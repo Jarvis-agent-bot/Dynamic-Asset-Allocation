@@ -31,6 +31,29 @@ describe("ensembleSignals", () => {
     expect(sigs.every((s) => s.confidence >= 0 && s.confidence <= 1)).toBe(true);
   });
 
+  it("throws on duplicate strategy ids (signal quality contract)", () => {
+    const series = makeSeries({ n: 10 });
+
+    const a = buyAndHold();
+    const b = buyAndHold();
+    // Force a duplicate id to ensure we fail loudly instead of silently overwriting weights.
+    (b as any).id = a.id;
+
+    expect(() => ensembleSignals([a, b], series, { [a.id]: 1 })).toThrow(/unique/i);
+  });
+
+  it("throws on unknown non-zero weightsConfig ids (prevents dilution)", () => {
+    const series = makeSeries({ n: 10 });
+    const strategies = [buyAndHold(), smaCrossover({ fast: 5, slow: 20 })];
+
+    expect(() =>
+      ensembleSignals(strategies, series, {
+        ...DEFAULT_ENSEMBLE_WEIGHTS,
+        definitely_not_a_strategy: 0.1,
+      })
+    ).toThrow(/unknown strategy/i);
+  });
+
   it("has transparent reasons", () => {
     const series = makeSeries({ n: 30, daily: 0.001 });
     const sigs = ensembleSignals([buyAndHold(), smaCrossover({ fast: 5, slow: 20 })], series, DEFAULT_ENSEMBLE_WEIGHTS);
