@@ -28,7 +28,10 @@ describe("decideAction", () => {
 
   it("throws on invalid thresholds", () => {
     expect(() => decideAction(0.5, 0.5, { buyAbove: 0.4, sellBelow: 0.6, minChange: 0.1 })).toThrow(
-      /sellBelow must be <= buyAbove/
+      /sellBelow must be < buyAbove/
+    );
+    expect(() => decideAction(0.5, 0.5, { buyAbove: 0.5, sellBelow: 0.5, minChange: 0.1 })).toThrow(
+      /sellBelow must be < buyAbove/
     );
     expect(() => decideAction(0.5, 0.5, { buyAbove: 1.2, sellBelow: 0.4, minChange: 0.1 })).toThrow(/buyAbove/);
     expect(() => decideAction(0.5, 0.5, { buyAbove: 0.6, sellBelow: 0.4, minChange: -0.1 })).toThrow(/minChange/);

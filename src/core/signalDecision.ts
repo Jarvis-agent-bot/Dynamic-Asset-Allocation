@@ -12,8 +12,9 @@ function assertValidThresholds(thresholds: SignalThresholds): void {
   if (sellBelow < 0 || sellBelow > 1) throw new Error(`Signal threshold sellBelow must be within [0,1]`);
   if (minChange < 0 || minChange > 1) throw new Error(`Signal threshold minChange must be within [0,1]`);
 
-  // Contract: the neutral band is [sellBelow, buyAbove].
-  if (sellBelow > buyAbove) throw new Error(`Signal threshold sellBelow must be <= buyAbove`);
+  // Contract: the neutral band is [sellBelow, buyAbove] with non-zero width.
+  // We require sellBelow < buyAbove to avoid ambiguous equality edge cases.
+  if (sellBelow >= buyAbove) throw new Error(`Signal threshold sellBelow must be < buyAbove`);
 }
 
 export function decideAction(prevWeight: number, targetWeight: number, thresholds: SignalThresholds): Action {
