@@ -2,7 +2,9 @@
 
 一个基于 Next.js 开发的纯前端基金估值与重仓股实时追踪工具。采用玻璃拟态设计（Glassmorphism），支持移动端适配，且无需后端服务器即可运行。
 
-> 说明：本仓库已迁移到 `Jarvis-agent-bot/Dynamic-Asset-Allocation` 进行持续维护。
+> 说明：本仓库为 `Jarvis-agent-bot/Dynamic-Asset-Allocation`，持续维护中。
+
+预览地址（GitHub Pages）：https://jarvis-agent-bot.github.io/Dynamic-Asset-Allocation/
 
 ## ✨ 特性
 
