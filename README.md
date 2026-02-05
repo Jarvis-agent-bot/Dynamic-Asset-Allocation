@@ -9,9 +9,11 @@
 算法/回测相关代码位于 `src/core/`（尽量保持 UI 无关、可测试）：
 
 - 基础工程文档：[`docs/DAA_FOUNDATION.md`](./docs/DAA_FOUNDATION.md)（模块边界 + 核心数据模型）
+- 信号规格（v0）：[`docs/DAA_SIGNAL_SPEC_V0.md`](./docs/DAA_SIGNAL_SPEC_V0.md)
 
 - `src/core/domain.js`：核心数据模型（Asset/Portfolio/Strategy/BacktestResult/MarketEvent 等，JSdoc typedef）
 - `src/core/strategies.js`：策略接口实现（如 Buy&Hold、SMA crossover、策略组合 ensemble）
+- `src/core/signals.js`：fixed-weight ensemble → BUY/SELL/HOLD 信号输出（v0）
 - `src/core/backtest.js`：最小回测闭环（单资产、日频、无手续费 v0）
 - `src/core/metrics.js`：收益/回撤/夏普/胜率等指标 + 评分
 
