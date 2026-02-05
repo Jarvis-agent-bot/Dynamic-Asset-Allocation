@@ -15,8 +15,12 @@ export function toSignals(
   thresholds: SignalThresholds = DEFAULT_SIGNAL_THRESHOLDS
 ): Signal[] {
   return dates.map((date, i) => {
-    const tw = clamp(targetWeights[i] ?? 0, 0, 1);
-    const prev = i > 0 ? clamp(targetWeights[i - 1] ?? 0, 0, 1) : tw;
+    const rawTw = targetWeights[i] ?? 0;
+    const rawPrev = i > 0 ? (targetWeights[i - 1] ?? 0) : rawTw;
+
+    // Defensive: avoid NaN/Infinity leaking into signals.
+    const tw = clamp(Number.isFinite(rawTw) ? rawTw : 0, 0, 1);
+    const prev = clamp(Number.isFinite(rawPrev) ? rawPrev : tw, 0, 1);
     const delta = tw - prev;
 
     const action = decideAction(prev, tw, thresholds);
