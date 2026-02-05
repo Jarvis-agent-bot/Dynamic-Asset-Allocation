@@ -95,8 +95,12 @@ export function ensembleTargetWeights(
   });
 
   const reasonsByDay = dates.map((_, i) => {
+    // Sort strategy contributions by magnitude for clearer explainability.
+    // Contribution is proportional to normalized ensemble weight * strategy weight signal.
     return perStrat
       .filter((s) => s.weight > 0)
+      .slice()
+      .sort((a, b) => b.weight * b.ws[i] - a.weight * a.ws[i])
       .map((s) => `${s.name}: ${pct01(s.ws[i])}% (w=${pct01(s.weight)}%)`);
   });
 
