@@ -1,5 +1,5 @@
 import { clamp } from "../math";
-import { normalizeWeights } from "../config";
+import { assertNonNegativeWeights, normalizeWeights } from "../config";
 import type { PriceBar, Strategy } from "../domain";
 
 export function ensembleTargetWeights(
@@ -7,6 +7,7 @@ export function ensembleTargetWeights(
   series: PriceBar[],
   weightsConfig: Record<string, number>
 ): { dates: string[]; targetWeights: number[]; reasonsByDay: string[][] } {
+  assertNonNegativeWeights(weightsConfig);
   const wNorm = normalizeWeights(weightsConfig);
   const dates = series.map((b) => b.date);
 

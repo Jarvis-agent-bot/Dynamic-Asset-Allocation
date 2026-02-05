@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
 
-import { DEFAULT_ENSEMBLE_WEIGHTS, normalizeWeights } from "../config";
+import { assertNonNegativeWeights, DEFAULT_ENSEMBLE_WEIGHTS, normalizeWeights } from "../config";
+
+describe("assertNonNegativeWeights", () => {
+  it("throws on negative weights", () => {
+    expect(() => assertNonNegativeWeights({ a: -1, b: 3 })).toThrow(/non-negative/);
+  });
+
+  it("accepts zeros and positives", () => {
+    expect(() => assertNonNegativeWeights({ a: 0, b: 1 })).not.toThrow();
+  });
+});
 
 describe("normalizeWeights", () => {
   it("normalizes to sum=1", () => {
