@@ -40,6 +40,23 @@ export function toSignals(
 
   assertSignalThresholds(thresholds);
 
+  const pct = (x: number): string => {
+    // Keep signal explanations readable while avoiding misleading rounding.
+    const p = clamp(Number(x) || 0, 0, 1) * 100;
+    const s = p.toFixed(1);
+    return s.endsWith(".0") ? s.slice(0, -2) : s;
+  };
+
+  const signedPct = (x: number): string => {
+    const p = (Number(x) || 0) * 100;
+    // Use a single decimal (trimmed) to avoid hiding meaningful small changes.
+    const abs = Math.abs(p);
+    const s = abs.toFixed(1);
+    const trimmed = s.endsWith(".0") ? s.slice(0, -2) : s;
+    const sign = p > 0 ? "+" : p < 0 ? "-" : "";
+    return `${sign}${trimmed}`;
+  };
+
   return dates.map((date, i) => {
     const rawTw = targetWeights[i] ?? 0;
     const rawPrev = i > 0 ? (targetWeights[i - 1] ?? 0) : rawTw;
@@ -54,9 +71,7 @@ export function toSignals(
 
     const reasons = reasonsByDay?.[i] ? [...reasonsByDay[i]] : [];
 
-    const deltaPct = Math.round(delta * 100);
-    const deltaLabel = deltaPct > 0 ? `+${deltaPct}` : String(deltaPct);
-    reasons.unshift(`ensemble target=${Math.round(tw * 100)}% (Δ=${deltaLabel}%)`);
+    reasons.unshift(`ensemble target=${pct(tw)}% (Δ=${signedPct(delta)}%)`);
 
     return { date, action, targetWeight: tw, confidence, reasons };
   });
