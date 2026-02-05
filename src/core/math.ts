@@ -32,12 +32,18 @@ export function cumulativeProduct(returns: number[], start = 1): number[] {
 export function maxDrawdown(equity: number[]): number {
   let peak = -Infinity;
   let mdd = 0;
-  for (const v of equity) {
+
+  for (const vRaw of equity) {
+    // Defensive: ignore non-finite values so a single NaN doesn't poison the whole scan.
+    const v = Number.isFinite(vRaw) ? vRaw : null;
+    if (v === null) continue;
+
     peak = Math.max(peak, v);
     if (peak > 0) {
       const dd = (v - peak) / peak;
       mdd = Math.min(mdd, dd);
     }
   }
+
   return Math.abs(mdd);
 }
