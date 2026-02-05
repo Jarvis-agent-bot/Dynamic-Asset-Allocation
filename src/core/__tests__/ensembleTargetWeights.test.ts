@@ -63,4 +63,41 @@ describe("ensembleTargetWeights contracts", () => {
 
     expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/out-of-range/i);
   });
+
+  it("sorts explainability reasons by contribution magnitude (improves readability)", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
+
+    const strategies = [
+      strat("s1", [0.0, 1.0], "Strat 1"),
+      strat("s2", [1.0, 0.0], "Strat 2"),
+    ];
+
+    const { reasonsByDay } = ensembleTargetWeights(strategies, series, {
+      s1: 0.25,
+      s2: 0.75,
+    });
+
+    // Day 1: s2 contributes 0.75*1.0, s1 contributes 0.25*0.0 => s2 first.
+    expect(reasonsByDay[0][0]).toMatch(/^Strat 2:/);
+    // Day 2: s1 contributes 0.25*1.0, s2 contributes 0.75*0.0 => s1 first.
+    expect(reasonsByDay[1][0]).toMatch(/^Strat 1:/);
+  });
+
+  it("uses a deterministic tie-breaker for equal contributions (prevents jitter)", () => {
+    const series = [bar("2026-02-01")];
+
+    const strategies = [
+      strat("b", [0.5], "B"),
+      strat("a", [0.5], "A"),
+    ];
+
+    const { reasonsByDay } = ensembleTargetWeights(strategies, series, {
+      a: 1,
+      b: 1,
+    });
+
+    // Equal contrib => sorted by id (a then b).
+    expect(reasonsByDay[0][0]).toMatch(/^A:/);
+    expect(reasonsByDay[0][1]).toMatch(/^B:/);
+  });
 });
