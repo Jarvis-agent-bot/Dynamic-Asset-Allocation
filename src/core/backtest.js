@@ -1,5 +1,5 @@
 import { clamp, cumulativeProduct } from "./math.js";
-import { computeMetrics } from "./metrics.js";
+import { computeMetrics, scoreMetrics } from "./metrics.js";
 
 /**
  * Compute daily close-to-close returns.
@@ -50,4 +50,15 @@ export function backtestSingleAsset(strategy, series) {
  */
 export function runBacktests(strategies, series) {
   return strategies.map((s) => backtestSingleAsset(s, series));
+}
+
+/**
+ * Rank backtest results by a scalar score (higher is better).
+ * @param {Array<ReturnType<typeof backtestSingleAsset>>} results
+ * @param {Parameters<typeof scoreMetrics>[1]} [weights]
+ */
+export function rankBacktestResults(results, weights) {
+  return [...(results || [])]
+    .map((r) => ({ ...r, score: scoreMetrics(r.metrics, weights) }))
+    .sort((a, b) => b.score - a.score);
 }

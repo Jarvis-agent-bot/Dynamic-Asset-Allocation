@@ -1,4 +1,5 @@
 import { clamp } from "./math.js";
+import { normalizeWeights } from "./config.js";
 
 /**
  * Buy & Hold: always 100% in the asset.
@@ -15,6 +16,53 @@ export function buyAndHold() {
  * Simple moving average crossover (single-asset):
  * - weight=1 when fastSMA > slowSMA, else 0
  */
+/**
+ * Weighted ensemble of single-asset strategies.
+ *
+ * Combines multiple strategies' target weights into one final weight stream via
+ * a normalized convex combination.
+ *
+ * @param {{
+ *  id?: string,
+ *  name?: string,
+ *  strategies: Array<{id:string,name:string,weights:(series:any[])=>number[]}>,
+ *  weightsById: Record<string, number>
+ * }} args
+ */
+export function ensembleStrategy({
+  id = "ensemble",
+  name = "Ensemble",
+  strategies,
+  weightsById,
+}) {
+  if (!Array.isArray(strategies) || strategies.length === 0) {
+    throw new Error("strategies required");
+  }
+  const norm = normalizeWeights(weightsById);
+
+  return {
+    id,
+    name,
+    weights: (series) => {
+      const parts = strategies.map((s) => {
+        const w = s.weights(series);
+        if (w.length !== series.length) throw new Error(`weights length mismatch: ${s.id}`);
+        return w.map((x) => clamp(Number(x) || 0, 0, 1));
+      });
+
+      return series.map((_, i) => {
+        let acc = 0;
+        for (let si = 0; si < strategies.length; si++) {
+          const sid = strategies[si].id;
+          const alpha = Number(norm[sid] || 0);
+          acc += alpha * parts[si][i];
+        }
+        return clamp(acc, 0, 1);
+      });
+    },
+  };
+}
+
 export function smaCrossover({ fast = 5, slow = 20 } = {}) {
   if (fast >= slow) throw new Error("fast must be < slow");
 
