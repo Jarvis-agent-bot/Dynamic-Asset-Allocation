@@ -7,6 +7,13 @@ export function ensembleTargetWeights(
   series: PriceBar[],
   weightsConfig: Record<string, number>
 ): { dates: string[]; targetWeights: number[]; reasonsByDay: string[][] } {
+  if (strategies.length === 0) {
+    throw new Error("ensembleTargetWeights() requires at least one strategy");
+  }
+  if (series.length === 0) {
+    throw new Error("ensembleTargetWeights() requires a non-empty price series");
+  }
+
   assertNonNegativeWeights(weightsConfig);
 
   // Contract: strategy ids must be unique. Duplicate ids would overwrite each other

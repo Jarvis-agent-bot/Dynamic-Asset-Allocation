@@ -19,6 +19,16 @@ function strat(id: string, w: number): Strategy {
 }
 
 describe("ensembleTargetWeights (weightsConfig contract)", () => {
+  it("throws on empty strategies (prevents silently all-0 target)", () => {
+    const series = makeSeries();
+    expect(() => ensembleTargetWeights([], series, {})).toThrow(/at least one strategy/);
+  });
+
+  it("throws on empty series (prevents confusing length mismatch downstream)", () => {
+    const strategies = [strat("a", 1)];
+    expect(() => ensembleTargetWeights(strategies, [], { a: 1 })).toThrow(/non-empty price series/);
+  });
+
   it("throws when strategies contain duplicate ids (prevents silent overwrite)", () => {
     const strategies = [strat("dup", 1), strat("dup", 0)];
     const series = makeSeries();
