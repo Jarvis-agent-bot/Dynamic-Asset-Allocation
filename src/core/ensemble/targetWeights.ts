@@ -44,10 +44,17 @@ export function ensembleTargetWeights(
     return clamp(sum, 0, 1);
   });
 
+  const pct = (x: number): string => {
+    // Keep signal explanations readable while avoiding misleading rounding.
+    const p = clamp(Number(x) || 0, 0, 1) * 100;
+    const s = p.toFixed(1);
+    return s.endsWith(".0") ? s.slice(0, -2) : s;
+  };
+
   const reasonsByDay = dates.map((_, i) => {
     return perStrat
       .filter((s) => s.weight > 0)
-      .map((s) => `${s.name}: ${Math.round(s.ws[i] * 100)}% (w=${Math.round(s.weight * 100)}%)`);
+      .map((s) => `${s.name}: ${pct(s.ws[i])}% (w=${pct(s.weight)}%)`);
   });
 
   return { dates, targetWeights, reasonsByDay };
