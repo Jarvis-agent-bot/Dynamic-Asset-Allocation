@@ -9,9 +9,15 @@ export function ensembleTargetWeights(
 ): { dates: string[]; targetWeights: number[]; reasonsByDay: string[][] } {
   assertNonNegativeWeights(weightsConfig);
 
+  // Contract: strategy ids must be unique. Duplicate ids would overwrite each other
+  // in the weights map and silently degrade signal quality.
+  const stratIds = new Set(strategies.map((s) => s.id));
+  if (stratIds.size !== strategies.length) {
+    throw new Error("Strategy ids must be unique in ensembleTargetWeights() input");
+  }
+
   // Contract: weightsConfig should not silently contain unknown strategy ids.
   // Unknown weights would otherwise dilute normalization and degrade signal quality.
-  const stratIds = new Set(strategies.map((s) => s.id));
   const unknown = Object.entries(weightsConfig).filter(([id, raw]) => !stratIds.has(id) && Number(raw) !== 0);
   if (unknown.length > 0) {
     const ids = unknown.map(([id]) => id).join(", ");
