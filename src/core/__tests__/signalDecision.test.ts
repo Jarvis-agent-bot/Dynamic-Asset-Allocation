@@ -72,4 +72,13 @@ describe("computeConfidence", () => {
 
     expect(far).toBeGreaterThan(near);
   });
+
+  it("increases for SELL as target moves further below sellBelow", () => {
+    const t = { ...DEFAULT_SIGNAL_THRESHOLDS, buyAbove: 0.6, sellBelow: 0.4, minChange: 0.15 };
+
+    const near = computeConfidence("SELL", 0.41, 0.39, t);
+    const far = computeConfidence("SELL", 0.41, 0.1, t);
+
+    expect(far).toBeGreaterThan(near);
+  });
 });
