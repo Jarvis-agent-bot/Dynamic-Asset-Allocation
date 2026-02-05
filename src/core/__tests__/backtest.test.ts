@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { backtestSingleAsset, runBacktests } from "../backtest";
+import type { PriceBar } from "../domain";
 import { buyAndHold, smaCrossover } from "../strategies";
 
 function makeTrendSeries({ n = 60, start = 100, daily = 0.002 } = {}) {
@@ -50,6 +51,30 @@ describe("backtestSingleAsset", () => {
     expect(res.dailyReturns[0]).toBe(0);
     expect(res.dailyReturns.every((x) => Number.isFinite(x))).toBe(true);
     expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
+  });
+
+  it("breaks the prev-close chain on invalid mid-series prices (no stale prev)", () => {
+    // If a mid-series day is invalid, we emit 0% for that day AND the next day
+    // (until a valid prev-close is re-established), then resume normal returns.
+    const series = [
+      { date: "2026-01-01", close: 100 },
+      { date: "2026-01-02", close: 110 }, // +10%
+      { date: "2026-01-03", close: Number.NaN }, // invalid
+      { date: "2026-01-04", close: 121 }, // would be +10% vs stale 110, but should be 0% because prev is broken
+      { date: "2026-01-05", close: 133.1 }, // +10% vs 121
+    ];
+
+    const res = backtestSingleAsset(buyAndHold(), series as PriceBar[]);
+    expect(res.dailyReturns).toHaveLength(series.length - 1);
+
+    // 1->2
+    expect(res.dailyReturns[0]).toBeCloseTo(0.1, 8);
+    // invalid day
+    expect(res.dailyReturns[1]).toBe(0);
+    // day after invalid should also be 0 (re-establish prevClose)
+    expect(res.dailyReturns[2]).toBe(0);
+    // resume normal returns
+    expect(res.dailyReturns[3]).toBeCloseTo(0.1, 8);
   });
 });
 
