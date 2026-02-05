@@ -40,6 +40,14 @@ describe("ensembleTargetWeights contracts", () => {
     ).toThrow(/unknown strategy id/i);
   });
 
+  it("throws when weightsConfig assigns no positive weight to included strategies", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
+
+    const strategies = [strat("s1", [0.2, 0.2])];
+
+    expect(() => ensembleTargetWeights(strategies, series, { s1: 0 })).toThrow(/positive weight/i);
+  });
+
   it("throws when series dates are not strictly increasing", () => {
     const series = [bar("2026-02-02"), bar("2026-02-01")];
 
