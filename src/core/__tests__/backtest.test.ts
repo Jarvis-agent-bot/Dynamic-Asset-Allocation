@@ -33,6 +33,16 @@ describe("backtestSingleAsset", () => {
     expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
   });
 
+  it("throws if series dates are not strictly increasing", () => {
+    const series = makeTrendSeries({ n: 5, daily: 0.002 });
+    // Make it non-increasing at index 2
+    series[2] = { ...series[2], date: series[1].date };
+
+    expect(() => backtestSingleAsset(buyAndHold(), series as PriceBar[])).toThrow(
+      /dates must be strictly increasing/i
+    );
+  });
+
   it("treats invalid prices as 0% returns (prevents NaN propagation)", () => {
     const series = makeTrendSeries({ n: 5, daily: 0.002 });
     series[2] = { ...series[2], close: Number.NaN };
