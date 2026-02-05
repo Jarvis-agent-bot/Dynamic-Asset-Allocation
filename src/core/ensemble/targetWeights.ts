@@ -46,8 +46,20 @@ export function ensembleTargetWeights(
   const dates = series.map((b) => b.date);
 
   const perStrat = strategies.map((s) => {
-    const ws = s.weights(series).map((x) => clamp(Number(x) || 0, 0, 1));
-    if (ws.length !== series.length) throw new Error(`weights length mismatch for ${s.id}`);
+    const raw = s.weights(series);
+    if (raw.length !== series.length) throw new Error(`weights length mismatch for ${s.id}`);
+
+    // Contract: strategy weights must be finite numbers.
+    // Non-finite values would otherwise get coerced to 0 and silently degrade signal quality.
+    for (let i = 0; i < raw.length; i++) {
+      const v = Number(raw[i]);
+      if (!Number.isFinite(v)) {
+        throw new Error(`Non-finite weight from ${s.id} at index ${i}: ${String(raw[i])}`);
+      }
+    }
+
+    const ws = raw.map((x) => clamp(Number(x), 0, 1));
+
     return { id: s.id, name: s.name, ws, weight: Number(wNorm[s.id] || 0) };
   });
 

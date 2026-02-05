@@ -74,4 +74,18 @@ describe("ensembleTargetWeights (weightsConfig contract)", () => {
       })
     ).toThrow(/must assign a positive weight/);
   });
+
+  it("throws if a strategy emits non-finite weights (prevents silently coercing to 0)", () => {
+    const series = makeSeries();
+
+    const strategies: Strategy[] = [
+      {
+        id: "bad",
+        name: "bad",
+        weights: (s) => s.map((_, i) => (i === 0 ? Number.NaN : 1)),
+      },
+    ];
+
+    expect(() => ensembleTargetWeights(strategies, series, { bad: 1 })).toThrow(/Non-finite weight/);
+  });
 });
