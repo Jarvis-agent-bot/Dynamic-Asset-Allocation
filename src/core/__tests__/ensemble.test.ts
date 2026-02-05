@@ -12,6 +12,19 @@ function makeFlatSeries({ n = 40, start = 100 }: { n?: number; start?: number } 
 }
 
 describe("ensembleStrategy", () => {
+  it("throws on negative weights (DAA contract)", () => {
+    const series = makeFlatSeries({ n: 10 });
+    const s1 = buyAndHold();
+    const s2 = smaCrossover({ fast: 3, slow: 10 });
+
+    expect(() =>
+      ensembleStrategy({
+        strategies: [s1, s2],
+        weightsById: { [s1.id]: 1, [s2.id]: -0.01 },
+      }).weights(series),
+    ).toThrow(/non-negative/i);
+  });
+
   it("produces weights within [0,1] and correct length", () => {
     const series = makeFlatSeries({ n: 30 });
     const s1 = buyAndHold();

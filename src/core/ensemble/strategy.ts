@@ -1,5 +1,5 @@
 import { clamp } from "../math";
-import { normalizeWeights } from "../config";
+import { assertNonNegativeWeights, normalizeWeights } from "../config";
 import type { PriceBar, Strategy } from "../domain";
 
 /**
@@ -23,7 +23,9 @@ export function ensembleStrategy({
     throw new Error("strategies required");
   }
 
-  // ensure we don't accept negative weights silently
+  // DAA contract: never accept negative weights.
+  assertNonNegativeWeights(weightsById);
+
   const norm = normalizeWeights(weightsById);
 
   return {
