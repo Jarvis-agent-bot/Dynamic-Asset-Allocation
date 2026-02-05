@@ -49,7 +49,9 @@ export function computeAssetReturns(series: Array<Pick<PriceBar, "close">>): num
 export function backtestSingleAsset(strategy: Strategy, series: PriceBar[]): BacktestResult {
   if (!series || series.length < 2) throw new Error("series too short");
   const w = strategy.weights(series).map((x: number) => clamp(Number(x) || 0, 0, 1));
-  if (w.length !== series.length) throw new Error("weights length mismatch");
+  if (w.length !== series.length) {
+    throw new Error(`weights length mismatch: ${strategy.id} expected=${series.length} got=${w.length}`);
+  }
 
   const assetReturns = computeAssetReturns(series);
 

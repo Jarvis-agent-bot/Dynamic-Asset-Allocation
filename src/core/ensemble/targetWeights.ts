@@ -47,7 +47,9 @@ export function ensembleTargetWeights(
 
   const perStrat = strategies.map((s) => {
     const raw = s.weights(series);
-    if (raw.length !== series.length) throw new Error(`weights length mismatch for ${s.id}`);
+    if (raw.length !== series.length) {
+      throw new Error(`weights length mismatch: ${s.id} expected=${series.length} got=${raw.length}`);
+    }
 
     // Contract: strategy weights must be finite numbers.
     // Non-finite values would otherwise get coerced to 0 and silently degrade signal quality.

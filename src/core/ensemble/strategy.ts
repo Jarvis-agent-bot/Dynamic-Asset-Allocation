@@ -34,7 +34,9 @@ export function ensembleStrategy({
     weights: (series: PriceBar[]) => {
       const parts: number[][] = strategies.map((s) => {
         const w = s.weights(series);
-        if (w.length !== series.length) throw new Error(`weights length mismatch: ${s.id}`);
+        if (w.length !== series.length) {
+          throw new Error(`weights length mismatch: ${s.id} expected=${series.length} got=${w.length}`);
+        }
         return w.map((x: number) => clamp(Number(x) || 0, 0, 1));
       });
 
