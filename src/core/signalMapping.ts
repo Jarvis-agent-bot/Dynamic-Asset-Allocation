@@ -14,7 +14,7 @@ function assertSignalThresholds(t: SignalThresholds): void {
   };
 
   for (const k of ["buyAbove", "sellBelow", "minChange"] as const) {
-    const v = Number((t as any)[k]);
+    const v = t[k];
     if (!Number.isFinite(v)) bad(k, "must be a finite number");
     if (v < 0 || v > 1) bad(k, "must be between 0 and 1");
   }
