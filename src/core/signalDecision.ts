@@ -36,10 +36,12 @@ export function decideActionWithReason(
   const crossedBuy = prev <= buyAbove && tw > buyAbove;
   const crossedSell = prev >= sellBelow && tw < sellBelow;
 
+  const fmt = (x: number) => Number.isFinite(x) ? x.toFixed(3) : String(x);
+
   if (crossedBuy) return { action: "BUY", reason: `rule: crossed above buyAbove (${buyAbove})` };
   if (crossedSell) return { action: "SELL", reason: `rule: crossed below sellBelow (${sellBelow})` };
-  if (delta >= minChange) return { action: "BUY", reason: `rule: Δ>=minChange (${minChange})` };
-  if (delta <= -minChange) return { action: "SELL", reason: `rule: Δ<=-minChange (${minChange})` };
+  if (delta >= minChange) return { action: "BUY", reason: `rule: Δ=${fmt(delta)}>=minChange (${minChange})` };
+  if (delta <= -minChange) return { action: "SELL", reason: `rule: Δ=${fmt(delta)}<=-minChange (${minChange})` };
 
   return { action: "HOLD", reason: `rule: within band & |Δ|<minChange (${minChange})` };
 }
