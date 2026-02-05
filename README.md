@@ -53,12 +53,12 @@
 
 2. 安装依赖：
    ```bash
-   npm install
+   pnpm install
    ```
 
 3. 运行开发服务器：
    ```bash
-   npm run dev
+   pnpm dev
    ```
    访问 [http://localhost:3000](http://localhost:3000) 查看效果。
 
@@ -68,7 +68,7 @@
 
 若要手动构建：
 ```bash
-npm run build
+pnpm build
 ```
 静态文件将生成在 `out` 目录下。
 
