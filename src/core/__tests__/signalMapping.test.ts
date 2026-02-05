@@ -41,14 +41,18 @@ describe("toSignals", () => {
     expect(sigs[0].targetWeight).toBe(0);
     expect(Number.isFinite(sigs[0].confidence)).toBe(true);
     expect(String(sigs[0].reasons[0])).toContain("ensemble target=0%");
-    // Warnings are included to make upstream data issues visible without breaking the API.
-    expect(sigs[0].reasons.join("\n")).toContain("warning: non-finite targetWeight");
+    // The decision rule should remain the 2nd line even when warnings are present.
+    expect(String(sigs[0].reasons[1])).toContain("rule:");
+    // Warnings are included to make upstream data issues visible without breaking the API,
+    // and should appear right after the decision rule for consistent explainability.
+    expect(String(sigs[0].reasons[2])).toContain("warning: non-finite targetWeight");
 
     expect(sigs[1].targetWeight).toBe(0.8);
     expect(Number.isFinite(sigs[1].confidence)).toBe(true);
     // When the previous day is non-finite, we default prev=tw (so Δ=0) to avoid spurious jumps.
     expect(String(sigs[1].reasons[0])).toContain("Δ=0%");
-    expect(sigs[1].reasons.join("\n")).toContain("warning: previous targetWeight non-finite");
+    expect(String(sigs[1].reasons[1])).toContain("rule:");
+    expect(String(sigs[1].reasons[2])).toContain("warning: previous targetWeight non-finite");
   });
 
   it("formats positive deltas with an explicit + sign for readability", () => {
