@@ -101,7 +101,9 @@ export function ensembleTargetWeights(
     // Sort strategy contributions by magnitude for clearer explainability.
     // Contribution is proportional to normalized ensemble weight * strategy weight signal.
     return perStrat
-      .filter((s) => s.weight > 0)
+      // Keep explainability focused: omit strategies that have 0 weight in the ensemble
+      // OR emit a 0% target for the day (no contribution).
+      .filter((s) => s.weight > 0 && s.ws[i] > 0)
       .slice()
       .sort((a, b) => {
         const diff = b.weight * b.ws[i] - a.weight * a.ws[i];
