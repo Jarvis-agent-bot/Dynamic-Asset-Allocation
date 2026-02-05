@@ -14,6 +14,14 @@ export function toSignals(
   reasonsByDay: string[][],
   thresholds: SignalThresholds = DEFAULT_SIGNAL_THRESHOLDS
 ): Signal[] {
+  if (dates.length !== targetWeights.length) {
+    throw new Error(`toSignals contract violation: dates.length (${dates.length}) must equal targetWeights.length (${targetWeights.length})`);
+  }
+
+  if (reasonsByDay.length > 0 && reasonsByDay.length !== dates.length) {
+    throw new Error(`toSignals contract violation: reasonsByDay.length (${reasonsByDay.length}) must equal dates.length (${dates.length}) when provided`);
+  }
+
   return dates.map((date, i) => {
     const rawTw = targetWeights[i] ?? 0;
     const rawPrev = i > 0 ? (targetWeights[i - 1] ?? 0) : rawTw;

@@ -3,6 +3,11 @@ import { describe, it, expect } from "vitest";
 import { toSignals, DEFAULT_SIGNAL_THRESHOLDS } from "../signalMapping";
 
 describe("toSignals", () => {
+  it("throws when array lengths violate the contract", () => {
+    expect(() => toSignals(["2026-02-01"], [0.5, 0.6], [[]] as string[][])).toThrow(/dates\.length/);
+    expect(() => toSignals(["2026-02-01"], [0.5], [[], []] as string[][])).toThrow(/reasonsByDay\.length/);
+  });
+
   it("clamps non-finite target weights to a safe value", () => {
     const dates = ["2026-02-01", "2026-02-02"];
     const targetWeights = [Number.NaN, 0.8];
