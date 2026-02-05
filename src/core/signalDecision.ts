@@ -18,8 +18,17 @@ export function decideActionWithReason(
 ): { action: Action; reason: string } {
   assertValidSignalThresholds(thresholds);
 
-  const prev = clamp(prevWeight ?? 0, 0, 1);
-  const tw = clamp(targetWeight ?? 0, 0, 1);
+  // Defensive: treat non-finite inputs as invalid and HOLD.
+  // Data providers / pipelines can occasionally emit NaN/Infinity; we don't want that
+  // to accidentally trigger BUY/SELL actions.
+  const prevNum = Number(prevWeight);
+  const twNum = Number(targetWeight);
+  if (!Number.isFinite(prevNum) || !Number.isFinite(twNum)) {
+    return { action: "HOLD", reason: "rule: invalid (non-finite) weight input" };
+  }
+
+  const prev = clamp(prevNum, 0, 1);
+  const tw = clamp(twNum, 0, 1);
   const delta = tw - prev;
 
   const { buyAbove, sellBelow, minChange } = thresholds;
@@ -38,8 +47,13 @@ export function decideActionWithReason(
 export function computeConfidence(action: Action, prevWeight: number, targetWeight: number, thresholds: SignalThresholds): number {
   assertValidSignalThresholds(thresholds);
 
-  const prev = clamp(prevWeight ?? 0, 0, 1);
-  const tw = clamp(targetWeight ?? 0, 0, 1);
+  // Defensive: if inputs are invalid, confidence should be 0.
+  const prevNum = Number(prevWeight);
+  const twNum = Number(targetWeight);
+  if (!Number.isFinite(prevNum) || !Number.isFinite(twNum)) return 0;
+
+  const prev = clamp(prevNum, 0, 1);
+  const tw = clamp(twNum, 0, 1);
   const delta = tw - prev;
 
   const { buyAbove, sellBelow } = thresholds;

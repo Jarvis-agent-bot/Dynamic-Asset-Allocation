@@ -26,6 +26,14 @@ describe("decideAction", () => {
     expect(decideAction(0.8, 0.64, t)).toBe("SELL"); // -0.16
   });
 
+  it("HOLD on non-finite weights (defensive)", () => {
+    const t = { ...DEFAULT_SIGNAL_THRESHOLDS, buyAbove: 0.6, sellBelow: 0.4, minChange: 0.15 };
+    expect(decideAction(Number.NaN, 0.7, t)).toBe("HOLD");
+    expect(decideAction(0.7, Number.NaN, t)).toBe("HOLD");
+    expect(decideAction(Number.POSITIVE_INFINITY, 0.7, t)).toBe("HOLD");
+    expect(decideAction(0.7, Number.NEGATIVE_INFINITY, t)).toBe("HOLD");
+  });
+
   it("throws on invalid thresholds", () => {
     expect(() => decideAction(0.5, 0.5, { buyAbove: 0.4, sellBelow: 0.6, minChange: 0.1 })).toThrow(
       /sellBelow must be < buyAbove/
