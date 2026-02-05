@@ -31,6 +31,15 @@ describe("backtestSingleAsset", () => {
     // Sanity: equity should be finite and >= 0
     expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
   });
+
+  it("treats invalid prices as 0% returns (prevents NaN propagation)", () => {
+    const series = makeTrendSeries({ n: 5, daily: 0.002 });
+    series[2] = { ...series[2], close: Number.NaN };
+
+    const res = backtestSingleAsset(buyAndHold(), series);
+    expect(res.dailyReturns.every((x) => Number.isFinite(x))).toBe(true);
+    expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
+  });
 });
 
 describe("runBacktests", () => {

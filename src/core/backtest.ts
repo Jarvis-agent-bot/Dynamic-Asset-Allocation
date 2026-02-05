@@ -6,9 +6,18 @@ import type { BacktestResult, PriceBar, Strategy } from "./domain";
 export function computeAssetReturns(series: Array<Pick<PriceBar, "close">>): number[] {
   const rs: number[] = [];
   for (let i = 1; i < series.length; i++) {
-    const prev = series[i - 1].close;
-    const cur = series[i].close;
-    rs.push(prev > 0 ? cur / prev - 1 : 0);
+    const prev = Number(series[i - 1].close);
+    const cur = Number(series[i].close);
+
+    // Defensive: data providers occasionally emit null/0/NaN/Infinity.
+    // For backtests we treat invalid prices as a 0% return to avoid NaN pollution.
+    if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev <= 0 || cur <= 0) {
+      rs.push(0);
+      continue;
+    }
+
+    const r = cur / prev - 1;
+    rs.push(Number.isFinite(r) ? r : 0);
   }
   return rs;
 }
