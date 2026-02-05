@@ -40,6 +40,17 @@ describe("backtestSingleAsset", () => {
     expect(res.dailyReturns.every((x) => Number.isFinite(x))).toBe(true);
     expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
   });
+
+  it("does not cascade invalid-prev into all subsequent days", () => {
+    const series = makeTrendSeries({ n: 6, daily: 0.01 });
+    // First day invalid: day-1 return must be 0, but later valid days should still produce finite output.
+    series[0] = { ...series[0], close: 0 };
+
+    const res = backtestSingleAsset(buyAndHold(), series);
+    expect(res.dailyReturns[0]).toBe(0);
+    expect(res.dailyReturns.every((x) => Number.isFinite(x))).toBe(true);
+    expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
+  });
 });
 
 describe("runBacktests", () => {

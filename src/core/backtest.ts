@@ -5,20 +5,38 @@ import type { BacktestResult, PriceBar, Strategy } from "./domain";
 /** Compute daily close-to-close returns. */
 export function computeAssetReturns(series: Array<Pick<PriceBar, "close">>): number[] {
   const rs: number[] = [];
+
+  // Defensive: data providers occasionally emit null/0/NaN/Infinity.
+  // For backtests we treat invalid prices as a 0% return to avoid NaN pollution.
+  //
+  // Important: if a day is invalid, we also "break" the prev-close chain so we don't
+  // create a cascade of invalid-prev returns on subsequent days.
+  let prevClose: number | undefined = undefined;
+  if (series.length > 0) {
+    const first = Number(series[0].close);
+    if (Number.isFinite(first) && first > 0) prevClose = first;
+  }
+
   for (let i = 1; i < series.length; i++) {
-    const prev = Number(series[i - 1].close);
     const cur = Number(series[i].close);
 
-    // Defensive: data providers occasionally emit null/0/NaN/Infinity.
-    // For backtests we treat invalid prices as a 0% return to avoid NaN pollution.
-    if (!Number.isFinite(prev) || !Number.isFinite(cur) || prev <= 0 || cur <= 0) {
+    if (!Number.isFinite(cur) || cur <= 0) {
       rs.push(0);
+      prevClose = undefined;
       continue;
     }
 
-    const r = cur / prev - 1;
+    if (prevClose === undefined) {
+      rs.push(0);
+      prevClose = cur;
+      continue;
+    }
+
+    const r = cur / prevClose - 1;
     rs.push(Number.isFinite(r) ? r : 0);
+    prevClose = cur;
   }
+
   return rs;
 }
 
