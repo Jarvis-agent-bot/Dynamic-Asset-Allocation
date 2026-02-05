@@ -8,6 +8,28 @@ describe("toSignals", () => {
     expect(() => toSignals(["2026-02-01"], [0.5], [[], []] as string[][])).toThrow(/reasonsByDay\.length/);
   });
 
+  it("throws on invalid thresholds (prevents silent bad signal mapping)", () => {
+    const dates = ["2026-02-01"];
+    const targetWeights = [0.5];
+    const reasonsByDay = [[]] as string[][];
+
+    expect(() =>
+      toSignals(dates, targetWeights, reasonsByDay, {
+        buyAbove: 0.4,
+        sellBelow: 0.6,
+        minChange: 0.1,
+      })
+    ).toThrow(/buyAbove/);
+
+    expect(() =>
+      toSignals(dates, targetWeights, reasonsByDay, {
+        buyAbove: 0.6,
+        sellBelow: 0.4,
+        minChange: -0.1,
+      })
+    ).toThrow(/minChange/);
+  });
+
   it("clamps non-finite target weights to a safe value", () => {
     const dates = ["2026-02-01", "2026-02-02"];
     const targetWeights = [Number.NaN, 0.8];

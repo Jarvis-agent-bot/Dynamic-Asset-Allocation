@@ -8,6 +8,22 @@ export const DEFAULT_SIGNAL_THRESHOLDS: SignalThresholds = {
   minChange: 0.15,
 };
 
+function assertSignalThresholds(t: SignalThresholds): void {
+  const bad = (k: keyof SignalThresholds, msg: string) => {
+    throw new Error(`Invalid signal threshold '${k}': ${msg}`);
+  };
+
+  for (const k of ["buyAbove", "sellBelow", "minChange"] as const) {
+    const v = Number((t as any)[k]);
+    if (!Number.isFinite(v)) bad(k, "must be a finite number");
+    if (v < 0 || v > 1) bad(k, "must be between 0 and 1");
+  }
+
+  if (t.buyAbove <= t.sellBelow) {
+    throw new Error(`Invalid signal thresholds: buyAbove (${t.buyAbove}) must be > sellBelow (${t.sellBelow})`);
+  }
+}
+
 export function toSignals(
   dates: string[],
   targetWeights: number[],
@@ -21,6 +37,8 @@ export function toSignals(
   if (reasonsByDay.length > 0 && reasonsByDay.length !== dates.length) {
     throw new Error(`toSignals contract violation: reasonsByDay.length (${reasonsByDay.length}) must equal dates.length (${dates.length}) when provided`);
   }
+
+  assertSignalThresholds(thresholds);
 
   return dates.map((date, i) => {
     const rawTw = targetWeights[i] ?? 0;
