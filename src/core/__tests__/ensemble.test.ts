@@ -51,6 +51,42 @@ describe("ensembleStrategy", () => {
     ).toThrow(/positive weight/i);
   });
 
+  it("throws when a strategy emits non-finite weights (signal quality contract)", () => {
+    const series = makeFlatSeries({ n: 3 });
+
+    const good = buyAndHold();
+    const bad = {
+      id: "bad",
+      name: "Bad",
+      weights: () => [0.2, Number.NaN, 0.2],
+    };
+
+    expect(() =>
+      ensembleStrategy({
+        strategies: [good, bad],
+        weightsById: { [good.id]: 1, [bad.id]: 1 },
+      }).weights(series),
+    ).toThrow(/Non-finite weight/);
+  });
+
+  it("throws when a strategy emits out-of-range weights (signal quality contract)", () => {
+    const series = makeFlatSeries({ n: 2 });
+
+    const good = buyAndHold();
+    const bad = {
+      id: "bad2",
+      name: "Bad2",
+      weights: () => [0.2, 1.5],
+    };
+
+    expect(() =>
+      ensembleStrategy({
+        strategies: [good, bad],
+        weightsById: { [good.id]: 1, [bad.id]: 1 },
+      }).weights(series),
+    ).toThrow(/Out-of-range weight/);
+  });
+
   it("produces weights within [0,1] and correct length", () => {
     const series = makeFlatSeries({ n: 30 });
     const s1 = buyAndHold();

@@ -66,7 +66,19 @@ export function ensembleStrategy({
         if (w.length !== series.length) {
           throw new Error(`weights length mismatch: ${s.id} expected=${series.length} got=${w.length}`);
         }
-        return w.map((x: number) => clamp(Number(x) || 0, 0, 1));
+
+        // Contract: strategy weights must be finite numbers in [0, 1].
+        // We keep this strict (instead of silently clamping) to avoid hiding provider/strategy bugs
+        // that can degrade signal quality.
+        for (let i = 0; i < w.length; i++) {
+          const v = Number(w[i]);
+          if (!Number.isFinite(v)) throw new Error(`Non-finite weight from ${s.id} at index ${i}: ${String(w[i])}`);
+          if (v < 0 || v > 1) {
+            throw new Error(`Out-of-range weight from ${s.id} at index ${i}: ${String(w[i])} (expected 0..1)`);
+          }
+        }
+
+        return w.map((x: number) => clamp(Number(x), 0, 1));
       });
 
       return series.map((_b: PriceBar, i: number) => {
