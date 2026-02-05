@@ -26,6 +26,13 @@ describe("normalizeWeights", () => {
     expect(n.b).toBe(1);
   });
 
+  it("treats non-finite numbers as 0 (forgiving behavior)", () => {
+    const n = normalizeWeights({ a: Number.POSITIVE_INFINITY, b: 1, c: NaN as unknown as number });
+    expect(n.a).toBe(0);
+    expect(n.c).toBe(0);
+    expect(n.b).toBe(1);
+  });
+
   it("keeps shape of default config", () => {
     const n = normalizeWeights(DEFAULT_ENSEMBLE_WEIGHTS);
     const keys = Object.keys(DEFAULT_ENSEMBLE_WEIGHTS);

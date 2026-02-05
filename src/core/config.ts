@@ -29,7 +29,12 @@ export function assertNonNegativeWeights(weights: Record<string, number> = {}): 
 
 /** Normalize weights into a new object. */
 export function normalizeWeights(weights: Record<string, number> = {}): Record<string, number> {
-  const entries: Array<[string, number]> = Object.entries(weights).map(([k, v]) => [k, Math.max(0, Number(v) || 0)]);
+  const entries: Array<[string, number]> = Object.entries(weights).map(([k, raw]) => {
+    const n = Number(raw);
+    // Forgiving behavior: treat NaN/Infinity as 0, and clamp negatives to 0.
+    const v = Number.isFinite(n) ? Math.max(0, n) : 0;
+    return [k, v];
+  });
   const sum = entries.reduce((acc, [, v]) => acc + v, 0);
   if (sum <= 0) return Object.fromEntries(entries.map(([k]) => [k, 0]));
   return Object.fromEntries(entries.map(([k, v]) => [k, v / sum]));
