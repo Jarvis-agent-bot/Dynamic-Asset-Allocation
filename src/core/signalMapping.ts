@@ -1,28 +1,13 @@
 import { clamp } from "./math";
 import type { Signal, SignalThresholds } from "./domain";
 import { computeConfidence, decideAction } from "./signalDecision";
+import { assertValidSignalThresholds } from "./signalThresholds";
 
 export const DEFAULT_SIGNAL_THRESHOLDS: SignalThresholds = {
   buyAbove: 0.6,
   sellBelow: 0.4,
   minChange: 0.15,
 };
-
-function assertSignalThresholds(t: SignalThresholds): void {
-  const bad = (k: keyof SignalThresholds, msg: string) => {
-    throw new Error(`Invalid signal threshold '${k}': ${msg}`);
-  };
-
-  for (const k of ["buyAbove", "sellBelow", "minChange"] as const) {
-    const v = t[k];
-    if (!Number.isFinite(v)) bad(k, "must be a finite number");
-    if (v < 0 || v > 1) bad(k, "must be between 0 and 1");
-  }
-
-  if (t.buyAbove <= t.sellBelow) {
-    throw new Error(`Invalid signal thresholds: buyAbove (${t.buyAbove}) must be > sellBelow (${t.sellBelow})`);
-  }
-}
 
 export function toSignals(
   dates: string[],
@@ -31,14 +16,18 @@ export function toSignals(
   thresholds: SignalThresholds = DEFAULT_SIGNAL_THRESHOLDS
 ): Signal[] {
   if (dates.length !== targetWeights.length) {
-    throw new Error(`toSignals contract violation: dates.length (${dates.length}) must equal targetWeights.length (${targetWeights.length})`);
+    throw new Error(
+      `toSignals contract violation: dates.length (${dates.length}) must equal targetWeights.length (${targetWeights.length})`
+    );
   }
 
   if (reasonsByDay.length > 0 && reasonsByDay.length !== dates.length) {
-    throw new Error(`toSignals contract violation: reasonsByDay.length (${reasonsByDay.length}) must equal dates.length (${dates.length}) when provided`);
+    throw new Error(
+      `toSignals contract violation: reasonsByDay.length (${reasonsByDay.length}) must equal dates.length (${dates.length}) when provided`
+    );
   }
 
-  assertSignalThresholds(thresholds);
+  assertValidSignalThresholds(thresholds);
 
   const pct = (x: number): string => {
     // Keep signal explanations readable while avoiding misleading rounding.
