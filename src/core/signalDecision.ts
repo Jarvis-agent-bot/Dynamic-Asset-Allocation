@@ -42,6 +42,13 @@ export function computeConfidence(action: Action, prevWeight: number, targetWeig
 
   const { buyAbove, sellBelow } = thresholds;
 
+  // Intuition: BUY/SELL decisions can be high-confidence when we are meaningfully beyond the band.
+  // HOLD is inherently lower-confidence; otherwise flat/quiet series tend to look "confident" by default.
   const dist = action === "BUY" ? Math.max(0, tw - buyAbove) : action === "SELL" ? Math.max(0, sellBelow - tw) : 0;
+
+  if (action === "HOLD") {
+    return clamp(0.2 + Math.min(0.2, Math.abs(delta)) * 0.5, 0, 1);
+  }
+
   return clamp(0.4 + dist * 1.5 + Math.min(0.3, Math.abs(delta)), 0, 1);
 }

@@ -42,3 +42,18 @@ describe("rankBacktestResults", () => {
     expect(ranked[0].score).toBeGreaterThanOrEqual(ranked[1].score);
   });
 });
+
+describe("signal confidence", () => {
+  it("keeps HOLD confidence lower than decisive BUY/SELL", async () => {
+    const mod = await import("../signalDecision");
+
+    const thresholds = { buyAbove: 0.6, sellBelow: 0.4, minChange: 0.15 };
+
+    const hold = mod.computeConfidence("HOLD", 0.5, 0.51, thresholds);
+    const buy = mod.computeConfidence("BUY", 0.55, 0.8, thresholds);
+    const sell = mod.computeConfidence("SELL", 0.45, 0.1, thresholds);
+
+    expect(hold).toBeLessThan(buy);
+    expect(hold).toBeLessThan(sell);
+  });
+});
