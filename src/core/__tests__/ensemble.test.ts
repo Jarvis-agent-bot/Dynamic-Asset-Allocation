@@ -12,6 +12,18 @@ function makeFlatSeries({ n = 40, start = 100 }: { n?: number; start?: number } 
 }
 
 describe("ensembleStrategy", () => {
+  it("throws on empty series (signal quality contract)", () => {
+    const s1 = buyAndHold();
+    const s2 = smaCrossover({ fast: 3, slow: 10 });
+
+    expect(() =>
+      ensembleStrategy({
+        strategies: [s1, s2],
+        weightsById: { [s1.id]: 1, [s2.id]: 1 },
+      }).weights([]),
+    ).toThrow(/non-empty price series/i);
+  });
+
   it("throws on negative weights (DAA contract)", () => {
     const series = makeFlatSeries({ n: 10 });
     const s1 = buyAndHold();

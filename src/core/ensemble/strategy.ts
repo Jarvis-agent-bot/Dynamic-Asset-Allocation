@@ -61,6 +61,10 @@ export function ensembleStrategy({
     id,
     name,
     weights: (series: PriceBar[]) => {
+      if (series.length === 0) {
+        throw new Error("ensembleStrategy.weights() requires a non-empty price series");
+      }
+
       const parts: number[][] = strategies.map((s) => {
         const w = s.weights(series);
         if (w.length !== series.length) {
