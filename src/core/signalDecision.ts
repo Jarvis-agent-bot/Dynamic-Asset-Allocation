@@ -44,7 +44,12 @@ export function decideActionWithReason(
   return { action: "HOLD", reason: `rule: within band & |Δ|<minChange (${minChange})` };
 }
 
-export function computeConfidence(action: Action, prevWeight: number, targetWeight: number, thresholds: SignalThresholds): number {
+export function computeConfidence(
+  action: Action,
+  prevWeight: number,
+  targetWeight: number,
+  thresholds: SignalThresholds
+): number {
   assertValidSignalThresholds(thresholds);
 
   // Defensive: if inputs are invalid, confidence should be 0.
@@ -56,15 +61,30 @@ export function computeConfidence(action: Action, prevWeight: number, targetWeig
   const tw = clamp(twNum, 0, 1);
   const delta = tw - prev;
 
-  const { buyAbove, sellBelow } = thresholds;
+  const { buyAbove, sellBelow, minChange } = thresholds;
 
-  // Intuition: BUY/SELL decisions can be high-confidence when we are meaningfully beyond the band.
-  // HOLD is inherently lower-confidence; otherwise flat/quiet series tend to look "confident" by default.
-  const dist = action === "BUY" ? Math.max(0, tw - buyAbove) : action === "SELL" ? Math.max(0, sellBelow - tw) : 0;
+  const bandWidth = buyAbove - sellBelow; // >0 by contract
+
+  // How far beyond the neutral band are we? (drives BUY/SELL confidence)
+  const bandDist =
+    action === "BUY" ? Math.max(0, tw - buyAbove) : action === "SELL" ? Math.max(0, sellBelow - tw) : 0;
+
+  // How much does momentum exceed the minChange threshold?
+  const momExcess = Math.max(0, Math.abs(delta) - (minChange || 0));
 
   if (action === "HOLD") {
-    return clamp(0.2 + Math.min(0.2, Math.abs(delta)) * 0.5, 0, 1);
+    // HOLD confidence should be higher when:
+    // - we're safely inside the band
+    // - day-over-day change is small (not near a momentum trigger)
+    const insideBand = tw >= sellBelow && tw <= buyAbove;
+    const margin = insideBand ? Math.min(tw - sellBelow, buyAbove - tw) : 0;
+    const marginNorm = clamp(bandWidth > 0 ? margin / (bandWidth / 2) : 0, 0, 1); // 1 in the middle
+
+    const deltaNorm = minChange > 0 ? clamp(1 - Math.abs(delta) / minChange, 0, 1) : 1;
+
+    return clamp(0.2 + 0.45 * marginNorm + 0.25 * deltaNorm, 0, 1);
   }
 
-  return clamp(0.4 + dist * 1.5 + Math.min(0.3, Math.abs(delta)), 0, 1);
+  // BUY/SELL confidence increases when we are meaningfully beyond the band OR when momentum strongly exceeds minChange.
+  return clamp(0.4 + bandDist * 1.5 + Math.min(0.3, Math.abs(delta)) + momExcess * 0.5, 0, 1);
 }
