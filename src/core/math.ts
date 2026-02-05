@@ -19,8 +19,11 @@ export function stdev(xs: number[]): number {
 export function cumulativeProduct(returns: number[], start = 1): number[] {
   const eq: number[] = [];
   let v = start;
-  for (const r of returns) {
-    v = v * (1 + r);
+  for (const rRaw of returns) {
+    // Defensive: treat non-finite returns as 0% so we don't pollute the whole equity curve.
+    const r = Number.isFinite(rRaw) ? rRaw : 0;
+    const next = v * (1 + r);
+    v = Number.isFinite(next) ? next : v;
     eq.push(v);
   }
   return eq;
