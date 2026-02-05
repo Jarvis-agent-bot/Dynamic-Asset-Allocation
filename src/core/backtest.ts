@@ -82,5 +82,6 @@ export type RankedBacktestResult = BacktestResult & { score: number };
 export function rankBacktestResults(results: BacktestResult[] = [], weights?: ScoreWeights): RankedBacktestResult[] {
   return [...(results || [])]
     .map((r) => ({ ...r, score: scoreMetrics(r.metrics, weights) }))
-    .sort((a, b) => b.score - a.score);
+    // Deterministic ordering: break ties by strategyId so CI snapshots/logs don't flap.
+    .sort((a, b) => (b.score - a.score) || a.strategyId.localeCompare(b.strategyId));
 }

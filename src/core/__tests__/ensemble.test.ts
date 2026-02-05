@@ -80,6 +80,24 @@ describe("rankBacktestResults", () => {
     expect(ranked[1]).toHaveProperty("score");
     expect(ranked[0].score).toBeGreaterThanOrEqual(ranked[1].score);
   });
+
+  it("is deterministic when scores tie (break ties by strategyId)", () => {
+    const base = {
+      equity: [1],
+      dailyReturns: [],
+      metrics: { totalReturn: 0, maxDrawdown: 0, sharpe: 0, winRate: 0 },
+    };
+
+    const ranked = rankBacktestResults(
+      [
+        { ...base, strategyId: "b", strategyName: "B" },
+        { ...base, strategyId: "a", strategyName: "A" },
+      ],
+      { wReturn: 0, wSharpe: 0, wDrawdown: 0, wWinRate: 0 },
+    );
+
+    expect(ranked.map((r) => r.strategyId)).toEqual(["a", "b"]);
+  });
 });
 
 describe("signal confidence", () => {
