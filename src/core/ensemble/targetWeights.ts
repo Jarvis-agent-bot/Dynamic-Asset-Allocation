@@ -103,7 +103,12 @@ export function ensembleTargetWeights(
     return perStrat
       .filter((s) => s.weight > 0)
       .slice()
-      .sort((a, b) => b.weight * b.ws[i] - a.weight * a.ws[i])
+      .sort((a, b) => {
+        const diff = b.weight * b.ws[i] - a.weight * a.ws[i];
+        if (diff !== 0) return diff;
+        // Deterministic tie-break to avoid jitter in explainability strings.
+        return a.id.localeCompare(b.id);
+      })
       .map((s) => {
         const contrib = s.weight * s.ws[i];
         return `${s.name}: ${pct01(s.ws[i])}% (w=${pct01(s.weight)}%, contrib=${pct01(contrib)}%)`;
