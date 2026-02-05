@@ -104,7 +104,10 @@ export function ensembleTargetWeights(
       .filter((s) => s.weight > 0)
       .slice()
       .sort((a, b) => b.weight * b.ws[i] - a.weight * a.ws[i])
-      .map((s) => `${s.name}: ${pct01(s.ws[i])}% (w=${pct01(s.weight)}%)`);
+      .map((s) => {
+        const contrib = s.weight * s.ws[i];
+        return `${s.name}: ${pct01(s.ws[i])}% (w=${pct01(s.weight)}%, contrib=${pct01(contrib)}%)`;
+      });
   });
 
   return { dates, targetWeights, reasonsByDay };
