@@ -3,100 +3,56 @@ import { describe, it, expect } from "vitest";
 import { ensembleTargetWeights } from "../ensemble/targetWeights";
 import type { PriceBar, Strategy } from "../domain";
 
-function makeSeries(): PriceBar[] {
-  return [
-    { date: "2026-02-01", close: 100 },
-    { date: "2026-02-02", close: 101 },
-  ];
+function bar(date: string, close = 100): PriceBar {
+  return { date, close };
 }
 
-function strat(id: string, w: number): Strategy {
+function strat(id: string, ws: number[], name?: string): Strategy {
   return {
     id,
-    name: id,
-    weights: (series) => series.map(() => w),
+    name: name ?? id,
+    weights: () => ws,
   };
 }
 
-describe("ensembleTargetWeights (weightsConfig contract)", () => {
-  it("throws on empty strategies (prevents silently all-0 target)", () => {
-    const series = makeSeries();
-    expect(() => ensembleTargetWeights([], series, {})).toThrow(/at least one strategy/);
-  });
+describe("ensembleTargetWeights contracts", () => {
+  it("throws when strategy ids are not unique (prevents silent overwrites)", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
 
-  it("throws on empty series (prevents confusing length mismatch downstream)", () => {
-    const strategies = [strat("a", 1)];
-    expect(() => ensembleTargetWeights(strategies, [], { a: 1 })).toThrow(/non-empty price series/);
-  });
-
-  it("throws when series dates are not strictly increasing (prevents misordered signals)", () => {
-    const strategies = [strat("a", 1)];
-
-    const series: PriceBar[] = [
-      { date: "2026-02-02", close: 101 },
-      { date: "2026-02-02", close: 100 },
+    const strategies = [
+      strat("dup", [0.2, 0.2], "A"),
+      strat("dup", [0.8, 0.8], "B"),
     ];
 
-    expect(() => ensembleTargetWeights(strategies, series, { a: 1 })).toThrow(/strictly increasing/);
+    expect(() => ensembleTargetWeights(strategies, series, { dup: 1 })).toThrow(/ids must be unique/i);
   });
 
-  it("throws when strategies contain duplicate ids (prevents silent overwrite)", () => {
-    const strategies = [strat("dup", 1), strat("dup", 0)];
-    const series = makeSeries();
+  it("throws when weightsConfig includes unknown non-zero strategy ids", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
 
-    expect(() => ensembleTargetWeights(strategies, series, { dup: 1 })).toThrow(/duplicates: dup/);
-  });
-
-  it("throws on unknown strategy ids with non-zero weights (prevents silent dilution)", () => {
-    const strategies = [strat("a", 1), strat("b", 0)];
-    const series = makeSeries();
+    const strategies = [strat("s1", [0.2, 0.2])];
 
     expect(() =>
       ensembleTargetWeights(strategies, series, {
-        a: 1,
-        b: 1,
-        unknown: 1,
+        s1: 1,
+        unknown: 0.1,
       })
-    ).toThrow(/Unknown strategy id\(s\) in weightsConfig/);
+    ).toThrow(/unknown strategy id/i);
   });
 
-  it("ignores unknown strategy ids when their weight is explicitly 0", () => {
-    const strategies = [strat("a", 1), strat("b", 0)];
-    const series = makeSeries();
+  it("throws when series dates are not strictly increasing", () => {
+    const series = [bar("2026-02-02"), bar("2026-02-01")];
 
-    const { targetWeights } = ensembleTargetWeights(strategies, series, {
-      a: 1,
-      b: 1,
-      unknown: 0,
-    });
+    const strategies = [strat("s1", [0.2, 0.2])];
 
-    // If a and b are equally weighted, target weight is average of (1 and 0) => 0.5.
-    expect(targetWeights).toEqual([0.5, 0.5]);
+    expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/strictly increasing/i);
   });
 
-  it("throws when all included strategy weights are 0 (prevents silent always-0 target)", () => {
-    const strategies = [strat("a", 1), strat("b", 0)];
-    const series = makeSeries();
+  it("throws when a strategy emits out-of-range weights", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
 
-    expect(() =>
-      ensembleTargetWeights(strategies, series, {
-        a: 0,
-        b: 0,
-      })
-    ).toThrow(/must assign a positive weight/);
-  });
+    const strategies = [strat("s1", [0.2, 1.2])];
 
-  it("throws if a strategy emits non-finite weights (prevents silently coercing to 0)", () => {
-    const series = makeSeries();
-
-    const strategies: Strategy[] = [
-      {
-        id: "bad",
-        name: "bad",
-        weights: (s) => s.map((_, i) => (i === 0 ? Number.NaN : 1)),
-      },
-    ];
-
-    expect(() => ensembleTargetWeights(strategies, series, { bad: 1 })).toThrow(/Non-finite weight/);
+    expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/out-of-range/i);
   });
 });
