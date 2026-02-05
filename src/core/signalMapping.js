@@ -1,0 +1,64 @@
+import { clamp } from "./math.js";
+
+/**
+ * @typedef {'BUY'|'SELL'|'HOLD'} Action
+ */
+
+/**
+ * @typedef {Object} Signal
+ * @property {string} date
+ * @property {Action} action
+ * @property {number} targetWeight
+ * @property {number} confidence 0..1 (heuristic)
+ * @property {string[]} reasons
+ */
+
+export const DEFAULT_SIGNAL_THRESHOLDS = {
+  buyAbove: 0.6,
+  sellBelow: 0.4,
+  // optional hysteresis / change sensitivity
+  minChange: 0.15,
+};
+
+/**
+ * Map ensemble target weights into BUY/SELL/HOLD signals.
+ *
+ * Rules (v0, neutral defaults):
+ * - BUY when targetWeight crosses above buyAbove OR increases by >=minChange.
+ * - SELL when targetWeight crosses below sellBelow OR decreases by >=minChange.
+ * - Else HOLD.
+ *
+ * @param {string[]} dates
+ * @param {number[]} targetWeights
+ * @param {string[][]} reasonsByDay
+ * @param {{buyAbove:number,sellBelow:number,minChange:number}} thresholds
+ * @returns {Signal[]}
+ */
+export function toSignals(dates, targetWeights, reasonsByDay, thresholds = DEFAULT_SIGNAL_THRESHOLDS) {
+  const buyAbove = thresholds.buyAbove;
+  const sellBelow = thresholds.sellBelow;
+  const minChange = thresholds.minChange;
+
+  return dates.map((date, i) => {
+    const tw = clamp(targetWeights[i] ?? 0, 0, 1);
+    const prev = i > 0 ? clamp(targetWeights[i - 1] ?? 0, 0, 1) : tw;
+    const delta = tw - prev;
+
+    let action = /** @type {Action} */ ("HOLD");
+
+    const crossedBuy = prev <= buyAbove && tw > buyAbove;
+    const crossedSell = prev >= sellBelow && tw < sellBelow;
+
+    if (crossedBuy || delta >= minChange) action = "BUY";
+    else if (crossedSell || delta <= -minChange) action = "SELL";
+
+    // heuristic confidence: distance from neutral band + magnitude of change
+    const dist = action === "BUY" ? Math.max(0, tw - buyAbove) : action === "SELL" ? Math.max(0, sellBelow - tw) : 0;
+    const confidence = clamp(0.4 + dist * 1.5 + Math.min(0.3, Math.abs(delta)), 0, 1);
+
+    const reasons = reasonsByDay?.[i] ? [...reasonsByDay[i]] : [];
+    reasons.unshift(`ensemble target=${Math.round(tw * 100)}% (Δ=${Math.round(delta * 100)}%)`);
+
+    return { date, action, targetWeight: tw, confidence, reasons };
+  });
+}
