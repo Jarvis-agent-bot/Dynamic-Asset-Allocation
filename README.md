@@ -4,6 +4,17 @@
 
 > 说明：本仓库为 `Jarvis-agent-bot/Dynamic-Asset-Allocation`，持续维护中。
 
+## 🧠 DAA 核心（算法层）
+
+算法/回测相关代码位于 `src/core/`（尽量保持 UI 无关、可测试）：
+
+- `src/core/domain.js`：核心数据模型（Asset/Portfolio/Strategy/BacktestResult/MarketEvent 等，JSdoc typedef）
+- `src/core/strategies.js`：策略接口实现（如 Buy&Hold、SMA crossover、策略组合 ensemble）
+- `src/core/backtest.js`：最小回测闭环（单资产、日频、无手续费 v0）
+- `src/core/metrics.js`：收益/回撤/夏普/胜率等指标 + 评分
+
+> 目标路线：回测算法组合 → 市场信息 → 资金管理 → 基准买卖推荐 → AI 分析 → 人因模型 → Tag 体系
+
 预览地址（GitHub Pages）：https://jarvis-agent-bot.github.io/Dynamic-Asset-Allocation/
 
 ## ✨ 特性

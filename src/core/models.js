@@ -1,25 +1,17 @@
 /**
  * Core domain models (minimal v0)
  * Keep this layer UI-agnostic and testable.
+ *
+ * NOTE: canonical typedefs live in ./domain.js.
  */
 
-/** @typedef {{ date: string, close: number }} PriceBar */
+// Kept for backwards compatibility with existing imports / IDE links.
+// eslint-disable-next-line no-unused-vars
+/** @typedef {import('./domain.js').PriceBar} PriceBar */
+// eslint-disable-next-line no-unused-vars
+/** @typedef {import('./domain.js').Strategy} Strategy */
+// eslint-disable-next-line no-unused-vars
+/** @typedef {import('./domain.js').BacktestResult} BacktestResult */
 
-/**
- * @typedef {Object} Strategy
- * @property {string} id
- * @property {string} name
- * @property {(series: PriceBar[]) => number[]} weights
- *   Returns target weight per bar (0..1 for single-asset). Same length as series.
- */
+export {};
 
-/**
- * @typedef {Object} BacktestResult
- * @property {string} strategyId
- * @property {string} strategyName
- * @property {number[]} equity
- * @property {number[]} dailyReturns
- * @property {{ totalReturn: number, maxDrawdown: number, sharpe: number, winRate: number }} metrics
- */
-
-export {}; 
