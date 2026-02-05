@@ -25,4 +25,12 @@ describe("decideAction", () => {
     expect(decideAction(0.2, 0.36, t)).toBe("BUY"); // +0.16
     expect(decideAction(0.8, 0.64, t)).toBe("SELL"); // -0.16
   });
+
+  it("throws on invalid thresholds", () => {
+    expect(() => decideAction(0.5, 0.5, { buyAbove: 0.4, sellBelow: 0.6, minChange: 0.1 })).toThrow(
+      /sellBelow must be <= buyAbove/
+    );
+    expect(() => decideAction(0.5, 0.5, { buyAbove: 1.2, sellBelow: 0.4, minChange: 0.1 })).toThrow(/buyAbove/);
+    expect(() => decideAction(0.5, 0.5, { buyAbove: 0.6, sellBelow: 0.4, minChange: -0.1 })).toThrow(/minChange/);
+  });
 });
