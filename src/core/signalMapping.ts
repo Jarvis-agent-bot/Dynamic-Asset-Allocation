@@ -35,7 +35,10 @@ export function toSignals(
     const confidence = computeConfidence(action, prev, tw, thresholds);
 
     const reasons = reasonsByDay?.[i] ? [...reasonsByDay[i]] : [];
-    reasons.unshift(`ensemble target=${Math.round(tw * 100)}% (Δ=${Math.round(delta * 100)}%)`);
+
+    const deltaPct = Math.round(delta * 100);
+    const deltaLabel = deltaPct > 0 ? `+${deltaPct}` : String(deltaPct);
+    reasons.unshift(`ensemble target=${Math.round(tw * 100)}% (Δ=${deltaLabel}%)`);
 
     return { date, action, targetWeight: tw, confidence, reasons };
   });
