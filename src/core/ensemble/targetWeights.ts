@@ -74,12 +74,15 @@ export function ensembleTargetWeights(
       throw new Error(`weights length mismatch: ${s.id} expected=${series.length} got=${raw.length}`);
     }
 
-    // Contract: strategy weights must be finite numbers.
-    // Non-finite values would otherwise get coerced to 0 and silently degrade signal quality.
+    // Contract: strategy weights must be finite numbers in [0, 1].
+    // Non-finite or out-of-range values would otherwise get coerced/clamped and silently degrade signal quality.
     for (let i = 0; i < raw.length; i++) {
       const v = Number(raw[i]);
       if (!Number.isFinite(v)) {
         throw new Error(`Non-finite weight from ${s.id} at index ${i}: ${String(raw[i])}`);
+      }
+      if (v < 0 || v > 1) {
+        throw new Error(`Out-of-range weight from ${s.id} at index ${i}: ${String(raw[i])} (expected 0..1)`);
       }
     }
 
