@@ -8,7 +8,20 @@ export function ensembleTargetWeights(
   weightsConfig: Record<string, number>
 ): { dates: string[]; targetWeights: number[]; reasonsByDay: string[][] } {
   assertNonNegativeWeights(weightsConfig);
-  const wNorm = normalizeWeights(weightsConfig);
+
+  // Contract: weightsConfig should not silently contain unknown strategy ids.
+  // Unknown weights would otherwise dilute normalization and degrade signal quality.
+  const stratIds = new Set(strategies.map((s) => s.id));
+  const unknown = Object.entries(weightsConfig).filter(([id, raw]) => !stratIds.has(id) && Number(raw) !== 0);
+  if (unknown.length > 0) {
+    const ids = unknown.map(([id]) => id).join(", ");
+    throw new Error(`Unknown strategy id(s) in weightsConfig: ${ids}`);
+  }
+
+  // Normalize only across the strategies that are actually part of this ensemble.
+  const weightsForStrats = Object.fromEntries(strategies.map((s) => [s.id, Number(weightsConfig[s.id] ?? 0)]));
+  const wNorm = normalizeWeights(weightsForStrats);
+
   const dates = series.map((b) => b.date);
 
   const perStrat = strategies.map((s) => {
