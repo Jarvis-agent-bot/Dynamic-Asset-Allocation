@@ -34,9 +34,26 @@ export function toSignals(
     const rawTw = targetWeights[i] ?? 0;
     const rawPrev = i > 0 ? (targetWeights[i - 1] ?? 0) : rawTw;
 
+    const warnings: string[] = [];
+
     // Defensive: avoid NaN/Infinity leaking into signals.
-    const tw = clamp(Number.isFinite(rawTw) ? rawTw : 0, 0, 1);
-    const prev = clamp(Number.isFinite(rawPrev) ? rawPrev : tw, 0, 1);
+    const twIsFinite = Number.isFinite(rawTw);
+    const tw = clamp(twIsFinite ? rawTw : 0, 0, 1);
+    if (!twIsFinite) {
+      warnings.push("warning: non-finite targetWeight treated as 0");
+    } else if (tw !== rawTw) {
+      warnings.push(`warning: targetWeight out of range; clamped from ${rawTw} to ${tw}`);
+    }
+
+    const prevIsFinite = Number.isFinite(rawPrev);
+    // If the previous day is non-finite, default prev=tw (so Δ=0) to avoid spurious jumps.
+    const prev = clamp(prevIsFinite ? rawPrev : tw, 0, 1);
+    if (!prevIsFinite && i > 0) {
+      warnings.push("warning: previous targetWeight non-finite; Δ forced to 0");
+    } else if (prevIsFinite && prev !== rawPrev && i > 0) {
+      warnings.push(`warning: previous targetWeight out of range; clamped from ${rawPrev} to ${prev}`);
+    }
+
     const delta = tw - prev;
 
     const { action, reason: decisionReason } = decideActionWithReason(prev, tw, thresholds);
@@ -47,7 +64,11 @@ export function toSignals(
     reasons.unshift(`ensemble target=${pct01(tw)}% (Δ=${signedPct(delta)}%)`);
     // Put the decision rule right after the headline target/Δ line.
     reasons.splice(1, 0, decisionReason);
+    if (warnings.length) {
+      reasons.splice(2, 0, ...warnings);
+    }
 
     return { date, action, targetWeight: tw, confidence, reasons };
   });
 }
+
