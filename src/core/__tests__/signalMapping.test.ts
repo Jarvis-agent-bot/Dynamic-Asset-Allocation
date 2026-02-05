@@ -57,4 +57,14 @@ describe("toSignals", () => {
 
     expect(String(sigs[1].reasons[0])).toContain("Δ=+60%");
   });
+
+  it("includes the decision rule as the 2nd reason line for explainability", () => {
+    const dates = ["2026-02-01", "2026-02-02"];
+    const targetWeights = [0.2, 0.8];
+    const reasonsByDay = [[], []] as string[][];
+
+    const sigs = toSignals(dates, targetWeights, reasonsByDay, DEFAULT_SIGNAL_THRESHOLDS);
+
+    expect(String(sigs[1].reasons[1])).toContain("rule:");
+  });
 });

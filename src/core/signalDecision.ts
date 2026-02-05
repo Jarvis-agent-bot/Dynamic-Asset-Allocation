@@ -3,6 +3,19 @@ import type { Action, SignalThresholds } from "./domain";
 import { assertValidSignalThresholds } from "./signalThresholds";
 
 export function decideAction(prevWeight: number, targetWeight: number, thresholds: SignalThresholds): Action {
+  return decideActionWithReason(prevWeight, targetWeight, thresholds).action;
+}
+
+/**
+ * Like decideAction(), but also returns the rule that fired.
+ *
+ * This improves signal explainability without changing the core Action API.
+ */
+export function decideActionWithReason(
+  prevWeight: number,
+  targetWeight: number,
+  thresholds: SignalThresholds
+): { action: Action; reason: string } {
   assertValidSignalThresholds(thresholds);
 
   const prev = clamp(prevWeight ?? 0, 0, 1);
@@ -14,9 +27,12 @@ export function decideAction(prevWeight: number, targetWeight: number, threshold
   const crossedBuy = prev <= buyAbove && tw > buyAbove;
   const crossedSell = prev >= sellBelow && tw < sellBelow;
 
-  if (crossedBuy || delta >= minChange) return "BUY";
-  if (crossedSell || delta <= -minChange) return "SELL";
-  return "HOLD";
+  if (crossedBuy) return { action: "BUY", reason: `rule: crossed above buyAbove (${buyAbove})` };
+  if (crossedSell) return { action: "SELL", reason: `rule: crossed below sellBelow (${sellBelow})` };
+  if (delta >= minChange) return { action: "BUY", reason: `rule: Δ>=minChange (${minChange})` };
+  if (delta <= -minChange) return { action: "SELL", reason: `rule: Δ<=-minChange (${minChange})` };
+
+  return { action: "HOLD", reason: `rule: within band & |Δ|<minChange (${minChange})` };
 }
 
 export function computeConfidence(action: Action, prevWeight: number, targetWeight: number, thresholds: SignalThresholds): number {

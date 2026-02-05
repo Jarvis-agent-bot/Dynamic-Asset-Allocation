@@ -1,6 +1,6 @@
 import { clamp } from "./math";
 import type { Signal, SignalThresholds } from "./domain";
-import { computeConfidence, decideAction } from "./signalDecision";
+import { computeConfidence, decideActionWithReason } from "./signalDecision";
 import { assertValidSignalThresholds } from "./signalThresholds";
 
 export const DEFAULT_SIGNAL_THRESHOLDS: SignalThresholds = {
@@ -55,12 +55,14 @@ export function toSignals(
     const prev = clamp(Number.isFinite(rawPrev) ? rawPrev : tw, 0, 1);
     const delta = tw - prev;
 
-    const action = decideAction(prev, tw, thresholds);
+    const { action, reason: decisionReason } = decideActionWithReason(prev, tw, thresholds);
     const confidence = computeConfidence(action, prev, tw, thresholds);
 
     const reasons = reasonsByDay?.[i] ? [...reasonsByDay[i]] : [];
 
     reasons.unshift(`ensemble target=${pct(tw)}% (Δ=${signedPct(delta)}%)`);
+    // Put the decision rule right after the headline target/Δ line.
+    reasons.splice(1, 0, decisionReason);
 
     return { date, action, targetWeight: tw, confidence, reasons };
   });
