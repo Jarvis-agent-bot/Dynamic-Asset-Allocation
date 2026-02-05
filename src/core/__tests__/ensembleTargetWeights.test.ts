@@ -29,6 +29,17 @@ describe("ensembleTargetWeights (weightsConfig contract)", () => {
     expect(() => ensembleTargetWeights(strategies, [], { a: 1 })).toThrow(/non-empty price series/);
   });
 
+  it("throws when series dates are not strictly increasing (prevents misordered signals)", () => {
+    const strategies = [strat("a", 1)];
+
+    const series: PriceBar[] = [
+      { date: "2026-02-02", close: 101 },
+      { date: "2026-02-02", close: 100 },
+    ];
+
+    expect(() => ensembleTargetWeights(strategies, series, { a: 1 })).toThrow(/strictly increasing/);
+  });
+
   it("throws when strategies contain duplicate ids (prevents silent overwrite)", () => {
     const strategies = [strat("dup", 1), strat("dup", 0)];
     const series = makeSeries();

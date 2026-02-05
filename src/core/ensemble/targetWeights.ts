@@ -57,6 +57,16 @@ export function ensembleTargetWeights(
 
   const dates = series.map((b) => b.date);
 
+  // Contract: series dates must be strictly increasing to ensure we don't generate
+  // ambiguous signals or misordered backtests.
+  for (let i = 1; i < dates.length; i++) {
+    if (dates[i] <= dates[i - 1]) {
+      throw new Error(
+        `Price series dates must be strictly increasing (got ${dates[i - 1]} then ${dates[i]} at index ${i})`
+      );
+    }
+  }
+
   const perStrat = strategies.map((s) => {
     const raw = s.weights(series);
     if (raw.length !== series.length) {
