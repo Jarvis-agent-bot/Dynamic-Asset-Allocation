@@ -18,9 +18,21 @@ export function ensembleTargetWeights(
 
   // Contract: strategy ids must be unique. Duplicate ids would overwrite each other
   // in the weights map and silently degrade signal quality.
-  const stratIds = new Set(strategies.map((s) => s.id));
+  const ids = strategies.map((s) => s.id);
+  const stratIds = new Set(ids);
   if (stratIds.size !== strategies.length) {
-    throw new Error("Strategy ids must be unique in ensembleTargetWeights() input");
+    const counts = ids.reduce<Record<string, number>>((acc, id) => {
+      acc[id] = (acc[id] ?? 0) + 1;
+      return acc;
+    }, {});
+    const dups = Object.entries(counts)
+      .filter(([, n]) => n > 1)
+      .map(([id]) => id)
+      .join(", ");
+
+    throw new Error(
+      `Strategy ids must be unique in ensembleTargetWeights() input${dups ? ` (duplicates: ${dups})` : ""}`
+    );
   }
 
   // Contract: weightsConfig should not silently contain unknown strategy ids.

@@ -33,7 +33,7 @@ describe("ensembleTargetWeights (weightsConfig contract)", () => {
     const strategies = [strat("dup", 1), strat("dup", 0)];
     const series = makeSeries();
 
-    expect(() => ensembleTargetWeights(strategies, series, { dup: 1 })).toThrow(/Strategy ids must be unique/);
+    expect(() => ensembleTargetWeights(strategies, series, { dup: 1 })).toThrow(/duplicates: dup/);
   });
 
   it("throws on unknown strategy ids with non-zero weights (prevents silent dilution)", () => {
