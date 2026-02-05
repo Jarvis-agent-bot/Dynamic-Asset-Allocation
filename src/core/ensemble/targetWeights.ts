@@ -20,6 +20,14 @@ export function ensembleTargetWeights(
 
   // Normalize only across the strategies that are actually part of this ensemble.
   const weightsForStrats = Object.fromEntries(strategies.map((s) => [s.id, Number(weightsConfig[s.id] ?? 0)]));
+
+  // Contract: at least one included strategy must have a positive weight.
+  // Otherwise we'd silently normalize to all-zeros and emit a perpetual 0% target.
+  const sumIncludedWeights = Object.values(weightsForStrats).reduce((acc, v) => acc + (Number(v) || 0), 0);
+  if (sumIncludedWeights <= 0) {
+    throw new Error("weightsConfig must assign a positive weight to at least one strategy in the ensemble");
+  }
+
   const wNorm = normalizeWeights(weightsForStrats);
 
   const dates = series.map((b) => b.date);
