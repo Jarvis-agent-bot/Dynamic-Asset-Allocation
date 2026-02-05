@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { DEFAULT_ENSEMBLE_WEIGHTS, normalizeWeights } from "../config.js";
+import { DEFAULT_ENSEMBLE_WEIGHTS, normalizeWeights } from "../config";
 
 describe("normalizeWeights", () => {
   it("normalizes to sum=1", () => {

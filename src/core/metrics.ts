@@ -1,14 +1,7 @@
-import { mean, stdev, maxDrawdown } from "./math.js";
+import { mean, stdev, maxDrawdown } from "./math";
+import type { BacktestMetrics } from "./domain";
 
-/**
- * @param {number[]} equity
- * @param {number[]} dailyReturns
- */
-/**
- * @typedef {{ totalReturn: number, maxDrawdown: number, sharpe: number, winRate: number }} Metrics
- */
-
-export function computeMetrics(equity, dailyReturns) {
+export function computeMetrics(equity: number[], dailyReturns: number[]): BacktestMetrics {
   const totalReturn = equity.length ? equity[equity.length - 1] - 1 : 0;
   const mdd = maxDrawdown(equity);
 
@@ -17,7 +10,7 @@ export function computeMetrics(equity, dailyReturns) {
   const sigma = stdev(dailyReturns);
   const sharpe = sigma === 0 ? 0 : (mu / sigma) * Math.sqrt(252);
 
-  const wins = dailyReturns.filter((r) => r > 0).length;
+  const wins = dailyReturns.filter((r: number) => r > 0).length;
   const winRate = dailyReturns.length ? wins / dailyReturns.length : 0;
 
   return {
@@ -36,19 +29,19 @@ export function computeMetrics(equity, dailyReturns) {
  * - reward: totalReturn + sharpe
  * - penalize: maxDrawdown
  * - tiny reward: winRate
- *
- * @param {Metrics} m
- * @param {{
- *   wReturn?: number,
- *   wSharpe?: number,
- *   wDrawdown?: number,
- *   wWinRate?: number
- * }} [w]
  */
+
+export type ScoreWeights = {
+  wReturn?: number;
+  wSharpe?: number;
+  wDrawdown?: number;
+  wWinRate?: number;
+};
+
 export function scoreMetrics(
-  m,
-  { wReturn = 1, wSharpe = 1, wDrawdown = 1, wWinRate = 0.1 } = {},
-) {
+  m: BacktestMetrics,
+  { wReturn = 1, wSharpe = 1, wDrawdown = 1, wWinRate = 0.1 }: ScoreWeights = {}
+): number {
   const totalReturn = Number(m?.totalReturn) || 0;
   const sharpe = Number(m?.sharpe) || 0;
   const maxDrawdown = Number(m?.maxDrawdown) || 0;

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 
-import { ensembleSignals, DEFAULT_SIGNAL_THRESHOLDS } from "../signals.js";
-import { buyAndHold, smaCrossover } from "../strategies.js";
-import { DEFAULT_ENSEMBLE_WEIGHTS } from "../config.js";
+import { ensembleSignals, DEFAULT_SIGNAL_THRESHOLDS } from "../signals";
+import { buyAndHold, smaCrossover } from "../strategies";
+import { DEFAULT_ENSEMBLE_WEIGHTS } from "../config";
 
 function makeSeries({ n = 60, start = 100, daily = 0.002 } = {}) {
   const out = [];

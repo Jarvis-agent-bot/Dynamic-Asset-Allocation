@@ -1,12 +1,10 @@
-import { clamp, cumulativeProduct } from "./math.js";
-import { computeMetrics, scoreMetrics } from "./metrics.js";
+import { clamp, cumulativeProduct } from "./math";
+import { computeMetrics, scoreMetrics, type ScoreWeights } from "./metrics";
+import type { BacktestResult, PriceBar, Strategy } from "./domain";
 
-/**
- * Compute daily close-to-close returns.
- * @param {{close:number}[]} series
- */
-export function computeAssetReturns(series) {
-  const rs = [];
+/** Compute daily close-to-close returns. */
+export function computeAssetReturns(series: Array<Pick<PriceBar, "close">>): number[] {
+  const rs: number[] = [];
   for (let i = 1; i < series.length; i++) {
     const prev = series[i - 1].close;
     const cur = series[i].close;
@@ -20,12 +18,10 @@ export function computeAssetReturns(series) {
  * weights are applied for the NEXT day return (i -> i+1), so we align:
  * - weights length == series length
  * - dailyReturns length == series length - 1
- * @param {{id:string,name:string,weights:(series:any[])=>number[]}} strategy
- * @param {{date:string,close:number}[]} series
  */
-export function backtestSingleAsset(strategy, series) {
+export function backtestSingleAsset(strategy: Strategy, series: PriceBar[]): BacktestResult {
   if (!series || series.length < 2) throw new Error("series too short");
-  const w = strategy.weights(series).map((x) => clamp(Number(x) || 0, 0, 1));
+  const w = strategy.weights(series).map((x: number) => clamp(Number(x) || 0, 0, 1));
   if (w.length !== series.length) throw new Error("weights length mismatch");
 
   const assetReturns = computeAssetReturns(series);
@@ -43,21 +39,13 @@ export function backtestSingleAsset(strategy, series) {
   };
 }
 
-/**
- * Run multiple strategies and return results.
- * @param {Array<any>} strategies
- * @param {Array<any>} series
- */
-export function runBacktests(strategies, series) {
+export function runBacktests(strategies: Strategy[], series: PriceBar[]): BacktestResult[] {
   return strategies.map((s) => backtestSingleAsset(s, series));
 }
 
-/**
- * Rank backtest results by a scalar score (higher is better).
- * @param {Array<ReturnType<typeof backtestSingleAsset>>} results
- * @param {Parameters<typeof scoreMetrics>[1]} [weights]
- */
-export function rankBacktestResults(results, weights) {
+export type RankedBacktestResult = BacktestResult & { score: number };
+
+export function rankBacktestResults(results: BacktestResult[] = [], weights?: ScoreWeights): RankedBacktestResult[] {
   return [...(results || [])]
     .map((r) => ({ ...r, score: scoreMetrics(r.metrics, weights) }))
     .sort((a, b) => b.score - a.score);

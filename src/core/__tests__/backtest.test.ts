@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { backtestSingleAsset, runBacktests } from "../backtest.js";
-import { buyAndHold, smaCrossover } from "../strategies.js";
+import { backtestSingleAsset, runBacktests } from "../backtest";
+import { buyAndHold, smaCrossover } from "../strategies";
 
 function makeTrendSeries({ n = 60, start = 100, daily = 0.002 } = {}) {
   const out = [];

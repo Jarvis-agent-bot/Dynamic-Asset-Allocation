@@ -1,15 +1,12 @@
-import { clamp } from "../math.js";
-import { normalizeWeights } from "../config.js";
+import { clamp } from "../math";
+import { normalizeWeights } from "../config";
+import type { PriceBar, Strategy } from "../domain";
 
-/**
- * Combine multiple strategy weight series (single-asset) into an ensemble target weight series.
- *
- * @param {Array<{id:string,name:string,weights:(series:any[])=>number[]}>} strategies
- * @param {Array<{date:string,close:number}>} series
- * @param {Record<string, number>} weightsConfig
- * @returns {{ dates: string[], targetWeights: number[], reasonsByDay: string[][] }}
- */
-export function ensembleTargetWeights(strategies, series, weightsConfig) {
+export function ensembleTargetWeights(
+  strategies: Strategy[],
+  series: PriceBar[],
+  weightsConfig: Record<string, number>
+): { dates: string[]; targetWeights: number[]; reasonsByDay: string[][] } {
   const wNorm = normalizeWeights(weightsConfig);
   const dates = series.map((b) => b.date);
 
@@ -26,7 +23,6 @@ export function ensembleTargetWeights(strategies, series, weightsConfig) {
   });
 
   const reasonsByDay = dates.map((_, i) => {
-    // keep minimal, transparent reasons
     return perStrat
       .filter((s) => s.weight > 0)
       .map((s) => `${s.name}: ${Math.round(s.ws[i] * 100)}% (w=${Math.round(s.weight * 100)}%)`);

@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 
-import { backtestSingleAsset, rankBacktestResults } from "../backtest.js";
-import { buyAndHold, smaCrossover, ensembleStrategy } from "../strategies.js";
+import { backtestSingleAsset, rankBacktestResults } from "../backtest";
+import { buyAndHold, smaCrossover, ensembleStrategy } from "../strategies";
 
-function makeFlatSeries({ n = 40, start = 100 } = {}) {
-  const out = [];
+function makeFlatSeries({ n = 40, start = 100 }: { n?: number; start?: number } = {}) {
+  const out: Array<{ date: string; close: number }> = [];
   for (let i = 0; i < n; i++) {
     out.push({ date: `2026-02-${String(i + 1).padStart(2, "0")}`, close: start });
   }
@@ -26,7 +26,7 @@ describe("ensembleStrategy", () => {
 
     const w = ensemble.weights(series);
     expect(w).toHaveLength(series.length);
-    expect(w.every((x) => x >= 0 && x <= 1 && Number.isFinite(x))).toBe(true);
+    expect(w.every((x: number) => x >= 0 && x <= 1 && Number.isFinite(x))).toBe(true);
   });
 });
 
