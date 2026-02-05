@@ -48,7 +48,12 @@ export function computeAssetReturns(series: Array<Pick<PriceBar, "close">>): num
  */
 export function backtestSingleAsset(strategy: Strategy, series: PriceBar[]): BacktestResult {
   if (!series || series.length < 2) throw new Error("series too short");
-  const w = strategy.weights(series).map((x: number) => clamp(Number(x) || 0, 0, 1));
+  // Defensive: strategies must not emit NaN/Infinity weights. For backtests we treat
+  // invalid weights as 0 to prevent NaN pollution and accidental full-risk exposure.
+  const w = strategy.weights(series).map((x: number) => {
+    const n = Number(x);
+    return clamp(Number.isFinite(n) ? n : 0, 0, 1);
+  });
   if (w.length !== series.length) {
     throw new Error(`weights length mismatch: ${strategy.id} expected=${series.length} got=${w.length}`);
   }

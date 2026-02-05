@@ -42,6 +42,24 @@ describe("backtestSingleAsset", () => {
     expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
   });
 
+  it("treats non-finite strategy weights as 0 (prevents accidental full-risk exposure)", () => {
+    const series = makeTrendSeries({ n: 6, daily: 0.01 });
+
+    const strat = {
+      id: "bad_w",
+      name: "bad_w",
+      weights: (s: PriceBar[]) => s.map((_, i) => (i === 2 ? Number.POSITIVE_INFINITY : 1)),
+    };
+
+    const res = backtestSingleAsset(strat as any, series as PriceBar[]);
+    expect(res.dailyReturns.every((x) => Number.isFinite(x))).toBe(true);
+    expect(res.equity.every((x) => Number.isFinite(x) && x >= 0)).toBe(true);
+
+    // The day with invalid weight should behave like 0 weight.
+    // weight at day i applies to return i->i+1, so i=2 affects dailyReturns[2].
+    expect(res.dailyReturns[2]).toBe(0);
+  });
+
   it("does not cascade invalid-prev into all subsequent days", () => {
     const series = makeTrendSeries({ n: 6, daily: 0.01 });
     // First day invalid: day-1 return must be 0, but later valid days should still produce finite output.
