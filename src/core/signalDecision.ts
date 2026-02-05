@@ -87,7 +87,8 @@ export function computeConfidence(
     action === "BUY" ? Math.max(0, tw - buyAbove) : action === "SELL" ? Math.max(0, sellBelow - tw) : 0;
 
   // How much does momentum exceed the minChange threshold?
-  const momExcess = Math.max(0, Math.abs(delta) - (minChange || 0));
+  // Use a normalized measure so confidence behaves consistently across different minChange settings.
+  const momRatio = minChange > 0 ? Math.max(0, Math.abs(delta) / minChange - 1) : 0;
 
   if (action === "HOLD") {
     // HOLD confidence should be higher when:
@@ -103,5 +104,10 @@ export function computeConfidence(
   }
 
   // BUY/SELL confidence increases when we are meaningfully beyond the band OR when momentum strongly exceeds minChange.
-  return clamp(0.4 + bandDist * 1.5 + Math.min(0.3, Math.abs(delta)) + momExcess * 0.5, 0, 1);
+  const deltaNorm =
+    minChange > 0
+      ? clamp(Math.abs(delta) / minChange, 0, 2) / 2 // 0..1 (caps at 2x minChange)
+      : 1;
+
+  return clamp(0.4 + bandDist * 1.5 + 0.3 * deltaNorm + 0.2 * momRatio, 0, 1);
 }
