@@ -38,12 +38,27 @@ export function decideActionWithReason(
 
   const fmt = (x: number) => Number.isFinite(x) ? x.toFixed(3) : String(x);
 
-  if (crossedBuy) return { action: "BUY", reason: `rule: crossed above buyAbove (${buyAbove})` };
-  if (crossedSell) return { action: "SELL", reason: `rule: crossed below sellBelow (${sellBelow})` };
-  if (delta >= minChange) return { action: "BUY", reason: `rule: Δ=${fmt(delta)}>=minChange (${minChange})` };
-  if (delta <= -minChange) return { action: "SELL", reason: `rule: Δ=${fmt(delta)}<=-minChange (${minChange})` };
+  if (crossedBuy) {
+    return {
+      action: "BUY",
+      reason: `rule: crossed above buyAbove (${fmt(buyAbove)}): prev=${fmt(prev)} -> tw=${fmt(tw)}`,
+    };
+  }
 
-  return { action: "HOLD", reason: `rule: within band & |Δ|<minChange (${minChange})` };
+  if (crossedSell) {
+    return {
+      action: "SELL",
+      reason: `rule: crossed below sellBelow (${fmt(sellBelow)}): prev=${fmt(prev)} -> tw=${fmt(tw)}`,
+    };
+  }
+
+  if (delta >= minChange) return { action: "BUY", reason: `rule: Δ=${fmt(delta)}>=minChange (${fmt(minChange)})` };
+  if (delta <= -minChange) return { action: "SELL", reason: `rule: Δ=${fmt(delta)}<=-minChange (${fmt(minChange)})` };
+
+  return {
+    action: "HOLD",
+    reason: `rule: within band [${fmt(sellBelow)}, ${fmt(buyAbove)}] & |Δ|<minChange (${fmt(minChange)})`,
+  };
 }
 
 export function computeConfidence(
