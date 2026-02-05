@@ -26,7 +26,36 @@ export function ensembleStrategy({
   // DAA contract: never accept negative weights.
   assertNonNegativeWeights(weightsById);
 
-  const norm = normalizeWeights(weightsById);
+  // Contract: strategy ids must be unique. Duplicate ids would cause ambiguous normalization.
+  const ids = strategies.map((s) => s.id);
+  const uniq = new Set(ids);
+  if (uniq.size !== strategies.length) {
+    const counts = ids.reduce<Record<string, number>>((acc, id) => {
+      acc[id] = (acc[id] ?? 0) + 1;
+      return acc;
+    }, {});
+    const dups = Object.entries(counts)
+      .filter(([, n]) => n > 1)
+      .map(([id]) => id)
+      .join(", ");
+    throw new Error(`Strategy ids must be unique (duplicates: ${dups || "unknown"})`);
+  }
+
+  // Contract: weightsById must not contain unknown non-zero strategy ids.
+  const unknown = Object.entries(weightsById).filter(([id, raw]) => !uniq.has(id) && Number(raw) !== 0);
+  if (unknown.length > 0) {
+    throw new Error(`Unknown strategy id(s) in weightsById: ${unknown.map(([id]) => id).join(", ")}`);
+  }
+
+  // Contract: at least one included strategy must have a positive weight.
+  const sumIncluded = strategies.reduce((acc, s) => acc + (Number(weightsById[s.id] ?? 0) || 0), 0);
+  if (sumIncluded <= 0) {
+    throw new Error("weightsById must assign a positive weight to at least one strategy in the ensemble");
+  }
+
+  // Normalize only across the strategies that are part of this ensemble.
+  const weightsForStrats = Object.fromEntries(strategies.map((s) => [s.id, Number(weightsById[s.id] ?? 0)]));
+  const norm = normalizeWeights(weightsForStrats);
 
   return {
     id,

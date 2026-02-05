@@ -25,6 +25,32 @@ describe("ensembleStrategy", () => {
     ).toThrow(/non-negative/i);
   });
 
+  it("throws when weightsById contains unknown strategy ids (signal quality contract)", () => {
+    const series = makeFlatSeries({ n: 10 });
+    const s1 = buyAndHold();
+    const s2 = smaCrossover({ fast: 3, slow: 10 });
+
+    expect(() =>
+      ensembleStrategy({
+        strategies: [s1, s2],
+        weightsById: { [s1.id]: 1, [s2.id]: 1, unknown_strat: 0.1 },
+      }).weights(series),
+    ).toThrow(/Unknown strategy id\(s\) in weightsById/i);
+  });
+
+  it("throws when all included strategy weights are zero", () => {
+    const series = makeFlatSeries({ n: 10 });
+    const s1 = buyAndHold();
+    const s2 = smaCrossover({ fast: 3, slow: 10 });
+
+    expect(() =>
+      ensembleStrategy({
+        strategies: [s1, s2],
+        weightsById: { [s1.id]: 0, [s2.id]: 0 },
+      }).weights(series),
+    ).toThrow(/positive weight/i);
+  });
+
   it("produces weights within [0,1] and correct length", () => {
     const series = makeFlatSeries({ n: 30 });
     const s1 = buyAndHold();
