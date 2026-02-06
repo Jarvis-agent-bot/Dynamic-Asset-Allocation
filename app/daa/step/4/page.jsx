@@ -84,7 +84,7 @@ export default function Step4BaselineRebalancePage() {
     };
 
     try {
-      const resp = await fetch("/daa-api/v1/rebalance/simulate", {
+      const resp = await fetch("/api/daa/rebalance/simulate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
