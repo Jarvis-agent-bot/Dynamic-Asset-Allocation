@@ -382,7 +382,7 @@ function NumericInput({ value, onChange, step = 1, min = 0, placeholder }) {
     <div style={{ position: 'relative' }}>
       <input
         type="number"
-        step="any"
+        step={step}
         className="input no-zoom" // 增加 no-zoom 类
         value={value}
         onChange={(e) => onChange(e.target.value)}
