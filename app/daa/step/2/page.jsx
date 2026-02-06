@@ -42,18 +42,26 @@ export default function Step2MarketEventsPage() {
   const [showTwitter, setShowTwitter] = useState(true);
   const [showNews, setShowNews] = useState(true);
   const [symbol, setSymbol] = useState("");
+  const [since, setSince] = useState(""); // YYYY-MM-DD
+  const [until, setUntil] = useState(""); // YYYY-MM-DD
   const [selected, setSelected] = useState(null);
 
   const filtered = useMemo(() => {
     const sources = [];
     if (showTwitter) sources.push("twitter");
     if (showNews) sources.push("news");
+
+    const sinceTs = since ? `${since}T00:00:00.000Z` : undefined;
+    const untilTs = until ? `${until}T23:59:59.999Z` : undefined;
+
     return filterMarketEvents(MOCK_EVENTS, {
       sources,
       symbols: symbol.trim() ? [symbol.trim()] : undefined,
+      sinceTs,
+      untilTs,
       limit: 200,
     });
-  }, [showTwitter, showNews, symbol]);
+  }, [showTwitter, showNews, symbol, since, until]);
 
   return (
     <main>
@@ -89,6 +97,39 @@ export default function Step2MarketEventsPage() {
             Clear
           </button>
         ) : null}
+
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "#666" }}>Since</span>
+          <input
+            type="date"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+            aria-label="Filter since date"
+            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+          />
+        </label>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "#666" }}>Until</span>
+          <input
+            type="date"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+            aria-label="Filter until date"
+            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+          />
+        </label>
+        {(since || until) ? (
+          <button
+            onClick={() => {
+              setSince("");
+              setUntil("");
+            }}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
+          >
+            Clear dates
+          </button>
+        ) : null}
+
         <div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>
           {filtered.length} events
         </div>

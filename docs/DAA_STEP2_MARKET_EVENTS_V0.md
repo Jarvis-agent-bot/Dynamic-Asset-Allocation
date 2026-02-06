@@ -68,6 +68,7 @@ export type MarketEventQuery = {
 - 顶部过滤区：
   - 两个 checkbox：Twitter（主观）/ News（客观）
   - Symbol 输入框：输入后即时过滤；提供 Clear 按钮
+  - Since / Until 日期过滤：按事件 ts 过滤；提供 Clear dates 按钮
   - 右侧展示当前 events 数量
 - 列表区（Events）：
   - 每条 event 显示：title / source / summary / symbols / author / tags / 本地格式化时间
