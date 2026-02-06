@@ -89,4 +89,15 @@ describe("toSignals", () => {
 
     expect(String(sigs[1].reasons[1])).toContain("rule:");
   });
+
+  it("throws when reasonsByDay contains non-string entries (contract validation)", () => {
+    const dates = ["2026-02-01"];
+    const targetWeights = [0.5];
+
+    const badReasons = [["ok", 123]];
+
+    expect(() => toSignals(dates, targetWeights, badReasons as unknown as string[][], DEFAULT_SIGNAL_THRESHOLDS)).toThrow(
+      /reasonsByDay\[0\]\[1\] must be a string/i
+    );
+  });
 });

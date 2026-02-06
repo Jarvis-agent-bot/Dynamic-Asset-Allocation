@@ -59,7 +59,21 @@ export function toSignals(
     const { action, reason: decisionReason } = decideActionWithReason(prev, tw, thresholds);
     const confidence = computeConfidence(action, prev, tw, thresholds);
 
-    const reasons = reasonsByDay?.[i] ? [...reasonsByDay[i]] : [];
+    const dayReasons = reasonsByDay?.[i];
+    if (dayReasons != null && !Array.isArray(dayReasons)) {
+      throw new Error(`toSignals contract violation: reasonsByDay[${i}] must be an array of strings when provided`);
+    }
+    if (Array.isArray(dayReasons)) {
+      for (let j = 0; j < dayReasons.length; j++) {
+        if (typeof dayReasons[j] !== "string") {
+          throw new Error(
+            `toSignals contract violation: reasonsByDay[${i}][${j}] must be a string (got ${typeof dayReasons[j]})`
+          );
+        }
+      }
+    }
+
+    const reasons = Array.isArray(dayReasons) ? [...dayReasons] : [];
 
     reasons.unshift(`ensemble target=${pct01(tw)}% (Δ=${signedPct(delta)}%)`);
     // Put the decision rule right after the headline target/Δ line.
