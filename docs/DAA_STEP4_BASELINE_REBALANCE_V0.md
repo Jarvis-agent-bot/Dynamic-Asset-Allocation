@@ -1,12 +1,12 @@
 # DAA — Step4 基准再平衡（Baseline Rebalance）v0
 
-> 本文档对应 UI：`/daa/step/4`（Step 4 — 基准再平衡 v0 占位）。
+> 本文档对应 UI：`/daa/step/4`（Step 4 — 基准再平衡 v0）。
 
 ## 目标（v0）
 
 - **先把 UI 框架搭起来**：从「价格序列输入」→「core 信号输出」的闭环可跑。
 - **不做推荐/不做自动下单**：仅展示信号与后续规划方向。
-- 为后续 Step3（资金管理）与 Step2（市场事件）接入预留位置。
+- 为后续接入 Step3（资金管理）与 Step2（市场事件）预留空间。
 
 ## 页面行为（与当前 UI 一致）
 
@@ -25,7 +25,8 @@
    - 解析失败时：显示错误 `priceSeries JSON parse failed`
 
 3. **Signals 输出区**
-   - 计算逻辑：调用 core 的 `ensembleSignals({ symbol, series })`
+   - 计算逻辑：调用 core 的 `ensembleSignals(strategies, series, DEFAULT_ENSEMBLE_WEIGHTS)`
+     - v0 内置策略：`buyAndHold()` + `smaCrossover({ fast: 3, slow: 10 })`
    - 调用异常时：显示异常 message
    - 正常时：以 pretty JSON（2 空格缩进）展示输出
    - 提供 **Copy** 按钮：复制当前 signals 的 pretty JSON 到剪贴板（signals 为空时 disabled）
