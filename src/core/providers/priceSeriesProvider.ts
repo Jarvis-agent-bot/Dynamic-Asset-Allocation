@@ -1,4 +1,5 @@
 import type { PriceBar } from "../domain";
+import { assertIsoDateString } from "../isoDate";
 import { assertValidPriceSeries } from "../seriesContracts";
 
 /**
@@ -39,25 +40,9 @@ export function assertValidPriceSeriesRequest(request: PriceSeriesRequest): void
     throw new Error(`symbol must be a non-empty string (got ${String(symbol)})`);
   }
 
-  const assertIsoDate: (d: unknown, label: string) => asserts d is string = (
-    d,
-    label,
-  ) => {
-    if (typeof d !== "string" || d.length === 0) {
-      throw new Error(`${label} must be a non-empty string (got ${String(d)})`);
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-      throw new Error(`${label} must match YYYY-MM-DD (got ${d})`);
-    }
-    const parsed = new Date(`${d}T00:00:00Z`);
-    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== d) {
-      throw new Error(`${label} must be a valid calendar date (got ${d})`);
-    }
-  };
-
   const { start, end } = request;
-  if (start !== undefined) assertIsoDate(start, "start");
-  if (end !== undefined) assertIsoDate(end, "end");
+  if (start !== undefined) assertIsoDateString(start, "start");
+  if (end !== undefined) assertIsoDateString(end, "end");
   if (start && end && start > end) {
     throw new Error(`start must be <= end (got ${start} > ${end})`);
   }

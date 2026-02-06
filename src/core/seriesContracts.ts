@@ -1,4 +1,5 @@
 import type { PriceBar } from "./domain";
+import { assertIsoDateString } from "./isoDate";
 
 /**
  * Contract: series dates must be present, ISO-like (YYYY-MM-DD), valid calendar dates,
@@ -14,13 +15,12 @@ export function assertValidSeriesDates(series: Array<Pick<PriceBar, "date">>): v
       throw new Error(`Price series date must be a non-empty string (got ${String(d)} at index ${i})`);
     }
 
-    // Strict-ish ISO check (YYYY-MM-DD) + validity (e.g., rejects 2026-13-40).
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-      throw new Error(`Price series date must match YYYY-MM-DD (got ${d} at index ${i})`);
-    }
-    const parsed = new Date(`${d}T00:00:00Z`);
-    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== d) {
-      throw new Error(`Price series date must be a valid calendar date (got ${d} at index ${i})`);
+    // Strict ISO check (YYYY-MM-DD) + validity (e.g., rejects 2026-13-40).
+    try {
+      assertIsoDateString(d, "Price series date");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`${msg} at index ${i}`);
     }
 
     if (i > 0) {
