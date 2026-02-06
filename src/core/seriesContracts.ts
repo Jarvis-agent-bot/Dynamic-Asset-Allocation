@@ -31,3 +31,26 @@ export function assertValidSeriesDates(series: Array<Pick<PriceBar, "date">>): v
     }
   }
 }
+
+/**
+ * Provider contract (framework v0): a price series must be well-formed enough to
+ * power signals/backtests without relying on "forgiving" fallbacks.
+ *
+ * Note: backtest code still contains defensive handling for bad data, but pipelines
+ * should validate early so failures are loud and actionable.
+ */
+export function assertValidPriceSeries(series: PriceBar[]): void {
+  if (!series || series.length < 2) throw new Error("series too short (need >= 2 bars)");
+
+  assertValidSeriesDates(series);
+
+  for (let i = 0; i < series.length; i++) {
+    const close = Number(series[i]?.close);
+    if (!Number.isFinite(close)) {
+      throw new Error(`Price series close must be a finite number (got ${String(series[i]?.close)} at index ${i})`);
+    }
+    if (close <= 0) {
+      throw new Error(`Price series close must be > 0 (got ${close} at index ${i})`);
+    }
+  }
+}
