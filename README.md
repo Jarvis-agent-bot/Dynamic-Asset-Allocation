@@ -18,6 +18,29 @@
 - `src/core/metrics.ts`：收益/回撤/夏普/胜率等指标 + 评分
 - `src/core/providers/priceSeriesProvider.ts`：**framework v0 provider contract**（价格序列提供方 + 合同校验 + 包装错误类型）
 
+### Framework v0 快速上手（Contracts + Provider + E2E）
+
+框架 v0 的目标是：用一套最小但严格的 contracts，把「数据提供（provider）」与「回测/信号核心」隔离开，便于后续接入真实数据源与最小 UI。
+
+- Provider 只需要实现 `PriceSeriesProvider#getPriceSeries()`
+- 调用侧用 `fetchValidatedPriceSeries()`（或 `fetchValidatedPriceSeriesEnforcingRange()`）获取并校验数据
+- E2E 样例测试位于：`src/core/__tests__/frameworkV0.e2e.test.ts`
+
+```ts
+import type { PriceSeriesProvider } from "./src/core/providers";
+import { fetchValidatedPriceSeries } from "./src/core/providers";
+
+const provider: PriceSeriesProvider = {
+  name: "example",
+  async getPriceSeries({ symbol }) {
+    // return [{ date: "2026-01-01", close: 100 }, ...]
+    throw new Error(`not implemented: ${symbol}`);
+  },
+};
+
+await fetchValidatedPriceSeries(provider, { symbol: "SPY", start: "2026-01-01", end: "2026-02-01" });
+```
+
 > 目标路线：回测算法组合 → 市场信息 → 资金管理 → 基准买卖推荐 → AI 分析 → 人因模型 → Tag 体系
 
 预览地址（GitHub Pages）：https://jarvis-agent-bot.github.io/Dynamic-Asset-Allocation/
