@@ -29,6 +29,12 @@ export type PriceSeriesRequest = {
   end?: string;
 };
 
+function formatPriceSeriesRequest(request: PriceSeriesRequest): string {
+  return `symbol=${request.symbol}`
+    + (request.start ? ` start=${request.start}` : "")
+    + (request.end ? ` end=${request.end}` : "");
+}
+
 /**
  * Contract validation for framework v0 provider requests.
  */
@@ -112,9 +118,7 @@ export async function fetchValidatedPriceSeries(
   assertValidPriceSeriesRequest(request);
 
   const providerName = provider.name ?? "(anonymous)";
-  const reqStr = `symbol=${request.symbol}`
-    + (request.start ? ` start=${request.start}` : "")
-    + (request.end ? ` end=${request.end}` : "");
+  const reqStr = formatPriceSeriesRequest(request);
 
   try {
     const series = await provider.getPriceSeries(request);
@@ -149,9 +153,7 @@ export async function fetchValidatedPriceSeriesEnforcingRange(
   const series = await fetchValidatedPriceSeries(provider, request);
 
   const providerName = provider.name ?? "(anonymous)";
-  const reqStr = `symbol=${request.symbol}`
-    + (request.start ? ` start=${request.start}` : "")
-    + (request.end ? ` end=${request.end}` : "");
+  const reqStr = formatPriceSeriesRequest(request);
 
   try {
     assertPriceSeriesRespectsRequestRange(series, request);
