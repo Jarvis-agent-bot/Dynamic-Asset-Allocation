@@ -1,13 +1,30 @@
 import { describe, expect, it } from "vitest";
 
 import type { PriceBar } from "../domain";
-import { fetchValidatedPriceSeries, type PriceSeriesProvider } from "../providers";
+import { assertValidPriceSeriesRequest, fetchValidatedPriceSeries, type PriceSeriesProvider } from "../providers";
 
 function bar(date: string, close: number): PriceBar {
   return { date, close };
 }
 
 describe("framework v0 provider contract", () => {
+  it("assertValidPriceSeriesRequest throws for invalid symbol", () => {
+    expect(() => assertValidPriceSeriesRequest({ symbol: "" })).toThrow(/symbol must be a non-empty string/i);
+  });
+
+  it("assertValidPriceSeriesRequest throws for invalid dates", () => {
+    expect(() => assertValidPriceSeriesRequest({ symbol: "SPY", start: "2026-13-01" })).toThrow(
+      /start.*valid calendar date/i,
+    );
+    expect(() => assertValidPriceSeriesRequest({ symbol: "SPY", end: "20260101" })).toThrow(/end.*YYYY-MM-DD/i);
+  });
+
+  it("assertValidPriceSeriesRequest throws if start > end", () => {
+    expect(() => assertValidPriceSeriesRequest({ symbol: "SPY", start: "2026-02-01", end: "2026-01-01" })).toThrow(
+      /start must be <= end/i,
+    );
+  });
+
   it("fetchValidatedPriceSeries throws if provider returns an invalid series", async () => {
     const provider: PriceSeriesProvider = {
       async getPriceSeries() {
