@@ -64,9 +64,6 @@ export function assertValidPriceSeriesRequest(request: PriceSeriesRequest): void
 }
 
 /**
- * Convenience wrapper: fetch + validate so failures happen at the boundary.
- */
-/**
  * Optional contract check: if a request includes `start`/`end`, validate that the
  * provider response respects that inclusive range.
  *
