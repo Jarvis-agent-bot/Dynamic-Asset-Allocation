@@ -27,13 +27,25 @@ describe("framework v0 provider contract", () => {
 
   it("fetchValidatedPriceSeries throws if provider returns an invalid series", async () => {
     const provider: PriceSeriesProvider = {
+      name: "test-provider",
       async getPriceSeries() {
         return [bar("2026-01-01", 100), bar("2026-01-01", 101)]; // duplicate date
       },
     };
 
-    await expect(fetchValidatedPriceSeries(provider, { symbol: "SPY" })).rejects.toThrow(
-      /strictly increasing/i,
+    await expect(fetchValidatedPriceSeries(provider, { symbol: "SPY" })).rejects.toThrow(/strictly increasing/i);
+  });
+
+  it("fetchValidatedPriceSeries error includes provider name + request", async () => {
+    const provider: PriceSeriesProvider = {
+      name: "test-provider",
+      async getPriceSeries() {
+        throw new Error("boom");
+      },
+    };
+
+    await expect(fetchValidatedPriceSeries(provider, { symbol: "SPY", start: "2026-01-01" })).rejects.toThrow(
+      /test-provider.*symbol=SPY.*start=2026-01-01.*boom/i,
     );
   });
 

@@ -10,6 +10,9 @@ import { assertValidPriceSeries } from "../seriesContracts";
  * - `close` finite and > 0
  */
 export interface PriceSeriesProvider {
+  /** Optional identifier used for error messages/logging (e.g. "stooq", "yahoo"). */
+  name?: string;
+
   getPriceSeries(request: PriceSeriesRequest): Promise<PriceBar[]>;
 }
 
@@ -68,7 +71,18 @@ export async function fetchValidatedPriceSeries(
   request: PriceSeriesRequest,
 ): Promise<PriceBar[]> {
   assertValidPriceSeriesRequest(request);
-  const series = await provider.getPriceSeries(request);
-  assertValidPriceSeries(series);
-  return series;
+
+  const providerName = provider.name ?? "(anonymous)";
+  const reqStr = `symbol=${request.symbol}`
+    + (request.start ? ` start=${request.start}` : "")
+    + (request.end ? ` end=${request.end}` : "");
+
+  try {
+    const series = await provider.getPriceSeries(request);
+    assertValidPriceSeries(series);
+    return series;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`PriceSeriesProvider ${providerName} failed (${reqStr}): ${msg}`, { cause: err });
+  }
 }
