@@ -83,12 +83,15 @@ export function assertPriceSeriesRespectsRequestRange(
 }
 
 export class PriceSeriesProviderError extends Error {
-  providerName: string;
-  request: PriceSeriesRequest;
+  readonly providerName: string;
+  readonly request: PriceSeriesRequest;
 
   constructor(opts: { providerName: string; request: PriceSeriesRequest; message: string; cause?: unknown }) {
     super(opts.message, { cause: opts.cause });
     this.name = "PriceSeriesProviderError";
+    // Ensure instanceof works reliably even when transpiled.
+    Object.setPrototypeOf(this, new.target.prototype);
+
     this.providerName = opts.providerName;
     this.request = opts.request;
   }
