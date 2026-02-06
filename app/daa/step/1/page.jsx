@@ -16,6 +16,14 @@ export default function Step1BacktestPage() {
   const [runError, setRunError] = useState(null);
   const [result, setResult] = useState(null);
 
+  const validationError = useMemo(() => {
+    if (!symbol.trim()) return "Symbol is required";
+    if (!start) return "Start date is required";
+    if (!end) return "End date is required";
+    if (end < start) return "End date must be on/after Start date";
+    return null;
+  }, [symbol, start, end]);
+
   // v0: mock price series (flat-ish). We keep this explicit so the UI can ship
   // before market-data ingestion exists.
   const series = useMemo(() => {
@@ -33,6 +41,11 @@ export default function Step1BacktestPage() {
 
   function run() {
     setRunError(null);
+    if (validationError) {
+      setRunError(validationError);
+      setResult(null);
+      return;
+    }
     try {
       const results = strategies.map((s) => backtestSingleAsset(s, series));
       const ranked = rankBacktestResults(results);
@@ -56,23 +69,51 @@ export default function Step1BacktestPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         <label style={{ display: "grid", gap: 6 }}>
           <span style={{ fontSize: 12, color: "#666" }}>Symbol</span>
-          <input value={symbol} onChange={(e) => setSymbol(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+          <input
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            placeholder="e.g. SPY"
+            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+          />
         </label>
         <label style={{ display: "grid", gap: 6 }}>
           <span style={{ fontSize: 12, color: "#666" }}>Start</span>
-          <input value={start} onChange={(e) => setStart(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+          <input
+            type="date"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+          />
         </label>
         <label style={{ display: "grid", gap: 6 }}>
           <span style={{ fontSize: 12, color: "#666" }}>End</span>
-          <input value={end} onChange={(e) => setEnd(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+          <input
+            type="date"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+          />
         </label>
       </div>
 
       <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-        <button onClick={run} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #111", background: "#111", color: "#fff" }}>
+        <button
+          onClick={run}
+          disabled={Boolean(validationError)}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #111",
+            background: validationError ? "#666" : "#111",
+            color: "#fff",
+            cursor: validationError ? "not-allowed" : "pointer",
+            opacity: validationError ? 0.7 : 1,
+          }}
+        >
           Run
         </button>
-        {runError ? <span style={{ color: "#b00020", fontSize: 12 }}>Error: {runError}</span> : null}
+        {validationError ? <span style={{ color: "#b00020", fontSize: 12 }}>{validationError}</span> : null}
+        {!validationError && runError ? <span style={{ color: "#b00020", fontSize: 12 }}>Error: {runError}</span> : null}
       </div>
 
       {result ? (
