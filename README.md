@@ -43,13 +43,13 @@ await fetchValidatedPriceSeries(provider, { symbol: "SPY", start: "2026-01-01", 
 
 > 目标路线：回测算法组合 → 市场信息 → 资金管理 → 基准买卖推荐 → AI 分析 → 人因模型 → Tag 体系
 
-预览地址（GitHub Pages）：https://jarvis-agent-bot.github.io/Dynamic-Asset-Allocation/
+部署地址（VPS）：https://exwxyzi.cn/daa/
 
 ## ✨ 特性
 
 - **实时估值**：通过输入基金编号，实时获取并展示基金的单位净值、估值净值及实时涨跌幅。
 - **重仓追踪**：自动获取基金前 10 大重仓股票，并实时追踪重仓股的盘中涨跌情况。支持收起/展开展示。
-- **纯前端运行**：采用 JSONP 方案直连东方财富、腾讯财经等公开接口，彻底解决跨域问题，支持在 GitHub Pages 等静态环境直接部署。
+- **纯前端运行**：采用 JSONP 方案直连东方财富、腾讯财经等公开接口，彻底解决跨域问题（当前以 VPS 部署为主）。
 - **本地持久化**：使用 `localStorage` 存储已添加的基金列表及配置信息，刷新不丢失。
 - **响应式设计**：完美适配 PC 与移动端。针对移动端优化了文字展示、间距及交互体验。
 - **自选功能**：支持将基金添加至“自选”列表，通过 Tab 切换展示全部基金或仅自选基金。自选状态支持持久化及同步清理。
@@ -63,7 +63,7 @@ await fetchValidatedPriceSeries(provider, { symbol: "SPY", start: "2026-01-01", 
   - 基金估值：天天基金 (JSONP)
   - 重仓数据：东方财富 (HTML Parsing)
   - 股票行情：腾讯财经 (Script Tag Injection)
-- **部署**：GitHub Actions + GitHub Pages
+- **部署**：VPS（Docker + Nginx）
 
 ## 🚀 快速开始
 
@@ -88,13 +88,12 @@ await fetchValidatedPriceSeries(provider, { symbol: "SPY", start: "2026-01-01", 
 
 ### 构建与部署
 
-本项目已配置 GitHub Actions。每次推送到 `main` 分支时，会自动执行构建并部署到 GitHub Pages。
+当前以 VPS 部署为主（Docker + Nginx）。
 
 若要手动构建：
 ```bash
 pnpm build
 ```
-静态文件将生成在 `out` 目录下。
 
 ## 📖 使用说明
 
