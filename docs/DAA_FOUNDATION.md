@@ -10,6 +10,7 @@
   - `domain.js`：领域数据模型（JSdoc typedef，提供统一词汇表）。
   - `backtest.js`：回测引擎（最小闭环 v0）。
   - `strategies.js`：策略定义（纯函数），支持组合/ensemble。
+  - `signals.js`：fixed-weight ensemble → BUY/SELL/HOLD 信号输出（v0）。
   - `metrics.js`：指标计算（收益/回撤/夏普/胜率等）。
   - `models.js` / `config.js`：轻量配置与通用结构（避免 UI 依赖）。
 
@@ -30,4 +31,6 @@
 
 ## DONE（可观察的完成标准）
 
-- 仓库包含本文件（`docs/DAA_FOUNDATION.md`），并在 `README.md` 中有入口链接。
+- `README.md` 链接到 `docs/DAA_FOUNDATION.md`。
+- `src/core/` 至少覆盖：策略（`strategies.js`）、回测（`backtest.js`）、指标（`metrics.js`）、信号（`signals.js`）。
+- 信号 v0 规格见：`docs/DAA_SIGNAL_SPEC_V0.md`。
