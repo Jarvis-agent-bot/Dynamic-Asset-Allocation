@@ -146,6 +146,25 @@ describe("rankBacktestResults", () => {
 
     expect(ranked.map((r) => r.strategyId)).toEqual(["a", "b"]);
   });
+
+  it("is deterministic even if score weights are non-finite (defensive)", () => {
+    const base = {
+      equity: [1],
+      dailyReturns: [],
+      metrics: { totalReturn: 0, maxDrawdown: 0, sharpe: 0, winRate: 0 },
+    };
+
+    const ranked = rankBacktestResults(
+      [
+        { ...base, strategyId: "b", strategyName: "B" },
+        { ...base, strategyId: "a", strategyName: "A" },
+      ],
+      // would previously produce NaN scores (e.g. NaN * 0)
+      { wReturn: Number.NaN, wSharpe: Number.NaN, wDrawdown: Number.NaN, wWinRate: Number.NaN },
+    );
+
+    expect(ranked.map((r) => r.strategyId)).toEqual(["a", "b"]);
+  });
 });
 
 describe("signal confidence", () => {

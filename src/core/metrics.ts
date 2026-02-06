@@ -46,5 +46,18 @@ export function scoreMetrics(
   const sharpe = Number(m?.sharpe) || 0;
   const maxDrawdown = Number(m?.maxDrawdown) || 0;
   const winRate = Number(m?.winRate) || 0;
-  return wReturn * totalReturn + wSharpe * sharpe - wDrawdown * maxDrawdown + wWinRate * winRate;
+
+  // Defensive: treat non-finite score weights as defaults to avoid NaN scores
+  // that would otherwise make ranking non-deterministic.
+  const finiteOr = (v: unknown, fallback: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const wr = finiteOr(wReturn, 1);
+  const ws = finiteOr(wSharpe, 1);
+  const wd = finiteOr(wDrawdown, 1);
+  const ww = finiteOr(wWinRate, 0.1);
+
+  return wr * totalReturn + ws * sharpe - wd * maxDrawdown + ww * winRate;
 }
