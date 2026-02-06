@@ -2,6 +2,7 @@ import Link from "next/link";
 import { DAA_STEPS, getStep } from "../../steps";
 import StatusPill from "../../components/StatusPill";
 import StepsQuickNav from "../../components/StepsQuickNav";
+import StepKeyNav from "./StepKeyNav";
 
 export function generateMetadata({ params }) {
   const step = getStep(params?.id);
@@ -79,8 +80,12 @@ export default function StepPage({ params }) {
   const idx = DAA_STEPS.findIndex((s) => s.id === step.id);
   const indexText = idx >= 0 ? `${idx + 1}/${DAA_STEPS.length}` : "";
 
+  const prev = idx > 0 ? DAA_STEPS[idx - 1] : null;
+  const next = idx >= 0 && idx < DAA_STEPS.length - 1 ? DAA_STEPS[idx + 1] : null;
+
   return (
     <main>
+      <StepKeyNav prevHref={prev ? `/daa/step/${prev.id}` : null} nextHref={next ? `/daa/step/${next.id}` : null} />
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h1 style={{ margin: 0, fontSize: 20 }}>
           Step {step.id} {indexText ? `(${indexText})` : ""}: {step.title}
