@@ -1,5 +1,28 @@
 import Link from "next/link";
-import { DAA_STEPS, getStep } from "../../steps";
+import { DAA_STEPS, DAA_STEP_STATUS_LABEL, getStep } from "../../steps";
+
+function StatusPill({ status }) {
+  const label = DAA_STEP_STATUS_LABEL[status] || status || "";
+  const bg = status === "wip" ? "#e6f4ff" : status === "todo" ? "#fff7e6" : "#f5f5f5";
+  const fg = status === "wip" ? "#0958d9" : status === "todo" ? "#ad4e00" : "#555";
+
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 8px",
+        borderRadius: 999,
+        fontSize: 12,
+        background: bg,
+        color: fg,
+        border: "1px solid rgba(0,0,0,0.06)",
+        lineHeight: "18px",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
 function Nav({ stepId }) {
   const idx = DAA_STEPS.findIndex((s) => s.id === stepId);
@@ -66,9 +89,15 @@ export default function StepPage({ params }) {
 
   return (
     <main>
-      <h1 style={{ margin: 0, fontSize: 20 }}>
-        Step {step.id} {indexText ? `(${indexText})` : ""}: {step.title}
-      </h1>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <h1 style={{ margin: 0, fontSize: 20 }}>
+          Step {step.id} {indexText ? `(${indexText})` : ""}: {step.title}
+        </h1>
+        {step.status ? <StatusPill status={step.status} /> : null}
+      </div>
+
+      {step.desc ? <p style={{ color: "#666", marginTop: 8 }}>{step.desc}</p> : null}
+
       <p style={{ color: "#444", marginTop: 8 }}>
         这个页面即“功能边界”。先定义 UI 需要的字段（inputs / outputs），再反推 contract/provider 的最小实现。
       </p>
