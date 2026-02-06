@@ -21,7 +21,7 @@ function Nav({ stepId }) {
   const next = idx >= 0 && idx < DAA_STEPS.length - 1 ? DAA_STEPS[idx + 1] : null;
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 13, marginTop: 12 }}>
+    <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 13, marginTop: 12 }}>
       <Link href="/daa/" style={{ color: "#111" }}>
         ← 控制台
       </Link>
@@ -40,6 +40,12 @@ function Nav({ stepId }) {
       ) : (
         <span style={{ color: "#bbb" }}>下一步 →</span>
       )}
+      <span style={{ color: "#999" }}>|</span>
+      <span style={{ color: "#777", fontSize: 12 }} title="Keyboard shortcuts">
+        快捷键：<kbd style={{ padding: "1px 4px", border: "1px solid #ddd", borderRadius: 4, background: "#fafafa" }}>←</kbd>
+        <span style={{ margin: "0 4px" }}>/</span>
+        <kbd style={{ padding: "1px 4px", border: "1px solid #ddd", borderRadius: 4, background: "#fafafa" }}>→</kbd>
+      </span>
     </div>
   );
 }
