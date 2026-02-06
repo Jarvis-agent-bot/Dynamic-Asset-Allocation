@@ -8,6 +8,12 @@ function pretty(x) {
   return JSON.stringify(x, null, 2);
 }
 
+function fmtTs(ts) {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return String(ts || "");
+  return d.toLocaleString("zh-CN", { hour12: false });
+}
+
 const MOCK_EVENTS = [
   {
     id: "tw-1",
@@ -67,8 +73,22 @@ export default function Step2MarketEventsPage() {
         </label>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <span style={{ fontSize: 12, color: "#666" }}>Symbol</span>
-          <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="SPY" style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+          <input
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            placeholder="SPY"
+            aria-label="Filter by symbol"
+            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+          />
         </label>
+        {symbol.trim() ? (
+          <button
+            onClick={() => setSymbol("")}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
+          >
+            Clear
+          </button>
+        ) : null}
         <div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>
           {filtered.length} events
         </div>
@@ -98,9 +118,13 @@ export default function Step2MarketEventsPage() {
                   <div style={{ fontSize: 12, color: "#666" }}>{e.source}</div>
                 </div>
                 <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{e.summary || ""}</div>
-                <div style={{ fontSize: 12, color: "#777", marginTop: 6 }}>
-                  {(e.symbols || []).join(", ")}
-                  <span style={{ marginLeft: 8 }}>{new Date(e.ts).toLocaleString()}</span>
+                <div style={{ fontSize: 12, color: "#777", marginTop: 6, display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <div>
+                    {(e.symbols || []).join(", ")}
+                    {e.author ? <span style={{ marginLeft: 8, color: "#666" }}>{e.author}</span> : null}
+                    {e.tags?.length ? <span style={{ marginLeft: 8, color: "#666" }}>{e.tags.join(" · ")}</span> : null}
+                  </div>
+                  <div>{fmtTs(e.ts)}</div>
                 </div>
               </button>
             ))}
@@ -111,9 +135,17 @@ export default function Step2MarketEventsPage() {
 
         {selected ? (
           <section style={{ border: "1px solid #eee", borderRadius: 8, overflow: "hidden" }}>
-            <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", display: "flex", justifyContent: "space-between" }}>
-              <div style={{ fontWeight: 600 }}>Detail</div>
-              <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", display: "flex", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>Detail</div>
+                <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{selected.title}</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {selected.url ? (
+                  <a href={selected.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#2563eb" }}>
+                    Open
+                  </a>
+                ) : null}
                 <button
                   onClick={() => navigator.clipboard.writeText(pretty(selected))}
                   style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
