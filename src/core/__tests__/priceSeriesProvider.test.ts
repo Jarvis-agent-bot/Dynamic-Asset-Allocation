@@ -17,6 +17,8 @@ function bar(date: string, close: number): PriceBar {
 describe("framework v0 provider contract", () => {
   it("assertValidPriceSeriesRequest throws for invalid symbol", () => {
     expect(() => assertValidPriceSeriesRequest({ symbol: "" })).toThrow(/symbol must be a non-empty string/i);
+    expect(() => assertValidPriceSeriesRequest({ symbol: "  SPY" })).toThrow(/leading\/trailing whitespace/i);
+    expect(() => assertValidPriceSeriesRequest({ symbol: "SPY  " })).toThrow(/leading\/trailing whitespace/i);
   });
 
   it("assertValidPriceSeriesRequest throws for invalid dates", () => {

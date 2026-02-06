@@ -40,6 +40,10 @@ export function assertValidPriceSeriesRequest(request: PriceSeriesRequest): void
     throw new Error(`symbol must be a non-empty string (got ${String(symbol)})`);
   }
 
+  if (symbol.trim() !== symbol) {
+    throw new Error(`symbol must not have leading/trailing whitespace (got ${JSON.stringify(symbol)})`);
+  }
+
   const { start, end } = request;
   if (start !== undefined) assertIsoDateString(start, "start");
   if (end !== undefined) assertIsoDateString(end, "end");
