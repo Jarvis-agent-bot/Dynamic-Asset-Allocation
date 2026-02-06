@@ -6,7 +6,7 @@ import { DEFAULT_ENSEMBLE_WEIGHTS } from "../../../../src/core/config";
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
 import { ensembleSignals } from "../../../../src/core/signals";
 
-function pretty(x) {
+function pretty(x: unknown) {
   return JSON.stringify(x, null, 2);
 }
 
@@ -51,23 +51,23 @@ export default function Step4BaselineRebalancePage() {
       const out = ensembleSignals(strategies, series, DEFAULT_ENSEMBLE_WEIGHTS);
       return { signals: out, error: null };
     } catch (e) {
-      return { signals: null, error: e?.message || String(e) };
+      return { signals: null, error: e instanceof Error ? e.message : String(e) };
     }
   }, [priceSeriesText, strategies]);
 
-  const [engineResult, setEngineResult] = useState(null);
-  const [engineError, setEngineError] = useState(null);
-  const [engineStatus, setEngineStatus] = useState("idle"); // idle | running | done | failed
+  const [engineResult, setEngineResult] = useState<unknown>(null);
+  const [engineError, setEngineError] = useState<string | null>(null);
+  const [engineStatus, setEngineStatus] = useState<"idle" | "running" | "done" | "failed">("idle");
 
   async function runEngine() {
     setEngineError(null);
     setEngineResult(null);
     setEngineStatus("running");
 
-    let money_plan;
+    let money_plan: unknown;
     try {
       money_plan = JSON.parse(moneyPlanText);
-    } catch (e) {
+    } catch {
       setEngineError("moneyPlan JSON parse failed");
       setEngineStatus("failed");
       return;
@@ -76,10 +76,10 @@ export default function Step4BaselineRebalancePage() {
     const payload = {
       money_plan,
       signals: (signals || []).map((s) => ({
-        symbol: s.symbol || symbol,
+        symbol,
         action: s.action,
-        score: s.score,
-        reason: s.reason,
+        score: s.confidence,
+        reason: Array.isArray(s.reasons) ? s.reasons.join("; ") : undefined,
       })),
     };
 
@@ -93,11 +93,11 @@ export default function Step4BaselineRebalancePage() {
         const txt = await resp.text();
         throw new Error(`engine http ${resp.status}: ${txt}`);
       }
-      const data = await resp.json();
+      const data: unknown = await resp.json();
       setEngineResult(data);
       setEngineStatus("done");
     } catch (e) {
-      setEngineError(e?.message || String(e));
+      setEngineError(e instanceof Error ? e.message : String(e));
       setEngineStatus("failed");
     }
   }
