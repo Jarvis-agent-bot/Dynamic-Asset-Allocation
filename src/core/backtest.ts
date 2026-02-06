@@ -53,7 +53,7 @@ export function backtestSingleAsset(strategy: Strategy, series: PriceBar[]): Bac
   // We rely on lexicographic ordering/alignment between weights[i] and return[i->i+1];
   // missing/out-of-order or non-ISO dates would silently degrade signal quality.
   for (let i = 0; i < series.length; i++) {
-    const d = (series[i] as any)?.date;
+    const d = series[i]?.date;
     if (typeof d !== "string" || d.length === 0) {
       throw new Error(`Price series date must be a non-empty string (got ${String(d)} at index ${i})`);
     }
@@ -67,7 +67,7 @@ export function backtestSingleAsset(strategy: Strategy, series: PriceBar[]): Bac
     }
 
     if (i > 0) {
-      const prev = (series[i - 1] as any).date as string;
+      const prev = series[i - 1].date;
       if (d <= prev) {
         throw new Error(`Price series dates must be strictly increasing (got ${prev} then ${d} at index ${i})`);
       }
