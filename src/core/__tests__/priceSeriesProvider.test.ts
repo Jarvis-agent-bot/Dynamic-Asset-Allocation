@@ -81,6 +81,18 @@ describe("framework v0 provider contract", () => {
     assertPriceSeriesRespectsRequestRange([bar("2026-01-01", 100)], {});
   });
 
+  it("assertPriceSeriesRespectsRequestRange throws if series contains a non-ISO date string", () => {
+    expect(() =>
+      assertPriceSeriesRespectsRequestRange([{ date: "20260101" }], { start: "2026-01-01" }),
+    ).toThrow(/YYYY-MM-DD/i);
+  });
+
+  it("assertPriceSeriesRespectsRequestRange throws if series contains a non-string date", () => {
+    expect(() =>
+      assertPriceSeriesRespectsRequestRange([{ date: 123 as any }], { start: "2026-01-01" }),
+    ).toThrow(/YYYY-MM-DD/i);
+  });
+
   it("assertPriceSeriesRespectsRequestRange throws if series has date before start", () => {
     expect(() =>
       assertPriceSeriesRespectsRequestRange([bar("2026-01-01", 100), bar("2026-01-02", 101)], {

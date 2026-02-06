@@ -79,6 +79,11 @@ export function assertPriceSeriesRespectsRequestRange(
 
   for (let i = 0; i < series.length; i++) {
     const d = series[i]?.date;
+
+    if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      throw new Error(`series date must be a YYYY-MM-DD string (got ${String(d)} at index ${i})`);
+    }
+
     if (start && d < start) {
       throw new Error(`series contains date before start (start=${start}, got ${d} at index ${i})`);
     }
