@@ -1,5 +1,5 @@
 export type RiskPreference = "high" | "mid" | "low";
-export type RiskScore = "high" | "mid" | "low" | "sb"; // 你的标签里保留“傻逼”
+export type RiskScore = "high" | "mid" | "low";
 
 export type Tags = {
   riskPreference?: RiskPreference;

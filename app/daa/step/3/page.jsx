@@ -108,7 +108,7 @@ export default function Step3MoneyManagementPage() {
           style={{ width: "100%", padding: 10, border: "1px solid #ddd", borderRadius: 6, fontFamily: "ui-monospace, SFMono-Regular" }}
         />
         <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
-          v0：允许 sum(targetPct) ≤ 1（保留现金）；超过 1 会报错。Tag 支持 riskPreference/riskScore（含 sb=傻逼）。
+          v0：允许 sum(targetPct) ≤ 1（保留现金）；超过 1 会报错。Tag 支持 riskPreference/riskScore。
         </div>
       </section>
 
