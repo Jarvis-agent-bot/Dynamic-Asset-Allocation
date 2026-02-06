@@ -100,4 +100,20 @@ describe("ensembleTargetWeights contracts", () => {
     expect(reasonsByDay[0][0]).toMatch(/^A:/);
     expect(reasonsByDay[0][1]).toMatch(/^B:/);
   });
+
+  it("throws when a strategy emits non-finite weights (guards signal quality)", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
+
+    const strategies = [strat("s1", [0.2, Number.NaN])];
+
+    expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/non-finite/i);
+  });
+
+  it("throws when a strategy weights length does not match the series", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
+
+    const strategies = [strat("s1", [0.2])];
+
+    expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/length mismatch/i);
+  });
 });
