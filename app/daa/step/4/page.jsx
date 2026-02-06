@@ -40,7 +40,7 @@ export default function Step4BaselineRebalancePage() {
     try {
       const out = ensembleSignals(strategies, series, DEFAULT_ENSEMBLE_WEIGHTS);
       return {
-        signals: out.map((s) => ({ ...s, symbol: s.symbol || symbol })),
+        signals: out,
         error: null,
       };
     } catch (e) {
