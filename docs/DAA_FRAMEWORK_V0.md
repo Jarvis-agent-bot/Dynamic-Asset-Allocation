@@ -27,8 +27,31 @@ Reference implementation:
 - `src/core/seriesContracts.ts`
 - `src/core/providers/priceSeriesProvider.ts`
 
-### Boundary helper
+### Boundary helpers
 
-Use `fetchValidatedPriceSeries(provider, request)` to fetch + validate at the boundary.
+At the core/provider boundary, prefer calling the validation helpers instead of using
+`provider.getPriceSeries()` directly.
+
+- `fetchValidatedPriceSeries(provider, request)`
+  - validates the request (`symbol`, optional `start`/`end`)
+  - validates the returned series (`assertValidPriceSeries`)
+  - wraps errors with provider name + request context (preserves `cause`)
+
+- `fetchValidatedPriceSeriesEnforcingRange(provider, request)`
+  - does everything above
+  - additionally enforces that, when a caller supplies `start`/`end`, the provider response stays within
+    that inclusive window (opt-in because some providers may ignore date filters)
+
+Example:
+
+```ts
+import { fetchValidatedPriceSeriesEnforcingRange } from "src/core/providers";
+
+const bars = await fetchValidatedPriceSeriesEnforcingRange(provider, {
+  symbol: "SPY",
+  start: "2020-01-01",
+  end: "2020-12-31",
+});
+```
 
 This keeps downstream logic simpler and makes provider bugs actionable.
