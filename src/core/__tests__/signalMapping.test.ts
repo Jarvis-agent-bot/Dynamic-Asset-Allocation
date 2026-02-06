@@ -55,6 +55,21 @@ describe("toSignals", () => {
     expect(String(sigs[1].reasons[2])).toContain("warning: previous targetWeight non-finite");
   });
 
+  it("clamps out-of-range target weights and surfaces warnings", () => {
+    const dates = ["2026-02-01", "2026-02-02"];
+    const targetWeights = [1.5, -0.2];
+    const reasonsByDay = [[], []] as string[][];
+
+    const sigs = toSignals(dates, targetWeights, reasonsByDay, DEFAULT_SIGNAL_THRESHOLDS);
+
+    expect(sigs[0].targetWeight).toBe(1);
+    expect(String(sigs[0].reasons.join("\n"))).toContain("warning: targetWeight out of range");
+
+    expect(sigs[1].targetWeight).toBe(0);
+    // prev was out of range on day 0 and should be clamped when referenced on day 1.
+    expect(String(sigs[1].reasons.join("\n"))).toContain("warning: previous targetWeight out of range");
+  });
+
   it("formats positive deltas with an explicit + sign for readability", () => {
     const dates = ["2026-02-01", "2026-02-02"];
     const targetWeights = [0.2, 0.8];
