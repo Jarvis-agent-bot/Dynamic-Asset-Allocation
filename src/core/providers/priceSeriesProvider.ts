@@ -113,6 +113,12 @@ export async function fetchValidatedPriceSeries(
     assertValidPriceSeries(series);
     return series;
   } catch (err) {
+    // Avoid double-wrapping if a downstream helper/provider already threw our
+    // structured error.
+    if (err instanceof PriceSeriesProviderError) {
+      throw err;
+    }
+
     const msg = err instanceof Error ? err.message : String(err);
     throw new PriceSeriesProviderError({
       providerName,
