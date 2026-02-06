@@ -1,31 +1,53 @@
-import { describe, expect, it } from "vitest";
-import { assertValidPriceSeries } from "../seriesContracts";
-import type { PriceBar } from "../domain";
+import { describe, it, expect } from "vitest";
 
-function bar(date: string, close: number): PriceBar {
-  return { date, close };
-}
+import { assertValidPriceSeries, assertValidSeriesDates } from "../seriesContracts";
 
-describe("seriesContracts", () => {
-  describe("assertValidPriceSeries", () => {
-    it("accepts a minimal valid 2-point series", () => {
-      expect(() => assertValidPriceSeries([bar("2026-02-01", 100), bar("2026-02-02", 101)])).not.toThrow();
-    });
+const okSeries = [
+  { date: "2026-01-01", close: 100 },
+  { date: "2026-01-02", close: 101 },
+];
 
-    it("throws on series shorter than 2", () => {
-      expect(() => assertValidPriceSeries([bar("2026-02-01", 100)])).toThrow(/series too short/i);
-    });
+describe("assertValidSeriesDates", () => {
+  it("accepts strictly increasing ISO dates", () => {
+    expect(() => assertValidSeriesDates(okSeries)).not.toThrow();
+  });
 
-    it("throws on non-finite close", () => {
-      expect(() => assertValidPriceSeries([bar("2026-02-01", 100), bar("2026-02-02", Number.NaN)])).toThrow(
-        /close must be a finite number/i,
-      );
-    });
+  it("rejects non-ISO date formats", () => {
+    expect(() => assertValidSeriesDates([{ date: "2026/01/01" }])).toThrow(/YYYY-MM-DD/i);
+  });
 
-    it("throws on non-positive close", () => {
-      expect(() => assertValidPriceSeries([bar("2026-02-01", 100), bar("2026-02-02", 0)])).toThrow(
-        /close must be > 0/i,
-      );
-    });
+  it("rejects invalid calendar dates", () => {
+    expect(() => assertValidSeriesDates([{ date: "2026-02-31" }])).toThrow(/valid calendar date/i);
+  });
+
+  it("rejects non-increasing dates", () => {
+    expect(() =>
+      assertValidSeriesDates([
+        { date: "2026-01-02" },
+        { date: "2026-01-02" },
+      ]),
+    ).toThrow(/strictly increasing/i);
+  });
+});
+
+describe("assertValidPriceSeries", () => {
+  it("rejects series shorter than 2 bars", () => {
+    expect(() => assertValidPriceSeries([{ date: "2026-01-01", close: 100 }])).toThrow(/too short/i);
+  });
+
+  it("rejects non-finite close values", () => {
+    expect(() => assertValidPriceSeries([{ date: "2026-01-01", close: 100 }, { date: "2026-01-02", close: NaN }])).toThrow(
+      /finite/i,
+    );
+  });
+
+  it("rejects non-positive close values", () => {
+    expect(() => assertValidPriceSeries([{ date: "2026-01-01", close: 100 }, { date: "2026-01-02", close: 0 }])).toThrow(
+      /> 0/i,
+    );
+  });
+
+  it("accepts a minimal valid series", () => {
+    expect(() => assertValidPriceSeries(okSeries)).not.toThrow();
   });
 });
