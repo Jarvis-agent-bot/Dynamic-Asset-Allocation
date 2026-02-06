@@ -14,10 +14,6 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM base AS build
-# basePath must be known at build time for correct asset URLs / routing.
-# Default remains empty; VPS deploy can pass NEXT_BASE_PATH=/daa.
-ARG NEXT_BASE_PATH=""
-ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -26,8 +22,6 @@ RUN pnpm build
 FROM base AS runner
 # Next.js runtime
 ENV PORT=3000
-# Keep runtime basePath aligned with build (mainly for clarity/debugging).
-ENV NEXT_BASE_PATH=""
 EXPOSE 3000
 
 COPY --from=build /app/.next ./.next

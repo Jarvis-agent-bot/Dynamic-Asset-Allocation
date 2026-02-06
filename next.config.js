@@ -1,12 +1,10 @@
 /** @type {import('next').NextConfig} */
-const basePath = process.env.NEXT_BASE_PATH || "";
 
 const nextConfig = {
   reactStrictMode: true,
-  // For VPS nginx path-based hosting, e.g. /daa
-  basePath,
-  assetPrefix: basePath || undefined,
-  // Avoid redirect churn between /daa and /daa/
+  // The app routes already live under /daa (see app/daa/*).
+  // Do NOT also set Next.js basePath to /daa, otherwise routes become /daa/daa/*.
+  // VPS/Nginx should forward requests to the app without stripping the /daa prefix.
   trailingSlash: true,
 };
 

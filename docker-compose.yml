@@ -3,13 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        # VPS nginx uses path-based hosting under /daa.
-        # Must be available at build time for Next.js basePath.
-        NEXT_BASE_PATH: "/daa"
     environment:
       - PORT=3000
-      - NEXT_BASE_PATH=/daa
     ports:
       - "127.0.0.1:3000:3000"
     restart: unless-stopped
