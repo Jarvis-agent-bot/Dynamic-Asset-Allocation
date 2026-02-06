@@ -49,14 +49,19 @@ export function computeAssetReturns(series: Array<Pick<PriceBar, "close">>): num
 export function backtestSingleAsset(strategy: Strategy, series: PriceBar[]): BacktestResult {
   if (!series || series.length < 2) throw new Error("series too short");
 
-  // Contract: series dates must be strictly increasing if present.
-  // We rely on alignment between weights[i] and return[i->i+1]; out-of-order dates
-  // would silently degrade signal quality and backtest interpretability.
-  for (let i = 1; i < series.length; i++) {
-    const prev = series[i - 1]?.date;
-    const cur = series[i]?.date;
-    if (typeof prev === "string" && typeof cur === "string" && cur <= prev) {
-      throw new Error(`Price series dates must be strictly increasing (got ${prev} then ${cur} at index ${i})`);
+  // Contract: series dates must be present and strictly increasing.
+  // We rely on alignment between weights[i] and return[i->i+1]; missing/out-of-order
+  // dates would silently degrade signal quality and backtest interpretability.
+  for (let i = 0; i < series.length; i++) {
+    const d = (series[i] as any)?.date;
+    if (typeof d !== "string" || d.length === 0) {
+      throw new Error(`Price series date must be a non-empty string (got ${String(d)} at index ${i})`);
+    }
+    if (i > 0) {
+      const prev = (series[i - 1] as any).date as string;
+      if (d <= prev) {
+        throw new Error(`Price series dates must be strictly increasing (got ${prev} then ${d} at index ${i})`);
+      }
     }
   }
 

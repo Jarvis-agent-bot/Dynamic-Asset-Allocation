@@ -58,13 +58,15 @@ export function ensembleTargetWeights(
 
   const dates = series.map((b) => b.date);
 
-  // Contract: series dates must be strictly increasing to ensure we don't generate
+  // Contract: series dates must be present and strictly increasing to ensure we don't generate
   // ambiguous signals or misordered backtests.
-  for (let i = 1; i < dates.length; i++) {
-    if (dates[i] <= dates[i - 1]) {
-      throw new Error(
-        `Price series dates must be strictly increasing (got ${dates[i - 1]} then ${dates[i]} at index ${i})`
-      );
+  for (let i = 0; i < dates.length; i++) {
+    const d = dates[i];
+    if (typeof d !== "string" || d.length === 0) {
+      throw new Error(`Price series date must be a non-empty string (got ${String(d)} at index ${i})`);
+    }
+    if (i > 0 && d <= dates[i - 1]) {
+      throw new Error(`Price series dates must be strictly increasing (got ${dates[i - 1]} then ${d} at index ${i})`);
     }
   }
 

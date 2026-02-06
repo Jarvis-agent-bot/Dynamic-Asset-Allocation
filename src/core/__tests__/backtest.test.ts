@@ -43,6 +43,13 @@ describe("backtestSingleAsset", () => {
     );
   });
 
+  it("throws if a series date is missing/invalid (provider contract)", () => {
+    const series = makeTrendSeries({ n: 5, daily: 0.002 }) as any[];
+    series[0] = { ...series[0], date: "" };
+
+    expect(() => backtestSingleAsset(buyAndHold(), series as PriceBar[])).toThrow(/date must be a non-empty string/i);
+  });
+
   it("treats invalid prices as 0% returns (prevents NaN propagation)", () => {
     const series = makeTrendSeries({ n: 5, daily: 0.002 });
     series[2] = { ...series[2], close: Number.NaN };
