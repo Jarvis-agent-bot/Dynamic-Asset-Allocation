@@ -111,3 +111,17 @@ export async function fetchValidatedPriceSeries(
     throw new Error(`PriceSeriesProvider ${providerName} failed (${reqStr}): ${msg}`, { cause: err });
   }
 }
+
+/**
+ * Variant of `fetchValidatedPriceSeries` that also enforces that, when the caller
+ * requests a `start`/`end` range, the provider response stays within that
+ * inclusive window.
+ */
+export async function fetchValidatedPriceSeriesEnforcingRange(
+  provider: PriceSeriesProvider,
+  request: PriceSeriesRequest,
+): Promise<PriceBar[]> {
+  const series = await fetchValidatedPriceSeries(provider, request);
+  assertPriceSeriesRespectsRequestRange(series, request);
+  return series;
+}

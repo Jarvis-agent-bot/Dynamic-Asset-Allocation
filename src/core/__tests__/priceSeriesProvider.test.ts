@@ -5,6 +5,7 @@ import {
   assertPriceSeriesRespectsRequestRange,
   assertValidPriceSeriesRequest,
   fetchValidatedPriceSeries,
+  fetchValidatedPriceSeriesEnforcingRange,
   type PriceSeriesProvider,
 } from "../providers";
 
@@ -91,6 +92,22 @@ describe("framework v0 provider contract", () => {
         end: "2026-01-02",
       }),
     ).toThrow(/after end/i);
+  });
+
+  it("fetchValidatedPriceSeriesEnforcingRange throws if provider ignores requested start/end", async () => {
+    const provider: PriceSeriesProvider = {
+      async getPriceSeries() {
+        return [bar("2026-01-01", 100), bar("2026-01-02", 101), bar("2026-01-03", 102)];
+      },
+    };
+
+    await expect(
+      fetchValidatedPriceSeriesEnforcingRange(provider, {
+        symbol: "SPY",
+        start: "2026-01-02",
+        end: "2026-01-02",
+      }),
+    ).rejects.toThrow(/before start|after end/i);
   });
 
   it("fetchValidatedPriceSeries returns the series if valid", async () => {
