@@ -6,6 +6,8 @@ const nextConfig = {
   // For VPS nginx path-based hosting, e.g. /daa
   basePath,
   assetPrefix: basePath || undefined,
+  // Avoid redirect churn between /daa and /daa/
+  trailingSlash: true,
 };
 
 module.exports = nextConfig;
