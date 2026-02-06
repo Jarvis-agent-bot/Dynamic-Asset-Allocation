@@ -147,6 +147,24 @@ export async function fetchValidatedPriceSeriesEnforcingRange(
   request: PriceSeriesRequest,
 ): Promise<PriceBar[]> {
   const series = await fetchValidatedPriceSeries(provider, request);
-  assertPriceSeriesRespectsRequestRange(series, request);
-  return series;
+
+  const providerName = provider.name ?? "(anonymous)";
+  const reqStr = `symbol=${request.symbol}`
+    + (request.start ? ` start=${request.start}` : "")
+    + (request.end ? ` end=${request.end}` : "");
+
+  try {
+    assertPriceSeriesRespectsRequestRange(series, request);
+    return series;
+  } catch (err) {
+    if (err instanceof PriceSeriesProviderError) throw err;
+
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new PriceSeriesProviderError({
+      providerName,
+      request,
+      message: `PriceSeriesProvider ${providerName} returned series outside requested range (${reqStr}): ${msg}`,
+      cause: err,
+    });
+  }
 }

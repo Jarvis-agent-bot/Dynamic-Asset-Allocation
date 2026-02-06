@@ -119,18 +119,28 @@ describe("framework v0 provider contract", () => {
 
   it("fetchValidatedPriceSeriesEnforcingRange throws if provider ignores requested start/end", async () => {
     const provider: PriceSeriesProvider = {
+      name: "test-provider",
       async getPriceSeries() {
         return [bar("2026-01-01", 100), bar("2026-01-02", 101), bar("2026-01-03", 102)];
       },
     };
 
-    await expect(
-      fetchValidatedPriceSeriesEnforcingRange(provider, {
+    try {
+      await fetchValidatedPriceSeriesEnforcingRange(provider, {
         symbol: "SPY",
         start: "2026-01-02",
         end: "2026-01-02",
-      }),
-    ).rejects.toThrow(/before start|after end/i);
+      });
+      throw new Error("expected fetchValidatedPriceSeriesEnforcingRange to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PriceSeriesProviderError);
+      const e = err as PriceSeriesProviderError;
+      expect(e.providerName).toBe("test-provider");
+      expect(e.request.symbol).toBe("SPY");
+      expect(e.message).toMatch(/outside requested range/i);
+      expect(e.message).toMatch(/before start|after end/i);
+      expect(e.cause).toBeInstanceOf(Error);
+    }
   });
 
   it("fetchValidatedPriceSeries returns the series if valid", async () => {
