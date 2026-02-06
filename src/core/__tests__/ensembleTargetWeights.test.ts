@@ -40,6 +40,19 @@ describe("ensembleTargetWeights contracts", () => {
     ).toThrow(/unknown strategy id/i);
   });
 
+  it("allows weightsConfig to include unknown ids with 0 weight (disabled strategies)", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
+
+    const strategies = [strat("s1", [0.2, 0.2])];
+
+    expect(() =>
+      ensembleTargetWeights(strategies, series, {
+        s1: 1,
+        unused: 0,
+      })
+    ).not.toThrow();
+  });
+
   it("throws when weightsConfig assigns no positive weight to included strategies", () => {
     const series = [bar("2026-02-01"), bar("2026-02-02")];
 
