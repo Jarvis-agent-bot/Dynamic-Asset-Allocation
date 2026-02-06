@@ -49,6 +49,25 @@ describe("framework v0 provider contract", () => {
     );
   });
 
+  it("fetchValidatedPriceSeries preserves the original error as cause", async () => {
+    const provider: PriceSeriesProvider = {
+      name: "test-provider",
+      async getPriceSeries() {
+        throw new Error("boom");
+      },
+    };
+
+    try {
+      await fetchValidatedPriceSeries(provider, { symbol: "SPY" });
+      throw new Error("expected fetchValidatedPriceSeries to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error);
+      const e = err as Error & { cause?: unknown };
+      expect(e.cause).toBeInstanceOf(Error);
+      expect((e.cause as Error).message).toBe("boom");
+    }
+  });
+
   it("fetchValidatedPriceSeries returns the series if valid", async () => {
     const provider: PriceSeriesProvider = {
       async getPriceSeries() {
