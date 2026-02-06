@@ -6,6 +6,7 @@ import {
   assertValidPriceSeriesRequest,
   fetchValidatedPriceSeries,
   fetchValidatedPriceSeriesEnforcingRange,
+  PriceSeriesProviderError,
   type PriceSeriesProvider,
 } from "../providers";
 
@@ -67,8 +68,10 @@ describe("framework v0 provider contract", () => {
       await fetchValidatedPriceSeries(provider, { symbol: "SPY" });
       throw new Error("expected fetchValidatedPriceSeries to throw");
     } catch (err) {
-      expect(err).toBeInstanceOf(Error);
-      const e = err as Error & { cause?: unknown };
+      expect(err).toBeInstanceOf(PriceSeriesProviderError);
+      const e = err as PriceSeriesProviderError;
+      expect(e.providerName).toBe("test-provider");
+      expect(e.request.symbol).toBe("SPY");
       expect(e.cause).toBeInstanceOf(Error);
       expect((e.cause as Error).message).toBe("boom");
     }

@@ -88,6 +88,18 @@ export function assertPriceSeriesRespectsRequestRange(
   }
 }
 
+export class PriceSeriesProviderError extends Error {
+  providerName: string;
+  request: PriceSeriesRequest;
+
+  constructor(opts: { providerName: string; request: PriceSeriesRequest; message: string; cause?: unknown }) {
+    super(opts.message, { cause: opts.cause });
+    this.name = "PriceSeriesProviderError";
+    this.providerName = opts.providerName;
+    this.request = opts.request;
+  }
+}
+
 export async function fetchValidatedPriceSeries(
   provider: PriceSeriesProvider,
   request: PriceSeriesRequest,
@@ -105,7 +117,12 @@ export async function fetchValidatedPriceSeries(
     return series;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`PriceSeriesProvider ${providerName} failed (${reqStr}): ${msg}`, { cause: err });
+    throw new PriceSeriesProviderError({
+      providerName,
+      request,
+      message: `PriceSeriesProvider ${providerName} failed (${reqStr}): ${msg}`,
+      cause: err,
+    });
   }
 }
 
