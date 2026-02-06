@@ -29,6 +29,7 @@ export function ensembleTargetWeights(
     const dups = Object.entries(counts)
       .filter(([, n]) => n > 1)
       .map(([id]) => id)
+      .sort()
       .join(", ");
 
     throw new Error(
@@ -40,7 +41,10 @@ export function ensembleTargetWeights(
   // Unknown weights would otherwise dilute normalization and degrade signal quality.
   const unknown = Object.entries(weightsConfig).filter(([id, raw]) => !stratIds.has(id) && Number(raw) !== 0);
   if (unknown.length > 0) {
-    const ids = unknown.map(([id]) => id).join(", ");
+    const ids = unknown
+      .map(([id]) => id)
+      .sort()
+      .join(", ");
     throw new Error(`Unknown strategy id(s) in weightsConfig: ${ids}`);
   }
 
