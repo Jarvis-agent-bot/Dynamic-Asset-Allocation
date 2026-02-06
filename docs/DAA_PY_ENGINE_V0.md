@@ -12,7 +12,7 @@
 ## Nginx
 
 建议通过 VPS nginx 将 Python API 暴露为：
-- `https://exwxyzi.cn/daa-api/` → `daa-py` service（宿主机 127.0.0.1:8001 → container 8000）
+- `https://exwxyzi.cn/daa-api/` → `daa-py` service（宿主机 127.0.0.1:18000 → container 8000）
 
 避免和 Next.js 的 `/daa/` 前缀冲突。
 
