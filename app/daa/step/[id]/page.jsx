@@ -2,6 +2,17 @@ import Link from "next/link";
 import { DAA_STEPS, getStep } from "../../steps";
 import StatusPill from "../../components/StatusPill";
 
+export function generateMetadata({ params }) {
+  const step = getStep(params?.id);
+  const title = step ? `DAA Step ${step.id}: ${step.title}` : `DAA Unknown Step (${String(params?.id)})`;
+  const description = step?.desc ? String(step.desc) : "DAA step page";
+
+  return {
+    title,
+    description,
+  };
+}
+
 function Nav({ stepId }) {
   const idx = DAA_STEPS.findIndex((s) => s.id === stepId);
   const prev = idx > 0 ? DAA_STEPS[idx - 1] : null;
