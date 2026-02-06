@@ -95,6 +95,12 @@ describe("framework v0 provider contract", () => {
     ).toThrow(/YYYY-MM-DD/i);
   });
 
+  it("assertPriceSeriesRespectsRequestRange throws if series contains an invalid calendar date", () => {
+    expect(() =>
+      assertPriceSeriesRespectsRequestRange([{ date: "2026-13-40" }], { start: "2026-01-01" }),
+    ).toThrow(/valid calendar date/i);
+  });
+
   it("assertPriceSeriesRespectsRequestRange throws if series has date before start", () => {
     expect(() =>
       assertPriceSeriesRespectsRequestRange([bar("2026-01-01", 100), bar("2026-01-02", 101)], {

@@ -69,8 +69,16 @@ export function assertPriceSeriesRespectsRequestRange(
   for (let i = 0; i < series.length; i++) {
     const d = series[i]?.date;
 
-    if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-      throw new Error(`series date must be a YYYY-MM-DD string (got ${String(d)} at index ${i})`);
+    if (typeof d !== "string" || d.length === 0) {
+      throw new Error(`series date must be a non-empty YYYY-MM-DD string (got ${String(d)} at index ${i})`);
+    }
+
+    // Strict ISO check (YYYY-MM-DD) + validity (e.g., rejects 2026-13-40).
+    try {
+      assertIsoDateString(d, "series date");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`${msg} at index ${i}`);
     }
 
     if (start && d < start) {
