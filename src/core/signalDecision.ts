@@ -55,9 +55,13 @@ export function decideActionWithReason(
   if (delta >= minChange) return { action: "BUY", reason: `rule: Δ=${fmt(delta)}>=minChange (${fmt(minChange)})` };
   if (delta <= -minChange) return { action: "SELL", reason: `rule: Δ=${fmt(delta)}<=-minChange (${fmt(minChange)})` };
 
+  const insideBand = tw >= sellBelow && tw <= buyAbove;
+
   return {
     action: "HOLD",
-    reason: `rule: within band [${fmt(sellBelow)}, ${fmt(buyAbove)}] & |Δ|<minChange (${fmt(minChange)})`,
+    reason: insideBand
+      ? `rule: within band [${fmt(sellBelow)}, ${fmt(buyAbove)}] & |Δ|<minChange (${fmt(minChange)})`
+      : `rule: outside band [${fmt(sellBelow)}, ${fmt(buyAbove)}] but no threshold crossed & |Δ|<minChange (${fmt(minChange)})`,
   };
 }
 

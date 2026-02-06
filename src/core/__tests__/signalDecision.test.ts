@@ -50,6 +50,10 @@ describe("decideAction", () => {
     expect(hold.action).toBe("HOLD");
     expect(hold.reason).toMatch(/within band/i);
 
+    const holdOutside = decideActionWithReason(0.8, 0.79, t);
+    expect(holdOutside.action).toBe("HOLD");
+    expect(holdOutside.reason).toMatch(/outside band/i);
+
     const invalid = decideActionWithReason(Number.NaN, 0.7, t);
     expect(invalid.action).toBe("HOLD");
     expect(invalid.reason).toMatch(/non-finite/i);
