@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { PriceBar } from "../domain";
-import { assertValidPriceSeriesRequest, fetchValidatedPriceSeries, type PriceSeriesProvider } from "../providers";
+import {
+  assertPriceSeriesRespectsRequestRange,
+  assertValidPriceSeriesRequest,
+  fetchValidatedPriceSeries,
+  type PriceSeriesProvider,
+} from "../providers";
 
 function bar(date: string, close: number): PriceBar {
   return { date, close };
@@ -66,6 +71,26 @@ describe("framework v0 provider contract", () => {
       expect(e.cause).toBeInstanceOf(Error);
       expect((e.cause as Error).message).toBe("boom");
     }
+  });
+
+  it("assertPriceSeriesRespectsRequestRange is a no-op when no range is requested", () => {
+    assertPriceSeriesRespectsRequestRange([bar("2026-01-01", 100)], {});
+  });
+
+  it("assertPriceSeriesRespectsRequestRange throws if series has date before start", () => {
+    expect(() =>
+      assertPriceSeriesRespectsRequestRange([bar("2026-01-01", 100), bar("2026-01-02", 101)], {
+        start: "2026-01-02",
+      }),
+    ).toThrow(/before start/i);
+  });
+
+  it("assertPriceSeriesRespectsRequestRange throws if series has date after end", () => {
+    expect(() =>
+      assertPriceSeriesRespectsRequestRange([bar("2026-01-01", 100), bar("2026-01-03", 101)], {
+        end: "2026-01-02",
+      }),
+    ).toThrow(/after end/i);
   });
 
   it("fetchValidatedPriceSeries returns the series if valid", async () => {

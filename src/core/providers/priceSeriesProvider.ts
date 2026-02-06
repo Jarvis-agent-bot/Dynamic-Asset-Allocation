@@ -66,6 +66,31 @@ export function assertValidPriceSeriesRequest(request: PriceSeriesRequest): void
 /**
  * Convenience wrapper: fetch + validate so failures happen at the boundary.
  */
+/**
+ * Optional contract check: if a request includes `start`/`end`, validate that the
+ * provider response respects that inclusive range.
+ *
+ * Note: this is intentionally opt-in. Some providers may ignore date ranges and
+ * return a wider window; consumers can choose whether to enforce.
+ */
+export function assertPriceSeriesRespectsRequestRange(
+  series: Array<Pick<PriceBar, "date">>,
+  request: Pick<PriceSeriesRequest, "start" | "end">,
+): void {
+  const { start, end } = request;
+  if (!start && !end) return;
+
+  for (let i = 0; i < series.length; i++) {
+    const d = series[i]?.date;
+    if (start && d < start) {
+      throw new Error(`series contains date before start (start=${start}, got ${d} at index ${i})`);
+    }
+    if (end && d > end) {
+      throw new Error(`series contains date after end (end=${end}, got ${d} at index ${i})`);
+    }
+  }
+}
+
 export async function fetchValidatedPriceSeries(
   provider: PriceSeriesProvider,
   request: PriceSeriesRequest,
