@@ -157,6 +157,10 @@ export default function Step1BacktestPage() {
         {!validationError && runError ? <span style={{ color: "#b00020", fontSize: 12 }}>Error: {runError}</span> : null}
       </div>
 
+      <div style={{ marginTop: 10, fontSize: 12, color: series.length ? "#555" : "#b00020" }} aria-live="polite">
+        Mock series: {series.length} points (capped at 200 days) — {start} → {end}
+      </div>
+
       {result ? (
         <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <section style={{ border: "1px solid #eee", borderRadius: 8, padding: 12 }}>
