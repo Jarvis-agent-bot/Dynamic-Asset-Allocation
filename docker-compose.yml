@@ -5,6 +5,15 @@ services:
       dockerfile: Dockerfile
     environment:
       - PORT=3000
+      - DAA_PY_BASE_URL=http://daa-py:8000
     ports:
       - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+
+  daa-py:
+    build:
+      context: ./services/daa-py
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
     restart: unless-stopped
