@@ -26,11 +26,46 @@ export default function Step1BacktestPage() {
 
   // v0: mock price series (flat-ish). We keep this explicit so the UI can ship
   // before market-data ingestion exists.
+  // Small quality-of-life: the mock series now respects the user-selected date range.
   const series = useMemo(() => {
+    function parseISODate(iso) {
+      // Expect YYYY-MM-DD. Use UTC to avoid timezone drift.
+      const m = /^\d{4}-\d{2}-\d{2}$/.exec(String(iso || ""));
+      if (!m) return null;
+      const d = new Date(`${iso}T00:00:00.000Z`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    function fmt(d) {
+      const y = d.getUTCFullYear();
+      const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const da = String(d.getUTCDate()).padStart(2, "0");
+      return `${y}-${mo}-${da}`;
+    }
+
+    function addDays(d, n) {
+      const x = new Date(d.getTime());
+      x.setUTCDate(x.getUTCDate() + n);
+      return x;
+    }
+
+    const s = parseISODate(start);
+    const e = parseISODate(end);
+    if (!s || !e || e < s) return [];
+
+    // Cap to keep UI snappy if someone picks huge ranges in v0.
+    const maxDays = 200;
     const out = [];
-    const n = 30;
-    for (let i = 0; i < n; i++) {
-      out.push({ date: `2026-01-${String(i + 1).padStart(2, "0")}`, close: 100 + (i % 3) * 0.2 });
+
+    // Tiny deterministic jitter based on symbol so users feel inputs “do something”.
+    const seed = String(symbol || "").toUpperCase();
+    const base = 100 + (seed.length % 7) * 0.5;
+
+    for (let i = 0; i <= maxDays; i++) {
+      const d = addDays(s, i);
+      if (d > e) break;
+      const wobble = (i % 5) * 0.12;
+      out.push({ date: fmt(d), close: base + i * 0.03 + wobble });
     }
     return out;
   }, [symbol, start, end]);
