@@ -102,7 +102,7 @@ export function ensembleTargetWeights(
   const reasonsByDay = dates.map((_, i) => {
     // Sort strategy contributions by magnitude for clearer explainability.
     // Contribution is proportional to normalized ensemble weight * strategy weight signal.
-    return perStrat
+    const reasons = perStrat
       // Keep explainability focused: omit strategies that have 0 weight in the ensemble
       // OR emit a 0% target for the day (no contribution).
       .filter((s) => s.weight > 0 && s.ws[i] > 0)
@@ -117,6 +117,14 @@ export function ensembleTargetWeights(
         const contrib = s.weight * s.ws[i];
         return `${s.name}: ${pct01(s.ws[i])}% (w=${pct01(s.weight)}%, contrib=${pct01(contrib)}%)`;
       });
+
+    // Explainability contract: avoid an empty list so callers/UI don't have to special-case.
+    // If target=0% because every strategy contributed 0, say so explicitly.
+    if (reasons.length === 0) {
+      return ["(no strategy contributed >0 on this day)"];
+    }
+
+    return reasons;
   });
 
   return { dates, targetWeights, reasonsByDay };

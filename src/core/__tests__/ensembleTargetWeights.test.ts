@@ -114,6 +114,18 @@ describe("ensembleTargetWeights contracts", () => {
     expect(reasonsByDay[0][1]).toMatch(/^B:/);
   });
 
+  it("returns a non-empty reasons list even when all strategies contribute 0 (UI-friendly explainability)", () => {
+    const series = [bar("2026-02-01"), bar("2026-02-02")];
+
+    const strategies = [strat("s1", [0.0, 0.0], "Strat 1")];
+
+    const { reasonsByDay, targetWeights } = ensembleTargetWeights(strategies, series, { s1: 1 });
+
+    expect(targetWeights).toEqual([0, 0]);
+    expect(reasonsByDay[0].length).toBeGreaterThan(0);
+    expect(reasonsByDay[0][0]).toMatch(/no strategy contributed/i);
+  });
+
   it("throws when a strategy emits non-finite weights (guards signal quality)", () => {
     const series = [bar("2026-02-01"), bar("2026-02-02")];
 
