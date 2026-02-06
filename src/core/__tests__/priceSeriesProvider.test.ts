@@ -74,6 +74,7 @@ describe("framework v0 provider contract", () => {
       const e = err as PriceSeriesProviderError;
       expect(e.providerName).toBe("test-provider");
       expect(e.request.symbol).toBe("SPY");
+      expect(e.requestString).toBe("symbol=SPY");
       expect(e.cause).toBeInstanceOf(Error);
       expect((e.cause as Error).message).toBe("boom");
     }
@@ -137,6 +138,7 @@ describe("framework v0 provider contract", () => {
       const e = err as PriceSeriesProviderError;
       expect(e.providerName).toBe("test-provider");
       expect(e.request.symbol).toBe("SPY");
+      expect(e.requestString).toMatch(/symbol=SPY/i);
       expect(e.message).toMatch(/outside requested range/i);
       expect(e.message).toMatch(/before start|after end/i);
       expect(e.cause).toBeInstanceOf(Error);

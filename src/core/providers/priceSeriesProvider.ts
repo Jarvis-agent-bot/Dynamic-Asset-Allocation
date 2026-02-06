@@ -99,8 +99,16 @@ export function assertPriceSeriesRespectsRequestRange(
 export class PriceSeriesProviderError extends Error {
   readonly providerName: string;
   readonly request: PriceSeriesRequest;
+  /** Pre-formatted request for convenient logging (e.g., "symbol=SPY start=2026-01-01"). */
+  readonly requestString: string;
 
-  constructor(opts: { providerName: string; request: PriceSeriesRequest; message: string; cause?: unknown }) {
+  constructor(opts: {
+    providerName: string;
+    request: PriceSeriesRequest;
+    requestString: string;
+    message: string;
+    cause?: unknown;
+  }) {
     super(opts.message, { cause: opts.cause });
     this.name = "PriceSeriesProviderError";
     // Ensure instanceof works reliably even when transpiled.
@@ -108,6 +116,7 @@ export class PriceSeriesProviderError extends Error {
 
     this.providerName = opts.providerName;
     this.request = opts.request;
+    this.requestString = opts.requestString;
   }
 }
 
@@ -135,6 +144,7 @@ export async function fetchValidatedPriceSeries(
     throw new PriceSeriesProviderError({
       providerName,
       request,
+      requestString: reqStr,
       message: `PriceSeriesProvider ${providerName} failed (${reqStr}): ${msg}`,
       cause: err,
     });
@@ -165,6 +175,7 @@ export async function fetchValidatedPriceSeriesEnforcingRange(
     throw new PriceSeriesProviderError({
       providerName,
       request,
+      requestString: reqStr,
       message: `PriceSeriesProvider ${providerName} returned series outside requested range (${reqStr}): ${msg}`,
       cause: err,
     });
