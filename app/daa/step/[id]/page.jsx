@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DAA_STEPS, getStep } from "../../steps";
 import StatusPill from "../../components/StatusPill";
+import StepsQuickNav from "../../components/StepsQuickNav";
 
 export function generateMetadata({ params }) {
   const step = getStep(params?.id);
@@ -51,6 +52,8 @@ export default function StepPage({ params }) {
         <h1 style={{ margin: 0, fontSize: 20 }}>未知步骤</h1>
         <p style={{ color: "#666" }}>step id: {String(params?.id)}</p>
 
+        <StepsQuickNav activeId={null} />
+
         <div style={{ marginTop: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>可用步骤</div>
           <ul style={{ margin: 0, paddingLeft: 18, color: "#555" }}>
@@ -87,7 +90,9 @@ export default function StepPage({ params }) {
 
       {step.desc ? <p style={{ color: "#666", marginTop: 8 }}>{step.desc}</p> : null}
 
-      <p style={{ color: "#444", marginTop: 8 }}>
+      <StepsQuickNav activeId={step.id} />
+
+      <p style={{ color: "#444", marginTop: 10 }}>
         这个页面即“功能边界”。先定义 UI 需要的字段（inputs / outputs），再反推 contract/provider 的最小实现。
       </p>
 
