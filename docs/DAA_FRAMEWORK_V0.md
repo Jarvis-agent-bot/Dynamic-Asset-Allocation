@@ -45,7 +45,8 @@ At the core/provider boundary, prefer calling the validation helpers instead of 
 Example:
 
 ```ts
-import { fetchValidatedPriceSeriesEnforcingRange } from "src/core/providers";
+// Inside this repo (framework v0), prefer importing from the core barrel:
+import { fetchValidatedPriceSeriesEnforcingRange } from "../src/core";
 
 const bars = await fetchValidatedPriceSeriesEnforcingRange(provider, {
   symbol: "SPY",
