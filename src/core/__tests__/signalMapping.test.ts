@@ -8,6 +8,17 @@ describe("toSignals", () => {
     expect(() => toSignals(["2026-02-01"], [0.5], [[], []] as string[][])).toThrow(/reasonsByDay\.length/);
   });
 
+  it("supports omitting reasonsByDay (defaults to empty)", () => {
+    const dates = ["2026-02-01", "2026-02-02"];
+    const targetWeights = [0.2, 0.8];
+
+    const sigs = toSignals(dates, targetWeights);
+
+    expect(sigs).toHaveLength(2);
+    expect(String(sigs[0].reasons[0])).toContain("ensemble target=");
+    expect(String(sigs[0].reasons[1])).toContain("rule:");
+  });
+
   it("throws on invalid thresholds (prevents silent bad signal mapping)", () => {
     const dates = ["2026-02-01"];
     const targetWeights = [0.5];

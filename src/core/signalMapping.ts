@@ -13,7 +13,7 @@ export const DEFAULT_SIGNAL_THRESHOLDS: SignalThresholds = {
 export function toSignals(
   dates: string[],
   targetWeights: number[],
-  reasonsByDay: string[][],
+  reasonsByDay: string[][] = [],
   thresholds: SignalThresholds = DEFAULT_SIGNAL_THRESHOLDS
 ): Signal[] {
   if (dates.length !== targetWeights.length) {
