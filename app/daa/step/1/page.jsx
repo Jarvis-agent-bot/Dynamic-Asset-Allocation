@@ -15,6 +15,7 @@ export default function Step1BacktestPage() {
   const [end, setEnd] = useState("2026-02-01");
   const [runError, setRunError] = useState(null);
   const [result, setResult] = useState(null);
+  const [copyStatus, setCopyStatus] = useState("idle"); // idle | copied | failed
 
   const validationError = useMemo(() => {
     if (!symbol.trim()) return "Symbol is required";
@@ -78,6 +79,11 @@ export default function Step1BacktestPage() {
     setRunError(null);
     if (validationError) {
       setRunError(validationError);
+      setResult(null);
+      return;
+    }
+    if (!series.length) {
+      setRunError("No price data (mock series empty for this date range)");
       setResult(null);
       return;
     }
@@ -171,10 +177,19 @@ export default function Step1BacktestPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ fontWeight: 600 }}>JSON</div>
               <button
-                onClick={() => navigator.clipboard.writeText(jsonPretty(result))}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(jsonPretty(result));
+                    setCopyStatus("copied");
+                    setTimeout(() => setCopyStatus("idle"), 1200);
+                  } catch (e) {
+                    setCopyStatus("failed");
+                    setTimeout(() => setCopyStatus("idle"), 1500);
+                  }
+                }}
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
               >
-                Copy
+                {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Copy failed" : "Copy"}
               </button>
             </div>
             <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{jsonPretty(result)}</pre>
