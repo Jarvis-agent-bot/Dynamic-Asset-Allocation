@@ -69,6 +69,22 @@ describe("ensembleTargetWeights contracts", () => {
     expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/strictly increasing/i);
   });
 
+  it("throws when series dates are not YYYY-MM-DD (prevents lexicographic ordering bugs)", () => {
+    const series = [bar("02/01/2026"), bar("02/02/2026")];
+
+    const strategies = [strat("s1", [0.2, 0.2])];
+
+    expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/YYYY-MM-DD/i);
+  });
+
+  it("throws when series dates are invalid calendar dates", () => {
+    const series = [bar("2026-13-40")];
+
+    const strategies = [strat("s1", [0.2])];
+
+    expect(() => ensembleTargetWeights(strategies, series, { s1: 1 })).toThrow(/valid calendar date/i);
+  });
+
   it("throws when a strategy emits out-of-range weights", () => {
     const series = [bar("2026-02-01"), bar("2026-02-02")];
 

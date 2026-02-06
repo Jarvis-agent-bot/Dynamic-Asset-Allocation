@@ -7,8 +7,12 @@ import { DEFAULT_ENSEMBLE_WEIGHTS } from "../config";
 function makeSeries({ n = 60, start = 100, daily = 0.002 } = {}) {
   const out = [];
   let v = start;
+  const startDate = new Date("2026-02-01T00:00:00Z");
   for (let i = 0; i < n; i++) {
-    out.push({ date: `2026-02-${String(i + 1).padStart(2, "0")}`, close: v });
+    const d = new Date(startDate);
+    d.setUTCDate(d.getUTCDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    out.push({ date: iso, close: v });
     v = v * (1 + daily);
   }
   return out;
