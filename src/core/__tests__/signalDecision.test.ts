@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { decideAction, computeConfidence } from "../signalDecision";
+import { decideAction, decideActionWithReason, computeConfidence } from "../signalDecision";
 import { DEFAULT_SIGNAL_THRESHOLDS } from "../signalMapping";
 
 describe("decideAction", () => {
@@ -32,6 +32,27 @@ describe("decideAction", () => {
     expect(decideAction(0.7, Number.NaN, t)).toBe("HOLD");
     expect(decideAction(Number.POSITIVE_INFINITY, 0.7, t)).toBe("HOLD");
     expect(decideAction(0.7, Number.NEGATIVE_INFINITY, t)).toBe("HOLD");
+  });
+
+  it("decideActionWithReason returns rule explainability (no silent logic)", () => {
+    const t = { ...DEFAULT_SIGNAL_THRESHOLDS, buyAbove: 0.6, sellBelow: 0.4, minChange: 0.15 };
+
+    const buy = decideActionWithReason(0.59, 0.61, t);
+    expect(buy.action).toBe("BUY");
+    expect(buy.reason).toMatch(/rule:/i);
+    expect(buy.reason).toMatch(/crossed above buyAbove/i);
+
+    const sell = decideActionWithReason(0.41, 0.39, t);
+    expect(sell.action).toBe("SELL");
+    expect(sell.reason).toMatch(/crossed below sellBelow/i);
+
+    const hold = decideActionWithReason(0.5, 0.52, t);
+    expect(hold.action).toBe("HOLD");
+    expect(hold.reason).toMatch(/within band/i);
+
+    const invalid = decideActionWithReason(Number.NaN, 0.7, t);
+    expect(invalid.action).toBe("HOLD");
+    expect(invalid.reason).toMatch(/non-finite/i);
   });
 
   it("throws on invalid thresholds", () => {
