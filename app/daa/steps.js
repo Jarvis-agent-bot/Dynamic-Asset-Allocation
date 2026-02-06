@@ -19,15 +19,15 @@ export const DAA_STEPS = [
   },
   {
     id: 4,
-    title: "基准买卖推荐（暂不做）",
-    desc: "占位：与交易执行分离，先留契约边界。",
-    status: "later",
+    title: "基准再平衡（signals 输出）",
+    desc: "从价格序列输入到 core signals 输出的闭环。",
+    status: "todo",
   },
   {
     id: 5,
-    title: "AI 分析（暂不做）",
-    desc: "占位：解释性输出 + 可追溯引用来源。",
-    status: "later",
+    title: "信号决策摘要",
+    desc: "粘贴 Step4 signals，提取最后一条作为“今日动作摘要”（不执行交易）。",
+    status: "todo",
   },
   {
     id: 6,
