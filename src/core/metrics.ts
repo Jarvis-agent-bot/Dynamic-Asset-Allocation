@@ -2,6 +2,12 @@ import { mean, stdev, maxDrawdown } from "./math";
 import type { BacktestMetrics } from "./domain";
 
 export function computeMetrics(equity: number[], dailyReturns: number[]): BacktestMetrics {
+  if (equity.length !== dailyReturns.length) {
+    throw new Error(
+      `computeMetrics contract violation: equity.length (${equity.length}) must equal dailyReturns.length (${dailyReturns.length})`
+    );
+  }
+
   const totalReturn = equity.length ? equity[equity.length - 1] - 1 : 0;
   const mdd = maxDrawdown(equity);
 
