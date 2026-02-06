@@ -1,5 +1,6 @@
 import { clamp } from "../math";
 import { assertNonNegativeWeights, normalizeWeights } from "../config";
+import { assertValidSeriesDates } from "../seriesContracts";
 import type { PriceBar, Strategy } from "../domain";
 import { pct01 } from "../format";
 
@@ -60,29 +61,9 @@ export function ensembleTargetWeights(
 
   const wNorm = normalizeWeights(weightsForStrats);
 
+  assertValidSeriesDates(series);
+
   const dates = series.map((b) => b.date);
-
-  // Contract: series dates must be present, ISO-like (YYYY-MM-DD), and strictly increasing.
-  // We rely on lexicographic ordering, so non-ISO dates would silently break backtests/signals.
-  for (let i = 0; i < dates.length; i++) {
-    const d = dates[i];
-    if (typeof d !== "string" || d.length === 0) {
-      throw new Error(`Price series date must be a non-empty string (got ${String(d)} at index ${i})`);
-    }
-
-    // Strict-ish ISO check (YYYY-MM-DD) + validity (e.g., rejects 2026-13-40).
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-      throw new Error(`Price series date must match YYYY-MM-DD (got ${d} at index ${i})`);
-    }
-    const parsed = new Date(`${d}T00:00:00Z`);
-    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== d) {
-      throw new Error(`Price series date must be a valid calendar date (got ${d} at index ${i})`);
-    }
-
-    if (i > 0 && d <= dates[i - 1]) {
-      throw new Error(`Price series dates must be strictly increasing (got ${dates[i - 1]} then ${d} at index ${i})`);
-    }
-  }
 
   const perStrat = strategies.map((s) => {
     const raw = s.weights(series);
