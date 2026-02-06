@@ -107,55 +107,62 @@ export default function Step1BacktestPage() {
         v0：先用 mock 价格序列把页面交互、结果结构、可复制 JSON 做出来；后续再接入市场数据（Twitter/雪球/yfinance）。
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "#666" }}>Symbol</span>
-          <input
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-            placeholder="e.g. SPY"
-            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
-          />
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "#666" }}>Start</span>
-          <input
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
-          />
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "#666" }}>End</span>
-          <input
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
-          />
-        </label>
-      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run();
+        }}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>Symbol</span>
+            <input
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              placeholder="e.g. SPY"
+              style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>Start</span>
+            <input
+              type="date"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>End</span>
+            <input
+              type="date"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
+            />
+          </label>
+        </div>
 
-      <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-        <button
-          onClick={run}
-          disabled={Boolean(validationError)}
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            border: "1px solid #111",
-            background: validationError ? "#666" : "#111",
-            color: "#fff",
-            cursor: validationError ? "not-allowed" : "pointer",
-            opacity: validationError ? 0.7 : 1,
-          }}
-        >
-          Run
-        </button>
-        {validationError ? <span style={{ color: "#b00020", fontSize: 12 }}>{validationError}</span> : null}
-        {!validationError && runError ? <span style={{ color: "#b00020", fontSize: 12 }}>Error: {runError}</span> : null}
-      </div>
+        <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="submit"
+            disabled={Boolean(validationError)}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #111",
+              background: validationError ? "#666" : "#111",
+              color: "#fff",
+              cursor: validationError ? "not-allowed" : "pointer",
+              opacity: validationError ? 0.7 : 1,
+            }}
+          >
+            Run
+          </button>
+          {validationError ? <span style={{ color: "#b00020", fontSize: 12 }}>{validationError}</span> : null}
+          {!validationError && runError ? <span style={{ color: "#b00020", fontSize: 12 }}>Error: {runError}</span> : null}
+        </div>
+      </form>
 
       <div style={{ marginTop: 10, fontSize: 12, color: series.length ? "#555" : "#b00020" }} aria-live="polite">
         Mock series: {series.length} points (capped at 200 days) — {start} → {end}
