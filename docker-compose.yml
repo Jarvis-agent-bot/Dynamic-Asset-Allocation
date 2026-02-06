@@ -1,0 +1,11 @@
+services:
+  daa-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NEXT_BASE_PATH=/daa
+      - PORT=3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
