@@ -5,12 +5,17 @@ import type { PriceBar } from "../domain";
 import { buyAndHold, smaCrossover } from "../strategies";
 
 function makeTrendSeries({ n = 60, start = 100, daily = 0.002 } = {}) {
-  const out = [];
+  const out: Array<{ date: string; close: number }> = [];
   let v = start;
+
+  const startDate = new Date("2026-01-01T00:00:00Z");
   for (let i = 0; i < n; i++) {
-    out.push({ date: `2026-01-${String(i + 1).padStart(2, "0")}`, close: v });
+    const d = new Date(startDate);
+    d.setUTCDate(d.getUTCDate() + i);
+    out.push({ date: d.toISOString().slice(0, 10), close: v });
     v = v * (1 + daily);
   }
+
   return out;
 }
 
@@ -48,6 +53,16 @@ describe("backtestSingleAsset", () => {
     series[0] = { ...series[0], date: "" };
 
     expect(() => backtestSingleAsset(buyAndHold(), series as PriceBar[])).toThrow(/date must be a non-empty string/i);
+  });
+
+  it("throws if a series date is not YYYY-MM-DD or is not a valid calendar date", () => {
+    const series = makeTrendSeries({ n: 5, daily: 0.002 }) as any[];
+
+    series[1] = { ...series[1], date: "01/02/2026" };
+    expect(() => backtestSingleAsset(buyAndHold(), series as PriceBar[])).toThrow(/YYYY-MM-DD/i);
+
+    series[1] = { ...series[1], date: "2026-13-40" };
+    expect(() => backtestSingleAsset(buyAndHold(), series as PriceBar[])).toThrow(/valid calendar date/i);
   });
 
   it("treats invalid prices as 0% returns (prevents NaN propagation)", () => {
