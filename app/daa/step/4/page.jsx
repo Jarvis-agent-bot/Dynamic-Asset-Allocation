@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react";
 
+import { DEFAULT_ENSEMBLE_WEIGHTS } from "../../../../src/core/config";
+import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
 import { ensembleSignals } from "../../../../src/core/signals";
 
 function pretty(x) {
   return JSON.stringify(x, null, 2);
 }
 
-// v0: baseline rebalance uses existing signals output + simple position sizing placeholders.
+// v0: baseline rebalance bridges JS signals -> Python engine suggested orders.
 export default function Step4BaselineRebalancePage() {
   const [symbol, setSymbol] = useState("SPY");
   const [priceSeriesText, setPriceSeriesText] = useState(
@@ -21,6 +23,22 @@ export default function Step4BaselineRebalancePage() {
     ])
   );
 
+  const [moneyPlanText, setMoneyPlanText] = useState(
+    pretty({
+      account: { baseCcy: "USD", totalEquity: 100000, cash: 20000, investable: 80000 },
+      constraints: { maxPositionPct: 0.35, maxIn: 20000, maxOut: 20000 },
+      allocations: [
+        { id: "core_equity", label: "Core Equity", targetPct: 0.6, tags: { riskPreference: "mid", riskScore: "mid" } },
+        { id: "defensive", label: "Defensive", targetPct: 0.25, tags: { riskPreference: "low", riskScore: "low" } },
+        { id: "opportunistic", label: "Opportunistic", targetPct: 0.15, tags: { riskPreference: "high", riskScore: "high" } },
+      ],
+    })
+  );
+
+  const strategies = useMemo(() => {
+    return [buyAndHold(), smaCrossover({ fast: 3, slow: 10 })];
+  }, []);
+
   const { signals, error } = useMemo(() => {
     let series;
     try {
@@ -30,15 +48,59 @@ export default function Step4BaselineRebalancePage() {
     }
 
     try {
-      const out = ensembleSignals({
-        symbol,
-        series,
-      });
+      const out = ensembleSignals(strategies, series, DEFAULT_ENSEMBLE_WEIGHTS);
       return { signals: out, error: null };
     } catch (e) {
       return { signals: null, error: e?.message || String(e) };
     }
-  }, [symbol, priceSeriesText]);
+  }, [priceSeriesText, strategies]);
+
+  const [engineResult, setEngineResult] = useState(null);
+  const [engineError, setEngineError] = useState(null);
+  const [engineStatus, setEngineStatus] = useState("idle"); // idle | running | done | failed
+
+  async function runEngine() {
+    setEngineError(null);
+    setEngineResult(null);
+    setEngineStatus("running");
+
+    let money_plan;
+    try {
+      money_plan = JSON.parse(moneyPlanText);
+    } catch (e) {
+      setEngineError("moneyPlan JSON parse failed");
+      setEngineStatus("failed");
+      return;
+    }
+
+    const payload = {
+      money_plan,
+      signals: (signals || []).map((s) => ({
+        symbol: s.symbol || symbol,
+        action: s.action,
+        score: s.score,
+        reason: s.reason,
+      })),
+    };
+
+    try {
+      const resp = await fetch("/daa-api/v1/rebalance/simulate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`engine http ${resp.status}: ${txt}`);
+      }
+      const data = await resp.json();
+      setEngineResult(data);
+      setEngineStatus("done");
+    } catch (e) {
+      setEngineError(e?.message || String(e));
+      setEngineStatus("failed");
+    }
+  }
 
   return (
     <main>
@@ -70,8 +132,18 @@ export default function Step4BaselineRebalancePage() {
       </section>
 
       <section style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginTop: 12 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Money plan (JSON)</div>
+        <textarea
+          value={moneyPlanText}
+          onChange={(e) => setMoneyPlanText(e.target.value)}
+          rows={8}
+          style={{ width: "100%", padding: 10, border: "1px solid #ddd", borderRadius: 6, fontFamily: "ui-monospace, SFMono-Regular" }}
+        />
+      </section>
+
+      <section style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginTop: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontWeight: 600 }}>Signals</div>
+          <div style={{ fontWeight: 600 }}>Signals (JS)</div>
           <button
             onClick={() => navigator.clipboard.writeText(pretty(signals))}
             disabled={!signals}
@@ -85,6 +157,30 @@ export default function Step4BaselineRebalancePage() {
         ) : (
           <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{signals ? pretty(signals) : "(no output)"}</pre>
         )}
+      </section>
+
+      <section style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontWeight: 600 }}>Python engine suggested orders</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              onClick={runEngine}
+              disabled={engineStatus === "running" || !signals}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #111", background: "#111", color: "#fff", opacity: engineStatus === "running" ? 0.6 : 1 }}
+            >
+              {engineStatus === "running" ? "Running..." : "Run engine"}
+            </button>
+            <button
+              onClick={() => navigator.clipboard.writeText(pretty(engineResult))}
+              disabled={!engineResult}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+        {engineError ? <div style={{ fontSize: 12, color: "#b00020" }}>{engineError}</div> : null}
+        <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{engineResult ? pretty(engineResult) : "(no output yet)"}</pre>
       </section>
 
       <section style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, marginTop: 12 }}>

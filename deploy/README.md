@@ -15,5 +15,9 @@ chmod +x deploy/start.sh
 It will pull latest `main`, build the image, and restart the service.
 
 ## Notes
-- Default port: 3000 (map it behind Nginx if needed)
+- Web (Next.js): 127.0.0.1:3000
+- Python engine (FastAPI): 127.0.0.1:18000
+- Suggested Nginx routing:
+  - `/daa/` → http://127.0.0.1:3000/daa/
+  - `/daa-api/` → http://127.0.0.1:18000/
 - No qlib / AI secrets are required for the v0 framework.
