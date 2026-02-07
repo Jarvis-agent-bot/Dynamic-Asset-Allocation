@@ -43,7 +43,7 @@ export default function Step4BaselineRebalancePage() {
 
     try {
       // v0: keep strategies/weights fixed; this page is just a runnable loop.
-      const strategies = [buyAndHold(), smaCrossover({ fast: 5, slow: 20 })];
+      const strategies = [buyAndHold(), smaCrossover({ fast: 3, slow: 10 })];
       const sigs = ensembleSignals(strategies, series, DEFAULT_ENSEMBLE_WEIGHTS);
       return { signals: sigs, error: null };
     } catch (e) {
