@@ -2,8 +2,22 @@ import { DAA_STEP_STATUS_LABEL } from "../steps";
 
 export default function StatusPill({ status }) {
   const label = DAA_STEP_STATUS_LABEL[status] || status || "";
-  const bg = status === "wip" ? "#e6f4ff" : status === "todo" ? "#fff7e6" : "#f5f5f5";
-  const fg = status === "wip" ? "#0958d9" : status === "todo" ? "#ad4e00" : "#555";
+  const bg =
+    status === "wip"
+      ? "#e6f4ff"
+      : status === "todo"
+        ? "#fff7e6"
+        : status === "done"
+          ? "#f6ffed"
+          : "#f5f5f5";
+  const fg =
+    status === "wip"
+      ? "#0958d9"
+      : status === "todo"
+        ? "#ad4e00"
+        : status === "done"
+          ? "#237804"
+          : "#555";
 
   return (
     <span

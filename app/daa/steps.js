@@ -9,25 +9,25 @@ export const DAA_STEPS = [
     id: 2,
     title: "市场信息（Twitter主观 + 雪球/yfinance客观）",
     desc: "把‘市场信息’拆成页面字段：主观观点 + 可验证客观数据。",
-    status: "todo",
+    status: "done",
   },
   {
     id: 3,
     title: "金额管理（比例分配/Tag/max in-out）",
     desc: "页面优先：先把资金约束与分配规则‘可配置化’。",
-    status: "todo",
+    status: "done",
   },
   {
     id: 4,
     title: "基准再平衡（signals 输出）",
     desc: "从价格序列输入到 core signals 输出的闭环。",
-    status: "todo",
+    status: "done",
   },
   {
     id: 5,
     title: "信号决策摘要",
     desc: "粘贴 Step4 signals，提取最后一条作为“今日动作摘要”（不执行交易）。",
-    status: "todo",
+    status: "done",
   },
   {
     id: 6,
@@ -46,6 +46,7 @@ export const DAA_STEPS = [
 export const DAA_STEP_STATUS_LABEL = {
   wip: "进行中",
   todo: "待做",
+  done: "已完成",
   later: "以后",
 };
 
