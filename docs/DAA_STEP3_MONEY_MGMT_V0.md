@@ -1,49 +1,80 @@
-# DAA Step3 金额管理页 v0（资金池 / 比例分配 / Tag / max in-out / 最大持仓）
+# DAA Step3 金额管理页 v0（Account / Constraints / Allocations JSON / Copy Plan JSON）
 
-> v0 目标：先把 **mock 数据 + 本地校验 + Copy JSON** 跑通（不接后端、不做推荐），为后续 Step4 的仓位/推荐逻辑提供稳定输入。
+> v0 目标：把 **输入结构 + 本地校验 + Copy JSON** 做出来（先 mock 数据），为后续 Step4 推荐算法提供稳定输入。
 
 ## 页面路径
 
 - Route: `/daa/step/3`
-- 名称：金额管理（资金池 / 分配 / 约束 / Tag）
+- 标题：Step 3 — 金额管理
 
-## UI 行为（v0）
+## 核心交互（v0）
 
-### 1) Account（资金池/账户概览）
-- 字段：
-  - `baseCcy`：基准币种（字符串，如 `USD`/`CNY`）
-  - `totalEquity`：总资产（> 0）
-  - `cash`：现金（>= 0，且 `cash <= totalEquity`）
-  - `investable`：可投资额度（>= 0，且 `investable <= totalEquity`）
+页面分 3 块：**Account / Constraints / Allocations(JSON)**，并在右侧生成 **Plan JSON**，支持一键 Copy。
 
-### 2) Constraints（约束）
-- `maxPositionPct`：单一标的最大持仓比例（0..1，且 `>0`）
-- `maxIn`：单次最大流入金额（>= 0）
-- `maxOut`：单次最大流出金额（>= 0）
+### 1) Account
 
-### 3) Allocations（比例分配 + Tag）
-- v0：用一个 JSON textarea 输入 allocations（后续再换成表格/表单）。
-- `allocations[]` 每项：
-  - `id`：标识符（必填）
-  - `label`：展示名（必填）
-  - `targetPct`：目标比例（0..1）
-  - `tags`（可选）：
-    - `riskPreference`: `high | mid | low`
-    - `riskScore`: `high | mid | low`
+字段：
 
-### 4) Validation（本地校验）
-- 页面展示校验 issues 列表（path + message）。
-- v0 的分配规则：
-  - 允许 `sum(targetPct) <= 1`（剩余比例视为保留现金）
-  - 若 `sum(targetPct) > 1` 则报错
+- `baseCcy`（Base currency）：基础币种（字符串，v0 默认 `"USD"`）
+- `totalEquity`（Total equity）：账户总权益（number）
+- `cash`（Cash）：现金（number）
+- `investable`（Investable）：可投资金额（number）
 
-### 5) Plan JSON 预览 + Copy
-- 页面展示完整 plan JSON。
-- 点击 Copy 将 plan JSON 复制到剪贴板。
+v0 校验（由 `validateMoneyPlan(plan)` 执行）：
 
-## 数据结构（v0 schema）
+- `baseCcy` 必填
+- `totalEquity >= 0`
+- `cash >= 0`
+- `investable >= 0`
 
-### 顶层对象：MoneyPlan
+> 注：v0 不强制 `cash + investable == totalEquity`（如需约束后续再加）。
+
+### 2) Constraints
+
+字段：
+
+- `maxPositionPct`（Max position % (0..1)）：单一标的最大持仓比例（0..1 小数）
+- `maxIn`（Max in (absolute)）：单次最大流入（绝对金额）
+- `maxOut`（Max out (absolute)）：单次最大流出（绝对金额）
+
+v0 校验：
+
+- `0 <= maxPositionPct <= 1`
+- `maxIn >= 0`
+- `maxOut >= 0`
+
+### 3) Allocations (JSON)
+
+- 通过 textarea 输入一个 **JSON 数组**。
+- 每个元素表示一个“分配桶/资产/策略桶”。
+
+推荐结构：
+
+- `id`：字符串标识
+- `label`：展示名
+- `targetPct`：目标权重（0..1 小数）
+- `tags`：对象（v0 支持 `riskPreference` / `riskScore` 两个 tag 字段）
+
+v0 校验（关键点）：
+
+- `allocations` 必须是数组
+- 每行 `targetPct` 在 `[0, 1]`
+- `sum(targetPct) <= 1`：允许 **小于 1**（剩余部分视为保留现金）；**超过 1 报错**
+
+页面提示文案：
+
+- `v0：允许 sum(targetPct) ≤ 1（保留现金）；超过 1 会报错。Tag 支持 riskPreference/riskScore。`
+
+### 4) Plan JSON + Copy
+
+页面会根据当前输入实时生成：
+
+- **Validation**：展示校验结果（OK / issues 列表）
+- **Plan JSON**：展示最终 plan（并提供 `Copy` 按钮复制到剪贴板）
+
+## 数据结构（v0）
+
+最终 Plan JSON 形状：
 
 ```json
 {
@@ -75,20 +106,8 @@
 }
 ```
 
-## 本地校验规则（v0）
-
-1. `account.baseCcy` 必填
-2. `account.totalEquity` 必填且 `> 0`
-3. `account.cash >= 0` 且 `cash <= totalEquity`
-4. `account.investable >= 0` 且 `investable <= totalEquity`
-5. `constraints.maxPositionPct` 在 `(0, 1]`
-6. `constraints.maxIn >= 0`，`constraints.maxOut >= 0`
-7. `allocations[]`：每项 `id/label` 必填，`targetPct` 在 `[0,1]`
-8. `sum(allocations[].targetPct) <= 1`（允许保留现金；若 > 1 报错）
-
 ## 非目标（v0 不做）
 
 - 不接入后端持久化
-- 不做买卖推荐/AI
 - 不计算真实持仓/交易可执行性
-- 不做复杂约束联动（例如按 tag 的资金上限、动态风险预算等）
+- 不做更复杂的资金约束（例如按 tag 的资金上限、动态风险预算等）
