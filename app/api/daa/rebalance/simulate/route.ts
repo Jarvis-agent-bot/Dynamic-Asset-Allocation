@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { isDaaEngineRebalanceSimulateResponse } from "@/src/core/contracts/daaEngine";
 import { isRebalanceSimulateRequest, type RebalanceSimulateRequest } from "@/src/daa/engineContracts";
-import { proxyToEngine } from "@/src/daa/proxyToEngine";
+import { proxyToEngineJson } from "@/src/daa/proxyToEngine";
 import { readJsonBody } from "@/src/daa/requestJson";
 import { parsePositiveIntEnv } from "@/src/daa/env";
 
@@ -21,13 +22,14 @@ export async function POST(req: Request) {
 
   const timeoutMs = parsePositiveIntEnv("DAA_ENGINE_TIMEOUT_MS", 30_000);
 
-  // Pass through raw text to avoid coupling to engine request shape.
-  return proxyToEngine({
+  // Validate upstream response is JSON and roughly matches the v0 contract.
+  return proxyToEngineJson({
     upstreamPath: "/daa-api/v1/rebalance/simulate",
     method: "POST",
     bodyText: parsed.rawText,
     contentType: "application/json",
     timeoutMs,
     fallbackContentType: "application/json",
+    validate: isDaaEngineRebalanceSimulateResponse,
   });
 }
