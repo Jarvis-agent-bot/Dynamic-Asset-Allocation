@@ -17,13 +17,29 @@ export async function POST(req: Request) {
   const base = process.env.DAA_ENGINE_BASE_URL?.replace(/\/$/, "") || "";
   const url = `${base}${upstreamPath}`;
 
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: bodyText,
-    // Next.js runtime caches fetch by default in some contexts; this is a pure proxy.
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timeoutMs = Number(process.env.DAA_ENGINE_TIMEOUT_MS || 30_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: bodyText,
+      signal: controller.signal,
+      // Next.js runtime caches fetch by default in some contexts; this is a pure proxy.
+      cache: "no-store",
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "unknown fetch error";
+    return NextResponse.json(
+      { error: "upstream fetch failed", upstream: url, message: msg },
+      { status: 502 },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const text = await resp.text();
 
