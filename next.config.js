@@ -9,6 +9,10 @@ const nextConfig = {
   // v0 milestone smoke checks hit explicit trailing slash URLs (e.g. /daa/step/4/).
   // Make trailing-slash URLs first-class to ensure they return 200 (no 308).
   trailingSlash: true,
+
+  // Avoid auto-redirecting between /path and /path/ forms; in front of CF/Nginx,
+  // redirects can be interpreted differently (and would fail the smoke check).
+  skipTrailingSlashRedirect: true,
 };
 
 module.exports = nextConfig;
