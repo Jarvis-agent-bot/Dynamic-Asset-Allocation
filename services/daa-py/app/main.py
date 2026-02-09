@@ -8,9 +8,15 @@ from pydantic import BaseModel, Field
 app = FastAPI(title="DAA Python Engine", version="0.1.0")
 
 
-@app.get("/health")
+class HealthResponse(BaseModel):
+    ok: bool
+    service: Literal["daa-engine"] = "daa-engine"
+    version: str
+
+
+@app.get("/health", response_model=HealthResponse)
 def health():
-    return {"ok": True}
+    return HealthResponse(ok=True, version=app.version)
 
 
 Side = Literal["BUY", "SELL", "HOLD"]
