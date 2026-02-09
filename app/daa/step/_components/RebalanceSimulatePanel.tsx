@@ -58,7 +58,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
     if (!response || typeof response !== "object") return null;
     const r = response as any;
     if (r.explain === undefined || r.explain === null) return null;
-    return String(r.explain);
+    return r.explain as unknown;
   }, [response]);
 
   const warnings = useMemo(() => {
@@ -301,7 +301,9 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
                 </div>
               ) : null}
               {explain ? (
-                <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{explain}</pre>
+                <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {typeof explain === "string" ? explain : pretty(explain)}
+                </pre>
               ) : (
                 <div style={{ fontSize: 12, color: "#666" }}>No explain.</div>
               )}
