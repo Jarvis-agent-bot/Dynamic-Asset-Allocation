@@ -1,0 +1,43 @@
+import type { Metadata } from "next";
+import Script from "next/script";
+import type { ReactNode } from "react";
+
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "基估宝",
+  description: "输入基金编号添加基金，实时显示估值与前10重仓",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: ReactNode;
+}>) {
+  const GA_ID = "G-PD2JWJHVEM"; // Replace with your Google Analytics ID.
+
+  return (
+    <html lang="zh-CN">
+      <head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+        {/* Google Analytics */}
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GA_ID}');
+          `}
+        </Script>
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
