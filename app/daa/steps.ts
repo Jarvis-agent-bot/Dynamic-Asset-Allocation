@@ -35,14 +35,14 @@ export const DAA_STEPS: DaaStep[] = [
   },
   {
     id: 4,
-    title: "基准再平衡（signals 输出）",
-    desc: "从价格序列输入到 core signals 输出的闭环。",
+    title: "基准再平衡（v0 推荐）",
+    desc: "v0：点击按钮调用 /api/daa/rebalance/simulate，生成再平衡推荐（orders + target weights + explain）。",
     status: "done",
   },
   {
     id: 5,
-    title: "信号决策摘要",
-    desc: "粘贴 Step4 signals，提取最后一条作为“今日动作摘要”（不执行交易）。",
+    title: "推荐结果展示（v0）",
+    desc: "v0：同样可生成并检查推荐结果，提供 explain/warnings + 一键复制 JSON。",
     status: "done",
   },
   {
