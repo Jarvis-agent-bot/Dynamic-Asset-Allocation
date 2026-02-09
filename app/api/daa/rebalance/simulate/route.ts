@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import type { RebalanceSimulateRequest } from "@/src/daa/engineContracts";
+import { isRebalanceSimulateRequest, type RebalanceSimulateRequest } from "@/src/daa/engineContracts";
 import { proxyToEngine } from "@/src/daa/proxyToEngine";
 import { readJsonBody } from "@/src/daa/requestJson";
 
@@ -10,6 +10,13 @@ import { readJsonBody } from "@/src/daa/requestJson";
 export async function POST(req: Request) {
   const parsed = await readJsonBody<RebalanceSimulateRequest>(req);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+  if (!isRebalanceSimulateRequest(parsed.value)) {
+    return NextResponse.json(
+      { error: "invalid request shape", expected: "{ money_plan: ..., signals: ... }" },
+      { status: 400 },
+    );
+  }
 
   const timeoutMs = Number(process.env.DAA_ENGINE_TIMEOUT_MS || 30_000);
 
