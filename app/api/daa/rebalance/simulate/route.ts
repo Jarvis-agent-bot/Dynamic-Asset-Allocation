@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isRebalanceSimulateRequest, type RebalanceSimulateRequest } from "@/src/daa/engineContracts";
 import { proxyToEngine } from "@/src/daa/proxyToEngine";
 import { readJsonBody } from "@/src/daa/requestJson";
+import { parsePositiveIntEnv } from "@/src/daa/env";
 
 // Single purpose: provide a stable Next.js API endpoint that proxies to the Python engine
 // behind nginx (/daa-api/...). This keeps the UI independent from deployment routing.
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const timeoutMs = Number(process.env.DAA_ENGINE_TIMEOUT_MS || 30_000);
+  const timeoutMs = parsePositiveIntEnv("DAA_ENGINE_TIMEOUT_MS", 30_000);
 
   // Pass through raw text to avoid coupling to engine request shape.
   return proxyToEngine({
