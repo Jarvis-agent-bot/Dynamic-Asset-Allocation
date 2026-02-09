@@ -1,14 +1,19 @@
 import Link from "next/link";
-import { DAA_STEPS, DAA_STEP_STATUS_LABEL } from "../steps";
+import { DAA_STEPS, DAA_STEP_STATUS_LABEL, type DaaStepStatus } from "../steps";
 
-export default function StepsQuickNav({ activeId }) {
+type Props = {
+  activeId?: number | null;
+};
+
+export default function StepsQuickNav({ activeId }: Props) {
   return (
     <nav aria-label="DAA steps" style={{ marginTop: 10 }}>
       <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>Steps</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {DAA_STEPS.map((s) => {
           const isActive = Number(activeId) === s.id;
-          const statusLabel = s.status ? DAA_STEP_STATUS_LABEL[s.status] || s.status : "";
+          const status = s.status as DaaStepStatus | string | undefined;
+          const statusLabel = status ? DAA_STEP_STATUS_LABEL[status as DaaStepStatus] || status : "";
           const a11yLabel = statusLabel ? `Step ${s.id}: ${s.title}（${statusLabel}）` : `Step ${s.id}: ${s.title}`;
 
           return (

@@ -4,7 +4,13 @@ import StatusPill from "../../components/StatusPill";
 import StepsQuickNav from "../../components/StepsQuickNav";
 import StepKeyNav from "./StepKeyNav";
 
-export function generateMetadata({ params }) {
+type StepPageProps = {
+  params: {
+    id: string;
+  };
+};
+
+export function generateMetadata({ params }: StepPageProps) {
   const step = getStep(params?.id);
   const title = step ? `DAA Step ${step.id}: ${step.title}` : `DAA Unknown Step (${String(params?.id)})`;
   const description = step?.desc ? String(step.desc) : "DAA step page";
@@ -15,7 +21,7 @@ export function generateMetadata({ params }) {
   };
 }
 
-function Nav({ stepId }) {
+function Nav({ stepId }: { stepId: number }) {
   const idx = DAA_STEPS.findIndex((s) => s.id === stepId);
   const prev = idx > 0 ? DAA_STEPS[idx - 1] : null;
   const next = idx >= 0 && idx < DAA_STEPS.length - 1 ? DAA_STEPS[idx + 1] : null;
@@ -50,7 +56,7 @@ function Nav({ stepId }) {
   );
 }
 
-export default function StepPage({ params }) {
+export default function StepPage({ params }: StepPageProps) {
   const step = getStep(params.id);
 
   if (!step) {
