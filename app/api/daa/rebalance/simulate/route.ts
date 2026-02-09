@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
 
+import type { RebalanceSimulateRequest } from "@/src/daa/engineContracts";
+import { readJsonBody } from "@/src/daa/requestJson";
+
 // Single purpose: provide a stable Next.js API endpoint that proxies to the Python engine
 // behind nginx (/daa-api/...). This keeps the UI independent from deployment routing.
 
 export async function POST(req: Request) {
   const upstreamPath = "/daa-api/v1/rebalance/simulate";
 
-  let bodyText: string;
-  try {
-    bodyText = await req.text();
-  } catch {
-    return NextResponse.json({ error: "failed to read request body" }, { status: 400 });
-  }
+  const parsed = await readJsonBody<RebalanceSimulateRequest>(req);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   // Prefer absolute base URL when provided (useful for local dev), otherwise same-origin.
   const base = process.env.DAA_ENGINE_BASE_URL?.replace(/\/$/, "") || "";
@@ -26,7 +25,7 @@ export async function POST(req: Request) {
     resp = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: bodyText,
+      body: parsed.rawText,
       signal: controller.signal,
       // Next.js runtime caches fetch by default in some contexts; this is a pure proxy.
       cache: "no-store",
