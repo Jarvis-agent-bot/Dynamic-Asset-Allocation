@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 
-import { proxyToEngine } from "../proxyToEngine";
+import { proxyToEngine, proxyToEngineJson } from "../proxyToEngine";
 
 describe("daa/proxyToEngine", () => {
   const originalFetch = globalThis.fetch;
@@ -98,5 +98,63 @@ describe("daa/proxyToEngine", () => {
     expect(resp.status).toBe(200);
     expect(resp.headers.get("content-type")).toBe("text/plain");
     await expect(resp.text()).resolves.toBe("OK");
+  });
+
+  it("proxyToEngineJson parses JSON and preserves upstream status", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+    });
+
+    expect(resp.status).toBe(201);
+    await expect(resp.json()).resolves.toMatchObject({ ok: true });
+  });
+
+  it("proxyToEngineJson returns 502 when upstream JSON is invalid", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response("not-json", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+    });
+
+    expect(resp.status).toBe(502);
+    await expect(resp.json()).resolves.toMatchObject({ ok: false, error: "invalid upstream json" });
+  });
+
+  it("proxyToEngineJson returns 502 when validate() fails", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: "not-a-bool" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+      validate: (v: unknown): v is { ok: true } => typeof v === "object" && v !== null && (v as any).ok === true,
+    });
+
+    expect(resp.status).toBe(502);
+    await expect(resp.json()).resolves.toMatchObject({ ok: false, error: "upstream response contract mismatch" });
   });
 });
