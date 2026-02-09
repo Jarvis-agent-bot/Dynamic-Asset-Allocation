@@ -238,6 +238,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
                       <th style={{ textAlign: "left", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Symbol</th>
                       <th style={{ textAlign: "left", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Side</th>
                       <th style={{ textAlign: "right", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Notional</th>
+                      <th style={{ textAlign: "left", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Why</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -246,6 +247,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
                         <td style={{ padding: "6px 0" }}>{o.symbol}</td>
                         <td style={{ padding: "6px 0" }}>{o.side}</td>
                         <td style={{ padding: "6px 0", textAlign: "right" }}>{o.notional.toFixed(2)}</td>
+                        <td style={{ padding: "6px 0", color: "#444" }}>{o.reason || ""}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -253,18 +255,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
               ) : (
                 <div style={{ fontSize: 12, color: "#666" }}>No orders.</div>
               )}
-              {orders.some((o) => o.reason) ? (
-                <div style={{ marginTop: 8, fontSize: 12, color: "#444" }}>
-                  {orders
-                    .filter((o) => o.reason)
-                    .slice(0, 3)
-                    .map((o, idx) => (
-                      <div key={idx} style={{ marginTop: idx ? 6 : 0 }}>
-                        <span style={{ fontWeight: 600 }}>{o.symbol}</span>: {o.reason}
-                      </div>
-                    ))}
-                </div>
-              ) : null}
+              {null}
             </div>
 
             <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
