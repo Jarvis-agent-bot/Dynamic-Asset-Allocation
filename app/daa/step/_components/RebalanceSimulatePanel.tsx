@@ -57,7 +57,8 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
   const explain = useMemo(() => {
     if (!response || typeof response !== "object") return null;
     const r = response as any;
-    return r.explain ?? null;
+    if (r.explain === undefined || r.explain === null) return null;
+    return String(r.explain);
   }, [response]);
 
   const warnings = useMemo(() => {
@@ -68,6 +69,29 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
   }, [response]);
 
   const targetWeights = useMemo(() => {
+    // Prefer weights returned by the engine if present; otherwise show the input allocations.
+    if (response && typeof response === "object") {
+      const r = response as any;
+
+      const raw = r.targetWeights ?? r.target_weights;
+      if (Array.isArray(raw)) {
+        return raw
+          .filter(Boolean)
+          .map((a: any) => ({
+            id: String(a?.id ?? a?.symbol ?? ""),
+            label: String(a?.label ?? a?.name ?? a?.id ?? a?.symbol ?? ""),
+            targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0),
+          }))
+          .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
+      }
+
+      if (raw && typeof raw === "object") {
+        return Object.entries(raw as Record<string, unknown>)
+          .map(([id, targetPct]) => ({ id, label: id, targetPct: Number(targetPct ?? 0) }))
+          .filter((a) => a.id && Number.isFinite(a.targetPct));
+      }
+    }
+
     if (!parsedReq.ok) return [];
     const req = parsedReq.value as any;
     const allocs = req?.money_plan?.allocations;
@@ -76,7 +100,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
       .filter(Boolean)
       .map((a: any) => ({ id: String(a?.id ?? ""), label: String(a?.label ?? ""), targetPct: Number(a?.targetPct ?? 0) }))
       .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
-  }, [parsedReq]);
+  }, [parsedReq, response]);
 
   async function run() {
     setLoading(true);
@@ -277,7 +301,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
                 </div>
               ) : null}
               {explain ? (
-                <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(explain)}</pre>
+                <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{explain}</pre>
               ) : (
                 <div style={{ fontSize: 12, color: "#666" }}>No explain.</div>
               )}
