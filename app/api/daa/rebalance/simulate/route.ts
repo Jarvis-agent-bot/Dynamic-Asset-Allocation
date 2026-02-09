@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import type { RebalanceSimulateRequest } from "@/src/daa/engineContracts";
+import { isRebalanceSimulateRequest, type RebalanceSimulateRequest } from "@/src/daa/engineContracts";
 import { readJsonBody } from "@/src/daa/requestJson";
 
 // Single purpose: provide a stable Next.js API endpoint that proxies to the Python engine
@@ -11,6 +11,12 @@ export async function POST(req: Request) {
 
   const parsed = await readJsonBody<RebalanceSimulateRequest>(req);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  if (!isRebalanceSimulateRequest(parsed.value)) {
+    return NextResponse.json(
+      { error: "invalid request shape", expected: "{ money_plan: ..., signals: ... }" },
+      { status: 400 },
+    );
+  }
 
   // Prefer absolute base URL when provided (useful for local dev), otherwise same-origin.
   const base = process.env.DAA_ENGINE_BASE_URL?.replace(/\/$/, "") || "";

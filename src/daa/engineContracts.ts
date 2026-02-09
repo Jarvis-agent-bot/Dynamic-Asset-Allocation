@@ -13,6 +13,14 @@ export type RebalanceSimulateRequest = {
   signals: JsonValue;
 };
 
+export function isRebalanceSimulateRequest(x: unknown): x is RebalanceSimulateRequest {
+  if (!x || typeof x !== "object") return false;
+  const obj = x as Record<string, unknown>;
+
+  // money_plan/signals can be any JSON value (including null); only require presence.
+  return Object.prototype.hasOwnProperty.call(obj, "money_plan") && Object.prototype.hasOwnProperty.call(obj, "signals");
+}
+
 export type EngineErrorResponse = {
   error: string;
   message?: string;
