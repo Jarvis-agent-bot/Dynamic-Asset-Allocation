@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { validateMoneyPlan } from "../../../../src/core/money";
 
-function pretty(x) {
+function pretty(x: unknown) {
   return JSON.stringify(x, null, 2);
 }
 
@@ -68,15 +68,15 @@ export default function Step3MoneyManagementPage() {
           </label>
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Total equity</span>
-            <input type="number" value={totalEquity} onChange={(e) => setTotalEquity(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+            <input type="number" value={totalEquity} onChange={(e) => setTotalEquity(Number(e.target.value || 0))} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
           </label>
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Cash</span>
-            <input type="number" value={cash} onChange={(e) => setCash(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+            <input type="number" value={cash} onChange={(e) => setCash(Number(e.target.value || 0))} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
           </label>
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Investable</span>
-            <input type="number" value={investable} onChange={(e) => setInvestable(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+            <input type="number" value={investable} onChange={(e) => setInvestable(Number(e.target.value || 0))} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
           </label>
         </div>
       </section>
@@ -86,15 +86,15 @@ export default function Step3MoneyManagementPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Max position % (0..1)</span>
-            <input type="number" step="0.01" value={maxPositionPct} onChange={(e) => setMaxPositionPct(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+            <input type="number" step="0.01" value={maxPositionPct} onChange={(e) => setMaxPositionPct(Number(e.target.value || 0))} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
           </label>
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Max in (absolute)</span>
-            <input type="number" value={maxIn} onChange={(e) => setMaxIn(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+            <input type="number" value={maxIn} onChange={(e) => setMaxIn(Number(e.target.value || 0))} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
           </label>
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Max out (absolute)</span>
-            <input type="number" value={maxOut} onChange={(e) => setMaxOut(e.target.value)} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
+            <input type="number" value={maxOut} onChange={(e) => setMaxOut(Number(e.target.value || 0))} style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }} />
           </label>
         </div>
       </section>

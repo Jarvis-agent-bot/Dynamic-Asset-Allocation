@@ -3,7 +3,13 @@
 import { useMemo, useState } from "react";
 
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
-import { backtestSingleAsset, rankBacktestResults } from "../../../../src/core/backtest";
+import { backtestSingleAsset, rankBacktestResults, type RankedBacktestResult } from "../../../../src/core/backtest";
+
+type Step1Result = {
+  ranked: RankedBacktestResult[];
+  input: unknown;
+  output?: unknown;
+} & Record<string, unknown>;
 
 function jsonPretty(x: unknown) {
   return JSON.stringify(x, null, 2);
@@ -14,7 +20,7 @@ export default function Step1BacktestPage() {
   const [start, setStart] = useState("2026-01-01");
   const [end, setEnd] = useState("2026-02-01");
   const [runError, setRunError] = useState<string | null>(null);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<Step1Result | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const validationError = useMemo(() => {

@@ -2,19 +2,19 @@
 
 import { useMemo, useState } from "react";
 
-import { filterMarketEvents } from "../../../../src/core/marketEvents";
+import { filterMarketEvents, type MarketEvent, type MarketEventSource } from "../../../../src/core/marketEvents";
 
-function pretty(x) {
+function pretty(x: unknown) {
   return JSON.stringify(x, null, 2);
 }
 
-function fmtTs(ts) {
+function fmtTs(ts: string) {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return String(ts || "");
   return d.toLocaleString("zh-CN", { hour12: false });
 }
 
-const MOCK_EVENTS = [
+const MOCK_EVENTS: MarketEvent[] = [
   {
     id: "tw-1",
     source: "twitter",
@@ -44,10 +44,10 @@ export default function Step2MarketEventsPage() {
   const [symbol, setSymbol] = useState("");
   const [since, setSince] = useState(""); // YYYY-MM-DD
   const [until, setUntil] = useState(""); // YYYY-MM-DD
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState<MarketEvent | null>(null);
 
   const filtered = useMemo(() => {
-    const sources = [];
+    const sources: MarketEventSource[] = [];
     if (showTwitter) sources.push("twitter");
     if (showNews) sources.push("news");
 
