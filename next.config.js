@@ -7,8 +7,8 @@ const nextConfig = {
   // VPS/Nginx should forward requests to the app without stripping the /daa prefix.
 
   // v0 milestone smoke checks hit explicit trailing slash URLs (e.g. /daa/step/4/).
-  // Make trailing-slash URLs first-class to ensure they return 200 (no 308).
-  trailingSlash: true,
+  // Keep canonical routing as no-slash, but allow /path/ to resolve without a 308.
+  trailingSlash: false,
 
   // Avoid auto-redirecting between /path and /path/ forms; in front of CF/Nginx,
   // redirects can be interpreted differently (and would fail the smoke check).
