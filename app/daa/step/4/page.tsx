@@ -2,16 +2,22 @@
 
 import { useMemo, useState } from "react";
 
+import { DEFAULT_ENSEMBLE_WEIGHTS } from "../../../../src/core/config";
 import { ensembleSignals } from "../../../../src/core/signals";
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
-import { DEFAULT_ENSEMBLE_WEIGHTS } from "../../../../src/core/config";
 
-function pretty(x) {
+function pretty(x: unknown) {
   return JSON.stringify(x, null, 2);
 }
 
-function makeMockSeries({ n = 60, start = 100, daily = 0.002 } = {}) {
-  const out = [];
+type MockSeriesOpts = {
+  n?: number;
+  start?: number;
+  daily?: number;
+};
+
+function makeMockSeries({ n = 60, start = 100, daily = 0.002 }: MockSeriesOpts = {}) {
+  const out: Array<{ date: string; close: number }> = [];
   let v = start;
   const startDate = new Date("2026-02-01T00:00:00Z");
   for (let i = 0; i < n; i++) {
@@ -34,7 +40,7 @@ export default function Step4BaselineRebalancePage() {
   const [priceSeriesText, setPriceSeriesText] = useState(pretty(makeMockSeries({ n: 60, daily: 0.001 })));
 
   const { signals, error } = useMemo(() => {
-    let series;
+    let series: unknown;
     try {
       series = JSON.parse(priceSeriesText);
     } catch {
@@ -44,10 +50,10 @@ export default function Step4BaselineRebalancePage() {
     try {
       // v0: keep strategies/weights fixed; this page is just a runnable loop.
       const strategies = [buyAndHold(), smaCrossover({ fast: 3, slow: 10 })];
-      const sigs = ensembleSignals(strategies, series, DEFAULT_ENSEMBLE_WEIGHTS);
-      return { signals: sigs, error: null };
+      const sigs = ensembleSignals(strategies, series as any, DEFAULT_ENSEMBLE_WEIGHTS);
+      return { signals: sigs, error: null as string | null };
     } catch (e) {
-      return { signals: null, error: String(e?.message || e) };
+      return { signals: null, error: e instanceof Error ? e.message : String(e) };
     }
   }, [priceSeriesText]);
 
