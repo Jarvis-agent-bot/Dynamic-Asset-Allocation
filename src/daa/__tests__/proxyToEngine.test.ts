@@ -100,6 +100,27 @@ describe("daa/proxyToEngine", () => {
     await expect(resp.text()).resolves.toBe("OK");
   });
 
+  it("passes through other upstream headers (e.g. set-cookie)", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response("OK", {
+        status: 200,
+        headers: {
+          "content-type": "text/plain",
+          "set-cookie": "sid=abc; Path=/; HttpOnly",
+        },
+      });
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngine({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+    });
+
+    expect(resp.headers.get("set-cookie")).toContain("sid=abc");
+  });
+
   it("proxyToEngineJson parses JSON and preserves upstream status", async () => {
     globalThis.fetch = vi.fn(async () => {
       return new Response(JSON.stringify({ ok: true }), {
