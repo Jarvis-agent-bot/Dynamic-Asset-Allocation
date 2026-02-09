@@ -10,6 +10,17 @@ export type ProxyToEngineOptions = {
 };
 
 // Shared proxy logic for Next.js routes that forward requests to the Python engine behind nginx.
+function isAbortError(e: unknown): boolean {
+  // In Node/undici this is usually a DOMException named "AbortError".
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "name" in e &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (e as any).name === "AbortError"
+  );
+}
+
 export async function proxyToEngine(opts: ProxyToEngineOptions): Promise<Response> {
   const base = process.env.DAA_ENGINE_BASE_URL?.replace(/\/$/, "") || "";
   const url = `${base}${opts.upstreamPath}`;
@@ -27,6 +38,13 @@ export async function proxyToEngine(opts: ProxyToEngineOptions): Promise<Respons
       cache: "no-store",
     });
   } catch (e) {
+    if (isAbortError(e)) {
+      return NextResponse.json(
+        { error: "upstream timeout", upstream: url, timeoutMs: opts.timeoutMs },
+        { status: 504 },
+      );
+    }
+
     const msg = e instanceof Error ? e.message : "unknown fetch error";
     return NextResponse.json(
       { error: "upstream fetch failed", upstream: url, message: msg },
