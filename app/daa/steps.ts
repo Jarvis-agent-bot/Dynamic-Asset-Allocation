@@ -1,4 +1,20 @@
-export const DAA_STEPS = [
+export const DAA_STEP_STATUS_LABEL = {
+  wip: "进行中",
+  todo: "待做",
+  done: "已完成",
+  later: "以后",
+} as const;
+
+export type DaaStepStatus = keyof typeof DAA_STEP_STATUS_LABEL;
+
+export type DaaStep = {
+  id: number;
+  title: string;
+  desc: string;
+  status?: DaaStepStatus | string;
+};
+
+export const DAA_STEPS: DaaStep[] = [
   {
     id: 1,
     title: "回测算法组合",
@@ -43,14 +59,7 @@ export const DAA_STEPS = [
   },
 ];
 
-export const DAA_STEP_STATUS_LABEL = {
-  wip: "进行中",
-  todo: "待做",
-  done: "已完成",
-  later: "以后",
-};
-
-export function getStep(id) {
+export function getStep(id: unknown): DaaStep | null {
   const stepId = Number(id);
   return DAA_STEPS.find((s) => s.id === stepId) || null;
 }

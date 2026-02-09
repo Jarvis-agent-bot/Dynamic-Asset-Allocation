@@ -1,7 +1,11 @@
-import { DAA_STEP_STATUS_LABEL } from "../steps";
+import { DAA_STEP_STATUS_LABEL, type DaaStepStatus } from "../steps";
 
-export default function StatusPill({ status }) {
-  const label = DAA_STEP_STATUS_LABEL[status] || status || "";
+type Props = {
+  status?: DaaStepStatus | string;
+};
+
+export default function StatusPill({ status }: Props) {
+  const label = status ? DAA_STEP_STATUS_LABEL[status as DaaStepStatus] || status : "";
   const bg =
     status === "wip"
       ? "#e6f4ff"
