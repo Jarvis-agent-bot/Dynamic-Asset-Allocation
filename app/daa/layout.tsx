@@ -1,10 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import type React from "react";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "DAA Console",
 };
 
-export default function DaaLayout({ children }) {
+type Props = {
+  children: React.ReactNode;
+};
+
+export default function DaaLayout({ children }: Props) {
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", padding: 24, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
       <div style={{ marginBottom: 16 }}>
