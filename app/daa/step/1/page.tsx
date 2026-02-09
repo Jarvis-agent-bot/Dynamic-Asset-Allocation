@@ -3,9 +3,15 @@
 import { useMemo, useState } from "react";
 
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
-import { backtestSingleAsset, rankBacktestResults } from "../../../../src/core/backtest";
+import { backtestSingleAsset, rankBacktestResults, type RankedBacktestResult } from "../../../../src/core/backtest";
 
-function jsonPretty(x) {
+type Step1Result = {
+  ranked: RankedBacktestResult[];
+  input: unknown;
+  output?: unknown;
+} & Record<string, unknown>;
+
+function jsonPretty(x: unknown) {
   return JSON.stringify(x, null, 2);
 }
 
@@ -13,9 +19,9 @@ export default function Step1BacktestPage() {
   const [symbol, setSymbol] = useState("SPY");
   const [start, setStart] = useState("2026-01-01");
   const [end, setEnd] = useState("2026-02-01");
-  const [runError, setRunError] = useState(null);
-  const [result, setResult] = useState(null);
-  const [copyStatus, setCopyStatus] = useState("idle"); // idle | copied | failed
+  const [runError, setRunError] = useState<string | null>(null);
+  const [result, setResult] = useState<Step1Result | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const validationError = useMemo(() => {
     if (!symbol.trim()) return "Symbol is required";
@@ -29,7 +35,7 @@ export default function Step1BacktestPage() {
   // before market-data ingestion exists.
   // Small quality-of-life: the mock series now respects the user-selected date range.
   const series = useMemo(() => {
-    function parseISODate(iso) {
+    function parseISODate(iso: string) {
       // Expect YYYY-MM-DD. Use UTC to avoid timezone drift.
       const m = /^\d{4}-\d{2}-\d{2}$/.exec(String(iso || ""));
       if (!m) return null;
@@ -37,14 +43,14 @@ export default function Step1BacktestPage() {
       return Number.isNaN(d.getTime()) ? null : d;
     }
 
-    function fmt(d) {
+    function fmt(d: Date) {
       const y = d.getUTCFullYear();
       const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
       const da = String(d.getUTCDate()).padStart(2, "0");
       return `${y}-${mo}-${da}`;
     }
 
-    function addDays(d, n) {
+    function addDays(d: Date, n: number) {
       const x = new Date(d.getTime());
       x.setUTCDate(x.getUTCDate() + n);
       return x;
@@ -95,7 +101,7 @@ export default function Step1BacktestPage() {
         ranked,
       });
     } catch (e) {
-      setRunError(e?.message || String(e));
+      setRunError(e instanceof Error ? e.message : String(e));
       setResult(null);
     }
   }
