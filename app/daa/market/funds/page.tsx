@@ -6,7 +6,7 @@ import Announcement from "../../../components/Announcement";
 import zhifubaoImg from "../../../assets/zhifubao.png";
 import weixinImg from "../../../assets/weixin.png";
 
-function PlusIcon(props) {
+function PlusIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -14,7 +14,7 @@ function PlusIcon(props) {
   );
 }
 
-function TrashIcon(props) {
+function TrashIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -25,7 +25,7 @@ function TrashIcon(props) {
   );
 }
 
-function SettingsIcon(props) {
+function SettingsIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
@@ -34,7 +34,7 @@ function SettingsIcon(props) {
   );
 }
 
-function RefreshIcon(props) {
+function RefreshIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M4 12a8 8 0 0 1 12.5-6.9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -45,7 +45,7 @@ function RefreshIcon(props) {
   );
 }
 
-function ChevronIcon(props) {
+function ChevronIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -53,7 +53,7 @@ function ChevronIcon(props) {
   );
 }
 
-function SortIcon(props) {
+function SortIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M3 7h18M6 12h12M9 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -61,7 +61,7 @@ function SortIcon(props) {
   );
 }
 
-function GridIcon(props) {
+function GridIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="2" />
@@ -72,7 +72,7 @@ function GridIcon(props) {
   );
 }
 
-function CloseIcon(props) {
+function CloseIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -80,7 +80,7 @@ function CloseIcon(props) {
   );
 }
 
-function ExitIcon(props) {
+function ExitIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -88,7 +88,7 @@ function ExitIcon(props) {
   );
 }
 
-function ListIcon(props) {
+function ListIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -96,7 +96,7 @@ function ListIcon(props) {
   );
 }
 
-function DragIcon(props) {
+function DragIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M4 8h16M4 12h16M4 16h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -104,7 +104,7 @@ function DragIcon(props) {
   );
 }
 
-function FolderPlusIcon(props) {
+function FolderPlusIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M9 13h6m-3-3v6m-9-4V5a2 2 0 0 1 2-2h4l2 3h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -112,7 +112,7 @@ function FolderPlusIcon(props) {
   );
 }
 
-function StarIcon({ filled, ...props }) {
+function StarIcon({ filled, ...props }: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={filled ? "var(--accent)" : "none"}>
       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -120,7 +120,7 @@ function StarIcon({ filled, ...props }) {
   );
 }
 
-function CalendarIcon(props) {
+function CalendarIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -131,13 +131,13 @@ function CalendarIcon(props) {
   );
 }
 
-function DatePicker({ value, onChange }) {
+function DatePicker({ value, onChange }: any) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(() => value ? new Date(value) : new Date());
   
   // 点击外部关闭
   useEffect(() => {
-    const close = () => setIsOpen(false);
+const close: any = () => setIsOpen(false);
     if (isOpen) window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, [isOpen]);
@@ -145,17 +145,17 @@ function DatePicker({ value, onChange }) {
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth(); // 0-11
 
-  const handlePrevMonth = (e) => {
+const handlePrevMonth: any = (e: any) => {
     e.stopPropagation();
     setCurrentMonth(new Date(year, month - 1, 1));
   };
 
-  const handleNextMonth = (e) => {
+const handleNextMonth: any = (e: any) => {
     e.stopPropagation();
     setCurrentMonth(new Date(year, month + 1, 1));
   };
 
-  const handleSelect = (e, day) => {
+const handleSelect: any = (e: any, day: any) => {
     e.stopPropagation();
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
@@ -179,7 +179,7 @@ function DatePicker({ value, onChange }) {
   for (let i = 1; i <= daysInMonth; i++) days.push(i);
 
   return (
-    <div className="date-picker" style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+    <div className="date-picker" style={{ position: 'relative' }} onClick={(e: any) => e.stopPropagation()}>
       <div 
         className="input-trigger" 
         onClick={() => setIsOpen(!isOpen)}
@@ -237,7 +237,7 @@ function DatePicker({ value, onChange }) {
               {['日', '一', '二', '三', '四', '五', '六'].map(d => (
                 <div key={d} className="muted" style={{ fontSize: '12px', marginBottom: 4 }}>{d}</div>
               ))}
-              {days.map((d, i) => {
+              {days.map((d, i: any) => {
                 if (!d) return <div key={i} />;
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const isSelected = value === dateStr;
@@ -250,7 +250,7 @@ function DatePicker({ value, onChange }) {
                 return (
                   <div 
                     key={i}
-                    onClick={(e) => !isFuture && handleSelect(e, d)}
+                    onClick={(e: any) => !isFuture && handleSelect(e, d)}
                     style={{
                       height: 28,
                       display: 'flex',
@@ -264,10 +264,10 @@ function DatePicker({ value, onChange }) {
                       fontWeight: isSelected || isToday ? 600 : 400,
                       opacity: isFuture ? 0.3 : 1
                     }}
-                    onMouseEnter={(e) => {
+                    onMouseEnter={(e: any) => {
                       if (!isSelected && !isFuture) e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
                     }}
-                    onMouseLeave={(e) => {
+                    onMouseLeave={(e: any) => {
                       if (!isSelected && !isFuture) e.currentTarget.style.background = isToday ? 'rgba(255,255,255,0.1)' : 'transparent';
                     }}
                   >
@@ -355,7 +355,7 @@ function DonateTabs() {
   );
 }
 
-function MinusIcon(props) {
+function MinusIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
       <path d="M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -363,16 +363,16 @@ function MinusIcon(props) {
   );
 }
 
-function NumericInput({ value, onChange, step = 1, min = 0, placeholder }) {
+function NumericInput({ value, onChange, step = 1, min = 0, placeholder }: any) {
   const decimals = String(step).includes('.') ? String(step).split('.')[1].length : 0;
-  const fmt = (n) => Number(n).toFixed(decimals);
-  const inc = () => {
+const fmt: any = (n: any) => Number(n).toFixed(decimals);
+const inc: any = () => {
     const v = parseFloat(value);
     const base = isNaN(v) ? 0 : v;
     const next = base + step;
     onChange(fmt(next));
   };
-  const dec = () => {
+const dec: any = () => {
     const v = parseFloat(value);
     const base = isNaN(v) ? 0 : v;
     const next = Math.max(min, base - step);
@@ -385,7 +385,7 @@ function NumericInput({ value, onChange, step = 1, min = 0, placeholder }) {
         step={step}
         className="input no-zoom" // 增加 no-zoom 类
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e: any) => onChange(e.target.value)}
         placeholder={placeholder}
         style={{ width: '100%', paddingRight: 56 }}
       />
@@ -401,7 +401,7 @@ function NumericInput({ value, onChange, step = 1, min = 0, placeholder }) {
   );
 }
 
-function Stat({ label, value, delta }) {
+function Stat({ label, value, delta }: any) {
   const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : '';
   return (
     <div className="stat" style={{ flexDirection: 'column', gap: 4, minWidth: 0 }}>
@@ -411,18 +411,18 @@ function Stat({ label, value, delta }) {
   );
 }
 
-function FeedbackModal({ onClose }) {
+function FeedbackModal({ onClose }: any) {
   const [submitting, setSubmitting] = useState(false);
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState("");
 
-  const onSubmit = async (e) => {
+  const onSubmit = async (e: any) => {
     e.preventDefault();
     setSubmitting(true);
     setError("");
 
     const formData = new FormData(e.target);
-    const nickname = formData.get("nickname")?.trim();
+    const nickname = String(formData.get("nickname") ?? "").trim();
     if (!nickname) {
       formData.set("nickname", "匿名");
     }
@@ -466,7 +466,7 @@ function FeedbackModal({ onClose }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal feedback-modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
       >
         <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -548,7 +548,7 @@ function FeedbackModal({ onClose }) {
   );
 }
 
-function HoldingActionModal({ fund, onClose, onAction }) {
+function HoldingActionModal({ fund, onClose, onAction }: any) {
   return (
     <motion.div
       className="modal-overlay"
@@ -565,7 +565,7 @@ function HoldingActionModal({ fund, onClose, onAction }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
         style={{ maxWidth: '320px' }}
       >
         <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
@@ -612,14 +612,14 @@ function HoldingActionModal({ fund, onClose, onAction }) {
   );
 }
 
-function TradeModal({ type, fund, onClose, onConfirm }) {
+function TradeModal({ type, fund, onClose, onConfirm }: any) {
   const isBuy = type === 'buy';
   const [share, setShare] = useState('');
   const [amount, setAmount] = useState('');
   const [feeRate, setFeeRate] = useState('0');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [isAfter3pm, setIsAfter3pm] = useState(new Date().getHours() >= 15);
-  const [calcShare, setCalcShare] = useState(null);
+  const [calcShare, setCalcShare] = useState<number | null>(null);
   const price = fund?.estPricedCoverage > 0.05 ? fund?.estGsz : (typeof fund?.gsz === 'number' ? fund?.gsz : Number(fund?.dwjz));
 
   useEffect(() => {
@@ -636,7 +636,7 @@ function TradeModal({ type, fund, onClose, onConfirm }) {
     }
   }, [isBuy, amount, feeRate, price]);
 
-  const handleSubmit = (e) => {
+const handleSubmit: any = (e: any) => {
     e.preventDefault();
     if (isBuy) {
       if (!amount || !feeRate || !date || calcShare === null || !price) return;
@@ -667,7 +667,7 @@ function TradeModal({ type, fund, onClose, onConfirm }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
         style={{ maxWidth: '420px' }}
       >
         <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
@@ -815,11 +815,11 @@ function TradeModal({ type, fund, onClose, onConfirm }) {
   );
 }
 
-function HoldingEditModal({ fund, holding, onClose, onSave }) {
+function HoldingEditModal({ fund, holding, onClose, onSave }: any) {
   const [share, setShare] = useState(holding?.share || '');
   const [cost, setCost] = useState(holding?.cost || '');
 
-  const handleSubmit = (e) => {
+const handleSubmit: any = (e: any) => {
     e.preventDefault();
     if (!share || !cost) return; // 简单校验
     onSave({
@@ -847,7 +847,7 @@ function HoldingEditModal({ fund, holding, onClose, onSave }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
         style={{ maxWidth: '400px' }}
       >
         <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
@@ -875,7 +875,7 @@ function HoldingEditModal({ fund, holding, onClose, onSave }) {
               step="any"
               className={`input ${!share ? 'error' : ''}`}
               value={share}
-              onChange={(e) => setShare(e.target.value)}
+              onChange={(e: any) => setShare(e.target.value)}
               placeholder="请输入持有份额"
               style={{ 
                 width: '100%',
@@ -894,7 +894,7 @@ function HoldingEditModal({ fund, holding, onClose, onSave }) {
               step="any"
               className={`input ${!cost ? 'error' : ''}`}
               value={cost}
-              onChange={(e) => setCost(e.target.value)}
+              onChange={(e: any) => setCost(e.target.value)}
               placeholder="请输入持仓成本价"
               style={{ 
                 width: '100%',
@@ -920,7 +920,7 @@ function HoldingEditModal({ fund, holding, onClose, onSave }) {
   );
 }
 
-function AddResultModal({ failures, onClose }) {
+function AddResultModal({ failures, onClose }: any) {
   return (
     <motion.div
       className="modal-overlay"
@@ -937,7 +937,7 @@ function AddResultModal({ failures, onClose }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
       >
         <div className="title" style={{ marginBottom: 12, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -952,7 +952,7 @@ function AddResultModal({ failures, onClose }) {
           未获取到估值数据的基金如下：
         </div>
         <div className="list">
-          {failures.map((it, idx) => (
+          {failures.map((it: any, idx: any) => (
             <div className="item" key={idx}>
               <span className="name">{it.name || '未知名称'}</span>
               <div className="values">
@@ -969,7 +969,7 @@ function AddResultModal({ failures, onClose }) {
   );
 }
 
-function SuccessModal({ message, onClose }) {
+function SuccessModal({ message, onClose }: any) {
   return (
     <motion.div
       className="modal-overlay"
@@ -986,7 +986,7 @@ function SuccessModal({ message, onClose }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
       >
         <div className="success-message" style={{ textAlign: 'center', padding: '20px 0' }}>
           <div style={{ fontSize: '48px', marginBottom: 16 }}>🎉</div>
@@ -1001,7 +1001,7 @@ function SuccessModal({ message, onClose }) {
   );
 }
 
-function ConfirmModal({ title, message, onConfirm, onCancel, confirmText = "确定删除" }) {
+function ConfirmModal({ title, message, onConfirm, onCancel, confirmText = "确定删除" }: any) {
   return (
     <motion.div
       className="modal-overlay"
@@ -1019,7 +1019,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmText = "确�
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
         style={{ maxWidth: '400px' }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
       >
         <div className="title" style={{ marginBottom: 12 }}>
           <TrashIcon width="20" height="20" className="danger" />
@@ -1037,55 +1037,55 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmText = "确�
   );
 }
 
-function GroupManageModal({ groups, onClose, onSave }) {
+function GroupManageModal({ groups, onClose, onSave }: any) {
   const [items, setItems] = useState(groups);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // { id, name }
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: any; name: any } | null>(null);
 
-  const handleReorder = (newOrder) => {
+const handleReorder: any = (newOrder: any) => {
     setItems(newOrder);
   };
 
-  const handleRename = (id, newName) => {
+const handleRename: any = (id: any, newName: any) => {
     const truncatedName = (newName || '').slice(0, 8);
-    setItems(prev => prev.map(item => item.id === id ? { ...item, name: truncatedName } : item));
+    setItems((prev: any) => prev.map((item: any) => item.id === id ? { ...item, name: truncatedName } : item));
   };
 
-  const handleDeleteClick = (id, name) => {
-    const itemToDelete = items.find(it => it.id === id);
-    const isNew = !groups.find(g => g.id === id);
+const handleDeleteClick: any = (id: any, name: any) => {
+    const itemToDelete = items.find((it: any) => it.id === id);
+    const isNew = !groups.find((g: any) => g.id === id);
     const isEmpty = itemToDelete && (!itemToDelete.codes || itemToDelete.codes.length === 0);
 
     if (isNew || isEmpty) {
-      setItems(prev => prev.filter(item => item.id !== id));
+      setItems((prev: any) => prev.filter((item: any) => item.id !== id));
     } else {
       setDeleteConfirm({ id, name });
     }
   };
 
-  const handleConfirmDelete = () => {
+const handleConfirmDelete: any = () => {
     if (deleteConfirm) {
-      setItems(prev => prev.filter(item => item.id !== deleteConfirm.id));
+      setItems((prev: any) => prev.filter((item: any) => item.id !== deleteConfirm.id));
       setDeleteConfirm(null);
     }
   };
 
-  const handleAddRow = () => {
+const handleAddRow: any = () => {
     const newGroup = {
       id: `group_${Date.now()}`,
       name: '',
       codes: []
     };
-    setItems(prev => [...prev, newGroup]);
+    setItems((prev: any) => [...prev, newGroup]);
   };
 
-  const handleConfirm = () => {
-    const hasEmpty = items.some(it => !it.name.trim());
+const handleConfirm: any = () => {
+    const hasEmpty = items.some((it: any) => !it.name.trim());
     if (hasEmpty) return;
     onSave(items);
     onClose();
   };
 
-  const isAllValid = items.every(it => it.name.trim() !== '');
+  const isAllValid = items.every((it: any) => it.name.trim() !== '');
 
   return (
     <motion.div
@@ -1104,7 +1104,7 @@ function GroupManageModal({ groups, onClose, onSave }) {
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
         style={{ maxWidth: '500px', width: '90vw' }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
       >
         <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1125,7 +1125,7 @@ function GroupManageModal({ groups, onClose, onSave }) {
           ) : (
             <Reorder.Group axis="y" values={items} onReorder={handleReorder} className="group-manage-list">
               <AnimatePresence mode="popLayout">
-                {items.map((item) => (
+                {items.map((item: any) => (
                   <Reorder.Item 
                     key={item.id} 
                     value={item} 
@@ -1148,7 +1148,7 @@ function GroupManageModal({ groups, onClose, onSave }) {
                     <input
                       className={`input group-rename-input ${!item.name.trim() ? 'error' : ''}`}
                       value={item.name}
-                      onChange={(e) => handleRename(item.id, e.target.value)}
+                      onChange={(e: any) => handleRename(item.id, e.target.value)}
                       placeholder="请输入分组名称..."
                       style={{ 
                         flex: 1, 
@@ -1226,13 +1226,13 @@ function GroupManageModal({ groups, onClose, onSave }) {
   );
 }
 
-function AddFundToGroupModal({ allFunds, currentGroupCodes, onClose, onAdd }) {
+function AddFundToGroupModal({ allFunds, currentGroupCodes, onClose, onAdd }: any) {
   const [selected, setSelected] = useState(new Set());
   
   // 过滤出未在当前分组中的基金
-  const availableFunds = (allFunds || []).filter(f => !(currentGroupCodes || []).includes(f.code));
+  const availableFunds = (allFunds || []).filter((f: any) => !(currentGroupCodes || []).includes(f.code));
 
-  const toggleSelect = (code) => {
+const toggleSelect: any = (code: any) => {
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(code)) next.delete(code);
@@ -1257,7 +1257,7 @@ function AddFundToGroupModal({ allFunds, currentGroupCodes, onClose, onAdd }) {
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
         style={{ maxWidth: '500px', width: '90vw' }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
       >
         <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1276,7 +1276,7 @@ function AddFundToGroupModal({ allFunds, currentGroupCodes, onClose, onAdd }) {
             </div>
           ) : (
             <div className="group-manage-list">
-              {availableFunds.map((fund) => (
+              {availableFunds.map((fund: any) => (
                 <div 
                   key={fund.code} 
                   className={`group-manage-item glass ${selected.has(fund.code) ? 'selected' : ''}`}
@@ -1312,7 +1312,7 @@ function AddFundToGroupModal({ allFunds, currentGroupCodes, onClose, onAdd }) {
   );
 }
 
-function GroupModal({ onClose, onConfirm }) {
+function GroupModal({ onClose, onConfirm }: any) {
   const [name, setName] = useState('');
   return (
     <motion.div
@@ -1331,7 +1331,7 @@ function GroupModal({ onClose, onConfirm }) {
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         className="glass card modal"
         style={{ maxWidth: '400px' }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: any) => e.stopPropagation()}
       >
         <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1349,12 +1349,12 @@ function GroupModal({ onClose, onConfirm }) {
             autoFocus
             placeholder="请输入分组名称..."
             value={name}
-            onChange={(e) => {
+            onChange={(e: any) => {
               const v = e.target.value || '';
               // 限制最多 8 个字符（兼容中英文），超出部分自动截断
               setName(v.slice(0, 8));
             }}
-            onKeyDown={(e) => {
+            onKeyDown={(e: any) => {
               if (e.key === 'Enter' && name.trim()) onConfirm(name.trim());
             }}
           />
@@ -1369,7 +1369,7 @@ function GroupModal({ onClose, onConfirm }) {
 }
 
 // 数字滚动组件
-function CountUp({ value, prefix = '', suffix = '', decimals = 2, className = '', style = {} }) {
+function CountUp({ value, prefix = '', suffix = '', decimals = 2, className = '', style = {} }: any) {
   const [displayValue, setDisplayValue] = useState(value);
   const previousValue = useRef(value);
 
@@ -1381,7 +1381,7 @@ function CountUp({ value, prefix = '', suffix = '', decimals = 2, className = ''
     const duration = 1000; // 1秒动画
     const startTime = performance.now();
 
-    const animate = (currentTime) => {
+const animate: any = (currentTime: any) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
       
@@ -1408,16 +1408,16 @@ function CountUp({ value, prefix = '', suffix = '', decimals = 2, className = ''
   );
 }
 
-function GroupSummary({ funds, holdings, groupName, getProfit }) {
+function GroupSummary({ funds, holdings, groupName, getProfit }: any) {
   const [showPercent, setShowPercent] = useState(true);
-  const rowRef = useRef(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
   const [assetSize, setAssetSize] = useState(24);
   const [metricSize, setMetricSize] = useState(18);
   const [winW, setWinW] = useState(0);
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setWinW(window.innerWidth);
-      const onR = () => setWinW(window.innerWidth);
+const onR: any = () => setWinW(window.innerWidth);
       window.addEventListener('resize', onR);
       return () => window.removeEventListener('resize', onR);
     }
@@ -1430,7 +1430,7 @@ function GroupSummary({ funds, holdings, groupName, getProfit }) {
     let totalCost = 0;
     let hasHolding = false;
 
-    funds.forEach(fund => {
+    funds.forEach((fund: any) => {
       const holding = holdings[fund.code];
       const profit = getProfit(fund, holding);
       
@@ -1516,10 +1516,10 @@ function GroupSummary({ funds, holdings, groupName, getProfit }) {
 }
 
 export default function HomePage() {
-  const [funds, setFunds] = useState([]);
+  const [funds, setFunds] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const timerRef = useRef(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshingRef = useRef(false);
 
   // 刷新频率状态
@@ -1535,7 +1535,7 @@ export default function HomePage() {
 
   // 自选状态
   const [favorites, setFavorites] = useState(new Set());
-  const [groups, setGroups] = useState([]); // [{ id, name, codes: [] }]
+  const [groups, setGroups] = useState<any[]>([]); // [{ id, name, codes: [] }]
   const [currentTab, setCurrentTab] = useState('all');
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [groupManageOpen, setGroupManageOpen] = useState(false);
@@ -1554,29 +1554,29 @@ export default function HomePage() {
 
   // 搜索相关状态
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedFunds, setSelectedFunds] = useState([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedFunds, setSelectedFunds] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const searchTimeoutRef = useRef(null);
-  const dropdownRef = useRef(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [addResultOpen, setAddResultOpen] = useState(false);
-  const [addFailures, setAddFailures] = useState([]);
+  const [addFailures, setAddFailures] = useState<any[]>([]);
   const [holdingModal, setHoldingModal] = useState({ open: false, fund: null });
   const [actionModal, setActionModal] = useState({ open: false, fund: null });
   const [tradeModal, setTradeModal] = useState({ open: false, fund: null, type: 'buy' }); // type: 'buy' | 'sell'
-  const [clearConfirm, setClearConfirm] = useState(null); // { fund }
+  const [clearConfirm, setClearConfirm] = useState<{ fund: any } | null>(null);
   const [donateOpen, setDonateOpen] = useState(false);
-  const [holdings, setHoldings] = useState({}); // { [code]: { share: number, cost: number } }
+  const [holdings, setHoldings] = useState<Record<string, any>>({}); // { [code]: { share: number, cost: number } }
   const [percentModes, setPercentModes] = useState({}); // { [code]: boolean }
   const [isTradingDay, setIsTradingDay] = useState(true); // 默认为交易日，通过接口校正
-  const tabsRef = useRef(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   // 检查交易日状态
-  const checkTradingDay = () => {
+const checkTradingDay: any = () => {
     const now = new Date();
     const isWeekend = now.getDay() === 0 || now.getDay() === 6;
     
@@ -1592,7 +1592,7 @@ export default function HomePage() {
     const script = document.createElement('script');
     script.src = `https://qt.gtimg.cn/q=sh000001&_t=${Date.now()}`;
     script.onload = () => {
-      const data = window.v_sh000001;
+      const data = (window as any).v_sh000001;
       if (data) {
         const parts = data.split('~');
         if (parts.length > 30) {
@@ -1639,7 +1639,7 @@ export default function HomePage() {
       const group = groups.find(g => g.id === currentTab);
       return group ? group.codes.includes(f.code) : true;
     })
-    .sort((a, b) => {
+    .sort((a, b: any) => {
       if (sortBy === 'yield') {
         const valA = typeof a.estGszzl === 'number' ? a.estGszzl : (Number(a.gszzl) || 0);
         const valB = typeof b.estGszzl === 'number' ? b.estGszzl : (Number(b.gszzl) || 0);
@@ -1671,7 +1671,7 @@ export default function HomePage() {
   const [canRight, setCanRight] = useState(false);
 
   // 计算持仓收益
-  const getHoldingProfit = (fund, holding) => {
+const getHoldingProfit: any = (fund: any, holding: any) => {
     if (!holding || typeof holding.share !== 'number') return null;
     
     const now = new Date();
@@ -1722,7 +1722,7 @@ export default function HomePage() {
     };
   };
 
-  const handleSaveHolding = (code, data) => {
+const handleSaveHolding: any = (code: any, data: any) => {
     setHoldings(prev => {
       const next = { ...prev };
       if (data.share === null && data.cost === null) {
@@ -1736,7 +1736,7 @@ export default function HomePage() {
     setHoldingModal({ open: false, fund: null });
   };
 
-  const handleAction = (type, fund) => {
+const handleAction: any = (type: any, fund: any) => {
     setActionModal({ open: false, fund: null });
     if (type === 'edit') {
       setHoldingModal({ open: true, fund });
@@ -1747,14 +1747,14 @@ export default function HomePage() {
     }
   };
 
-  const handleClearConfirm = () => {
+const handleClearConfirm: any = () => {
     if (clearConfirm?.fund) {
       handleSaveHolding(clearConfirm.fund.code, { share: null, cost: null });
     }
     setClearConfirm(null);
   };
 
-  const handleTrade = (fund, data) => {
+const handleTrade: any = (fund: any, data: any) => {
     const current = holdings[fund.code] || { share: 0, cost: 0 };
     const isBuy = tradeModal.type === 'buy';
     
@@ -1781,28 +1781,28 @@ export default function HomePage() {
     setTradeModal({ open: false, fund: null, type: 'buy' });
   };
 
-  const handleMouseDown = (e) => {
+const handleMouseDown: any = (e: any) => {
     if (!tabsRef.current) return;
     setIsDragging(true);
   };
 
-  const handleMouseLeaveOrUp = () => {
+const handleMouseLeaveOrUp: any = () => {
     setIsDragging(false);
   };
 
-  const handleMouseMove = (e) => {
+const handleMouseMove: any = (e: any) => {
     if (!isDragging || !tabsRef.current) return;
     e.preventDefault();
     tabsRef.current.scrollLeft -= e.movementX;
   };
 
-  const handleWheel = (e) => {
+const handleWheel: any = (e: any) => {
     if (!tabsRef.current) return;
     const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     tabsRef.current.scrollLeft += delta;
   };
 
-  const updateTabOverflow = () => {
+const updateTabOverflow: any = () => {
     if (!tabsRef.current) return;
     const el = tabsRef.current;
     setTabsOverflow(el.scrollWidth > el.clientWidth);
@@ -1812,7 +1812,7 @@ export default function HomePage() {
 
   useEffect(() => {
     updateTabOverflow();
-    const onResize = () => updateTabOverflow();
+const onResize: any = () => updateTabOverflow();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [groups, funds.length, favorites.size]);
@@ -1821,7 +1821,7 @@ export default function HomePage() {
   const [successModal, setSuccessModal] = useState({ open: false, message: '' });
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
+const handleClickOutside: any = (event: any) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowDropdown(false);
       }
@@ -1830,7 +1830,7 @@ export default function HomePage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const toggleFavorite = (code) => {
+const toggleFavorite: any = (code: any) => {
     setFavorites(prev => {
       const next = new Set(prev);
       if (next.has(code)) {
@@ -1844,7 +1844,7 @@ export default function HomePage() {
     });
   };
 
-  const toggleCollapse = (code) => {
+const toggleCollapse: any = (code: any) => {
     setCollapsedCodes(prev => {
       const next = new Set(prev);
       if (next.has(code)) {
@@ -1858,7 +1858,7 @@ export default function HomePage() {
     });
   };
 
-  const handleAddGroup = (name) => {
+const handleAddGroup: any = (name: any) => {
     const newGroup = {
       id: `group_${Date.now()}`,
       name,
@@ -1871,23 +1871,23 @@ export default function HomePage() {
     setGroupModalOpen(false);
   };
 
-  const handleRemoveGroup = (id) => {
+const handleRemoveGroup: any = (id: any) => {
     const next = groups.filter(g => g.id !== id);
     setGroups(next);
     localStorage.setItem('groups', JSON.stringify(next));
     if (currentTab === id) setCurrentTab('all');
   };
 
-  const handleUpdateGroups = (newGroups) => {
+const handleUpdateGroups: any = (newGroups: any) => {
     setGroups(newGroups);
     localStorage.setItem('groups', JSON.stringify(newGroups));
     // 如果当前选中的分组被删除了，切换回“全部”
-    if (currentTab !== 'all' && currentTab !== 'fav' && !newGroups.find(g => g.id === currentTab)) {
+    if (currentTab !== 'all' && currentTab !== 'fav' && !newGroups.find((g: any) => g.id === currentTab)) {
       setCurrentTab('all');
     }
   };
 
-  const handleAddFundsToGroup = (codes) => {
+const handleAddFundsToGroup: any = (codes: any) => {
     if (!codes || codes.length === 0) return;
     const next = groups.map(g => {
       if (g.id === currentTab) {
@@ -1904,12 +1904,12 @@ export default function HomePage() {
     setSuccessModal({ open: true, message: `成功添加 ${codes.length} 支基金` });
   };
 
-  const removeFundFromCurrentGroup = (code) => {
+const removeFundFromCurrentGroup: any = (code: any) => {
     const next = groups.map(g => {
       if (g.id === currentTab) {
         return {
           ...g,
-          codes: g.codes.filter(c => c !== code)
+          codes: g.codes.filter((c: any) => c !== code)
         };
       }
       return g;
@@ -1918,13 +1918,13 @@ export default function HomePage() {
     localStorage.setItem('groups', JSON.stringify(next));
   };
 
-  const toggleFundInGroup = (code, groupId) => {
+const toggleFundInGroup: any = (code: any, groupId: any) => {
     const next = groups.map(g => {
       if (g.id === groupId) {
         const has = g.codes.includes(code);
         return {
           ...g,
-          codes: has ? g.codes.filter(c => c !== code) : [...g.codes, code]
+          codes: has ? g.codes.filter((c: any) => c !== code) : [...g.codes, code]
         };
       }
       return g;
@@ -1934,9 +1934,9 @@ export default function HomePage() {
   };
 
   // 按 code 去重，保留第一次出现的项，避免列表重复
-  const dedupeByCode = (list) => {
+const dedupeByCode: any = (list: any) => {
     const seen = new Set();
-    return list.filter((f) => {
+    return list.filter((f: any) => {
       const c = f?.code;
       if (!c || seen.has(c)) return false;
       seen.add(c);
@@ -1951,7 +1951,7 @@ export default function HomePage() {
         const deduped = dedupeByCode(saved);
         setFunds(deduped);
         localStorage.setItem('funds', JSON.stringify(deduped));
-        const codes = Array.from(new Set(deduped.map((f) => f.code)));
+        const codes = Array.from(new Set(deduped.map((f: any) => f.code)));
         if (codes.length) refreshAll(codes);
       }
       const savedMs = parseInt(localStorage.getItem('refreshMs') || '30000', 10);
@@ -1999,8 +1999,8 @@ export default function HomePage() {
   }, [funds, refreshMs]);
 
   // --- 辅助：JSONP 数据抓取逻辑 ---
-  const loadScript = (url) => {
-    return new Promise((resolve, reject) => {
+const loadScript: any = (url: any) => {
+    return new Promise<void>((resolve, reject) => {
       const script = document.createElement('script');
       script.src = url;
       script.async = true;
@@ -2016,10 +2016,10 @@ export default function HomePage() {
     });
   };
 
-  const fetchFundData = async (c) => {
-    return new Promise(async (resolve, reject) => {
+  const fetchFundData = async (c: any) => {
+    return new Promise(async (resolve, reject: any) => {
       // 腾讯接口识别逻辑优化
-      const getTencentPrefix = (code) => {
+const getTencentPrefix: any = (code: any) => {
         if (code.startsWith('6') || code.startsWith('9')) return 'sh';
         if (code.startsWith('0') || code.startsWith('3')) return 'sz';
         if (code.startsWith('4') || code.startsWith('8')) return 'bj';
@@ -2036,15 +2036,15 @@ export default function HomePage() {
       // 东方财富接口固定调用 jsonpgz，我们通过修改全局变量临时捕获它
       scriptGz.src = gzUrl;
 
-      const originalJsonpgz = window.jsonpgz;
-      window.jsonpgz = (json) => {
-        window.jsonpgz = originalJsonpgz; // 立即恢复
+      const originalJsonpgz = (window as any).jsonpgz;
+      (window as any).jsonpgz = (json: any) => {
+        (window as any).jsonpgz = originalJsonpgz; // 立即恢复
         if (!json || typeof json !== 'object') {
           reject(new Error('未获取到基金估值数据'));
           return;
         }
         const gszzlNum = Number(json.gszzl);
-        const gzData = {
+        const gzData: any = {
           code: json.fundcode,
           name: json.name,
           dwjz: json.dwjz,
@@ -2060,7 +2060,7 @@ export default function HomePage() {
           const tScript = document.createElement('script');
           tScript.src = tUrl;
           tScript.onload = () => {
-            const v = window[`v_jj${c}`];
+            const v = (window as any)[`v_jj${c}`];
             if (v) {
               const p = v.split('~');
               // p[5]: 单位净值, p[7]: 涨跌幅, p[8]: 净值日期
@@ -2084,13 +2084,13 @@ export default function HomePage() {
         const holdingsPromise = new Promise((resolveH) => {
           const holdingsUrl = `https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=${c}&topline=10&year=&month=&rt=${Date.now()}`;
           loadScript(holdingsUrl).then(async () => {
-            let holdings = [];
-            const html = window.apidata?.content || '';
+            let holdings: any[] = [];
+            const html = (window as any).apidata?.content || '';
             const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
             for (const r of rows) {
-              const cells = (r.match(/<td[\s\S]*?>([\s\S]*?)<\/td>/gi) || []).map(td => td.replace(/<[^>]*>/g, '').trim());
-              const codeIdx = cells.findIndex(txt => /^\d{6}$/.test(txt));
-              const weightIdx = cells.findIndex(txt => /\d+(?:\.\d+)?\s*%/.test(txt));
+              const cells = (r.match(/<td[\s\S]*?>([\s\S]*?)<\/td>/gi) || []).map((td: any) => td.replace(/<[^>]*>/g, '').trim());
+              const codeIdx = cells.findIndex((txt: any) => /^\d{6}$/.test(txt));
+              const weightIdx = cells.findIndex((txt: any) => /\d+(?:\.\d+)?\s*%/.test(txt));
               if (codeIdx >= 0 && weightIdx >= 0) {
                 holdings.push({
                   code: cells[codeIdx],
@@ -2108,13 +2108,13 @@ export default function HomePage() {
                 const tencentCodes = holdings.map(h => `s_${getTencentPrefix(h.code)}${h.code}`).join(',');
                 const quoteUrl = `https://qt.gtimg.cn/q=${tencentCodes}`;
 
-                await new Promise((resQuote) => {
+                await new Promise<void>((resQuote) => {
                   const scriptQuote = document.createElement('script');
                   scriptQuote.src = quoteUrl;
                   scriptQuote.onload = () => {
                     holdings.forEach(h => {
                       const varName = `v_s_${getTencentPrefix(h.code)}${h.code}`;
-                      const dataStr = window[varName];
+                      const dataStr = (window as any)[varName];
                       if (dataStr) {
                         const parts = dataStr.split('~');
                         if (parts.length > 5) {
@@ -2131,7 +2131,7 @@ export default function HomePage() {
                   };
                   document.body.appendChild(scriptQuote);
                 });
-              } catch (e) {
+              } catch (e: any) {
                 console.error('获取股票涨跌幅失败', e);
               }
             }
@@ -2139,7 +2139,7 @@ export default function HomePage() {
           }).catch(() => resolveH([]));
         });
 
-        Promise.all([tencentPromise, holdingsPromise]).then(([tData, holdings]) => {
+        Promise.all([tencentPromise, holdingsPromise]).then(([tData, holdings]: any) => {
           if (tData) {
             // 如果腾讯数据的日期更新（或相同），优先使用腾讯的净值数据（通常更准且包含涨跌幅）
             if (tData.jzrq && (!gzData.jzrq || tData.jzrq >= gzData.jzrq)) {
@@ -2153,7 +2153,7 @@ export default function HomePage() {
       };
 
       scriptGz.onerror = () => {
-        window.jsonpgz = originalJsonpgz;
+        (window as any).jsonpgz = originalJsonpgz;
         if (document.body.contains(scriptGz)) document.body.removeChild(scriptGz);
         reject(new Error('基金数据加载失败'));
       };
@@ -2166,7 +2166,7 @@ export default function HomePage() {
     });
   };
 
-  const performSearch = async (val) => {
+  const performSearch = async (val: any) => {
     if (!val.trim()) {
       setSearchResults([]);
       return;
@@ -2177,18 +2177,18 @@ export default function HomePage() {
     const url = `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=${encodeURIComponent(val)}&callback=${callbackName}&_=${Date.now()}`;
     
     try {
-      await new Promise((resolve, reject) => {
-        window[callbackName] = (data) => {
+      await new Promise<void>((resolve, reject) => {
+        (window as any)[callbackName] = (data: any) => {
           if (data && data.Datas) {
             // 过滤出基金类型的数据 (CATEGORY 为 700 是公募基金)
-            const fundsOnly = data.Datas.filter(d => 
+            const fundsOnly = data.Datas.filter((d: any) => 
               d.CATEGORY === 700 || 
               d.CATEGORY === "700" || 
               d.CATEGORYDESC === "基金"
             );
             setSearchResults(fundsOnly);
           }
-          delete window[callbackName];
+          delete (window as any)[callbackName];
           resolve();
         };
 
@@ -2200,26 +2200,26 @@ export default function HomePage() {
         };
         script.onerror = () => {
           if (document.body.contains(script)) document.body.removeChild(script);
-          delete window[callbackName];
+          delete (window as any)[callbackName];
           reject(new Error('搜索请求失败'));
         };
         document.body.appendChild(script);
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error('搜索失败', e);
     } finally {
       setIsSearching(false);
     }
   };
 
-  const handleSearchInput = (e) => {
+const handleSearchInput: any = (e: any) => {
     const val = e.target.value;
     setSearchTerm(val);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => performSearch(val), 300);
   };
 
-  const toggleSelectFund = (fund) => {
+const toggleSelectFund: any = (fund: any) => {
     setSelectedFunds(prev => {
       const exists = prev.find(f => f.CODE === fund.CODE);
       if (exists) {
@@ -2241,7 +2241,7 @@ export default function HomePage() {
         try {
           const data = await fetchFundData(f.CODE);
           newFunds.push(data);
-        } catch (e) {
+        } catch (e: any) {
           console.error(`添加基金 ${f.CODE} 失败`, e);
         }
       }
@@ -2255,25 +2255,25 @@ export default function HomePage() {
       setSelectedFunds([]);
       setSearchTerm('');
       setSearchResults([]);
-    } catch (e) {
+    } catch (e: any) {
       setError('批量添加失败');
     } finally {
       setLoading(false);
     }
   };
 
-  const refreshAll = async (codes) => {
+  const refreshAll = async (codes: any) => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
     const uniqueCodes = Array.from(new Set(codes));
     try {
-      const updated = [];
+      const updated: any[] = [];
       for (const c of uniqueCodes) {
         try {
           const data = await fetchFundData(c);
           updated.push(data);
-        } catch (e) {
+        } catch (e: any) {
           console.error(`刷新基金 ${c} 失败`, e);
           // 失败时从当前 state 中寻找旧数据
           setFunds(prev => {
@@ -2301,7 +2301,7 @@ export default function HomePage() {
           return deduped;
         });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
     } finally {
       refreshingRef.current = false;
@@ -2309,13 +2309,13 @@ export default function HomePage() {
     }
   };
 
-  const toggleViewMode = () => {
+const toggleViewMode: any = () => {
     const nextMode = viewMode === 'card' ? 'list' : 'card';
     setViewMode(nextMode);
     localStorage.setItem('viewMode', nextMode);
   };
 
-  const addFund = async (e) => {
+  const addFund = async (e: any) => {
     e?.preventDefault?.();
     setError('');
     const manualTokens = String(searchTerm || '')
@@ -2333,9 +2333,9 @@ export default function HomePage() {
     setLoading(true);
     try {
       const newFunds = [];
-      const failures = [];
-      const nameMap = {};
-      selectedFunds.forEach(f => { nameMap[f.CODE] = f.NAME; });
+      const failures: any[] = [];
+      const nameMap: Record<string, any> = {};
+      selectedFunds.forEach((f: any) => { nameMap[f.CODE] = f.NAME; });
       for (const c of selectedCodes) {
         if (funds.some((f) => f.code === c)) continue;
         try {
@@ -2359,14 +2359,14 @@ export default function HomePage() {
         setAddFailures(failures);
         setAddResultOpen(true);
       }
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message || '添加失败');
     } finally {
       setLoading(false);
     }
   };
 
-  const removeFund = (removeCode) => {
+const removeFund: any = (removeCode: any) => {
     const next = funds.filter((f) => f.code !== removeCode);
     setFunds(next);
     localStorage.setItem('funds', JSON.stringify(next));
@@ -2374,7 +2374,7 @@ export default function HomePage() {
     // 同步删除分组中的失效代码
     const nextGroups = groups.map(g => ({
       ...g,
-      codes: g.codes.filter(c => c !== removeCode)
+      codes: g.codes.filter((c: any) => c !== removeCode)
     }));
     setGroups(nextGroups);
     localStorage.setItem('groups', JSON.stringify(nextGroups));
@@ -2415,7 +2415,7 @@ export default function HomePage() {
     await refreshAll(codes);
   };
 
-  const saveSettings = (e) => {
+const saveSettings: any = (e: any) => {
     e?.preventDefault?.();
     const ms = Math.max(5, Number(tempSeconds)) * 1000;
     setRefreshMs(ms);
@@ -2440,8 +2440,8 @@ export default function HomePage() {
         exportedAt: new Date().toISOString()
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      if (window.showSaveFilePicker) {
-        const handle = await window.showSaveFilePicker({
+      if ((window as any).showSaveFilePicker) {
+        const handle = await (window as any).showSaveFilePicker({
           suggestedName: `realtime-fund-config-${Date.now()}.json`,
           types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
         });
@@ -2457,14 +2457,14 @@ export default function HomePage() {
       a.href = url;
       a.download = `realtime-fund-config-${Date.now()}.json`;
       let done = false;
-      const finish = () => {
+const finish: any = () => {
         if (done) return;
         done = true;
         URL.revokeObjectURL(url);
         setSuccessModal({ open: true, message: '导出成功' });
         setSettingsOpen(false);
       };
-      const onVisibility = () => {
+const onVisibility: any = () => {
         if (document.visibilityState === 'hidden') return;
         finish();
         document.removeEventListener('visibilitychange', onVisibility);
@@ -2477,7 +2477,7 @@ export default function HomePage() {
     }
   };
 
-  const handleImportFileChange = async (e) => {
+  const handleImportFileChange = async (e: any) => {
     try {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -2495,9 +2495,9 @@ export default function HomePage() {
 
         if (Array.isArray(data.funds)) {
           const incomingFunds = dedupeByCode(data.funds);
-          const existingCodes = new Set(currentFunds.map(f => f.code));
-          const newItems = incomingFunds.filter(f => f && f.code && !existingCodes.has(f.code));
-          appendedCodes = newItems.map(f => f.code);
+          const existingCodes = new Set(currentFunds.map((f: any) => f.code));
+          const newItems = incomingFunds.filter((f: any) => f && f.code && !existingCodes.has(f.code));
+          appendedCodes = newItems.map((f: any) => f.code);
           mergedFunds = [...currentFunds, ...newItems];
           setFunds(mergedFunds);
           localStorage.setItem('funds', JSON.stringify(mergedFunds));
@@ -2512,8 +2512,8 @@ export default function HomePage() {
         if (Array.isArray(data.groups)) {
           // 合并分组：如果 ID 相同则合并 codes，否则添加新分组
           const mergedGroups = [...currentGroups];
-          data.groups.forEach(incomingGroup => {
-            const existingIdx = mergedGroups.findIndex(g => g.id === incomingGroup.id);
+          data.groups.forEach((incomingGroup: any) => {
+            const existingIdx = mergedGroups.findIndex((g: any) => g.id === incomingGroup.id);
             if (existingIdx > -1) {
               mergedGroups[existingIdx] = {
                 ...mergedGroups[existingIdx],
@@ -2553,7 +2553,7 @@ export default function HomePage() {
         if (appendedCodes.length) {
           // 这里需要确保 refreshAll 不会因为闭包问题覆盖掉刚刚合并好的 mergedFunds
           // 我们直接传入所有代码执行一次全量刷新是最稳妥的，或者修改 refreshAll 支持增量更新
-          const allCodes = mergedFunds.map(f => f.code);
+          const allCodes = mergedFunds.map((f: any) => f.code);
           await refreshAll(allCodes);
         }
 
@@ -2609,14 +2609,14 @@ export default function HomePage() {
   ]);
 
   useEffect(() => {
-    const onKey = (ev) => {
+const onKey: any = (ev: any) => {
       if (ev.key === 'Escape' && settingsOpen) setSettingsOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [settingsOpen]);
 
-  const getGroupName = () => {
+const getGroupName: any = () => {
     if (currentTab === 'all') return '全部资产';
     if (currentTab === 'fav') return '自选资产';
     const group = groups.find(g => g.id === currentTab);
@@ -2916,12 +2916,12 @@ export default function HomePage() {
                     fontSize: '14px',
                     fontWeight: 500
                   }}
-                  onMouseEnter={(e) => {
+                  onMouseEnter={(e: any) => {
                     e.currentTarget.style.borderColor = 'var(--primary)';
                     e.currentTarget.style.color = 'var(--primary)';
                     e.currentTarget.style.background = 'rgba(34, 211, 238, 0.05)';
                   }}
-                  onMouseLeave={(e) => {
+                  onMouseLeave={(e: any) => {
                     e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
                     e.currentTarget.style.color = 'var(--muted)';
                     e.currentTarget.style.background = 'transparent';
@@ -2960,7 +2960,7 @@ export default function HomePage() {
                               {currentTab !== 'all' && currentTab !== 'fav' ? (
                                 <button
                                   className="icon-button fav-button"
-                                  onClick={(e) => {
+                                  onClick={(e: any) => {
                                     e.stopPropagation();
                                     removeFundFromCurrentGroup(f.code);
                                   }}
@@ -2971,7 +2971,7 @@ export default function HomePage() {
                               ) : (
                                 <button
                                   className={`icon-button fav-button ${favorites.has(f.code) ? 'active' : ''}`}
-                                  onClick={(e) => {
+                                  onClick={(e: any) => {
                                     e.stopPropagation();
                                     toggleFavorite(f.code);
                                   }}
@@ -3042,7 +3042,7 @@ export default function HomePage() {
                               {currentTab !== 'all' && currentTab !== 'fav' ? (
                                 <button
                                   className="icon-button fav-button"
-                                  onClick={(e) => {
+                                  onClick={(e: any) => {
                                     e.stopPropagation();
                                     removeFundFromCurrentGroup(f.code);
                                   }}
@@ -3053,7 +3053,7 @@ export default function HomePage() {
                               ) : (
                                 <button
                                   className={`icon-button fav-button ${favorites.has(f.code) ? 'active' : ''}`}
-                                  onClick={(e) => {
+                                  onClick={(e: any) => {
                                     e.stopPropagation();
                                     toggleFavorite(f.code);
                                   }}
@@ -3175,7 +3175,7 @@ export default function HomePage() {
                                   {profit.profitTotal !== null && (
                                     <div 
                                       className="stat"
-                                      onClick={(e) => {
+                                      onClick={(e: any) => {
                                         e.stopPropagation();
                                         setPercentModes(prev => ({ ...prev, [f.code]: !prev[f.code] }));
                                       }}
@@ -3234,7 +3234,7 @@ export default function HomePage() {
                               >
                                 {Array.isArray(f.holdings) && f.holdings.length ? (
                                   <div className="list">
-                                    {f.holdings.map((h, idx) => (
+                                    {f.holdings.map((h, idx: any) => (
                                       <div className="item" key={idx}>
                                         <span className="name">{h.name}</span>
                                         <div className="values">
@@ -3300,11 +3300,11 @@ export default function HomePage() {
               borderRadius: '6px',
               transition: 'all 0.2s ease'
             }}
-            onMouseEnter={(e) => {
+            onMouseEnter={(e: any) => {
               e.currentTarget.style.color = 'var(--primary)';
               e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
             }}
-            onMouseLeave={(e) => {
+            onMouseLeave={(e: any) => {
               e.currentTarget.style.color = 'var(--muted)';
               e.currentTarget.style.background = 'transparent';
             }}
@@ -3348,7 +3348,7 @@ export default function HomePage() {
           <HoldingActionModal
             fund={actionModal.fund}
             onClose={() => setActionModal({ open: false, fund: null })}
-            onAction={(type) => handleAction(type, actionModal.fund)}
+            onAction={(type: any) => handleAction(type, actionModal.fund)}
           />
         )}
       </AnimatePresence>
@@ -3359,7 +3359,7 @@ export default function HomePage() {
             type={tradeModal.type}
             fund={tradeModal.fund}
             onClose={() => setTradeModal({ open: false, fund: null, type: 'buy' })}
-            onConfirm={(data) => handleTrade(tradeModal.fund, data)}
+            onConfirm={(data: any) => handleTrade(tradeModal.fund, data)}
           />
         )}
       </AnimatePresence>
@@ -3382,7 +3382,7 @@ export default function HomePage() {
             fund={holdingModal.fund}
             holding={holdings[holdingModal.fund?.code]}
             onClose={() => setHoldingModal({ open: false, fund: null })}
-            onSave={(data) => handleSaveHolding(holdingModal.fund?.code, data)}
+            onSave={(data: any) => handleSaveHolding(holdingModal.fund?.code, data)}
           />
         )}
       </AnimatePresence>
@@ -3396,7 +3396,7 @@ export default function HomePage() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="glass card modal"
               style={{ maxWidth: '360px' }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e: any) => e.stopPropagation()}
             >
               <div className="title" style={{ marginBottom: 20, justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -3449,7 +3449,7 @@ export default function HomePage() {
 
       {settingsOpen && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="设置" onClick={() => setSettingsOpen(false)}>
-          <div className="glass card modal" onClick={(e) => e.stopPropagation()}>
+          <div className="glass card modal" onClick={(e: any) => e.stopPropagation()}>
             <div className="title" style={{ marginBottom: 12 }}>
               <SettingsIcon width="20" height="20" />
               <span>设置</span>
@@ -3477,7 +3477,7 @@ export default function HomePage() {
                 min="5"
                 step="5"
                 value={tempSeconds}
-                onChange={(e) => setTempSeconds(Number(e.target.value))}
+                onChange={(e: any) => setTempSeconds(Number(e.target.value))}
                 placeholder="自定义秒数"
               />
             </div>
