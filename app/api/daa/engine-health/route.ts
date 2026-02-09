@@ -1,6 +1,7 @@
 import { proxyToEngine } from "@/src/daa/proxyToEngine";
 
 // Health passthrough for the Python engine behind nginx (/daa-api/...).
+// Contract: src/core/contracts/daaEngine.ts
 export async function GET() {
   const timeoutMs = Number(process.env.DAA_ENGINE_TIMEOUT_MS || 10_000);
 
