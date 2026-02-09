@@ -68,10 +68,13 @@ export async function proxyToEngine(opts: ProxyToEngineOptions): Promise<Respons
   }
 
   const text = await resp.text();
-  const contentType = resp.headers.get("content-type") || opts.fallbackContentType;
+
+  // Pass through upstream headers (e.g. set-cookie) while ensuring a stable content-type.
+  const headers = new Headers(resp.headers);
+  if (!headers.get("content-type")) headers.set("content-type", opts.fallbackContentType);
 
   return new Response(text, {
     status: resp.status,
-    headers: { "content-type": contentType },
+    headers,
   });
 }
