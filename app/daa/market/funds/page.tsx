@@ -1562,13 +1562,13 @@ export default function HomePage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [addResultOpen, setAddResultOpen] = useState(false);
   const [addFailures, setAddFailures] = useState<any[]>([]);
-  const [holdingModal, setHoldingModal] = useState({ open: false, fund: null });
+  const [holdingModal, setHoldingModal] = useState<{ open: boolean; fund: any | null }>({ open: false, fund: null });
   const [actionModal, setActionModal] = useState({ open: false, fund: null });
   const [tradeModal, setTradeModal] = useState({ open: false, fund: null, type: 'buy' }); // type: 'buy' | 'sell'
   const [clearConfirm, setClearConfirm] = useState<{ fund: any } | null>(null);
   const [donateOpen, setDonateOpen] = useState(false);
   const [holdings, setHoldings] = useState<Record<string, any>>({}); // { [code]: { share: number, cost: number } }
-  const [percentModes, setPercentModes] = useState({}); // { [code]: boolean }
+  const [percentModes, setPercentModes] = useState<Record<string, boolean>>({}); // { [code]: boolean }
   const [isTradingDay, setIsTradingDay] = useState(true); // 默认为交易日，通过接口校正
   const tabsRef = useRef<HTMLDivElement | null>(null);
 
@@ -2423,7 +2423,7 @@ const saveSettings: any = (e: any) => {
     setSettingsOpen(false);
   };
 
-  const importFileRef = useRef(null);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
   const [importMsg, setImportMsg] = useState('');
 
   const exportLocalData = async () => {
@@ -3234,7 +3234,7 @@ const getGroupName: any = () => {
                               >
                                 {Array.isArray(f.holdings) && f.holdings.length ? (
                                   <div className="list">
-                                    {f.holdings.map((h, idx: any) => (
+                                    {f.holdings.map((h: any, idx: any) => (
                                       <div className="item" key={idx}>
                                         <span className="name">{h.name}</span>
                                         <div className="values">
