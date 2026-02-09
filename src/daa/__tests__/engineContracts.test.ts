@@ -26,6 +26,8 @@ describe("daa/engineContracts", () => {
   it("isRebalanceSimulateRequest", () => {
     expect(isRebalanceSimulateRequest(null)).toBe(false);
     expect(isRebalanceSimulateRequest({})).toBe(false);
-    expect(isRebalanceSimulateRequest({ money_plan: {}, signals: [] })).toBe(true);
+
+    expect(isRebalanceSimulateRequest({ money_plan: {}, signals: [] })).toBe(false);
+    expect(isRebalanceSimulateRequest({ money_plan: {}, signals: {} })).toBe(true);
   });
 });
