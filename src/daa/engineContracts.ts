@@ -11,6 +11,7 @@ export type JsonValue =
 
 export type RebalanceSimulateRequest = {
   money_plan: JsonValue;
+  // Engine expects an array of { symbol, action, score, ... } (see services/daa-py/app/main.py).
   signals: JsonValue;
 };
 
@@ -36,11 +37,11 @@ export function isEngineErrorResponse(x: unknown): x is EngineErrorResponse {
 
 export function isRebalanceSimulateRequest(x: unknown): x is RebalanceSimulateRequest {
   if (!isPlainObject(x)) return false;
-  // v0: we still avoid deep shape validation, but require the top-level payloads to be objects.
+  // v0: keep it shallow, but align with the Python engine contract.
   if (!("money_plan" in x) || !("signals" in x)) return false;
 
   const moneyPlan = (x as Record<string, unknown>).money_plan;
   const signals = (x as Record<string, unknown>).signals;
 
-  return isPlainObject(moneyPlan) && isPlainObject(signals);
+  return isPlainObject(moneyPlan) && Array.isArray(signals);
 }
