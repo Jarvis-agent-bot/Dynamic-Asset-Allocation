@@ -22,7 +22,20 @@ function isAbortError(e: unknown): boolean {
 }
 
 export async function proxyToEngine(opts: ProxyToEngineOptions): Promise<Response> {
-  const base = process.env.DAA_ENGINE_BASE_URL?.replace(/\/$/, "") || "";
+  const baseRaw = process.env.DAA_ENGINE_BASE_URL;
+  if (!baseRaw) {
+    // Avoid trying to fetch a relative URL (e.g. "/daa-api/..."), which fails in Node.
+    return NextResponse.json(
+      {
+        error: "missing DAA_ENGINE_BASE_URL",
+        message: "Set DAA_ENGINE_BASE_URL (e.g. https://your-domain.com) to reach the Python engine behind nginx.",
+        upstreamPath: opts.upstreamPath,
+      },
+      { status: 500 },
+    );
+  }
+
+  const base = baseRaw.replace(/\/$/, "");
   const url = `${base}${opts.upstreamPath}`;
 
   const controller = new AbortController();

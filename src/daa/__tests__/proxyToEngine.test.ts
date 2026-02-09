@@ -4,15 +4,40 @@ import { proxyToEngine } from "../proxyToEngine";
 
 describe("daa/proxyToEngine", () => {
   const originalFetch = globalThis.fetch;
+  const originalEnv = process.env.DAA_ENGINE_BASE_URL;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    process.env.DAA_ENGINE_BASE_URL = "https://engine.test";
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
     vi.useRealTimers();
     vi.restoreAllMocks();
+
+    if (originalEnv === undefined) delete process.env.DAA_ENGINE_BASE_URL;
+    else process.env.DAA_ENGINE_BASE_URL = originalEnv;
+  });
+
+  it("returns 500 with a clear error when DAA_ENGINE_BASE_URL is missing", async () => {
+    delete process.env.DAA_ENGINE_BASE_URL;
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const resp = await proxyToEngine({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 123,
+      fallbackContentType: "text/plain; charset=utf-8",
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(resp.status).toBe(500);
+    await expect(resp.json()).resolves.toMatchObject({
+      error: "missing DAA_ENGINE_BASE_URL",
+      upstreamPath: "/daa-api/health",
+    });
   });
 
   it("maps AbortError to a 504 upstream timeout JSON", async () => {
