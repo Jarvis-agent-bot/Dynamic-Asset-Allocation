@@ -63,7 +63,7 @@ export type MarketEventQuery = {
 - `limit`：可选；>0 时截断
 
 ## UI 行为摘要（/daa/step/2）
-代码位置：`app/daa/step/2/page.jsx`
+代码位置：`app/daa/step/2/page.tsx`
 
 - 顶部过滤区：
   - 两个 checkbox：Twitter（主观）/ News（客观）
