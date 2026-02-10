@@ -6,11 +6,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DAA_STEPS, getStep } from "../steps";
 import StatusPill from "../components/StatusPill";
 
-import Step1BacktestPage from "../step/1/page";
-import Step2MarketEventsPage from "../step/2/page";
-import Step3MoneyMgmtPage from "../step/3/page";
-import Step4BaselineRebalancePage from "../step/4/page";
-import Step5SignalDecisionPage from "../step/5/page";
+import Step1BacktestPage from "../step/_pages/Step1BacktestPage";
+import Step2MarketEventsPage from "../step/_pages/Step2MarketEventsPage";
+import Step3MoneyMgmtPage from "../step/_pages/Step3MoneyManagementPage";
+import Step4BaselineRebalancePage from "../step/_pages/Step4BaselineRebalancePage";
+import Step5SignalDecisionPage from "../step/_pages/Step5RecommendationReviewPage";
 
 const LS_ACTIVE_STEP = "daa.wizard.activeStep";
 
