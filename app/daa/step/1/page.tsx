@@ -1,5 +1,11 @@
-import { redirect } from "next/navigation";
+import { DeepLinkScaffold } from "../_components/DeepLinkScaffold";
+import Step1BacktestPage from "../_pages/Step1BacktestPage";
 
 export default function Step1Page() {
-  redirect("/daa?step=1");
+  // Deep-link page: render the actual Step UI (with the wizard summary + nav) instead of a placeholder.
+  return (
+    <DeepLinkScaffold stepId={1}>
+      <Step1BacktestPage />
+    </DeepLinkScaffold>
+  );
 }

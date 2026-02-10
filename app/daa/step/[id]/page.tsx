@@ -4,6 +4,9 @@ import StatusPill from "../../components/StatusPill";
 import StepsQuickNav from "../../components/StepsQuickNav";
 import StepKeyNav from "./StepKeyNav";
 import WizardPersistentSummary from "../../_components/WizardPersistentSummary";
+import Step1BacktestPage from "../_pages/Step1BacktestPage";
+import Step2MarketEventsPage from "../_pages/Step2MarketEventsPage";
+import Step3MoneyManagementPage from "../_pages/Step3MoneyManagementPage";
 import { RebalanceSimulatePanel } from "../_components/RebalanceSimulatePanel";
 
 type StepPageProps = {
@@ -117,6 +120,24 @@ export default function StepPage({ params }: StepPageProps) {
 
   // Fallback rendering: even if the dynamic route is used in some deployments,
   // Step4/5 must still expose the v0 rebalance recommendation action.
+  if (step.id === 1 || step.id === 2 || step.id === 3) {
+    const Page = step.id === 1 ? Step1BacktestPage : step.id === 2 ? Step2MarketEventsPage : Step3MoneyManagementPage;
+
+    return (
+      <main>
+        <div style={{ marginTop: 12 }}>
+          <WizardPersistentSummary />
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <Page />
+        </div>
+
+        <Nav stepId={step.id} />
+      </main>
+    );
+  }
+
   if (step.id === 4 || step.id === 5) {
     return (
       <main>

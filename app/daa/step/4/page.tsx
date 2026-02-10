@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import Step4BaselineRebalancePage from "../_pages/Step4BaselineRebalancePage";
 
 export default function Step4Page() {
-  redirect("/daa?step=4");
+  return <Step4BaselineRebalancePage />;
 }

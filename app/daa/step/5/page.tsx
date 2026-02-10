@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import Step5RecommendationReviewPage from "../_pages/Step5RecommendationReviewPage";
 
 export default function Step5Page() {
-  redirect("/daa?step=5");
+  return <Step5RecommendationReviewPage />;
 }
