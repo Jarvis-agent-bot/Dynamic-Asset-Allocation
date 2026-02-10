@@ -35,7 +35,7 @@ const SAMPLE_REBALANCE_SIMULATE_REQUEST = {
 export default function Step4BaselineRebalancePage() {
   return (
     <main>
-      <h1 style={{ margin: 0, fontSize: 20 }}>Step 4 — 基准再平衡（Baseline Rebalance）v0</h1>
+      <h1 style={{ margin: 0, fontSize: 20 }}>Step 4 — 基准再平衡（Baseline Rebalance）v0 (rebalance-simulate-ui)</h1>
       <p style={{ color: "#444" }}>
         v0：点击按钮调用 <code>POST /api/daa/rebalance/simulate</code> 生成“再平衡推荐”（orders + target weights + explain），并提供一键复制 JSON。
         默认提供一份已知可用的 sample payload，避免默认 422。

@@ -35,7 +35,7 @@ const SAMPLE_REBALANCE_SIMULATE_REQUEST = {
 export default function Step5RecommendationReviewPage() {
   return (
     <main>
-      <h1 style={{ margin: 0, fontSize: 20 }}>Step 5 — 推荐结果展示（Recommendation Review）v0</h1>
+      <h1 style={{ margin: 0, fontSize: 20 }}>Step 5 — 推荐结果展示（Recommendation Review）v0 (rebalance-simulate-ui)</h1>
       <p style={{ color: "#444" }}>
         v0：同样调用 <code>POST /api/daa/rebalance/simulate</code>，展示推荐动作（orders）、目标权重（allocations）、
         以及 explain/warnings，并提供一键复制 JSON。
