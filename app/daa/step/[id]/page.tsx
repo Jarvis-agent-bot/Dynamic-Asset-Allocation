@@ -3,6 +3,7 @@ import { DAA_STEPS, getStep } from "../../steps";
 import StatusPill from "../../components/StatusPill";
 import StepsQuickNav from "../../components/StepsQuickNav";
 import StepKeyNav from "./StepKeyNav";
+import WizardPersistentSummary from "../../_components/WizardPersistentSummary";
 import { RebalanceSimulatePanel } from "../_components/RebalanceSimulatePanel";
 
 type StepPageProps = {
@@ -126,10 +127,16 @@ export default function StepPage({ params }: StepPageProps) {
           v0：点击按钮调用 <code>POST /api/daa/rebalance/simulate</code> 生成“再平衡推荐”（orders + target weights + explain），并提供一键复制 JSON。
         </p>
 
-        <RebalanceSimulatePanel
-          title={step.id === 4 ? "Generate v0 rebalance recommendation" : "Generate & inspect recommendation"}
-          defaultRequest={SAMPLE_REBALANCE_SIMULATE_REQUEST}
-        />
+        <div style={{ marginTop: 12 }}>
+          <WizardPersistentSummary />
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <RebalanceSimulatePanel
+            title={step.id === 4 ? "Generate v0 rebalance recommendation" : "Generate & inspect recommendation"}
+            defaultRequest={SAMPLE_REBALANCE_SIMULATE_REQUEST}
+          />
+        </div>
 
         <Nav stepId={step.id} />
       </main>
@@ -155,6 +162,10 @@ export default function StepPage({ params }: StepPageProps) {
       {step.desc ? <p style={{ color: "#666", marginTop: 8 }}>{step.desc}</p> : null}
 
       <StepsQuickNav activeId={step.id} />
+
+      <div style={{ marginTop: 12 }}>
+        <WizardPersistentSummary />
+      </div>
 
       <p style={{ color: "#444", marginTop: 10 }}>
         这个页面即“功能边界”。先定义 UI 需要的字段（inputs / outputs），再反推 contract/provider 的最小实现。

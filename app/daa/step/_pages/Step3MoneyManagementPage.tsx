@@ -4,20 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { validateMoneyPlan } from "../../../../src/core/money";
 
-const LS_MONEY_PLAN = "daa.wizard.moneyPlan";
-
-function pretty(x: unknown) {
-  return JSON.stringify(x, null, 2);
-}
-
-function saveJsonToLs(key: string, value: unknown) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-    window.dispatchEvent(new CustomEvent("daa:wizard:data"));
-  } catch {
-    // ignore
-  }
-}
+import { LS_MONEY_PLAN, pretty, saveJsonToLs } from "../../wizardStorage";
 
 export default function Step3MoneyManagementPage() {
   const [baseCcy, setBaseCcy] = useState("USD");
