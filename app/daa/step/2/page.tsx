@@ -1,5 +1,6 @@
-import { redirect } from "next/navigation";
+import Step2MarketEventsPage from "../_pages/Step2MarketEventsPage";
 
 export default function Step2Page() {
-  redirect("/daa?step=2");
+  // Deep-link page: render the actual Step UI instead of redirecting to /daa.
+  return <Step2MarketEventsPage />;
 }
