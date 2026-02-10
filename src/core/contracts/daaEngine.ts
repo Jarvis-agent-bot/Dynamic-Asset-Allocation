@@ -14,7 +14,8 @@ export type DaaEngineErrorResponse = {
 // Keep this loose: enforce types when fields exist, but don't require deep shapes.
 export type DaaEngineRebalanceSimulateResponse = {
   orders?: unknown[];
-  explain?: string;
+  // Engine returns an object today (policy/constraints/etc), but allow strings for flexibility.
+  explain?: unknown;
   warnings?: string[];
 };
 
@@ -31,7 +32,13 @@ export function isDaaEngineRebalanceSimulateResponse(v: unknown): v is DaaEngine
   const o = v as Record<string, unknown>;
 
   if ("orders" in o && o.orders !== undefined && !Array.isArray(o.orders)) return false;
-  if ("explain" in o && o.explain !== undefined && typeof o.explain !== "string") return false;
+
+  // `explain` may be a string or a JSON object; just ensure it's JSON-serializable-ish.
+  if ("explain" in o && o.explain !== undefined) {
+    const t = typeof o.explain;
+    if (!(t === "string" || t === "object")) return false;
+  }
+
   if (
     "warnings" in o &&
     o.warnings !== undefined &&
