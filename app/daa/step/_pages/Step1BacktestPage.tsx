@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
 import { backtestSingleAsset, rankBacktestResults, type RankedBacktestResult } from "../../../../src/core/backtest";
+import { fetchValidatedPriceSeriesEnforcingRange, createDeterministicMockPriceSeriesProvider } from "../../../../src/core/providers";
+import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
 
 type Step1Result = {
   ranked: RankedBacktestResult[];
@@ -31,51 +32,45 @@ export default function Step1BacktestPage() {
     return null;
   }, [symbol, start, end]);
 
-  // v0: mock price series (flat-ish). We keep this explicit so the UI can ship
-  // before market-data ingestion exists.
-  // Small quality-of-life: the mock series now respects the user-selected date range.
-  const series = useMemo(() => {
-    function parseISODate(iso: string) {
-      // Expect YYYY-MM-DD. Use UTC to avoid timezone drift.
-      const m = /^\d{4}-\d{2}-\d{2}$/.exec(String(iso || ""));
-      if (!m) return null;
-      const d = new Date(`${iso}T00:00:00.000Z`);
-      return Number.isNaN(d.getTime()) ? null : d;
+  const [series, setSeries] = useState<Array<{ date: string; close: number }>>([]);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+
+  // v0: deterministic mock provider (framework v0) so the UI can ship before
+  // market-data ingestion exists.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runFetch() {
+      setSeriesError(null);
+
+      try {
+        const provider = createDeterministicMockPriceSeriesProvider({ maxDays: 200 });
+        const next = await fetchValidatedPriceSeriesEnforcingRange(provider, {
+          symbol: String(symbol || "").toUpperCase(),
+          start,
+          end,
+        });
+
+        if (!cancelled) setSeries(next);
+      } catch (e) {
+        if (cancelled) return;
+        setSeries([]);
+        setSeriesError(e instanceof Error ? e.message : String(e));
+      }
     }
 
-    function fmt(d: Date) {
-      const y = d.getUTCFullYear();
-      const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
-      const da = String(d.getUTCDate()).padStart(2, "0");
-      return `${y}-${mo}-${da}`;
+    // Keep validationError as the primary UI guard.
+    if (!validationError) {
+      void runFetch();
+    } else {
+      setSeries([]);
+      setSeriesError(null);
     }
 
-    function addDays(d: Date, n: number) {
-      const x = new Date(d.getTime());
-      x.setUTCDate(x.getUTCDate() + n);
-      return x;
-    }
-
-    const s = parseISODate(start);
-    const e = parseISODate(end);
-    if (!s || !e || e < s) return [];
-
-    // Cap to keep UI snappy if someone picks huge ranges in v0.
-    const maxDays = 200;
-    const out = [];
-
-    // Tiny deterministic jitter based on symbol so users feel inputs “do something”.
-    const seed = String(symbol || "").toUpperCase();
-    const base = 100 + (seed.length % 7) * 0.5;
-
-    for (let i = 0; i <= maxDays; i++) {
-      const d = addDays(s, i);
-      if (d > e) break;
-      const wobble = (i % 5) * 0.12;
-      out.push({ date: fmt(d), close: base + i * 0.03 + wobble });
-    }
-    return out;
-  }, [symbol, start, end]);
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, start, end, validationError]);
 
   const strategies = useMemo(() => {
     return [buyAndHold(), smaCrossover({ fast: 3, slow: 10 })];
@@ -89,7 +84,7 @@ export default function Step1BacktestPage() {
       return;
     }
     if (!series.length) {
-      setRunError("No price data (mock series empty for this date range)");
+      setRunError(seriesError ? `No price data: ${seriesError}` : "No price data (mock series empty for this date range)");
       setResult(null);
       return;
     }
@@ -172,6 +167,7 @@ export default function Step1BacktestPage() {
 
       <div style={{ marginTop: 10, fontSize: 12, color: series.length ? "#555" : "#b00020" }} aria-live="polite">
         Mock series: {series.length} points (capped at 200 days) — {start} → {end}
+        {seriesError ? <span style={{ marginLeft: 8 }}>({seriesError})</span> : null}
       </div>
 
       {result ? (
