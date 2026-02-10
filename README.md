@@ -1,8 +1,16 @@
-# 实时基金估值 (Real-time Fund Valuation)
+# Dynamic Asset Allocation (DAA)
 
-一个基于 Next.js 开发的纯前端基金估值与重仓股实时追踪工具。采用玻璃拟态设计（Glassmorphism），支持移动端适配，且无需后端服务器即可运行。
+这是一个以 **Dynamic Asset Allocation（DAA）** 为核心的产品化系统（Next.js App Router + 可测试的 core 算法层 + 可选的 Python 在线引擎）。
+
+- 线上入口（VPS）：https://exwxyzi.cn/daa/
+- 目标交付方式：按 Step 页面逐步交付，从“可运行闭环”开始，再逐步增强策略/数据/资金管理/推荐/解释。
 
 > 说明：本仓库为 `Jarvis-agent-bot/Dynamic-Asset-Allocation`，持续维护中。
+
+## Product 结构（前端优先）
+
+- `/daa/step/*`：引导式工作流页面（产品主线）
+- `/daa/market/funds/`：legacy「基金估值/重仓」模块（保留 + 归位为 DAA 子模块，不再作为项目对外主定位）
 
 ## 🧠 DAA 核心（算法层）
 
@@ -16,11 +24,11 @@
 - `src/core/signals.ts`：fixed-weight ensemble → BUY/SELL/HOLD 信号输出（v0）
 - `src/core/backtest.ts`：最小回测闭环（单资产、日频、无手续费 v0）
 - `src/core/metrics.ts`：收益/回撤/夏普/胜率等指标 + 评分
-- `src/core/providers/priceSeriesProvider.ts`：**framework v0 provider contract**（价格序列提供方 + 合同校验 + 包装错误类型）
+- `src/core/providers/priceSeriesProvider.ts`：framework v0 provider contract（价格序列提供方 + 合同校验 + 包装错误类型）
 
 ### Framework v0 快速上手（Contracts + Provider + E2E）
 
-框架 v0 的目标是：用一套最小但严格的 contracts，把「数据提供（provider）」与「回测/信号核心」隔离开，便于后续接入真实数据源与最小 UI。
+框架 v0 的目标是：用一套最小但严格的 contracts，把「数据提供（provider）」与「回测/信号核心」隔离开，便于后续接入真实数据源与 UI。
 
 - Provider 只需要实现 `PriceSeriesProvider#getPriceSeries()`
 - 调用侧用 `fetchValidatedPriceSeries()`（或 `fetchValidatedPriceSeriesEnforcingRange()`）获取并校验数据
@@ -38,83 +46,60 @@ const provider: PriceSeriesProvider = {
   },
 };
 
-await fetchValidatedPriceSeries(provider, { symbol: "SPY", start: "2026-01-01", end: "2026-02-01" });
+await fetchValidatedPriceSeries(provider, {
+  symbol: "SPY",
+  start: "2026-01-01",
+  end: "2026-02-01",
+});
 ```
 
-> 目标路线：回测算法组合 → 市场信息 → 资金管理 → 基准买卖推荐 → AI 分析 → 人因模型 → Tag 体系
+> 路线（按顺序推进）：回测算法组合 → 市场信息（Twitter+yfinance/雪球）→ 资金管理 → 基准买卖推荐 → AI 分析 → 人因模型 → Tag 体系
 
-部署地址（VPS）：https://exwxyzi.cn/daa/
+## Python 在线引擎（可选）
 
-## ✨ 特性
+- Python 引擎对外通过 Nginx 前缀：`/daa-api/`
+- 典型健康检查：`https://exwxyzi.cn/daa-api/health`
+- Next.js 同域 API（供前端调用）：`/api/daa/*`（例如 Step4/Step5 调用的 `POST /api/daa/rebalance/simulate`）
 
-- **实时估值**：通过输入基金编号，实时获取并展示基金的单位净值、估值净值及实时涨跌幅。
-- **重仓追踪**：自动获取基金前 10 大重仓股票，并实时追踪重仓股的盘中涨跌情况。支持收起/展开展示。
-- **纯前端运行**：采用 JSONP 方案直连东方财富、腾讯财经等公开接口，彻底解决跨域问题（当前以 VPS 部署为主）。
-- **本地持久化**：使用 `localStorage` 存储已添加的基金列表及配置信息，刷新不丢失。
-- **响应式设计**：完美适配 PC 与移动端。针对移动端优化了文字展示、间距及交互体验。
-- **自选功能**：支持将基金添加至“自选”列表，通过 Tab 切换展示全部基金或仅自选基金。自选状态支持持久化及同步清理。
-- **可自定义频率**：支持设置自动刷新间隔（5秒 - 300秒），并提供手动刷新按钮。
+部署相关：见 `deploy/README.md`。
+
+## ✨ 当前已交付（v0）
+
+- Step 页面产品化骨架（/daa/step/*）
+- 最小 contracts/providers + 测试闭环（pnpm test/typecheck/build）
+- v0 再平衡建议：Step4/Step5 通过 `POST /api/daa/rebalance/simulate` 生成建议，并在 UI 展示“建议 + 解释 + 可复制 JSON”
 
 ## 🛠 技术栈
 
-- **框架**：[Next.js](https://nextjs.org/) (App Router)
-- **样式**：原生 CSS (Global CSS) + 玻璃拟态设计
-- **数据源**：
-  - 基金估值：天天基金 (JSONP)
-  - 重仓数据：东方财富 (HTML Parsing)
-  - 股票行情：腾讯财经 (Script Tag Injection)
-- **部署**：VPS（Docker + Nginx）
+- 前端：Next.js（App Router）+ TypeScript（strict）
+- 算法：TypeScript core（可测试）
+- 引擎：FastAPI（可选在线 API）
+- 部署：VPS（Docker + Nginx）
 
 ## 🚀 快速开始
 
 ### 本地开发
 
-1. 克隆仓库：
-   ```bash
-   git clone git@github.com:Jarvis-agent-bot/Dynamic-Asset-Allocation.git
-   cd Dynamic-Asset-Allocation
-   ```
-
-2. 安装依赖：
-   ```bash
-   pnpm install
-   ```
-
-3. 运行开发服务器：
-   ```bash
-   pnpm dev
-   ```
-   访问 [http://localhost:3000](http://localhost:3000) 查看效果。
-
-### 构建与部署
-
-当前以 VPS 部署为主（Docker + Nginx）。
-
-若要手动构建：
 ```bash
+git clone git@github.com:Jarvis-agent-bot/Dynamic-Asset-Allocation.git
+cd Dynamic-Asset-Allocation
+pnpm install
+pnpm dev
+```
+
+打开 http://localhost:3000/daa/
+
+### 构建与测试
+
+```bash
+pnpm test
+pnpm run typecheck
 pnpm build
 ```
 
-## 📖 使用说明
+## 📄 License
 
-1. **添加基金**：在顶部输入框输入 6 位基金代码（如 `110022`），点击“添加”。
-2. **查看详情**：卡片将展示实时估值及前 10 重仓股的占比与今日涨跌。
-3. **调整频率**：点击右上角“设置”图标，可调整自动刷新的间隔时间。
-4. **删除基金**：点击卡片右上角的红色删除图标即可移除。
-
-## 📝 免责声明
-
-本项目所有数据均来自公开接口，仅供个人学习及参考使用。数据可能存在延迟，不作为任何投资建议。
-
-## 📄 开源协议 (License)
-
-本项目采用 **[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)**（AGPL-3.0）开源协议。
-
-- **允许**：自由使用、修改、分发本软件；若你通过网络服务向用户提供基于本项目的修改版本，须向该服务的用户提供对应源代码。
-- **要求**：基于本项目衍生或修改的作品需以相同协议开源，并保留版权声明与协议全文。
-- **无担保**：软件按「原样」提供，不提供任何明示或暗示的担保。
-
-完整协议文本见仓库根目录 [LICENSE](./LICENSE) 文件，或 [GNU AGPL v3 官方说明](https://www.gnu.org/licenses/agpl-3.0.html)。
+本项目采用 **[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)**（AGPL-3.0）。
 
 ---
 Maintained by [Jarvis-agent-bot](https://github.com/Jarvis-agent-bot)
