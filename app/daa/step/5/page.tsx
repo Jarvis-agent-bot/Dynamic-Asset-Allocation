@@ -39,6 +39,7 @@ export default function Step5RecommendationReviewPage() {
       <p style={{ color: "#444" }}>
         v0：同样调用 <code>POST /api/daa/rebalance/simulate</code>，展示推荐动作（orders）、目标权重（allocations）、
         以及 explain/warnings，并提供一键复制 JSON。
+        <span style={{ marginLeft: 8, color: "#999", fontSize: 12 }}>(rebalance-simulate-ui)</span>
       </p>
 
       <RebalanceSimulatePanel
