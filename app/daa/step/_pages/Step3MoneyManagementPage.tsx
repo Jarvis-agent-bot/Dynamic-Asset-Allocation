@@ -24,15 +24,18 @@ export default function Step3MoneyManagementPage() {
     ])
   );
 
-  const plan = useMemo(() => {
-    let allocations;
+  const { plan, allocationsJsonOk } = useMemo(() => {
+    let allocationsUnknown: unknown = [];
+    let allocationsJsonOk = true;
+
     try {
-      allocations = JSON.parse(allocationsText);
+      allocationsUnknown = JSON.parse(allocationsText);
     } catch {
-      allocations = [];
+      allocationsJsonOk = false;
+      allocationsUnknown = [];
     }
 
-    return {
+    const plan = {
       account: {
         baseCcy,
         totalEquity: Number(totalEquity),
@@ -44,11 +47,19 @@ export default function Step3MoneyManagementPage() {
         maxIn: Number(maxIn),
         maxOut: Number(maxOut),
       },
-      allocations: Array.isArray(allocations) ? allocations : [],
+      allocations: Array.isArray(allocationsUnknown) ? allocationsUnknown : [],
     };
+
+    return { plan, allocationsJsonOk };
   }, [baseCcy, totalEquity, cash, investable, maxPositionPct, maxIn, maxOut, allocationsText]);
 
-  const issues = useMemo(() => validateMoneyPlan(plan), [plan]);
+  const issues = useMemo(() => {
+    const next = validateMoneyPlan(plan);
+    if (!allocationsJsonOk) {
+      next.unshift({ path: "allocations", message: "must be valid JSON array" });
+    }
+    return next;
+  }, [plan, allocationsJsonOk]);
 
   useEffect(() => {
     // Persist the money plan so the Wizard can show a cross-step summary panel.
@@ -110,8 +121,9 @@ export default function Step3MoneyManagementPage() {
           rows={10}
           style={{ width: "100%", padding: 10, border: "1px solid #ddd", borderRadius: 6, fontFamily: "ui-monospace, SFMono-Regular" }}
         />
-        <div style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+        <div style={{ fontSize: 12, color: allocationsJsonOk ? "#666" : "#b00020", marginTop: 6 }}>
           v0：允许 sum(targetPct) ≤ 1（保留现金）；超过 1 会报错。Tag 支持 riskPreference/riskScore。
+          {!allocationsJsonOk ? " Allocations JSON is invalid." : null}
         </div>
       </section>
 
