@@ -116,11 +116,23 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
     }
 
     try {
-      const res = await fetch("/api/daa/rebalance/simulate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: requestText,
-      });
+      // On VPS, nginx may only proxy `/daa/*` to Next.js. Provide a fallback endpoint
+      // under `/daa/api/...` so the UI works even when `/api/...` is routed elsewhere.
+      const endpoints = ["/api/daa/rebalance/simulate", "/daa/api/daa/rebalance/simulate"];
+
+      let res: Response | null = null;
+      for (const url of endpoints) {
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: requestText,
+        });
+        res = r;
+        // Retry only when the route is missing (common VPS misroute); otherwise return the actual error.
+        if (r.status !== 404) break;
+      }
+
+      if (!res) throw new Error("no response");
 
       setHttpStatus(res.status);
       const text = await res.text();

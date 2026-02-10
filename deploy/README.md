@@ -20,4 +20,5 @@ It will pull latest `main`, build the image, and restart the service.
 - Suggested Nginx routing:
   - `/daa/` → http://127.0.0.1:3000/daa/
   - `/daa-api/` → http://127.0.0.1:18000/
+  - `/api/daa/` → http://127.0.0.1:3000/api/daa/ (Next.js API routes used by Step4/5)
 - No qlib / AI secrets are required for the v0 framework.
