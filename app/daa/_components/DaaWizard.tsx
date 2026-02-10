@@ -13,7 +13,7 @@ import Step1BacktestPage from "../step/_pages/Step1BacktestPage";
 import Step2MarketEventsPage from "../step/_pages/Step2MarketEventsPage";
 import Step3MoneyMgmtPage from "../step/_pages/Step3MoneyManagementPage";
 import Step4BaselineRebalancePage from "../step/_pages/Step4BaselineRebalancePage";
-import Step5SignalDecisionPage from "../step/_pages/Step5RecommendationReviewPage";
+import Step5SignalDecisionPage from "../step/_pages/Step5SignalDecisionSummaryPage";
 
 // (moved) LS_ACTIVE_STEP lives in app/daa/wizardStorage.ts
 
