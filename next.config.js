@@ -7,8 +7,12 @@ const nextConfig = {
   // VPS/Nginx should forward requests to the app without stripping the /daa prefix.
 
   // v0 milestone smoke checks hit explicit trailing-slash URLs (e.g. /daa/step/4/).
-  // Make the trailing-slash form canonical so those URLs render 200 (no redirect).
-  trailingSlash: true,
+  // v0 milestone smoke checks hit explicit trailing-slash URLs (e.g. /daa/step/4/).
+  // On the VPS/Cloudflare stack, the non-slash form may be treated as canonical.
+  // We keep Next's default and disable the built-in trailing-slash redirect so
+  // both `/foo` and `/foo/` render 200.
+  trailingSlash: false,
+  skipTrailingSlashRedirect: true,
 };
 
 module.exports = nextConfig;
