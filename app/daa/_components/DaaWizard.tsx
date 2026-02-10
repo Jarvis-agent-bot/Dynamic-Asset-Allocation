@@ -5,6 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DAA_STEPS, getStep } from "../steps";
 import StatusPill from "../components/StatusPill";
+import WizardPersistentSummary from "./WizardPersistentSummary";
+
+import { LS_ACTIVE_STEP } from "../wizardStorage";
 
 import Step1BacktestPage from "../step/_pages/Step1BacktestPage";
 import Step2MarketEventsPage from "../step/_pages/Step2MarketEventsPage";
@@ -12,7 +15,7 @@ import Step3MoneyMgmtPage from "../step/_pages/Step3MoneyManagementPage";
 import Step4BaselineRebalancePage from "../step/_pages/Step4BaselineRebalancePage";
 import Step5SignalDecisionPage from "../step/_pages/Step5RecommendationReviewPage";
 
-const LS_ACTIVE_STEP = "daa.wizard.activeStep";
+// (moved) LS_ACTIVE_STEP lives in app/daa/wizardStorage.ts
 
 function clampStepId(n: number | null | undefined): number {
   if (!n || !Number.isFinite(n)) return 1;
@@ -125,6 +128,10 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
             );
           })}
         </div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <WizardPersistentSummary />
       </div>
 
       <div style={{ marginTop: 14 }}>

@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, saveJsonToLs } from "../../wizardStorage";
 
 type Props = {
   title: string;
@@ -47,6 +49,11 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
   const [response, setResponse] = useState<unknown>(null);
 
   const parsedReq = useMemo(() => safeJsonParse(requestText), [requestText]);
+
+  useEffect(() => {
+    if (!parsedReq.ok) return;
+    saveJsonToLs(LS_REBALANCE_REQUEST, parsedReq.value);
+  }, [parsedReq]);
 
   const orders = useMemo(() => {
     if (!response || typeof response !== "object") return [];
@@ -137,11 +144,9 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
       setHttpStatus(res.status);
       const text = await res.text();
       const maybeJson = safeJsonParse(text);
-      if (maybeJson.ok) {
-        setResponse(maybeJson.value);
-      } else {
-        setResponse({ raw: text });
-      }
+      const nextResp = maybeJson.ok ? maybeJson.value : { raw: text };
+      setResponse(nextResp);
+      saveJsonToLs(LS_REBALANCE_RESPONSE, nextResp);
 
       if (!res.ok) {
         setError(`HTTP ${res.status}`);
