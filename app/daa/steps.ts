@@ -41,8 +41,8 @@ export const DAA_STEPS: DaaStep[] = [
   },
   {
     id: 5,
-    title: "推荐结果展示（v0）",
-    desc: "v0：同样可生成并检查推荐结果，提供 explain/warnings + 一键复制 JSON。",
+    title: "信号决策摘要（v0）",
+    desc: "v0：粘贴 signals JSON 数组，提取最后一条作为‘今日动作摘要’，仅做展示与校验 + Copy JSON。",
     status: "done",
   },
   {
