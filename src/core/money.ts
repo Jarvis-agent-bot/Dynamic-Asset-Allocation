@@ -1,5 +1,6 @@
 export type RiskPreference = "high" | "mid" | "low";
-export type RiskScore = "high" | "mid" | "low";
+// riskScore includes "sb" (slang) as a deliberate bucket for consistently bad performers.
+export type RiskScore = "high" | "mid" | "low" | "sb";
 
 export type Tags = {
   riskPreference?: RiskPreference;
