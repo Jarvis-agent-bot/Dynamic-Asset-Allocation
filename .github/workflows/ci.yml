@@ -21,6 +21,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+          run_install: false
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -28,10 +34,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          pnpm --version
+      - name: pnpm version
+        run: pnpm --version
 
       - name: Install
         run: pnpm install --frozen-lockfile
