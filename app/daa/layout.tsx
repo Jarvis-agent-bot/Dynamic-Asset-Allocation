@@ -18,6 +18,14 @@ export default function DaaLayout({ children }: Props) {
           <strong>Dynamic Asset Allocation</strong>
         </Link>
         <div style={{ fontSize: 12, color: "#666" }}>Console (v0) — front-end driven</div>
+        <div style={{ marginTop: 8, display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12 }}>
+          <Link href="/daa/" style={{ color: "#111" }}>
+            Wizard
+          </Link>
+          <Link href="/daa/dashboard" style={{ color: "#111" }}>
+            Dashboard
+          </Link>
+        </div>
       </div>
       {children}
     </div>
