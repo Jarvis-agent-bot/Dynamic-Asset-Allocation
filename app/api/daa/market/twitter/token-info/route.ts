@@ -26,23 +26,31 @@ export async function GET() {
       cache: "no-store",
     });
 
-    const text = await r.text();
     if (!r.ok) {
+      // Avoid returning upstream bodies: they may contain the token (query param) in error text.
       return json(
         {
           error: "twitterdata upstream error",
           status: r.status,
-          body: text.slice(0, 2000),
         },
         { status: 502 },
       );
     }
+
+    const text = await r.text();
 
     let payload: unknown;
     try {
       payload = JSON.parse(text);
     } catch {
       payload = { raw: text };
+    }
+
+    // Ensure we never return the actual token to the browser.
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const copy: Record<string, unknown> = { ...(payload as any) };
+      if (typeof copy.token === "string") copy.token = "REDACTED";
+      payload = copy;
     }
 
     return json({ ok: true, source: "twitterdata", payload });
