@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { pretty, readJsonFromLs, saveJsonToLs, WIZARD_DATA_EVENT } from "../../wizardStorage";
+import { LS_HUMAN_PROFILE, pretty, readJsonFromLs, saveJsonToLs, WIZARD_DATA_EVENT } from "../../wizardStorage";
 import { getAllowedValueKeys, getTagDef, loadTagTaxonomy } from "../../tagTaxonomy";
 import { computeHumanFactor, type HumanProfile, type RiskPreference, type RiskScore } from "../../../../src/core/humanFactor";
 
-const LS_HUMAN_PROFILE = "daa.step6.humanProfile";
+// (moved) LS_HUMAN_PROFILE lives in app/daa/wizardStorage.ts
 
 const FALLBACK_RISK_PREFERENCE: RiskPreference[] = ["high", "mid", "low"];
 const FALLBACK_RISK_SCORE: RiskScore[] = ["high", "mid", "low", "sb"];
