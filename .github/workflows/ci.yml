@@ -40,13 +40,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Test
-        run: pnpm test
-
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      - name: Build
+      - name: Gates (test + typecheck + build)
         env:
           NEXT_TELEMETRY_DISABLED: 1
-        run: pnpm build
+        run: pnpm run gates

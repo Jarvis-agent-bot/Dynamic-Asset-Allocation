@@ -9,7 +9,8 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.core.json"
+    "typecheck": "tsc -p tsconfig.core.json",
+    "gates": "pnpm test && pnpm run typecheck && pnpm build"
   },
   "dependencies": {
     "framer-motion": "^12.29.2",
