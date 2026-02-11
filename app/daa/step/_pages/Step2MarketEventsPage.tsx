@@ -200,7 +200,98 @@ export default function Step2MarketEventsPage() {
       payload?.next?.cursor ??
       payload?.data?.next_cursor ??
       payload?.data?.cursor;
-    return typeof c === "string" ? c : "";
+    if (typeof c === "string") return c;
+
+    // twitterdata often encodes cursors as special timeline entries.
+    const insts: any[] = [
+      ...(payload?.data?.communityResults?.result?.ranked_community_timeline?.timeline?.instructions ?? []),
+      ...(payload?.data?.list?.tweets_timeline?.timeline?.instructions ?? []),
+    ];
+
+    for (const inst of insts) {
+      const entries = inst?.entries;
+      if (!Array.isArray(entries)) continue;
+      for (const e of entries) {
+        const content = e?.content ?? {};
+        const cursorType = content?.cursorType;
+        const value = content?.value;
+        if (cursorType === "Bottom" && typeof value === "string" && value.trim()) return value.trim();
+      }
+    }
+
+    return "";
+  }
+
+  // twitterdata returns GraphQL-ish nested timelines; we extract tweet results into a stable array
+  // that our `normalizeTwitterInput()` can digest.
+  function extractTwitterdataTweets(payload: any): any[] {
+    const out: any[] = [];
+
+    const addTweet = (tweet: any) => {
+      const restId = String(tweet?.rest_id ?? tweet?.id_str ?? tweet?.legacy?.id_str ?? "").trim();
+      const legacy = tweet?.legacy ?? {};
+      const userLegacy = tweet?.core?.user_results?.result?.legacy ?? tweet?.core?.user_results?.result ?? {};
+      const screenName = String(userLegacy?.screen_name ?? "").trim();
+
+      const text = String(legacy?.full_text ?? legacy?.text ?? "").trim();
+      const createdAt = String(legacy?.created_at ?? "").trim();
+
+      const author = screenName ? `@${screenName}` : undefined;
+      const url = screenName && restId ? `https://x.com/${screenName}/status/${restId}` : undefined;
+
+      if (!text) return;
+
+      out.push({
+        id: restId || undefined,
+        created_at: createdAt || undefined,
+        text,
+        author,
+        url,
+      });
+    };
+
+    const addEntry = (entry: any) => {
+      const content = entry?.content ?? entry;
+
+      // Common shape: { itemContent: { tweet_results: { result: Tweet } } }
+      const tweet1 = content?.itemContent?.tweet_results?.result;
+      if (tweet1) addTweet(tweet1);
+
+      // Module shape: { items: [ { item: { itemContent: ... } }, ... ] }
+      const items = content?.items;
+      if (Array.isArray(items)) {
+        for (const it of items) {
+          const tweet2 = it?.item?.itemContent?.tweet_results?.result ?? it?.itemContent?.tweet_results?.result;
+          if (tweet2) addTweet(tweet2);
+        }
+      }
+
+      // Conversation/module shape: { items: [ { item: { itemContent: ... } } ] } nested under content
+      const modItems = content?.content?.items;
+      if (Array.isArray(modItems)) {
+        for (const it of modItems) {
+          const tweet3 = it?.item?.itemContent?.tweet_results?.result ?? it?.itemContent?.tweet_results?.result;
+          if (tweet3) addTweet(tweet3);
+        }
+      }
+    };
+
+    const addInstructions = (instructions: any) => {
+      if (!Array.isArray(instructions)) return;
+      for (const inst of instructions) {
+        const entries = inst?.entries;
+        if (!Array.isArray(entries)) continue;
+        for (const e of entries) addEntry(e);
+      }
+    };
+
+    // List timeline
+    addInstructions(payload?.data?.list?.tweets_timeline?.timeline?.instructions);
+
+    // Community timeline
+    addInstructions(payload?.data?.communityResults?.result?.ranked_community_timeline?.timeline?.instructions);
+
+    return out;
   }
 
   async function fetchTwitterList() {
@@ -214,17 +305,9 @@ export default function Step2MarketEventsPage() {
       const j = (await r.json()) as any;
       if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
 
-      // Convert upstream payload into an array so our normalizer can ingest it.
+      // Convert twitterdata's nested timeline payload into a stable JSON array.
       const payload = j?.payload;
-      const items: any[] = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.data) ? payload.data : [];
-      const normalized = items.map((it) => {
-        const id = String(it?.restId ?? it?.id ?? it?.tweet_id ?? "");
-        const createdAt = String(it?.created_at ?? it?.createdAt ?? it?.time ?? it?.ts ?? "");
-        const text = String(it?.text ?? it?.full_text ?? it?.content ?? it?.message ?? "");
-        const author = String(it?.author ?? it?.user ?? it?.screen_name ?? it?.screenName ?? it?.username ?? "");
-        const url = String(it?.url ?? "");
-        return { id: id || undefined, created_at: createdAt || undefined, text, author: author || undefined, url: url || undefined };
-      });
+      const normalized = extractTwitterdataTweets(payload);
 
       setTwitterText((prev) => {
         const prevArr = safeParseJsonArray(prev);
@@ -232,7 +315,7 @@ export default function Step2MarketEventsPage() {
         return pretty(merged);
       });
 
-      setFetchState(`twitter list fetched: ${normalized.length} (merged)`);
+      setFetchState(`twitter list fetched: ${normalized.length} (extracted + merged)`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter list fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -264,17 +347,7 @@ export default function Step2MarketEventsPage() {
       const nextCursor = extractCursor(payload);
       if (nextCursor) setTwitterCommunityCursor(nextCursor);
 
-      const items: any[] =
-        Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.tweets) ? payload.tweets : [];
-
-      const normalized = items.map((it) => {
-        const id = String(it?.restId ?? it?.id ?? it?.tweet_id ?? "");
-        const createdAt = String(it?.created_at ?? it?.createdAt ?? it?.time ?? it?.ts ?? "");
-        const text = String(it?.text ?? it?.full_text ?? it?.content ?? it?.message ?? "");
-        const author = String(it?.author ?? it?.user ?? it?.screen_name ?? it?.screenName ?? it?.username ?? "");
-        const url = String(it?.url ?? "");
-        return { id: id || undefined, created_at: createdAt || undefined, text, author: author || undefined, url: url || undefined };
-      });
+      const normalized = extractTwitterdataTweets(payload);
 
       setTwitterText((prev) => {
         const prevArr = safeParseJsonArray(prev);
