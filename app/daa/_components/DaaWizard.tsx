@@ -94,7 +94,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>DAA Wizard（v0）</h1>
           <p style={{ margin: "6px 0 0", color: "#444" }}>
-            你的 Step 现在在同一页面内串联执行；支持 Next/Back；URL 仍可用 <code>/daa/step/*</code> 深链，便于分享与定位。
+            你的 7 个 Step 现在在同一页面内串联执行；支持 Next/Back；URL 仍可用 <code>/daa/step/*</code> 深链，便于分享与定位。
           </p>
         </div>
 

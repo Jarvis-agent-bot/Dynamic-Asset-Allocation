@@ -8,6 +8,7 @@ export const LS_MONEY_PLAN = "daa.wizard.moneyPlan";
 export const LS_REBALANCE_REQUEST = "daa.wizard.rebalanceRequest";
 export const LS_REBALANCE_RESPONSE = "daa.wizard.rebalanceResponse";
 export const LS_MARKET_EVENTS = "daa.wizard.marketEvents";
+export const LS_TAG_SCHEMA = "daa.wizard.tagSchema";
 
 export const WIZARD_DATA_EVENT = "daa:wizard:data";
 
