@@ -18,7 +18,7 @@ export function DeepLinkScaffold({ stepId, children }: { stepId: number; childre
       <div style={{ marginTop: 12 }}>{children}</div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 13, marginTop: 12 }}>
-        <Link href="/daa/" style={{ color: "#111" }}>
+        <Link href="/daa/dashboard" style={{ color: "#111" }}>
           ← 控制台
         </Link>
         <span style={{ color: "#999" }}>|</span>
