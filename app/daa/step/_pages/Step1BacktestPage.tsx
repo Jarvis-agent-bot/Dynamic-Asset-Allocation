@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { backtestSingleAsset, rankBacktestResults, type RankedBacktestResult } from "../../../../src/core/backtest";
+import { recommendEnsembleWeightsFromRankedResults } from "../../../../src/core/recommendEnsembleWeights";
 import { fetchValidatedPriceSeriesEnforcingRange, createDeterministicMockPriceSeriesProvider } from "../../../../src/core/providers";
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
 
@@ -91,9 +92,14 @@ export default function Step1BacktestPage() {
     try {
       const results = strategies.map((s) => backtestSingleAsset(s, series));
       const ranked = rankBacktestResults(results);
+      const recommendedWeightsConfig = recommendEnsembleWeightsFromRankedResults(ranked);
+
       setResult({
         input: { symbol, start, end, strategies: strategies.map((s) => ({ id: s.id, name: s.name })) },
         ranked,
+        output: {
+          weightsConfig: recommendedWeightsConfig,
+        },
       });
     } catch (e) {
       setRunError(e instanceof Error ? e.message : String(e));
@@ -179,7 +185,7 @@ export default function Step1BacktestPage() {
                 <li key={r.strategyId} style={{ margin: "8px 0" }}>
                   <div style={{ fontWeight: 600 }}>{r.strategyName}</div>
                   <div style={{ fontSize: 12, color: "#555" }}>
-                    score={r.score.toFixed(4)} | totalReturn={(r.metrics.totalReturn * 100).toFixed(2)}% | mdd={(r.metrics.maxDrawdown * 100).toFixed(2)}% | sharpe={r.metrics.sharpe.toFixed(2)}
+                    score={r.score.toFixed(4)} | totalReturn={(r.metrics.totalReturn * 100).toFixed(2)}% | mdd={(r.metrics.maxDrawdown * 100).toFixed(2)}% | sharpe={r.metrics.sharpe.toFixed(2)} | winRate={(r.metrics.winRate * 100).toFixed(1)}%
                   </div>
                 </li>
               ))}

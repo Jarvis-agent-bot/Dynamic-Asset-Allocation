@@ -13,6 +13,8 @@ export * from "./metrics";
 export * from "./backtest";
 export * from "./strategies";
 
+export * from "./recommendEnsembleWeights";
+
 export * from "./seriesContracts";
 export * from "./providers";
 export * from "./marketEvents";
