@@ -9,6 +9,7 @@ import Step7TagsPage from "../step/_pages/Step7TagsPage";
 
 import DaaDashboardAiExplain from "./_components/DaaDashboardAiExplain";
 import DaaDashboardExport from "./_components/DaaDashboardExport";
+import DaaDashboardRunChecklist from "./_components/DaaDashboardRunChecklist";
 
 function scrollToId(id: string) {
   const el = document.getElementById(id);
@@ -21,15 +22,15 @@ export default function DaaDashboardPage() {
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22 }}>DAA Dashboard（v0）</h1>
+          <h1 style={{ margin: 0, fontSize: 22 }}>DAA Dashboard（v1）</h1>
           <p style={{ margin: "6px 0 0", color: "#444" }}>
-            把 <b>Step2 → Step4/5 → Step6 → Step7</b> 串成一条“可执行路径”。在同一页完成输入/生成/解释/导出。
+            把 <b>Step2 → Step4/5 → Step6 → Step7</b> 串成一条“可执行路径”。这里是默认入口：补缺口 → 运行 → 导出。
           </p>
         </div>
 
         <div style={{ fontSize: 12, color: "#666" }}>
-          <Link href="/daa/" style={{ color: "#111" }}>
-            ← Back to Wizard
+          <Link href="/daa/wizard" style={{ color: "#111" }}>
+            ← Wizard
           </Link>
         </div>
       </div>
@@ -57,6 +58,8 @@ export default function DaaDashboardPage() {
           </button>
         </div>
       </div>
+
+      <DaaDashboardRunChecklist onJump={scrollToId} />
 
       <div id="export" style={{ marginTop: 14, scrollMarginTop: 12 }}>
         <DaaDashboardExport />

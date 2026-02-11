@@ -57,7 +57,7 @@ function Nav({ stepId }: { stepId: number }) {
 
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 13, marginTop: 12 }}>
-      <Link href="/daa/" style={{ color: "#111" }}>
+      <Link href="/daa/dashboard" style={{ color: "#111" }}>
         ← 控制台
       </Link>
       <span style={{ color: "#999" }}>|</span>
@@ -110,7 +110,7 @@ export default function StepPage({ params }: StepPageProps) {
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <Link href="/daa/" style={{ color: "#111" }}>
+          <Link href="/daa/dashboard" style={{ color: "#111" }}>
             ← 返回控制台
           </Link>
         </div>
