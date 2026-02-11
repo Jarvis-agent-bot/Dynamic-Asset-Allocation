@@ -19,7 +19,7 @@ export const DAA_STEPS: DaaStep[] = [
     id: 1,
     title: "回测算法组合",
     desc: "定义回测输入、策略集合与关键指标输出。",
-    status: "wip",
+    status: "done",
   },
   {
     id: 2,
@@ -47,15 +47,9 @@ export const DAA_STEPS: DaaStep[] = [
   },
   {
     id: 6,
-    title: "人因模型（暂不做）",
-    desc: "占位：把主观风险偏好等因素结构化。",
-    status: "later",
-  },
-  {
-    id: 7,
-    title: "Tag 体系（占位）",
-    desc: "占位：标签是配置与解释的关键。",
-    status: "later",
+    title: "人因模型（v0）",
+    desc: "v0：把主观风险偏好等因素结构化，并输出可解释的权重。",
+    status: "done",
   },
 ];
 
