@@ -99,6 +99,15 @@ export default function Step2MarketEventsPage() {
   const [twitterCommunityCursor, setTwitterCommunityCursor] = useState("");
   const [twitterCommunityLimit, setTwitterCommunityLimit] = useState(50);
 
+  const [twitterUserScreenName, setTwitterUserScreenName] = useState("limichange2");
+  const [twitterUserRestId, setTwitterUserRestId] = useState("");
+  const [twitterUserCursor, setTwitterUserCursor] = useState("");
+  const [twitterUserLimit, setTwitterUserLimit] = useState(50);
+
+  const [twitterSearchQuery, setTwitterSearchQuery] = useState("ai");
+  const [twitterSearchCursor, setTwitterSearchCursor] = useState("");
+  const [twitterSearchLimit, setTwitterSearchLimit] = useState(50);
+
   const [yahooSymbol, setYahooSymbol] = useState("AAPL");
   const [xueqiuSymbol, setXueqiuSymbol] = useState("SH603533");
   const [fetchState, setFetchState] = useState<string>("");
@@ -192,6 +201,34 @@ export default function Step2MarketEventsPage() {
     return out;
   }
 
+  function collectTwitterdataInstructionArrays(payload: any): any[][] {
+    const out: any[][] = [];
+    const seen = new Set<any>();
+
+    const walk = (node: any, depth: number) => {
+      if (!node || depth > 10) return;
+      if (Array.isArray(node)) return;
+      if (typeof node !== "object") return;
+
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        if (k === "instructions" && Array.isArray(v)) {
+          if (!seen.has(v)) {
+            seen.add(v);
+            out.push(v);
+          }
+          continue;
+        }
+
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          walk(v, depth + 1);
+        }
+      }
+    };
+
+    walk(payload, 0);
+    return out;
+  }
+
   function extractCursor(payload: any): string {
     const c =
       payload?.nextCursor ??
@@ -200,26 +237,53 @@ export default function Step2MarketEventsPage() {
       payload?.next?.cursor ??
       payload?.data?.next_cursor ??
       payload?.data?.cursor;
-    if (typeof c === "string") return c;
+    if (typeof c === "string" && c.trim()) return c.trim();
 
     // twitterdata often encodes cursors as special timeline entries.
-    const insts: any[] = [
-      ...(payload?.data?.communityResults?.result?.ranked_community_timeline?.timeline?.instructions ?? []),
-      ...(payload?.data?.list?.tweets_timeline?.timeline?.instructions ?? []),
-    ];
-
-    for (const inst of insts) {
-      const entries = inst?.entries;
-      if (!Array.isArray(entries)) continue;
-      for (const e of entries) {
-        const content = e?.content ?? {};
-        const cursorType = content?.cursorType;
-        const value = content?.value;
-        if (cursorType === "Bottom" && typeof value === "string" && value.trim()) return value.trim();
+    for (const instArr of collectTwitterdataInstructionArrays(payload)) {
+      for (const inst of instArr) {
+        const entries = inst?.entries;
+        if (!Array.isArray(entries)) continue;
+        for (const e of entries) {
+          const content = e?.content ?? {};
+          const cursorType = content?.cursorType;
+          const value = content?.value;
+          if (cursorType === "Bottom" && typeof value === "string" && value.trim()) return value.trim();
+        }
       }
     }
 
     return "";
+  }
+
+  function extractTwitterdataRestId(payload: any): string {
+    const direct =
+      payload?.data?.user?.result?.rest_id ??
+      payload?.data?.userResults?.result?.rest_id ??
+      payload?.data?.user?.rest_id ??
+      payload?.rest_id;
+
+    if (typeof direct === "string" && /^\d+$/.test(direct.trim())) return direct.trim();
+
+    let found = "";
+
+    const walk = (node: any, depth: number) => {
+      if (found) return;
+      if (!node || depth > 10) return;
+      if (Array.isArray(node)) return;
+      if (typeof node !== "object") return;
+
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+        if (k === "rest_id" && typeof v === "string" && /^\d+$/.test(v.trim())) {
+          found = v.trim();
+          return;
+        }
+        if (v && typeof v === "object" && !Array.isArray(v)) walk(v, depth + 1);
+      }
+    };
+
+    walk(payload, 0);
+    return found;
   }
 
   // twitterdata returns GraphQL-ish nested timelines; we extract tweet results into a stable array
@@ -285,11 +349,9 @@ export default function Step2MarketEventsPage() {
       }
     };
 
-    // List timeline
-    addInstructions(payload?.data?.list?.tweets_timeline?.timeline?.instructions);
-
-    // Community timeline
-    addInstructions(payload?.data?.communityResults?.result?.ranked_community_timeline?.timeline?.instructions);
+    for (const instArr of collectTwitterdataInstructionArrays(payload)) {
+      addInstructions(instArr);
+    }
 
     return out;
   }
@@ -359,6 +421,112 @@ export default function Step2MarketEventsPage() {
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter community fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchTwitterUserByScreenName() {
+    const screenName = twitterUserScreenName.trim().replace(/^@/, "");
+    if (!screenName) {
+      setFetchState("twitter user resolve failed: missing screenName");
+      return;
+    }
+
+    setFetchState("resolving twitter user restId...");
+    try {
+      const r = await fetch(`/api/daa/market/twitter/user-by-screen-name?screenName=${encodeURIComponent(screenName)}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      const restId = extractTwitterdataRestId(j?.payload);
+      if (restId) setTwitterUserRestId(restId);
+
+      setFetchState(restId ? `twitter user resolved: restId=${restId}` : "twitter user resolved (restId not found)");
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`twitter user resolve failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchTwitterUserTweets(opts?: { reset?: boolean; includeReplies?: boolean }) {
+    const reset = Boolean(opts?.reset);
+    const includeReplies = Boolean(opts?.includeReplies);
+
+    const restId = twitterUserRestId.trim();
+    if (!restId) {
+      setFetchState("twitter user tweets fetch failed: missing restId (resolve by screenName first)");
+      return;
+    }
+
+    const cursor = reset ? "" : twitterUserCursor.trim();
+    setFetchState(reset ? "fetching twitter user tweets (first page)..." : "fetching twitter user tweets (next page)...");
+
+    try {
+      const qs = new URLSearchParams();
+      qs.set("restId", restId);
+      if (includeReplies) qs.set("includeReplies", "1");
+      if (cursor) qs.set("cursor", cursor);
+      if (Number.isFinite(twitterUserLimit) && twitterUserLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterUserLimit))));
+
+      const r = await fetch(`/api/daa/market/twitter/user-tweets?${qs.toString()}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      const payload = j?.payload;
+      const nextCursor = extractCursor(payload);
+      if (nextCursor) setTwitterUserCursor(nextCursor);
+
+      const normalized = extractTwitterdataTweets(payload);
+      setTwitterText((prev) => {
+        const prevArr = safeParseJsonArray(prev);
+        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
+        return pretty(merged);
+      });
+
+      setFetchState(
+        `twitter user ${includeReplies ? "tweets+replies" : "tweets"} fetched: ${normalized.length}${nextCursor ? " (cursor updated)" : ""}`,
+      );
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`twitter user tweets fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchTwitterSearch(opts?: { reset?: boolean }) {
+    const reset = Boolean(opts?.reset);
+    const rawQuery = twitterSearchQuery.trim();
+    if (!rawQuery) {
+      setFetchState("twitter search failed: missing query");
+      return;
+    }
+
+    const cursor = reset ? "" : twitterSearchCursor.trim();
+    setFetchState(reset ? "searching twitter (first page)..." : "searching twitter (next page)...");
+
+    try {
+      const qs = new URLSearchParams();
+      qs.set("rawQuery", rawQuery);
+      if (cursor) qs.set("cursor", cursor);
+      if (Number.isFinite(twitterSearchLimit) && twitterSearchLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterSearchLimit))));
+
+      const r = await fetch(`/api/daa/market/twitter/search?${qs.toString()}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      const payload = j?.payload;
+      const nextCursor = extractCursor(payload);
+      if (nextCursor) setTwitterSearchCursor(nextCursor);
+
+      const normalized = extractTwitterdataTweets(payload);
+      setTwitterText((prev) => {
+        const prevArr = safeParseJsonArray(prev);
+        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
+        return pretty(merged);
+      });
+
+      setFetchState(`twitter search fetched: ${normalized.length}${nextCursor ? " (cursor updated)" : ""}`);
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`twitter search failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -530,6 +698,89 @@ export default function Step2MarketEventsPage() {
               min={1}
               max={200}
             />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterUserScreenName} onChange={(e) => setTwitterUserScreenName(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Twitter screenName (e.g. limichange2)" />
+            <input value={twitterUserRestId} onChange={(e) => setTwitterUserRestId(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="User restId (digits)" />
+            <button onClick={fetchTwitterUserByScreenName} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Resolve RestId
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 240px", gap: 8, alignItems: "center" }}>
+            <input value={twitterUserRestId} onChange={(e) => setTwitterUserRestId(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="User restId" />
+            <input
+              type="number"
+              value={twitterUserLimit}
+              onChange={(e) => setTwitterUserLimit(Math.max(1, Math.min(200, Number(e.target.value) || 50)))}
+              style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }}
+              placeholder="limit"
+              min={1}
+              max={200}
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => fetchTwitterUserTweets({ reset: true, includeReplies: false })} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+                User Tweets
+              </button>
+              <button onClick={() => fetchTwitterUserTweets({ reset: true, includeReplies: true })} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+                Tweets+Replies
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterUserCursor} onChange={(e) => setTwitterUserCursor(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="User cursor (auto-filled)" />
+            <button
+              onClick={() => setTwitterUserCursor("")}
+              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}
+              title="Reset cursor"
+            >
+              Reset
+            </button>
+            <button
+              onClick={() => fetchTwitterUserTweets({ reset: false, includeReplies: false })}
+              disabled={!twitterUserCursor.trim()}
+              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", opacity: twitterUserCursor.trim() ? 1 : 0.5 }}
+              title={twitterUserCursor.trim() ? "" : "No cursor yet (fetch first page)"}
+            >
+              Next page
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterSearchQuery} onChange={(e) => setTwitterSearchQuery(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Search query (rawQuery)" />
+            <input
+              type="number"
+              value={twitterSearchLimit}
+              onChange={(e) => setTwitterSearchLimit(Math.max(1, Math.min(200, Number(e.target.value) || 50)))}
+              style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }}
+              placeholder="limit"
+              min={1}
+              max={200}
+            />
+            <button onClick={() => fetchTwitterSearch({ reset: true })} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Search
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterSearchCursor} onChange={(e) => setTwitterSearchCursor(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Search cursor (auto-filled)" />
+            <button
+              onClick={() => setTwitterSearchCursor("")}
+              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}
+              title="Reset cursor"
+            >
+              Reset
+            </button>
+            <button
+              onClick={() => fetchTwitterSearch({ reset: false })}
+              disabled={!twitterSearchCursor.trim()}
+              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", opacity: twitterSearchCursor.trim() ? 1 : 0.5 }}
+              title={twitterSearchCursor.trim() ? "" : "No cursor yet (search first page)"}
+            >
+              Next page
+            </button>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
