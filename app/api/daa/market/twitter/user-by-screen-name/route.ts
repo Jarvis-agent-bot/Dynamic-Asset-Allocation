@@ -34,17 +34,18 @@ export async function GET(req: Request) {
       cache: "no-store",
     });
 
-    const text = await r.text();
     if (!r.ok) {
+      // Avoid returning upstream bodies: they may contain the token (query param) in error text.
       return json(
         {
           error: "twitterdata upstream error",
           status: r.status,
-          body: text.slice(0, 2000),
         },
         { status: 502 },
       );
     }
+
+    const text = await r.text();
 
     let payload: unknown;
     try {
