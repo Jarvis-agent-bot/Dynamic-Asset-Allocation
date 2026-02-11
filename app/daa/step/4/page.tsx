@@ -1,5 +1,5 @@
-import Step4BaselineRebalancePage from "../_pages/Step4BaselineRebalancePage";
+import Step4BaselineRecommendationPage from "../_pages/Step4BaselineRecommendationPage";
 
 export default function Step4Page() {
-  return <Step4BaselineRebalancePage />;
+  return <Step4BaselineRecommendationPage />;
 }
