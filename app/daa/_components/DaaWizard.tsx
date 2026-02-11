@@ -14,6 +14,7 @@ import Step2MarketEventsPage from "../step/_pages/Step2MarketEventsPage";
 import Step3MoneyMgmtPage from "../step/_pages/Step3MoneyManagementPage";
 import Step4BaselineRecommendationPage from "../step/_pages/Step4BaselineRecommendationPage";
 import Step5SignalDecisionPage from "../step/_pages/Step5SignalDecisionSummaryPage";
+import Step6HumanFactorPage from "../step/_pages/Step6HumanFactorPage";
 
 // (moved) LS_ACTIVE_STEP lives in app/daa/wizardStorage.ts
 
@@ -74,6 +75,10 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
 
   const step = getStep(String(activeStepId));
 
+  const idx = DAA_STEPS.findIndex((s) => s.id === activeStepId);
+  const prevStepId = idx > 0 ? DAA_STEPS[idx - 1]?.id : null;
+  const nextStepId = idx >= 0 && idx < DAA_STEPS.length - 1 ? DAA_STEPS[idx + 1]?.id : null;
+
   function go(stepId: number) {
     const next = clampStepId(stepId);
     setActiveStepId(next);
@@ -88,7 +93,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>DAA Wizard（v0）</h1>
           <p style={{ margin: "6px 0 0", color: "#444" }}>
-            你的 5 个 Step 现在在同一页面内串联执行；URL 仍可用 <code>/daa/step/*</code> 深链，便于分享与定位。
+            你的 6 个 Step 现在在同一页面内串联执行；支持 Next/Back；URL 仍可用 <code>/daa/step/*</code> 深链，便于分享与定位。
           </p>
         </div>
 
@@ -140,6 +145,49 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
         {activeStepId === 3 ? <Step3MoneyMgmtPage /> : null}
         {activeStepId === 4 ? <Step4BaselineRecommendationPage /> : null}
         {activeStepId === 5 ? <Step5SignalDecisionPage /> : null}
+        {activeStepId === 6 ? <Step6HumanFactorPage /> : null}
+      </div>
+
+      <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => (prevStepId ? go(prevStepId) : null)}
+          disabled={!prevStepId}
+          style={{
+            cursor: prevStepId ? "pointer" : "not-allowed",
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid #e5e5e5",
+            background: prevStepId ? "#fff" : "#fafafa",
+            color: "#111",
+            fontSize: 13,
+            opacity: prevStepId ? 1 : 0.6,
+          }}
+        >
+          ← Back
+        </button>
+
+        <div style={{ fontSize: 12, color: "#666" }}>
+          Step {activeStepId} / {DAA_STEPS.length}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => (nextStepId ? go(nextStepId) : null)}
+          disabled={!nextStepId}
+          style={{
+            cursor: nextStepId ? "pointer" : "not-allowed",
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: nextStepId ? "1px solid #111" : "1px solid #e5e5e5",
+            background: nextStepId ? "#111" : "#fafafa",
+            color: nextStepId ? "#fff" : "#111",
+            fontSize: 13,
+            opacity: nextStepId ? 1 : 0.6,
+          }}
+        >
+          Next →
+        </button>
       </div>
 
       <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>
