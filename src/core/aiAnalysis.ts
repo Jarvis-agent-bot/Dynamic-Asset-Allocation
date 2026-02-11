@@ -2,6 +2,8 @@ import type { MarketEvent } from "./marketEvents";
 
 import { isPlainObject } from "../daa/engineContracts";
 
+import { buildMarketCitations, type MarketEventCitation } from "./marketCitations";
+
 export type AiAnalysisAlternative = {
   name: string;
   constraintPatch: {
@@ -16,6 +18,8 @@ export type AiAnalysis = {
   summary: string;
   baselineNotes: string[];
   marketNotes: string[];
+  // Traceable links back to Step2 events (id + ts + title [+ summary/url]).
+  marketCitations: MarketEventCitation[];
   alternatives: AiAnalysisAlternative[];
   disclaimers: string[];
 };
@@ -114,13 +118,6 @@ function normalizeMarketEvents(events: unknown): MarketEvent[] {
     .filter((e) => e.id && e.ts && e.title);
 }
 
-function eventMentionsSymbol(e: MarketEvent, symbol: string): boolean {
-  const s = symbol.toLowerCase();
-  if (e.symbols?.some((x) => String(x).toLowerCase() === s)) return true;
-  const hay = `${e.title} ${e.summary ?? ""}`.toLowerCase();
-  return hay.includes(s);
-}
-
 export function analyzeDaaRecommendation(input: {
   baselineRequest: unknown;
   baselineResponse: unknown;
@@ -146,18 +143,23 @@ export function analyzeDaaRecommendation(input: {
 
   const symbols = Array.from(new Set([...orders.map((o) => o.symbol), ...weights.map((w) => w.id)].filter(Boolean)));
 
+  const marketCitations = buildMarketCitations({
+    events,
+    symbols: symbols.slice(0, 6),
+    perSymbolLimit: 2,
+  });
+
   const marketNotes: string[] = [];
   if (!events.length) {
     marketNotes.push("No MarketEvent input found. (Step2 market events are optional but improve explainability.)");
+  } else if (!marketCitations.length) {
+    marketNotes.push(`Market events loaded (${events.length}), but none matched the current symbols (${symbols.join(", ") || "<none>"}).`);
   } else {
-    for (const sym of symbols.slice(0, 6)) {
-      const hits = events.filter((e) => eventMentionsSymbol(e, sym)).slice(0, 2);
-      for (const h of hits) {
-        marketNotes.push(`${sym}: ${h.title}`);
-      }
-    }
-    if (!marketNotes.length) {
-      marketNotes.push(`Market events loaded (${events.length}), but none matched the current symbols (${symbols.join(", ") || "<none>"}).`);
+    for (const c of marketCitations) {
+      // Keep it human-readable, but still traceable by eventId.
+      const summary = c.summary ? ` — ${c.summary}` : "";
+      const url = c.url ? ` (${c.url})` : "";
+      marketNotes.push(`${c.symbol}: [${c.eventId}] ${c.title}${summary}${url}`);
     }
   }
 
@@ -201,6 +203,7 @@ export function analyzeDaaRecommendation(input: {
     summary: summaryPieces.join(" "),
     baselineNotes,
     marketNotes,
+    marketCitations,
     alternatives,
     disclaimers: [
       "This is an analysis/explainability helper, not investment advice.",

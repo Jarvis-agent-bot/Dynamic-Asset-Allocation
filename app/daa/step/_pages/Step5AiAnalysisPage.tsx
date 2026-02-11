@@ -127,6 +127,15 @@ export default function Step5AiAnalysisPage() {
               </div>
 
               <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Market citations (traceable back to Step2 events)</div>
+                {analysis.marketCitations.length ? (
+                  <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(analysis.marketCitations)}</pre>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#666" }}>No citations (missing market events or no symbol matches).</div>
+                )}
+              </div>
+
+              <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
                 <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Alternative scenarios (copy into simulator request)</div>
                 {analysis.alternatives.length ? (
                   <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(analysis.alternatives)}</pre>
