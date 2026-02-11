@@ -94,6 +94,11 @@ export default function Step2MarketEventsPage() {
   const [copyState, setCopyState] = useState<string>("");
 
   const [twitterListId, setTwitterListId] = useState("1898757620019908725");
+  const [twitterListLimit, setTwitterListLimit] = useState(50);
+  const [twitterCommunityId, setTwitterCommunityId] = useState("");
+  const [twitterCommunityCursor, setTwitterCommunityCursor] = useState("");
+  const [twitterCommunityLimit, setTwitterCommunityLimit] = useState(50);
+
   const [yahooSymbol, setYahooSymbol] = useState("AAPL");
   const [xueqiuSymbol, setXueqiuSymbol] = useState("SH603533");
   const [fetchState, setFetchState] = useState<string>("");
@@ -158,10 +163,54 @@ export default function Step2MarketEventsPage() {
     setIngestIssues(issues);
   }
 
+  function safeParseJsonArray(text: string): any[] {
+    try {
+      const v = JSON.parse(text);
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function mergeLooseTweetItems(prev: any[], added: any[]): any[] {
+    const out: any[] = [];
+    const seen = new Set<string>();
+
+    const push = (it: any) => {
+      const id = String(it?.id ?? "").trim();
+      const createdAt = String(it?.created_at ?? it?.createdAt ?? "").trim();
+      const text = String(it?.text ?? it?.full_text ?? it?.content ?? "").trim();
+      const key = id || (createdAt && text ? `${createdAt}::${text}` : text);
+      if (!key) return;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(it);
+    };
+
+    prev.forEach(push);
+    added.forEach(push);
+    return out;
+  }
+
+  function extractCursor(payload: any): string {
+    const c =
+      payload?.nextCursor ??
+      payload?.next_cursor ??
+      payload?.cursor ??
+      payload?.next?.cursor ??
+      payload?.data?.next_cursor ??
+      payload?.data?.cursor;
+    return typeof c === "string" ? c : "";
+  }
+
   async function fetchTwitterList() {
     setFetchState("fetching twitter list...");
     try {
-      const r = await fetch(`/api/daa/market/twitter/list?listId=${encodeURIComponent(twitterListId)}`, { cache: "no-store" });
+      const qs = new URLSearchParams();
+      qs.set("listId", twitterListId);
+      if (Number.isFinite(twitterListLimit) && twitterListLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterListLimit))));
+
+      const r = await fetch(`/api/daa/market/twitter/list?${qs.toString()}`, { cache: "no-store" });
       const j = (await r.json()) as any;
       if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
 
@@ -177,11 +226,66 @@ export default function Step2MarketEventsPage() {
         return { id: id || undefined, created_at: createdAt || undefined, text, author: author || undefined, url: url || undefined };
       });
 
-      setTwitterText(pretty(normalized));
-      setFetchState(`twitter list fetched: ${normalized.length}`);
+      setTwitterText((prev) => {
+        const prevArr = safeParseJsonArray(prev);
+        const merged = mergeLooseTweetItems(prevArr, normalized);
+        return pretty(merged);
+      });
+
+      setFetchState(`twitter list fetched: ${normalized.length} (merged)`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter list fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchTwitterCommunity(opts?: { reset?: boolean }) {
+    const reset = Boolean(opts?.reset);
+    const communityId = twitterCommunityId.trim();
+    if (!communityId) {
+      setFetchState("twitter community fetch failed: missing communityId");
+      return;
+    }
+
+    const cursor = reset ? "" : twitterCommunityCursor.trim();
+    setFetchState(reset ? "fetching twitter community (first page)..." : "fetching twitter community (next page)...");
+
+    try {
+      const qs = new URLSearchParams();
+      qs.set("communityId", communityId);
+      if (cursor) qs.set("cursor", cursor);
+      if (Number.isFinite(twitterCommunityLimit) && twitterCommunityLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterCommunityLimit))));
+
+      const r = await fetch(`/api/daa/market/twitter/community?${qs.toString()}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      const payload = j?.payload;
+      const nextCursor = extractCursor(payload);
+      if (nextCursor) setTwitterCommunityCursor(nextCursor);
+
+      const items: any[] =
+        Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.tweets) ? payload.tweets : [];
+
+      const normalized = items.map((it) => {
+        const id = String(it?.restId ?? it?.id ?? it?.tweet_id ?? "");
+        const createdAt = String(it?.created_at ?? it?.createdAt ?? it?.time ?? it?.ts ?? "");
+        const text = String(it?.text ?? it?.full_text ?? it?.content ?? it?.message ?? "");
+        const author = String(it?.author ?? it?.user ?? it?.screen_name ?? it?.screenName ?? it?.username ?? "");
+        const url = String(it?.url ?? "");
+        return { id: id || undefined, created_at: createdAt || undefined, text, author: author || undefined, url: url || undefined };
+      });
+
+      setTwitterText((prev) => {
+        const prevArr = safeParseJsonArray(prev);
+        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
+        return pretty(merged);
+      });
+
+      setFetchState(`twitter community fetched: ${normalized.length}${nextCursor ? " (cursor updated)" : ""}`);
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`twitter community fetch failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -255,6 +359,15 @@ export default function Step2MarketEventsPage() {
     window.setTimeout(() => setCopyState(""), 1200);
   }
 
+  function copyTwitterJson() {
+    const arr = safeParseJsonArray(twitterText);
+    const text = arr.length ? pretty(arr) : twitterText;
+
+    navigator.clipboard.writeText(text);
+    setCopyState(arr.length ? `copied twitter json (${arr.length} items)` : "copied twitter text");
+    window.setTimeout(() => setCopyState(""), 1200);
+  }
+
   return (
     <main>
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 2 — 市场信息</h1>
@@ -302,11 +415,48 @@ export default function Step2MarketEventsPage() {
             {fetchState ? <span style={{ fontSize: 12, color: "#666" }}>{fetchState}</span> : null}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 8, alignItems: "center" }}>
             <input value={twitterListId} onChange={(e) => setTwitterListId(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Twitter listId" />
+            <input
+              type="number"
+              value={twitterListLimit}
+              onChange={(e) => setTwitterListLimit(Math.max(1, Math.min(200, Number(e.target.value) || 50)))}
+              style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }}
+              placeholder="limit"
+              min={1}
+              max={200}
+            />
             <button onClick={fetchTwitterList} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
               Fetch List
             </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterCommunityId} onChange={(e) => setTwitterCommunityId(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Twitter communityId" />
+            <button onClick={() => fetchTwitterCommunity({ reset: true })} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Fetch Community
+            </button>
+            <button
+              onClick={() => fetchTwitterCommunity({ reset: false })}
+              disabled={!twitterCommunityCursor.trim()}
+              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff", opacity: twitterCommunityCursor.trim() ? 1 : 0.5 }}
+              title={twitterCommunityCursor.trim() ? "" : "No cursor yet (fetch first page)"}
+            >
+              Next page
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterCommunityCursor} onChange={(e) => setTwitterCommunityCursor(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Community cursor (auto-filled)" />
+            <input
+              type="number"
+              value={twitterCommunityLimit}
+              onChange={(e) => setTwitterCommunityLimit(Math.max(1, Math.min(200, Number(e.target.value) || 50)))}
+              style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }}
+              placeholder="limit"
+              min={1}
+              max={200}
+            />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
@@ -326,7 +476,16 @@ export default function Step2MarketEventsPage() {
 
         <div style={{ padding: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-            <label style={{ fontSize: 12, color: "#666" }}>Twitter（主观）— 支持 JSON array 或纯文本（每行一条）</label>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ fontSize: 12, color: "#666" }}>Twitter（主观）— 支持 JSON array 或纯文本（每行一条）</label>
+              <button
+                onClick={copyTwitterJson}
+                style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
+                title="Copy the current Twitter textarea content (prefer JSON array)"
+              >
+                Copy Twitter JSON
+              </button>
+            </div>
             <textarea
               value={twitterText}
               onChange={(e) => setTwitterText(e.target.value)}
