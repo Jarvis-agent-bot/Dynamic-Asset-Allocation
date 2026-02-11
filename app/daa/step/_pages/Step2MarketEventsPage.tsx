@@ -93,6 +93,11 @@ export default function Step2MarketEventsPage() {
   const [ingestIssues, setIngestIssues] = useState<string[]>([]);
   const [copyState, setCopyState] = useState<string>("");
 
+  const [twitterListId, setTwitterListId] = useState("1898757620019908725");
+  const [yahooSymbol, setYahooSymbol] = useState("AAPL");
+  const [xueqiuSymbol, setXueqiuSymbol] = useState("SH603533");
+  const [fetchState, setFetchState] = useState<string>("");
+
   useEffect(() => {
     const stored = readJsonFromLs<MarketEvent[]>(LS_MARKET_EVENTS);
     if (stored && Array.isArray(stored) && stored.length) {
@@ -153,6 +158,92 @@ export default function Step2MarketEventsPage() {
     setIngestIssues(issues);
   }
 
+  async function fetchTwitterList() {
+    setFetchState("fetching twitter list...");
+    try {
+      const r = await fetch(`/api/daa/market/twitter/list?listId=${encodeURIComponent(twitterListId)}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      // Convert upstream payload into an array so our normalizer can ingest it.
+      const payload = j?.payload;
+      const items: any[] = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.data) ? payload.data : [];
+      const normalized = items.map((it) => {
+        const id = String(it?.restId ?? it?.id ?? it?.tweet_id ?? "");
+        const createdAt = String(it?.created_at ?? it?.createdAt ?? it?.time ?? it?.ts ?? "");
+        const text = String(it?.text ?? it?.full_text ?? it?.content ?? it?.message ?? "");
+        const author = String(it?.author ?? it?.user ?? it?.screen_name ?? it?.screenName ?? it?.username ?? "");
+        const url = String(it?.url ?? "");
+        return { id: id || undefined, created_at: createdAt || undefined, text, author: author || undefined, url: url || undefined };
+      });
+
+      setTwitterText(pretty(normalized));
+      setFetchState(`twitter list fetched: ${normalized.length}`);
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`twitter list fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchYahooRss() {
+    setFetchState("fetching yahoo rss...");
+    try {
+      const r = await fetch(`/api/daa/market/yahoo/rss?symbol=${encodeURIComponent(yahooSymbol)}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      // Normalize into a yfinance-like array.
+      const arr = (j?.items ?? []).map((it: any, idx: number) => {
+        return {
+          uuid: `yahoo-rss-${j?.symbol ?? yahooSymbol}-${idx}`,
+          title: it?.title,
+          link: it?.link,
+          providerPublishTime: it?.pubDate,
+          relatedTickers: [String(j?.symbol ?? yahooSymbol).toUpperCase()],
+          summary: it?.summary,
+        };
+      });
+
+      setYfinanceText(pretty(arr));
+      setFetchState(`yahoo rss fetched: ${arr.length}`);
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`yahoo rss fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchXueqiuQuote() {
+    setFetchState("fetching xueqiu quote...");
+    try {
+      const r = await fetch(`/api/daa/market/xueqiu/quotec?symbol=${encodeURIComponent(xueqiuSymbol)}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      // Wrap it into a news-like shape so it can be ingested into MarketEvent[]
+      const quote = j?.payload?.data?.[0] ?? j?.payload?.data?.quote ?? j?.payload?.data ?? j?.payload;
+      const now = new Date().toISOString();
+      const wrapped = {
+        items: [
+          {
+            id: `xq-quote-${xueqiuSymbol}-${Date.now()}`,
+            created_at: now,
+            title: `雪球行情 ${xueqiuSymbol}`,
+            summary: JSON.stringify(quote)?.slice(0, 800) ?? "",
+            symbols: [xueqiuSymbol],
+            url: `https://xueqiu.com/S/${xueqiuSymbol}`,
+            quote,
+          },
+        ],
+      };
+
+      setXueqiuText(pretty(wrapped));
+      setFetchState("xueqiu quote fetched: 1");
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`xueqiu quote fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   function copyAllJson() {
     const payload = {
       generatedAt: new Date().toISOString(),
@@ -172,9 +263,9 @@ export default function Step2MarketEventsPage() {
       </p>
 
       <section style={{ border: "1px solid #eee", borderRadius: 10, overflow: "hidden", marginTop: 12 }}>
-        <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <div>Ingest（粘贴 → 标准化 → 合并到事件列表）</div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>Ingest / Fetch（自动拉取 → 标准化 → 合并到事件列表）</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={ingest} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}>
               Ingest
             </button>
@@ -199,6 +290,36 @@ export default function Step2MarketEventsPage() {
               style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
             >
               Clear
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10, borderBottom: "1px solid #eee" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ fontSize: 12, color: "#666" }}>
+              自动拉取（token 仅在服务端 env）：<code>TWITTERDATA_TOKEN</code> / <code>XUEQIU_TOKEN</code>
+            </div>
+            {fetchState ? <span style={{ fontSize: 12, color: "#666" }}>{fetchState}</span> : null}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterListId} onChange={(e) => setTwitterListId(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Twitter listId" />
+            <button onClick={fetchTwitterList} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Fetch List
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={yahooSymbol} onChange={(e) => setYahooSymbol(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Yahoo symbol (AAPL)" />
+            <button onClick={fetchYahooRss} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Fetch Yahoo RSS
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={xueqiuSymbol} onChange={(e) => setXueqiuSymbol(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Xueqiu symbol (SH603533)" />
+            <button onClick={fetchXueqiuQuote} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Fetch Xueqiu Quote
             </button>
           </div>
         </div>
