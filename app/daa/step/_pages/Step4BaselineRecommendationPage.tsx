@@ -50,7 +50,7 @@ export default function Step4BaselineRecommendationPage() {
       </p>
 
       <div style={{ marginTop: 12 }}>
-        <RebalanceSimulatePanel title="Generate v0 baseline recommendation" defaultRequest={defaultRequest} />
+        <RebalanceSimulatePanel title="Generate v0 baseline recommendation" defaultRequest={defaultRequest} includeMarketContext />
       </div>
     </main>
   );

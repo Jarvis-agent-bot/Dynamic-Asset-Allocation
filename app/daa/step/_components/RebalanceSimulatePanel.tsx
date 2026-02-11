@@ -2,11 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, saveJsonToLs } from "../../wizardStorage";
+import type { MarketEvent } from "@/src/core/marketEvents";
+
+import { buildMarketCitations, type MarketEventCitation } from "@/src/core/marketCitations";
+
+import { LS_MARKET_EVENTS, LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, readJsonFromLs, saveJsonToLs } from "../../wizardStorage";
 
 type Props = {
   title: string;
   defaultRequest: unknown;
+  // When enabled, merge Step2 market events into the UI output as traceable citations.
+  includeMarketContext?: boolean;
   // Optional hook for Step5 AI analysis: capture the latest run's request/response.
   onResult?: (r: {
     request: unknown;
@@ -49,7 +55,23 @@ function normalizeOrders(x: unknown): SuggestedOrder[] {
     .filter((o) => o.symbol && o.side && Number.isFinite(o.notional));
 }
 
-export function RebalanceSimulatePanel({ title, defaultRequest, onResult }: Props) {
+function normalizeCitations(x: unknown): MarketEventCitation[] {
+  if (!Array.isArray(x)) return [];
+  return x
+    .filter(Boolean)
+    .map((c: any) => ({
+      symbol: String(c?.symbol ?? ""),
+      eventId: String(c?.eventId ?? c?.event_id ?? ""),
+      source: c?.source === "twitter" || c?.source === "news" ? c.source : "news",
+      ts: String(c?.ts ?? ""),
+      title: String(c?.title ?? ""),
+      summary: c?.summary === undefined ? undefined : String(c?.summary),
+      url: c?.url === undefined ? undefined : String(c?.url),
+    }))
+    .filter((c) => c.symbol && c.eventId && c.ts && c.title);
+}
+
+export function RebalanceSimulatePanel({ title, defaultRequest, includeMarketContext, onResult }: Props) {
   const [requestText, setRequestText] = useState(() => pretty(defaultRequest));
   const [loading, setLoading] = useState(false);
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
@@ -81,6 +103,12 @@ export function RebalanceSimulatePanel({ title, defaultRequest, onResult }: Prop
     const r = response as any;
     if (!Array.isArray(r.warnings)) return [];
     return r.warnings.map(String);
+  }, [response]);
+
+  const marketCitations = useMemo(() => {
+    if (!response || typeof response !== "object") return [];
+    const r = response as any;
+    return normalizeCitations(r.marketCitations ?? r.market_citations);
   }, [response]);
 
   const targetWeights = useMemo(() => {
@@ -152,7 +180,38 @@ export function RebalanceSimulatePanel({ title, defaultRequest, onResult }: Prop
       setHttpStatus(res.status);
       const text = await res.text();
       const maybeJson = safeJsonParse(text);
-      const nextResp = maybeJson.ok ? maybeJson.value : { raw: text };
+      const baseResp = maybeJson.ok ? maybeJson.value : { raw: text };
+
+      let nextResp: unknown = baseResp;
+
+      if (includeMarketContext) {
+        const stored = readJsonFromLs<MarketEvent[]>(LS_MARKET_EVENTS);
+        const events = Array.isArray(stored) ? stored : [];
+
+        // Symbols for citations come from signal symbols + weights + orders.
+        const signalSyms = Array.isArray((parsed.value as any)?.signals)
+          ? (parsed.value as any).signals.map((s: any) => String(s?.symbol ?? "")).filter(Boolean)
+          : [];
+
+        const weightSyms = Array.isArray((parsed.value as any)?.money_plan?.allocations)
+          ? (parsed.value as any).money_plan.allocations.map((a: any) => String(a?.id ?? "")).filter(Boolean)
+          : [];
+
+        const orderSyms = (maybeJson.ok && baseResp && typeof baseResp === "object" && !Array.isArray(baseResp))
+          ? normalizeOrders((baseResp as any).orders).map((o) => o.symbol)
+          : [];
+
+        const symbols = Array.from(new Set([...signalSyms, ...weightSyms, ...orderSyms].filter(Boolean))).slice(0, 10);
+
+        const citations = buildMarketCitations({ events, symbols, perSymbolLimit: 2 });
+
+        if (nextResp && typeof nextResp === "object" && !Array.isArray(nextResp)) {
+          nextResp = { ...(nextResp as any), marketCitations: citations };
+        } else {
+          nextResp = { result: nextResp, marketCitations: citations };
+        }
+      }
+
       setResponse(nextResp);
       saveJsonToLs(LS_REBALANCE_RESPONSE, nextResp);
 
@@ -320,9 +379,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest, onResult }: Prop
             <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Explanation (why)</div>
               {warnings.length ? (
-                <div style={{ fontSize: 12, color: "#b00020", marginBottom: 6 }}>
-                  Warnings: {warnings.join("; ")}
-                </div>
+                <div style={{ fontSize: 12, color: "#b00020", marginBottom: 6 }}>Warnings: {warnings.join("; ")}</div>
               ) : null}
               {explain ? (
                 <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
@@ -331,13 +388,22 @@ export function RebalanceSimulatePanel({ title, defaultRequest, onResult }: Prop
               ) : (
                 <div style={{ fontSize: 12, color: "#666" }}>No explain.</div>
               )}
+
+              {includeMarketContext ? (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Market citations (from Step2 events)</div>
+                  {marketCitations.length ? (
+                    <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(marketCitations)}</pre>
+                  ) : (
+                    <div style={{ fontSize: 12, color: "#666" }}>No citations (missing market events or no symbol matches).</div>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Raw JSON</div>
-              <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {pretty(response || {})}
-              </pre>
+              <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(response || {})}</pre>
             </div>
           </div>
         </div>

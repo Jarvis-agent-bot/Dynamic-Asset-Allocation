@@ -41,5 +41,10 @@ describe("analyzeDaaRecommendation", () => {
     });
 
     expect(a.marketNotes.join("\n")).toContain("SPY:");
+    expect(a.marketNotes.join("\n")).toContain("[e1]");
+    expect(a.marketNotes.join("\n")).toContain("Market is optimistic");
+
+    expect(a.marketCitations).toHaveLength(1);
+    expect(a.marketCitations[0]?.eventId).toBe("e1");
   });
 });
