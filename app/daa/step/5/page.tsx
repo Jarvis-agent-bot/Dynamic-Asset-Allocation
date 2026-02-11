@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 
+import Step5AiAnalysisPage from "../_pages/Step5AiAnalysisPage";
 import Step5RecommendationReviewPage from "../_pages/Step5RecommendationReviewPage";
 import Step5SignalDecisionSummaryPage from "../_pages/Step5SignalDecisionSummaryPage";
 
-type TabKey = "recommendation" | "signal_summary";
+type TabKey = "recommendation" | "ai_analysis" | "signal_summary";
 
 export default function Step5Page() {
   const [tab, setTab] = useState<TabKey>("recommendation");
@@ -29,6 +30,20 @@ export default function Step5Page() {
         </button>
         <button
           type="button"
+          onClick={() => setTab("ai_analysis")}
+          style={{
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #e5e5e5",
+            background: tab === "ai_analysis" ? "#111" : "#fafafa",
+            color: tab === "ai_analysis" ? "#fff" : "#111",
+            fontSize: 12,
+          }}
+        >
+          AI Analysis
+        </button>
+        <button
+          type="button"
           onClick={() => setTab("signal_summary")}
           style={{
             padding: "8px 10px",
@@ -43,7 +58,9 @@ export default function Step5Page() {
         </button>
       </div>
 
-      <div style={{ marginTop: 12 }}>{tab === "recommendation" ? <Step5RecommendationReviewPage /> : <Step5SignalDecisionSummaryPage />}</div>
+      <div style={{ marginTop: 12 }}>
+        {tab === "recommendation" ? <Step5RecommendationReviewPage /> : tab === "ai_analysis" ? <Step5AiAnalysisPage /> : <Step5SignalDecisionSummaryPage />}
+      </div>
     </main>
   );
 }

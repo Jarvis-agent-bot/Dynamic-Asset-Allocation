@@ -7,6 +7,14 @@ import { LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, saveJsonToLs } from "../..
 type Props = {
   title: string;
   defaultRequest: unknown;
+  // Optional hook for Step5 AI analysis: capture the latest run's request/response.
+  onResult?: (r: {
+    request: unknown;
+    httpStatus: number | null;
+    responseText: string;
+    responseJson: unknown;
+    ok: boolean;
+  }) => void;
 };
 
 function pretty(x: unknown) {
@@ -41,7 +49,7 @@ function normalizeOrders(x: unknown): SuggestedOrder[] {
     .filter((o) => o.symbol && o.side && Number.isFinite(o.notional));
 }
 
-export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
+export function RebalanceSimulatePanel({ title, defaultRequest, onResult }: Props) {
   const [requestText, setRequestText] = useState(() => pretty(defaultRequest));
   const [loading, setLoading] = useState(false);
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
@@ -147,6 +155,14 @@ export function RebalanceSimulatePanel({ title, defaultRequest }: Props) {
       const nextResp = maybeJson.ok ? maybeJson.value : { raw: text };
       setResponse(nextResp);
       saveJsonToLs(LS_REBALANCE_RESPONSE, nextResp);
+
+      onResult?.({
+        request: parsed.value,
+        httpStatus: res.status,
+        responseText: text,
+        responseJson: nextResp,
+        ok: res.ok,
+      });
 
       if (!res.ok) {
         setError(`HTTP ${res.status}`);
