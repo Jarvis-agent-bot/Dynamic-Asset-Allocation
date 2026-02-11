@@ -3,82 +3,16 @@
 import { useEffect, useState } from "react";
 
 import { pretty, readJsonFromLs, saveJsonToLs } from "../../wizardStorage";
-
-const LS_TAG_TAXONOMY = "daa.step7.tagTaxonomy";
-
-type TagValue = {
-  key: string;
-  label?: string;
-  desc?: string;
-};
-
-type TagDefinition = {
-  key: string;
-  label: string;
-  desc?: string;
-  multi?: boolean;
-  appliesTo?: Array<"human" | "marketEvent" | "signals" | "moneyPlan" | "recommendation">;
-  values: TagValue[];
-};
-
-type TagTaxonomy = {
-  version: 1;
-  tags: TagDefinition[];
-};
-
-const DEFAULT_TAXONOMY: TagTaxonomy = {
-  version: 1,
-  tags: [
-    {
-      key: "riskPreference",
-      label: "Risk Preference",
-      desc: "Subjective preference; used in Step6/strategy selection.",
-      appliesTo: ["human"],
-      values: [
-        { key: "high", label: "High" },
-        { key: "mid", label: "Mid" },
-        { key: "low", label: "Low" },
-      ],
-    },
-    {
-      key: "riskScore",
-      label: "Risk Score",
-      desc: "Performance-based score (v0 manual input).",
-      appliesTo: ["human"],
-      values: [
-        { key: "high", label: "High" },
-        { key: "mid", label: "Mid" },
-        { key: "low", label: "Low" },
-        { key: "sb", label: "SB", desc: "the \"傻逼\" bucket" },
-      ],
-    },
-    {
-      key: "eventTags",
-      label: "Event Tags",
-      desc: "Common tags for MarketEvent normalization (Step2).",
-      appliesTo: ["marketEvent"],
-      multi: true,
-      values: [
-        { key: "macro" },
-        { key: "rates" },
-        { key: "earnings" },
-        { key: "policy" },
-        { key: "liquidity" },
-        { key: "risk-on" },
-        { key: "risk-off" },
-      ],
-    },
-  ],
-};
+import { DEFAULT_TAG_TAXONOMY, isValidTagTaxonomy, LS_TAG_TAXONOMY, type TagTaxonomy } from "../../tagTaxonomy";
 
 export default function Step7TagsPage() {
-  const [rawJson, setRawJson] = useState<string>(pretty(DEFAULT_TAXONOMY));
+  const [rawJson, setRawJson] = useState<string>(pretty(DEFAULT_TAG_TAXONOMY));
   const [err, setErr] = useState<string>("");
   const [copyState, setCopyState] = useState<string>("");
 
   useEffect(() => {
     const stored = readJsonFromLs<TagTaxonomy>(LS_TAG_TAXONOMY);
-    if (stored?.version && Array.isArray(stored.tags)) {
+    if (isValidTagTaxonomy(stored)) {
       setRawJson(pretty(stored));
     }
   }, []);
@@ -92,6 +26,9 @@ export default function Step7TagsPage() {
       for (const t of parsed.tags) {
         if (!t?.key || !t?.label) throw new Error("each tag needs key + label");
         if (!Array.isArray(t.values)) throw new Error(`tag ${String(t?.key)}: values must be an array`);
+        for (const tv of t.values) {
+          if (!tv?.key) throw new Error(`tag ${String(t?.key)}: each value needs key`);
+        }
       }
       saveJsonToLs(LS_TAG_TAXONOMY, parsed);
     } catch (e) {
@@ -116,7 +53,7 @@ export default function Step7TagsPage() {
 
   function resetDefault() {
     setErr("");
-    setRawJson(pretty(DEFAULT_TAXONOMY));
+    setRawJson(pretty(DEFAULT_TAG_TAXONOMY));
   }
 
   return (
@@ -168,7 +105,7 @@ export default function Step7TagsPage() {
       <section style={{ border: "1px solid #eee", borderRadius: 10, padding: 12, marginTop: 12 }}>
         <div style={{ fontWeight: 600 }}>Notes</div>
         <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
-          这一步先只做“配置与复制”。后续 milestone 再把它接入 Step2/Step6/Step4/Step5 的输出与过滤。
+          这一步负责配置 taxonomy；Step2/Step6 会读取该 taxonomy 来提供下拉/校验/复制输出（形成闭环）。
         </div>
       </section>
     </main>

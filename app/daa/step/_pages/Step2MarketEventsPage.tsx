@@ -10,7 +10,8 @@ import {
   normalizeYahooFinanceNewsInput,
 } from "../../../../src/market/normalize";
 
-import { LS_MARKET_EVENTS, pretty, readJsonFromLs, saveJsonToLs } from "../../wizardStorage";
+import { LS_MARKET_EVENTS, pretty, readJsonFromLs, saveJsonToLs, WIZARD_DATA_EVENT } from "../../wizardStorage";
+import { getAllowedValueKeySetForAppliesTo, loadTagTaxonomy } from "../../tagTaxonomy";
 
 function fmtTs(ts: string) {
   const d = new Date(ts);
@@ -112,6 +113,20 @@ export default function Step2MarketEventsPage() {
   const [xueqiuSymbol, setXueqiuSymbol] = useState("SH603533");
   const [fetchState, setFetchState] = useState<string>("");
 
+  const [taxonomyRefresh, setTaxonomyRefresh] = useState(0);
+  const [tagToAdd, setTagToAdd] = useState<string>("");
+  const [tagIssues, setTagIssues] = useState<string[]>([]);
+
+  useEffect(() => {
+    const onData = () => setTaxonomyRefresh((x) => x + 1);
+    window.addEventListener(WIZARD_DATA_EVENT, onData);
+    return () => window.removeEventListener(WIZARD_DATA_EVENT, onData);
+  }, []);
+
+  const tagTaxonomy = useMemo(() => loadTagTaxonomy(), [taxonomyRefresh]);
+  const allowedEventTagSet = useMemo(() => getAllowedValueKeySetForAppliesTo(tagTaxonomy, "marketEvent"), [tagTaxonomy]);
+  const allowedEventTags = useMemo(() => [...allowedEventTagSet].sort(), [allowedEventTagSet]);
+
   useEffect(() => {
     const stored = readJsonFromLs<MarketEvent[]>(LS_MARKET_EVENTS);
     if (stored && Array.isArray(stored) && stored.length) {
@@ -139,6 +154,17 @@ export default function Step2MarketEventsPage() {
       limit: 500,
     });
   }, [events, showTwitter, showNews, symbol, since, until]);
+
+  const selectedUnknownTags = useMemo(() => {
+    if (!selected || !allowedEventTagSet.size) return [];
+    const out: string[] = [];
+    for (const t of selected.tags || []) {
+      const k = String(t || "").trim();
+      if (!k) continue;
+      if (!allowedEventTagSet.has(k)) out.push(k);
+    }
+    return out;
+  }, [selected, allowedEventTagSet]);
 
   function ingest() {
     const issues: string[] = [];
@@ -170,6 +196,7 @@ export default function Step2MarketEventsPage() {
 
     setEvents((prev) => mergeMarketEvents(prev, added));
     setIngestIssues(issues);
+    setTagIssues([]);
   }
 
   function safeParseJsonArray(text: string): any[] {
@@ -589,7 +616,64 @@ export default function Step2MarketEventsPage() {
     }
   }
 
+  function updateEventById(id: string, updater: (e: MarketEvent) => MarketEvent) {
+    setEvents((prev) => prev.map((e) => (e.id === id ? updater(e) : e)));
+    setSelected((prev) => (prev && prev.id === id ? updater(prev) : prev));
+    setTagIssues([]);
+  }
+
+  function validateAllEventTags(list: MarketEvent[]): string[] {
+    if (!allowedEventTagSet.size) return [];
+
+    const issues: string[] = [];
+    for (const e of list) {
+      for (const t of e.tags || []) {
+        const k = String(t || "").trim();
+        if (!k) continue;
+        if (!allowedEventTagSet.has(k)) issues.push(`event ${e.id}: unknown tag '${k}' (not in Step7 taxonomy)`);
+      }
+    }
+
+    return issues;
+  }
+
+  function toggleSelectedTag(tag: string) {
+    if (!selected) return;
+    const k = String(tag || "").trim();
+    if (!k) return;
+
+    updateEventById(selected.id, (e) => {
+      const set = new Set<string>((e.tags || []).map((x) => String(x || "").trim()).filter(Boolean));
+      if (set.has(k)) set.delete(k);
+      else set.add(k);
+      return { ...e, tags: [...set] };
+    });
+  }
+
+  function addTagFromDropdown() {
+    if (!selected) return;
+    const k = String(tagToAdd || "").trim();
+    if (!k) return;
+
+    if (!allowedEventTagSet.size) {
+      setTagIssues(["no marketEvent tags found in Step7 taxonomy; configure Step7 first"]);
+      return;
+    }
+
+    if (!allowedEventTagSet.has(k)) {
+      setTagIssues([`tag '${k}' is not in Step7 taxonomy`]);
+      return;
+    }
+
+    toggleSelectedTag(k);
+    setTagToAdd("");
+  }
+
   function copyAllJson() {
+    const issues = validateAllEventTags(filtered);
+    setTagIssues(issues);
+    if (issues.length) return;
+
     const payload = {
       generatedAt: new Date().toISOString(),
       events: filtered,
@@ -597,6 +681,18 @@ export default function Step2MarketEventsPage() {
 
     navigator.clipboard.writeText(pretty(payload));
     setCopyState(`copied ${filtered.length} events`);
+    window.setTimeout(() => setCopyState(""), 1200);
+  }
+
+  function copySelectedJson() {
+    if (!selected) return;
+
+    const issues = validateAllEventTags([selected]);
+    setTagIssues(issues);
+    if (issues.length) return;
+
+    navigator.clipboard.writeText(pretty(selected));
+    setCopyState("copied selected event");
     window.setTimeout(() => setCopyState(""), 1200);
   }
 
@@ -913,6 +1009,15 @@ export default function Step2MarketEventsPage() {
           <button onClick={copyAllJson} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}>
             Copy events JSON
           </button>
+          {tagIssues.length ? (
+            <div
+              style={{ fontSize: 12, color: "#991b1b", maxWidth: 420, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              title={tagIssues.join("\n")}
+            >
+              {tagIssues[0]}
+              {tagIssues.length > 1 ? ` (+${tagIssues.length - 1} more)` : ""}
+            </div>
+          ) : null}
           {copyState ? <div style={{ fontSize: 12, color: "#16a34a" }}>{copyState}</div> : null}
         </div>
       </div>
@@ -999,7 +1104,7 @@ export default function Step2MarketEventsPage() {
                   </a>
                 ) : null}
                 <button
-                  onClick={() => navigator.clipboard.writeText(pretty(selected))}
+                  onClick={copySelectedJson}
                   style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
                 >
                   Copy JSON
@@ -1013,6 +1118,78 @@ export default function Step2MarketEventsPage() {
               </div>
             </div>
             <div style={{ padding: 10 }}>
+              <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 10, marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 12 }}>Tags (from Step7 taxonomy)</div>
+
+                <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <select
+                    value={tagToAdd}
+                    onChange={(e) => setTagToAdd(e.target.value)}
+                    style={{ padding: 8, border: "1px solid #eee", borderRadius: 8, background: "#fff", minWidth: 220, fontSize: 12 }}
+                    disabled={!allowedEventTags.length}
+                  >
+                    <option value="">{allowedEventTags.length ? "Add a tag..." : "No marketEvent tags (configure Step7)"}</option>
+                    {allowedEventTags.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={addTagFromDropdown}
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
+                    disabled={!tagToAdd}
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => updateEventById(selected.id, (e) => ({ ...e, tags: [] }))}
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
+                    disabled={!(selected.tags || []).length}
+                  >
+                    Clear tags
+                  </button>
+                </div>
+
+                {allowedEventTags.length ? (
+                  <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {allowedEventTags.map((t) => {
+                      const active = (selected.tags || []).includes(t);
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => toggleSelectedTag(t)}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            border: "1px solid #ddd",
+                            background: active ? "#111827" : "#fff",
+                            color: active ? "#fff" : "#111827",
+                            fontSize: 12,
+                          }}
+                        >
+                          {t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>去 Step7 配置 taxonomy 里的 marketEvent tags，这里会自动读取并用于校验。</div>
+                )}
+
+                {(selected.tags || []).length ? (
+                  <div style={{ marginTop: 10, fontSize: 12, color: "#444" }}>
+                    current: <code>{(selected.tags || []).join(", ")}</code>
+                  </div>
+                ) : null}
+
+                {selectedUnknownTags.length ? (
+                  <div style={{ marginTop: 10, fontSize: 12, color: "#991b1b" }}>
+                    unknown tags (not in Step7 taxonomy): <code>{selectedUnknownTags.join(", ")}</code>
+                  </div>
+                ) : null}
+              </div>
+
               <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(selected)}</pre>
             </div>
           </section>
