@@ -51,6 +51,12 @@ export const DAA_STEPS: DaaStep[] = [
     desc: "v0：把主观风险偏好等因素结构化，并输出可解释的权重。",
     status: "done",
   },
+  {
+    id: 7,
+    title: "Tag 体系（v0）",
+    desc: "v0：把 Tag 的 key/values/rules 固定为可复制 JSON，并让后续 Step 都能引用。",
+    status: "todo",
+  },
 ];
 
 export function getStep(id: unknown): DaaStep | null {
