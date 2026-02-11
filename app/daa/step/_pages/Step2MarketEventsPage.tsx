@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { filterMarketEvents, type MarketEvent, type MarketEventSource } from "../../../../src/core/marketEvents";
+import {
+  mergeMarketEvents,
+  normalizeTwitterInput,
+  normalizeXueqiuNewsInput,
+  normalizeYahooFinanceNewsInput,
+} from "../../../../src/market/normalize";
 
-function pretty(x: unknown) {
-  return JSON.stringify(x, null, 2);
-}
+import { LS_MARKET_EVENTS, pretty, readJsonFromLs, saveJsonToLs } from "../../wizardStorage";
 
 function fmtTs(ts: string) {
   const d = new Date(ts);
@@ -14,9 +18,44 @@ function fmtTs(ts: string) {
   return d.toLocaleString("zh-CN", { hour12: false });
 }
 
-const MOCK_EVENTS: MarketEvent[] = [
+const SAMPLE_TWITTER_JSON = pretty([
   {
-    id: "tw-1",
+    id: "1870000000000000000",
+    created_at: "2026-02-10T08:30:00.000Z",
+    text: "Macro: CPI print looks softer than expected. $SPY $QQQ\nAnalyst view: risk-on may persist.",
+    author: "@analyst_list",
+    url: "https://twitter.com/",
+    tags: ["macro", "rates"],
+  },
+]);
+
+const SAMPLE_YFINANCE_JSON = pretty([
+  {
+    uuid: "yf-1",
+    title: "Company earnings beat estimates",
+    link: "https://finance.yahoo.com/",
+    providerPublishTime: 1765414200,
+    relatedTickers: ["AAPL"],
+    summary: "Objective news example from yfinance export.",
+  },
+]);
+
+const SAMPLE_XUEQIU_JSON = pretty({
+  items: [
+    {
+      id: "xq-1",
+      created_at: 1765417800,
+      title: "雪球：市场快讯",
+      summary: "示例：可粘贴雪球 API/抓取导出的 JSON。",
+      symbols: ["SH600519"],
+      url: "https://xueqiu.com/",
+    },
+  ],
+});
+
+const DEFAULT_EVENTS: MarketEvent[] = [
+  {
+    id: "tw-sample",
     source: "twitter",
     ts: "2026-02-06T08:30:00.000Z",
     title: "Macro: CPI print looks softer than expected",
@@ -27,7 +66,7 @@ const MOCK_EVENTS: MarketEvent[] = [
     url: "https://twitter.com",
   },
   {
-    id: "news-1",
+    id: "news-sample",
     source: "news",
     ts: "2026-02-06T06:10:00.000Z",
     title: "Company earnings beat estimates",
@@ -39,12 +78,36 @@ const MOCK_EVENTS: MarketEvent[] = [
 ];
 
 export default function Step2MarketEventsPage() {
+  const [events, setEvents] = useState<MarketEvent[]>(DEFAULT_EVENTS);
+  const [selected, setSelected] = useState<MarketEvent | null>(null);
+
   const [showTwitter, setShowTwitter] = useState(true);
   const [showNews, setShowNews] = useState(true);
   const [symbol, setSymbol] = useState("");
   const [since, setSince] = useState(""); // YYYY-MM-DD
   const [until, setUntil] = useState(""); // YYYY-MM-DD
-  const [selected, setSelected] = useState<MarketEvent | null>(null);
+
+  const [twitterText, setTwitterText] = useState("");
+  const [yfinanceText, setYfinanceText] = useState("");
+  const [xueqiuText, setXueqiuText] = useState("");
+  const [ingestIssues, setIngestIssues] = useState<string[]>([]);
+  const [copyState, setCopyState] = useState<string>("");
+
+  const [twitterListId, setTwitterListId] = useState("1898757620019908725");
+  const [yahooSymbol, setYahooSymbol] = useState("AAPL");
+  const [xueqiuSymbol, setXueqiuSymbol] = useState("SH603533");
+  const [fetchState, setFetchState] = useState<string>("");
+
+  useEffect(() => {
+    const stored = readJsonFromLs<MarketEvent[]>(LS_MARKET_EVENTS);
+    if (stored && Array.isArray(stored) && stored.length) {
+      setEvents(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    saveJsonToLs(LS_MARKET_EVENTS, events);
+  }, [events]);
 
   const filtered = useMemo(() => {
     const sources: MarketEventSource[] = [];
@@ -54,23 +117,255 @@ export default function Step2MarketEventsPage() {
     const sinceTs = since ? `${since}T00:00:00.000Z` : undefined;
     const untilTs = until ? `${until}T23:59:59.999Z` : undefined;
 
-    return filterMarketEvents(MOCK_EVENTS, {
+    return filterMarketEvents(events, {
       sources,
       symbols: symbol.trim() ? [symbol.trim()] : undefined,
       sinceTs,
       untilTs,
-      limit: 200,
+      limit: 500,
     });
-  }, [showTwitter, showNews, symbol, since, until]);
+  }, [events, showTwitter, showNews, symbol, since, until]);
+
+  function ingest() {
+    const issues: string[] = [];
+    const added: MarketEvent[] = [];
+
+    if (twitterText.trim()) {
+      const r = normalizeTwitterInput(twitterText, {});
+      issues.push(...r.issues.map((x) => `twitter: ${x}`));
+      added.push(...r.events);
+    }
+
+    if (yfinanceText.trim()) {
+      const r = normalizeYahooFinanceNewsInput(yfinanceText);
+      issues.push(...r.issues.map((x) => `yfinance: ${x}`));
+      added.push(...r.events);
+    }
+
+    if (xueqiuText.trim()) {
+      const r = normalizeXueqiuNewsInput(xueqiuText);
+      issues.push(...r.issues.map((x) => `xueqiu: ${x}`));
+      added.push(...r.events);
+    }
+
+    if (!added.length) {
+      issues.push("no events produced (check your JSON/text)");
+      setIngestIssues(issues);
+      return;
+    }
+
+    setEvents((prev) => mergeMarketEvents(prev, added));
+    setIngestIssues(issues);
+  }
+
+  async function fetchTwitterList() {
+    setFetchState("fetching twitter list...");
+    try {
+      const r = await fetch(`/api/daa/market/twitter/list?listId=${encodeURIComponent(twitterListId)}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      // Convert upstream payload into an array so our normalizer can ingest it.
+      const payload = j?.payload;
+      const items: any[] = Array.isArray(payload) ? payload : Array.isArray(payload?.items) ? payload.items : Array.isArray(payload?.data) ? payload.data : [];
+      const normalized = items.map((it) => {
+        const id = String(it?.restId ?? it?.id ?? it?.tweet_id ?? "");
+        const createdAt = String(it?.created_at ?? it?.createdAt ?? it?.time ?? it?.ts ?? "");
+        const text = String(it?.text ?? it?.full_text ?? it?.content ?? it?.message ?? "");
+        const author = String(it?.author ?? it?.user ?? it?.screen_name ?? it?.screenName ?? it?.username ?? "");
+        const url = String(it?.url ?? "");
+        return { id: id || undefined, created_at: createdAt || undefined, text, author: author || undefined, url: url || undefined };
+      });
+
+      setTwitterText(pretty(normalized));
+      setFetchState(`twitter list fetched: ${normalized.length}`);
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`twitter list fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchYahooRss() {
+    setFetchState("fetching yahoo rss...");
+    try {
+      const r = await fetch(`/api/daa/market/yahoo/rss?symbol=${encodeURIComponent(yahooSymbol)}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      // Normalize into a yfinance-like array.
+      const arr = (j?.items ?? []).map((it: any, idx: number) => {
+        return {
+          uuid: `yahoo-rss-${j?.symbol ?? yahooSymbol}-${idx}`,
+          title: it?.title,
+          link: it?.link,
+          providerPublishTime: it?.pubDate,
+          relatedTickers: [String(j?.symbol ?? yahooSymbol).toUpperCase()],
+          summary: it?.summary,
+        };
+      });
+
+      setYfinanceText(pretty(arr));
+      setFetchState(`yahoo rss fetched: ${arr.length}`);
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`yahoo rss fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function fetchXueqiuQuote() {
+    setFetchState("fetching xueqiu quote...");
+    try {
+      const r = await fetch(`/api/daa/market/xueqiu/quotec?symbol=${encodeURIComponent(xueqiuSymbol)}`, { cache: "no-store" });
+      const j = (await r.json()) as any;
+      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+
+      // Wrap it into a news-like shape so it can be ingested into MarketEvent[]
+      const quote = j?.payload?.data?.[0] ?? j?.payload?.data?.quote ?? j?.payload?.data ?? j?.payload;
+      const now = new Date().toISOString();
+      const wrapped = {
+        items: [
+          {
+            id: `xq-quote-${xueqiuSymbol}-${Date.now()}`,
+            created_at: now,
+            title: `雪球行情 ${xueqiuSymbol}`,
+            summary: JSON.stringify(quote)?.slice(0, 800) ?? "",
+            symbols: [xueqiuSymbol],
+            url: `https://xueqiu.com/S/${xueqiuSymbol}`,
+            quote,
+          },
+        ],
+      };
+
+      setXueqiuText(pretty(wrapped));
+      setFetchState("xueqiu quote fetched: 1");
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`xueqiu quote fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  function copyAllJson() {
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      events: filtered,
+    };
+
+    navigator.clipboard.writeText(pretty(payload));
+    setCopyState(`copied ${filtered.length} events`);
+    window.setTimeout(() => setCopyState(""), 1200);
+  }
 
   return (
     <main>
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 2 — 市场信息</h1>
       <p style={{ color: "#444" }}>
-        v0：先用 mock events 把产品页面结构确定下来。Twitter=主观；yfinance/雪球=客观新闻。
+        v0：支持把 Twitter（主观）与 yfinance/雪球（客观新闻）标准化为统一 <code>MarketEvent</code> JSON，并在页面里过滤/查看/复制。
       </p>
 
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <section style={{ border: "1px solid #eee", borderRadius: 10, overflow: "hidden", marginTop: 12 }}>
+        <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>Ingest / Fetch（自动拉取 → 标准化 → 合并到事件列表）</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button onClick={ingest} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}>
+              Ingest
+            </button>
+            <button
+              onClick={() => {
+                setTwitterText(SAMPLE_TWITTER_JSON);
+                setYfinanceText(SAMPLE_YFINANCE_JSON);
+                setXueqiuText(SAMPLE_XUEQIU_JSON);
+                setIngestIssues([]);
+              }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
+            >
+              Load samples
+            </button>
+            <button
+              onClick={() => {
+                setTwitterText("");
+                setYfinanceText("");
+                setXueqiuText("");
+                setIngestIssues([]);
+              }}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10, borderBottom: "1px solid #eee" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ fontSize: 12, color: "#666" }}>
+              自动拉取（token 仅在服务端 env）：<code>TWITTERDATA_TOKEN</code> / <code>XUEQIU_TOKEN</code>
+            </div>
+            {fetchState ? <span style={{ fontSize: 12, color: "#666" }}>{fetchState}</span> : null}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={twitterListId} onChange={(e) => setTwitterListId(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Twitter listId" />
+            <button onClick={fetchTwitterList} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Fetch List
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={yahooSymbol} onChange={(e) => setYahooSymbol(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Yahoo symbol (AAPL)" />
+            <button onClick={fetchYahooRss} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Fetch Yahoo RSS
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+            <input value={xueqiuSymbol} onChange={(e) => setXueqiuSymbol(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Xueqiu symbol (SH603533)" />
+            <button onClick={fetchXueqiuQuote} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
+              Fetch Xueqiu Quote
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+            <label style={{ fontSize: 12, color: "#666" }}>Twitter（主观）— 支持 JSON array 或纯文本（每行一条）</label>
+            <textarea
+              value={twitterText}
+              onChange={(e) => setTwitterText(e.target.value)}
+              placeholder="Paste Twitter list export JSON or plaintext..."
+              style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+            <label style={{ fontSize: 12, color: "#666" }}>yfinance（客观）— 建议粘贴 Python 导出的 <code>list[dict]</code></label>
+            <textarea
+              value={yfinanceText}
+              onChange={(e) => setYfinanceText(e.target.value)}
+              placeholder="Paste yfinance news JSON..."
+              style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+            <label style={{ fontSize: 12, color: "#666" }}>雪球（客观）— 支持 <code>{"{items: [...] }"}</code> / <code>{"{list: [...] }"}</code> / array</label>
+            <textarea
+              value={xueqiuText}
+              onChange={(e) => setXueqiuText(e.target.value)}
+              placeholder="Paste xueqiu news JSON..."
+              style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
+            />
+          </div>
+
+          {ingestIssues.length ? (
+            <div style={{ padding: 10, borderRadius: 10, border: "1px solid #fee2e2", background: "#fff1f2", color: "#991b1b", fontSize: 12 }}>
+              {ingestIssues.map((x, i) => (
+                <div key={i}>{x}</div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={showTwitter} onChange={(e) => setShowTwitter(e.target.checked)} />
           <span>Twitter（主观）</span>
@@ -130,12 +425,29 @@ export default function Step2MarketEventsPage() {
           </button>
         ) : null}
 
-        <div style={{ marginLeft: "auto", fontSize: 12, color: "#666" }}>{filtered.length} events</div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ fontSize: 12, color: "#666" }}>{filtered.length} events</div>
+          <button onClick={copyAllJson} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}>
+            Copy events JSON
+          </button>
+          {copyState ? <div style={{ fontSize: 12, color: "#16a34a" }}>{copyState}</div> : null}
+        </div>
       </div>
 
       <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: selected ? "1fr 1fr" : "1fr", gap: 12 }}>
         <section style={{ border: "1px solid #eee", borderRadius: 8, overflow: "hidden" }}>
-          <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", fontWeight: 600 }}>Events</div>
+          <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div>Events</div>
+            <button
+              onClick={() => {
+                setEvents([]);
+                setSelected(null);
+              }}
+              style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
+            >
+              Reset
+            </button>
+          </div>
           <div style={{ padding: 10 }}>
             {filtered.map((e) => (
               <button
@@ -157,7 +469,16 @@ export default function Step2MarketEventsPage() {
                   <div style={{ fontSize: 12, color: "#666" }}>{e.source}</div>
                 </div>
                 <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>{e.summary || ""}</div>
-                <div style={{ fontSize: 12, color: "#777", marginTop: 6, display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#777",
+                    marginTop: 6,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
                   <div>
                     {(e.symbols || []).join(", ")}
                     {e.author ? <span style={{ marginLeft: 8, color: "#666" }}>{e.author}</span> : null}
@@ -174,7 +495,16 @@ export default function Step2MarketEventsPage() {
 
         {selected ? (
           <section style={{ border: "1px solid #eee", borderRadius: 8, overflow: "hidden" }}>
-            <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div
+              style={{
+                padding: 10,
+                borderBottom: "1px solid #eee",
+                background: "#fafafa",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
               <div>
                 <div style={{ fontWeight: 600 }}>Detail</div>
                 <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{selected.title}</div>
