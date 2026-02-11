@@ -151,10 +151,18 @@ export default function WizardPersistentSummary() {
 
         <button
           type="button"
-          onClick={() => navigator.clipboard.writeText(pretty(bundle))}
+          onClick={() =>
+            navigator.clipboard.writeText(
+              pretty({
+                schemaVersion: 1,
+                generatedAt: new Date().toISOString(),
+                ...bundle,
+              })
+            )
+          }
           style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
         >
-          Copy JSON
+          Copy full JSON
         </button>
       </div>
 
