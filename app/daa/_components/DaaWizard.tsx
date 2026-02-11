@@ -12,7 +12,7 @@ import { LS_ACTIVE_STEP } from "../wizardStorage";
 import Step1BacktestPage from "../step/_pages/Step1BacktestPage";
 import Step2MarketEventsPage from "../step/_pages/Step2MarketEventsPage";
 import Step3MoneyMgmtPage from "../step/_pages/Step3MoneyManagementPage";
-import Step4BaselineRebalancePage from "../step/_pages/Step4BaselineRebalancePage";
+import Step4BaselineRecommendationPage from "../step/_pages/Step4BaselineRecommendationPage";
 import Step5SignalDecisionPage from "../step/_pages/Step5SignalDecisionSummaryPage";
 
 // (moved) LS_ACTIVE_STEP lives in app/daa/wizardStorage.ts
@@ -138,7 +138,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
         {activeStepId === 1 ? <Step1BacktestPage /> : null}
         {activeStepId === 2 ? <Step2MarketEventsPage /> : null}
         {activeStepId === 3 ? <Step3MoneyMgmtPage /> : null}
-        {activeStepId === 4 ? <Step4BaselineRebalancePage /> : null}
+        {activeStepId === 4 ? <Step4BaselineRecommendationPage /> : null}
         {activeStepId === 5 ? <Step5SignalDecisionPage /> : null}
       </div>
 
