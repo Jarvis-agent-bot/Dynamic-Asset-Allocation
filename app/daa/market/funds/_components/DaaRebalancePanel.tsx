@@ -10,6 +10,7 @@ import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeig
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
+import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
 import { getDefaultExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
@@ -56,6 +57,9 @@ type Props = {
   funds?: FundLike[];
   holdings?: HoldingsLike;
 };
+
+const LS_WHATIF_FEE_BPS = 'daa.whatif.feeBps';
+const LS_WHATIF_SLIPPAGE_BPS = 'daa.whatif.slippageBps';
 
 function scrollToId(id: string) {
   const el = document.getElementById(id);
@@ -459,6 +463,94 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const effectiveOrders = engineOrders.length ? engineOrders : naiveOrders;
 
+  const [whatIfFeeBps, setWhatIfFeeBps] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    const raw = window.localStorage.getItem(LS_WHATIF_FEE_BPS);
+    const n = raw === null ? 0 : Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  });
+
+  const [whatIfSlippageBps, setWhatIfSlippageBps] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    const raw = window.localStorage.getItem(LS_WHATIF_SLIPPAGE_BPS);
+    const n = raw === null ? 0 : Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(LS_WHATIF_FEE_BPS, String(whatIfFeeBps));
+  }, [whatIfFeeBps]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(LS_WHATIF_SLIPPAGE_BPS, String(whatIfSlippageBps));
+  }, [whatIfSlippageBps]);
+
+  const whatIfValuesBySymbol = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const r of currentWeights) out[r.id] = r.value;
+    return out;
+  }, [currentWeights]);
+
+  const whatIfTargetWeightsBySymbol = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const t of targetWeights) out[t.id] = t.targetPct;
+    return out;
+  }, [targetWeights]);
+
+  const whatIfLabelsBySymbol = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const r of currentWeights) out[r.id] = r.label;
+    for (const t of targetWeights) out[t.id] = t.label;
+    return out;
+  }, [currentWeights, targetWeights]);
+
+  const whatIf = useMemo(() => {
+    if (!effectiveOrders.length) return null;
+
+    return simulateRebalanceWhatIfV0({
+      cashStart: toFiniteNumber(portfolioCash) ?? 0,
+      valuesBySymbol: whatIfValuesBySymbol,
+      targetWeightsBySymbol: whatIfTargetWeightsBySymbol,
+      orders: effectiveOrders
+        .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
+        .map((o) => ({ symbol: o.symbol, side: o.side as 'BUY' | 'SELL', notional: o.notional })),
+      feeBps: whatIfFeeBps,
+      slippageBps: whatIfSlippageBps,
+      labelsBySymbol: whatIfLabelsBySymbol,
+    });
+  }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBps, whatIfTargetWeightsBySymbol, whatIfValuesBySymbol]);
+
+  const whatIfRows = useMemo(() => {
+    if (!whatIf) return [] as Array<{
+      id: string;
+      label: string;
+      valueBefore: number;
+      valueAfter: number;
+      currentPct: number;
+      targetPct: number;
+      postPct: number;
+      driftPct: number;
+    }>;
+
+    const sumTarget = Object.values(whatIfTargetWeightsBySymbol).reduce((acc, x) => acc + (Number.isFinite(x) ? x : 0), 0);
+    const targetCashPct = Math.max(0, 1 - sumTarget);
+
+    const cashRow = {
+      id: 'CASH',
+      label: 'Cash',
+      valueBefore: whatIf.cashBefore,
+      valueAfter: whatIf.cashAfter,
+      currentPct: whatIf.totalBefore > 0 ? whatIf.cashBefore / whatIf.totalBefore : 0,
+      targetPct: targetCashPct,
+      postPct: whatIf.totalAfter > 0 ? whatIf.cashAfter / whatIf.totalAfter : 0,
+      driftPct: (whatIf.totalAfter > 0 ? whatIf.cashAfter / whatIf.totalAfter : 0) - targetCashPct,
+    };
+
+    return [cashRow, ...whatIf.rows];
+  }, [whatIf, whatIfTargetWeightsBySymbol]);
+
   async function doCopyOrders() {
     try {
       const payload = {
@@ -806,6 +898,87 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
                     Source: {engineOrders.length ? 'engine orders (last run)' : 'naive diff orders'}.
                   </div>
+
+                  {whatIf ? (
+                    <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12 }}>What-if preview (fees/slippage + expected drift)</div>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                        Costs model (v0): BUY acquires (notional - cost); SELL receives (notional - cost); cost = (feeBps + slippageBps).
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, marginTop: 8, alignItems: 'center' }}>
+                        <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+                          feeBps
+                          <input
+                            type="number"
+                            value={whatIfFeeBps}
+                            min={0}
+                            step={1}
+                            onChange={(e) => setWhatIfFeeBps(Number(e.target.value))}
+                            style={{ width: 90, padding: '4px 6px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'inherit' }}
+                          />
+                        </label>
+
+                        <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+                          slippageBps
+                          <input
+                            type="number"
+                            value={whatIfSlippageBps}
+                            min={0}
+                            step={1}
+                            onChange={(e) => setWhatIfSlippageBps(Number(e.target.value))}
+                            style={{ width: 90, padding: '4px 6px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'inherit' }}
+                          />
+                        </label>
+
+                        <div className="muted" style={{ fontSize: 12 }}>
+                          costPct={(whatIf.costPct * 100).toFixed(2)}%
+                        </div>
+                      </div>
+
+                      {whatIf.warnings.length ? (
+                        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)' }}>
+                          {whatIf.warnings.join('; ')}
+                        </div>
+                      ) : null}
+
+                      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                        totalBefore={whatIf.totalBefore.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; totalAfter={whatIf.totalAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; costTotal={whatIf.costTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; cashAfter={whatIf.cashAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}.
+                      </div>
+
+                      <div style={{ marginTop: 10, overflowX: 'auto' as const }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Asset</th>
+                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Current</th>
+                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Post</th>
+                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Target</th>
+                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Drift</th>
+                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Value(after)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {whatIfRows.map((r) => {
+                              const color = Math.abs(r.driftPct) >= 0.01 ? 'var(--danger)' : 'var(--text)';
+                              return (
+                                <tr key={r.id} style={{ opacity: r.id === 'CASH' ? 0.9 : 1 }}>
+                                  <td style={{ padding: '6px 0' }}>
+                                    {r.label} <span className="muted">({r.id})</span>
+                                  </td>
+                                  <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.currentPct * 100).toFixed(1)}%</td>
+                                  <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.postPct * 100).toFixed(1)}%</td>
+                                  <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPct * 100).toFixed(1)}%</td>
+                                  <td style={{ padding: '6px 0', textAlign: 'right', color }}>{(r.driftPct * 100).toFixed(1)}%</td>
+                                  <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.valueAfter.toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="muted" style={{ fontSize: 12 }}>
