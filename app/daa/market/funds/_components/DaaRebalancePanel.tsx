@@ -3,7 +3,10 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
+import { copyTextToClipboard } from '../../../copyToClipboard';
 import { useDaaRuntime } from '../../../useDaaRuntime';
+import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
+import { pretty } from '../../../wizardStorage';
 
 import DaaDashboardAiExplain from '../../../dashboard/_components/DaaDashboardAiExplain';
 import DaaDashboardExport from '../../../dashboard/_components/DaaDashboardExport';
@@ -23,7 +26,21 @@ function scrollToId(id: string) {
 
 export function DaaRebalancePanel() {
   const rt = useDaaRuntime();
+  const { exportBundle } = useDaaWorkflowExportBundleV1();
+
   const [open, setOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+
+  async function doCopyBundle() {
+    try {
+      await copyTextToClipboard(pretty(exportBundle));
+      setCopyStatus('ok');
+      window.setTimeout(() => setCopyStatus('idle'), 1200);
+    } catch {
+      setCopyStatus('error');
+      window.setTimeout(() => setCopyStatus('idle'), 2000);
+    }
+  }
 
   const headline = useMemo(() => {
     const readyBits = [rt.marketEventCount ? 'events' : null, rt.hasRecommendation ? 'recommendation' : null, rt.hasHumanProfile ? 'human' : null].filter(Boolean);
@@ -48,6 +65,9 @@ export function DaaRebalancePanel() {
           <Link href="/daa?step=1" className="muted" style={{ fontSize: 12 }}>
             Wizard
           </Link>
+          <button type="button" className="button" onClick={doCopyBundle} style={{ padding: '6px 10px' }}>
+            {copyStatus === 'ok' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy bundle JSON'}
+          </button>
           <button
             type="button"
             className="button secondary"
