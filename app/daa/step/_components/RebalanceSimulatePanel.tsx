@@ -17,6 +17,7 @@ import {
   saveJsonToLs,
 } from "../../wizardStorage";
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from "../../portfolioStateStore";
+import { OrdersReviewV0 } from "../../_components/OrdersReviewV0";
 
 type Props = {
   title: string;
@@ -99,6 +100,33 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
   }, [endpointOverrides]);
 
   const parsedReq = useMemo(() => safeJsonParse(requestText), [requestText]);
+
+  const reqCash = useMemo(() => {
+    if (!parsedReq.ok) return null;
+    const v: any = parsedReq.value as any;
+
+    // rebalance-simulate request shape: money_plan.account.cash
+    const cash = v?.money_plan?.account?.cash;
+    const cashN = typeof cash === "number" ? cash : Number(cash);
+    return Number.isFinite(cashN) ? cashN : null;
+  }, [parsedReq]);
+
+  const reqCcy = useMemo(() => {
+    if (!parsedReq.ok) return null;
+    const v: any = parsedReq.value as any;
+    const base = v?.money_plan?.account?.baseCcy;
+    return typeof base === "string" && base ? base : null;
+  }, [parsedReq]);
+
+  const reqMinTradeNotional = useMemo(() => {
+    if (!parsedReq.ok) return null;
+    const v: any = parsedReq.value as any;
+
+    // core request shape (if used): policy.minTradeNotional
+    const raw = v?.policy?.minTradeNotional ?? v?.policy?.min_trade_notional;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }, [parsedReq]);
 
   useEffect(() => {
     if (!parsedReq.ok) return;
@@ -422,31 +450,13 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
             <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
-              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Recommended actions (orders)</div>
-              {orders.length ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: "left", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Symbol</th>
-                      <th style={{ textAlign: "left", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Side</th>
-                      <th style={{ textAlign: "right", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Notional</th>
-                      <th style={{ textAlign: "left", borderBottom: "1px solid #eee", paddingBottom: 6 }}>Why</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orders.map((o, idx) => (
-                      <tr key={idx}>
-                        <td style={{ padding: "6px 0" }}>{o.symbol}</td>
-                        <td style={{ padding: "6px 0" }}>{o.side}</td>
-                        <td style={{ padding: "6px 0", textAlign: "right" }}>{o.notional.toFixed(2)}</td>
-                        <td style={{ padding: "6px 0", color: "#444" }}>{o.reason || ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div style={{ fontSize: 12, color: "#666" }}>No orders.</div>
-              )}
+              <OrdersReviewV0
+                title="Orders review (v0)"
+                orders={orders}
+                cashStart={reqCash}
+                minTradeNotional={reqMinTradeNotional}
+                ccy={reqCcy}
+              />
 
               <div style={{ marginTop: 8 }}>
                 <button
