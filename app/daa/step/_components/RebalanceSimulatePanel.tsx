@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { MarketEvent } from "@/src/core/marketEvents";
 
@@ -91,6 +91,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<unknown>(null);
   const [lastAttemptAt, setLastAttemptAt] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const [paperExecAt, setPaperExecAt] = useState<string | null>(null);
   const [paperExecError, setPaperExecError] = useState<string | null>(null);
@@ -207,10 +208,16 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
 
     setLoading(true);
     setError(null);
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     // Keep the previous response visible while retrying; only replace it once we have a new response.
 
     const parsed = safeJsonParse(requestText);
     if (!parsed.ok) {
+      abortRef.current = null;
       setLoading(false);
       setError(parsed.error);
       return;
@@ -257,6 +264,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
           method: "POST",
           headers: { "content-type": "application/json" },
           body: bodyText,
+          signal: controller.signal,
         });
         res = r;
         // Retry only when the route is missing (common VPS misroute); otherwise return the actual error.
@@ -332,8 +340,11 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
         setError(`HTTP ${res.status}`);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const isAbort = typeof e === "object" && e !== null && "name" in e && (e as any).name === "AbortError";
+      if (isAbort) setError("Canceled");
+      else setError(e instanceof Error ? e.message : String(e));
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
   }
@@ -392,6 +403,14 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
           >
             {loading ? "Running..." : error ? "Retry" : "Generate recommendation"}
           </button>
+          {loading ? (
+            <button
+              onClick={() => abortRef.current?.abort()}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
+            >
+              Cancel
+            </button>
+          ) : null}
         </div>
       </div>
 

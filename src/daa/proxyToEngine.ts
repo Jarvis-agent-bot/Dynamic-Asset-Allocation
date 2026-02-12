@@ -7,6 +7,8 @@ export type ProxyToEngineOptions = {
   contentType?: string;
   timeoutMs: number;
   fallbackContentType: string;
+  // Optional: forward request cancellation (e.g. client abort) to the upstream fetch.
+  abortSignal?: AbortSignal;
 };
 
 // Shared proxy logic for Next.js routes that forward requests to the Python engine behind nginx.
@@ -39,6 +41,14 @@ export async function proxyToEngine(opts: ProxyToEngineOptions): Promise<Respons
   const url = `${base}${opts.upstreamPath}`;
 
   const controller = new AbortController();
+  const onAbort = () => controller.abort();
+
+  // Forward client abort (when provided) and enforce an upper bound timeout.
+  if (opts.abortSignal) {
+    if (opts.abortSignal.aborted) controller.abort();
+    else opts.abortSignal.addEventListener("abort", onAbort, { once: true });
+  }
+
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs);
 
   let resp: Response;
@@ -65,6 +75,7 @@ export async function proxyToEngine(opts: ProxyToEngineOptions): Promise<Respons
     );
   } finally {
     clearTimeout(timeout);
+    opts.abortSignal?.removeEventListener("abort", onAbort);
   }
 
   const text = await resp.text();
@@ -97,6 +108,13 @@ export async function proxyToEngineJson<T>(opts: ProxyToEngineJsonOptions<T>): P
   const url = `${base}${opts.upstreamPath}`;
 
   const controller = new AbortController();
+  const onAbort = () => controller.abort();
+
+  if (opts.abortSignal) {
+    if (opts.abortSignal.aborted) controller.abort();
+    else opts.abortSignal.addEventListener("abort", onAbort, { once: true });
+  }
+
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs);
 
   let resp: Response;
@@ -123,6 +141,7 @@ export async function proxyToEngineJson<T>(opts: ProxyToEngineJsonOptions<T>): P
     );
   } finally {
     clearTimeout(timeout);
+    opts.abortSignal?.removeEventListener("abort", onAbort);
   }
 
   const text = await resp.text();
