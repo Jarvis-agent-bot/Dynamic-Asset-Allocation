@@ -7,6 +7,7 @@ import { copyTextToClipboard } from '../../../copyToClipboard';
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from '../../../portfolioStateStore';
 import { getSnapshotPrice, loadPriceSnapshotV1 } from '../../../priceSnapshotStore';
 import { loadTargetWeightsV1 } from '../../../targetWeightsStore';
+import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 
 import { appendPaperExecutionLog } from '@/src/daa/executionLogStore';
 import { useDaaRuntime } from '../../../useDaaRuntime';
@@ -35,6 +36,7 @@ import Step7TagsPage from '../../../step/_pages/Step7TagsPage';
 import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
 import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
 import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
+import DaaRebalancePolicyEditorV0 from './DaaRebalancePolicyEditorV0';
 
 type FundLike = {
   code: string;
@@ -453,10 +455,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         if (nav && nav > 0) pricesMap[sym] = nav;
       }
 
+      const basePolicy = loadRebalancePolicyV1();
       const policy = {
-        thresholdPct: 0.01,
-        minTradeNotional: 10,
-        cooldownSeconds: 10 * 60,
+        ...basePolicy,
         lastRebalanceAt: st.lastRebalance?.at,
         now: new Date().toISOString(),
       };
@@ -585,6 +586,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
           <div id="target-weights" style={{ scrollMarginTop: 12 }}>
             <DaaTargetWeightsEditorV0 />
+          </div>
+
+          <div id="policy" style={{ scrollMarginTop: 12 }}>
+            <DaaRebalancePolicyEditorV0 />
           </div>
 
           <div id="rebalance" style={{ scrollMarginTop: 12, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
