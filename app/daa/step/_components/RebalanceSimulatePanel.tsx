@@ -11,6 +11,8 @@ import { LS_MARKET_EVENTS, LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, readJson
 type Props = {
   title: string;
   defaultRequest: unknown;
+  // Defaults to rebalance-simulate endpoints; override for other API-backed panels.
+  endpoints?: string[];
   // When enabled, merge Step2 market events into the UI output as traceable citations.
   includeMarketContext?: boolean;
   // Optional hook for Step5 AI analysis: capture the latest run's request/response.
@@ -71,7 +73,7 @@ function normalizeCitations(x: unknown): MarketEventCitation[] {
     .filter((c) => c.symbol && c.eventId && c.ts && c.title);
 }
 
-export function RebalanceSimulatePanel({ title, defaultRequest, includeMarketContext, onResult }: Props) {
+export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpointOverrides, includeMarketContext, onResult }: Props) {
   const [requestText, setRequestText] = useState(() => pretty(defaultRequest));
   const [loading, setLoading] = useState(false);
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
@@ -161,7 +163,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest, includeMarketCon
     try {
       // On VPS, nginx may only proxy `/daa/*` to Next.js. Provide a fallback endpoint
       // under `/daa/api/...` so the UI works even when `/api/...` is routed elsewhere.
-      const endpoints = ["/api/daa/rebalance/simulate", "/daa/api/daa/rebalance/simulate"];
+      const endpoints = endpointOverrides?.length ? endpointOverrides : ["/api/daa/rebalance/simulate", "/daa/api/daa/rebalance/simulate"];
 
       let res: Response | null = null;
       for (const url of endpoints) {
@@ -193,9 +195,18 @@ export function RebalanceSimulatePanel({ title, defaultRequest, includeMarketCon
           ? (parsed.value as any).signals.map((s: any) => String(s?.symbol ?? "")).filter(Boolean)
           : [];
 
-        const weightSyms = Array.isArray((parsed.value as any)?.money_plan?.allocations)
+        const allocSyms = Array.isArray((parsed.value as any)?.money_plan?.allocations)
           ? (parsed.value as any).money_plan.allocations.map((a: any) => String(a?.id ?? "")).filter(Boolean)
           : [];
+
+        const coreWeightSyms = (() => {
+          const tw = (parsed.value as any)?.targetWeights ?? (parsed.value as any)?.target_weights;
+          if (Array.isArray(tw)) return tw.map((w: any) => String(w?.id ?? w?.symbol ?? "")).filter(Boolean);
+          if (tw && typeof tw === "object" && !Array.isArray(tw)) return Object.keys(tw).map(String).filter(Boolean);
+          return [];
+        })();
+
+        const weightSyms = [...allocSyms, ...coreWeightSyms];
 
         const orderSyms = (maybeJson.ok && baseResp && typeof baseResp === "object" && !Array.isArray(baseResp))
           ? normalizeOrders((baseResp as any).orders).map((o) => o.symbol)
