@@ -8,6 +8,7 @@ import { LS_LEGACY_HOLDINGS, loadPortfolioStateV1, recordPortfolioLastRebalance,
 import { getSnapshotPrice, loadPriceSnapshotV1, savePriceSnapshotV1 } from '../../../priceSnapshotStore';
 import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeightsStore';
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
+import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import { appendPaperExecutionLog } from '@/src/daa/executionLogStore';
 import { useDaaRuntime } from '../../../useDaaRuntime';
@@ -189,6 +190,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
   const rebalanceResp = useMemo(() => readJsonFromLs(LS_REBALANCE_RESPONSE), [rev]);
+
+  const rebalancePolicy = useMemo(() => loadRebalancePolicyV1(), [rev]);
+
+  const baseCcy = useMemo(() => {
+    const mp: any = moneyPlan as any;
+    return typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : null;
+  }, [moneyPlan]);
 
   async function doCopyBundle() {
     try {
@@ -784,38 +792,24 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             )}
 
             <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Suggested orders</div>
               {effectiveOrders.length ? (
-                <div style={{ overflowX: 'auto' as const }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Symbol</th>
-                        <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Side</th>
-                        <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Notional</th>
-                        <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Why</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {effectiveOrders.map((o, idx) => (
-                        <tr key={`${o.symbol}-${idx}`}>
-                          <td style={{ padding: '6px 0' }}>{o.symbol}</td>
-                          <td style={{ padding: '6px 0' }}>{o.side}</td>
-                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{o.notional.toFixed(2)}</td>
-                          <td style={{ padding: '6px 0' }} className="muted">
-                            {o.reason || (engineOrders.length ? '' : 'naive')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div>
+                  <OrdersReviewV0
+                    title="Orders review (v0)"
+                    orders={effectiveOrders}
+                    cashStart={portfolioCash}
+                    minTradeNotional={rebalancePolicy.minTradeNotional}
+                    ccy={baseCcy}
+                  />
 
                   <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
                     Source: {engineOrders.length ? 'engine orders (last run)' : 'naive diff orders'}.
                   </div>
                 </div>
               ) : (
-                <div className="muted" style={{ fontSize: 12 }}>暂无 orders：请先跑一次 Step4，或确保 current vs target 数据齐全。</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  暂无 orders：请先跑一次 Step4，或确保 current vs target 数据齐全。（minTradeNotional={rebalancePolicy.minTradeNotional.toFixed(2)}）
+                </div>
               )}
             </div>
           </div>
