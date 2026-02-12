@@ -20,10 +20,23 @@ export type WhatIfRowV0 = {
 
 export type RebalanceWhatIfV0 = {
   schemaVersion: 1;
+
+  // Inputs.
   feeBps: number;
   slippageBps: number;
+
+  // Aggregates across all orders.
+  buyNotional: number;
+  sellNotional: number;
+  turnoverNotional: number;
+  turnoverPctOfTotalBefore: number;
+
+  // Costs (v0): cost = fee + slippage, applied as a percent of notional.
   costPct: number;
+  feeTotal: number;
+  slippageTotal: number;
   costTotal: number;
+
   totalBefore: number;
   totalAfter: number;
   cashBefore: number;
@@ -73,12 +86,26 @@ export function simulateRebalanceWhatIfV0(args: {
   const feeBps = toFiniteNumber(args.feeBps) ?? 0;
   const slippageBps = toFiniteNumber(args.slippageBps) ?? 0;
 
-  const feePct = clamp01(feeBps / 10_000);
-  const slippagePct = clamp01(slippageBps / 10_000);
-  const costPct = clamp01(feePct + slippagePct);
+  const feePctRaw = feeBps / 10_000;
+  const slippagePctRaw = slippageBps / 10_000;
+
+  const feePctClamped = clamp01(feePctRaw);
+  const slippagePctClamped = clamp01(slippagePctRaw);
+
+  const sumPct = feePctClamped + slippagePctClamped;
+  const costPct = clamp01(sumPct);
+
+  // If fee+slippage exceed 100%, keep the fee/slippage ratio but scale the totals down to 100%.
+  let feePctUsed = feePctClamped;
+  let slippagePctUsed = slippagePctClamped;
+  if (sumPct > 1) {
+    const denom = sumPct > 0 ? sumPct : 1;
+    feePctUsed = (feePctClamped / denom) * costPct;
+    slippagePctUsed = (slippagePctClamped / denom) * costPct;
+  }
 
   if (feeBps < 0 || slippageBps < 0) warnings.push("feeBps/slippageBps < 0; clamped to 0");
-  if (feePct + slippagePct > 1) warnings.push("fee+slippage exceeds 100%; clamped to 100%");
+  if (sumPct > 1) warnings.push("fee+slippage exceeds 100%; clamped to 100%");
 
   const valueBeforeById = new Map<string, number>();
   for (const [idRaw, vRaw] of Object.entries(args.valuesBySymbol ?? {})) {
@@ -102,6 +129,11 @@ export function simulateRebalanceWhatIfV0(args: {
   // Apply orders as value deltas.
   const deltaById = new Map<string, number>();
   let cashDelta = 0;
+
+  let buyNotional = 0;
+  let sellNotional = 0;
+  let feeTotal = 0;
+  let slippageTotal = 0;
   let costTotal = 0;
 
   for (const o of args.orders ?? []) {
@@ -112,14 +144,21 @@ export function simulateRebalanceWhatIfV0(args: {
     if (!id || (side !== "BUY" && side !== "SELL") || notional === null) continue;
     if (notional <= 0) continue;
 
-    const cost = notional * costPct;
+    const fee = notional * feePctUsed;
+    const slippage = notional * slippagePctUsed;
+    const cost = fee + slippage;
+
+    feeTotal += fee;
+    slippageTotal += slippage;
     costTotal += cost;
 
     if (side === "BUY") {
+      buyNotional += notional;
       // Spend `notional` cash; acquire `notional - cost` of asset value.
       cashDelta -= notional;
       deltaById.set(id, (deltaById.get(id) ?? 0) + (notional - cost));
     } else {
+      sellNotional += notional;
       // Sell `notional` of asset value; receive `notional - cost` in cash.
       cashDelta += notional - cost;
       deltaById.set(id, (deltaById.get(id) ?? 0) - notional);
@@ -180,12 +219,24 @@ export function simulateRebalanceWhatIfV0(args: {
 
   rows.sort((a, b) => Math.abs(b.driftPct) - Math.abs(a.driftPct));
 
+  const turnoverNotional = buyNotional + sellNotional;
+
   return {
     schemaVersion: 1,
+
     feeBps,
     slippageBps,
+
+    buyNotional,
+    sellNotional,
+    turnoverNotional,
+    turnoverPctOfTotalBefore: safeDiv(turnoverNotional, totalBefore),
+
     costPct,
+    feeTotal,
+    slippageTotal,
     costTotal,
+
     totalBefore,
     totalAfter,
     cashBefore: cashStartN,

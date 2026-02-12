@@ -1363,6 +1363,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         </label>
 
                         <div className="muted" style={{ fontSize: 12 }}>
+                          turnover={whatIf.turnoverNotional.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''} ({(whatIf.turnoverPctOfTotalBefore * 100).toFixed(2)}% of totalBefore)
+                        </div>
+
+                        <div className="muted" style={{ fontSize: 12 }}>
                           costPct={(whatIf.costPct * 100).toFixed(2)}%
                         </div>
                       </div>
@@ -1374,7 +1378,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       ) : null}
 
                       <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                        totalBefore={whatIf.totalBefore.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; totalAfter={whatIf.totalAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; costTotal={whatIf.costTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; cashAfter={whatIf.cashAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}.
+                        turnover={whatIf.turnoverNotional.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''} (buy={whatIf.buyNotional.toFixed(2)}, sell={whatIf.sellNotional.toFixed(2)});
+                        feeTotal={whatIf.feeTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; slippageTotal={whatIf.slippageTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''};
+                        costTotal={whatIf.costTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; totalBefore={whatIf.totalBefore.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; totalAfter={whatIf.totalAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; cashAfter={whatIf.cashAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}.
                       </div>
 
                       <div style={{ marginTop: 10, overflowX: 'auto' as const }}>

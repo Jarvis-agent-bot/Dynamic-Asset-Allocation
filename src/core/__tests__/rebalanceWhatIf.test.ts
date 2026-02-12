@@ -17,7 +17,15 @@ describe("rebalanceWhatIf", () => {
     });
 
     expect(res.schemaVersion).toBe(1);
+
+    expect(res.buyNotional).toBeCloseTo(10, 10);
+    expect(res.sellNotional).toBeCloseTo(10, 10);
+    expect(res.turnoverNotional).toBeCloseTo(20, 10);
+    expect(res.turnoverPctOfTotalBefore).toBeCloseTo(0.1, 10);
+
     expect(res.costPct).toBeCloseTo(0.01, 10);
+    expect(res.feeTotal).toBeCloseTo(0.1, 10);
+    expect(res.slippageTotal).toBeCloseTo(0.1, 10);
     expect(res.costTotal).toBeCloseTo(0.2, 10);
 
     // totalAfter = totalBefore - costTotal
