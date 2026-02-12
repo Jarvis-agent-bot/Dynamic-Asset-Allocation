@@ -1,10 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getDaaWizardCompatRedirect } from "./src/daa/wizardCompat";
+
 // VPS smoke checks for v0 hit explicit trailing-slash URLs like `/daa/step/4/`.
 // Some deployments still treat the non-slash form as canonical and will 308-redirect.
 // To make smoke checks deterministic, internally rewrite `/daa/**/` -> `/daa/**` (no redirect).
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+
+  const compatRedirect = getDaaWizardCompatRedirect(pathname, search);
+  if (compatRedirect) {
+    return NextResponse.redirect(new URL(compatRedirect, req.url), 307);
+  }
 
   // Keep `/daa/` as-is; only normalize deeper paths.
   if (pathname.startsWith("/daa/") && pathname.length > "/daa/".length && pathname.endsWith("/")) {
