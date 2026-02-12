@@ -1,14 +1,16 @@
-import { DaaWizard } from "../_components/DaaWizard";
+import { redirect } from "next/navigation";
 
-type DaaWizardPageProps = {
+type DaaWizardCompatPageProps = {
   searchParams?: {
     step?: string;
   };
 };
 
-export default function DaaWizardPage({ searchParams }: DaaWizardPageProps) {
+export default function DaaWizardCompatPage({ searchParams }: DaaWizardCompatPageProps) {
   const stepId = Number(searchParams?.step);
   const initialStepId = Number.isFinite(stepId) ? Math.trunc(stepId) : undefined;
 
-  return <DaaWizard initialStepId={initialStepId} />;
+  // Compatibility route: keep old `/daa/wizard` links working, but avoid fragmenting URLs.
+  // Canonical wizard URL is `/daa?step=...` (and `/daa/` remains dashboard-first).
+  redirect(`/daa?step=${initialStepId && initialStepId > 0 ? initialStepId : 1}`);
 }
