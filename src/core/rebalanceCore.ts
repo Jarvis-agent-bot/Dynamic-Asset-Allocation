@@ -15,6 +15,35 @@ export type RebalanceCoreConstraints = {
   minNotional?: number;
 };
 
+export type RebalanceTriggerPolicy = {
+  // Minimum max-per-symbol drift (|desired-current| / equity) required to trigger a rebalance.
+  thresholdPct?: number;
+  // Minimum per-order notional. If larger than constraints.minNotional, it overrides it.
+  minTradeNotional?: number;
+  // Cooldown window after a prior rebalance; during cooldown, shouldRebalance=false.
+  cooldownSeconds?: number;
+  // ISO timestamp for last rebalance; used only when cooldownSeconds > 0.
+  lastRebalanceAt?: string;
+  // Optional ISO timestamp to make the decision deterministic in tests/UI.
+  now?: string;
+};
+
+export type RebalanceTriggerDecision = {
+  shouldRebalance: boolean;
+  reasons: string[];
+  stats: {
+    equity: number;
+    thresholdPct: number;
+    minTradeNotional: number;
+    cooldownSeconds: number;
+    maxAbsDriftPct: number;
+    maxAbsDriftSymbol: string | null;
+    orderCount: number;
+    eligibleOrderCount: number;
+    eligibleNotionalSum: number;
+  };
+};
+
 export type RebalanceCoreHolding = {
   symbol: string;
   qty: number;
@@ -41,6 +70,8 @@ export type SuggestedOrder = {
 export type RebalanceCoreRequest = {
   account?: RebalanceCoreAccount;
   constraints?: RebalanceCoreConstraints;
+  // Policy layer to decide whether the computed orders should actually trigger a rebalance.
+  policy?: RebalanceTriggerPolicy;
   // Accept either an array or a map for convenience in copy/paste JSON.
   holdings: RebalanceCoreHolding[] | Record<string, number>;
   prices: RebalanceCorePrice[] | Record<string, number>;
@@ -65,6 +96,7 @@ export type RebalanceCoreResponse = {
   targetWeights: { id: string; label: string; targetPct: number }[];
   warnings: string[];
   explain: RebalanceCoreExplain;
+  trigger: RebalanceTriggerDecision;
 };
 
 function clamp01(x: number) {
@@ -77,6 +109,12 @@ function clamp01(x: number) {
 function toFiniteNumber(x: unknown, fallback: number): number {
   const n = typeof x === "number" ? x : Number(x);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function parseIsoMs(x: unknown): number {
+  if (typeof x !== "string" || !x) return Number.NaN;
+  const ms = Date.parse(x);
+  return Number.isFinite(ms) ? ms : Number.NaN;
 }
 
 function normalizeHoldings(holdings: RebalanceCoreRequest["holdings"], warnings: string[]): Record<string, number> {
@@ -236,6 +274,15 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     minNotional: Math.max(0, toFiniteNumber(req?.constraints?.minNotional, 1e-6)),
   };
 
+  const policy: RebalanceTriggerPolicy = req?.policy && typeof req.policy === "object" && !Array.isArray(req.policy) ? req.policy : {};
+  const thresholdPct = clamp01(toFiniteNumber(policy.thresholdPct, 0));
+  const minTradeNotional = Math.max(0, toFiniteNumber(policy.minTradeNotional, 0));
+  const cooldownSeconds = Math.max(0, toFiniteNumber(policy.cooldownSeconds, 0));
+  const lastRebalanceAt = typeof policy.lastRebalanceAt === "string" ? policy.lastRebalanceAt : "";
+  const now = typeof policy.now === "string" ? policy.now : "";
+
+  const effectiveMinNotional = Math.max(constraints.minNotional, minTradeNotional);
+
   const holdings = normalizeHoldings(req.holdings, warnings);
   const prices = normalizePrices(req.prices, warnings);
 
@@ -281,6 +328,21 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
         desiredValues: {},
         deltas: {},
       },
+      trigger: {
+        shouldRebalance: false,
+        reasons: ["equity: non-positive"],
+        stats: {
+          equity: 0,
+          thresholdPct,
+          minTradeNotional: effectiveMinNotional,
+          cooldownSeconds,
+          maxAbsDriftPct: 0,
+          maxAbsDriftSymbol: null,
+          orderCount: 0,
+          eligibleOrderCount: 0,
+          eligibleNotionalSum: 0,
+        },
+      },
     };
   }
 
@@ -309,7 +371,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     deltas[sym] = want - cur;
   }
 
-  const minN = constraints.minNotional;
+  const minN = effectiveMinNotional;
 
   // Sells first to fund buys.
   const sellCandidates = Object.entries(deltas)
@@ -374,6 +436,68 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     notes.push(`target weights sum to ${(tw.finalSum * 100).toFixed(2)}%; remaining ${(100 - tw.finalSum * 100).toFixed(2)}% is implicit cash`);
   }
 
+  // Trigger policy (v0): decide whether we should actually rebalance based on
+  // drift threshold, minimum trade size, and a cooldown window.
+  let maxAbsDriftPct = 0;
+  let maxAbsDriftSymbol: string | null = null;
+  for (const [sym, delta] of Object.entries(deltas)) {
+    if (!Number.isFinite(delta)) continue;
+    const pct = Math.abs(delta) / equity;
+    if (pct > maxAbsDriftPct) {
+      maxAbsDriftPct = pct;
+      maxAbsDriftSymbol = sym;
+    }
+  }
+
+  const reasons: string[] = [];
+
+  const driftOk = thresholdPct <= 0 || maxAbsDriftPct >= thresholdPct;
+  if (!driftOk) {
+    reasons.push(
+      `threshold: maxAbsDriftPct ${(maxAbsDriftPct * 100).toFixed(2)}% < thresholdPct ${(thresholdPct * 100).toFixed(2)}%`
+    );
+  }
+
+  const eligibleOrders = orders.filter((o) => Number.isFinite(o.notional) && o.notional > minN);
+  const eligibleNotionalSum = eligibleOrders.reduce((acc, o) => acc + o.notional, 0);
+  if (!eligibleOrders.length) reasons.push(`minTradeNotional: no orders > ${minN}`);
+
+  let cooldownOk = true;
+  if (cooldownSeconds > 0) {
+    const nowMs = parseIsoMs(now || new Date().toISOString());
+    const lastMs = parseIsoMs(lastRebalanceAt);
+
+    if (Number.isFinite(nowMs) && Number.isFinite(lastMs)) {
+      const elapsed = (nowMs - lastMs) / 1000;
+      if (elapsed < cooldownSeconds) {
+        cooldownOk = false;
+        const remain = cooldownSeconds - Math.max(0, elapsed);
+        reasons.push(`cooldown: last rebalance ${elapsed.toFixed(0)}s ago; wait ${remain.toFixed(0)}s`);
+      }
+    } else {
+      reasons.push(`cooldown: configured (${cooldownSeconds}s) but missing/invalid timestamps; ignored`);
+    }
+  }
+
+  const shouldRebalance = driftOk && cooldownOk && eligibleOrders.length > 0;
+  if (shouldRebalance) reasons.push("trigger: ok");
+
+  const trigger: RebalanceTriggerDecision = {
+    shouldRebalance,
+    reasons,
+    stats: {
+      equity,
+      thresholdPct,
+      minTradeNotional: minN,
+      cooldownSeconds,
+      maxAbsDriftPct,
+      maxAbsDriftSymbol,
+      orderCount: orders.length,
+      eligibleOrderCount: eligibleOrders.length,
+      eligibleNotionalSum,
+    },
+  };
+
   return {
     orders,
     targetWeights: tw.weights,
@@ -390,5 +514,6 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
       desiredValues,
       deltas,
     },
+    trigger,
   };
 }

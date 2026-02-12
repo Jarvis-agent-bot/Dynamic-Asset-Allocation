@@ -39,6 +39,12 @@ const SAMPLE_REBALANCE_CORE_REQUEST = {
     maxOut: 500,
     minNotional: 0.01,
   },
+  // v0 trigger policy: avoid over-trading on tiny drifts and add a debounce window.
+  policy: {
+    thresholdPct: 0.01,
+    minTradeNotional: 10,
+    cooldownSeconds: 10 * 60,
+  },
   holdings: [
     { symbol: "SPY", qty: 10 },
     { symbol: "TLT", qty: 10 },
