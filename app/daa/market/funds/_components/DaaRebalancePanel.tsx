@@ -4,16 +4,20 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
-import { loadPortfolioStateV1 } from '../../../portfolioStateStore';
+import { loadPortfolioStateV1, recordPortfolioLastRebalance } from '../../../portfolioStateStore';
 import { getSnapshotPrice, loadPriceSnapshotV1 } from '../../../priceSnapshotStore';
+
+import { appendPaperExecutionLog } from '@/src/daa/executionLogStore';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
   LS_MONEY_PLAN,
+  LS_REBALANCE_REQUEST,
   LS_REBALANCE_RESPONSE,
   WIZARD_DATA_EVENT,
   pretty,
   readJsonFromLs,
+  saveJsonToLs,
 } from '../../../wizardStorage';
 
 import DaaDashboardAiExplain from '../../../dashboard/_components/DaaDashboardAiExplain';
@@ -161,6 +165,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const [rev, setRev] = useState(0);
 
+  const [paperRunLoading, setPaperRunLoading] = useState(false);
+  const [paperRunError, setPaperRunError] = useState<string | null>(null);
+  const [paperRunRecordedAt, setPaperRunRecordedAt] = useState<string | null>(null);
+  const [paperRunSummary, setPaperRunSummary] = useState<string | null>(null);
+
   useEffect(() => {
     const onData = () => setRev((x) => x + 1);
     window.addEventListener(WIZARD_DATA_EVENT, onData as EventListener);
@@ -225,6 +234,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       return loadPortfolioStateV1().cash;
     } catch {
       return 0;
+    }
+  }, [rev]);
+
+  const portfolioLastRebalanceAt = useMemo(() => {
+    try {
+      return loadPortfolioStateV1().lastRebalance?.at ?? null;
+    } catch {
+      return null;
     }
   }, [rev]);
 
@@ -373,6 +390,146 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
   }
 
+  function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
+    try {
+      return { ok: true, value: JSON.parse(text) as unknown };
+    } catch {
+      return { ok: false, error: 'JSON parse failed' };
+    }
+  }
+
+  async function runPaperRebalanceCore() {
+    setPaperRunError(null);
+    setPaperRunRecordedAt(null);
+    setPaperRunSummary(null);
+
+    if (typeof window === 'undefined') return;
+
+    setPaperRunLoading(true);
+
+    try {
+      const st = loadPortfolioStateV1();
+
+      const mp: any = moneyPlan as any;
+      const baseCcy = typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : '';
+      const mpConstraints: any = mp?.constraints ?? {};
+
+      const constraints: any = { minNotional: 0.01 };
+      const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
+      const maxIn = toFiniteNumber(mpConstraints?.maxIn);
+      const maxOut = toFiniteNumber(mpConstraints?.maxOut);
+      if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
+      if (maxIn !== null) constraints.maxIn = maxIn;
+      if (maxOut !== null) constraints.maxOut = maxOut;
+
+      const holdingsMap: Record<string, number> = {};
+      for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
+        const sym = String(symRaw ?? '').trim();
+        if (!sym) continue;
+
+        const qty = toFiniteNumber((p as any)?.qty);
+        if (!qty || qty <= 0) continue;
+        holdingsMap[sym] = qty;
+      }
+
+      const byCode = new Map<string, FundLike>();
+      for (const f of funds ?? []) {
+        const code = String(f?.code ?? '').trim();
+        if (code) byCode.set(code, f);
+      }
+
+      const pricesMap: Record<string, number> = {};
+      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeights.map((t) => t.id)]);
+
+      for (const sym of symbols) {
+        const manual = getSnapshotPrice(priceSnapshot, sym);
+        const nav = manual ?? pickFundNav(byCode.get(sym));
+        if (nav && nav > 0) pricesMap[sym] = nav;
+      }
+
+      const policy = {
+        thresholdPct: 0.01,
+        minTradeNotional: 10,
+        cooldownSeconds: 10 * 60,
+        lastRebalanceAt: st.lastRebalance?.at,
+        now: new Date().toISOString(),
+      };
+
+      const account: any = { cash: st.cash };
+      if (baseCcy) account.baseCcy = baseCcy;
+
+      const req = {
+        account,
+        constraints,
+        policy,
+        holdings: holdingsMap,
+        prices: pricesMap,
+        targetWeights,
+      };
+
+      saveJsonToLs(LS_REBALANCE_REQUEST, req);
+
+      // Core is deterministic and runs in-process (Next.js route), so this stays fast.
+      const res = await fetch('/api/daa/rebalance/core', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(req),
+      });
+
+      const text = await res.text();
+      const parsed = safeJsonParse(text);
+      const respValue = parsed.ok ? parsed.value : { raw: text };
+
+      saveJsonToLs(LS_REBALANCE_RESPONSE, respValue);
+
+      if (!res.ok) {
+        setPaperRunError(`HTTP ${res.status}`);
+        return;
+      }
+
+      if (!parsed.ok) {
+        setPaperRunError('response JSON parse failed');
+        return;
+      }
+
+      const resp: any = respValue as any;
+      const orders = Array.isArray(resp?.orders) ? resp.orders : [];
+      const shouldRebalance = !!resp?.trigger?.shouldRebalance;
+
+      if (!shouldRebalance) {
+        setPaperRunSummary('Trigger policy: shouldRebalance=false (not recorded).');
+        return;
+      }
+
+      if (!orders.length) {
+        setPaperRunSummary('No orders returned (not recorded).');
+        return;
+      }
+
+      const r = appendPaperExecutionLog({
+        storage: window.localStorage,
+        source: 'rebalance-core',
+        orders,
+        note: 'ui:market/funds:paper-run',
+      });
+
+      if (!r.ok) {
+        setPaperRunError(r.error);
+        return;
+      }
+
+      setPaperRunRecordedAt(r.entry.at);
+      setPaperRunSummary(`Recorded paper execution: ${orders.length} orders.`);
+
+      // Record the latest run in the portfolio store so cooldown debouncing can work.
+      recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue });
+    } catch (e) {
+      setPaperRunError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPaperRunLoading(false);
+    }
+  }
+
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
       <div className="title" style={{ marginBottom: 12, justifyContent: 'space-between' as const }}>
@@ -430,6 +587,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <button type="button" className="button" onClick={doCopyOrders} style={{ padding: '6px 10px' }} disabled={!effectiveOrders.length}>
                   {copyOrdersStatus === 'ok' ? 'Copied' : copyOrdersStatus === 'error' ? 'Copy failed' : 'Copy suggested orders'}
                 </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={runPaperRebalanceCore}
+                  style={{ padding: '6px 10px' }}
+                  disabled={paperRunLoading || !targetWeights.length}
+                >
+                  {paperRunLoading ? 'Running...' : 'Run paper rebalance'}
+                </button>
                 <Link href="/daa?step=3" className="muted" style={{ fontSize: 12 }}>
                   Edit money plan
                 </Link>
@@ -442,6 +608,21 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
               Current = holdings × (manual price or estGsz/gsz/dwjz) + cash; Target = engine targetWeights or money_plan.allocations; Orders = engine orders or naive diff.
             </div>
+
+            {portfolioLastRebalanceAt ? (
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                portfolioState.lastRebalance.at:{' '}
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{portfolioLastRebalanceAt}</span>
+              </div>
+            ) : null}
+
+            {paperRunRecordedAt ? (
+              <div style={{ fontSize: 12, marginTop: 6, color: 'var(--primary)' }}>Paper run recorded at {paperRunRecordedAt}.</div>
+            ) : paperRunError ? (
+              <div style={{ fontSize: 12, marginTop: 6, color: 'var(--danger)' }}>{paperRunError}</div>
+            ) : paperRunSummary ? (
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{paperRunSummary}</div>
+            ) : null}
 
             {rebalanceTableRows.length ? (
               <div style={{ marginTop: 10, overflowX: 'auto' as const }}>
