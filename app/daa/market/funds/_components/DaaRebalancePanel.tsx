@@ -163,7 +163,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const rt = useDaaRuntime();
   const { exportBundle } = useDaaWorkflowExportBundleV1();
 
-  const [open, setOpen] = useState(false);
+  // Funds hub shortest path: keep DAA Workflow expanded by default.
+  const [open, setOpen] = useState(true);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyOrdersStatus, setCopyOrdersStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyWeightsStatus, setCopyWeightsStatus] = useState<'idle' | 'ok' | 'error'>('idle');
@@ -199,10 +200,21 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
   }
 
+  const nextJump = useMemo(() => {
+    if (rt.nextStepId === null) return { targetId: 'export', buttonText: '下一步：去导出' };
+    return { targetId: `step${rt.nextStepId}`, buttonText: `下一步：去 Step${rt.nextStepId}` };
+  }, [rt.nextStepId]);
+
+  function jumpTo(targetId: string) {
+    // Ensure the panel is open before scrolling.
+    setOpen(true);
+    window.setTimeout(() => scrollToId(targetId), 50);
+  }
+
   const headline = useMemo(() => {
     const readyBits = [rt.marketEventCount ? 'events' : null, rt.hasRecommendation ? 'recommendation' : null, rt.hasHumanProfile ? 'human' : null].filter(Boolean);
     const readyText = readyBits.length ? readyBits.join(' + ') : 'empty';
-    return `Next: ${rt.nextActionText} (data: ${readyText})`;
+    return `下一步: ${rt.nextActionText}（data: ${readyText}）`;
   }, [rt.hasHumanProfile, rt.hasRecommendation, rt.marketEventCount, rt.nextActionText]);
 
   const step1SummaryText = useMemo(() => {
@@ -505,12 +517,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const shouldRebalance = !!resp?.trigger?.shouldRebalance;
 
       if (!shouldRebalance) {
-        setPaperRunSummary('Trigger policy: shouldRebalance=false (not recorded).');
+        setPaperRunSummary('触发策略: shouldRebalance=false（未记录）。');
         return;
       }
 
       if (!orders.length) {
-        setPaperRunSummary('No orders returned (not recorded).');
+        setPaperRunSummary('未返回 orders（未记录）。');
         return;
       }
 
@@ -527,7 +539,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       }
 
       setPaperRunRecordedAt(r.entry.at);
-      setPaperRunSummary(`Recorded paper execution: ${orders.length} orders.`);
+      setPaperRunSummary(`已记录 paper execution：${orders.length} 条 orders。`);
 
       // Record the latest run in the portfolio store so cooldown debouncing can work.
       recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: 'ui:market/funds:paper-run' });
@@ -555,6 +567,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           <Link href="/daa?step=1" className="muted" style={{ fontSize: 12 }}>
             Wizard
           </Link>
+          <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)} style={{ padding: '6px 10px' }}>
+            {nextJump.buttonText}
+          </button>
           <button type="button" className="button" onClick={doCopyBundle} style={{ padding: '6px 10px' }}>
             {copyStatus === 'ok' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy bundle JSON'}
           </button>
@@ -675,7 +690,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               </div>
             ) : (
               <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                Not enough data yet. Add holdings in Market/Funds and configure a money plan (Step3) / run recommendation (Step4).
+                数据不足：请先在 Market/Funds 录入持仓/价格，并配置 Step3 money plan 或先跑一次 Step4 recommendation。
               </div>
             )}
 
@@ -711,7 +726,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   </div>
                 </div>
               ) : (
-                <div className="muted" style={{ fontSize: 12 }}>No orders. (Run Step4 once or ensure current vs target data exists.)</div>
+                <div className="muted" style={{ fontSize: 12 }}>暂无 orders：请先跑一次 Step4，或确保 current vs target 数据齐全。</div>
               )}
             </div>
           </div>
@@ -752,7 +767,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             </div>
           ) : (
             <div id="step5" style={{ scrollMarginTop: 12, fontSize: 12 }} className="muted">
-              Step5 Explain: waiting for recommendation (run Step4 once).
+              Step5 Explain：blocked，需先跑一次 Step4 recommendation。
             </div>
           )}
 
