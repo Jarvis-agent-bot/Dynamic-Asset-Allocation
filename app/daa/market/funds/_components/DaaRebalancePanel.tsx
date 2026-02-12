@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { loadPortfolioStateV1 } from '../../../portfolioStateStore';
+import { getSnapshotPrice, loadPriceSnapshotV1 } from '../../../priceSnapshotStore';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -27,6 +28,7 @@ import Step6HumanFactorPage from '../../../step/_pages/Step6HumanFactorPage';
 import Step7TagsPage from '../../../step/_pages/Step7TagsPage';
 
 import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
+import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
 
 type FundLike = {
   code: string;
@@ -226,6 +228,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
   }, [rev]);
 
+  const priceSnapshot = useMemo(() => loadPriceSnapshotV1(), [rev]);
+
   const targetWeights = useMemo(() => normalizeTargetWeights({ response: rebalanceResp, moneyPlan }), [moneyPlan, rebalanceResp]);
 
   const engineOrders = useMemo(() => {
@@ -235,10 +239,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }, [rebalanceResp]);
 
   const currentWeights = useMemo(() => {
-    if (!funds?.length || !holdings) return [] as Array<{ id: string; label: string; value: number }>;
+    if (!holdings) return [] as Array<{ id: string; label: string; value: number }>;
 
     const byCode = new Map<string, FundLike>();
-    for (const f of funds) {
+    for (const f of funds ?? []) {
       const code = String(f?.code ?? '').trim();
       if (code) byCode.set(code, f);
     }
@@ -252,7 +256,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       if (!share || share <= 0) continue;
 
       const fund = byCode.get(code);
-      const nav = pickFundNav(fund ?? undefined);
+      const manual = getSnapshotPrice(priceSnapshot, code);
+      const nav = manual ?? pickFundNav(fund ?? undefined);
+
       const value = nav ? share * nav : 0;
       if (value <= 0) continue;
 
@@ -261,7 +267,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     rows.sort((a, b) => b.value - a.value);
     return rows;
-  }, [funds, holdings]);
+  }, [funds, holdings, priceSnapshot]);
 
   const rebalanceTableRows = useMemo(() => {
     const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
@@ -410,6 +416,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             <DaaPortfolioEditorV0 />
           </div>
 
+          <div id="prices" style={{ scrollMarginTop: 12 }}>
+            <DaaPriceSnapshotInputV0 />
+          </div>
+
           <div id="rebalance" style={{ scrollMarginTop: 12, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
               <div style={{ fontWeight: 800 }}>Rebalance v0</div>
@@ -430,7 +440,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             </div>
 
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Current = holdings × (estGsz/gsz/dwjz) + cash; Target = engine targetWeights or money_plan.allocations; Orders = engine orders or naive diff.
+              Current = holdings × (manual price or estGsz/gsz/dwjz) + cash; Target = engine targetWeights or money_plan.allocations; Orders = engine orders or naive diff.
             </div>
 
             {rebalanceTableRows.length ? (
