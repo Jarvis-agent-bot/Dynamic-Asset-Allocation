@@ -187,6 +187,143 @@ function formatWeightsMarkdown(rows: Array<{ id: string; label: string; currentP
   return ['| Asset | Current | Target | Delta |', '| --- | ---: | ---: | ---: |', ...lines].join('\n');
 }
 
+type DriftAlertBreach = {
+  id: string;
+  label: string;
+  // Signed drift vs target (currentPct - targetPct).
+  driftPct: number;
+};
+
+type DriftAlertV0 = {
+  at: string;
+  source: 'ui-pre' | 'core';
+  thresholdPct: number;
+  maxAbsDriftPct: number;
+  maxAbsDriftSymbol: string | null;
+  breached: boolean;
+  breaches: DriftAlertBreach[];
+  // Optional: surface trigger policy verdict when we have it.
+  shouldRebalance?: boolean;
+  eligibleOrderCount?: number;
+  reasons?: string[];
+};
+
+function fmtPct01(x: number) {
+  if (!Number.isFinite(x)) return 'n/a';
+  return `${(x * 100).toFixed(2)}%`;
+}
+
+function computeDriftAlertFromTableRows(args: {
+  at: string;
+  rows: Array<{ id: string; label: string; deltaPct: number }>;
+  thresholdPct: number;
+}): DriftAlertV0 {
+  let maxAbs = 0;
+  let maxSym: string | null = null;
+
+  for (const r of args.rows) {
+    const abs = Math.abs(r.deltaPct);
+    if (!Number.isFinite(abs)) continue;
+    if (abs > maxAbs) {
+      maxAbs = abs;
+      maxSym = r.id;
+    }
+  }
+
+  const thresholdPct = Number.isFinite(args.thresholdPct) && args.thresholdPct > 0 ? args.thresholdPct : 0;
+  const breaches = args.rows
+    .filter((r) => Number.isFinite(r.deltaPct) && thresholdPct > 0 && Math.abs(r.deltaPct) >= thresholdPct)
+    .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))
+    .slice(0, 6)
+    .map((r) => ({ id: r.id, label: r.label, driftPct: r.deltaPct }));
+
+  return {
+    at: args.at,
+    source: 'ui-pre',
+    thresholdPct,
+    maxAbsDriftPct: maxAbs,
+    maxAbsDriftSymbol: maxSym,
+    breached: thresholdPct > 0 && maxAbs >= thresholdPct,
+    breaches,
+  };
+}
+
+function computeDriftAlertFromCoreResponse(args: { at: string; resp: any; fallbackThresholdPct: number }): DriftAlertV0 {
+  const stats: any = args.resp?.trigger?.stats ?? {};
+  const explain: any = args.resp?.explain ?? {};
+
+  const equity = toFiniteNumber(explain?.equity) ?? toFiniteNumber(stats?.equity) ?? 0;
+
+  const thresholdPct =
+    (toFiniteNumber(stats?.thresholdPct) ?? null) !== null && (toFiniteNumber(stats?.thresholdPct) as number) > 0
+      ? (toFiniteNumber(stats?.thresholdPct) as number)
+      : args.fallbackThresholdPct;
+
+  const labels = new Map<string, string>();
+  if (Array.isArray(args.resp?.targetWeights)) {
+    for (const w of args.resp.targetWeights) {
+      const id = String((w as any)?.id ?? '').trim();
+      if (!id) continue;
+      const label = String((w as any)?.label ?? id).trim() || id;
+      labels.set(id, label);
+    }
+  }
+
+  const breaches: DriftAlertBreach[] = [];
+  let maxAbs = 0;
+  let maxSym: string | null = null;
+
+  const deltas = explain?.deltas;
+  if (equity > 0 && deltas && typeof deltas === 'object' && !Array.isArray(deltas)) {
+    for (const [idRaw, deltaRaw] of Object.entries(deltas as Record<string, unknown>)) {
+      const id = String(idRaw ?? '').trim();
+      if (!id) continue;
+
+      const delta = toFiniteNumber(deltaRaw);
+      if (delta === null) continue;
+
+      // delta = desired - current (notional). driftPct = currentPct - targetPct = -delta / equity.
+      const driftPct = -delta / equity;
+      if (!Number.isFinite(driftPct)) continue;
+
+      const abs = Math.abs(driftPct);
+      if (abs > maxAbs) {
+        maxAbs = abs;
+        maxSym = id;
+      }
+
+      if (thresholdPct > 0 && abs >= thresholdPct) {
+        breaches.push({ id, label: labels.get(id) ?? id, driftPct });
+      }
+    }
+  }
+
+  breaches.sort((a, b) => Math.abs(b.driftPct) - Math.abs(a.driftPct));
+  const topBreaches = breaches.slice(0, 6);
+
+  const maxAbsFromStats = toFiniteNumber(stats?.maxAbsDriftPct);
+  const maxSymFromStats = typeof stats?.maxAbsDriftSymbol === 'string' && stats.maxAbsDriftSymbol ? String(stats.maxAbsDriftSymbol) : null;
+
+  const maxAbsFinal = maxAbsFromStats !== null ? maxAbsFromStats : maxAbs;
+  const maxSymFinal = maxSymFromStats ?? maxSym;
+
+  const reasonsRaw = args.resp?.trigger?.reasons;
+  const reasons = Array.isArray(reasonsRaw) ? reasonsRaw.map((x: any) => String(x)) : undefined;
+
+  return {
+    at: args.at,
+    source: 'core',
+    thresholdPct,
+    maxAbsDriftPct: maxAbsFinal,
+    maxAbsDriftSymbol: maxSymFinal,
+    breached: thresholdPct > 0 && maxAbsFinal >= thresholdPct,
+    breaches: topBreaches,
+    shouldRebalance: !!args.resp?.trigger?.shouldRebalance,
+    eligibleOrderCount: toFiniteNumber(stats?.eligibleOrderCount) ?? undefined,
+    reasons,
+  };
+}
+
 export function DaaRebalancePanel({ funds, holdings }: Props) {
   const rt = useDaaRuntime();
   const { exportBundle } = useDaaWorkflowExportBundleV1();
@@ -206,6 +343,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunError, setPaperRunError] = useState<string | null>(null);
   const [paperRunRecordedAt, setPaperRunRecordedAt] = useState<string | null>(null);
   const [paperRunSummary, setPaperRunSummary] = useState<string | null>(null);
+  const [paperRunDriftAlert, setPaperRunDriftAlert] = useState<DriftAlertV0 | null>(null);
 
   useEffect(() => {
     const onData = () => setRev((x) => x + 1);
@@ -696,10 +834,16 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     setPaperRunError(null);
     setPaperRunRecordedAt(null);
     setPaperRunSummary(null);
+    setPaperRunDriftAlert(null);
 
     if (typeof window === 'undefined') return;
 
     setPaperRunLoading(true);
+
+    // Pre-compute drift breaches so the UI shows an immediate "live" alert even if the core route is slow.
+    setPaperRunDriftAlert(
+      computeDriftAlertFromTableRows({ at: new Date().toISOString(), rows: rebalanceTableRows, thresholdPct: driftThresholdPct })
+    );
 
     try {
       const st = loadPortfolioStateV1();
@@ -786,6 +930,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       }
 
       const resp: any = respValue as any;
+
+      // Surface core-level drift/trigger info as a compact alert for fast feedback during runs.
+      setPaperRunDriftAlert(computeDriftAlertFromCoreResponse({ at: new Date().toISOString(), resp, fallbackThresholdPct: driftThresholdPct }));
+
       const orders = Array.isArray(resp?.orders) ? resp.orders : [];
       const shouldRebalance = !!resp?.trigger?.shouldRebalance;
 
@@ -934,6 +1082,52 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               <div style={{ fontSize: 12, marginTop: 6, color: 'var(--danger)' }}>{paperRunError}</div>
             ) : paperRunSummary ? (
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{paperRunSummary}</div>
+            ) : null}
+
+            {paperRunDriftAlert ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 10,
+                  background: 'rgba(0,0,0,0.12)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: paperRunDriftAlert.breached ? 'var(--danger)' : 'var(--muted)' }}>
+                    Live drift alerts
+                    {paperRunLoading ? <span className="muted" style={{ marginLeft: 6, fontWeight: 500 }}>(running...)</span> : null}
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular' }}>
+                    {paperRunDriftAlert.source} @ {paperRunDriftAlert.at}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 4, fontSize: 12, color: paperRunDriftAlert.breached ? 'var(--danger)' : 'var(--text)' }}>
+                  maxAbsDrift={fmtPct01(paperRunDriftAlert.maxAbsDriftPct)}
+                  {paperRunDriftAlert.maxAbsDriftSymbol ? ` (${paperRunDriftAlert.maxAbsDriftSymbol})` : ''}; threshold={fmtPct01(paperRunDriftAlert.thresholdPct)}
+                  {paperRunDriftAlert.shouldRebalance !== undefined ? `; shouldRebalance=${String(paperRunDriftAlert.shouldRebalance)}` : ''}
+                </div>
+
+                {paperRunDriftAlert.breaches.length ? (
+                  <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                    Breaches:{' '}
+                    {paperRunDriftAlert.breaches
+                      .map((b) => `${b.label}(${b.id}) ${b.driftPct >= 0 ? '+' : ''}${(b.driftPct * 100).toFixed(1)}%`)
+                      .join(' · ')}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>No symbols exceed the drift threshold.</div>
+                )}
+
+                {paperRunDriftAlert.reasons?.length ? (
+                  <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                    Trigger: {paperRunDriftAlert.reasons.slice(0, 3).join('; ')}
+                    {paperRunDriftAlert.eligibleOrderCount !== undefined ? `; eligibleOrders=${paperRunDriftAlert.eligibleOrderCount}` : ''}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             {rebalanceTableRows.length ? (
