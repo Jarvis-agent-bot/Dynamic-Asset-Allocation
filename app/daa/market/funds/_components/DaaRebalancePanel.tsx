@@ -209,6 +209,13 @@ type DriftAlertV0 = {
   reasons?: string[];
 };
 
+type PaperRunHealthcheckV0 = {
+  expected: RebalancePostRunSummaryV0 | null;
+  actual: RebalancePostRunSummaryV0 | null;
+  pass: boolean | null;
+  notes: string[];
+};
+
 function fmtPct01(x: number) {
   if (!Number.isFinite(x)) return 'n/a';
   return `${(x * 100).toFixed(2)}%`;
@@ -345,6 +352,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunRecordedAt, setPaperRunRecordedAt] = useState<string | null>(null);
   const [paperRunSummary, setPaperRunSummary] = useState<string | null>(null);
   const [paperRunPostSummary, setPaperRunPostSummary] = useState<RebalancePostRunSummaryV0 | null>(null);
+  const [paperRunHealthcheck, setPaperRunHealthcheck] = useState<PaperRunHealthcheckV0 | null>(null);
   const [paperRunDriftAlert, setPaperRunDriftAlert] = useState<DriftAlertV0 | null>(null);
   const paperRunAbortRef = useRef<AbortController | null>(null);
 
@@ -838,6 +846,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     setPaperRunRecordedAt(null);
     setPaperRunSummary(null);
     setPaperRunPostSummary(null);
+    setPaperRunHealthcheck(null);
     setPaperRunDriftAlert(null);
 
     if (typeof window === 'undefined') return;
@@ -892,6 +901,31 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         const nav = manual ?? pickFundNav(byCode.get(sym));
         if (nav && nav > 0) pricesMap[sym] = nav;
       }
+
+      const valuesBySymbol: Record<string, number> = {};
+      for (const [sym, qty] of Object.entries(holdingsMap)) {
+        const px = toFiniteNumber((pricesMap as any)[sym]);
+        if (px === null || px <= 0) continue;
+        valuesBySymbol[sym] = qty * px;
+      }
+
+      // "Expected" = what the user sees in the preview (effectiveOrders + preview targetWeights).
+      // "Actual" will be computed after we get the core response orders/weights.
+      const expectedSummary: RebalancePostRunSummaryV0 | null = (() => {
+        try {
+          return buildRebalancePostRunSummaryV0({
+            cashStart: toFiniteNumber((st as any)?.cash) ?? 0,
+            valuesBySymbol,
+            targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
+            orders: effectiveOrders,
+            feeBps: whatIfFeeBps,
+            slippageBps: whatIfSlippageBps,
+            labelsBySymbol: whatIfLabelsBySymbol,
+          });
+        } catch {
+          return null;
+        }
+      })();
 
       const basePolicy = loadRebalancePolicyV1();
       const policy = {
@@ -972,37 +1006,44 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunRecordedAt(r.entry.at);
       setPaperRunSummary(`已记录 paper execution：${orders.length} 条 orders。`);
 
-      try {
-        const valuesBySymbol: Record<string, number> = {};
-        for (const [sym, qty] of Object.entries(holdingsMap)) {
-          const px = toFiniteNumber((pricesMap as any)[sym]);
-          if (px === null || px <= 0) continue;
-          valuesBySymbol[sym] = qty * px;
-        }
+      const actualSummary: RebalancePostRunSummaryV0 | null = (() => {
+        try {
+          const targetWeightsBySymbol: Record<string, number> = {};
 
-        const targetWeightsBySymbol: Record<string, number> = {};
-        for (const t of targetWeights) {
-          const id = String((t as any)?.id ?? '').trim();
-          if (!id) continue;
-          const w = toFiniteNumber((t as any)?.targetPct);
-          if (w === null) continue;
-          targetWeightsBySymbol[id] = w;
-        }
+          // Start with preview labels so tables stay readable even when core omits labels.
+          const labelsBySymbol: Record<string, string> = { ...(whatIfLabelsBySymbol ?? {}) };
 
-        const labelsBySymbol: Record<string, string> = {};
-        for (const t of targetWeights) {
-          const id = String((t as any)?.id ?? '').trim();
-          if (!id) continue;
-          labelsBySymbol[id] = String((t as any)?.label ?? id);
-        }
-        for (const f of funds ?? []) {
-          const code = String((f as any)?.code ?? '').trim();
-          const name = String((f as any)?.name ?? '').trim();
-          if (code && name) labelsBySymbol[code] = name;
-        }
+          const twArr = Array.isArray(resp?.targetWeights) ? (resp.targetWeights as any[]) : [];
+          if (twArr.length) {
+            for (const t of twArr) {
+              const id = String((t as any)?.id ?? '').trim();
+              if (!id) continue;
+              const w = toFiniteNumber((t as any)?.targetPct);
+              if (w === null) continue;
+              targetWeightsBySymbol[id] = w;
 
-        setPaperRunPostSummary(
-          buildRebalancePostRunSummaryV0({
+              const label = String((t as any)?.label ?? id).trim();
+              if (label) labelsBySymbol[id] = label;
+            }
+          } else {
+            // Fallback (shouldn't happen for core): use the request targetWeights.
+            for (const t of targetWeights) {
+              const id = String((t as any)?.id ?? '').trim();
+              if (!id) continue;
+              const w = toFiniteNumber((t as any)?.targetPct);
+              if (w === null) continue;
+              targetWeightsBySymbol[id] = w;
+              labelsBySymbol[id] = String((t as any)?.label ?? id);
+            }
+          }
+
+          for (const f of funds ?? []) {
+            const code = String((f as any)?.code ?? '').trim();
+            const name = String((f as any)?.name ?? '').trim();
+            if (code && name) labelsBySymbol[code] = name;
+          }
+
+          return buildRebalancePostRunSummaryV0({
             cashStart: toFiniteNumber((st as any)?.cash) ?? 0,
             valuesBySymbol,
             targetWeightsBySymbol,
@@ -1010,11 +1051,46 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             feeBps: whatIfFeeBps,
             slippageBps: whatIfSlippageBps,
             labelsBySymbol,
-          })
-        );
-      } catch {
-        // ignore
+          });
+        } catch {
+          return null;
+        }
+      })();
+
+      if (actualSummary) setPaperRunPostSummary(actualSummary);
+
+      // Compare the preview (expected) vs core run (actual) to make mismatches obvious.
+      const notes: string[] = [];
+      let pass: boolean | null = null;
+
+      if (!expectedSummary) notes.push('missing expected (preview) metrics');
+      if (!actualSummary) notes.push('missing actual (core) metrics');
+
+      if (expectedSummary && actualSummary) {
+        const turnoverDiff = Math.abs(actualSummary.turnoverNotional - expectedSummary.turnoverNotional);
+        const turnoverTol = Math.max(1, Math.abs(expectedSummary.turnoverNotional) * 0.01); // 1% or 1 base unit
+
+        const driftExp = expectedSummary.maxAbsDriftAfterPct01;
+        const driftAct = actualSummary.maxAbsDriftAfterPct01;
+        const driftDiff = driftExp !== null && driftAct !== null ? Math.abs(driftAct - driftExp) : Number.POSITIVE_INFINITY;
+        const driftTol = 0.001; // 10 bps
+
+        pass = turnoverDiff <= turnoverTol && driftDiff <= driftTol;
+
+        if (turnoverDiff > turnoverTol) {
+          notes.push(`turnover mismatch: diff=${turnoverDiff.toFixed(2)} > tol=${turnoverTol.toFixed(2)}`);
+        }
+
+        if (driftDiff > driftTol) {
+          notes.push(`post-drift mismatch: diff=${fmtPct01(driftDiff)} > tol=${fmtPct01(driftTol)}`);
+        }
+
+        if (expectedSummary.ordersCount !== actualSummary.ordersCount) {
+          notes.push(`ordersCount mismatch: expected=${expectedSummary.ordersCount} vs actual=${actualSummary.ordersCount}`);
+        }
       }
+
+      setPaperRunHealthcheck({ expected: expectedSummary, actual: actualSummary, pass, notes });
 
       // Record the latest run in the portfolio store so cooldown debouncing can work.
       recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: 'ui:market/funds:paper-run' });
@@ -1192,6 +1268,53 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 {paperRunPostSummary?.warnings?.length ? (
                   <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
                     What-if warnings: {paperRunPostSummary.warnings.slice(0, 2).join('; ')}
+                  </div>
+                ) : null}
+
+                {paperRunHealthcheck ? (
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12 }}>Post-run healthcheck</div>
+                      {paperRunHealthcheck.pass !== null ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            padding: '2px 8px',
+                            borderRadius: 999,
+                            background: paperRunHealthcheck.pass ? '#0a7' : '#b00020',
+                            color: '#fff',
+                          }}
+                        >
+                          {paperRunHealthcheck.pass ? 'PASS' : 'FAIL'}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {paperRunHealthcheck.expected && paperRunHealthcheck.actual ? (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                        Expected (preview) vs Actual (core)
+                        {' '}· turnover: exp <b>{paperRunHealthcheck.expected.turnoverNotional.toFixed(2)}</b>
+                        {paperRunHealthcheck.expected.turnoverPctOfTotalBefore01 !== null ? (
+                          <> ({fmtPct01(paperRunHealthcheck.expected.turnoverPctOfTotalBefore01)})</>
+                        ) : null}
+                        {' '}· act <b>{paperRunHealthcheck.actual.turnoverNotional.toFixed(2)}</b>
+                        {paperRunHealthcheck.actual.turnoverPctOfTotalBefore01 !== null ? (
+                          <> ({fmtPct01(paperRunHealthcheck.actual.turnoverPctOfTotalBefore01)})</>
+                        ) : null}
+                        {' '}· max|drift| after: exp <b>{paperRunHealthcheck.expected.maxAbsDriftAfterPct01 !== null ? fmtPct01(paperRunHealthcheck.expected.maxAbsDriftAfterPct01) : 'n/a'}</b>
+                        {' '}· act <b>{paperRunHealthcheck.actual.maxAbsDriftAfterPct01 !== null ? fmtPct01(paperRunHealthcheck.actual.maxAbsDriftAfterPct01) : 'n/a'}</b>
+                      </div>
+                    ) : (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                        Expected/Actual metrics missing.
+                      </div>
+                    )}
+
+                    {paperRunHealthcheck.notes.length ? (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                        Notes: {paperRunHealthcheck.notes.join(' | ')}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
