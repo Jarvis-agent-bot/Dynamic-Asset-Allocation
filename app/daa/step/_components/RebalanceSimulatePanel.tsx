@@ -6,7 +6,16 @@ import type { MarketEvent } from "@/src/core/marketEvents";
 
 import { buildMarketCitations, type MarketEventCitation } from "@/src/core/marketCitations";
 
-import { LS_MARKET_EVENTS, LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, readJsonFromLs, saveJsonToLs } from "../../wizardStorage";
+import { appendPaperExecutionLog } from "@/src/daa/executionLogStore";
+
+import {
+  LS_MARKET_EVENTS,
+  LS_REBALANCE_REQUEST,
+  LS_REBALANCE_RESPONSE,
+  WIZARD_DATA_EVENT,
+  readJsonFromLs,
+  saveJsonToLs,
+} from "../../wizardStorage";
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from "../../portfolioStateStore";
 
 type Props = {
@@ -80,6 +89,14 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<unknown>(null);
+
+  const [paperExecAt, setPaperExecAt] = useState<string | null>(null);
+  const [paperExecError, setPaperExecError] = useState<string | null>(null);
+
+  const isCoreEndpoint = useMemo(() => {
+    const endpoints = endpointOverrides?.length ? endpointOverrides : ["/api/daa/rebalance/simulate", "/daa/api/daa/rebalance/simulate"];
+    return endpoints.some((u) => u.includes("/rebalance/core"));
+  }, [endpointOverrides]);
 
   const parsedReq = useMemo(() => safeJsonParse(requestText), [requestText]);
 
@@ -161,6 +178,8 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
     setError(null);
     setResponse(null);
     setHttpStatus(null);
+    setPaperExecAt(null);
+    setPaperExecError(null);
 
     const parsed = safeJsonParse(requestText);
     if (!parsed.ok) {
@@ -288,6 +307,32 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
     }
   }
 
+  const okStatus = httpStatus !== null && httpStatus >= 200 && httpStatus < 300;
+  const canRecordPaperExec = okStatus && orders.length > 0 && !loading;
+
+  function recordPaperExecution() {
+    setPaperExecError(null);
+
+    if (typeof window === "undefined") return;
+
+    const r = appendPaperExecutionLog({
+      storage: window.localStorage,
+      source: isCoreEndpoint ? "rebalance-core" : "rebalance-simulate",
+      orders,
+      note: `ui:${title}`,
+    });
+
+    if (!r.ok) {
+      setPaperExecError(r.error);
+      return;
+    }
+
+    setPaperExecAt(r.entry.at);
+
+    // Let cross-step summaries refresh without plumbing extra context.
+    window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
+  }
+
   const canCopyReq = parsedReq.ok;
   const canCopyResp = !!response;
 
@@ -402,6 +447,33 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
               ) : (
                 <div style={{ fontSize: 12, color: "#666" }}>No orders.</div>
               )}
+
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={recordPaperExecution}
+                  disabled={!canRecordPaperExec}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    background: "#fff",
+                    opacity: canRecordPaperExec ? 1 : 0.5,
+                    fontSize: 12,
+                  }}
+                >
+                  Record paper execution (log only)
+                </button>
+                <div style={{ marginTop: 6, fontSize: 11, color: "#666" }}>
+                  Writes BUY/SELL orders into a localStorage execution log for review/traceability. No real trading.
+                </div>
+                {paperExecAt ? (
+                  <div style={{ marginTop: 6, fontSize: 11, color: "#0a7" }}>Recorded at {paperExecAt}.</div>
+                ) : null}
+                {paperExecError ? (
+                  <div style={{ marginTop: 6, fontSize: 11, color: "#b00020" }}>{paperExecError}</div>
+                ) : null}
+              </div>
             </div>
 
             {trigger ? (

@@ -15,6 +15,8 @@ import {
 } from "../wizardStorage";
 import { LS_TAG_TAXONOMY, loadTagTaxonomy } from "../tagTaxonomy";
 
+import { loadPaperExecutionLog } from "@/src/daa/executionLogStore";
+
 type SuggestedOrder = { symbol: string; side: string; notional: number; reason?: string };
 
 type MarketEventLite = { id?: string; ts?: string; title?: string };
@@ -93,6 +95,10 @@ export default function WizardPersistentSummary() {
   const tagTaxonomyRaw = useMemo(() => readJsonFromLs(LS_TAG_TAXONOMY), [rev]);
   const tagTaxonomy = useMemo(() => loadTagTaxonomy(), [rev]);
 
+  const paperExecutionLog = useMemo(() => (typeof window === "undefined" ? [] : loadPaperExecutionLog(window.localStorage)), [rev]);
+  const paperExecutionCount = paperExecutionLog.length;
+  const paperExecutionLast = paperExecutionCount ? paperExecutionLog[paperExecutionCount - 1] : null;
+
   const signals = useMemo(() => extractSignals(rebalanceReq), [rebalanceReq]);
 
   const orders = useMemo(() => {
@@ -116,7 +122,8 @@ export default function WizardPersistentSummary() {
     !!step1Backtest ||
     (Array.isArray(marketEvents) && marketEvents.length > 0) ||
     !!humanProfile ||
-    !!tagTaxonomyRaw;
+    !!tagTaxonomyRaw ||
+    paperExecutionCount > 0;
 
   const bundle = useMemo(
     () => ({
@@ -128,8 +135,9 @@ export default function WizardPersistentSummary() {
       signals,
       recommendation: rebalanceResp,
       rebalance_request: rebalanceReq,
+      paper_execution_log: paperExecutionLog,
     }),
-    [step1Backtest, moneyPlan, marketEvents, humanProfile, tagTaxonomy, signals, rebalanceResp, rebalanceReq]
+    [step1Backtest, moneyPlan, marketEvents, humanProfile, tagTaxonomy, signals, rebalanceResp, rebalanceReq, paperExecutionLog]
   );
 
   if (!hasAny) {
@@ -279,6 +287,36 @@ export default function WizardPersistentSummary() {
             <pre style={{ margin: 0, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(rebalanceResp)}</pre>
           ) : (
             <div style={{ fontSize: 12, color: "#666" }}>No recommendation yet.</div>
+          )}
+        </div>
+
+        <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Execution log（paper）</div>
+          {paperExecutionCount ? (
+            <div style={{ fontSize: 12, color: "#444" }}>
+              <div>{paperExecutionCount} entries in localStorage.</div>
+              {paperExecutionLast ? (
+                <div style={{ marginTop: 6, fontSize: 11, color: "#666" }}>
+                  Last: {paperExecutionLast.at} — {paperExecutionLast.orders.length} orders
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(pretty(paperExecutionLog))}
+                style={{
+                  marginTop: 8,
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  background: "#fff",
+                  fontSize: 12,
+                }}
+              >
+                Copy log JSON
+              </button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#666" }}>No paper executions yet.</div>
           )}
         </div>
       </div>
