@@ -6,6 +6,8 @@ import Announcement from "../../../components/Announcement";
 import zhifubaoImg from "../../../assets/zhifubao.png";
 import weixinImg from "../../../assets/weixin.png";
 
+import { DaaRebalancePanel } from "./_components/DaaRebalancePanel";
+
 function PlusIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
@@ -2662,6 +2664,7 @@ const getGroupName: any = () => {
       </div>
 
       <div className="grid">
+        <DaaRebalancePanel />
         <div className="col-12 glass card add-fund-section" role="region" aria-label="添加基金">
           <div className="title" style={{ marginBottom: 12 }}>
             <PlusIcon width="20" height="20" />
