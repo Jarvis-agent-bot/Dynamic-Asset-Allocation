@@ -90,6 +90,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<unknown>(null);
+  const [lastAttemptAt, setLastAttemptAt] = useState<string | null>(null);
 
   const [paperExecAt, setPaperExecAt] = useState<string | null>(null);
   const [paperExecError, setPaperExecError] = useState<string | null>(null);
@@ -202,12 +203,11 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
   }, [parsedReq, response]);
 
   async function run() {
+    setLastAttemptAt(new Date().toISOString());
+
     setLoading(true);
     setError(null);
-    setResponse(null);
-    setHttpStatus(null);
-    setPaperExecAt(null);
-    setPaperExecError(null);
+    // Keep the previous response visible while retrying; only replace it once we have a new response.
 
     const parsed = safeJsonParse(requestText);
     if (!parsed.ok) {
@@ -310,6 +310,9 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
       }
 
       setResponse(nextResp);
+      // The output changed; clear the paper-exec status so users don't confuse it with a previous run.
+      setPaperExecAt(null);
+      setPaperExecError(null);
       saveJsonToLs(LS_REBALANCE_RESPONSE, nextResp);
 
       if (res.ok) {
@@ -387,7 +390,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
               opacity: loading || !parsedReq.ok ? 0.5 : 1,
             }}
           >
-            {loading ? "Running..." : "Generate recommendation"}
+            {loading ? "Running..." : error ? "Retry" : "Generate recommendation"}
           </button>
         </div>
       </div>
@@ -447,7 +450,16 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
             </button>
           </div>
 
-          {error ? <div style={{ fontSize: 12, color: "#b00020", marginBottom: 6 }}>{error}</div> : null}
+          {error ? (
+            <div style={{ fontSize: 12, color: "#b00020", marginBottom: 6 }}>
+              {lastAttemptAt ? (
+                <span style={{ fontFamily: "ui-monospace, SFMono-Regular" }}>{lastAttemptAt}</span>
+              ) : null}
+              {lastAttemptAt ? " · " : null}
+              {error}
+              {response ? <span style={{ color: "#666" }}> (showing last response)</span> : null}
+            </div>
+          ) : null}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
             <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
