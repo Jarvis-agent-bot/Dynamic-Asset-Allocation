@@ -12,6 +12,7 @@ import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
 import { getDefaultExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
+import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -343,6 +344,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunError, setPaperRunError] = useState<string | null>(null);
   const [paperRunRecordedAt, setPaperRunRecordedAt] = useState<string | null>(null);
   const [paperRunSummary, setPaperRunSummary] = useState<string | null>(null);
+  const [paperRunPostSummary, setPaperRunPostSummary] = useState<RebalancePostRunSummaryV0 | null>(null);
   const [paperRunDriftAlert, setPaperRunDriftAlert] = useState<DriftAlertV0 | null>(null);
 
   useEffect(() => {
@@ -834,6 +836,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     setPaperRunError(null);
     setPaperRunRecordedAt(null);
     setPaperRunSummary(null);
+    setPaperRunPostSummary(null);
     setPaperRunDriftAlert(null);
 
     if (typeof window === 'undefined') return;
@@ -963,6 +966,50 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunRecordedAt(r.entry.at);
       setPaperRunSummary(`已记录 paper execution：${orders.length} 条 orders。`);
 
+      try {
+        const valuesBySymbol: Record<string, number> = {};
+        for (const [sym, qty] of Object.entries(holdingsMap)) {
+          const px = toFiniteNumber((pricesMap as any)[sym]);
+          if (px === null || px <= 0) continue;
+          valuesBySymbol[sym] = qty * px;
+        }
+
+        const targetWeightsBySymbol: Record<string, number> = {};
+        for (const t of targetWeights) {
+          const id = String((t as any)?.id ?? '').trim();
+          if (!id) continue;
+          const w = toFiniteNumber((t as any)?.targetPct);
+          if (w === null) continue;
+          targetWeightsBySymbol[id] = w;
+        }
+
+        const labelsBySymbol: Record<string, string> = {};
+        for (const t of targetWeights) {
+          const id = String((t as any)?.id ?? '').trim();
+          if (!id) continue;
+          labelsBySymbol[id] = String((t as any)?.label ?? id);
+        }
+        for (const f of funds ?? []) {
+          const code = String((f as any)?.code ?? '').trim();
+          const name = String((f as any)?.name ?? '').trim();
+          if (code && name) labelsBySymbol[code] = name;
+        }
+
+        setPaperRunPostSummary(
+          buildRebalancePostRunSummaryV0({
+            cashStart: toFiniteNumber((st as any)?.cash) ?? 0,
+            valuesBySymbol,
+            targetWeightsBySymbol,
+            orders,
+            feeBps: whatIfFeeBps,
+            slippageBps: whatIfSlippageBps,
+            labelsBySymbol,
+          })
+        );
+      } catch {
+        // ignore
+      }
+
       // Record the latest run in the portfolio store so cooldown debouncing can work.
       recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: 'ui:market/funds:paper-run' });
     } catch (e) {
@@ -1077,7 +1124,50 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             ) : null}
 
             {paperRunRecordedAt ? (
-              <div style={{ fontSize: 12, marginTop: 6, color: 'var(--primary)' }}>Paper run recorded at {paperRunRecordedAt}.</div>
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '10px 12px',
+                  border: '1px solid rgba(0, 170, 119, 0.35)',
+                  borderRadius: 12,
+                  background: 'rgba(0, 170, 119, 0.08)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary)' }}>
+                    Paper run recorded
+                    <span className="muted" style={{ marginLeft: 8, fontWeight: 500, fontFamily: 'ui-monospace, SFMono-Regular' }}>{paperRunRecordedAt}</span>
+                  </div>
+                  <button type="button" className="button secondary" onClick={() => scrollToId('rebalance-log')} style={{ padding: '6px 10px' }}>
+                    Next: view log
+                  </button>
+                </div>
+
+                {paperRunPostSummary && paperRunPostSummary.targetFillPct01 !== null ? (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                    Target fill: <b>{(paperRunPostSummary.targetFillPct01 * 100).toFixed(0)}%</b>
+                    {paperRunPostSummary.sumAbsDriftBeforePct01 !== null && paperRunPostSummary.sumAbsDriftAfterPct01 !== null ? (
+                      <>
+                        {' '}· Σ|drift|: {(paperRunPostSummary.sumAbsDriftBeforePct01 * 100).toFixed(1)}% → {(paperRunPostSummary.sumAbsDriftAfterPct01 * 100).toFixed(1)}%
+                      </>
+                    ) : null}
+                    {paperRunPostSummary.maxAbsDriftBeforePct01 !== null && paperRunPostSummary.maxAbsDriftAfterPct01 !== null ? (
+                      <>
+                        {' '}· max|drift|: {(paperRunPostSummary.maxAbsDriftBeforePct01 * 100).toFixed(1)}% → {(paperRunPostSummary.maxAbsDriftAfterPct01 * 100).toFixed(1)}%
+                      </>
+                    ) : null}
+                    {' '}· orders: <b>{paperRunPostSummary.ordersCount}</b>
+                  </div>
+                ) : paperRunSummary ? (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{paperRunSummary}</div>
+                ) : null}
+
+                {paperRunPostSummary?.warnings?.length ? (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                    What-if warnings: {paperRunPostSummary.warnings.slice(0, 2).join('; ')}
+                  </div>
+                ) : null}
+              </div>
             ) : paperRunError ? (
               <div style={{ fontSize: 12, marginTop: 6, color: 'var(--danger)' }}>{paperRunError}</div>
             ) : paperRunSummary ? (
