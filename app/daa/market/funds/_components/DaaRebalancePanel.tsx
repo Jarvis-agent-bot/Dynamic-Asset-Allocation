@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
-import { loadPortfolioStateV1, recordPortfolioLastRebalance } from '../../../portfolioStateStore';
-import { getSnapshotPrice, loadPriceSnapshotV1 } from '../../../priceSnapshotStore';
-import { loadTargetWeightsV1 } from '../../../targetWeightsStore';
+import { LS_LEGACY_HOLDINGS, loadPortfolioStateV1, recordPortfolioLastRebalance, savePortfolioStateV1 } from '../../../portfolioStateStore';
+import { getSnapshotPrice, loadPriceSnapshotV1, savePriceSnapshotV1 } from '../../../priceSnapshotStore';
+import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeightsStore';
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 
 import { appendPaperExecutionLog } from '@/src/daa/executionLogStore';
@@ -168,6 +168,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyOrdersStatus, setCopyOrdersStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyWeightsStatus, setCopyWeightsStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [sampleStatus, setSampleStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
   const [rev, setRev] = useState(0);
 
@@ -197,6 +198,68 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     } catch {
       setCopyStatus('error');
       window.setTimeout(() => setCopyStatus('idle'), 2000);
+    }
+  }
+
+  async function applySampleScenarioV0() {
+    if (typeof window === 'undefined') return;
+
+    const ok = window.confirm(
+      'Load sample scenario v0? This will overwrite local demo data (portfolio, price snapshot, targetWeights) and clear last rebalance request/response.'
+    );
+    if (!ok) return;
+
+    try {
+      const at = new Date().toISOString();
+
+      const legacyHoldings: HoldingsLike = {
+        '005963': { share: 1000, cost: 1.2 },
+        '007300': { share: 500, cost: 1.0 },
+      };
+
+      // Keep the legacy `holdings` key in sync so the Market/Funds page and older exports keep working.
+      window.localStorage.setItem(LS_LEGACY_HOLDINGS, JSON.stringify(legacyHoldings));
+
+      savePortfolioStateV1({
+        schemaVersion: 1,
+        updatedAt: at,
+        cash: 1000,
+        positions: {
+          '005963': { qty: 1000, cost: 1.2 },
+          '007300': { qty: 500, cost: 1.0 },
+        },
+      });
+
+      savePriceSnapshotV1({
+        schemaVersion: 1,
+        updatedAt: at,
+        prices: {
+          '005963': { price: 1.234 },
+          '007300': { price: 1.052 },
+          '000001': { price: 1.4 },
+        },
+      });
+
+      persistTargetWeightsV1([
+        { id: '005963', label: '005963', targetPct: 0.4 },
+        { id: '007300', label: '007300', targetPct: 0.3 },
+        { id: '000001', label: '000001', targetPct: 0.3 },
+      ]);
+
+      // Clear stale outputs so the demo reflects the newly loaded scenario.
+      window.localStorage.removeItem(LS_REBALANCE_REQUEST);
+      window.localStorage.removeItem(LS_REBALANCE_RESPONSE);
+
+      window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
+
+      setSampleStatus('ok');
+      window.setTimeout(() => setSampleStatus('idle'), 1200);
+
+      setOpen(true);
+      window.setTimeout(() => scrollToId('rebalance'), 50);
+    } catch {
+      setSampleStatus('error');
+      window.setTimeout(() => setSampleStatus('idle'), 2000);
     }
   }
 
@@ -276,8 +339,31 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return normalizeOrders(r.orders);
   }, [rebalanceResp]);
 
+  const holdingsForWeights = useMemo(() => {
+    if (holdings && Object.keys(holdings).length) return holdings;
+
+    try {
+      const st = loadPortfolioStateV1();
+      const out: HoldingsLike = {};
+      for (const [codeRaw, p] of Object.entries(st.positions ?? {})) {
+        const code = String(codeRaw ?? '').trim();
+        if (!code) continue;
+
+        const qty = toFiniteNumber((p as any)?.qty);
+        if (!qty || qty <= 0) continue;
+
+        const costRaw = (p as any)?.cost;
+        const costNum = costRaw === undefined ? null : toFiniteNumber(costRaw);
+        out[code] = costNum !== null && costNum !== undefined ? { share: qty, cost: costNum } : { share: qty };
+      }
+      return out;
+    } catch {
+      return {} as HoldingsLike;
+    }
+  }, [holdings, rev]);
+
   const currentWeights = useMemo(() => {
-    if (!holdings) return [] as Array<{ id: string; label: string; value: number }>;
+    if (!holdingsForWeights || !Object.keys(holdingsForWeights).length) return [] as Array<{ id: string; label: string; value: number }>;
 
     const byCode = new Map<string, FundLike>();
     for (const f of funds ?? []) {
@@ -286,7 +372,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
 
     const rows: Array<{ id: string; label: string; value: number }> = [];
-    for (const [codeRaw, h] of Object.entries(holdings ?? {})) {
+    for (const [codeRaw, h] of Object.entries(holdingsForWeights ?? {})) {
       const code = String(codeRaw ?? '').trim();
       if (!code) continue;
 
@@ -305,7 +391,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     rows.sort((a, b) => b.value - a.value);
     return rows;
-  }, [funds, holdings, priceSnapshot]);
+  }, [funds, holdingsForWeights, priceSnapshot]);
 
   const rebalanceTableRows = useMemo(() => {
     const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
@@ -569,6 +655,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           </Link>
           <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)} style={{ padding: '6px 10px' }}>
             {nextJump.buttonText}
+          </button>
+          <button type="button" className="button secondary" onClick={applySampleScenarioV0} style={{ padding: '6px 10px' }}>
+            {sampleStatus === 'ok' ? 'Loaded' : sampleStatus === 'error' ? 'Load failed' : 'Load sample scenario'}
           </button>
           <button type="button" className="button" onClick={doCopyBundle} style={{ padding: '6px 10px' }}>
             {copyStatus === 'ok' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy bundle JSON'}
