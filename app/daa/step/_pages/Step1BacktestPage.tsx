@@ -7,10 +7,23 @@ import { recommendEnsembleWeightsFromRankedResults } from "../../../../src/core/
 import { fetchValidatedPriceSeriesEnforcingRange, createDeterministicMockPriceSeriesProvider } from "../../../../src/core/providers";
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
 
+import { LS_STEP1_BACKTEST, saveJsonToLs } from "../../wizardStorage";
+
 type Step1Result = {
+  schemaVersion: 1;
+  generatedAt: string;
+
   ranked: RankedBacktestResult[];
   input: unknown;
   output?: unknown;
+
+  summary?: {
+    bestStrategyId: string;
+    bestStrategyName: string;
+    bestScore: number;
+    metrics: RankedBacktestResult["metrics"];
+    weightsConfig: Record<string, number>;
+  };
 } & Record<string, unknown>;
 
 function jsonPretty(x: unknown) {
@@ -94,13 +107,29 @@ export default function Step1BacktestPage() {
       const ranked = rankBacktestResults(results);
       const recommendedWeightsConfig = recommendEnsembleWeightsFromRankedResults(ranked);
 
-      setResult({
+      const top = ranked[0];
+      const next: Step1Result = {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
         input: { symbol, start, end, strategies: strategies.map((s) => ({ id: s.id, name: s.name })) },
         ranked,
         output: {
           weightsConfig: recommendedWeightsConfig,
         },
-      });
+        summary: top
+          ? {
+              bestStrategyId: String(top.strategyId),
+              bestStrategyName: String(top.strategyName),
+              bestScore: Number(top.score),
+              metrics: top.metrics,
+              weightsConfig: recommendedWeightsConfig,
+            }
+          : undefined,
+      };
+
+      setResult(next);
+      // Write-back so the Funds hub / Wizard summary can show the latest strategy+metrics.
+      saveJsonToLs(LS_STEP1_BACKTEST, next);
     } catch (e) {
       setRunError(e instanceof Error ? e.message : String(e));
       setResult(null);

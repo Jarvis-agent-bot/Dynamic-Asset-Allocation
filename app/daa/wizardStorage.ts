@@ -10,6 +10,7 @@ export const LS_REBALANCE_RESPONSE = "daa.wizard.rebalanceResponse";
 export const LS_MARKET_EVENTS = "daa.wizard.marketEvents";
 
 // Step-specific storage keys (kept here so cross-step summary can read them).
+export const LS_STEP1_BACKTEST = "daa.step1.backtest";
 export const LS_HUMAN_PROFILE = "daa.step6.humanProfile";
 
 export const WIZARD_DATA_EVENT = "daa:wizard:data";
