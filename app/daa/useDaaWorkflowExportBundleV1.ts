@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { analyzeDaaRecommendation } from "@/src/core/aiAnalysis";
 
+import { loadPaperExecutionLog } from "@/src/daa/executionLogStore";
+import { loadRebalanceLog } from "@/src/daa/rebalanceLogStore";
+
+import { loadPortfolioStateV1 } from "./portfolioStateStore";
+
 import {
   LS_HUMAN_PROFILE,
   LS_MARKET_EVENTS,
@@ -25,6 +30,11 @@ export type DaaWorkflowExportBundleV1 = {
   ai_explain: unknown;
   human_profile: unknown;
   tag_taxonomy: unknown;
+
+  // Observability v0: keep rolling histories so runs can be traced/replayed.
+  portfolio_state: unknown;
+  rebalance_log: unknown;
+  paper_execution_log: unknown;
 
   meta: {
     tagTaxonomyConfigured: boolean;
@@ -52,6 +62,10 @@ export function useDaaWorkflowExportBundleV1() {
   const tagTaxonomyRaw = useMemo(() => readJsonFromLs(LS_TAG_TAXONOMY), [rev]);
   const tagTaxonomy = useMemo(() => loadTagTaxonomy(), [rev]);
 
+  const portfolioState = useMemo(() => (typeof window === "undefined" ? null : loadPortfolioStateV1()), [rev]);
+  const rebalanceLog = useMemo(() => (typeof window === "undefined" ? [] : loadRebalanceLog(window.localStorage)), [rev]);
+  const paperExecutionLog = useMemo(() => (typeof window === "undefined" ? [] : loadPaperExecutionLog(window.localStorage)), [rev]);
+
   const aiExplain = useMemo(() => {
     if (!rebalanceReq || !rebalanceResp) return null;
     try {
@@ -77,11 +91,26 @@ export function useDaaWorkflowExportBundleV1() {
       human_profile: humanProfile,
       tag_taxonomy: tagTaxonomy,
 
+      portfolio_state: portfolioState,
+      rebalance_log: rebalanceLog,
+      paper_execution_log: paperExecutionLog,
+
       meta: {
         tagTaxonomyConfigured: !!tagTaxonomyRaw,
       },
     }),
-    [aiExplain, humanProfile, marketEvents, rebalanceReq, rebalanceResp, tagTaxonomy, tagTaxonomyRaw]
+    [
+      aiExplain,
+      humanProfile,
+      marketEvents,
+      paperExecutionLog,
+      portfolioState,
+      rebalanceLog,
+      rebalanceReq,
+      rebalanceResp,
+      tagTaxonomy,
+      tagTaxonomyRaw,
+    ]
   );
 
   const marketEventCount = Array.isArray(marketEvents) ? marketEvents.length : 0;

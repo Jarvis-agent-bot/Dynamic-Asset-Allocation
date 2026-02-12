@@ -1,5 +1,9 @@
 "use client";
 
+import { appendRebalanceLog } from "@/src/daa/rebalanceLogStore";
+
+import { WIZARD_DATA_EVENT } from "./wizardStorage";
+
 // Portfolio state (v0): positions + cash + lastRebalance.
 // Stored in localStorage with an explicit schemaVersion for forward-compatible migrations.
 
@@ -232,4 +236,16 @@ export function recordPortfolioLastRebalance(args: { kind: "simulate" | "core"; 
   };
 
   savePortfolioStateV1(next);
+
+  // Capture a rolling history so users can export/trace multiple runs.
+  appendRebalanceLog({
+    storage: window.localStorage,
+    source: args.kind,
+    request: args.request,
+    response: args.response,
+    note: "portfolio.lastRebalance",
+  });
+
+  // Trigger UI refresh in the same tab (storage events don't fire locally).
+  window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
 }
