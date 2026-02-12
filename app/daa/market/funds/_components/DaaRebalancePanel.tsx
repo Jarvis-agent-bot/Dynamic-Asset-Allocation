@@ -32,12 +32,12 @@ export function DaaRebalancePanel() {
   }, [rt.hasHumanProfile, rt.hasRecommendation, rt.marketEventCount, rt.nextActionText]);
 
   return (
-    <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Rebalance 面板">
+    <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
       <div className="title" style={{ marginBottom: 12, justifyContent: 'space-between' as const }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
-          <span style={{ fontWeight: 800 }}>DAA Rebalance</span>
+          <span style={{ fontWeight: 800 }}>DAA Workflow</span>
           <span className="muted" style={{ fontSize: 12 }}>
-            Hub on Market/Funds: checklist + import/export + explain
+            Hub on Market/Funds: checklist + jump actions + import/export
           </span>
         </div>
 
