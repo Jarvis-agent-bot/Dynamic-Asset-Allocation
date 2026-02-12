@@ -17,6 +17,9 @@ describe("buildRebalancePostRunSummaryV0", () => {
     });
 
     expect(r.ordersCount).toBe(2);
+    expect(r.turnoverNotional).toBeCloseTo(200, 9);
+    expect(r.turnoverPctOfTotalBefore01).toBeCloseTo(2, 9);
+
     expect(r.targetFillPct01).not.toBeNull();
     expect(r.targetFillPct01).toBeCloseTo(1, 9);
 

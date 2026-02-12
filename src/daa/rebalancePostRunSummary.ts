@@ -3,13 +3,20 @@ import { simulateRebalanceWhatIfV0, type WhatIfOrderV0 } from "../core/rebalance
 export type RebalancePostRunSummaryV0 = {
   schemaVersion: 1;
   ordersCount: number;
+
+  // Turnover (buy+sell). This is useful to sanity-check that the run used the intended orders.
+  turnoverNotional: number;
+  turnoverPctOfTotalBefore01: number | null;
+
   // 0..1 where 1 means perfectly matches target (based on sumAbsDrift).
   targetFillPct01: number | null;
+
   // Sum of absolute drift vs target (including cash) before/after.
   sumAbsDriftBeforePct01: number | null;
   sumAbsDriftAfterPct01: number | null;
   maxAbsDriftBeforePct01: number | null;
   maxAbsDriftAfterPct01: number | null;
+
   warnings: string[];
 };
 
@@ -98,9 +105,15 @@ export function buildRebalancePostRunSummaryV0(args: {
 
   const targetFillPct01 = sumAbsBefore > 1e-12 ? clamp01(1 - sumAbsAfter / sumAbsBefore) : null;
 
+  const turnoverPctOfTotalBefore01 = whatIf.totalBefore > 0 ? whatIf.turnoverNotional / whatIf.totalBefore : null;
+
   return {
     schemaVersion: 1,
     ordersCount: orders.length,
+
+    turnoverNotional: whatIf.turnoverNotional,
+    turnoverPctOfTotalBefore01,
+
     targetFillPct01,
     sumAbsDriftBeforePct01: sumAbsBefore,
     sumAbsDriftAfterPct01: sumAbsAfter,
