@@ -170,6 +170,9 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
               text={rt.marketEventCount && rt.hasRecommendation && rt.hasHumanProfile ? "ready" : "partial"}
             />
             <JumpButton onClick={() => onJump("export")}>Go</JumpButton>
+            <Link href="/daa/dashboard#export" style={{ color: "#111", fontSize: 12 }}>
+              Open
+            </Link>
           </div>
         </div>
       </div>
