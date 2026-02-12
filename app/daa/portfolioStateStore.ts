@@ -216,7 +216,7 @@ function extractCashFromRebalanceRequest(req: unknown): number | null {
   return null;
 }
 
-export function recordPortfolioLastRebalance(args: { kind: "simulate" | "core"; request: unknown; response: unknown }) {
+export function recordPortfolioLastRebalance(args: { kind: "simulate" | "core"; request: unknown; response: unknown; logNote?: string }) {
   if (typeof window === "undefined") return;
 
   const st = loadPortfolioStateV1();
@@ -243,7 +243,7 @@ export function recordPortfolioLastRebalance(args: { kind: "simulate" | "core"; 
     source: args.kind,
     request: args.request,
     response: args.response,
-    note: "portfolio.lastRebalance",
+    note: args.logNote || "portfolio.lastRebalance",
   });
 
   // Trigger UI refresh in the same tab (storage events don't fire locally).

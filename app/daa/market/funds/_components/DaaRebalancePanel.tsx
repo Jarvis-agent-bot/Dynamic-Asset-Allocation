@@ -37,6 +37,7 @@ import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
 import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
 import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
 import DaaRebalancePolicyEditorV0 from './DaaRebalancePolicyEditorV0';
+import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 
 type FundLike = {
   code: string;
@@ -529,7 +530,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunSummary(`Recorded paper execution: ${orders.length} orders.`);
 
       // Record the latest run in the portfolio store so cooldown debouncing can work.
-      recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue });
+      recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: 'ui:market/funds:paper-run' });
     } catch (e) {
       setPaperRunError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -713,6 +714,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <div className="muted" style={{ fontSize: 12 }}>No orders. (Run Step4 once or ensure current vs target data exists.)</div>
               )}
             </div>
+          </div>
+
+          <div id="rebalance-log" style={{ scrollMarginTop: 12 }}>
+            <DaaRebalanceLogViewV0 />
           </div>
 
           <div id="step1" style={{ scrollMarginTop: 12 }}>
