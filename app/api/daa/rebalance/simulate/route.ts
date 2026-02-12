@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     contentType: "application/json",
     timeoutMs,
     fallbackContentType: "application/json",
+    abortSignal: req.signal,
     validate: isDaaEngineRebalanceSimulateResponse,
   });
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { LS_LEGACY_HOLDINGS, loadPortfolioStateV1, recordPortfolioLastRebalance, savePortfolioStateV1 } from '../../../portfolioStateStore';
@@ -346,6 +346,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunSummary, setPaperRunSummary] = useState<string | null>(null);
   const [paperRunPostSummary, setPaperRunPostSummary] = useState<RebalancePostRunSummaryV0 | null>(null);
   const [paperRunDriftAlert, setPaperRunDriftAlert] = useState<DriftAlertV0 | null>(null);
+  const paperRunAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const onData = () => setRev((x) => x + 1);
@@ -843,6 +844,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     setPaperRunLoading(true);
 
+    paperRunAbortRef.current?.abort();
+    const controller = new AbortController();
+    paperRunAbortRef.current = controller;
+
     // Pre-compute drift breaches so the UI shows an immediate "live" alert even if the core route is slow.
     setPaperRunDriftAlert(
       computeDriftAlertFromTableRows({ at: new Date().toISOString(), rows: rebalanceTableRows, thresholdPct: driftThresholdPct })
@@ -914,6 +919,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(req),
+        signal: controller.signal,
       });
 
       const text = await res.text();
@@ -1013,8 +1019,19 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       // Record the latest run in the portfolio store so cooldown debouncing can work.
       recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: 'ui:market/funds:paper-run' });
     } catch (e) {
-      setPaperRunError(e instanceof Error ? e.message : String(e));
+      const isAbort =
+        typeof e === 'object' &&
+        e !== null &&
+        'name' in e &&
+        (e as any).name === 'AbortError';
+
+      if (isAbort) {
+        setPaperRunSummary('已取消（abort）。');
+      } else {
+        setPaperRunError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
+      paperRunAbortRef.current = null;
       setPaperRunLoading(false);
     }
   }
@@ -1099,6 +1116,16 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 >
                   {paperRunLoading ? 'Running...' : 'Run paper rebalance'}
                 </button>
+                {paperRunLoading ? (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => paperRunAbortRef.current?.abort()}
+                    style={{ padding: '6px 10px' }}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
                 <Link href="/daa?step=3" className="muted" style={{ fontSize: 12 }}>
                   Edit money plan
                 </Link>

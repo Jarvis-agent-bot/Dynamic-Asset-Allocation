@@ -157,4 +157,38 @@ describe("daa/proxyToEngine", () => {
     expect(resp.status).toBe(502);
     await expect(resp.json()).resolves.toMatchObject({ ok: false, error: "upstream response contract mismatch" });
   });
+
+  it("forwards abortSignal to the upstream fetch", async () => {
+    globalThis.fetch = vi.fn(((_url: any, init: any) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => {
+            reject({ name: "AbortError" });
+          },
+          { once: true },
+        );
+      });
+    }) as any) as unknown as typeof fetch;
+
+    const ac = new AbortController();
+
+    const p = proxyToEngine({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "text/plain; charset=utf-8",
+      abortSignal: ac.signal,
+    });
+
+    ac.abort();
+
+    const resp = await p;
+
+    expect(resp.status).toBe(504);
+    await expect(resp.json()).resolves.toMatchObject({
+      error: "upstream timeout",
+      upstream: expect.any(String),
+    });
+  });
 });
