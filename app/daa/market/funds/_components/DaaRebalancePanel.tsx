@@ -10,7 +10,7 @@ import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeig
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
-import { appendPaperExecutionLog } from '@/src/daa/executionLogStore';
+import { getDefaultExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -620,7 +620,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         return;
       }
 
-      const r = appendPaperExecutionLog({
+      const exec = getDefaultExecutionAdapterV0();
+      const r = exec.executeOrders({
         storage: window.localStorage,
         source: 'rebalance-core',
         orders,

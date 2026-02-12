@@ -6,7 +6,7 @@ import type { MarketEvent } from "@/src/core/marketEvents";
 
 import { buildMarketCitations, type MarketEventCitation } from "@/src/core/marketCitations";
 
-import { appendPaperExecutionLog } from "@/src/daa/executionLogStore";
+import { getDefaultExecutionAdapterV0 } from "@/src/daa/executionAdapterV0";
 
 import {
   LS_MARKET_EVENTS,
@@ -343,7 +343,8 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
 
     if (typeof window === "undefined") return;
 
-    const r = appendPaperExecutionLog({
+    const exec = getDefaultExecutionAdapterV0();
+    const r = exec.executeOrders({
       storage: window.localStorage,
       source: isCoreEndpoint ? "rebalance-core" : "rebalance-simulate",
       orders,
