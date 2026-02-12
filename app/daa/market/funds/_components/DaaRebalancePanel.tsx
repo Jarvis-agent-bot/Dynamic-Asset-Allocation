@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from '../../../portfolioStateStore';
 import { getSnapshotPrice, loadPriceSnapshotV1 } from '../../../priceSnapshotStore';
+import { loadTargetWeightsV1 } from '../../../targetWeightsStore';
 
 import { appendPaperExecutionLog } from '@/src/daa/executionLogStore';
 import { useDaaRuntime } from '../../../useDaaRuntime';
@@ -33,6 +34,7 @@ import Step7TagsPage from '../../../step/_pages/Step7TagsPage';
 
 import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
 import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
+import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
 
 type FundLike = {
   code: string;
@@ -247,7 +249,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const priceSnapshot = useMemo(() => loadPriceSnapshotV1(), [rev]);
 
-  const targetWeights = useMemo(() => normalizeTargetWeights({ response: rebalanceResp, moneyPlan }), [moneyPlan, rebalanceResp]);
+  const manualTargetWeights = useMemo(() => loadTargetWeightsV1(), [rev]);
+  const computedTargetWeights = useMemo(() => normalizeTargetWeights({ response: rebalanceResp, moneyPlan }), [moneyPlan, rebalanceResp]);
+  // Funds hub: prefer user-edited targetWeights when present.
+  const targetWeights = manualTargetWeights.length ? manualTargetWeights : computedTargetWeights;
+  const targetWeightsSource = manualTargetWeights.length ? 'manual' : 'engine/money_plan';
 
   const engineOrders = useMemo(() => {
     if (!rebalanceResp || typeof rebalanceResp !== 'object') return [];
@@ -577,6 +583,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             <DaaPriceSnapshotInputV0 />
           </div>
 
+          <div id="target-weights" style={{ scrollMarginTop: 12 }}>
+            <DaaTargetWeightsEditorV0 />
+          </div>
+
           <div id="rebalance" style={{ scrollMarginTop: 12, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
               <div style={{ fontWeight: 800 }}>Rebalance v0</div>
@@ -606,7 +616,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             </div>
 
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Current = holdings × (manual price or estGsz/gsz/dwjz) + cash; Target = engine targetWeights or money_plan.allocations; Orders = engine orders or naive diff.
+              Current = holdings × (manual price or estGsz/gsz/dwjz) + cash; Target = manual targetWeights (if configured) else engine targetWeights/money_plan.allocations; Orders = engine orders or naive diff.
+              <span style={{ marginLeft: 6 }}>
+                targetWeights source:{' '}
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{targetWeightsSource}</span>
+              </span>
             </div>
 
             {portfolioLastRebalanceAt ? (
