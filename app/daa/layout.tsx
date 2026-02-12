@@ -22,7 +22,7 @@ export default function DaaLayout({ children }: Props) {
           <Link href="/daa/dashboard" style={{ color: "#111" }}>
             Dashboard
           </Link>
-          <Link href="/daa/wizard" style={{ color: "#111" }}>
+          <Link href="/daa?step=1" style={{ color: "#111" }}>
             Wizard
           </Link>
         </div>

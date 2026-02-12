@@ -29,7 +29,7 @@ export default function DaaDashboardPage() {
         </div>
 
         <div style={{ fontSize: 12, color: "#666" }}>
-          <Link href="/daa/wizard" style={{ color: "#111" }}>
+          <Link href="/daa?step=1" style={{ color: "#111" }}>
             ← Wizard
           </Link>
         </div>

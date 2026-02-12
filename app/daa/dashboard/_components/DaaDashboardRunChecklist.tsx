@@ -2,19 +2,9 @@
 
 import Link from "next/link";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
-import { analyzeDaaRecommendation } from "@/src/core/aiAnalysis";
-
-import {
-  LS_HUMAN_PROFILE,
-  LS_MARKET_EVENTS,
-  LS_REBALANCE_REQUEST,
-  LS_REBALANCE_RESPONSE,
-  WIZARD_DATA_EVENT,
-  readJsonFromLs,
-} from "../../wizardStorage";
-import { LS_TAG_TAXONOMY } from "../../tagTaxonomy";
+import { useDaaRuntime } from "../../useDaaRuntime";
 
 type Props = {
   onJump: (id: string) => void;
@@ -65,51 +55,19 @@ function JumpButton({ onClick, children }: { onClick: () => void; children: Reac
 }
 
 export default function DaaDashboardRunChecklist({ onJump }: Props) {
-  const [rev, setRev] = useState(0);
+  const rt = useDaaRuntime();
 
-  useEffect(() => {
-    const onData = () => setRev((x) => x + 1);
-    window.addEventListener(WIZARD_DATA_EVENT, onData as EventListener);
-    window.addEventListener("storage", onData);
-    return () => {
-      window.removeEventListener(WIZARD_DATA_EVENT, onData as EventListener);
-      window.removeEventListener("storage", onData);
-    };
-  }, []);
+  const nextAction = rt.nextActionText;
 
-  const marketEvents = useMemo(() => readJsonFromLs(LS_MARKET_EVENTS), [rev]);
-  const rebalanceReq = useMemo(() => readJsonFromLs(LS_REBALANCE_REQUEST), [rev]);
-  const rebalanceResp = useMemo(() => readJsonFromLs(LS_REBALANCE_RESPONSE), [rev]);
-  const humanProfile = useMemo(() => readJsonFromLs(LS_HUMAN_PROFILE), [rev]);
-  const tagTaxonomyRaw = useMemo(() => readJsonFromLs(LS_TAG_TAXONOMY), [rev]);
+  const step5Blocked = !rt.hasRecommendation;
+  const step5Done = rt.stepStatusById[5] === "done";
 
-  const marketEventCount = Array.isArray(marketEvents) ? marketEvents.length : 0;
-
-  const hasRecommendation = !!rebalanceResp;
-  const hasHuman = !!humanProfile;
-  const tagsConfigured = !!tagTaxonomyRaw;
-
-  const aiExplainOk = useMemo(() => {
-    if (!rebalanceReq || !rebalanceResp) return false;
-    try {
-      return !!analyzeDaaRecommendation({
-        baselineRequest: rebalanceReq,
-        baselineResponse: rebalanceResp,
-        marketEvents,
-      });
-    } catch {
-      return false;
-    }
-  }, [marketEvents, rebalanceReq, rebalanceResp]);
-
-  const nextAction =
-    marketEventCount === 0
-      ? "先补 Step2 events（至少 1 条）"
-      : !hasRecommendation
-        ? "去 Step4 运行一次 recommendation"
-        : !hasHuman
-          ? "补齐 Step6 human profile"
-          : "已具备最短路径；可以导出 bundle";
+  const step7Badge =
+    rt.tagTaxonomyStatus === "configured"
+      ? { tone: "ok" as const, text: "configured" }
+      : rt.tagTaxonomyStatus === "invalid"
+        ? { tone: "missing" as const, text: "invalid" }
+        : { tone: "warn" as const, text: "default" };
 
   return (
     <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
@@ -121,7 +79,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12 }}>
-          <Link href="/daa/wizard" style={{ color: "#111" }}>
+          <Link href="/daa?step=1" style={{ color: "#111" }}>
             Open Wizard
           </Link>
         </div>
@@ -134,9 +92,9 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
             <div style={{ fontSize: 12, color: "#666" }}>影响 Step5 explain 的可追溯引用。</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={marketEventCount ? "ok" : "missing"} text={marketEventCount ? `OK: ${marketEventCount}` : "missing"} />
+            <Badge tone={rt.marketEventCount ? "ok" : "missing"} text={rt.marketEventCount ? `OK: ${rt.marketEventCount}` : "missing"} />
             <JumpButton onClick={() => onJump("step2")}>Go</JumpButton>
-            <Link href="/daa/step/2" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa?step=2" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -148,9 +106,9 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
             <div style={{ fontSize: 12, color: "#666" }}>生成 baseline recommendation（写入 localStorage）。</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={hasRecommendation ? "ok" : "missing"} text={hasRecommendation ? "OK" : "missing"} />
+            <Badge tone={rt.hasRecommendation ? "ok" : "missing"} text={rt.hasRecommendation ? "OK" : "missing"} />
             <JumpButton onClick={() => onJump("step4")}>Go</JumpButton>
-            <Link href="/daa/step/4" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa?step=4" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -163,11 +121,11 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <Badge
-              tone={hasRecommendation ? (aiExplainOk ? "ok" : "warn") : "missing"}
-              text={!hasRecommendation ? "blocked" : aiExplainOk ? "OK" : "waiting"}
+              tone={step5Blocked ? "missing" : step5Done ? "ok" : "warn"}
+              text={step5Blocked ? "blocked" : step5Done ? `OK: citations ${rt.citationsCount}` : "waiting"}
             />
             <JumpButton onClick={() => onJump("step5")}>Go</JumpButton>
-            <Link href="/daa/step/5" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa?step=5" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -179,9 +137,9 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
             <div style={{ fontSize: 12, color: "#666" }}>用于人因权重（风险偏好/评分等）。</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={hasHuman ? "ok" : "missing"} text={hasHuman ? "OK" : "missing"} />
+            <Badge tone={rt.hasHumanProfile ? "ok" : "missing"} text={rt.hasHumanProfile ? "OK" : "missing"} />
             <JumpButton onClick={() => onJump("step6")}>Go</JumpButton>
-            <Link href="/daa/step/6" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa?step=6" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -193,9 +151,9 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
             <div style={{ fontSize: 12, color: "#666" }}>用于 Step2/Step6 输入校验与归一化。</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={tagsConfigured ? "ok" : "warn"} text={tagsConfigured ? "configured" : "default"} />
+            <Badge tone={step7Badge.tone} text={step7Badge.text} />
             <JumpButton onClick={() => onJump("step7")}>Go</JumpButton>
-            <Link href="/daa/step/7" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa?step=7" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -208,8 +166,8 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <Badge
-              tone={marketEventCount && hasRecommendation && hasHuman ? "ok" : "warn"}
-              text={marketEventCount && hasRecommendation && hasHuman ? "ready" : "partial"}
+              tone={rt.marketEventCount && rt.hasRecommendation && rt.hasHumanProfile ? "ok" : "warn"}
+              text={rt.marketEventCount && rt.hasRecommendation && rt.hasHumanProfile ? "ready" : "partial"}
             />
             <JumpButton onClick={() => onJump("export")}>Go</JumpButton>
           </div>

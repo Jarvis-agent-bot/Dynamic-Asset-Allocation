@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { DAA_STEPS, getStep } from "../steps";
-import StatusPill from "../components/StatusPill";
-import WizardPersistentSummary from "./WizardPersistentSummary";
+import { useEffect, useMemo, useState } from "react";
 
+import StatusPill from "../components/StatusPill";
+import { DAA_STEPS, getStep } from "../steps";
+import { useDaaRuntime } from "../useDaaRuntime";
 import { LS_ACTIVE_STEP } from "../wizardStorage";
 
 import Step1BacktestPage from "../step/_pages/Step1BacktestPage";
@@ -17,7 +18,7 @@ import Step5SignalDecisionPage from "../step/_pages/Step5SignalDecisionSummaryPa
 import Step6HumanFactorPage from "../step/_pages/Step6HumanFactorPage";
 import Step7TagsPage from "../step/_pages/Step7TagsPage";
 
-// (moved) LS_ACTIVE_STEP lives in app/daa/wizardStorage.ts
+import WizardPersistentSummary from "./WizardPersistentSummary";
 
 function clampStepId(n: number | null | undefined): number {
   if (!n || !Number.isFinite(n)) return 1;
@@ -37,6 +38,8 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const runtime = useDaaRuntime();
 
   const stepFromQuery = useMemo(() => clampStepId(parseStepParam(searchParams.get("step"))), [searchParams]);
 
@@ -88,26 +91,86 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  const runtimeStatus = runtime.stepStatusById[activeStepId];
+
   return (
     <main>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>DAA Wizard（v0）</h1>
           <p style={{ margin: "6px 0 0", color: "#444" }}>
-            你的 Step 现在在同一页面内串联执行；支持 Next/Back；URL 仍可用 <code>/daa/step/*</code> 深链，便于分享与定位。
+            同一页面内串联 Step1-7；支持 Next/Back；canonical URL 为 <code>/daa?step=...</code>（dashboard-first）。
           </p>
         </div>
 
-        <div style={{ fontSize: 12, color: "#666" }}>
-          当前：Step {activeStepId}
-          {step?.title ? ` — ${step.title}` : ""}
+        <div style={{ fontSize: 12, color: "#666", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <Link href="/daa/dashboard" style={{ color: "#111" }}>
+            ← Dashboard
+          </Link>
+          <span style={{ color: "#bbb" }}>|</span>
+          <span>
+            当前：Step {activeStepId}
+            {step?.title ? ` — ${step.title}` : ""}
+          </span>
+          {runtimeStatus ? <StatusPill status={runtimeStatus} /> : null}
         </div>
       </div>
+
+      <section style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 10, padding: 12, background: "#fff" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Next action</div>
+            <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
+              <b>{runtime.nextActionText}</b>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {runtime.nextStepId ? (
+              <button
+                type="button"
+                onClick={() => go(runtime.nextStepId as number)}
+                style={{
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #111",
+                  background: "#111",
+                  color: "#fff",
+                  fontSize: 12,
+                }}
+              >
+                Go Step {runtime.nextStepId} →
+              </button>
+            ) : (
+              <Link
+                href="/daa/dashboard#export"
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #111",
+                  background: "#111",
+                  color: "#fff",
+                  fontSize: 12,
+                  textDecoration: "none",
+                }}
+              >
+                Export bundle →
+              </Link>
+            )}
+
+            <Link href="/daa/dashboard" style={{ color: "#111", fontSize: 12 }}>
+              Open dashboard
+            </Link>
+          </div>
+        </div>
+      </section>
 
       <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 10, padding: 12, background: "#fff" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {DAA_STEPS.map((s) => {
             const isActive = s.id === activeStepId;
+            const status = runtime.stepStatusById[s.id];
             return (
               <button
                 key={s.id}
@@ -129,7 +192,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
               >
                 <span style={{ fontWeight: 700 }}>Step {s.id}</span>
                 <span>{s.title}</span>
-                {s.status ? <StatusPill status={s.status} /> : null}
+                {status ? <StatusPill status={status} /> : null}
               </button>
             );
           })}
@@ -192,13 +255,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
         </button>
       </div>
 
-      <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>
-        {step?.desc ? (
-          <div>
-            <span style={{ fontWeight: 600 }}>说明：</span> {String(step.desc)}
-          </div>
-        ) : null}
-      </div>
+      <div style={{ marginTop: 16, fontSize: 12, color: "#666" }}>{step?.desc ? <div>{String(step.desc)}</div> : null}</div>
     </main>
   );
 }
