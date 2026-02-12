@@ -12,6 +12,7 @@ import {
   LS_MONEY_PLAN,
   LS_REBALANCE_REQUEST,
   LS_REBALANCE_RESPONSE,
+  LS_STEP1_BACKTEST,
   WIZARD_DATA_EVENT,
   readJsonFromLs,
 } from "./wizardStorage";
@@ -23,6 +24,8 @@ export type DaaRuntime = {
   hasRecommendation: boolean;
   hasHumanProfile: boolean;
   hasMoneyPlan: boolean;
+  hasBacktest: boolean;
+  step1Backtest: unknown | null;
   tagTaxonomyStatus: DaaTagTaxonomyRuntimeStatus;
   analysis: AiAnalysis | null;
   citationsCount: number;
@@ -57,11 +60,13 @@ export function useDaaRuntime(): DaaRuntime {
   const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
   const humanProfile = useMemo(() => readJsonFromLs(LS_HUMAN_PROFILE), [rev]);
   const tagTaxonomyRaw = useMemo(() => readJsonFromLs(LS_TAG_TAXONOMY), [rev]);
+  const step1Backtest = useMemo(() => readJsonFromLs(LS_STEP1_BACKTEST), [rev]);
 
   const marketEventCount = useMemo(() => countMarketEvents(marketEvents), [marketEvents]);
   const hasRecommendation = !!rebalanceResp;
   const hasHumanProfile = !!humanProfile;
   const hasMoneyPlan = !!moneyPlan;
+  const hasBacktest = !!step1Backtest;
 
   const tagTaxonomyStatus: DaaTagTaxonomyRuntimeStatus = useMemo(() => {
     if (!tagTaxonomyRaw) return "default";
@@ -84,6 +89,7 @@ export function useDaaRuntime(): DaaRuntime {
   const citationsCount = analysis?.marketCitations?.length ?? 0;
 
   const stepStatusById: Record<number, DaaStepStatus> = useMemo(() => {
+    const step1: DaaStepStatus = hasBacktest ? "done" : "wip";
     const step2: DaaStepStatus = marketEventCount > 0 ? "done" : "todo";
     const step3: DaaStepStatus = hasMoneyPlan ? "done" : "wip";
     const step4: DaaStepStatus = hasRecommendation ? "done" : "todo";
@@ -93,7 +99,7 @@ export function useDaaRuntime(): DaaRuntime {
     const step7: DaaStepStatus = tagTaxonomyStatus === "configured" ? "done" : tagTaxonomyStatus === "invalid" ? "todo" : "wip";
 
     return {
-      1: "later",
+      1: step1,
       2: step2,
       3: step3,
       4: step4,
@@ -101,7 +107,7 @@ export function useDaaRuntime(): DaaRuntime {
       6: step6,
       7: step7,
     };
-  }, [citationsCount, hasHumanProfile, hasMoneyPlan, hasRecommendation, marketEventCount, tagTaxonomyStatus]);
+  }, [citationsCount, hasBacktest, hasHumanProfile, hasMoneyPlan, hasRecommendation, marketEventCount, tagTaxonomyStatus]);
 
   const { nextStepId, nextActionText } = useMemo(() => {
     if (marketEventCount === 0) return { nextStepId: 2, nextActionText: "先补 Step2 events（至少 1 条）" };
@@ -120,6 +126,8 @@ export function useDaaRuntime(): DaaRuntime {
     hasRecommendation,
     hasHumanProfile,
     hasMoneyPlan,
+    hasBacktest,
+    step1Backtest,
     tagTaxonomyStatus,
     analysis,
     citationsCount,

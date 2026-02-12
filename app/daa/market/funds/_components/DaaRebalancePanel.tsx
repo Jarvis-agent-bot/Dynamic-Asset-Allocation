@@ -13,6 +13,7 @@ import DaaDashboardExport from '../../../dashboard/_components/DaaDashboardExpor
 import DaaDashboardImport from '../../../dashboard/_components/DaaDashboardImport';
 import DaaDashboardRunChecklist from '../../../dashboard/_components/DaaDashboardRunChecklist';
 
+import Step1BacktestPage from '../../../step/_pages/Step1BacktestPage';
 import Step2MarketEventsPage from '../../../step/_pages/Step2MarketEventsPage';
 import Step4BaselineRecommendationPage from '../../../step/_pages/Step4BaselineRecommendationPage';
 import Step6HumanFactorPage from '../../../step/_pages/Step6HumanFactorPage';
@@ -48,6 +49,35 @@ export function DaaRebalancePanel() {
     return `Next: ${rt.nextActionText} (data: ${readyText})`;
   }, [rt.hasHumanProfile, rt.hasRecommendation, rt.marketEventCount, rt.nextActionText]);
 
+  const step1SummaryText = useMemo(() => {
+    const x: any = rt.step1Backtest;
+    if (!x) return 'Step1 backtest: <not run yet>'; // write-back comes from Step1 UI
+
+    const input = x?.input ?? {};
+    const symbol = input?.symbol ? String(input.symbol) : '';
+    const start = input?.start ? String(input.start) : '';
+    const end = input?.end ? String(input.end) : '';
+
+    const summary = x?.summary ?? null;
+    const metrics = summary?.metrics ?? null;
+
+    const bestName = summary?.bestStrategyName ? String(summary.bestStrategyName) : '';
+    const bestScore = Number(summary?.bestScore);
+
+    const tr = metrics?.totalReturn === undefined ? null : Number(metrics.totalReturn);
+    const mdd = metrics?.maxDrawdown === undefined ? null : Number(metrics.maxDrawdown);
+
+    const bits: string[] = [];
+    if (symbol && start && end) bits.push(`${symbol} ${start}→${end}`);
+    if (bestName) bits.push(`best=${bestName}`);
+    if (Number.isFinite(bestScore)) bits.push(`score=${bestScore.toFixed(4)}`);
+    if (tr !== null && Number.isFinite(tr)) bits.push(`ret=${(tr * 100).toFixed(2)}%`);
+    if (mdd !== null && Number.isFinite(mdd)) bits.push(`mdd=${(mdd * 100).toFixed(2)}%`);
+
+    const tail = bits.length ? bits.join(' | ') : '<loaded>';
+    return `Step1 backtest: ${tail}`;
+  }, [rt.step1Backtest]);
+
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
       <div className="title" style={{ marginBottom: 12, justifyContent: 'space-between' as const }}>
@@ -81,11 +111,16 @@ export function DaaRebalancePanel() {
       </div>
 
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
-        {headline}
+        <div>{headline}</div>
+        <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
       </div>
 
       {open ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+          <div id="step1" style={{ scrollMarginTop: 12 }}>
+            <Step1BacktestPage />
+          </div>
+
           <DaaDashboardRunChecklist
             onJump={(id) => {
               scrollToId(id);

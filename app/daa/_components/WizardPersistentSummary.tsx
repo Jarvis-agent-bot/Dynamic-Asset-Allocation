@@ -8,6 +8,7 @@ import {
   LS_MONEY_PLAN,
   LS_REBALANCE_REQUEST,
   LS_REBALANCE_RESPONSE,
+  LS_STEP1_BACKTEST,
   WIZARD_DATA_EVENT,
   pretty,
   readJsonFromLs,
@@ -85,6 +86,7 @@ export default function WizardPersistentSummary() {
 
   const marketEvents = useMemo(() => readJsonFromLs(LS_MARKET_EVENTS), [rev]);
   const humanProfile = useMemo(() => readJsonFromLs(LS_HUMAN_PROFILE), [rev]);
+  const step1Backtest = useMemo(() => readJsonFromLs(LS_STEP1_BACKTEST), [rev]);
 
   // Keep a "raw" read so we can decide whether Step7 has been configured,
   // but include the resolved taxonomy (with fallback default) in the copied bundle.
@@ -111,12 +113,14 @@ export default function WizardPersistentSummary() {
     !!moneyPlan ||
     !!rebalanceReq ||
     !!rebalanceResp ||
+    !!step1Backtest ||
     (Array.isArray(marketEvents) && marketEvents.length > 0) ||
     !!humanProfile ||
     !!tagTaxonomyRaw;
 
   const bundle = useMemo(
     () => ({
+      step1_backtest: step1Backtest,
       money_plan: moneyPlan,
       market_events: marketEvents,
       human_profile: humanProfile,
@@ -125,7 +129,7 @@ export default function WizardPersistentSummary() {
       recommendation: rebalanceResp,
       rebalance_request: rebalanceReq,
     }),
-    [moneyPlan, marketEvents, humanProfile, tagTaxonomy, signals, rebalanceResp, rebalanceReq]
+    [step1Backtest, moneyPlan, marketEvents, humanProfile, tagTaxonomy, signals, rebalanceResp, rebalanceReq]
   );
 
   if (!hasAny) {
@@ -167,6 +171,15 @@ export default function WizardPersistentSummary() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10, marginTop: 10 }}>
+        <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>策略/回测（Step1 backtest）</div>
+          {step1Backtest ? (
+            <pre style={{ margin: 0, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty(step1Backtest)}</pre>
+          ) : (
+            <div style={{ fontSize: 12, color: "#666" }}>No backtest yet.</div>
+          )}
+        </div>
+
         <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
           <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>资金（money plan）</div>
           {moneyPlan ? (
