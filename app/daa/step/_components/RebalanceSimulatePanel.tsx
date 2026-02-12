@@ -7,7 +7,7 @@ import type { MarketEvent } from "@/src/core/marketEvents";
 import { buildMarketCitations, type MarketEventCitation } from "@/src/core/marketCitations";
 
 import { LS_MARKET_EVENTS, LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, readJsonFromLs, saveJsonToLs } from "../../wizardStorage";
-import { recordPortfolioLastRebalance } from "../../portfolioStateStore";
+import { loadPortfolioStateV1, recordPortfolioLastRebalance } from "../../portfolioStateStore";
 
 type Props = {
   title: string;
@@ -108,6 +108,14 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
     return r.warnings.map(String);
   }, [response]);
 
+  const trigger = useMemo(() => {
+    if (!response || typeof response !== "object") return null;
+    const r = response as any;
+    const t = r.trigger;
+    if (!t || typeof t !== "object" || Array.isArray(t)) return null;
+    return t as any;
+  }, [response]);
+
   const marketCitations = useMemo(() => {
     if (!response || typeof response !== "object") return [];
     const r = response as any;
@@ -165,13 +173,43 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
       // On VPS, nginx may only proxy `/daa/*` to Next.js. Provide a fallback endpoint
       // under `/daa/api/...` so the UI works even when `/api/...` is routed elsewhere.
       const endpoints = endpointOverrides?.length ? endpointOverrides : ["/api/daa/rebalance/simulate", "/daa/api/daa/rebalance/simulate"];
+      const isCore = endpoints.some((u) => u.includes("/rebalance/core"));
+
+      // For the core endpoint, we can auto-inject debounce metadata from the local portfolio store
+      // so users don't have to manually paste timestamps into the request.
+      let sentPayload: unknown = parsed.value;
+      if (isCore && sentPayload && typeof sentPayload === "object" && !Array.isArray(sentPayload)) {
+        const reqObj: any = sentPayload as any;
+        const pol = reqObj.policy;
+
+        if (pol && typeof pol === "object" && !Array.isArray(pol)) {
+          const csRaw = (pol as any).cooldownSeconds ?? (pol as any).cooldown_seconds;
+          const cooldownSeconds = Number(csRaw ?? 0);
+
+          if (Number.isFinite(cooldownSeconds) && cooldownSeconds > 0) {
+            const st = loadPortfolioStateV1();
+            const nextPol: any = { ...(pol as any) };
+
+            if (typeof nextPol.lastRebalanceAt !== "string" || !nextPol.lastRebalanceAt) {
+              const stAt = st.lastRebalance?.at;
+              if (stAt) nextPol.lastRebalanceAt = stAt;
+            }
+
+            if (typeof nextPol.now !== "string" || !nextPol.now) nextPol.now = new Date().toISOString();
+
+            sentPayload = { ...reqObj, policy: nextPol };
+          }
+        }
+      }
+
+      const bodyText = JSON.stringify(sentPayload);
 
       let res: Response | null = null;
       for (const url of endpoints) {
         const r = await fetch(url, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: requestText,
+          body: bodyText,
         });
         res = r;
         // Retry only when the route is missing (common VPS misroute); otherwise return the actual error.
@@ -192,16 +230,16 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
         const events = Array.isArray(stored) ? stored : [];
 
         // Symbols for citations come from signal symbols + weights + orders.
-        const signalSyms = Array.isArray((parsed.value as any)?.signals)
-          ? (parsed.value as any).signals.map((s: any) => String(s?.symbol ?? "")).filter(Boolean)
+        const signalSyms = Array.isArray((sentPayload as any)?.signals)
+          ? (sentPayload as any).signals.map((s: any) => String(s?.symbol ?? "")).filter(Boolean)
           : [];
 
-        const allocSyms = Array.isArray((parsed.value as any)?.money_plan?.allocations)
-          ? (parsed.value as any).money_plan.allocations.map((a: any) => String(a?.id ?? "")).filter(Boolean)
+        const allocSyms = Array.isArray((sentPayload as any)?.money_plan?.allocations)
+          ? (sentPayload as any).money_plan.allocations.map((a: any) => String(a?.id ?? "")).filter(Boolean)
           : [];
 
         const coreWeightSyms = (() => {
-          const tw = (parsed.value as any)?.targetWeights ?? (parsed.value as any)?.target_weights;
+          const tw = (sentPayload as any)?.targetWeights ?? (sentPayload as any)?.target_weights;
           if (Array.isArray(tw)) return tw.map((w: any) => String(w?.id ?? w?.symbol ?? "")).filter(Boolean);
           if (tw && typeof tw === "object" && !Array.isArray(tw)) return Object.keys(tw).map(String).filter(Boolean);
           return [];
@@ -228,12 +266,12 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
       saveJsonToLs(LS_REBALANCE_RESPONSE, nextResp);
 
       if (res.ok) {
-        const kind = endpoints.some((u) => u.includes("/rebalance/core")) ? "core" : "simulate";
-        recordPortfolioLastRebalance({ kind, request: parsed.value, response: nextResp });
+        const kind = isCore ? "core" : "simulate";
+        recordPortfolioLastRebalance({ kind, request: sentPayload, response: nextResp });
       }
 
       onResult?.({
-        request: parsed.value,
+        request: sentPayload,
         httpStatus: res.status,
         responseText: text,
         responseJson: nextResp,
@@ -364,8 +402,24 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
               ) : (
                 <div style={{ fontSize: 12, color: "#666" }}>No orders.</div>
               )}
-              {null}
             </div>
+
+            {trigger ? (
+              <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Trigger policy</div>
+                <div style={{ fontSize: 12, color: trigger.shouldRebalance ? "#0a7" : "#666", marginBottom: 6 }}>
+                  shouldRebalance: <span style={{ fontFamily: "ui-monospace, SFMono-Regular" }}>{String(trigger.shouldRebalance)}</span>
+                </div>
+                {Array.isArray((trigger as any).reasons) && (trigger as any).reasons.length ? (
+                  <div style={{ fontSize: 12, color: "#444", marginBottom: 6 }}>
+                    {(trigger as any).reasons.map(String).join("; ")}
+                  </div>
+                ) : null}
+                {(trigger as any).stats ? (
+                  <pre style={{ margin: 0, fontSize: 12, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{pretty((trigger as any).stats)}</pre>
+                ) : null}
+              </div>
+            ) : null}
 
             <div style={{ border: "1px solid #f1f1f1", borderRadius: 8, padding: 10 }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Target weights</div>
