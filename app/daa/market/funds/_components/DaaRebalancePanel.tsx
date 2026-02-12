@@ -198,6 +198,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [copyWeightsStatus, setCopyWeightsStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [sampleStatus, setSampleStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
+  const [driftFilter, setDriftFilter] = useState<'all' | 'over' | 'under'>('all');
+
   const [rev, setRev] = useState(0);
 
   const [paperRunLoading, setPaperRunLoading] = useState(false);
@@ -220,6 +222,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const rebalanceResp = useMemo(() => readJsonFromLs(LS_REBALANCE_RESPONSE), [rev]);
 
   const rebalancePolicy = useMemo(() => loadRebalancePolicyV1(), [rev]);
+
+  // Use the same threshold for trigger policy, drift badges, and quick filters.
+  const driftThresholdPct = useMemo(() => {
+    const t = toFiniteNumber((rebalancePolicy as any)?.thresholdPct);
+    return t !== null && t > 0 ? t : 0.01;
+  }, [rebalancePolicy]);
 
   const baseCcy = useMemo(() => {
     const mp: any = moneyPlan as any;
@@ -476,6 +484,26 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     rows.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
     return rows;
   }, [currentWeights, portfolioCash, targetWeights]);
+
+  const driftCounts = useMemo(() => {
+    let over = 0;
+    let under = 0;
+    let within = 0;
+
+    for (const r of rebalanceTableRows) {
+      if (r.deltaPct >= driftThresholdPct) over += 1;
+      else if (r.deltaPct <= -driftThresholdPct) under += 1;
+      else within += 1;
+    }
+
+    return { total: rebalanceTableRows.length, over, under, within };
+  }, [rebalanceTableRows, driftThresholdPct]);
+
+  const filteredRebalanceTableRows = useMemo(() => {
+    if (driftFilter === 'over') return rebalanceTableRows.filter((r) => r.deltaPct >= driftThresholdPct);
+    if (driftFilter === 'under') return rebalanceTableRows.filter((r) => r.deltaPct <= -driftThresholdPct);
+    return rebalanceTableRows;
+  }, [driftFilter, rebalanceTableRows, driftThresholdPct]);
 
   const naiveOrders = useMemo(() => {
     if (!rebalanceTableRows.length) return [] as SuggestedOrder[];
@@ -909,33 +937,93 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             ) : null}
 
             {rebalanceTableRows.length ? (
-              <div style={{ marginTop: 10, overflowX: 'auto' as const }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Asset</th>
-                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Current</th>
-                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Target</th>
-                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Delta</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rebalanceTableRows.map((r) => {
-                      const delta = r.currentPct - r.targetPct;
-                      const color = delta > 0.01 ? 'var(--danger)' : delta < -0.01 ? 'var(--primary)' : 'var(--text)';
-                      return (
-                        <tr key={r.id}>
-                          <td style={{ padding: '6px 0' }}>
-                            {r.label} <span className="muted">({r.id})</span>
-                          </td>
-                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.currentPct * 100).toFixed(1)}%</td>
-                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPct * 100).toFixed(1)}%</td>
-                          <td style={{ padding: '6px 0', textAlign: 'right', color }}>{(r.deltaPct * 100).toFixed(1)}%</td>
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginBottom: 8 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>Quick filters:</span>
+                  <button
+                    type="button"
+                    className={driftFilter === 'all' ? 'button' : 'button secondary'}
+                    onClick={() => setDriftFilter('all')}
+                    style={{ padding: '4px 8px' }}
+                    aria-pressed={driftFilter === 'all'}
+                  >
+                    All <span className="muted">({driftCounts.total})</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={driftFilter === 'over' ? 'button' : 'button secondary'}
+                    onClick={() => setDriftFilter('over')}
+                    style={{ padding: '4px 8px' }}
+                    aria-pressed={driftFilter === 'over'}
+                    disabled={!driftCounts.over}
+                  >
+                    Over target <span className="muted">({driftCounts.over})</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={driftFilter === 'under' ? 'button' : 'button secondary'}
+                    onClick={() => setDriftFilter('under')}
+                    style={{ padding: '4px 8px' }}
+                    aria-pressed={driftFilter === 'under'}
+                    disabled={!driftCounts.under}
+                  >
+                    Under target <span className="muted">({driftCounts.under})</span>
+                  </button>
+                  <span className="muted" style={{ fontSize: 12, marginLeft: 4 }}>
+                    threshold={(driftThresholdPct * 100).toFixed(2)}%
+                  </span>
+                </div>
+
+                {filteredRebalanceTableRows.length ? (
+                  <div style={{ overflowX: 'auto' as const }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Asset</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Current</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Target</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Delta</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {filteredRebalanceTableRows.map((r) => {
+                          const delta = r.deltaPct;
+                          const kind = delta >= driftThresholdPct ? 'over' : delta <= -driftThresholdPct ? 'under' : 'ok';
+                          const driftAbsPct = (Math.abs(delta) * 100).toFixed(1);
+                          const badgeText = kind === 'over' ? `OVER +${driftAbsPct}%` : kind === 'under' ? `UNDER -${driftAbsPct}%` : `OK ${driftAbsPct}%`;
+                          const badgeColor = kind === 'over' ? 'var(--danger)' : kind === 'under' ? 'var(--primary)' : 'var(--muted)';
+                          const color = kind === 'over' ? 'var(--danger)' : kind === 'under' ? 'var(--primary)' : 'var(--text)';
+
+                          return (
+                            <tr key={r.id}>
+                              <td style={{ padding: '6px 0' }}>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center' }}>
+                                  <span>
+                                    {r.label} <span className="muted">({r.id})</span>
+                                  </span>
+                                  <span
+                                    className="badge"
+                                    style={{ padding: '2px 8px', fontSize: 11, borderColor: badgeColor, color: badgeColor, background: 'rgba(0,0,0,0.12)' }}
+                                    title={`drift ${(delta * 100).toFixed(2)}% vs target`}
+                                  >
+                                    {badgeText}
+                                  </span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.currentPct * 100).toFixed(1)}%</td>
+                              <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPct * 100).toFixed(1)}%</td>
+                              <td style={{ padding: '6px 0', textAlign: 'right', color }}>{(delta * 100).toFixed(1)}%</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    No rows match the current filter.
+                  </div>
+                )}
               </div>
             ) : (
               <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
@@ -1020,7 +1108,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           </thead>
                           <tbody>
                             {whatIfRows.map((r) => {
-                              const color = Math.abs(r.driftPct) >= 0.01 ? 'var(--danger)' : 'var(--text)';
+                              const drift = r.driftPct;
+                              const kind = drift >= driftThresholdPct ? 'over' : drift <= -driftThresholdPct ? 'under' : 'ok';
+                              const driftAbsPct = (Math.abs(drift) * 100).toFixed(1);
+                              const badgeText = kind === 'over' ? `OVER +${driftAbsPct}%` : kind === 'under' ? `UNDER -${driftAbsPct}%` : `OK ${driftAbsPct}%`;
+                              const badgeColor = kind === 'over' ? 'var(--danger)' : kind === 'under' ? 'var(--primary)' : 'var(--muted)';
+                              // Color is encoded in the drift badge.
                               return (
                                 <tr key={r.id} style={{ opacity: r.id === 'CASH' ? 0.9 : 1 }}>
                                   <td style={{ padding: '6px 0' }}>
@@ -1030,7 +1123,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.postPct * 100).toFixed(1)}%</td>
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPrePct * 100).toFixed(1)}%</td>
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPct * 100).toFixed(1)}%</td>
-                                  <td style={{ padding: '6px 0', textAlign: 'right', color }}>{(r.driftPct * 100).toFixed(1)}%</td>
+                                  <td style={{ padding: '6px 0', textAlign: 'right' }}>
+                                    <span
+                                      className="badge"
+                                      style={{ padding: '2px 8px', fontSize: 11, borderColor: badgeColor, color: badgeColor, background: 'rgba(0,0,0,0.12)' }}
+                                      title={`drift ${(drift * 100).toFixed(2)}% vs target(post)`}
+                                    >
+                                      {badgeText}
+                                    </span>
+                                  </td>
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.valueAfter.toFixed(2)}</td>
                                 </tr>
                               );
