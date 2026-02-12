@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { buildLatestRebalanceRunReportV1 } from '@/src/daa/rebalanceReportExport';
 import { loadRebalanceLog, type RebalanceLogEntryV0 } from '@/src/daa/rebalanceLogStore';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
@@ -165,7 +166,7 @@ export default function DaaRebalanceLogViewV0() {
         <div>
           <div style={{ fontWeight: 800 }}>Paper rebalance log v0</div>
           <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            最近 N 次 paper rebalance（trigger/weights/orders）。支持 Copy / Export（.json）。
+            最近 N 次 paper rebalance（trigger/weights/orders）。支持 Copy / Export（.json）与导出最近一次 run report（schemaVersioned）。
           </div>
         </div>
 
@@ -208,6 +209,23 @@ export default function DaaRebalanceLogViewV0() {
             disabled={!visible.length}
           >
             Export .json
+          </button>
+
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              const report = buildLatestRebalanceRunReportV1(window.localStorage);
+              downloadTextAsFile({
+                filename: `daa-rebalance-run-report-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`,
+                text: pretty(report),
+                mime: 'application/json',
+              });
+            }}
+            style={{ padding: '6px 10px' }}
+            disabled={!all.length}
+          >
+            Export last run report
           </button>
         </div>
       </div>
