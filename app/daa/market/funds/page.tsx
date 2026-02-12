@@ -8,6 +8,8 @@ import weixinImg from "../../../assets/weixin.png";
 
 import { DaaRebalancePanel } from "./_components/DaaRebalancePanel";
 
+import { loadLegacyHoldingsFromPortfolioState, persistLegacyHoldingsToPortfolioState } from "../../portfolioStateStore";
+
 function PlusIcon(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
@@ -1732,7 +1734,7 @@ const handleSaveHolding: any = (code: any, data: any) => {
       } else {
         next[code] = data;
       }
-      localStorage.setItem('holdings', JSON.stringify(next));
+      persistLegacyHoldingsToPortfolioState(next);
       return next;
     });
     setHoldingModal({ open: false, fund: null });
@@ -1981,8 +1983,8 @@ const dedupeByCode: any = (list: any) => {
       if (savedViewMode === 'card' || savedViewMode === 'list') {
         setViewMode(savedViewMode);
       }
-      // 加载持仓数据
-      const savedHoldings = JSON.parse(localStorage.getItem('holdings') || '{}');
+      // 加载持仓数据（schemaVersioned portfolio store; auto-migrates legacy `holdings`)
+      const savedHoldings = loadLegacyHoldingsFromPortfolioState();
       if (savedHoldings && typeof savedHoldings === 'object') {
         setHoldings(savedHoldings);
       }
@@ -2405,7 +2407,7 @@ const removeFund: any = (removeCode: any) => {
       if (!prev[removeCode]) return prev;
       const next = { ...prev };
       delete next[removeCode];
-      localStorage.setItem('holdings', JSON.stringify(next));
+      persistLegacyHoldingsToPortfolioState(next);
       return next;
     });
   };
@@ -2438,7 +2440,7 @@ const saveSettings: any = (e: any) => {
         collapsedCodes: JSON.parse(localStorage.getItem('collapsedCodes') || '[]'),
         refreshMs: parseInt(localStorage.getItem('refreshMs') || '30000', 10),
         viewMode: localStorage.getItem('viewMode') || 'card',
-        holdings: JSON.parse(localStorage.getItem('holdings') || '{}'),
+        holdings: loadLegacyHoldingsFromPortfolioState(),
         exportedAt: new Date().toISOString()
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -2546,9 +2548,10 @@ const onVisibility: any = () => {
         }
 
         if (data.holdings && typeof data.holdings === 'object') {
-          const mergedHoldings = { ...JSON.parse(localStorage.getItem('holdings') || '{}'), ...data.holdings };
+          const currentHoldings = loadLegacyHoldingsFromPortfolioState();
+          const mergedHoldings = { ...currentHoldings, ...data.holdings };
           setHoldings(mergedHoldings);
-          localStorage.setItem('holdings', JSON.stringify(mergedHoldings));
+          persistLegacyHoldingsToPortfolioState(mergedHoldings);
         }
 
         // 导入成功后，仅刷新新追加的基金
