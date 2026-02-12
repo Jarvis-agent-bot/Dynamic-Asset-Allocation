@@ -13,6 +13,15 @@ export default function DaaDashboardExport() {
 
   const exportText = useMemo(() => pretty(exportBundle), [exportBundle]);
 
+  const rebalanceLogCount = useMemo(
+    () => (Array.isArray((exportBundle as any)?.rebalance_log) ? (exportBundle as any).rebalance_log.length : 0),
+    [exportBundle]
+  );
+  const paperExecutionCount = useMemo(
+    () => (Array.isArray((exportBundle as any)?.paper_execution_log) ? (exportBundle as any).paper_execution_log.length : 0),
+    [exportBundle]
+  );
+
   async function doCopy() {
     try {
       await copyTextToClipboard(exportText);
@@ -32,7 +41,7 @@ export default function DaaDashboardExport() {
         <div>
           <div style={{ fontWeight: 800, fontSize: 14 }}>一键导出（Workflow bundle）</div>
           <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
-            把 Step2→Step4/5→Step6→Step7 的数据打包成一个 JSON，方便复制/分享/复盘。
+            把 Step2→Step4/5→Step6→Step7 的数据打包成一个 JSON（含 rebalancing log / paper execution log / portfolio state），方便复制/分享/复盘。
           </div>
         </div>
 
@@ -60,6 +69,12 @@ export default function DaaDashboardExport() {
         </span>
         <span style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #eee", background: hasTagsConfigured ? "#f0fdf4" : "#fafafa" }}>
           Step7 tags: <b>{hasTagsConfigured ? "configured" : "default"}</b>
+        </span>
+        <span style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #eee", background: rebalanceLogCount ? "#f0fdf4" : "#fafafa" }}>
+          Rebalance log: <b>{rebalanceLogCount}</b>
+        </span>
+        <span style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #eee", background: paperExecutionCount ? "#f0fdf4" : "#fafafa" }}>
+          Paper exec: <b>{paperExecutionCount}</b>
         </span>
       </div>
 
