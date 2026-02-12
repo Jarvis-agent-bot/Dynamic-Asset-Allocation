@@ -150,6 +150,29 @@ function normalizeTargetWeights(args: { response: unknown; moneyPlan: unknown })
     .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
 }
 
+function normalizeTargetWeightsAny(raw: unknown): TargetWeight[] {
+  if (!raw) return [];
+
+  if (Array.isArray(raw)) {
+    return raw
+      .filter(Boolean)
+      .map((a: any) => ({
+        id: String(a?.id ?? a?.symbol ?? ''),
+        label: String(a?.label ?? a?.name ?? a?.id ?? a?.symbol ?? ''),
+        targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0),
+      }))
+      .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
+  }
+
+  if (typeof raw === 'object') {
+    return Object.entries(raw as Record<string, unknown>)
+      .map(([id, targetPct]) => ({ id, label: id, targetPct: Number(targetPct ?? 0) }))
+      .filter((a) => a.id && Number.isFinite(a.targetPct));
+  }
+
+  return [];
+}
+
 function formatOrdersMarkdown(orders: SuggestedOrder[]) {
   const rows = orders.map((o) => `| ${o.symbol} | ${o.side} | ${o.notional.toFixed(2)} | ${o.reason ? o.reason.replace(/\|/g, ' ') : ''} |`);
   return [
@@ -193,6 +216,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }, []);
 
   const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
+  const rebalanceReq = useMemo(() => readJsonFromLs(LS_REBALANCE_REQUEST), [rev]);
   const rebalanceResp = useMemo(() => readJsonFromLs(LS_REBALANCE_RESPONSE), [rev]);
 
   const rebalancePolicy = useMemo(() => loadRebalancePolicyV1(), [rev]);
@@ -345,6 +369,26 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const targetWeights = manualTargetWeights.length ? manualTargetWeights : computedTargetWeights;
   const targetWeightsSource = manualTargetWeights.length ? 'manual' : 'engine/money_plan';
 
+  const lastRunTargetWeightsPre = useMemo(() => {
+    if (rebalanceReq && typeof rebalanceReq === 'object') {
+      const r: any = rebalanceReq as any;
+      const raw = r.targetWeights ?? r.target_weights;
+      const tw = normalizeTargetWeightsAny(raw);
+      if (tw.length) return tw;
+    }
+    return targetWeights;
+  }, [rebalanceReq, targetWeights]);
+
+  const lastRunTargetWeightsPost = useMemo(() => {
+    if (rebalanceResp && typeof rebalanceResp === 'object') {
+      const r: any = rebalanceResp as any;
+      const raw = r.targetWeights ?? r.target_weights;
+      const tw = normalizeTargetWeightsAny(raw);
+      if (tw.length) return tw;
+    }
+    return lastRunTargetWeightsPre;
+  }, [rebalanceResp, lastRunTargetWeightsPre]);
+
   const engineOrders = useMemo(() => {
     if (!rebalanceResp || typeof rebalanceResp !== 'object') return [];
     const r: any = rebalanceResp as any;
@@ -493,18 +537,25 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return out;
   }, [currentWeights]);
 
-  const whatIfTargetWeightsBySymbol = useMemo(() => {
+  const whatIfTargetWeightsPreBySymbol = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const t of targetWeights) out[t.id] = t.targetPct;
+    for (const t of lastRunTargetWeightsPre) out[t.id] = t.targetPct;
     return out;
-  }, [targetWeights]);
+  }, [lastRunTargetWeightsPre]);
+
+  const whatIfTargetWeightsPostBySymbol = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const t of lastRunTargetWeightsPost) out[t.id] = t.targetPct;
+    return out;
+  }, [lastRunTargetWeightsPost]);
 
   const whatIfLabelsBySymbol = useMemo(() => {
     const out: Record<string, string> = {};
     for (const r of currentWeights) out[r.id] = r.label;
-    for (const t of targetWeights) out[t.id] = t.label;
+    for (const t of lastRunTargetWeightsPre) out[t.id] = t.label;
+    for (const t of lastRunTargetWeightsPost) out[t.id] = t.label;
     return out;
-  }, [currentWeights, targetWeights]);
+  }, [currentWeights, lastRunTargetWeightsPre, lastRunTargetWeightsPost]);
 
   const whatIf = useMemo(() => {
     if (!effectiveOrders.length) return null;
@@ -512,7 +563,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return simulateRebalanceWhatIfV0({
       cashStart: toFiniteNumber(portfolioCash) ?? 0,
       valuesBySymbol: whatIfValuesBySymbol,
-      targetWeightsBySymbol: whatIfTargetWeightsBySymbol,
+      targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
       orders: effectiveOrders
         .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
         .map((o) => ({ symbol: o.symbol, side: o.side as 'BUY' | 'SELL', notional: o.notional })),
@@ -520,7 +571,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       slippageBps: whatIfSlippageBps,
       labelsBySymbol: whatIfLabelsBySymbol,
     });
-  }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBps, whatIfTargetWeightsBySymbol, whatIfValuesBySymbol]);
+  }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBps, whatIfTargetWeightsPostBySymbol, whatIfValuesBySymbol]);
 
   const whatIfRows = useMemo(() => {
     if (!whatIf) return [] as Array<{
@@ -529,13 +580,19 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       valueBefore: number;
       valueAfter: number;
       currentPct: number;
+      targetPrePct: number;
       targetPct: number;
       postPct: number;
       driftPct: number;
     }>;
 
-    const sumTarget = Object.values(whatIfTargetWeightsBySymbol).reduce((acc, x) => acc + (Number.isFinite(x) ? x : 0), 0);
-    const targetCashPct = Math.max(0, 1 - sumTarget);
+    const sumTargetPre = Object.values(whatIfTargetWeightsPreBySymbol).reduce((acc, x) => acc + (Number.isFinite(x) ? x : 0), 0);
+    const sumTargetPost = Object.values(whatIfTargetWeightsPostBySymbol).reduce((acc, x) => acc + (Number.isFinite(x) ? x : 0), 0);
+
+    const targetCashPrePct = Math.max(0, 1 - sumTargetPre);
+    const targetCashPostPct = Math.max(0, 1 - sumTargetPost);
+
+    const cashPostPct = whatIf.totalAfter > 0 ? whatIf.cashAfter / whatIf.totalAfter : 0;
 
     const cashRow = {
       id: 'CASH',
@@ -543,13 +600,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       valueBefore: whatIf.cashBefore,
       valueAfter: whatIf.cashAfter,
       currentPct: whatIf.totalBefore > 0 ? whatIf.cashBefore / whatIf.totalBefore : 0,
-      targetPct: targetCashPct,
-      postPct: whatIf.totalAfter > 0 ? whatIf.cashAfter / whatIf.totalAfter : 0,
-      driftPct: (whatIf.totalAfter > 0 ? whatIf.cashAfter / whatIf.totalAfter : 0) - targetCashPct,
+      targetPrePct: targetCashPrePct,
+      targetPct: targetCashPostPct,
+      postPct: cashPostPct,
+      driftPct: cashPostPct - targetCashPostPct,
     };
 
-    return [cashRow, ...whatIf.rows];
-  }, [whatIf, whatIfTargetWeightsBySymbol]);
+    const rows = whatIf.rows.map((r) => ({ ...r, targetPrePct: whatIfTargetWeightsPreBySymbol[r.id] ?? 0 }));
+    return [cashRow, ...rows];
+  }, [whatIf, whatIfTargetWeightsPreBySymbol, whatIfTargetWeightsPostBySymbol]);
 
   async function doCopyOrders() {
     try {
@@ -953,7 +1012,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                               <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Asset</th>
                               <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Current</th>
                               <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Post</th>
-                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Target</th>
+                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Target(pre)</th>
+                              <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Target(post)</th>
                               <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Drift</th>
                               <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Value(after)</th>
                             </tr>
@@ -968,6 +1028,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                   </td>
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.currentPct * 100).toFixed(1)}%</td>
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.postPct * 100).toFixed(1)}%</td>
+                                  <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPrePct * 100).toFixed(1)}%</td>
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPct * 100).toFixed(1)}%</td>
                                   <td style={{ padding: '6px 0', textAlign: 'right', color }}>{(r.driftPct * 100).toFixed(1)}%</td>
                                   <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.valueAfter.toFixed(2)}</td>
