@@ -2667,7 +2667,7 @@ const getGroupName: any = () => {
       </div>
 
       <div className="grid">
-        <DaaRebalancePanel />
+        <DaaRebalancePanel funds={funds} holdings={holdings} />
         <div className="col-12 glass card add-fund-section" role="region" aria-label="添加基金">
           <div className="title" style={{ marginBottom: 12 }}>
             <PlusIcon width="20" height="20" />
