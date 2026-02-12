@@ -80,7 +80,7 @@ export default function Step4BaselineRecommendationPage() {
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 4 — 基准算法推荐（v0）</h1>
       <p style={{ color: "#444" }}>
         v0：点击按钮调用 <code>POST /api/daa/rebalance/simulate</code> 生成“再平衡推荐”（orders + target weights + explain），并提供一键复制 JSON。
-        不接 AI，不做交易执行（仅供决策参考）。
+        不真下单；可选将 orders 记录到本地 execution log（paper）用于回溯（仅写 localStorage）。
       </p>
 
       <div style={{ marginTop: 12 }}>
