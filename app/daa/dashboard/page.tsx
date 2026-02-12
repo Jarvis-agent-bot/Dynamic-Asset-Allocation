@@ -11,6 +11,7 @@ import DaaDashboardAiExplain from "./_components/DaaDashboardAiExplain";
 import DaaDashboardExport from "./_components/DaaDashboardExport";
 import DaaDashboardImport from "./_components/DaaDashboardImport";
 import DaaDashboardRunChecklist from "./_components/DaaDashboardRunChecklist";
+import DaaDashboardBacktestDriftRebalance from "./_components/DaaDashboardBacktestDriftRebalance";
 
 function scrollToId(id: string) {
   const el = document.getElementById(id);
@@ -45,6 +46,9 @@ export default function DaaDashboardPage() {
           <button type="button" onClick={() => scrollToId("export")} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}>
             Export
           </button>
+          <button type="button" onClick={() => scrollToId("backtest")} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}>
+            Backtest
+          </button>
           <button type="button" onClick={() => scrollToId("step2")} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}>
             Step2 — Events
           </button>
@@ -71,6 +75,10 @@ export default function DaaDashboardPage() {
 
       <div id="export" style={{ marginTop: 14, scrollMarginTop: 12 }}>
         <DaaDashboardExport />
+      </div>
+
+      <div id="backtest" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+        <DaaDashboardBacktestDriftRebalance />
       </div>
 
       <div id="step2" style={{ marginTop: 14, scrollMarginTop: 12 }}>
