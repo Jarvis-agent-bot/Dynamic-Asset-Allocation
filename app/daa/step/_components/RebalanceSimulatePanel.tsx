@@ -7,6 +7,7 @@ import type { MarketEvent } from "@/src/core/marketEvents";
 import { buildMarketCitations, type MarketEventCitation } from "@/src/core/marketCitations";
 
 import { LS_MARKET_EVENTS, LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, readJsonFromLs, saveJsonToLs } from "../../wizardStorage";
+import { recordPortfolioLastRebalance } from "../../portfolioStateStore";
 
 type Props = {
   title: string;
@@ -225,6 +226,11 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
 
       setResponse(nextResp);
       saveJsonToLs(LS_REBALANCE_RESPONSE, nextResp);
+
+      if (res.ok) {
+        const kind = endpoints.some((u) => u.includes("/rebalance/core")) ? "core" : "simulate";
+        recordPortfolioLastRebalance({ kind, request: parsed.value, response: nextResp });
+      }
 
       onResult?.({
         request: parsed.value,
