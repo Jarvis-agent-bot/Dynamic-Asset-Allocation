@@ -9,6 +9,7 @@ import Step7TagsPage from "../step/_pages/Step7TagsPage";
 
 import DaaDashboardAiExplain from "./_components/DaaDashboardAiExplain";
 import DaaDashboardExport from "./_components/DaaDashboardExport";
+import DaaDashboardImport from "./_components/DaaDashboardImport";
 import DaaDashboardRunChecklist from "./_components/DaaDashboardRunChecklist";
 
 function scrollToId(id: string) {
@@ -38,6 +39,9 @@ export default function DaaDashboardPage() {
       <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
         <div style={{ fontWeight: 800, fontSize: 13 }}>Quick nav</div>
         <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => scrollToId("import")} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}>
+            Import
+          </button>
           <button type="button" onClick={() => scrollToId("export")} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}>
             Export
           </button>
@@ -60,6 +64,10 @@ export default function DaaDashboardPage() {
       </div>
 
       <DaaDashboardRunChecklist onJump={scrollToId} />
+
+      <div id="import" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+        <DaaDashboardImport />
+      </div>
 
       <div id="export" style={{ marginTop: 14, scrollMarginTop: 12 }}>
         <DaaDashboardExport />
