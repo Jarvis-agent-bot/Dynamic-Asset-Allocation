@@ -26,6 +26,8 @@ import Step4BaselineRecommendationPage from '../../../step/_pages/Step4BaselineR
 import Step6HumanFactorPage from '../../../step/_pages/Step6HumanFactorPage';
 import Step7TagsPage from '../../../step/_pages/Step7TagsPage';
 
+import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
+
 type FundLike = {
   code: string;
   name?: string;
@@ -404,6 +406,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       {open ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+          <div id="portfolio" style={{ scrollMarginTop: 12 }}>
+            <DaaPortfolioEditorV0 />
+          </div>
+
           <div id="rebalance" style={{ scrollMarginTop: 12, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
               <div style={{ fontWeight: 800 }}>Rebalance v0</div>
