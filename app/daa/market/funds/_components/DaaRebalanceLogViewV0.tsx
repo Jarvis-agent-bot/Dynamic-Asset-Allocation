@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { loadPaperExecutionLog, type PaperExecutionLogEntryV0 } from '@/src/daa/executionLogStore';
 import { buildLatestRebalanceRunReportV1 } from '@/src/daa/rebalanceReportExport';
+import { encodeRebalanceRunReportToShareToken } from '@/src/daa/rebalanceRunShareCodec';
 import { loadRebalanceLog, type RebalanceLogEntryV0 } from '@/src/daa/rebalanceLogStore';
 import {
   loadRebalanceOrderStatusRunHistoryV0,
@@ -121,6 +122,7 @@ export default function DaaRebalanceLogViewV0() {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
   useEffect(() => {
     const onData = () => setRev((x) => x + 1);
@@ -203,6 +205,20 @@ export default function DaaRebalanceLogViewV0() {
     }
   }
 
+  async function copyShareLink() {
+    try {
+      const report = buildLatestRebalanceRunReportV1(window.localStorage);
+      const token = encodeRebalanceRunReportToShareToken(report);
+      const url = `${window.location.origin}/daa/share#t=${token}`;
+      await copyTextToClipboard(url);
+      setShareStatus('ok');
+      window.setTimeout(() => setShareStatus('idle'), 1200);
+    } catch {
+      setShareStatus('error');
+      window.setTimeout(() => setShareStatus('idle'), 2000);
+    }
+  }
+
   const emptyHint = showAllSources
     ? 'No rebalance log entries yet.'
     : 'No paper rebalance runs recorded yet. Click “Run paper rebalance” above (trigger policy must be true to record).';
@@ -273,6 +289,10 @@ export default function DaaRebalanceLogViewV0() {
             disabled={!all.length}
           >
             Export last run report
+          </button>
+
+          <button type="button" className="button secondary" onClick={copyShareLink} style={{ padding: '6px 10px' }} disabled={!all.length}>
+            {shareStatus === 'ok' ? 'Link copied' : shareStatus === 'error' ? 'Copy failed' : 'Copy share link'}
           </button>
         </div>
       </div>

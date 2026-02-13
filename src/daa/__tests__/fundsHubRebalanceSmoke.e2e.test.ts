@@ -5,6 +5,7 @@ import { rebalanceCore } from "../../core/rebalanceCore";
 import { getDefaultExecutionAdapterV0 } from "../executionAdapterV0";
 import { appendRebalanceLog } from "../rebalanceLogStore";
 import { buildLatestRebalanceRunReportV1 } from "../rebalanceReportExport";
+import { decodeRebalanceRunReportFromShareToken, encodeRebalanceRunReportToShareToken } from "../rebalanceRunShareCodec";
 import { isRebalanceCoreRequest } from "../rebalanceCoreContracts";
 
 class MemoryStorage implements Pick<Storage, "getItem" | "setItem"> {
@@ -100,6 +101,13 @@ describe("funds hub rebalance e2e smoke", () => {
 
     expect(report.run.request).toEqual(req);
     expect(report.run.response).toEqual(resp);
+
+    // E2E UX: allow sharing a single-run summary across devices via a URL-safe token.
+    const token = encodeRebalanceRunReportToShareToken(report);
+    expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    const decoded = decodeRebalanceRunReportFromShareToken(token);
+    expect(decoded).toEqual(report);
   });
 
   it("keeps cash buffer + lot rounding internally consistent", () => {
