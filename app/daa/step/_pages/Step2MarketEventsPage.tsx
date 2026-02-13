@@ -12,6 +12,7 @@ import {
 
 import { LS_MARKET_EVENTS, pretty, readJsonFromLs, saveJsonToLs, WIZARD_DATA_EVENT } from "../../wizardStorage";
 import { getAllowedValueKeySetForAppliesTo, loadTagTaxonomy } from "../../tagTaxonomy";
+import { useMarketDataClient } from "../../useMarketDataClient";
 
 function fmtTs(ts: string) {
   const d = new Date(ts);
@@ -79,6 +80,8 @@ const DEFAULT_EVENTS: MarketEvent[] = [
 ];
 
 export default function Step2MarketEventsPage() {
+  const marketData = useMarketDataClient();
+
   const [events, setEvents] = useState<MarketEvent[]>(DEFAULT_EVENTS);
   const [selected, setSelected] = useState<MarketEvent | null>(null);
 
@@ -386,13 +389,7 @@ export default function Step2MarketEventsPage() {
   async function fetchTwitterList() {
     setFetchState("fetching twitter list...");
     try {
-      const qs = new URLSearchParams();
-      qs.set("listId", twitterListId);
-      if (Number.isFinite(twitterListLimit) && twitterListLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterListLimit))));
-
-      const r = await fetch(`/api/daa/market/twitter/list?${qs.toString()}`, { cache: "no-store" });
-      const j = (await r.json()) as any;
-      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+      const j = (await marketData.twitter.list({ listId: twitterListId, limit: twitterListLimit })) as any;
 
       // Convert twitterdata's nested timeline payload into a stable JSON array.
       const payload = j?.payload;
@@ -428,14 +425,11 @@ export default function Step2MarketEventsPage() {
     setFetchState(reset ? "fetching twitter community (first page)..." : "fetching twitter community (next page)...");
 
     try {
-      const qs = new URLSearchParams();
-      qs.set("communityId", communityId);
-      if (cursor) qs.set("cursor", cursor);
-      if (Number.isFinite(twitterCommunityLimit) && twitterCommunityLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterCommunityLimit))));
-
-      const r = await fetch(`/api/daa/market/twitter/community?${qs.toString()}`, { cache: "no-store" });
-      const j = (await r.json()) as any;
-      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+      const j = (await marketData.twitter.community({
+        communityId,
+        cursor: cursor || undefined,
+        limit: twitterCommunityLimit,
+      })) as any;
 
       const payload = j?.payload;
       const nextCursor = extractCursor(payload);
@@ -470,9 +464,7 @@ export default function Step2MarketEventsPage() {
 
     setFetchState("resolving twitter user restId...");
     try {
-      const r = await fetch(`/api/daa/market/twitter/user-by-screen-name?screenName=${encodeURIComponent(screenName)}`, { cache: "no-store" });
-      const j = (await r.json()) as any;
-      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+      const j = (await marketData.twitter.userByScreenName({ screenName })) as any;
 
       const restId = extractTwitterdataRestId(j?.payload);
       if (restId) setTwitterUserRestId(restId);
@@ -498,15 +490,12 @@ export default function Step2MarketEventsPage() {
     setFetchState(reset ? "fetching twitter user tweets (first page)..." : "fetching twitter user tweets (next page)...");
 
     try {
-      const qs = new URLSearchParams();
-      qs.set("restId", restId);
-      if (includeReplies) qs.set("includeReplies", "1");
-      if (cursor) qs.set("cursor", cursor);
-      if (Number.isFinite(twitterUserLimit) && twitterUserLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterUserLimit))));
-
-      const r = await fetch(`/api/daa/market/twitter/user-tweets?${qs.toString()}`, { cache: "no-store" });
-      const j = (await r.json()) as any;
-      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+      const j = (await marketData.twitter.userTweets({
+        restId,
+        includeReplies,
+        cursor: cursor || undefined,
+        limit: twitterUserLimit,
+      })) as any;
 
       const payload = j?.payload;
       const nextCursor = extractCursor(payload);
@@ -545,14 +534,11 @@ export default function Step2MarketEventsPage() {
     setFetchState(reset ? "searching twitter (first page)..." : "searching twitter (next page)...");
 
     try {
-      const qs = new URLSearchParams();
-      qs.set("rawQuery", rawQuery);
-      if (cursor) qs.set("cursor", cursor);
-      if (Number.isFinite(twitterSearchLimit) && twitterSearchLimit > 0) qs.set("limit", String(Math.min(200, Math.trunc(twitterSearchLimit))));
-
-      const r = await fetch(`/api/daa/market/twitter/search?${qs.toString()}`, { cache: "no-store" });
-      const j = (await r.json()) as any;
-      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+      const j = (await marketData.twitter.search({
+        rawQuery,
+        cursor: cursor || undefined,
+        limit: twitterSearchLimit,
+      })) as any;
 
       const payload = j?.payload;
       const nextCursor = extractCursor(payload);
@@ -580,9 +566,7 @@ export default function Step2MarketEventsPage() {
   async function fetchYahooRss() {
     setFetchState("fetching yahoo rss...");
     try {
-      const r = await fetch(`/api/daa/market/yahoo/rss?symbol=${encodeURIComponent(yahooSymbol)}`, { cache: "no-store" });
-      const j = (await r.json()) as any;
-      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+      const j = (await marketData.yahoo.rss({ symbol: yahooSymbol })) as any;
 
       // Normalize into a yfinance-like array.
       const arr = (j?.items ?? []).map((it: any, idx: number) => {
@@ -612,9 +596,7 @@ export default function Step2MarketEventsPage() {
   async function fetchXueqiuQuote() {
     setFetchState("fetching xueqiu quote...");
     try {
-      const r = await fetch(`/api/daa/market/xueqiu/quotec?symbol=${encodeURIComponent(xueqiuSymbol)}`, { cache: "no-store" });
-      const j = (await r.json()) as any;
-      if (!r.ok) throw new Error(j?.error || `http ${r.status}`);
+      const j = (await marketData.xueqiu.quoteC({ symbol: xueqiuSymbol })) as any;
 
       // Wrap it into a news-like shape so it can be ingested into MarketEvent[]
       const quote = j?.payload?.data?.[0] ?? j?.payload?.data?.quote ?? j?.payload?.data ?? j?.payload;
