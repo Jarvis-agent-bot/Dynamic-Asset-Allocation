@@ -63,6 +63,7 @@ import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
 import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
 import DaaRebalancePolicyEditorV0 from './DaaRebalancePolicyEditorV0';
 import DaaRebalanceScheduleV0 from './DaaRebalanceScheduleV0';
+import DaaDynamicRebalanceStatusPillV0 from './DaaDynamicRebalanceStatusPillV0';
 import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
 import { DaaOrderStatusTrackerV0 } from './DaaOrderStatusTrackerV0';
@@ -2424,6 +2425,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       <div className="title" style={{ marginBottom: 12, justifyContent: 'space-between' as const }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
           <span style={{ fontWeight: 800 }}>DAA Workflow</span>
+          <DaaDynamicRebalanceStatusPillV0 rev={rev} />
           <span className="muted" style={{ fontSize: 12 }}>
             Hub on Market/Funds: checklist + jump actions + import/export
           </span>
