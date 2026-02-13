@@ -66,9 +66,19 @@ export function normalizeTargetWeightsInput(x: unknown): TargetWeightV1[] {
       .map((a) => ({ id: a.id, label: a.label, targetPct: a.targetPct as number }));
   }
 
-  // Accept map form: {"SPY": 0.6, "TLT": 0.4}
-  if (typeof x === "object") {
-    return Object.entries(x as Record<string, unknown>)
+  if (x && typeof x === "object") {
+    const r: any = x as any;
+
+    // Common wrapper shapes (export bundles / engine req+resp / wizard state).
+    if (r.targetWeights !== undefined) return normalizeTargetWeightsInput(r.targetWeights);
+    if (r.target_weights !== undefined) return normalizeTargetWeightsInput(r.target_weights);
+    if (r.money_plan && typeof r.money_plan === "object" && (r.money_plan as any).allocations !== undefined) {
+      return normalizeTargetWeightsInput((r.money_plan as any).allocations);
+    }
+    if (r.allocations !== undefined) return normalizeTargetWeightsInput(r.allocations);
+
+    // Accept map form: {"SPY": 0.6, "TLT": 0.4}
+    return Object.entries(r as Record<string, unknown>)
       .map(([idRaw, targetPctRaw]) => {
         const id = String(idRaw ?? "").trim();
         const targetPct = normalizeTargetPct(targetPctRaw);
