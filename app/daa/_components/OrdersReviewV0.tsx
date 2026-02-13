@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 
+import { estimateTotalBrokerageFeesV0 } from "@/src/daa/feeEstimateV0";
+
 export type OrderLikeV0 = {
   symbol: string;
   side: string;
@@ -27,11 +29,17 @@ export function OrdersReviewV0(props: {
   minTradeNotional?: number | null;
   // Optional: show numbers like "USD".
   ccy?: string | null;
+  // Optional: estimated brokerage fees (bps of turnoverNotional).
+  feeBps?: number | null;
 }) {
-  const { title, orders, cashStart, minTradeNotional, ccy } = props;
+  const { title, orders, cashStart, minTradeNotional, ccy, feeBps } = props;
 
   const buySum = useMemo(() => sumNotional(orders, "BUY"), [orders]);
   const sellSum = useMemo(() => sumNotional(orders, "SELL"), [orders]);
+
+  const turnoverNotional = buySum + sellSum;
+  const feeBpsN = toFiniteNumber(feeBps);
+  const estimatedFeeTotal = useMemo(() => estimateTotalBrokerageFeesV0({ orders, feeBps }), [orders, feeBps]);
 
   const cashStartN = toFiniteNumber(cashStart);
   const minTradeN = toFiniteNumber(minTradeNotional);
@@ -99,6 +107,12 @@ export function OrdersReviewV0(props: {
           {cashStartN !== null ? (
             <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
               cashStart={cashStartN.toFixed(2)}{ccyLabel}; SELL sum={sellSum.toFixed(2)}{ccyLabel}; BUY sum={buySum.toFixed(2)}{ccyLabel}.
+            </div>
+          ) : null}
+
+          {estimatedFeeTotal !== null && feeBpsN !== null ? (
+            <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+              estimatedTotalFees≈{estimatedFeeTotal.toFixed(2)}{ccyLabel} (feeBps={feeBpsN.toFixed(1)}; turnover={turnoverNotional.toFixed(2)}{ccyLabel})
             </div>
           ) : null}
         </div>
