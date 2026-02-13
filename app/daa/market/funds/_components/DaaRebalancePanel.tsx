@@ -27,6 +27,7 @@ import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
 import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
+import { appendRebalanceLog } from '@/src/daa/rebalanceLogStore';
 import { buildRebalanceViolationsV0 } from '@/src/daa/rebalanceViolationsV0';
 import {
   attachOrdersToRebalanceRunV0,
@@ -2230,6 +2231,21 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             phase: 'done',
             message: 'shouldRebalance=false (no-op)',
           });
+        }
+
+        // Keep a traceable snapshot even for no-op runs (so the run history can show allocations).
+        try {
+          appendRebalanceLog({
+            storage: window.localStorage,
+            source: 'core',
+            runId: statusRunId ?? undefined,
+            request: req,
+            response: respValue,
+            note: runNote,
+          });
+          window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
+        } catch {
+          // ignore
         }
       }
 
