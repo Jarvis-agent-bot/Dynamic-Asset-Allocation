@@ -3817,6 +3817,54 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         Costs model (v0): BUY acquires (notional - cost); SELL receives (notional - cost); cost = feeBps + slippage/spreadBps(base) * sensitivity.
                       </div>
 
+                      <div
+                        style={{
+                          marginTop: 8,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                          background: 'rgba(0,0,0,0.12)',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: 12 }}>Impact summary (preview)</div>
+                        {(() => {
+                          const ccy = baseCcy ? ` ${baseCcy}` : '';
+                          const trades = effectiveOrders.filter(
+                            (o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0
+                          ).length;
+
+                          let maxAbsDriftAfterPct01: number | null = null;
+                          for (const r of whatIfRows) {
+                            const abs = Math.abs(r.driftPct);
+                            if (!Number.isFinite(abs)) continue;
+                            maxAbsDriftAfterPct01 = maxAbsDriftAfterPct01 === null ? abs : Math.max(maxAbsDriftAfterPct01, abs);
+                          }
+
+                          const turnoverPct01 = Number.isFinite(whatIf.turnoverPctOfTotalBefore) ? whatIf.turnoverPctOfTotalBefore : null;
+
+                          return (
+                            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' as const, marginTop: 6 }}>
+                              <div style={{ minWidth: 140 }}>
+                                <div className="muted" style={{ fontSize: 11 }}>trades</div>
+                                <div style={{ fontSize: 13, fontWeight: 800 }}>{trades}</div>
+                              </div>
+                              <div style={{ minWidth: 220 }}>
+                                <div className="muted" style={{ fontSize: 11 }}>turnover</div>
+                                <div style={{ fontSize: 13, fontWeight: 800 }}>
+                                  {whatIf.turnoverNotional.toFixed(2)}{ccy}{turnoverPct01 !== null ? ` (${fmtPct01(turnoverPct01)})` : ''}
+                                </div>
+                              </div>
+                              <div style={{ minWidth: 200 }}>
+                                <div className="muted" style={{ fontSize: 11 }}>max|drift| after</div>
+                                <div style={{ fontSize: 13, fontWeight: 800 }}>
+                                  {maxAbsDriftAfterPct01 !== null ? fmtPct01(maxAbsDriftAfterPct01) : 'n/a'}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, marginTop: 8, alignItems: 'center' }}>
                         <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
                           brokerageFeeBps
