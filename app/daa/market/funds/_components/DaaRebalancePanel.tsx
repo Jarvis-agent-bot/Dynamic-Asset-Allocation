@@ -4163,7 +4163,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       ) : null}
 
                       {whatIfAllocationDiffRowsV0.length ? (
-                        <AllocationDiffChartV0 rows={whatIfAllocationDiffRowsV0} />
+                        <AllocationDiffChartV0
+                          rows={whatIfAllocationDiffRowsV0}
+                          title="What changed (current vs proposed)"
+                          description="Before/After bars are weights vs total portfolio (including cash). Dashed marker = proposed target weight."
+                        />
                       ) : null}
 
                       <details className="muted" style={{ marginTop: 8, fontSize: 12 }}>
