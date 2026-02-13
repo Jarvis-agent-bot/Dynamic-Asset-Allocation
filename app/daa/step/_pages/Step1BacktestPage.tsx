@@ -7,6 +7,7 @@ import { recommendEnsembleWeightsFromRankedResults } from "../../../../src/core/
 import {
   createDeterministicMockPriceSeriesProvider,
   createOkxPublicPriceSeriesProvider,
+  createYfinancePublicPriceSeriesProvider,
   fetchValidatedPriceSeriesEnforcingRange,
 } from "../../../../src/core/providers";
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
@@ -35,7 +36,7 @@ function jsonPretty(x: unknown) {
 }
 
 export default function Step1BacktestPage() {
-  const [dataSource, setDataSource] = useState<"mock" | "okx">("mock");
+  const [dataSource, setDataSource] = useState<"yfinance" | "mock" | "okx">("yfinance");
   const [symbol, setSymbol] = useState("SPY");
   const [start, setStart] = useState("2026-01-01");
   const [end, setEnd] = useState("2026-02-01");
@@ -54,7 +55,7 @@ export default function Step1BacktestPage() {
   const [series, setSeries] = useState<Array<{ date: string; close: number }>>([]);
   const [seriesError, setSeriesError] = useState<string | null>(null);
 
-  // v0: support both a deterministic mock series and a real OKX (public) candle fetch.
+  // v0: support deterministic mock series, OKX (public) crypto candles, and Yahoo Finance ("yfinance") daily bars.
   useEffect(() => {
     let cancelled = false;
 
@@ -63,7 +64,11 @@ export default function Step1BacktestPage() {
 
       try {
         const provider =
-          dataSource === "okx" ? createOkxPublicPriceSeriesProvider({ bar: "1D" }) : createDeterministicMockPriceSeriesProvider({ maxDays: 200 });
+          dataSource === "okx"
+            ? createOkxPublicPriceSeriesProvider({ bar: "1D" })
+            : dataSource === "yfinance"
+              ? createYfinancePublicPriceSeriesProvider()
+              : createDeterministicMockPriceSeriesProvider({ maxDays: 200 });
 
         const next = await fetchValidatedPriceSeriesEnforcingRange(provider, {
           symbol: String(symbol || "").trim().toUpperCase(),
@@ -146,7 +151,7 @@ export default function Step1BacktestPage() {
     <main>
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 1 — 回测算法组合</h1>
       <p style={{ color: "#444" }}>
-        v0：支持 mock 价格序列（快速回归）+ OKX public candles（crypto，server-side 拉取并标准化成 PriceBar[]）。
+        v0：支持 yfinance（Yahoo Finance 日线，server-side 拉取并标准化成 PriceBar[]）+ mock（快速回归）+ OKX public candles（crypto）。
       </p>
 
       <form
@@ -162,12 +167,13 @@ export default function Step1BacktestPage() {
               value={dataSource}
               onChange={(e) => {
                 const v = e.target.value;
-                setDataSource(v === "okx" ? "okx" : "mock");
+                setDataSource(v === "okx" ? "okx" : v === "yfinance" ? "yfinance" : "mock");
               }}
               style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6, background: "#fff" }}
             >
-              <option value="mock">Mock (deterministic)</option>
+              <option value="yfinance">yfinance (Yahoo Finance, 1D)</option>
               <option value="okx">OKX (public, 1D candles)</option>
+              <option value="mock">Mock (deterministic)</option>
             </select>
           </label>
 
@@ -176,7 +182,9 @@ export default function Step1BacktestPage() {
             <input
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              placeholder={dataSource === "okx" ? "e.g. BTC-USDT" : "e.g. SPY"}
+              placeholder={
+                dataSource === "okx" ? "e.g. BTC-USDT" : dataSource === "yfinance" ? "e.g. SPY / 2800.HK / 2800" : "e.g. SPY"
+              }
               style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
             />
           </label>
@@ -225,8 +233,10 @@ export default function Step1BacktestPage() {
         Series ({dataSource}): {series.length} points — {start} → {end}
         {dataSource === "mock" ? (
           <span style={{ marginLeft: 6 }}>(capped at 200 days)</span>
-        ) : (
+        ) : dataSource === "okx" ? (
           <span style={{ marginLeft: 6 }}>(OKX: best-effort; may truncate to recent bars)</span>
+        ) : (
+          <span style={{ marginLeft: 6 }}>(yfinance: best-effort; market holidays/missing bars possible)</span>
         )}
         {seriesError ? <span style={{ marginLeft: 8 }}>({seriesError})</span> : null}
       </div>
