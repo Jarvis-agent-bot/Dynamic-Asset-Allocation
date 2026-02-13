@@ -1,7 +1,11 @@
 import { simulateRebalanceWhatIfV0, type WhatIfOrderV0 } from "../core/rebalanceWhatIf";
 
+import { normalizeSellProceedsRoutingV0, type SellProceedsRoutingV0 } from "./sellProceedsRoutingV0";
+
 export type PreTradeCashCheckV0 = {
   schemaVersion: 1;
+
+  sellProceedsRoutingV0: SellProceedsRoutingV0;
 
   cashStart: number;
   buyNotional: number;
@@ -41,6 +45,7 @@ function normalizeOrders(raw: unknown): WhatIfOrderV0[] {
 }
 
 export function getPreTradeCashCheckV0(args: {
+  sellProceedsRoutingV0?: unknown;
   cashStart: unknown;
   orders: unknown;
   feeBps?: unknown;
@@ -49,6 +54,8 @@ export function getPreTradeCashCheckV0(args: {
 }): PreTradeCashCheckV0 {
   const cashStart = Math.max(0, toFiniteNumber(args.cashStart) ?? 0);
   const orders = normalizeOrders(args.orders);
+
+  const sellProceedsRoutingV0 = normalizeSellProceedsRoutingV0(args.sellProceedsRoutingV0);
 
   const feeBps = toFiniteNumber(args.feeBps) ?? 0;
   const slippageBps = toFiniteNumber(args.slippageBps) ?? 0;
@@ -73,7 +80,8 @@ export function getPreTradeCashCheckV0(args: {
   const reasons: string[] = [];
 
   // Conservative settlement assumption for mutual funds / T+1/T+2 products: sell proceeds are not usable same-day.
-  if (buyNotional > cashStart + 1e-6) {
+  // When routing is CASH, we assume SELLs can fund BUYs within the same rebalance (more like T+0 products).
+  if (sellProceedsRoutingV0 !== "CASH" && buyNotional > cashStart + 1e-6) {
     reasons.push("buyNotional_exceeds_settled_cash");
   }
 
@@ -85,7 +93,9 @@ export function getPreTradeCashCheckV0(args: {
 
   const ccy = args.baseCcy ? ` ${args.baseCcy}` : "";
 
-  let message = `Pre-trade cash check: cashStart=${cashStart.toFixed(2)}${ccy}, buy=${buyNotional.toFixed(2)}${ccy}, sell=${sellNotional.toFixed(2)}${ccy}`;
+  const routingLabel = sellProceedsRoutingV0 === "CASH" ? "cash" : "targetCashBucket";
+
+  let message = `Pre-trade cash check: routing=${routingLabel}, cashStart=${cashStart.toFixed(2)}${ccy}, buy=${buyNotional.toFixed(2)}${ccy}, sell=${sellNotional.toFixed(2)}${ccy}`;
   if (blocking) {
     const tail: string[] = [];
     if (reasons.includes("buyNotional_exceeds_settled_cash")) {
@@ -101,6 +111,7 @@ export function getPreTradeCashCheckV0(args: {
 
   return {
     schemaVersion: 1,
+    sellProceedsRoutingV0,
     cashStart,
     buyNotional,
     sellNotional,

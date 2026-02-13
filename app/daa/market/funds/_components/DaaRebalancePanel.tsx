@@ -9,6 +9,8 @@ import { getSnapshotPrice, loadPriceSnapshotV1, savePriceSnapshotV1 } from '../.
 import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeightsStore';
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } from '../../../executionModeStore';
+import { loadSellProceedsRoutingV0, persistSellProceedsRoutingV0 } from '../../../sellProceedsRoutingStoreV0';
+import { type SellProceedsRoutingV0 } from '@/src/daa/sellProceedsRoutingV0';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import AllocationDiffChartV0 from './AllocationDiffChartV0';
@@ -460,6 +462,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const [rev, setRev] = useState(0);
   const executionMode: ExecutionModeV0 = useMemo(() => loadExecutionModeV0(), [rev]);
+  const sellProceedsRoutingV0: SellProceedsRoutingV0 = useMemo(() => loadSellProceedsRoutingV0(), [rev]);
 
   const [paperRunLoading, setPaperRunLoading] = useState(false);
   const [paperRunError, setPaperRunError] = useState<string | null>(null);
@@ -1255,13 +1258,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const preTradeCashCheck = useMemo(() => {
     return getPreTradeCashCheckV0({
+      sellProceedsRoutingV0,
       cashStart: portfolioCash,
       orders: effectiveOrders,
       feeBps: whatIfFeeBps,
       slippageBps: whatIfSlippageBpsUsed,
       baseCcy,
     });
-  }, [baseCcy, effectiveOrders, portfolioCash, whatIfFeeBps, whatIfSlippageBpsUsed]);
+  }, [baseCcy, effectiveOrders, portfolioCash, sellProceedsRoutingV0, whatIfFeeBps, whatIfSlippageBpsUsed]);
 
   const preRunViolationsV0 = useMemo(() => {
     const respAny: any = ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' ? (rebalanceResp as any) : (corePreview?.resp as any);
@@ -1870,6 +1874,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       }
 
       const coreCashCheck = getPreTradeCashCheckV0({
+        sellProceedsRoutingV0,
         cashStart: st.cash,
         orders,
         feeBps: whatIfFeeBps,
@@ -2354,6 +2359,26 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <div style={{ fontSize: 12, fontWeight: 700, color: preTradeCashCheck.blocking ? 'var(--danger)' : 'var(--muted)' }}>
                   Pre-trade cash/settlement check {preTradeCashCheck.blocking ? '(BLOCKED)' : '(ok)'}
                 </div>
+
+                <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                  <div className="muted" style={{ fontSize: 11 }}>Sell proceeds routing:</div>
+                  <select
+                    value={sellProceedsRoutingV0}
+                    onChange={(e) => persistSellProceedsRoutingV0(e.target.value)}
+                    style={{
+                      fontSize: 12,
+                      padding: '4px 6px',
+                      borderRadius: 8,
+                      background: 'rgba(0,0,0,0.15)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      color: 'inherit',
+                    }}
+                  >
+                    <option value="TARGET_CASH_BUCKET">Target cash bucket (conservative, T+1/T+2)</option>
+                    <option value="CASH">Cash (allow sells to fund buys)</option>
+                  </select>
+                </div>
+
                 <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
                   cashStart=<b>{preTradeCashCheck.cashStart.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
                   {' '}· buy=<b>{preTradeCashCheck.buyNotional.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
@@ -2364,7 +2389,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   <div style={{ fontSize: 11, marginTop: 6, color: 'var(--danger)' }}>{preTradeCashCheck.message}</div>
                 ) : (
                   <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                    Assumption: sell proceeds may settle later (T+1/T+2), so BUY notional must be covered by starting cash.
+                    {sellProceedsRoutingV0 === 'CASH'
+                      ? 'Assumption: sell proceeds can fund BUY orders (T+0-style settlement).' 
+                      : 'Assumption: sell proceeds may settle later (T+1/T+2), so BUY notional must be covered by starting cash.'}
                   </div>
                 )}
               </div>

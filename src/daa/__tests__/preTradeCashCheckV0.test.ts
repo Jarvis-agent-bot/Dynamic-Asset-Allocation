@@ -22,6 +22,22 @@ describe("pre-trade cash/settlement check v0", () => {
     expect(c.message).toMatch(/BLOCKED/);
   });
 
+  it("does not block when routing=CASH and sells can fund buys", () => {
+    const c = getPreTradeCashCheckV0({
+      sellProceedsRoutingV0: "CASH",
+      cashStart: 0,
+      orders: [
+        { side: "SELL", symbol: "AAA", notional: 100 },
+        { side: "BUY", symbol: "BBB", notional: 100 },
+      ],
+      feeBps: 0,
+      slippageBps: 0,
+    });
+
+    expect(c.blocking).toBe(false);
+    expect(c.reasons).toEqual([]);
+  });
+
   it("does not block when cashStart covers BUY notional", () => {
     const c = getPreTradeCashCheckV0({
       cashStart: 100,
