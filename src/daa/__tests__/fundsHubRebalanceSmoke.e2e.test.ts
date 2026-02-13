@@ -223,4 +223,25 @@ describe("funds hub rebalance e2e smoke", () => {
     expect(report.run.rebalanceLogEntry?.runId).toBe(runId2);
     expect(report.run.paperExecutionLogEntry?.runId).toBe(runId2);
   });
+
+  it("surfaces exchange min order size rounding as core warnings", () => {
+    const req = {
+      account: { cash: 0 },
+      holdings: { AAA: 27 },
+      prices: { AAA: 10, BBB: 10 },
+      targetWeights: {
+        AAA: 0,
+        BBB: 1,
+      },
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0, minTradeNotional: 100, cooldownSeconds: 0 },
+    };
+
+    expect(isRebalanceCoreRequest(req)).toBe(true);
+
+    const resp = rebalanceCore(req);
+    expect(resp.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["SELL:AAA:200", "BUY:BBB:200"]);
+    expect(resp.warnings.join("\n")).toMatch(/min order size:/i);
+    expect(resp.warnings.join("\n")).toMatch(/skipped 70\.00/i);
+  });
 });

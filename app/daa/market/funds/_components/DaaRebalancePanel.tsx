@@ -946,6 +946,18 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return recomputeOrders;
   }, [engineOrders, ordersPreviewSourceV0, recomputeOrders]);
 
+  const effectiveEngineWarnings = useMemo(() => {
+    const resp: any = ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' ? (rebalanceResp as any) : (corePreview?.resp as any);
+    const raw = resp?.warnings;
+    return Array.isArray(raw) ? raw.map((x: any) => String(x)) : [];
+  }, [corePreview, ordersPreviewSourceV0, rebalanceResp]);
+
+  const effectiveEngineNotes = useMemo(() => {
+    const resp: any = ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' ? (rebalanceResp as any) : (corePreview?.resp as any);
+    const raw = resp?.explain?.notes;
+    return Array.isArray(raw) ? raw.map((x: any) => String(x)) : [];
+  }, [corePreview, ordersPreviewSourceV0, rebalanceResp]);
+
   const tradeRationaleRowsV0 = useMemo(() => {
     if (!effectiveOrders.length) return [] as Array<{
       key: string;
@@ -2351,6 +2363,46 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     ccy={baseCcy}
                     feeBps={whatIfFeeBps}
                   />
+
+                  {effectiveEngineWarnings.length ? (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: "8px 10px",
+                        border: "1px solid rgba(176,0,32,0.35)",
+                        borderRadius: 10,
+                        background: "rgba(176,0,32,0.08)",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>Engine warnings</div>
+                      <div style={{ display: "grid", gap: 4 }}>
+                        {effectiveEngineWarnings.slice(0, 6).map((w, idx) => (
+                          <div key={idx} style={{ fontSize: 12, color: "var(--danger, #b00020)" }}>
+                            {w}
+                          </div>
+                        ))}
+                      </div>
+                      {effectiveEngineWarnings.length > 6 ? (
+                        <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                          +{effectiveEngineWarnings.length - 6} more warnings...
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {effectiveEngineNotes.length ? (
+                    <details className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+                      <summary style={{ cursor: "pointer" }}>Engine notes</summary>
+                      <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                        {effectiveEngineNotes.slice(0, 10).map((n, idx) => (
+                          <div key={idx}>{n}</div>
+                        ))}
+                      </div>
+                      {effectiveEngineNotes.length > 10 ? (
+                        <div style={{ fontSize: 11, marginTop: 6 }}>+{effectiveEngineNotes.length - 10} more notes...</div>
+                      ) : null}
+                    </details>
+                  ) : null}
 
                   <details style={{ marginTop: 10 }}>
                     <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Trade rationale (why each trade)</summary>
