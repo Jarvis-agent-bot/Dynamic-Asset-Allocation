@@ -267,6 +267,15 @@ function executeOrders(opts: {
 export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): DriftRebalanceBacktestResult {
   const warnings: string[] = [];
 
+  // backtestDriftRebalance is the SoT for the auto-plan UI. Surface core warnings
+  // (e.g. minTradeNotional/maxOut blockers) so the UI/markdown plan can show them.
+  function appendUniqueWarnings(more: string[] | undefined) {
+    if (!more?.length) return;
+    for (const w of more) {
+      if (!warnings.includes(w)) warnings.push(w);
+    }
+  }
+
   const { dates } = assertAlignedSeries(req.seriesBySymbol);
 
   const constraints = req.constraints;
@@ -308,6 +317,8 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
         cooldownSeconds: 0,
       },
     });
+
+    appendUniqueWarnings(res.warnings);
 
     const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : undefined;
 
@@ -362,6 +373,8 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
         now,
       },
     });
+
+    appendUniqueWarnings(res.warnings);
 
     if (res.trigger.shouldRebalance) {
       const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;

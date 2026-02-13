@@ -13,6 +13,7 @@ import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
 import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from '@/src/core/backtestDriftRebalance';
+import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
 import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
@@ -1109,50 +1110,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return rows;
   }
 
-  function buildAutoPlanMarkdownV0(res: DriftRebalanceBacktestResult): string {
-    const parts: string[] = [];
-
-    parts.push("# Auto rebalance plan (v0)");
-    parts.push("");
-    parts.push(
-      `rebalanceCount=${res.summary.rebalanceCount}; turnoverNotional=${res.summary.turnoverNotional.toFixed(2)}; equityAbs=${res.summary.initialEquityAbs.toFixed(2)} → ${res.summary.finalEquityAbs.toFixed(2)}`,
-    );
-    if (res.warnings?.length) parts.push(`warnings: ${res.warnings.length}`);
-    parts.push("");
-
-    if (res.states) {
-      parts.push("## Overall weight diff");
-      parts.push("");
-      parts.push(...formatWeightsDiffLines({ before: res.states.initial, after: res.states.final }));
-      parts.push("");
-    }
-
-    parts.push("## Events");
-    parts.push("");
-
-    for (const ev of res.events || []) {
-      const stats: any = (ev as any).trigger?.stats ?? {};
-
-      parts.push(`### ${ev.kind} @ ${ev.date}`);
-      parts.push("");
-      parts.push(
-        `shouldRebalance=${String((ev as any).trigger?.shouldRebalance)}; maxAbsDriftPct=${fmtPct01(Number(stats.maxAbsDriftPct ?? NaN))}; maxAbsDriftSymbol=${String(stats.maxAbsDriftSymbol ?? "")}`,
-      );
-      parts.push("");
-
-      parts.push("Diff:");
-      parts.push(...formatWeightsDiffLines({ before: (ev as any).before, after: (ev as any).after }).map((l) => `- ${l}`));
-      parts.push("");
-
-      parts.push("Orders:");
-      parts.push("```json");
-      parts.push(JSON.stringify((ev as any).orders ?? [], null, 2));
-      parts.push("```");
-      parts.push("");
-    }
-
-    return parts.join("\n");
-  }
+  // buildAutoPlanMarkdownV0 lives in src/core/autoPlanMarkdownV0 so it can be unit-tested.
 
   async function doCopyAutoPlanV0() {
     if (!autoPlanResult) return;
@@ -2433,6 +2391,19 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     {baseCcy ? ` ${baseCcy}` : ""}
                     {" "}· equityAbs: {autoPlanResult.summary.initialEquityAbs.toFixed(2)} → {autoPlanResult.summary.finalEquityAbs.toFixed(2)}
                   </div>
+
+                  {autoPlanResult.warnings?.length ? (
+                    <details style={{ marginTop: 8 }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--danger, #b00020)' }}>
+                        Warnings ({autoPlanResult.warnings.length})
+                      </summary>
+                      <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger, #b00020)' }}>
+                        {autoPlanResult.warnings.map((w, idx) => (
+                          <div key={idx}>{String(w)}</div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
 
                   {autoPlanResult.states ? (
                     <div style={{ marginTop: 10 }}>
