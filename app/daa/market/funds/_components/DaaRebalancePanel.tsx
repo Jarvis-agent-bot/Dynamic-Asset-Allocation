@@ -10,7 +10,9 @@ import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeig
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } from '../../../executionModeStore';
 import { loadSellProceedsRoutingV0, persistSellProceedsRoutingV0 } from '../../../sellProceedsRoutingStoreV0';
+import { loadCashBucketTargetPct01V0, persistCashBucketTargetPct01V0 } from '../../../cashBucketTargetStoreV0';
 import { type SellProceedsRoutingV0 } from '@/src/daa/sellProceedsRoutingV0';
+import { deriveInvestablePct01V0, scaleTargetWeightsByInvestablePct01V0 } from '@/src/daa/cashBucketTargetsV0';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import AllocationDiffChartV0 from './AllocationDiffChartV0';
@@ -484,6 +486,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [rev, setRev] = useState(0);
   const executionMode: ExecutionModeV0 = useMemo(() => loadExecutionModeV0(), [rev]);
   const sellProceedsRoutingV0: SellProceedsRoutingV0 = useMemo(() => loadSellProceedsRoutingV0(), [rev]);
+  const cashBucketTargetPct01 = useMemo(() => loadCashBucketTargetPct01V0(), [rev]);
 
   const [paperRunLoading, setPaperRunLoading] = useState(false);
   const [paperRunError, setPaperRunError] = useState<string | null>(null);
@@ -743,9 +746,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const targetWeights = manualTargetWeights.length ? manualTargetWeights : computedTargetWeights;
   const targetWeightsSource = manualTargetWeights.length ? 'manual' : 'engine/money_plan';
 
-  // Money-plan cash buffer: if investable < totalEquity, treat the remainder as target cash.
-  // We model it by scaling down all asset target weights by investable/totalEquity.
-  const investablePct01 = useMemo(() => {
+  // Cash bucket targets (keep cash vs invest): model it as an investable slice of equity,
+  // then scale asset weights so sum(targetWeightsEffective) < 1 implies a cash target.
+  const moneyPlanInvestablePct01 = useMemo(() => {
     const mp: any = moneyPlan as any;
     const total = toFiniteNumber(mp?.account?.totalEquity);
     const investable = toFiniteNumber(mp?.account?.investable);
@@ -755,11 +758,16 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       if (Number.isFinite(pct)) return Math.max(0, Math.min(1, pct));
     }
 
-    return 1;
+    return null;
   }, [moneyPlan]);
 
+  const investablePct01 = useMemo(
+    () => deriveInvestablePct01V0({ moneyPlanInvestablePct01, targetCashPct01: cashBucketTargetPct01 }),
+    [cashBucketTargetPct01, moneyPlanInvestablePct01]
+  );
+
   const targetWeightsEffective = useMemo(() => {
-    const scaled = !(investablePct01 >= 0 && investablePct01 <= 1) || investablePct01 === 1 ? targetWeights : targetWeights.map((t) => ({ ...t, targetPct: t.targetPct * investablePct01 }));
+    const scaled = scaleTargetWeightsByInvestablePct01V0(targetWeights, investablePct01);
 
     if (!assetBlacklistSetV0.size) return scaled;
     return scaled.filter((t) => !assetBlacklistSetV0.has(normalizePlanSymbol((t as any)?.id)));
@@ -2365,6 +2373,40 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               />
               <div className="muted" style={{ fontSize: 11 }}>
                 Excluded from holdings + targetWeights (and their prices) when generating plans.
+              </div>
+            </div>
+
+            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 8 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+                Cash bucket target
+              </div>
+              <input
+                type="number"
+                min={0}
+                max={95}
+                step={1}
+                value={Math.round(cashBucketTargetPct01 * 100)}
+                onChange={(e) => persistCashBucketTargetPct01V0(Number(e.target.value) / 100)}
+                style={{
+                  width: 92,
+                  padding: '6px 10px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  background: 'rgba(0,0,0,0.14)',
+                }}
+                aria-label="Rebalance cash bucket target percent"
+              />
+              <div className="muted" style={{ fontSize: 11 }}>
+                % (keep cash vs invest). Effective investable≈<b>{(investablePct01 * 100).toFixed(0)}%</b>
+                {moneyPlanInvestablePct01 !== null ? (
+                  <>
+                    {' '}· money_plan investable≈{(moneyPlanInvestablePct01 * 100).toFixed(0)}%
+                  </>
+                ) : (
+                  <>
+                    {' '}· money_plan investable: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>n/a</span>
+                  </>
+                )}
               </div>
             </div>
 
