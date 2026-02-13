@@ -510,6 +510,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunExecutionMode, setPaperRunExecutionMode] = useState<ExecutionModeV0>("paper");
   const paperRunAbortRef = useRef<AbortController | null>(null);
 
+  // When a run fails, keep enough context to show a useful error + allow one-click retry.
+  const [paperRunLastConfirmedOpts, setPaperRunLastConfirmedOpts] = useState<{ cashSweep?: boolean } | null>(null);
+  const [paperRunFailureDetails, setPaperRunFailureDetails] = useState<string | null>(null);
+
   // Preflight checklist (v0): confirm key safety/inputs before running a paper rebalance.
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [preflightPendingOpts, setPreflightPendingOpts] = useState<{ cashSweep?: boolean } | null>(null);
@@ -1876,6 +1880,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     const pending = safetyStopPendingOpts;
     closeSafetyStop();
 
+    // Used for the "Retry" UX when a run fails mid-flight.
+    setPaperRunLastConfirmedOpts(pending ?? {});
+
     if (pending && pending.cashSweep) return runPaperRebalanceCore({ cashSweep: true });
     return runPaperRebalanceCore();
   }
@@ -1887,6 +1894,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     setPaperRunPostSummary(null);
     setPaperRunHealthcheck(null);
     setPaperRunDriftAlert(null);
+    setPaperRunFailureDetails(null);
 
     if (typeof window === 'undefined') return;
 
@@ -2046,12 +2054,45 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       saveJsonToLs(LS_REBALANCE_RESPONSE, respValue);
 
       if (!res.ok) {
-        setPaperRunError(`HTTP ${res.status}`);
+        // Core errors are usually { error, expected? }. Surface them instead of a bare HTTP status.
+        const v: any = parsed.ok ? (respValue as any) : null;
+        const serverErr = v && typeof v === 'object' ? (typeof v.error === 'string' ? String(v.error) : null) : null;
+        const expected = v && typeof v === 'object' ? (typeof v.expected === 'string' ? String(v.expected) : null) : null;
+
+        const msgBase = serverErr ? `Core error: ${serverErr}` : 'Core request failed';
+        const msg = `${msgBase} (HTTP ${res.status})${expected ? `; expected: ${expected}` : ''}`;
+
+        setPaperRunError(msg);
+        setPaperRunFailureDetails((parsed.ok ? pretty(v) : text).slice(0, 8000));
+
+        if (statusRunId) {
+          failRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            error: msg,
+            message: 'core request failed',
+          });
+        }
+
         return;
       }
 
       if (!parsed.ok) {
-        setPaperRunError('response JSON parse failed');
+        const snippet = text ? text.slice(0, 240) : '';
+        const msg = `Core response JSON parse failed (HTTP ${res.status})${snippet ? `; body: ${snippet}` : ''}`;
+
+        setPaperRunError(msg);
+        setPaperRunFailureDetails(text.slice(0, 8000));
+
+        if (statusRunId) {
+          failRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            error: msg,
+            message: 'core response parse failed',
+          });
+        }
+
         return;
       }
 
@@ -3519,7 +3560,53 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 ) : null}
               </div>
             ) : paperRunError ? (
-              <div style={{ fontSize: 12, marginTop: 6, color: 'var(--danger)' }}>{paperRunError}</div>
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '10px 12px',
+                  border: '1px solid rgba(176, 0, 32, 0.55)',
+                  borderRadius: 12,
+                  background: 'rgba(176, 0, 32, 0.08)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--danger)' }}>Run failed</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                    <button
+                      type="button"
+                      className="button secondary"
+                      style={{ padding: '4px 8px' }}
+                      disabled={paperRunLoading || !paperRunLastConfirmedOpts}
+                      onClick={() => {
+                        if (!paperRunLastConfirmedOpts) return;
+                        void runPaperRebalanceCore(paperRunLastConfirmedOpts);
+                      }}
+                      title={!paperRunLastConfirmedOpts ? 'No confirmed run to retry yet.' : 'Retry the last confirmed run (same mode/options).'}
+                    >
+                      Retry
+                    </button>
+                    <button
+                      type="button"
+                      className="button secondary"
+                      style={{ padding: '4px 8px' }}
+                      disabled={paperRunLoading}
+                      onClick={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})}
+                      title="Re-open preflight checklist before retrying."
+                    >
+                      Review & retry
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 12, marginTop: 6, color: 'var(--danger)' }}>{paperRunError}</div>
+
+                {paperRunFailureDetails ? (
+                  <details className="muted" style={{ marginTop: 8, fontSize: 11 }}>
+                    <summary style={{ cursor: 'pointer' }}>Failure details</summary>
+                    <pre style={{ margin: '8px 0 0', overflowX: 'auto' }}>{paperRunFailureDetails}</pre>
+                  </details>
+                ) : null}
+              </div>
             ) : paperRunSummary ? (
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{paperRunSummary}</div>
             ) : null}
