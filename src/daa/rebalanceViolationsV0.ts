@@ -19,7 +19,7 @@ export type RebalanceViolationLevelV0 = "blocker" | "warning" | "info";
 
 export type RebalanceViolationV0 = {
   level: RebalanceViolationLevelV0;
-  kind: "minTrade" | "cashBuffer" | "sellBlocker" | "cashSettlement" | "engineWarning";
+  kind: "minTrade" | "cashBuffer" | "sellBlocker" | "cashSettlement" | "maxTurnover" | "engineWarning";
   title: string;
   details: string[];
   suggestion?: string;
@@ -40,6 +40,8 @@ export function buildRebalanceViolationsV0(args: {
   preTradeCashCheck?: PreTradeCashCheckV0 | null;
   coreResp?: RebalanceCoreResponse | null;
   whatIf?: RebalanceWhatIfV0 | null;
+  // When set (>0): warn if whatIf.turnoverPctOfTotalBefore exceeds this value.
+  maxTurnoverPct01?: number | null;
   naiveMinTradeDiag?: MinTradeDiagnosticsV0 | null;
 }): RebalanceViolationV0[] {
   const out: RebalanceViolationV0[] = [];
@@ -61,6 +63,29 @@ export function buildRebalanceViolationsV0(args: {
 
   const whatIf = args.whatIf ?? null;
   const whatIfWarnings = Array.isArray(whatIf?.warnings) ? whatIf!.warnings.map((x) => String(x)) : [];
+
+  // Turnover guardrail (configured in funds hub UI).
+  const maxTurnoverPct01Raw = typeof args.maxTurnoverPct01 === "number" ? args.maxTurnoverPct01 : null;
+  const maxTurnoverPct01 =
+    maxTurnoverPct01Raw !== null && Number.isFinite(maxTurnoverPct01Raw) && maxTurnoverPct01Raw > 0
+      ? Math.min(1, Math.max(0, maxTurnoverPct01Raw))
+      : null;
+
+  if (maxTurnoverPct01 !== null && whatIf && Number.isFinite(whatIf.turnoverPctOfTotalBefore)) {
+    const turnoverPct01 = whatIf.turnoverPctOfTotalBefore;
+    if (turnoverPct01 > maxTurnoverPct01 + 1e-12) {
+      out.push({
+        level: "warning",
+        kind: "maxTurnover",
+        title: "Turnover guardrail exceeded",
+        details: [
+          `Max allowed turnover: ${(maxTurnoverPct01 * 100).toFixed(1)}% of totalBefore.`,
+          `Projected turnover: ${(turnoverPct01 * 100).toFixed(1)}% (${fmtMoney(whatIf.turnoverNotional, baseCcy)}).`,
+        ],
+        suggestion: "Raise the max turnover guardrail, or reduce drift threshold / maxIn/maxOut so the plan turns over less.",
+      });
+    }
+  }
 
   // Min trade / precision blockers.
   const diag = args.naiveMinTradeDiag ?? null;

@@ -138,4 +138,32 @@ describe("rebalanceViolationsV0", () => {
 
     expect(v.some((x) => x.kind === "cashBuffer" && x.level === "warning")).toBe(true);
   });
+
+  it("warns when turnover exceeds maxTurnoverPct01 guardrail", () => {
+    const v = buildRebalanceViolationsV0({
+      baseCcy: "USD",
+      maxTurnoverPct01: 0.2,
+      whatIf: {
+        schemaVersion: 1,
+        feeBps: 0,
+        slippageBps: 0,
+        buyNotional: 0,
+        sellNotional: 0,
+        turnoverNotional: 30,
+        turnoverPctOfTotalBefore: 0.3,
+        costPct: 0,
+        feeTotal: 0,
+        slippageTotal: 0,
+        costTotal: 0,
+        totalBefore: 100,
+        totalAfter: 100,
+        cashBefore: 0,
+        cashAfter: 0,
+        warnings: [],
+        rows: [],
+      },
+    });
+
+    expect(v.some((x) => x.kind === "maxTurnover" && x.level === "warning")).toBe(true);
+  });
 });
