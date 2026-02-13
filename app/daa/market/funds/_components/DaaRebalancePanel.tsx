@@ -3087,6 +3087,64 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     </div>
                   ) : null}
 
+
+                  {Array.isArray((autoPlanResult as any).timeline) && (autoPlanResult as any).timeline.length ? (
+                    <details style={{ marginTop: 10 }}>
+                      <summary style={{ cursor: "pointer", fontSize: 12 }}>
+                        Timeline (drift over time) ({(autoPlanResult as any).timeline.length})
+                      </summary>
+                      <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                        {(autoPlanResult as any).timeline.map((pt: any, idx: number) => {
+                          const stats: any = pt?.trigger?.stats ?? {};
+                          const maxAbs = Number(stats.maxAbsDriftPct ?? NaN);
+                          const threshold = Number(stats.thresholdPct ?? driftThresholdPct);
+                          const ratio = threshold > 0 && Number.isFinite(maxAbs) ? Math.min(1, Math.max(0, maxAbs / threshold)) : 0;
+                          const hit = !!pt?.trigger?.shouldRebalance;
+                          const top = Array.isArray(pt?.topAbsDriftsPct01) ? pt.topAbsDriftsPct01.slice(0, 3) : [];
+
+                          return (
+                            <div
+                              key={`${pt?.date ?? idx}-${idx}`}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "110px 1fr 90px",
+                                gap: 10,
+                                alignItems: "center",
+                              }}
+                            >
+                              <div style={{ fontFamily: "ui-monospace, SFMono-Regular", fontSize: 11 }}>{String(pt?.date ?? "")}</div>
+                              <div style={{ height: 10, borderRadius: 999, background: "rgba(127,127,127,0.25)", overflow: "hidden" }}>
+                                <div
+                                  style={{
+                                    width: `${(ratio * 100).toFixed(1)}%`,
+                                    height: "100%",
+                                    background: hit ? "rgba(176,0,32,0.8)" : "rgba(64,160,255,0.7)",
+                                  }}
+                                />
+                              </div>
+                              <div style={{ fontSize: 11, textAlign: "right" as const }}>
+                                <span className={hit ? "" : "muted"} style={{ fontWeight: hit ? 800 : 400 }}>
+                                  {fmtPct01(maxAbs)}
+                                </span>
+                              </div>
+
+                              <div style={{ gridColumn: "1 / -1", fontSize: 11 }} className="muted">
+                                threshold={fmtPct01(threshold)}
+                                {String(stats.maxAbsDriftSymbol ?? "") ? `; maxSym=${String(stats.maxAbsDriftSymbol)}` : ""}; eligibleOrders={String(stats.eligibleOrderCount ?? "-")}; shouldRebalance={String(hit)}
+                                {top.length
+                                  ? `; top=${top
+                                      .map((x: any) => `${String(x?.symbol ?? "")}:${fmtPct01(Number(x?.absDriftPct01 ?? NaN))}`)
+                                      .filter(Boolean)
+                                      .join(", " )}`
+                                  : ""}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  ) : null}
+
                   <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                     <div style={{ fontWeight: 700, fontSize: 12 }}>Events</div>
 

@@ -58,6 +58,36 @@ export function buildAutoPlanMarkdownV0(res: DriftRebalanceBacktestResult): stri
     parts.push("");
   }
 
+  const timeline: any[] = Array.isArray((res as any).timeline) ? ((res as any).timeline as any[]) : [];
+  if (timeline.length) {
+    parts.push("## Timeline (drift over time)");
+    parts.push("");
+    for (const pt of timeline) {
+      const t: any = pt?.trigger?.stats ?? {};
+      const date = String(pt?.date ?? "");
+      const maxAbsDriftPct = fmtPct01(Number(t.maxAbsDriftPct ?? Number.NaN));
+      const sym = String(t.maxAbsDriftSymbol ?? "");
+      const should = String(!!pt?.trigger?.shouldRebalance);
+      const eligible = String(t.eligibleOrderCount ?? "-");
+
+      let top = "";
+      if (Array.isArray(pt?.topAbsDriftsPct01) && pt.topAbsDriftsPct01.length) {
+        top = pt.topAbsDriftsPct01
+          .slice(0, 3)
+          .map((x: any) => `${String(x?.symbol ?? "")}:${fmtPct01(Number(x?.absDriftPct01 ?? Number.NaN))}`)
+          .filter(Boolean)
+          .join(", ");
+      }
+
+      const reasons = Array.isArray(pt?.trigger?.reasons) ? pt.trigger.reasons.slice(0, 2).join("; ") : "";
+
+      parts.push(
+        `- ${date} maxAbsDrift=${maxAbsDriftPct}${sym ? ` (${sym})` : ""}; shouldRebalance=${should}; eligibleOrders=${eligible}${top ? `; top=${top}` : ""}${reasons ? `; reasons=${reasons}` : ""}`,
+      );
+    }
+    parts.push("");
+  }
+
   parts.push("## Events");
   parts.push("");
 

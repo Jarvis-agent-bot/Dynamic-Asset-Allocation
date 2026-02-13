@@ -38,6 +38,9 @@ export type DriftRebalanceBacktestRequest = {
 
   /** When enabled, include before/after portfolio weight snapshots on each event (for UI "plan diff"). */
   includeEventStates?: boolean;
+
+  /** When enabled, include per-day drift/trigger decisions (for UI "timeline"). Default: true. */
+  includeTimeline?: boolean;
 };
 
 export type PortfolioWeightsSnapshotV0 = {
@@ -60,6 +63,12 @@ export type DriftRebalanceBacktestEvent = {
   after?: PortfolioWeightsSnapshotV0;
 };
 
+export type DriftRebalanceBacktestTimelinePointV0 = {
+  date: string;
+  trigger: RebalanceTriggerDecision;
+  topAbsDriftsPct01: Array<{ symbol: string; absDriftPct01: number; deltaNotional: number }>;
+};
+
 export type DriftRebalanceBacktestResult = {
   schemaVersion: 1;
 
@@ -78,6 +87,9 @@ export type DriftRebalanceBacktestResult = {
 
   events: DriftRebalanceBacktestEvent[];
   warnings: string[];
+
+  /** Optional: per-day drift/trigger decisions, used by the Funds Hub UI to show a preview timeline. */
+  timeline?: DriftRebalanceBacktestTimelinePointV0[];
 
   // Optional: overall before/after snapshots (useful for showing a top-level preview diff).
   states?: {
@@ -164,6 +176,7 @@ function portfolioValueAbs(holdings: Record<string, number>, cash: number, price
   }
   return v;
 }
+
 function computeWeightsSnapshot(opts: {
   holdings: Record<string, number>;
   cash: number;
@@ -201,7 +214,6 @@ function computeWeightsSnapshot(opts: {
     weightsBySymbolPct01,
   };
 }
-
 
 function executeOrders(opts: {
   holdings: Record<string, number>;
@@ -264,6 +276,28 @@ function executeOrders(opts: {
   return { holdings, cash, executed, turnoverNotional };
 }
 
+function computeTopAbsDriftsPct01(args: {
+  deltas: Record<string, number>;
+  equity: number;
+  topN: number;
+}): Array<{ symbol: string; absDriftPct01: number; deltaNotional: number }> {
+  const equity = Number.isFinite(args.equity) && args.equity > 0 ? args.equity : 1;
+
+  const list: Array<{ symbol: string; absDriftPct01: number; deltaNotional: number }> = [];
+  for (const [sym, deltaRaw] of Object.entries(args.deltas || {})) {
+    const deltaNotional = toFiniteNumber(deltaRaw, 0);
+    if (!Number.isFinite(deltaNotional) || deltaNotional === 0) continue;
+
+    const absDriftPct01 = Math.abs(deltaNotional) / equity;
+    if (!Number.isFinite(absDriftPct01) || absDriftPct01 <= 0) continue;
+
+    list.push({ symbol: sym, absDriftPct01, deltaNotional });
+  }
+
+  list.sort((a, b) => b.absDriftPct01 - a.absDriftPct01 || a.symbol.localeCompare(b.symbol));
+  return list.slice(0, Math.max(0, Math.floor(args.topN)));
+}
+
 export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): DriftRebalanceBacktestResult {
   const warnings: string[] = [];
 
@@ -282,6 +316,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   const policy = req.policy || {};
   const bootstrapToTarget = req.bootstrapToTarget !== false;
   const includeEventStates = req.includeEventStates === true;
+  const includeTimeline = req.includeTimeline !== false;
 
   let holdings = cloneHoldings(req.initialHoldings || {});
   let cash = Math.max(0, toFiniteNumber(req.initialCash, 0));
@@ -291,6 +326,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   }
 
   const events: DriftRebalanceBacktestEvent[] = [];
+  const timeline: DriftRebalanceBacktestTimelinePointV0[] = [];
 
   // Establish day-0 prices and equity.
   const prices0 = buildPricesAtIndex(req.seriesBySymbol, 0, warnings);
@@ -354,9 +390,6 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     const eq = portfolioValueAbs(holdings, cash, px, warnings);
     equityAbsByDay.push(eq);
 
-    // End: last day has no next-day return.
-    if (i === dates.length - 1) break;
-
     const now = isoToIsoDateTime(dates[i]);
 
     const res = rebalanceCore({
@@ -375,6 +408,17 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     });
 
     appendUniqueWarnings(res.warnings);
+
+    if (includeTimeline) {
+      const deltas: Record<string, number> = (res as any).explain?.deltas ?? {};
+      const equity = toFiniteNumber((res as any).explain?.equity, res.trigger.stats.equity);
+
+      timeline.push({
+        date: dates[i],
+        trigger: res.trigger,
+        topAbsDriftsPct01: computeTopAbsDriftsPct01({ deltas, equity, topN: 5 }),
+      });
+    }
 
     if (res.trigger.shouldRebalance) {
       const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
@@ -437,6 +481,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     },
     events,
     warnings,
+    timeline: includeTimeline ? timeline : undefined,
     states: includeEventStates && initialState && finalState ? { initial: initialState, final: finalState } : undefined,
   };
 }
