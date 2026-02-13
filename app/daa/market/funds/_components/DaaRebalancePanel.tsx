@@ -2767,6 +2767,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 const s = summarizeTradesForConfirmationV0(safetyStopPreviewOrders, { topN: 8 });
                 const w = safetyStopPreviewWhatIf;
 
+                // Surface a cost/impact preview inside the final confirmation modal.
+                const feeBpsShown = toFiniteNumber(whatIfFeeBps) ?? 0;
+                const slippageBpsBaseShown = toFiniteNumber(whatIfSlippageBps) ?? 0;
+                const slippageBpsUsedShown = toFiniteNumber(whatIfSlippageBpsUsed) ?? 0;
+
+                const feeTotal = w && Number.isFinite(w.feeTotal) ? w.feeTotal : null;
+                const impactTotal = w && Number.isFinite(w.slippageTotal) ? w.slippageTotal : null;
+                const totalCost = w && Number.isFinite(w.costTotal) ? w.costTotal : null;
+
                 const bits: string[] = [];
                 bits.push(`orders=${s.orderCount}`);
                 bits.push(`trades=${s.tradeCount} (buy=${s.buyCount}; sell=${s.sellCount})`);
@@ -2774,13 +2783,21 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 if (Number.isFinite(s.sellNotional)) bits.push(`sell≈${s.sellNotional.toFixed(2)}${ccy}`);
                 if (Number.isFinite(s.netNotional)) bits.push(`net≈${s.netNotional.toFixed(2)}${ccy}`);
                 if (w && Number.isFinite(w.turnoverNotional)) bits.push(`turnover≈${w.turnoverNotional.toFixed(2)}${ccy}`);
-                if (w && Number.isFinite(w.costTotal)) bits.push(`cost≈${w.costTotal.toFixed(2)}${ccy}`);
+                if (feeTotal !== null) bits.push(`fee≈${feeTotal.toFixed(2)}${ccy}`);
+                if (impactTotal !== null) bits.push(`impact≈${impactTotal.toFixed(2)}${ccy}`);
+                if (totalCost !== null) bits.push(`totalCost≈${totalCost.toFixed(2)}${ccy}`);
 
                 return (
                   <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
                     <div>
                       Preview: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{bits.join('; ')}</span>
                     </div>
+
+                    {w && feeTotal !== null && impactTotal !== null && totalCost !== null ? (
+                      <div style={{ marginTop: 8 }}>
+                        Simulated price impact (v0): feeBps=<b>{feeBpsShown.toFixed(1)}</b>; slippage/impactBps=<b>{slippageBpsBaseShown.toFixed(1)}</b> × sensitivity=<b>{whatIfSlippageSensitivityV0}</b> → effective=<b>{slippageBpsUsedShown.toFixed(1)}</b>. est fee≈<b>{feeTotal.toFixed(2)}</b>{ccy}; est impact≈<b>{impactTotal.toFixed(2)}</b>{ccy}; est total≈<b>{totalCost.toFixed(2)}</b>{ccy}.
+                      </div>
+                    ) : null}
 
                     {s.topTrades.length ? (
                       <details style={{ marginTop: 8 }}>
