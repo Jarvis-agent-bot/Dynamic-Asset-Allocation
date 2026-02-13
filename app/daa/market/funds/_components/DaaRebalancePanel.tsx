@@ -2100,6 +2100,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     cashStart={portfolioCash}
                     minTradeNotional={rebalancePolicy.minTradeNotional}
                     ccy={baseCcy}
+                    feeBps={whatIfFeeBps}
                   />
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginTop: 8 }}>
@@ -2482,6 +2483,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                   cashStart={typeof ev?.before?.cashAbs === "number" ? ev.before.cashAbs : null}
                                   minTradeNotional={rebalancePolicy.minTradeNotional}
                                   ccy={baseCcy}
+                                  feeBps={whatIfFeeBps}
                                 />
                               </div>
                             </div>
