@@ -1,5 +1,13 @@
 import { simulateRebalanceWhatIfV0, type WhatIfOrderV0 } from "../core/rebalanceWhatIf";
 
+export type AllocationDiffRowV0 = {
+  id: string;
+  label: string;
+  beforePct01: number;
+  afterPct01: number;
+  targetPct01: number;
+};
+
 export type RebalancePostRunSummaryV0 = {
   schemaVersion: 1;
   ordersCount: number;
@@ -18,6 +26,9 @@ export type RebalancePostRunSummaryV0 = {
   maxAbsDriftAfterPct01: number | null;
 
   warnings: string[];
+
+  // For UI: per-symbol (and cash) allocation before vs after so we can render a diff chart.
+  allocationDiffRowsV0: AllocationDiffRowV0[];
 };
 
 function toFiniteNumber(x: unknown): number | null {
@@ -107,6 +118,26 @@ export function buildRebalancePostRunSummaryV0(args: {
 
   const turnoverPctOfTotalBefore01 = whatIf.totalBefore > 0 ? whatIf.turnoverNotional / whatIf.totalBefore : null;
 
+  const allocationDiffRowsV0: AllocationDiffRowV0[] = [
+    {
+      id: "CASH",
+      label: "Cash",
+      beforePct01: clamp01(cashBeforePct),
+      afterPct01: clamp01(cashAfterPct),
+      targetPct01: clamp01(targetCashPct),
+    },
+    ...whatIf.rows.map((r) => ({
+      id: String(r.id),
+      label: String(r.label),
+      beforePct01: clamp01(toFiniteNumber(r.currentPct) ?? 0),
+      afterPct01: clamp01(toFiniteNumber(r.postPct) ?? 0),
+      targetPct01: clamp01(toFiniteNumber(r.targetPct) ?? 0),
+    })),
+  ];
+
+  // Sort by absolute allocation change so the chart highlights the biggest diffs.
+  allocationDiffRowsV0.sort((a, b) => Math.abs(b.afterPct01 - b.beforePct01) - Math.abs(a.afterPct01 - a.beforePct01));
+
   return {
     schemaVersion: 1,
     ordersCount: orders.length,
@@ -120,5 +151,7 @@ export function buildRebalancePostRunSummaryV0(args: {
     maxAbsDriftBeforePct01: maxAbsBefore,
     maxAbsDriftAfterPct01: maxAbsAfter,
     warnings: whatIf.warnings,
+
+    allocationDiffRowsV0,
   };
 }

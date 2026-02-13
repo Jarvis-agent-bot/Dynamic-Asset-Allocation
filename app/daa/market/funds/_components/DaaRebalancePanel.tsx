@@ -11,6 +11,8 @@ import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } from '../../../executionModeStore';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
+import AllocationDiffChartV0 from './AllocationDiffChartV0';
+
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
 import { rebalanceCore, type RebalanceCoreRequest, type RebalanceCoreResponse } from '@/src/core/rebalanceCore';
 import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from '@/src/core/backtestDriftRebalance';
@@ -2090,6 +2092,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   </div>
                 ) : paperRunSummary ? (
                   <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{paperRunSummary}</div>
+                ) : null}
+
+                {paperRunPostSummary?.allocationDiffRowsV0?.length ? (
+                  <AllocationDiffChartV0 rows={paperRunPostSummary.allocationDiffRowsV0} />
                 ) : null}
 
                 {paperRunPostSummary?.warnings?.length ? (
