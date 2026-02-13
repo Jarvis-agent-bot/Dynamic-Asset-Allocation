@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="DAA Python Engine", version="0.1.0")
@@ -17,6 +17,122 @@ class HealthResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(ok=True, version=app.version)
+
+
+def _parse_yyyy_mm_dd(s: str) -> str:
+    # Keep it strict and return the canonical YYYY-MM-DD string.
+    d = s.strip()
+    if len(d) != 10 or d[4] != "-" or d[7] != "-":
+        raise ValueError("expected YYYY-MM-DD")
+    # Basic digit check (avoids pulling in extra deps just for date parsing).
+    y, m, dd = d[:4], d[5:7], d[8:10]
+    if not (y.isdigit() and m.isdigit() and dd.isdigit()):
+        raise ValueError("expected YYYY-MM-DD")
+    return d
+
+
+class PriceBar(BaseModel):
+    date: str = Field(min_length=10, max_length=10)
+    close: float
+
+
+class YfinanceHistoryResponse(BaseModel):
+    ok: bool
+    source: Literal["yfinance"] = "yfinance"
+    symbol: str
+    interval: str
+    series: list[PriceBar]
+    issues: list[str] = []
+
+
+@app.get("/v1/market/yfinance/history", response_model=YfinanceHistoryResponse)
+def yfinance_history(
+    symbol: str = Query(min_length=1, description="Ticker symbol, e.g. SPY / AAPL / 0700.HK"),
+    start: Optional[str] = Query(default=None, description="YYYY-MM-DD (inclusive)"),
+    end: Optional[str] = Query(default=None, description="YYYY-MM-DD (inclusive)"),
+    interval: str = Query(default="1d", description="yfinance interval, e.g. 1d"),
+):
+    """Fetch daily history via yfinance and normalize to PriceBar[].
+
+    Notes:
+    - yfinance `history(end=...)` treats end as exclusive. We convert (inclusive end)
+      by shifting end + 1 day when provided.
+    - v0 only needs {date, close}; we keep the response stable and minimal.
+    """
+
+    # Import lazily so the engine can still start without this route being hit.
+    import datetime as _dt
+    import math as _math
+
+    import yfinance as yf
+
+    issues: list[str] = []
+
+    start_s: Optional[str] = None
+    if start:
+        try:
+            start_s = _parse_yyyy_mm_dd(start)
+        except Exception as e:
+            return YfinanceHistoryResponse(ok=False, symbol=symbol, interval=interval, series=[], issues=[f"invalid start: {e}"])
+
+    end_exclusive: Optional[_dt.datetime] = None
+    if end:
+        try:
+            end_s = _parse_yyyy_mm_dd(end)
+            y, m, d = int(end_s[:4]), int(end_s[5:7]), int(end_s[8:10])
+            end_exclusive = _dt.datetime(y, m, d, tzinfo=_dt.timezone.utc) + _dt.timedelta(days=1)
+        except Exception as e:
+            return YfinanceHistoryResponse(ok=False, symbol=symbol, interval=interval, series=[], issues=[f"invalid end: {e}"])
+
+    try:
+        t = yf.Ticker(symbol)
+        df = t.history(
+            start=start_s,
+            end=end_exclusive,
+            interval=interval,
+            auto_adjust=False,
+            actions=False,
+        )
+    except Exception as e:
+        return YfinanceHistoryResponse(ok=False, symbol=symbol, interval=interval, series=[], issues=[f"yfinance error: {e}"])
+
+    if df is None or df.empty:
+        issues.append("empty series")
+        return YfinanceHistoryResponse(ok=True, symbol=symbol, interval=interval, series=[], issues=issues)
+
+    # Normalize index -> YYYY-MM-DD and Close -> float.
+    out: list[PriceBar] = []
+    try:
+        # The index is usually a DatetimeIndex.
+        for idx, row in df.iterrows():
+            # idx may be tz-aware; we only keep the date component.
+            if hasattr(idx, "to_pydatetime"):
+                dt = idx.to_pydatetime()
+            else:
+                dt = idx
+            date = str(getattr(dt, "date", lambda: dt)())
+            raw_close = row.get("Close")
+            if raw_close is None:
+                issues.append("missing close")
+                continue
+
+            close = float(raw_close)
+            if not _math.isfinite(close):
+                issues.append("non-finite close")
+                continue
+
+            out.append(PriceBar(date=date, close=close))
+    except Exception as e:
+        return YfinanceHistoryResponse(ok=False, symbol=symbol, interval=interval, series=[], issues=[f"normalize error: {e}"])
+
+    # Best-effort: enforce start/end filters on our side too.
+    if start_s:
+        out = [b for b in out if b.date >= start_s]
+    if end:
+        end_s = _parse_yyyy_mm_dd(end)
+        out = [b for b in out if b.date <= end_s]
+
+    return YfinanceHistoryResponse(ok=True, symbol=symbol, interval=interval, series=out, issues=issues)
 
 
 Side = Literal["BUY", "SELL", "HOLD"]

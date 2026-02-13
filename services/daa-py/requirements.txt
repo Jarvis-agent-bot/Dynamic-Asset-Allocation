@@ -3,3 +3,5 @@ uvicorn[standard]==0.34.0
 pydantic==2.10.6
 numpy==2.2.2
 pandas==2.2.3
+# Market data (Yahoo Finance)
+yfinance==0.2.54
