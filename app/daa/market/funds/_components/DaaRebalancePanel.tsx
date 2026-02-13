@@ -1475,6 +1475,18 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return [cashRow, ...rows];
   }, [whatIf, whatIfTargetWeightsPreBySymbol, whatIfTargetWeightsPostBySymbol]);
 
+  const whatIfAllocationDiffRowsV0 = useMemo(() => {
+    return whatIfRows
+      .filter((r) => r && typeof r.id === 'string')
+      .map((r) => ({
+        id: String(r.id),
+        label: String((r as any).label ?? r.id),
+        beforePct01: Number.isFinite((r as any).currentPct) ? (r as any).currentPct : 0,
+        afterPct01: Number.isFinite((r as any).postPct) ? (r as any).postPct : 0,
+        targetPct01: Number.isFinite((r as any).targetPct) ? (r as any).targetPct : 0,
+      }));
+  }, [whatIfRows]);
+
   async function doCopyOrders() {
     try {
       const payload = {
@@ -4030,6 +4042,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)' }}>
                           {whatIf.warnings.join('; ')}
                         </div>
+                      ) : null}
+
+                      {whatIfAllocationDiffRowsV0.length ? (
+                        <AllocationDiffChartV0 rows={whatIfAllocationDiffRowsV0} />
                       ) : null}
 
                       <details className="muted" style={{ marginTop: 8, fontSize: 12 }}>
