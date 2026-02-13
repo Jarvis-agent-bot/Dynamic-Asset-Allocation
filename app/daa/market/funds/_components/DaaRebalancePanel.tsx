@@ -501,6 +501,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunExecutionMode, setPaperRunExecutionMode] = useState<ExecutionModeV0>("paper");
   const paperRunAbortRef = useRef<AbortController | null>(null);
 
+  // Preflight checklist (v0): confirm key safety/inputs before running a paper rebalance.
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [preflightPendingOpts, setPreflightPendingOpts] = useState<{ cashSweep?: boolean } | null>(null);
+  const [preflightAckPrices, setPreflightAckPrices] = useState(false);
+  const [preflightAckConstraints, setPreflightAckConstraints] = useState(false);
+  const [preflightAckCash, setPreflightAckCash] = useState(false);
+  const [preflightOverrideBlockers, setPreflightOverrideBlockers] = useState(false);
+
   useEffect(() => {
     const onData = () => setRev((x) => x + 1);
     window.addEventListener(WIZARD_DATA_EVENT, onData as EventListener);
@@ -1735,6 +1743,41 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }
 
 
+  function openPreflightForRun(opts?: { cashSweep?: boolean }) {
+    const hasPriceWarnings = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0;
+    const hasConstraintAlerts = preRunHasBlockingV0 || preRunHasWarningsV0;
+
+    setPreflightPendingOpts(opts ?? {});
+
+    // Reduce friction when there is nothing actionable to review.
+    setPreflightAckPrices(!hasPriceWarnings);
+    setPreflightAckConstraints(!hasConstraintAlerts);
+
+    // Force an explicit acknowledgment for settlement/cash assumptions.
+    setPreflightAckCash(false);
+
+    setPreflightOverrideBlockers(false);
+    setPreflightOpen(true);
+  }
+
+  function closePreflight() {
+    setPreflightOpen(false);
+    setPreflightPendingOpts(null);
+  }
+
+  function closePreflightAndJump(id: string) {
+    setPreflightOpen(false);
+    setTimeout(() => scrollToId(id), 0);
+  }
+
+  async function proceedFromPreflight() {
+    const pending = preflightPendingOpts;
+    closePreflight();
+
+    if (pending && pending.cashSweep) return runPaperRebalanceCore({ cashSweep: true });
+    return runPaperRebalanceCore();
+  }
+
   async function runPaperRebalanceCore(opts?: { cashSweep?: boolean }) {
     setPaperRunError(null);
     setPaperRunRecordedAt(null);
@@ -2165,8 +2208,219 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const preRunHasBlockingV0 = preRunViolationsV0.some((v) => v.level === 'blocker');
   const preRunHasWarningsV0 = preRunViolationsV0.some((v) => v.level === 'warning');
 
+  const preflightHasPriceWarnings = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0;
+  const preflightCanProceed =
+    preflightAckPrices &&
+    preflightAckConstraints &&
+    preflightAckCash &&
+    (!preRunHasBlockingV0 || preflightOverrideBlockers);
+
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
+      {preflightOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Preflight checklist"
+          onClick={() => closePreflight()}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(760px, 100%)',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.10)',
+              background: 'rgba(0,0,0,0.92)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' as const }}>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 14 }}>Preflight checklist</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  Before <b>{preflightPendingOpts?.cashSweep ? 'cash sweep' : 'running rebalance'}</b> (dry run).
+                </div>
+              </div>
+              <button type="button" className="button secondary" onClick={() => closePreflight()} style={{ padding: '6px 10px' }}>
+                Close
+              </button>
+            </div>
+
+            <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>Prices</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    {preflightHasPriceWarnings
+                      ? `Warnings: missing=${priceDataWarningsV0.missing.length}; lastCloseFallback=${priceDataWarningsV0.lastClose.length}`
+                      : 'OK: all symbols have a usable price'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.10)',
+                      background: preflightHasPriceWarnings ? 'rgba(245, 158, 11, 0.20)' : 'rgba(34, 197, 94, 0.18)',
+                      color: preflightHasPriceWarnings ? '#f59e0b' : '#22c55e',
+                      fontSize: 12,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {preflightHasPriceWarnings ? 'WARN' : 'OK'}
+                  </span>
+                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump('prices')} style={{ padding: '6px 10px' }}>
+                    Review
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>Constraints / validation</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    {preRunHasBlockingV0
+                      ? `BLOCKERS detected (${preRunViolationsV0.filter((v) => v.level === 'blocker').length})`
+                      : preRunHasWarningsV0
+                        ? `Warnings detected (${preRunViolationsV0.filter((v) => v.level === 'warning').length})`
+                        : 'OK: no blockers/warnings'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.10)',
+                      background: preRunHasBlockingV0
+                        ? 'rgba(239, 68, 68, 0.18)'
+                        : preRunHasWarningsV0
+                          ? 'rgba(245, 158, 11, 0.20)'
+                          : 'rgba(34, 197, 94, 0.18)',
+                      color: preRunHasBlockingV0 ? '#ef4444' : preRunHasWarningsV0 ? '#f59e0b' : '#22c55e',
+                      fontSize: 12,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {preRunHasBlockingV0 ? 'BLOCKER' : preRunHasWarningsV0 ? 'WARN' : 'OK'}
+                  </span>
+                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump('rebalance')} style={{ padding: '6px 10px' }}>
+                    Review
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>Cash / settlement assumptions</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    {preTradeCashCheck.blocking ? `BLOCKED: ${preTradeCashCheck.message}` : 'OK: pre-trade cash check passed'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 999,
+                      border: '1px solid rgba(255,255,255,0.10)',
+                      background: preTradeCashCheck.blocking ? 'rgba(239, 68, 68, 0.18)' : 'rgba(34, 197, 94, 0.18)',
+                      color: preTradeCashCheck.blocking ? '#ef4444' : '#22c55e',
+                      fontSize: 12,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {preTradeCashCheck.blocking ? 'BLOCKED' : 'OK'}
+                  </span>
+                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump('rebalance')} style={{ padding: '6px 10px' }}>
+                    Review
+                  </button>
+                </div>
+              </div>
+
+              <div className="muted" style={{ fontSize: 12 }}>
+                Execution mode: <b>{executionMode === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b>. Dry run records orders to local execution log only.
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 13 }}>Acknowledge</div>
+
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={preflightAckPrices} onChange={(e) => setPreflightAckPrices(e.target.checked)} />
+                <span className="muted" style={{ fontSize: 12 }}>
+                  I verified target weights + prices. I accept any missing-price exclusions and last-close fallbacks.
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={preflightAckConstraints}
+                  onChange={(e) => setPreflightAckConstraints(e.target.checked)}
+                />
+                <span className="muted" style={{ fontSize: 12 }}>
+                  I reviewed constraints/validation (blockers/warnings) and understand the risk.
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={preflightAckCash} onChange={(e) => setPreflightAckCash(e.target.checked)} />
+                <span className="muted" style={{ fontSize: 12 }}>
+                  I reviewed cash/settlement assumptions (sell proceeds routing + cashAfter) before executing.
+                </span>
+              </label>
+
+              {preRunHasBlockingV0 ? (
+                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={preflightOverrideBlockers}
+                    onChange={(e) => setPreflightOverrideBlockers(e.target.checked)}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--danger)' }}>
+                    Override blockers and proceed anyway (not recommended).
+                  </span>
+                </label>
+              ) : null}
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" onClick={() => closePreflight()} style={{ padding: '6px 10px' }}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => proceedFromPreflight()}
+                style={{ padding: '6px 10px' }}
+                disabled={!preflightCanProceed || paperRunLoading || preTradeCashCheck.blocking || !targetWeights.length}
+                title={
+                  preTradeCashCheck.blocking
+                    ? preTradeCashCheck.message
+                    : !preflightCanProceed
+                      ? 'Please acknowledge the checklist first.'
+                      : undefined
+                }
+              >
+                {preflightPendingOpts?.cashSweep ? 'Proceed & cash sweep' : 'Proceed & run rebalance'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="title" style={{ marginBottom: 12, justifyContent: 'space-between' as const }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
           <span style={{ fontWeight: 800 }}>DAA Workflow</span>
@@ -2275,7 +2529,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <button
                   type="button"
                   className="button secondary"
-                  onClick={() => runPaperRebalanceCore()}
+                  onClick={() => openPreflightForRun()}
                   style={{ padding: '6px 10px' }}
                   disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
                   title={preTradeCashCheck.blocking ? preTradeCashCheck.message : undefined}
@@ -2285,7 +2539,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <button
                   type="button"
                   className="button secondary"
-                  onClick={() => runPaperRebalanceCore({ cashSweep: true })}
+                  onClick={() => openPreflightForRun({ cashSweep: true })}
                   style={{ padding: '6px 10px' }}
                   disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
                   title="Sweep excess cash down toward the implicit cash buffer target (ignores drift threshold; dry run only)."
