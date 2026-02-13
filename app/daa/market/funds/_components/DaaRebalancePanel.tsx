@@ -65,6 +65,15 @@ type Props = {
 
 const LS_WHATIF_FEE_BPS = 'daa.whatif.feeBps';
 const LS_WHATIF_SLIPPAGE_BPS = 'daa.whatif.slippageBps';
+const LS_WHATIF_SLIPPAGE_SENSITIVITY_V0 = 'daa.whatif.slippageSensitivityV0';
+
+type SlippageSensitivityV0 = 'LOW' | 'BASE' | 'HIGH';
+
+const SLIPPAGE_SENSITIVITY_MULTIPLIER_V0: Record<SlippageSensitivityV0, number> = {
+  LOW: 0.5,
+  BASE: 1,
+  HIGH: 2,
+};
 const LS_AUTO_PLAN_INPUT = 'daa.market.funds.autoPlan.input.v0';
 const LS_AUTO_PLAN_RESULT = 'daa.market.funds.autoPlan.result.v0';
 
@@ -735,6 +744,24 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     window.localStorage.setItem(LS_WHATIF_SLIPPAGE_BPS, String(whatIfSlippageBps));
   }, [whatIfSlippageBps]);
 
+  const [whatIfSlippageSensitivityV0, setWhatIfSlippageSensitivityV0] = useState<SlippageSensitivityV0>(() => {
+    if (typeof window === 'undefined') return 'BASE';
+    const raw = window.localStorage.getItem(LS_WHATIF_SLIPPAGE_SENSITIVITY_V0);
+    return raw === 'LOW' || raw === 'BASE' || raw === 'HIGH' ? raw : 'BASE';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(LS_WHATIF_SLIPPAGE_SENSITIVITY_V0, String(whatIfSlippageSensitivityV0));
+  }, [whatIfSlippageSensitivityV0]);
+
+  const whatIfSlippageBpsUsed = useMemo(() => {
+    const base = toFiniteNumber(whatIfSlippageBps) ?? 0;
+    const mult = SLIPPAGE_SENSITIVITY_MULTIPLIER_V0[whatIfSlippageSensitivityV0] ?? 1;
+    const out = base * mult;
+    return Number.isFinite(out) && out >= 0 ? out : 0;
+  }, [whatIfSlippageBps, whatIfSlippageSensitivityV0]);
+
   const whatIfValuesBySymbol = useMemo(() => {
     const out: Record<string, number> = {};
     for (const r of currentWeights) out[r.id] = r.value;
@@ -772,20 +799,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
         .map((o) => ({ symbol: o.symbol, side: o.side as 'BUY' | 'SELL', notional: o.notional })),
       feeBps: whatIfFeeBps,
-      slippageBps: whatIfSlippageBps,
+      slippageBps: whatIfSlippageBpsUsed,
       labelsBySymbol: whatIfLabelsBySymbol,
     });
-  }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBps, whatIfTargetWeightsPostBySymbol, whatIfValuesBySymbol]);
+  }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBpsUsed, whatIfTargetWeightsPostBySymbol, whatIfValuesBySymbol]);
 
   const preTradeCashCheck = useMemo(() => {
     return getPreTradeCashCheckV0({
       cashStart: portfolioCash,
       orders: effectiveOrders,
       feeBps: whatIfFeeBps,
-      slippageBps: whatIfSlippageBps,
+      slippageBps: whatIfSlippageBpsUsed,
       baseCcy,
     });
-  }, [baseCcy, effectiveOrders, portfolioCash, whatIfFeeBps, whatIfSlippageBps]);
+  }, [baseCcy, effectiveOrders, portfolioCash, whatIfFeeBps, whatIfSlippageBpsUsed]);
 
   const whatIfRows = useMemo(() => {
     if (!whatIf) return [] as Array<{
@@ -1250,7 +1277,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
             orders: effectiveOrders,
             feeBps: whatIfFeeBps,
-            slippageBps: whatIfSlippageBps,
+            slippageBps: whatIfSlippageBpsUsed,
             labelsBySymbol: whatIfLabelsBySymbol,
           });
         } catch {
@@ -1325,7 +1352,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         cashStart: st.cash,
         orders,
         feeBps: whatIfFeeBps,
-        slippageBps: whatIfSlippageBps,
+        slippageBps: whatIfSlippageBpsUsed,
         baseCcy: baseCcy || null,
       });
 
@@ -1394,7 +1421,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             targetWeightsBySymbol,
             orders,
             feeBps: whatIfFeeBps,
-            slippageBps: whatIfSlippageBps,
+            slippageBps: whatIfSlippageBpsUsed,
             labelsBySymbol,
           });
         } catch {
@@ -1878,7 +1905,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
                       <div style={{ fontWeight: 700, fontSize: 12 }}>What-if preview (fees/slippage + expected drift)</div>
                       <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                        Costs model (v0): BUY acquires (notional - cost); SELL receives (notional - cost); cost = (feeBps + slippageBps).
+                        Costs model (v0): BUY acquires (notional - cost); SELL receives (notional - cost); cost = feeBps + slippage/spreadBps(base) * sensitivity.
                       </div>
 
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, marginTop: 8, alignItems: 'center' }}>
@@ -1895,7 +1922,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         </label>
 
                         <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
-                          slippageBps
+                          slippage/spreadBps (base)
                           <input
                             type="number"
                             value={whatIfSlippageBps}
@@ -1905,6 +1932,42 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                             style={{ width: 90, padding: '4px 6px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'inherit' }}
                           />
                         </label>
+
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, alignItems: 'center' }}>
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            sensitivity
+                          </div>
+
+                          {(['LOW', 'BASE', 'HIGH'] as const).map((k) => {
+                            const active = whatIfSlippageSensitivityV0 === k;
+                            const mult = SLIPPAGE_SENSITIVITY_MULTIPLIER_V0[k];
+                            const label = k === 'LOW' ? `Low (${mult}x)` : k === 'BASE' ? `Base (${mult}x)` : `High (${mult}x)`;
+
+                            return (
+                              <button
+                                key={k}
+                                type="button"
+                                onClick={() => setWhatIfSlippageSensitivityV0(k)}
+                                className="badge"
+                                style={{
+                                  padding: '2px 8px',
+                                  fontSize: 11,
+                                  borderColor: active ? 'var(--text)' : 'rgba(255,255,255,0.18)',
+                                  color: active ? 'var(--text)' : 'var(--muted)',
+                                  background: active ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.12)',
+                                  cursor: 'pointer',
+                                }}
+                                title={`effectiveSlippageBps = base * ${mult}`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+
+                          <div className="muted" style={{ fontSize: 12 }}>
+                            effective={whatIfSlippageBpsUsed.toFixed(1)} bps
+                          </div>
+                        </div>
 
                         {(() => {
                           const ccy = baseCcy ? ` ${baseCcy}` : '';
