@@ -134,22 +134,43 @@ function toFiniteNumber(x: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function pickFundNav(fund: FundLike | undefined): number | null {
-  if (!fund) return null;
+type QuotePriceSourceV0 = 'estGsz' | 'gsz' | 'dwjz' | 'missing';
+
+type EffectivePriceSourceV0 = 'manual' | QuotePriceSourceV0;
+
+function pickFundQuotePriceV0(fund: FundLike | undefined): { price: number | null; source: QuotePriceSourceV0 } {
+  if (!fund) return { price: null, source: 'missing' };
 
   const coverage = toFiniteNumber(fund.estPricedCoverage) ?? 0;
   if (coverage > 0.05) {
     const est = toFiniteNumber(fund.estGsz);
-    if (est && est > 0) return est;
+    if (est && est > 0) return { price: est, source: 'estGsz' };
   }
 
   const gsz = toFiniteNumber(fund.gsz);
-  if (gsz && gsz > 0) return gsz;
+  if (gsz && gsz > 0) return { price: gsz, source: 'gsz' };
 
+  // dwjz = last close (yesterday's NAV) for funds.
   const dwjz = toFiniteNumber(fund.dwjz);
-  if (dwjz && dwjz > 0) return dwjz;
+  if (dwjz && dwjz > 0) return { price: dwjz, source: 'dwjz' };
 
-  return null;
+  return { price: null, source: 'missing' };
+}
+
+function resolveFundPriceV0(args: {
+  symbol: string;
+  snapshot: unknown;
+  fund: FundLike | undefined;
+}): { price: number | null; source: EffectivePriceSourceV0 } {
+  const manual = getSnapshotPrice(args.snapshot as any, args.symbol);
+  if (manual && manual > 0) return { price: manual, source: 'manual' };
+
+  const quote = pickFundQuotePriceV0(args.fund);
+  return { price: quote.price, source: quote.source };
+}
+
+function pickFundNav(fund: FundLike | undefined): number | null {
+  return pickFundQuotePriceV0(fund).price;
 }
 
 type TargetWeight = { id: string; label: string; targetPct: number };
@@ -840,8 +861,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       if (!share || share <= 0) continue;
 
       const fund = byCode.get(code);
-      const manual = getSnapshotPrice(priceSnapshot, code);
-      const nav = manual ?? pickFundNav(fund ?? undefined);
+      const pick = resolveFundPriceV0({ symbol: code, snapshot: priceSnapshot, fund: fund ?? undefined });
+      const nav = pick.price;
 
       const value = nav ? share * nav : 0;
       if (value <= 0) continue;
@@ -852,6 +873,48 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     rows.sort((a, b) => b.value - a.value);
     return rows;
   }, [funds, holdingsForWeightsEffective, priceSnapshot]);
+
+  const priceDataWarningsV0 = useMemo(() => {
+    const byCode = new Map<string, FundLike>();
+    for (const f of funds ?? []) {
+      const code = normalizePlanSymbol((f as any)?.code);
+      if (code) byCode.set(code, f);
+    }
+
+    const labelBySym = new Map<string, string>();
+    for (const t of targetWeightsEffective ?? []) {
+      const id = normalizePlanSymbol((t as any)?.id);
+      if (!id) continue;
+      labelBySym.set(id, String((t as any)?.label ?? id));
+    }
+
+    const symbols = new Set<string>([
+      ...Object.keys(holdingsForWeightsEffective ?? {}).map((x) => normalizePlanSymbol(x)),
+      ...(targetWeightsEffective ?? []).map((t) => normalizePlanSymbol((t as any)?.id)),
+    ]);
+
+    const missing: Array<{ sym: string; label: string }> = [];
+    const lastClose: Array<{ sym: string; label: string; price: number }> = [];
+
+    const list = Array.from(symbols).filter(Boolean).sort();
+    for (const sym of list) {
+      const fund = byCode.get(sym);
+      const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund });
+      const label = labelBySym.get(sym) ?? String((fund as any)?.name ?? sym);
+
+      const px = pick.price;
+      if (!px || px <= 0) {
+        missing.push({ sym, label });
+        continue;
+      }
+
+      if (pick.source === 'dwjz') {
+        lastClose.push({ sym, label, price: px });
+      }
+    }
+
+    return { missing, lastClose };
+  }, [funds, holdingsForWeightsEffective, priceSnapshot, targetWeightsEffective]);
 
   const rebalanceTableRows = useMemo(() => {
     const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
@@ -1048,8 +1111,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const pricesMap: Record<string, number> = {};
       const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsEffective.map((t) => t.id)]);
       for (const sym of symbols) {
-        const manual = getSnapshotPrice(priceSnapshot, sym);
-        const nav = manual ?? pickFundNav(byCode.get(sym));
+        const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
+        const nav = pick.price;
         if (nav && nav > 0) pricesMap[sym] = nav;
       }
 
@@ -1521,8 +1584,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       ]);
 
       for (const sym of symbols) {
-        const manual = getSnapshotPrice(priceSnapshot, sym);
-        const nav = manual ?? pickFundNav(byCode.get(sym));
+        const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
+        const nav = pick.price;
         if (nav && nav > 0) pricesMap[sym] = nav;
       }
 
@@ -1745,8 +1808,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsEffective.map((t) => t.id)]);
 
       for (const sym of symbols) {
-        const manual = getSnapshotPrice(priceSnapshot, sym);
-        const nav = manual ?? pickFundNav(byCode.get(sym));
+        const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
+        const nav = pick.price;
         if (nav && nav > 0) pricesMap[sym] = nav;
       }
 
@@ -2239,6 +2302,48 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{targetWeightsSource}</span>
               </span>
             </div>
+
+            {priceDataWarningsV0.missing.length || priceDataWarningsV0.lastClose.length ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '10px 12px',
+                  border: '1px solid rgba(245, 158, 11, 0.55)',
+                  borderRadius: 12,
+                  background: 'rgba(245, 158, 11, 0.08)',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 800 }}>Price data warnings</div>
+
+                {priceDataWarningsV0.missing.length ? (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                    Missing price (excluded from current weights / core request):{' '}
+                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>
+                      {priceDataWarningsV0.missing
+                        .slice(0, 10)
+                        .map((x) => x.sym)
+                        .join(', ')}
+                      {priceDataWarningsV0.missing.length > 10 ? ` (+${priceDataWarningsV0.missing.length - 10} more)` : ''}
+                    </span>
+                    . Fix: fill Price snapshot v0, or ensure Market/Funds quote has gsz/dwjz.
+                  </div>
+                ) : null}
+
+                {priceDataWarningsV0.lastClose.length ? (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                    Using last close (dwjz) fallback (real-time quote missing):{' '}
+                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>
+                      {priceDataWarningsV0.lastClose
+                        .slice(0, 10)
+                        .map((x) => `${x.sym}=${x.price}`)
+                        .join(', ')}
+                      {priceDataWarningsV0.lastClose.length > 10 ? ` (+${priceDataWarningsV0.lastClose.length - 10} more)` : ''}
+                    </span>
+                    .
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 8 }}>
               <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
