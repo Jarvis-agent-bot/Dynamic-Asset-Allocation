@@ -33,6 +33,11 @@ describe("backtestDriftRebalance", () => {
     // Only the init event should exist.
     expect(res.events.map((e) => e.kind)).toEqual(["init"]);
     expect(res.summary.rebalanceCount).toBe(0);
+
+    // Timeline is used by the Funds Hub UI (drift over time + trigger points).
+    expect(Array.isArray(res.timeline)).toBe(true);
+    expect(res.timeline?.length).toBe(3);
+    expect(res.timeline?.[0]?.date).toBe("2026-01-01");
   });
 
   it("triggers a rebalance when drift exceeds threshold and records turnover", () => {
@@ -72,5 +77,8 @@ describe("backtestDriftRebalance", () => {
 
     expect(res.summary.rebalanceCount).toBe(1);
     expect(res.summary.turnoverNotional).toBeGreaterThanOrEqual(50);
+
+    const tp = (res.timeline || []).find((t) => t.date === "2026-01-02");
+    expect(tp?.trigger.shouldRebalance).toBe(true);
   });
 });
