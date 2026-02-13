@@ -6,6 +6,7 @@ import {
   loadRebalanceOrderStatusRunHistoryV0,
   type RebalanceOrderStatusRunV0,
 } from '@/src/daa/rebalanceOrderStatusRunStoreV0';
+import { loadRebalanceLog, type RebalanceLogEntryV0 } from '@/src/daa/rebalanceLogStore';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { WIZARD_DATA_EVENT, pretty } from '../../../wizardStorage';
@@ -36,6 +37,67 @@ function computeCounts(run: RebalanceOrderStatusRunV0): { total: number; filled:
   return { total: orders.length, filled, failed };
 }
 
+function safeNum(x: unknown): number | null {
+  const n = typeof x === 'number' ? x : Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+
+type WeightRow = {
+  id: string;
+  label: string;
+  currentPct: number;
+  targetPct: number;
+  deltaPct: number;
+};
+
+function extractWeightRows(resp: unknown): { rows: WeightRow[]; equity: number | null } {
+  if (!resp || typeof resp !== 'object') return { rows: [], equity: null };
+
+  const r: any = resp as any;
+  const explain = r?.explain;
+  const equity = safeNum(explain?.equity);
+  if (!equity || equity <= 0) return { rows: [], equity: null };
+
+  const currentValues: Record<string, number> =
+    explain?.currentValues && typeof explain.currentValues === 'object' && !Array.isArray(explain.currentValues) ? (explain.currentValues as any) : {};
+  const desiredValues: Record<string, number> =
+    explain?.desiredValues && typeof explain.desiredValues === 'object' && !Array.isArray(explain.desiredValues) ? (explain.desiredValues as any) : {};
+
+  const labels: Record<string, string> = {};
+  if (Array.isArray(r?.targetWeights)) {
+    for (const w of r.targetWeights) {
+      const id = String((w as any)?.id ?? '').trim();
+      if (!id) continue;
+      const label = String((w as any)?.label ?? id).trim() || id;
+      labels[id] = label;
+    }
+  }
+
+  const ids = new Set<string>([...Object.keys(currentValues), ...Object.keys(desiredValues), ...Object.keys(labels)]);
+
+  const rows: WeightRow[] = [];
+  for (const id of ids) {
+    const curV = safeNum((currentValues as any)[id]) ?? 0;
+    const desV = safeNum((desiredValues as any)[id]) ?? 0;
+
+    const currentPct = curV / equity;
+    const targetPct = desV / equity;
+
+    if (!(Math.abs(currentPct) > 1e-9 || Math.abs(targetPct) > 1e-9)) continue;
+
+    rows.push({
+      id,
+      label: labels[id] ?? id,
+      currentPct,
+      targetPct,
+      deltaPct: currentPct - targetPct,
+    });
+  }
+
+  rows.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct) || a.id.localeCompare(b.id));
+  return { rows, equity };
+}
+
 export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number }) {
   const { rev } = props;
 
@@ -62,6 +124,31 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
     // Best-effort history stored in localStorage.
     return loadRebalanceOrderStatusRunHistoryV0(window.localStorage);
   }, [rev, localRev]);
+
+  const rebalanceLog = useMemo(() => {
+    if (typeof window === 'undefined') return [] as RebalanceLogEntryV0[];
+    return loadRebalanceLog(window.localStorage);
+  }, [rev, localRev]);
+
+  const logByRunId = useMemo(() => {
+    const m = new Map<string, RebalanceLogEntryV0>();
+    const bestMs = new Map<string, number>();
+
+    for (const e of rebalanceLog) {
+      const runId = typeof e?.runId === 'string' && e.runId ? e.runId : null;
+      if (!runId) continue;
+      const ms = Date.parse(String(e.at ?? ''));
+      if (!Number.isFinite(ms)) continue;
+
+      const prev = bestMs.get(runId);
+      if (prev === undefined || ms >= prev) {
+        bestMs.set(runId, ms);
+        m.set(runId, e);
+      }
+    }
+
+    return m;
+  }, [rebalanceLog]);
 
   const normalized = useMemo(() => {
     const items = all
@@ -189,6 +276,10 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
 
             const c = computeCounts(run);
 
+            const logEntry = logByRunId.get(run.runId) ?? null;
+            const { rows: weightRows, equity } = extractWeightRows(logEntry?.response);
+            const topWeights = weightRows.slice(0, 8);
+
             const key = run.runId;
             const isOpen = !!expanded[key];
 
@@ -209,6 +300,11 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
                     </span>
                     <span className="muted" style={{ fontSize: 12 }}>
                       orders: <b>{c.total}</b> · filled <b>{c.filled}</b> · failed <b>{c.failed}</b>
+                      {equity ? (
+                        <>
+                          {' '}· equity: <b>{equity.toFixed(2)}</b>
+                        </>
+                      ) : null}
                       {' '}· runId: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{run.runId.slice(0, 10)}</span>
                     </span>
                     {run.message ? (
@@ -244,6 +340,90 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
 
                 {isOpen ? (
                   <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Timestamps</div>
+                      <div className="muted" style={{ fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular' }}>
+                        createdAt={run.createdAt}; updatedAt={run.updatedAt}
+                        {createdAt && updatedAt ? (
+                          <>
+                            ; duration~{Math.max(0, (updatedAt.getTime() - createdAt.getTime()) / 1000).toFixed(1)}s
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {topWeights.length ? (
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Allocations (current vs target)</div>
+                        <div style={{ overflowX: 'auto' as const }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                            <thead>
+                              <tr>
+                                <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Asset</th>
+                                <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Current</th>
+                                <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Target</th>
+                                <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Delta</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {topWeights.map((r) => {
+                                const color = r.deltaPct > 0.01 ? 'var(--danger)' : r.deltaPct < -0.01 ? 'var(--primary)' : 'var(--text)';
+                                return (
+                                  <tr key={r.id} style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <td style={{ padding: '6px 0' }}>
+                                      {r.label} <span className="muted">({r.id})</span>
+                                    </td>
+                                    <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.currentPct * 100).toFixed(1)}%</td>
+                                    <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPct * 100).toFixed(1)}%</td>
+                                    <td style={{ padding: '6px 0', textAlign: 'right', color }}>{(r.deltaPct * 100).toFixed(1)}%</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        {weightRows.length > topWeights.length ? (
+                          <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                            Showing top {topWeights.length} by |delta|. Use the buttons below to copy the full snapshot.
+                          </div>
+                        ) : null}
+                        <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                          {logEntry ? (
+                            <button
+                              type="button"
+                              className="button secondary"
+                              onClick={() => {
+                                void copyTextToClipboard(pretty(logEntry)).catch(() => {
+                                  // ignore
+                                });
+                              }}
+                              style={{ padding: '6px 10px' }}
+                            >
+                              Copy core entry
+                            </button>
+                          ) : null}
+                          {logEntry ? (
+                            <button
+                              type="button"
+                              className="button secondary"
+                              onClick={() => {
+                                void copyTextToClipboard(pretty(logEntry.response)).catch(() => {
+                                  // ignore
+                                });
+                              }}
+                              style={{ padding: '6px 10px' }}
+                            >
+                              Copy core response
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="muted" style={{ fontSize: 11 }}>
+                        No allocation snapshot found for this runId yet. (Missing rebalance log entry)
+                      </div>
+                    )}
+
                     {Array.isArray(run.orders) && run.orders.length ? (
                       <div style={{ overflowX: 'auto' as const }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
