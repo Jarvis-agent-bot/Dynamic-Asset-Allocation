@@ -11,6 +11,10 @@ export type RebalanceOrderStatusV0 = {
   side: "BUY" | "SELL";
   notional: number;
   status: OrderStatusV0;
+  // Optional fill progress (for brokers that can report partial fills).
+  filledNotional?: number;
+  // 0..1 inclusive.
+  fillPct01?: number;
   updatedAt: string;
   detail?: string;
 };
@@ -81,12 +85,18 @@ function normalizeOrdersV0(x: unknown): RebalanceOrderStatusV0[] {
       const side: "BUY" | "SELL" | null = sideRaw === "BUY" ? "BUY" : sideRaw === "SELL" ? "SELL" : null;
       const notional = Number(o?.notional ?? NaN);
       const status = normalizeOrderStatusV0(o?.status);
+      const filledNotionalRaw = Number(o?.filledNotional ?? NaN);
+      const filledNotional = Number.isFinite(filledNotionalRaw) && filledNotionalRaw >= 0 ? filledNotionalRaw : undefined;
+      const fillPct01Raw = Number(o?.fillPct01 ?? NaN);
+      const fillPct01 = Number.isFinite(fillPct01Raw) ? Math.max(0, Math.min(1, fillPct01Raw)) : undefined;
       const updatedAt = String(o?.updatedAt ?? "").trim();
       const detail = o?.detail === undefined ? undefined : String(o.detail);
 
       if (!id || !symbol || !side || !Number.isFinite(notional) || !updatedAt) return null;
       const base: RebalanceOrderStatusV0 = { id, symbol, side, notional, status, updatedAt };
-      return detail === undefined ? base : { ...base, detail };
+      const withDetail = detail === undefined ? base : { ...base, detail };
+      const withFilledNotional = filledNotional === undefined ? withDetail : { ...withDetail, filledNotional };
+      return fillPct01 === undefined ? withFilledNotional : { ...withFilledNotional, fillPct01 };
     })
     .filter((o): o is RebalanceOrderStatusV0 => !!o);
 }
@@ -240,6 +250,8 @@ export function attachOrdersToRebalanceRunV0(args: {
       side: o.side,
       notional: o.notional,
       status: "queued",
+      filledNotional: 0,
+      fillPct01: 0,
       updatedAt: t,
     })),
   };
@@ -254,6 +266,8 @@ export function updateRebalanceOrderStatusV0(args: {
   runId: string;
   orderId: string;
   status: OrderStatusV0;
+  filledNotional?: number;
+  fillPct01?: number;
   detail?: string;
   phase?: RebalanceOrderStatusRunPhaseV0;
 }): { ok: true; run: RebalanceOrderStatusRunV0 } | { ok: false; error: string } {
@@ -266,11 +280,28 @@ export function updateRebalanceOrderStatusV0(args: {
   const nextOrders = prev.orders.map((o) => {
     if (o.id !== args.orderId) return o;
     const detail = args.detail === undefined ? o.detail : args.detail;
+
+    const filledNotional =
+      args.filledNotional === undefined
+        ? o.filledNotional
+        : Number.isFinite(args.filledNotional) && args.filledNotional >= 0
+          ? args.filledNotional
+          : o.filledNotional;
+
+    const fillPct01 =
+      args.fillPct01 === undefined
+        ? o.fillPct01
+        : Number.isFinite(args.fillPct01)
+          ? Math.max(0, Math.min(1, args.fillPct01))
+          : o.fillPct01;
+
     return {
       ...o,
       status: args.status,
       updatedAt: t,
       detail,
+      ...(filledNotional === undefined ? {} : { filledNotional }),
+      ...(fillPct01 === undefined ? {} : { fillPct01 }),
     };
   });
 

@@ -17,6 +17,18 @@ function fmtAgeSeconds(iso: string | null): string {
   return `${Math.round(s / 60)}m`;
 }
 
+function fmtFill(o: { notional: number; filledNotional?: number; fillPct01?: number }): string {
+  const filled = Number.isFinite(o.filledNotional as number) ? (o.filledNotional as number) : null;
+  const pctFromField = Number.isFinite(o.fillPct01 as number) ? (o.fillPct01 as number) : null;
+  const pct = pctFromField ?? (filled !== null && Number.isFinite(o.notional) && o.notional > 0 ? filled / o.notional : null);
+  const clamped = pct === null ? null : Math.max(0, Math.min(1, pct));
+  const pctText = clamped === null ? "" : `${Math.round(clamped * 100)}%`;
+
+  if (filled !== null && pctText) return `${filled.toFixed(2)} (${pctText})`;
+  if (filled !== null) return filled.toFixed(2);
+  return pctText;
+}
+
 export function DaaOrderStatusTrackerV0({ pollMs = 1000 }: { pollMs?: number }) {
   const [snap, setSnap] = useState<RebalanceOrderStatusRunV0 | null>(null);
   const [readAt, setReadAt] = useState<string | null>(null);
@@ -137,6 +149,7 @@ export function DaaOrderStatusTrackerV0({ pollMs = 1000 }: { pollMs?: number }) 
                 <th style={{ padding: "6px 6px" }}>Symbol</th>
                 <th style={{ padding: "6px 6px" }}>Side</th>
                 <th style={{ padding: "6px 6px" }}>Notional</th>
+                <th style={{ padding: "6px 6px" }}>Filled</th>
                 <th style={{ padding: "6px 6px" }}>Status</th>
                 <th style={{ padding: "6px 6px" }}>Updated</th>
                 <th style={{ padding: "6px 6px" }}>Detail</th>
@@ -149,6 +162,7 @@ export function DaaOrderStatusTrackerV0({ pollMs = 1000 }: { pollMs?: number }) 
                   <td style={{ padding: "6px 6px" }}>{o.symbol}</td>
                   <td style={{ padding: "6px 6px" }}>{o.side}</td>
                   <td style={{ padding: "6px 6px" }}>{Number.isFinite(o.notional) ? o.notional.toFixed(2) : String(o.notional)}</td>
+                  <td style={{ padding: "6px 6px" }}>{fmtFill(o as any)}</td>
                   <td style={{ padding: "6px 6px" }}>{o.status}</td>
                   <td style={{ padding: "6px 6px", fontFamily: "ui-monospace, SFMono-Regular" }}>{o.updatedAt}</td>
                   <td style={{ padding: "6px 6px" }}>{o.detail ?? ""}</td>
