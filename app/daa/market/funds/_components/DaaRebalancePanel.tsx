@@ -61,6 +61,7 @@ import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
 import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
 import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
 import DaaRebalancePolicyEditorV0 from './DaaRebalancePolicyEditorV0';
+import DaaRebalanceScheduleV0 from './DaaRebalanceScheduleV0';
 import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
 import { DaaOrderStatusTrackerV0 } from './DaaOrderStatusTrackerV0';
@@ -2220,6 +2221,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
           <div id="policy" style={{ scrollMarginTop: 12 }}>
             <DaaRebalancePolicyEditorV0 />
+          </div>
+
+          <div id="schedule" style={{ scrollMarginTop: 12 }}>
+            <DaaRebalanceScheduleV0 />
           </div>
 
           <div id="okx-sandbox" style={{ scrollMarginTop: 12 }}>

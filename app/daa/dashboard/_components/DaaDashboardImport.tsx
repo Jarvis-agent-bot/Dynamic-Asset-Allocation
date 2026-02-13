@@ -12,6 +12,7 @@ import {
 } from "../../wizardStorage";
 import { isValidTagTaxonomy, LS_TAG_TAXONOMY } from "../../tagTaxonomy";
 import { LS_LEGACY_HOLDINGS, LS_PORTFOLIO_STATE, loadLegacyHoldingsFromPortfolioState } from "../../portfolioStateStore";
+import { LS_REBALANCE_SCHEDULE } from "../../rebalanceScheduleStore";
 import { LS_PAPER_EXECUTION_LOG_V0 } from "@/src/daa/executionLogStore";
 import { LS_REBALANCE_LOG_V0 } from "@/src/daa/rebalanceLogStore";
 
@@ -28,6 +29,7 @@ type DashboardBundleV1 = {
   portfolio_state?: unknown;
   rebalance_log?: unknown;
   paper_execution_log?: unknown;
+  rebalance_schedule?: unknown;
 
   meta?: unknown;
   ai_explain?: unknown;
@@ -128,6 +130,10 @@ export default function DaaDashboardImport() {
 
     if (res.bundle.paper_execution_log != null) {
       saveJsonToLs(LS_PAPER_EXECUTION_LOG_V0, res.bundle.paper_execution_log);
+    }
+
+    if (res.bundle.rebalance_schedule != null) {
+      saveJsonToLs(LS_REBALANCE_SCHEDULE, res.bundle.rebalance_schedule);
     }
 
     setStatus({
