@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { backtestSingleAsset, rankBacktestResults, type RankedBacktestResult } from "../../../../src/core/backtest";
-import { recommendEnsembleWeightsFromRankedResults } from "../../../../src/core/recommendEnsembleWeights";
 import {
   createDeterministicMockPriceSeriesProvider,
   createOkxPublicPriceSeriesProvider,
   createYfinancePublicPriceSeriesProvider,
   fetchValidatedPriceSeriesEnforcingRange,
 } from "../../../../src/core/providers";
+import { recommendEnsembleWeightsFromRankedResults } from "../../../../src/core/recommendEnsembleWeights";
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
+import { inferStep1PriceSeriesSource } from "../../../../src/daa/step1PriceSeriesSource";
 
 import { LS_STEP1_BACKTEST, saveJsonToLs } from "../../wizardStorage";
 
@@ -31,18 +32,43 @@ type Step1Result = {
   };
 } & Record<string, unknown>;
 
+type DataSourceChoice = "auto" | "yfinance" | "okx" | "mock";
+
+type ResolvedSource = Exclude<DataSourceChoice, "auto">;
+
 function jsonPretty(x: unknown) {
   return JSON.stringify(x, null, 2);
 }
 
+function isMockDebugEnabled(): boolean {
+  // Client-only page; using window is OK. This avoids accidentally shipping mock as
+  // a "real" option in the normal user flow.
+  if (typeof window === "undefined") return false;
+  const qs = new URLSearchParams(window.location.search);
+  return qs.get("debug") === "1" || qs.get("mock") === "1" || qs.get("daaMock") === "1";
+}
+
 export default function Step1BacktestPage() {
-  const [dataSource, setDataSource] = useState<"yfinance" | "mock" | "okx">("yfinance");
+  const [dataSource, setDataSource] = useState<DataSourceChoice>("auto");
   const [symbol, setSymbol] = useState("SPY");
   const [start, setStart] = useState("2026-01-01");
   const [end, setEnd] = useState("2026-02-01");
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<Step1Result | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+
+  const allowMock = useMemo(() => isMockDebugEnabled(), []);
+
+  // Keep mock available only behind a debug flag. If a user loads a deep link with
+  // dataSource=mock but debug is off, fall back to auto.
+  useEffect(() => {
+    if (!allowMock && dataSource === "mock") setDataSource("auto");
+  }, [allowMock, dataSource]);
+
+  const resolvedSource: ResolvedSource = useMemo(() => {
+    if (dataSource === "auto") return inferStep1PriceSeriesSource(symbol);
+    return dataSource;
+  }, [dataSource, symbol]);
 
   const validationError = useMemo(() => {
     if (!symbol.trim()) return "Symbol is required";
@@ -55,7 +81,10 @@ export default function Step1BacktestPage() {
   const [series, setSeries] = useState<Array<{ date: string; close: number }>>([]);
   const [seriesError, setSeriesError] = useState<string | null>(null);
 
-  // v0: support deterministic mock series, OKX (public) crypto candles, and Yahoo Finance ("yfinance") daily bars.
+  // Step1 v0: default to real data sources.
+  // - Non-crypto: yfinance daily bars (server-side route to avoid CORS).
+  // - Crypto: OKX public candles.
+  // - Mock: debug-only deterministic series for quick regressions.
   useEffect(() => {
     let cancelled = false;
 
@@ -64,14 +93,16 @@ export default function Step1BacktestPage() {
 
       try {
         const provider =
-          dataSource === "okx"
+          resolvedSource === "okx"
             ? createOkxPublicPriceSeriesProvider({ bar: "1D" })
-            : dataSource === "yfinance"
+            : resolvedSource === "yfinance"
               ? createYfinancePublicPriceSeriesProvider()
               : createDeterministicMockPriceSeriesProvider({ maxDays: 200 });
 
         const next = await fetchValidatedPriceSeriesEnforcingRange(provider, {
-          symbol: String(symbol || "").trim().toUpperCase(),
+          symbol: String(symbol || "")
+            .trim()
+            .toUpperCase(),
           start,
           end,
         });
@@ -95,7 +126,7 @@ export default function Step1BacktestPage() {
     return () => {
       cancelled = true;
     };
-  }, [dataSource, symbol, start, end, validationError]);
+  }, [resolvedSource, symbol, start, end, validationError]);
 
   const strategies = useMemo(() => {
     return [buyAndHold(), smaCrossover({ fast: 3, slow: 10 })];
@@ -122,7 +153,13 @@ export default function Step1BacktestPage() {
       const next: Step1Result = {
         schemaVersion: 1,
         generatedAt: new Date().toISOString(),
-        input: { symbol, start, end, strategies: strategies.map((s) => ({ id: s.id, name: s.name })) },
+        input: {
+          symbol,
+          start,
+          end,
+          dataSource: resolvedSource,
+          strategies: strategies.map((s) => ({ id: s.id, name: s.name })),
+        },
         ranked,
         output: {
           weightsConfig: recommendedWeightsConfig,
@@ -147,11 +184,16 @@ export default function Step1BacktestPage() {
     }
   }
 
+  const dataChoiceLabel = useMemo(() => {
+    if (dataSource !== "auto") return dataSource;
+    return `auto → ${resolvedSource}`;
+  }, [dataSource, resolvedSource]);
+
   return (
     <main>
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 1 — 回测算法组合</h1>
       <p style={{ color: "#444" }}>
-        v0：支持 yfinance（Yahoo Finance 日线，server-side 拉取并标准化成 PriceBar[]）+ mock（快速回归）+ OKX public candles（crypto）。
+        v0：默认使用真实数据源（非 crypto → yfinance；crypto → OKX）。Mock 仅用于 debug（URL 加 <code>?debug=1</code>）。
       </p>
 
       <form
@@ -167,13 +209,14 @@ export default function Step1BacktestPage() {
               value={dataSource}
               onChange={(e) => {
                 const v = e.target.value;
-                setDataSource(v === "okx" ? "okx" : v === "yfinance" ? "yfinance" : "mock");
+                setDataSource(v === "auto" || v === "okx" || v === "yfinance" || v === "mock" ? (v as DataSourceChoice) : "auto");
               }}
               style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6, background: "#fff" }}
             >
+              <option value="auto">Auto (recommended)</option>
               <option value="yfinance">yfinance (Yahoo Finance, 1D)</option>
               <option value="okx">OKX (public, 1D candles)</option>
-              <option value="mock">Mock (deterministic)</option>
+              {allowMock ? <option value="mock">Mock (deterministic, debug)</option> : null}
             </select>
           </label>
 
@@ -182,9 +225,7 @@ export default function Step1BacktestPage() {
             <input
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              placeholder={
-                dataSource === "okx" ? "e.g. BTC-USDT" : dataSource === "yfinance" ? "e.g. SPY / 2800.HK / 2800" : "e.g. SPY"
-              }
+              placeholder={resolvedSource === "okx" ? "e.g. BTC-USDT" : "e.g. SPY / 2800.HK / 2800"}
               style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
             />
           </label>
@@ -230,10 +271,10 @@ export default function Step1BacktestPage() {
       </form>
 
       <div style={{ marginTop: 10, fontSize: 12, color: series.length ? "#555" : "#b00020" }} aria-live="polite">
-        Series ({dataSource}): {series.length} points — {start} → {end}
-        {dataSource === "mock" ? (
+        Series ({dataChoiceLabel}): {series.length} points — {start} → {end}
+        {resolvedSource === "mock" ? (
           <span style={{ marginLeft: 6 }}>(capped at 200 days)</span>
-        ) : dataSource === "okx" ? (
+        ) : resolvedSource === "okx" ? (
           <span style={{ marginLeft: 6 }}>(OKX: best-effort; may truncate to recent bars)</span>
         ) : (
           <span style={{ marginLeft: 6 }}>(yfinance: best-effort; market holidays/missing bars possible)</span>
