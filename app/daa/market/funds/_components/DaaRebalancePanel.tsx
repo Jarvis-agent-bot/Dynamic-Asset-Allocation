@@ -66,8 +66,12 @@ type Props = {
 const LS_WHATIF_FEE_BPS = 'daa.whatif.feeBps';
 const LS_WHATIF_SLIPPAGE_BPS = 'daa.whatif.slippageBps';
 const LS_WHATIF_SLIPPAGE_SENSITIVITY_V0 = 'daa.whatif.slippageSensitivityV0';
+const LS_WHATIF_DRIFT_THRESHOLD_PCT_V0 = 'daa.whatif.driftThresholdPctV0';
+const LS_WHATIF_ORDERS_PREVIEW_SOURCE_V0 = 'daa.whatif.ordersPreviewSourceV0';
 
 type SlippageSensitivityV0 = 'LOW' | 'BASE' | 'HIGH';
+
+type OrdersPreviewSourceV0 = 'RECOMPUTE' | 'ENGINE_LAST_RUN';
 
 const SLIPPAGE_SENSITIVITY_MULTIPLIER_V0: Record<SlippageSensitivityV0, number> = {
   LOW: 0.5,
@@ -408,11 +412,29 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const rebalancePolicy = useMemo(() => loadRebalancePolicyV1(), [rev]);
 
-  // Use the same threshold for trigger policy, drift badges, and quick filters.
-  const driftThresholdPct = useMemo(() => {
+  const policyDriftThresholdPct = useMemo(() => {
     const t = toFiniteNumber((rebalancePolicy as any)?.thresholdPct);
     return t !== null && t > 0 ? t : 0.01;
   }, [rebalancePolicy]);
+
+  const [whatIfDriftThresholdPctV0, setWhatIfDriftThresholdPctV0] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(LS_WHATIF_DRIFT_THRESHOLD_PCT_V0);
+    const n = raw === null ? null : Number(raw);
+    return n !== null && Number.isFinite(n) && n >= 0 ? n : null;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (whatIfDriftThresholdPctV0 === null) window.localStorage.removeItem(LS_WHATIF_DRIFT_THRESHOLD_PCT_V0);
+    else window.localStorage.setItem(LS_WHATIF_DRIFT_THRESHOLD_PCT_V0, String(whatIfDriftThresholdPctV0));
+  }, [whatIfDriftThresholdPctV0]);
+
+  // Use the same threshold for trigger policy, drift badges, and quick filters.
+  // Users can override it in-place via the funds hub what-if slider.
+  const driftThresholdPct = useMemo(() => {
+    return whatIfDriftThresholdPctV0 !== null ? whatIfDriftThresholdPctV0 : policyDriftThresholdPct;
+  }, [policyDriftThresholdPct, whatIfDriftThresholdPctV0]);
 
   const baseCcy = useMemo(() => {
     const mp: any = moneyPlan as any;
@@ -588,6 +610,23 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return normalizeOrders(r.orders);
   }, [rebalanceResp]);
 
+  const [ordersPreviewSourceV0, setOrdersPreviewSourceV0] = useState<OrdersPreviewSourceV0>(() => {
+    if (typeof window === 'undefined') return 'RECOMPUTE';
+    const raw = window.localStorage.getItem(LS_WHATIF_ORDERS_PREVIEW_SOURCE_V0);
+    return raw === 'ENGINE_LAST_RUN' ? 'ENGINE_LAST_RUN' : 'RECOMPUTE';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(LS_WHATIF_ORDERS_PREVIEW_SOURCE_V0, String(ordersPreviewSourceV0));
+  }, [ordersPreviewSourceV0]);
+
+  useEffect(() => {
+    if (ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' && !engineOrders.length) {
+      setOrdersPreviewSourceV0('RECOMPUTE');
+    }
+  }, [engineOrders.length, ordersPreviewSourceV0]);
+
   const holdingsForWeights = useMemo(() => {
     if (holdings && Object.keys(holdings).length) return holdings;
 
@@ -701,6 +740,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     const out: SuggestedOrder[] = [];
     for (const r of rebalanceTableRows) {
+      if (driftThresholdPct > 0 && Math.abs(r.deltaPct) < driftThresholdPct) continue;
+
       const deltaValue = (r.targetPct - r.currentPct) * total;
       if (!Number.isFinite(deltaValue) || Math.abs(deltaValue) < minNotional) continue;
 
@@ -716,9 +757,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     out.sort((a, b) => b.notional - a.notional);
     return out;
-  }, [currentWeights, portfolioCash, rebalanceTableRows]);
+  }, [currentWeights, driftThresholdPct, portfolioCash, rebalanceTableRows]);
 
-  const effectiveOrders = engineOrders.length ? engineOrders : naiveOrders;
+  const effectiveOrders = useMemo(() => {
+    if (ordersPreviewSourceV0 === 'ENGINE_LAST_RUN') return engineOrders;
+    return naiveOrders;
+  }, [engineOrders, naiveOrders, ordersPreviewSourceV0]);
 
   const [whatIfFeeBps, setWhatIfFeeBps] = useState(() => {
     if (typeof window === 'undefined') return 0;
@@ -1168,7 +1212,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         initialHoldings: holdingsMap,
         initialCash: cash0,
         constraints,
-        policy: rebalancePolicy,
+        policy: { ...rebalancePolicy, thresholdPct: driftThresholdPct },
         bootstrapToTarget: false,
         includeEventStates: true,
       });
@@ -1288,6 +1332,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const basePolicy = loadRebalancePolicyV1();
       const policy = {
         ...basePolicy,
+        // What-if: allow users to override drift threshold without persisting it to the policy store.
+        thresholdPct: driftThresholdPct,
         lastRebalanceAt: st.lastRebalance?.at,
         now: new Date().toISOString(),
       };
@@ -1824,9 +1870,69 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   >
                     Under target <span className="muted">({driftCounts.under})</span>
                   </button>
-                  <span className="muted" style={{ fontSize: 12, marginLeft: 4 }}>
-                    threshold={(driftThresholdPct * 100).toFixed(2)}%
-                  </span>
+                  {(() => {
+                    const pct = Math.max(0, driftThresholdPct * 100);
+                    const policyPct = Math.max(0, policyDriftThresholdPct * 100);
+                    const overrideActive = whatIfDriftThresholdPctV0 !== null;
+
+                    const setPct = (pct100: number | null) => {
+                      if (pct100 === null) {
+                        setWhatIfDriftThresholdPctV0(null);
+                        return;
+                      }
+                      const v = Number(pct100);
+                      if (!Number.isFinite(v) || v < 0) return;
+                      setWhatIfDriftThresholdPctV0(v / 100);
+                    };
+
+                    return (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginLeft: 4 }}>
+                        <span className="muted" style={{ fontSize: 12 }}>threshold</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={10}
+                          step={0.1}
+                          value={pct}
+                          onChange={(e) => {
+                            const v = toFiniteNumber((e.target as HTMLInputElement).value);
+                            if (v === null) return;
+                            setPct(v);
+                          }}
+                          style={{ width: 160 }}
+                          aria-label="What-if drift threshold percent"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          max={50}
+                          step={0.1}
+                          value={pct.toFixed(2)}
+                          onChange={(e) => {
+                            const v = toFiniteNumber((e.target as HTMLInputElement).value);
+                            if (v === null) return;
+                            setPct(v);
+                          }}
+                          style={{ width: 84, padding: '4px 6px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'inherit' }}
+                        />
+                        <span className="muted" style={{ fontSize: 12 }}>%</span>
+                        {overrideActive ? (
+                          <button
+                            type="button"
+                            className="button secondary"
+                            onClick={() => setPct(null)}
+                            style={{ padding: '4px 8px' }}
+                          >
+                            Reset
+                          </button>
+                        ) : (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            policy={policyPct.toFixed(2)}%
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {filteredRebalanceTableRows.length ? (
@@ -1897,8 +2003,37 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     ccy={baseCcy}
                   />
 
-                  <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                    Source: {engineOrders.length ? 'engine orders (last run)' : 'naive diff orders'}.
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginTop: 8 }}>
+                    <span className="muted" style={{ fontSize: 11 }}>Preview orders:</span>
+
+                    <button
+                      type="button"
+                      className={ordersPreviewSourceV0 === 'RECOMPUTE' ? 'button' : 'button secondary'}
+                      onClick={() => setOrdersPreviewSourceV0('RECOMPUTE')}
+                      style={{ padding: '4px 8px' }}
+                      aria-pressed={ordersPreviewSourceV0 === 'RECOMPUTE'}
+                      title="Recompute orders from current drift vs target using the current threshold"
+                    >
+                      Recompute
+                    </button>
+
+                    <button
+                      type="button"
+                      className={ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' ? 'button' : 'button secondary'}
+                      onClick={() => setOrdersPreviewSourceV0('ENGINE_LAST_RUN')}
+                      style={{ padding: '4px 8px' }}
+                      aria-pressed={ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'}
+                      disabled={!engineOrders.length}
+                      title="Use orders from the last core run (saved in localStorage)"
+                    >
+                      Last run (core)
+                    </button>
+
+                    <span className="muted" style={{ fontSize: 11 }}>
+                      {ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'
+                        ? 'Using saved engine orders; adjust threshold then re-run core to refresh.'
+                        : 'Instant: adjusts with the threshold slider.'}
+                    </span>
                   </div>
 
                   {whatIf ? (
