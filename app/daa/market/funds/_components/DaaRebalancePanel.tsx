@@ -8,10 +8,11 @@ import { LS_LEGACY_HOLDINGS, loadPortfolioStateV1, recordPortfolioLastRebalance,
 import { getSnapshotPrice, loadPriceSnapshotV1, savePriceSnapshotV1 } from '../../../priceSnapshotStore';
 import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeightsStore';
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
+import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } from '../../../executionModeStore';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
-import { getDefaultExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
+import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
@@ -346,6 +347,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [driftFilter, setDriftFilter] = useState<'all' | 'over' | 'under'>('all');
 
   const [rev, setRev] = useState(0);
+  const executionMode: ExecutionModeV0 = useMemo(() => loadExecutionModeV0(), [rev]);
 
   const [paperRunLoading, setPaperRunLoading] = useState(false);
   const [paperRunError, setPaperRunError] = useState<string | null>(null);
@@ -354,6 +356,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunPostSummary, setPaperRunPostSummary] = useState<RebalancePostRunSummaryV0 | null>(null);
   const [paperRunHealthcheck, setPaperRunHealthcheck] = useState<PaperRunHealthcheckV0 | null>(null);
   const [paperRunDriftAlert, setPaperRunDriftAlert] = useState<DriftAlertV0 | null>(null);
+  const [paperRunExecutionMode, setPaperRunExecutionMode] = useState<ExecutionModeV0>("paper");
   const paperRunAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -851,6 +854,17 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     if (typeof window === 'undefined') return;
 
+    const mode: ExecutionModeV0 = executionMode;
+    setPaperRunExecutionMode(mode);
+
+    if (mode === 'live') {
+      const ok = window.confirm('Live execution may place real trades (broker adapter not configured yet). Continue?');
+      if (!ok) {
+        setPaperRunSummary('已取消（未确认 live execution）。');
+        return;
+      }
+    }
+
     setPaperRunLoading(true);
 
     paperRunAbortRef.current?.abort();
@@ -990,21 +1004,22 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         return;
       }
 
-      const exec = getDefaultExecutionAdapterV0();
+      const runNote = mode === 'live' ? 'ui:market/funds:live-run' : 'ui:market/funds:paper-run';
+      const exec = getExecutionAdapterV0(mode === 'live' ? 'real' : 'paper');
       const r = exec.executeOrders({
         storage: window.localStorage,
         source: 'rebalance-core',
         orders,
-        note: 'ui:market/funds:paper-run',
+        note: runNote,
       });
 
       if (!r.ok) {
-        setPaperRunError(r.error);
+        setPaperRunError(mode === 'live' ? `live execution failed: ${r.error}` : r.error);
         return;
       }
 
       setPaperRunRecordedAt(r.entry.at);
-      setPaperRunSummary(`已记录 paper execution：${orders.length} 条 orders。`);
+      setPaperRunSummary(`已记录 ${r.kind} execution：${orders.length} 条 orders。`);
 
       const actualSummary: RebalancePostRunSummaryV0 | null = (() => {
         try {
@@ -1093,7 +1108,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunHealthcheck({ expected: expectedSummary, actual: actualSummary, pass, notes });
 
       // Record the latest run in the portfolio store so cooldown debouncing can work.
-      recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: 'ui:market/funds:paper-run' });
+      recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: runNote });
     } catch (e) {
       const isAbort =
         typeof e === 'object' &&
@@ -1183,6 +1198,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <button type="button" className="button" onClick={doCopyOrders} style={{ padding: '6px 10px' }} disabled={!effectiveOrders.length}>
                   {copyOrdersStatus === 'ok' ? 'Copied' : copyOrdersStatus === 'error' ? 'Copy failed' : 'Copy suggested orders'}
                 </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    Execution:
+                  </span>
+                  <select
+                    value={executionMode}
+                    onChange={(e) => persistExecutionModeV0(e.target.value)}
+                    style={{ padding: '6px 10px', borderRadius: 10 }}
+                    aria-label="Execution mode"
+                  >
+                    <option value="paper">paper</option>
+                    <option value="live">live</option>
+                  </select>
+                </div>
                 <button
                   type="button"
                   className="button secondary"
@@ -1190,7 +1219,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   style={{ padding: '6px 10px' }}
                   disabled={paperRunLoading || !targetWeights.length}
                 >
-                  {paperRunLoading ? 'Running...' : 'Run paper rebalance'}
+                  {paperRunLoading ? 'Running...' : executionMode === 'live' ? 'Run live rebalance' : 'Run paper rebalance'}
                 </button>
                 {paperRunLoading ? (
                   <button
@@ -1238,7 +1267,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
                   <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary)' }}>
-                    Paper run recorded
+                    Execution recorded ({paperRunExecutionMode})
                     <span className="muted" style={{ marginLeft: 8, fontWeight: 500, fontFamily: 'ui-monospace, SFMono-Regular' }}>{paperRunRecordedAt}</span>
                   </div>
                   <button type="button" className="button secondary" onClick={() => scrollToId('rebalance-log')} style={{ padding: '6px 10px' }}>
