@@ -23,10 +23,13 @@ describe("daa/executionLogStore", () => {
     expect(loadPaperExecutionLog(st as any)).toEqual([]);
   });
 
-  it("appendPaperExecutionLog rejects empty/invalid orders", () => {
+  it("appendPaperExecutionLog accepts explicit empty orders (no-op) but rejects invalid order objects", () => {
     const st = new MemStorage();
+
     const r1 = appendPaperExecutionLog({ storage: st as any, source: "rebalance-simulate", orders: [] });
-    expect(r1.ok).toBe(false);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) throw new Error("unreachable");
+    expect(r1.entry.orders).toEqual([]);
 
     const r2 = appendPaperExecutionLog({
       storage: st as any,

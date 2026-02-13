@@ -2101,47 +2101,38 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       // Surface core-level drift/trigger info as a compact alert for fast feedback during runs.
       setPaperRunDriftAlert(computeDriftAlertFromCoreResponse({ at: new Date().toISOString(), resp, fallbackThresholdPct: thresholdPctForRun }));
 
-      const orders = Array.isArray(resp?.orders) ? resp.orders : [];
       const shouldRebalance = !!resp?.trigger?.shouldRebalance;
 
+      // Only execute/record a paper run when the trigger policy says "rebalance".
+      // When shouldRebalance=false, still surface expected allocations (orders=0) so the user
+      // can see a deterministic "no-op" outcome.
+      const orders = shouldRebalance ? normalizeOrders(resp?.orders) : [];
+
+      const runNote = opts?.cashSweep ? 'ui:market/funds:cash-sweep' : 'ui:market/funds:dry-run';
+
       if (!shouldRebalance) {
-        setPaperRunSummary('触发策略: shouldRebalance=false（未记录）。');
+        setPaperRunSummary('触发策略: shouldRebalance=false（no-op；orders=0，展示预期 allocations）。');
+        setPaperRunRecordedAt(new Date().toISOString());
 
         if (statusRunId) {
           finishRebalanceOrderStatusRunV0({
             storage: window.localStorage,
             runId: statusRunId,
             phase: 'done',
-            message: 'shouldRebalance=false (no orders executed)',
+            message: 'shouldRebalance=false (no-op)',
           });
         }
-
-        return;
       }
 
-      if (!orders.length) {
-        setPaperRunSummary('未返回 orders（未记录）。');
-
-        if (statusRunId) {
-          finishRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            phase: 'done',
-            message: 'no orders returned by core',
-          });
-        }
-
-        return;
-      }
-
-      const coreCashCheck = getPreTradeCashCheckV0({
-        sellProceedsRoutingV0,
-        cashStart: st.cash,
-        orders,
-        feeBps: whatIfFeeBps,
-        slippageBps: whatIfSlippageBpsUsed,
-        baseCcy: baseCcy || null,
-      });
+      if (shouldRebalance) {
+        const coreCashCheck = getPreTradeCashCheckV0({
+          sellProceedsRoutingV0,
+          cashStart: st.cash,
+          orders,
+          feeBps: whatIfFeeBps,
+          slippageBps: whatIfSlippageBpsUsed,
+          baseCcy: baseCcy || null,
+        });
 
       if (coreCashCheck.blocking) {
         setPaperRunError(coreCashCheck.message);
@@ -2185,7 +2176,6 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         }
       }
 
-      const runNote = opts?.cashSweep ? 'ui:market/funds:cash-sweep' : 'ui:market/funds:dry-run';
       const exec = getExecutionAdapterV0('paper');
       const r = exec.executeOrders({
         storage: window.localStorage,
@@ -2232,6 +2222,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         });
       } catch {
         // ignore
+      }
       }
 
       const actualSummary: RebalancePostRunSummaryV0 | null = (() => {
@@ -2322,7 +2313,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunHealthcheck({ expected: expectedSummary, actual: actualSummary, pass, notes });
 
       // Record the latest run in the portfolio store so cooldown debouncing can work.
-      recordPortfolioLastRebalance({ kind: 'core', runId: statusRunId ?? undefined, request: req, response: respValue, logNote: runNote });
+      // Keep behavior consistent with the historical path: only record when we actually have orders to execute.
+      if (shouldRebalance && orders.length) {
+        recordPortfolioLastRebalance({ kind: 'core', runId: statusRunId ?? undefined, request: req, response: respValue, logNote: runNote });
+      }
     } catch (e) {
       const isAbort =
         typeof e === 'object' &&
