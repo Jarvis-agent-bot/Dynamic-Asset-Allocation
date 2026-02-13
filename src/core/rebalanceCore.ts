@@ -13,6 +13,10 @@ export type RebalanceCoreConstraints = {
   maxOut?: number;
   // Ignore tiny computed orders below this threshold.
   minNotional?: number;
+
+  // Optional allowlist-style exclusion: ignore these symbols from holdings/prices/targetWeights.
+  // Used by Funds hub rebalance E2E to skip unsupported or non-investable assets.
+  assetBlacklist?: string[];
 };
 
 export type RebalanceTriggerPolicy = {
@@ -117,25 +121,47 @@ function toFiniteNumber(x: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function normalizeSymbolKey(x: unknown): string {
+  return String(x ?? "").trim().toUpperCase();
+}
+
 function parseIsoMs(x: unknown): number {
   if (typeof x !== "string" || !x) return Number.NaN;
   const ms = Date.parse(x);
   return Number.isFinite(ms) ? ms : Number.NaN;
 }
 
-function normalizeHoldings(holdings: RebalanceCoreRequest["holdings"], warnings: string[]): Record<string, number> {
+function normalizeHoldings(
+  holdings: RebalanceCoreRequest["holdings"],
+  warnings: string[],
+  notes: string[],
+  blacklist: Set<string>
+): Record<string, number> {
+  const excluded: string[] = [];
+
   if (Array.isArray(holdings)) {
     const out: Record<string, number> = {};
     for (const h of holdings) {
       const symbol = String((h as any)?.symbol ?? "").trim();
       const qty = toFiniteNumber((h as any)?.qty, 0);
       if (!symbol) continue;
+
+      if (blacklist.has(normalizeSymbolKey(symbol))) {
+        excluded.push(symbol);
+        continue;
+      }
+
       if (!Number.isFinite(qty)) {
         warnings.push(`warning: holding qty for ${symbol} is non-finite; treated as 0`);
         continue;
       }
       out[symbol] = (out[symbol] ?? 0) + qty;
     }
+
+    if (excluded.length) {
+      notes.push(`assetBlacklist: excluded holdings: ${excluded.map((s) => normalizeSymbolKey(s)).sort().join(", ")}`);
+    }
+
     return out;
   }
 
@@ -143,6 +169,12 @@ function normalizeHoldings(holdings: RebalanceCoreRequest["holdings"], warnings:
   for (const [symbolRaw, qtyRaw] of Object.entries(holdings ?? {})) {
     const symbol = String(symbolRaw ?? "").trim();
     if (!symbol) continue;
+
+    if (blacklist.has(normalizeSymbolKey(symbol))) {
+      excluded.push(symbol);
+      continue;
+    }
+
     const qty = toFiniteNumber(qtyRaw, 0);
     if (!Number.isFinite(qty)) {
       warnings.push(`warning: holding qty for ${symbol} is non-finite; treated as 0`);
@@ -150,22 +182,45 @@ function normalizeHoldings(holdings: RebalanceCoreRequest["holdings"], warnings:
     }
     out[symbol] = qty;
   }
+
+  if (excluded.length) {
+    notes.push(`assetBlacklist: excluded holdings: ${excluded.map((s) => normalizeSymbolKey(s)).sort().join(", ")}`);
+  }
+
   return out;
 }
 
-function normalizePrices(prices: RebalanceCoreRequest["prices"], warnings: string[]): Record<string, number> {
+function normalizePrices(
+  prices: RebalanceCoreRequest["prices"],
+  warnings: string[],
+  notes: string[],
+  blacklist: Set<string>
+): Record<string, number> {
+  const excluded: string[] = [];
+
   if (Array.isArray(prices)) {
     const out: Record<string, number> = {};
     for (const p of prices) {
       const symbol = String((p as any)?.symbol ?? "").trim();
       const price = toFiniteNumber((p as any)?.price, Number.NaN);
       if (!symbol) continue;
+
+      if (blacklist.has(normalizeSymbolKey(symbol))) {
+        excluded.push(symbol);
+        continue;
+      }
+
       if (!Number.isFinite(price) || price <= 0) {
         warnings.push(`warning: price for ${symbol} must be > 0; got ${String((p as any)?.price)}`);
         continue;
       }
       out[symbol] = price;
     }
+
+    if (excluded.length) {
+      notes.push(`assetBlacklist: excluded prices: ${excluded.map((s) => normalizeSymbolKey(s)).sort().join(", ")}`);
+    }
+
     return out;
   }
 
@@ -173,6 +228,12 @@ function normalizePrices(prices: RebalanceCoreRequest["prices"], warnings: strin
   for (const [symbolRaw, priceRaw] of Object.entries(prices ?? {})) {
     const symbol = String(symbolRaw ?? "").trim();
     if (!symbol) continue;
+
+    if (blacklist.has(normalizeSymbolKey(symbol))) {
+      excluded.push(symbol);
+      continue;
+    }
+
     const price = toFiniteNumber(priceRaw, Number.NaN);
     if (!Number.isFinite(price) || price <= 0) {
       warnings.push(`warning: price for ${symbol} must be > 0; got ${String(priceRaw)}`);
@@ -180,13 +241,19 @@ function normalizePrices(prices: RebalanceCoreRequest["prices"], warnings: strin
     }
     out[symbol] = price;
   }
+
+  if (excluded.length) {
+    notes.push(`assetBlacklist: excluded prices: ${excluded.map((s) => normalizeSymbolKey(s)).sort().join(", ")}`);
+  }
+
   return out;
 }
 
 function normalizeTargetWeights(
   targetWeights: RebalanceCoreRequest["targetWeights"],
   warnings: string[],
-  constraints: Required<RebalanceCoreConstraints>
+  constraints: Required<RebalanceCoreConstraints>,
+  blacklist: Set<string>
 ): {
   inputSum: number;
   finalSum: number;
@@ -194,6 +261,7 @@ function normalizeTargetWeights(
   notes: string[];
 } {
   const notes: string[] = [];
+  const excluded: string[] = [];
 
   const raw: { id: string; label: string; targetPct: number }[] = [];
 
@@ -201,6 +269,11 @@ function normalizeTargetWeights(
     for (const w of targetWeights) {
       const id = String((w as any)?.id ?? (w as any)?.symbol ?? "").trim();
       if (!id) continue;
+
+      if (blacklist.has(normalizeSymbolKey(id))) {
+        excluded.push(id);
+        continue;
+      }
 
       const label = String((w as any)?.label ?? id).trim() || id;
       const targetPctRaw = (w as any)?.targetPct ?? (w as any)?.target_pct ?? (w as any)?.weight;
@@ -220,6 +293,11 @@ function normalizeTargetWeights(
     for (const [idRaw, targetPctRaw] of Object.entries(targetWeights ?? {})) {
       const id = String(idRaw ?? "").trim();
       if (!id) continue;
+
+      if (blacklist.has(normalizeSymbolKey(id))) {
+        excluded.push(id);
+        continue;
+      }
       const targetPctNum = toFiniteNumber(targetPctRaw, 0);
       if (!Number.isFinite(targetPctNum)) {
         warnings.push(`warning: targetPct for ${id} is non-finite; treated as 0`);
@@ -231,6 +309,10 @@ function normalizeTargetWeights(
       if (clamped !== targetPctNum) warnings.push(`warning: targetPct for ${id} out of range; clamped from ${targetPctNum} to ${clamped}`);
       raw.push({ id, label: id, targetPct: clamped });
     }
+  }
+
+  if (excluded.length) {
+    notes.push(`assetBlacklist: excluded targetWeights: ${excluded.map((s) => normalizeSymbolKey(s)).sort().join(", ")}`);
   }
 
   const inputSum = raw.reduce((acc, w) => acc + (Number.isFinite(w.targetPct) ? w.targetPct : 0), 0);
@@ -272,12 +354,28 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   const warnings: string[] = [];
 
   const cashStart = Math.max(0, toFiniteNumber(req?.account?.cash, 0));
+  const notes: string[] = [];
+
+  // Funds hub rebalance E2E: allow excluding symbols from holdings/prices/targets.
+  const assetBlacklistSet = new Set<string>();
+  const rawAssetBlacklist = (req?.constraints as any)?.assetBlacklist;
+  if (Array.isArray(rawAssetBlacklist)) {
+    for (const s of rawAssetBlacklist) {
+      const key = normalizeSymbolKey(s);
+      if (key) assetBlacklistSet.add(key);
+    }
+  }
+  const assetBlacklist = Array.from(assetBlacklistSet).sort();
+  const blacklist = new Set(assetBlacklist);
+
+  if (assetBlacklist.length) notes.push(`assetBlacklist: ${assetBlacklist.join(", ")}`);
 
   const constraints: Required<RebalanceCoreConstraints> = {
     maxPositionPct: clamp01(toFiniteNumber(req?.constraints?.maxPositionPct, 1)),
     maxIn: Math.max(0, toFiniteNumber(req?.constraints?.maxIn, Number.POSITIVE_INFINITY)),
     maxOut: Math.max(0, toFiniteNumber(req?.constraints?.maxOut, Number.POSITIVE_INFINITY)),
     minNotional: Math.max(0, toFiniteNumber(req?.constraints?.minNotional, 1e-6)),
+    assetBlacklist,
   };
 
   const policy: RebalanceTriggerPolicy = req?.policy && typeof req.policy === "object" && !Array.isArray(req.policy) ? req.policy : {};
@@ -289,10 +387,11 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
   const effectiveMinNotional = Math.max(constraints.minNotional, minTradeNotional);
 
-  const holdings = normalizeHoldings(req.holdings, warnings);
-  const prices = normalizePrices(req.prices, warnings);
+  const holdings = normalizeHoldings(req.holdings, warnings, notes, blacklist);
+  const prices = normalizePrices(req.prices, warnings, notes, blacklist);
 
-  const tw = normalizeTargetWeights(req.targetWeights, warnings, constraints);
+  const tw = normalizeTargetWeights(req.targetWeights, warnings, constraints, blacklist);
+  notes.push(...tw.notes);
 
   const currentValues: Record<string, number> = {};
   for (const [sym, qty] of Object.entries(holdings)) {
@@ -314,7 +413,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   const equityInput = toFiniteNumber(req?.account?.totalEquity, Number.NaN);
   const equity = Number.isFinite(equityInput) && equityInput > 0 ? equityInput : holdingsValue + cashStart;
 
-  const notes: string[] = [...tw.notes];
+  // notes accumulated above (blacklist + targetWeights normalization)
 
   if (!(Number.isFinite(equity) && equity > 0)) {
     warnings.push("warning: total equity is not positive; no rebalance possible");
