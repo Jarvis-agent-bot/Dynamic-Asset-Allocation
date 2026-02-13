@@ -26,6 +26,12 @@ export type RebalanceTriggerPolicy = {
   lastRebalanceAt?: string;
   // Optional ISO timestamp to make the decision deterministic in tests/UI.
   now?: string;
+
+  // Optional UX override: emit extra BUY orders (in lot-size steps) to sweep excess cash down
+  // toward the implicit cash buffer target (1 - sum(targetWeights)).
+  //
+  // This is intentionally opt-in so existing callers keep the strict "buy toward desired values" behavior.
+  cashSweepToTarget?: boolean;
 };
 
 export type RebalanceTriggerDecision = {
@@ -445,7 +451,104 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     cashAvail -= capped;
   }
 
-  const cashEnd = cashAvail;
+  let cashEnd = cashAvail;
+
+  // Optional: if the caller wants to enforce a target cash buffer (implicit cash), emit extra
+  // BUY orders (in lot-size steps) to reduce excess cash.
+  const cashSweepToTarget = !!(policy as any).cashSweepToTarget;
+  if (cashSweepToTarget) {
+    const desiredCashAbs = equity * Math.max(0, 1 - tw.finalSum);
+    const step = lotStep > 0 ? lotStep : minN;
+
+    if (Number.isFinite(desiredCashAbs) && Number.isFinite(step) && step > 0) {
+      const maxSweepOrders = 25;
+      let sweptNotional = 0;
+
+      // Track post-order valuations in notional space (no price conversion needed).
+      const postValues: Record<string, number> = { ...currentValues };
+      for (const o of orders) {
+        const sym = String((o as any)?.symbol ?? "").trim();
+        if (!sym) continue;
+        const n = toFiniteNumber((o as any)?.notional, 0);
+        if (!Number.isFinite(n) || n <= 0) continue;
+        if ((o as any)?.side === "SELL") postValues[sym] = Math.max(0, (postValues[sym] ?? 0) - n);
+        if ((o as any)?.side === "BUY") postValues[sym] = (postValues[sym] ?? 0) + n;
+      }
+
+      // Prefer buying the most underweight symbol; if everything is already at/above target,
+      // buy the highest target-weight symbol.
+      const candidates = tw.weights.filter((w) => Number.isFinite(w.targetPct) && w.targetPct > 0);
+
+      while (orders.length < maxSweepOrders && cashEnd - desiredCashAbs >= step - 1e-9) {
+        let bestSym = "";
+        let bestLabel = "";
+        let bestTargetPct = -1;
+        let bestDelta = Number.NEGATIVE_INFINITY;
+        let anyUnder = false;
+
+        for (const w of candidates) {
+          const sym = w.id;
+          if (!sym) continue;
+
+          const px = prices[sym];
+          if (!(Number.isFinite(px) && px > 0)) continue;
+
+          const want = desiredValues[sym] ?? 0;
+          const cur = postValues[sym] ?? 0;
+          const d = want - cur;
+
+          if (d > 0) anyUnder = true;
+
+          if (anyUnder) {
+            if (d > bestDelta || (d === bestDelta && sym.localeCompare(bestSym) < 0)) {
+              bestSym = sym;
+              bestLabel = w.label ?? sym;
+              bestDelta = d;
+              bestTargetPct = w.targetPct;
+            }
+          } else {
+            if (w.targetPct > bestTargetPct || (w.targetPct === bestTargetPct && sym.localeCompare(bestSym) < 0)) {
+              bestSym = sym;
+              bestLabel = w.label ?? sym;
+              bestTargetPct = w.targetPct;
+              bestDelta = d;
+            }
+          }
+        }
+
+        if (!bestSym) break;
+
+        const cashExcess = cashEnd - desiredCashAbs;
+        const raw = Math.min(cashExcess, constraints.maxIn);
+        if (!(Number.isFinite(raw) && raw >= step)) break;
+
+        const target = Math.min(raw, Math.max(step, bestDelta));
+        const notional = roundDownToLot(target);
+        if (!(Number.isFinite(notional) && notional >= step)) break;
+
+        orders.push({
+          symbol: bestSym,
+          side: "BUY",
+          notional,
+          reason: `cash sweep: invest excess cash toward target buffer; desiredCash≈${desiredCashAbs.toFixed(2)}; buy=${notional.toFixed(2)} (${bestLabel})`,
+        });
+
+        postValues[bestSym] = (postValues[bestSym] ?? 0) + notional;
+        cashEnd -= notional;
+        sweptNotional += notional;
+      }
+
+      if (sweptNotional > 0) {
+        notes.push(
+          `cash sweep: enabled; desiredCash≈${desiredCashAbs.toFixed(2)}; swept≈${sweptNotional.toFixed(2)}; cashEnd≈${cashEnd.toFixed(2)}`
+        );
+      }
+
+      if (orders.length >= maxSweepOrders) {
+        warnings.push(`warning: cash sweep stopped at maxSweepOrders=${maxSweepOrders}`);
+      }
+    }
+  }
 
   if (roundedAny && lotStep > 0) {
     notes.push(`applied lot rounding step=${lotStep}; orders rounded down to multiples of step`);

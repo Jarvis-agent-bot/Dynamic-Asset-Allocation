@@ -134,4 +134,20 @@ describe("rebalanceCore", () => {
     expect(res.trigger.shouldRebalance).toBe(false);
     expect(res.trigger.reasons.join("\n")).toMatch(/cooldown:/);
   });
+
+  it("sweeps excess cash down toward implicit cash buffer when enabled", () => {
+    const res = rebalanceCore({
+      account: { cash: 1000 },
+      holdings: {},
+      prices: { AAA: 1, BBB: 1 },
+      targetWeights: { AAA: 0.5, BBB: 0.4 }, // 10% implicit cash buffer
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0, minTradeNotional: 150, cashSweepToTarget: true },
+    });
+
+    // Without the sweep pass, lot rounding leaves cashEnd=250; sweep should invest the extra 150.
+    expect(res.explain.cashEnd).toBe(100);
+    expect(res.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["BUY:AAA:450", "BUY:BBB:300", "BUY:BBB:150"]);
+    expect(res.explain.notes.join("\n")).toMatch(/cash sweep:/i);
+  });
 });

@@ -1440,7 +1440,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }
 
 
-  async function runPaperRebalanceCore() {
+  async function runPaperRebalanceCore(opts?: { cashSweep?: boolean }) {
     setPaperRunError(null);
     setPaperRunRecordedAt(null);
     setPaperRunSummary(null);
@@ -1473,7 +1473,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     // v0: best-effort local snapshot so the UI can show per-order status while a run is in flight.
     const startedStatus = startRebalanceOrderStatusRunV0({
       storage: window.localStorage,
-      message: `Funds hub rebalance (${mode})`,
+      message: opts?.cashSweep ? `Funds hub cash sweep (${mode})` : `Funds hub rebalance (${mode})`,
     });
     if (startedStatus.ok) statusRunId = startedStatus.run.runId;
 
@@ -1485,7 +1485,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     // Pre-compute drift breaches so the UI shows an immediate "live" alert even if the core route is slow.
     setPaperRunDriftAlert(
-      computeDriftAlertFromTableRows({ at: new Date().toISOString(), rows: rebalanceTableRows, thresholdPct: driftThresholdPct })
+      computeDriftAlertFromTableRows({ at: new Date().toISOString(), rows: rebalanceTableRows, thresholdPct: opts?.cashSweep ? 0 : driftThresholdPct })
     );
 
     try {
@@ -1535,31 +1535,16 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         valuesBySymbol[sym] = qty * px;
       }
 
-      // "Expected" = what the user sees in the preview (effectiveOrders + preview targetWeights).
-      // "Actual" will be computed after we get the core response orders/weights.
-      const expectedSummary: RebalancePostRunSummaryV0 | null = (() => {
-        try {
-          return buildRebalancePostRunSummaryV0({
-            cashStart: toFiniteNumber((st as any)?.cash) ?? 0,
-            valuesBySymbol,
-            targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
-            orders: effectiveOrders,
-            feeBps: whatIfFeeBps,
-            slippageBps: whatIfSlippageBpsUsed,
-            labelsBySymbol: whatIfLabelsBySymbol,
-          });
-        } catch {
-          return null;
-        }
-      })();
+      const thresholdPctForRun = opts?.cashSweep ? 0 : driftThresholdPct;
 
       const basePolicy = loadRebalancePolicyV1();
       const policy = {
         ...basePolicy,
         // What-if: allow users to override drift threshold without persisting it to the policy store.
-        thresholdPct: driftThresholdPct,
+        thresholdPct: thresholdPctForRun,
         lastRebalanceAt: st.lastRebalance?.at,
         now: new Date().toISOString(),
+        ...(opts?.cashSweep ? { cashSweepToTarget: true } : {}),
       };
 
       const account: any = { cash: st.cash };
@@ -1573,6 +1558,33 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         prices: pricesMap,
         targetWeights: targetWeightsEffective,
       };
+
+      const expectedOrdersForRun = opts?.cashSweep
+        ? (() => {
+            try {
+              return normalizeOrders(rebalanceCore(req).orders);
+            } catch {
+              return effectiveOrders;
+            }
+          })()
+        : effectiveOrders;
+
+      // "Expected" is used for the post-run healthcheck; it should match the request we're about to execute.
+      const expectedSummary: RebalancePostRunSummaryV0 | null = (() => {
+        try {
+          return buildRebalancePostRunSummaryV0({
+            cashStart: toFiniteNumber((st as any)?.cash) ?? 0,
+            valuesBySymbol,
+            targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
+            orders: expectedOrdersForRun,
+            feeBps: whatIfFeeBps,
+            slippageBps: whatIfSlippageBpsUsed,
+            labelsBySymbol: whatIfLabelsBySymbol,
+          });
+        } catch {
+          return null;
+        }
+      })();
 
       saveJsonToLs(LS_REBALANCE_REQUEST, req);
 
@@ -1603,7 +1615,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const resp: any = respValue as any;
 
       // Surface core-level drift/trigger info as a compact alert for fast feedback during runs.
-      setPaperRunDriftAlert(computeDriftAlertFromCoreResponse({ at: new Date().toISOString(), resp, fallbackThresholdPct: driftThresholdPct }));
+      setPaperRunDriftAlert(computeDriftAlertFromCoreResponse({ at: new Date().toISOString(), resp, fallbackThresholdPct: thresholdPctForRun }));
 
       const orders = Array.isArray(resp?.orders) ? resp.orders : [];
       const shouldRebalance = !!resp?.trigger?.shouldRebalance;
@@ -1688,7 +1700,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         }
       }
 
-      const runNote = 'ui:market/funds:dry-run';
+      const runNote = opts?.cashSweep ? 'ui:market/funds:cash-sweep' : 'ui:market/funds:dry-run';
       const exec = getExecutionAdapterV0('paper');
       const r = exec.executeOrders({
         storage: window.localStorage,
@@ -1947,12 +1959,22 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <button
                   type="button"
                   className="button secondary"
-                  onClick={runPaperRebalanceCore}
+                  onClick={() => runPaperRebalanceCore()}
                   style={{ padding: '6px 10px' }}
                   disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
                   title={preTradeCashCheck.blocking ? preTradeCashCheck.message : undefined}
                 >
                   {paperRunLoading ? 'Running...' : executionMode === 'live' ? 'Run rebalance (live)' : 'Run rebalance (dry run)'}
+                </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => runPaperRebalanceCore({ cashSweep: true })}
+                  style={{ padding: '6px 10px' }}
+                  disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
+                  title="Sweep excess cash down toward the implicit cash buffer target (ignores drift threshold; dry run only)."
+                >
+                  Cash sweep (to buffer)
                 </button>
                 {paperRunLoading ? (
                   <button
