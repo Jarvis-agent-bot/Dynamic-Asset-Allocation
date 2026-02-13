@@ -12,6 +12,8 @@ import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } fro
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
+import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from '@/src/core/backtestDriftRebalance';
+import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
@@ -63,6 +65,8 @@ type Props = {
 
 const LS_WHATIF_FEE_BPS = 'daa.whatif.feeBps';
 const LS_WHATIF_SLIPPAGE_BPS = 'daa.whatif.slippageBps';
+const LS_AUTO_PLAN_INPUT = 'daa.market.funds.autoPlan.input.v0';
+const LS_AUTO_PLAN_RESULT = 'daa.market.funds.autoPlan.result.v0';
 
 function scrollToId(id: string) {
   const el = document.getElementById(id);
@@ -345,6 +349,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [copyWeightsStatus, setCopyWeightsStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [sampleStatus, setSampleStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
+  const [autoPlanInputText, setAutoPlanInputText] = useState(() => {
+    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
+    if (saved && typeof saved === 'object' && typeof (saved as any).text === 'string') return (saved as any).text;
+    return '';
+  });
+
+  const [autoPlanResult, setAutoPlanResult] = useState<DriftRebalanceBacktestResult | null>(() => {
+    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_RESULT);
+    return saved && typeof saved === 'object' && (saved as any).schemaVersion === 1 ? (saved as any as DriftRebalanceBacktestResult) : null;
+  });
+
+  const [autoPlanError, setAutoPlanError] = useState<string | null>(null);
+  const [autoPlanCopyStatus, setAutoPlanCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+
   const [driftFilter, setDriftFilter] = useState<'all' | 'over' | 'under'>('all');
 
   const [rev, setRev] = useState(0);
@@ -369,6 +387,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       window.removeEventListener('storage', onData);
     };
   }, []);
+
+  useEffect(() => {
+    // Persist the latest drift input so users can refresh and keep the plan editor state.
+    saveJsonToLs(LS_AUTO_PLAN_INPUT, { text: autoPlanInputText });
+  }, [autoPlanInputText]);
 
   const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
   const rebalanceReq = useMemo(() => readJsonFromLs(LS_REBALANCE_REQUEST), [rev]);
@@ -854,6 +877,282 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       return { ok: false, error: 'JSON parse failed' };
     }
   }
+
+  function normalizePlanSymbol(sym: unknown): string {
+    return String(sym ?? "").trim().toUpperCase();
+  }
+
+  function tryBuildSeriesBySymbolForPlan(
+    input: unknown,
+  ): { ok: true; seriesBySymbol: Record<string, any[]>; symbols: string[] } | { ok: false; error: string } {
+    // 1) Accept direct series map or {seriesBySymbol: ...}
+    const coerced = coerceSeriesBySymbolInput(input) as any;
+    const symbolsFromSeries = Object.keys(coerced || {}).filter(Boolean).sort();
+    if (symbolsFromSeries.length) return { ok: true, seriesBySymbol: coerced, symbols: symbolsFromSeries };
+
+    // 2) Accept snapshots: [{date, prices}] or {snapshots:[...]} or {"YYYY-MM-DD": {SYM: px}}
+    try {
+      const s = (() => {
+        if (Array.isArray(input)) return input;
+        if (input && typeof input === "object" && !Array.isArray(input)) {
+          const r: any = input as any;
+          if (Array.isArray(r.snapshots)) return r.snapshots;
+
+          const entries = Object.entries(r as Record<string, unknown>);
+          const looksLikeDateMap = entries.some(([k]) => /^\d{4}-\d{2}-\d{2}/.test(String(k)));
+          if (looksLikeDateMap) return entries.map(([date, prices]) => ({ date, prices }));
+        }
+        return null;
+      })();
+
+      if (!s) return { ok: false, error: "Input is neither seriesBySymbol nor snapshots" };
+
+      const { seriesBySymbol, symbols } = snapshotsToSeriesBySymbol(s as any);
+      return { ok: true, seriesBySymbol: seriesBySymbol as any, symbols };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  function formatWeightsDiffLines(args: {
+    before?: { cashPct01: number; weightsBySymbolPct01: Record<string, number> };
+    after?: { cashPct01: number; weightsBySymbolPct01: Record<string, number> };
+  }): string[] {
+    const before = args.before;
+    const after = args.after;
+    if (!before || !after) return ["(missing before/after snapshots)"];
+
+    const syms = new Set<string>();
+    for (const k of Object.keys(before.weightsBySymbolPct01 || {})) syms.add(k);
+    for (const k of Object.keys(after.weightsBySymbolPct01 || {})) syms.add(k);
+    const list = Array.from(syms).sort();
+
+    const rows: string[] = [];
+    rows.push(`cash: ${fmtPct01(before.cashPct01)} → ${fmtPct01(after.cashPct01)} (Δ ${fmtPct01(after.cashPct01 - before.cashPct01)})`);
+
+    for (const sym of list) {
+      const b = Number((before.weightsBySymbolPct01 as any)[sym] ?? 0);
+      const a = Number((after.weightsBySymbolPct01 as any)[sym] ?? 0);
+      rows.push(`${sym}: ${fmtPct01(b)} → ${fmtPct01(a)} (Δ ${fmtPct01(a - b)})`);
+    }
+
+    return rows;
+  }
+
+  function buildAutoPlanMarkdownV0(res: DriftRebalanceBacktestResult): string {
+    const parts: string[] = [];
+
+    parts.push("# Auto rebalance plan (v0)");
+    parts.push("");
+    parts.push(
+      `rebalanceCount=${res.summary.rebalanceCount}; turnoverNotional=${res.summary.turnoverNotional.toFixed(2)}; equityAbs=${res.summary.initialEquityAbs.toFixed(2)} → ${res.summary.finalEquityAbs.toFixed(2)}`,
+    );
+    if (res.warnings?.length) parts.push(`warnings: ${res.warnings.length}`);
+    parts.push("");
+
+    if (res.states) {
+      parts.push("## Overall weight diff");
+      parts.push("");
+      parts.push(...formatWeightsDiffLines({ before: res.states.initial, after: res.states.final }));
+      parts.push("");
+    }
+
+    parts.push("## Events");
+    parts.push("");
+
+    for (const ev of res.events || []) {
+      const stats: any = (ev as any).trigger?.stats ?? {};
+
+      parts.push(`### ${ev.kind} @ ${ev.date}`);
+      parts.push("");
+      parts.push(
+        `shouldRebalance=${String((ev as any).trigger?.shouldRebalance)}; maxAbsDriftPct=${fmtPct01(Number(stats.maxAbsDriftPct ?? NaN))}; maxAbsDriftSymbol=${String(stats.maxAbsDriftSymbol ?? "")}`,
+      );
+      parts.push("");
+
+      parts.push("Diff:");
+      parts.push(...formatWeightsDiffLines({ before: (ev as any).before, after: (ev as any).after }).map((l) => `- ${l}`));
+      parts.push("");
+
+      parts.push("Orders:");
+      parts.push("```json");
+      parts.push(JSON.stringify((ev as any).orders ?? [], null, 2));
+      parts.push("```");
+      parts.push("");
+    }
+
+    return parts.join("\n");
+  }
+
+  async function doCopyAutoPlanV0() {
+    if (!autoPlanResult) return;
+    try {
+      const md = buildAutoPlanMarkdownV0(autoPlanResult);
+      await copyTextToClipboard(md);
+      setAutoPlanCopyStatus("ok");
+      window.setTimeout(() => setAutoPlanCopyStatus("idle"), 1200);
+    } catch {
+      setAutoPlanCopyStatus("error");
+      window.setTimeout(() => setAutoPlanCopyStatus("idle"), 2000);
+    }
+  }
+
+  function seedAutoPlanFromCurrentSnapshotV0() {
+    try {
+      const st = loadPortfolioStateV1();
+
+      const holdingsMap: Record<string, number> = {};
+      for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
+        const sym = normalizePlanSymbol(symRaw);
+        if (!sym) continue;
+
+        const qty = toFiniteNumber((p as any)?.qty);
+        if (!qty || qty <= 0) continue;
+
+        holdingsMap[sym] = qty;
+      }
+
+      const byCode = new Map<string, FundLike>();
+      for (const f of funds ?? []) {
+        const code = normalizePlanSymbol((f as any)?.code);
+        if (code) byCode.set(code, f);
+      }
+
+      const pricesMap: Record<string, number> = {};
+      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeights.map((t) => normalizePlanSymbol((t as any)?.id))]);
+
+      for (const sym of symbols) {
+        const manual = getSnapshotPrice(priceSnapshot, sym);
+        const nav = manual ?? pickFundNav(byCode.get(sym));
+        if (nav && nav > 0) pricesMap[sym] = nav;
+      }
+
+      const syms = Object.keys(pricesMap).sort();
+      if (!syms.length) {
+        setAutoPlanError("No prices found to seed snapshots. Please fill in the Price Snapshot first.");
+        return;
+      }
+
+      const d0 = new Date();
+      const d1 = new Date(d0.getTime() + 86400000);
+      const d2 = new Date(d0.getTime() + 2 * 86400000);
+      const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+      const snap0: any = { date: fmt(d0), prices: {} as any };
+      const snap1: any = { date: fmt(d1), prices: {} as any };
+      const snap2: any = { date: fmt(d2), prices: {} as any };
+
+      for (const sym of syms) {
+        const px = Number((pricesMap as any)[sym]);
+        if (!Number.isFinite(px) || px <= 0) continue;
+
+        // Tiny drift seed: +1% then -1%. Replace with real scenarios/history.
+        (snap0.prices as any)[sym] = px;
+        (snap1.prices as any)[sym] = Number((px * 1.01).toFixed(6));
+        (snap2.prices as any)[sym] = Number((px * 0.99).toFixed(6));
+      }
+
+      setAutoPlanError(null);
+      setAutoPlanInputText(pretty({ snapshots: [snap0, snap1, snap2] }));
+    } catch (e) {
+      setAutoPlanError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function runAutoPlanV0() {
+    setAutoPlanError(null);
+
+    if (typeof window === "undefined") return;
+
+    if (!targetWeights.length) {
+      setAutoPlanError("Missing targetWeights. Please configure target weights first.");
+      return;
+    }
+
+    const raw = String(autoPlanInputText ?? "").trim();
+    if (!raw) {
+      setAutoPlanError("Provide drift input (seriesBySymbol or snapshots). Tip: click Seed from current snapshot.");
+      return;
+    }
+
+    const parsed = safeJsonParse(raw);
+    if (!parsed.ok) {
+      setAutoPlanError(parsed.error);
+      return;
+    }
+
+    const seriesRes = tryBuildSeriesBySymbolForPlan(parsed.value);
+    if (!seriesRes.ok) {
+      setAutoPlanError(seriesRes.error);
+      return;
+    }
+
+    const st = loadPortfolioStateV1();
+
+    const holdingsMap: Record<string, number> = {};
+    for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
+      const sym = normalizePlanSymbol(symRaw);
+      if (!sym) continue;
+
+      const qty = toFiniteNumber((p as any)?.qty);
+      if (!qty || qty <= 0) continue;
+
+      holdingsMap[sym] = qty;
+    }
+
+    const targetWeightsMap: Record<string, number> = {};
+    for (const t of targetWeights) {
+      const id = normalizePlanSymbol((t as any)?.id);
+      const w = toFiniteNumber((t as any)?.targetPct);
+      if (!id) continue;
+      if (w === null || w < 0) continue;
+      targetWeightsMap[id] = w;
+    }
+
+    const required = new Set<string>([...Object.keys(holdingsMap), ...Object.keys(targetWeightsMap)]);
+    const missing = Array.from(required).filter((sym) => !(sym in seriesRes.seriesBySymbol));
+
+    if (missing.length) {
+      setAutoPlanError(
+        `Missing symbols in series: ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? " ..." : ""}`,
+      );
+      return;
+    }
+
+    const mp: any = moneyPlan as any;
+    const mpConstraints: any = mp?.constraints ?? {};
+
+    const constraints: any = { minNotional: 0.01 };
+
+    const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
+    const maxIn = toFiniteNumber(mpConstraints?.maxIn);
+    const maxOut = toFiniteNumber(mpConstraints?.maxOut);
+
+    if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
+    if (maxIn !== null) constraints.maxIn = maxIn;
+    if (maxOut !== null) constraints.maxOut = maxOut;
+
+    const cash0 = toFiniteNumber((st as any)?.cash) ?? 0;
+
+    try {
+      const res = backtestDriftRebalance({
+        seriesBySymbol: seriesRes.seriesBySymbol as any,
+        targetWeights: targetWeightsMap,
+        initialHoldings: holdingsMap,
+        initialCash: cash0,
+        constraints,
+        policy: rebalancePolicy,
+        bootstrapToTarget: false,
+        includeEventStates: true,
+      });
+
+      setAutoPlanResult(res);
+      saveJsonToLs(LS_AUTO_PLAN_RESULT, res);
+    } catch (e) {
+      setAutoPlanError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
 
   async function runPaperRebalanceCore() {
     setPaperRunError(null);
@@ -1706,6 +2005,141 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               )}
             </div>
           </div>
+
+          <div
+            id="auto-plan"
+            style={{
+              scrollMarginTop: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 12,
+              padding: 12,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" as const }}>
+              <div style={{ fontWeight: 800 }}>Auto plan v0</div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" as const }}>
+                <button type="button" className="button secondary" onClick={seedAutoPlanFromCurrentSnapshotV0} style={{ padding: "6px 10px" }}>
+                  Seed from current snapshot
+                </button>
+                <button type="button" className="button secondary" onClick={runAutoPlanV0} style={{ padding: "6px 10px" }}>
+                  Generate plan
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={doCopyAutoPlanV0}
+                  style={{ padding: "6px 10px" }}
+                  disabled={!autoPlanResult}
+                >
+                  {autoPlanCopyStatus === "ok" ? "Copied" : autoPlanCopyStatus === "error" ? "Copy failed" : "Copy plan (md)"}
+                </button>
+              </div>
+            </div>
+
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              One-click dynamic plan generator: drift (price series) -&gt; trigger policy -&gt; orders, with a preview weight diff. This is a
+              deterministic simulation (paper only); it does not execute or record orders.
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              <textarea
+                value={autoPlanInputText}
+                onChange={(e) => setAutoPlanInputText(e.target.value)}
+                rows={8}
+                placeholder={"Paste {seriesBySymbol: {...}} or {snapshots:[{date,prices}]}"}
+                style={{
+                  width: "100%",
+                  fontFamily: "ui-monospace, SFMono-Regular",
+                  fontSize: 12,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid rgba(127,127,127,0.35)",
+                  background: "rgba(0,0,0,0.12)",
+                }}
+              />
+
+              {autoPlanError ? <div style={{ fontSize: 12, color: "var(--danger, #b00020)" }}>{autoPlanError}</div> : null}
+
+              {autoPlanResult ? (
+                <div style={{ marginTop: 6, padding: "10px 12px", border: "1px solid rgba(127,127,127,0.35)", borderRadius: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" as const }}>
+                    <div style={{ fontWeight: 700, fontSize: 12 }}>Plan summary</div>
+                    <div className="muted" style={{ fontSize: 11, fontFamily: "ui-monospace, SFMono-Regular" }}>
+                      schemaVersion={(autoPlanResult as any).schemaVersion}
+                    </div>
+                  </div>
+
+                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                    rebalanceCount=<b>{autoPlanResult.summary.rebalanceCount}</b>
+                    {" "}· turnoverNotional=<b>{autoPlanResult.summary.turnoverNotional.toFixed(2)}</b>
+                    {baseCcy ? ` ${baseCcy}` : ""}
+                    {" "}· equityAbs: {autoPlanResult.summary.initialEquityAbs.toFixed(2)} → {autoPlanResult.summary.finalEquityAbs.toFixed(2)}
+                  </div>
+
+                  {autoPlanResult.states ? (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Overall diff (initial → final)</div>
+                      <pre style={{ margin: 0, fontSize: 11, whiteSpace: "pre-wrap" }}>
+                        {formatWeightsDiffLines({ before: autoPlanResult.states.initial, after: autoPlanResult.states.final }).join("\n")}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ fontWeight: 700, fontSize: 12 }}>Events</div>
+
+                    {autoPlanResult.events?.length ? (
+                      <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
+                        {autoPlanResult.events.map((ev: any, idx: number) => {
+                          const stats: any = ev?.trigger?.stats ?? {};
+                          return (
+                            <div
+                              key={`${ev.kind}-${ev.date}-${idx}`}
+                              style={{ padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12 }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" as const, alignItems: "baseline" }}>
+                                <div style={{ fontWeight: 700, fontSize: 12 }}>
+                                  {ev.kind} @ <span style={{ fontFamily: "ui-monospace, SFMono-Regular" }}>{ev.date}</span>
+                                </div>
+                                <div className="muted" style={{ fontSize: 11 }}>
+                                  maxAbsDriftPct={fmtPct01(Number(stats.maxAbsDriftPct ?? NaN))}; maxAbsDriftSymbol={String(stats.maxAbsDriftSymbol ?? "")}
+                                </div>
+                              </div>
+
+                              <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                                shouldRebalance={String(!!ev?.trigger?.shouldRebalance)}; eligibleOrders={String(stats.eligibleOrderCount ?? "-")};
+                                reasons={Array.isArray(ev?.trigger?.reasons) ? ev.trigger.reasons.slice(0, 2).join("; ") : ""}
+                              </div>
+
+                              <div style={{ marginTop: 10 }}>
+                                <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Preview diff (before → after)</div>
+                                <pre style={{ margin: 0, fontSize: 11, whiteSpace: "pre-wrap" }}>
+                                  {formatWeightsDiffLines({ before: ev.before, after: ev.after }).join("\n")}
+                                </pre>
+                              </div>
+
+                              <div style={{ marginTop: 10 }}>
+                                <OrdersReviewV0
+                                  title="Orders"
+                                  orders={Array.isArray(ev?.orders) ? ev.orders : []}
+                                  cashStart={typeof ev?.before?.cashAbs === "number" ? ev.before.cashAbs : null}
+                                  minTradeNotional={rebalancePolicy.minTradeNotional}
+                                  ccy={baseCcy}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>No events.</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
 
           <div id="rebalance-log" style={{ scrollMarginTop: 12 }}>
             <DaaRebalanceLogViewV0 />
