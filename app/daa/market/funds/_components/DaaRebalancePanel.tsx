@@ -68,6 +68,7 @@ import DaaRebalanceScheduleV0 from './DaaRebalanceScheduleV0';
 import DaaDynamicRebalanceStatusPillV0 from './DaaDynamicRebalanceStatusPillV0';
 import DaaDynamicRebalancePausedReasonBannerV0 from './DaaDynamicRebalancePausedReasonBannerV0';
 import DaaDynamicRebalanceSkipHistoryV0 from './DaaDynamicRebalanceSkipHistoryV0';
+import DaaDynamicRebalanceRunHistoryV0 from './DaaDynamicRebalanceRunHistoryV0';
 import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
 import { DaaOrderStatusTrackerV0 } from './DaaOrderStatusTrackerV0';
@@ -4455,6 +4456,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             </div>
           </div>
 
+
+          <div id="dynamic-rebalance-run-history" style={{ scrollMarginTop: 12 }}>
+            <DaaDynamicRebalanceRunHistoryV0 rev={rev} />
+          </div>
 
           <div id="rebalance-log" style={{ scrollMarginTop: 12 }}>
             <DaaRebalanceLogViewV0 />
