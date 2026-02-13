@@ -185,6 +185,39 @@ export default function DaaTargetWeightsEditorV0() {
     setWarnings(['Imported JSON into editor (click Save to persist).']);
   }
 
+  function doImportAndSaveJson() {
+    const text = String(pasteText ?? '').trim();
+    if (!text) return;
+
+    const parsed = parseTargetWeightsJson(text);
+    if (!parsed.ok) {
+      setIssues([parsed.error]);
+      setWarnings([]);
+      setSaveStatus('error');
+      window.setTimeout(() => setSaveStatus('idle'), 2000);
+      return;
+    }
+
+    try {
+      // Persist directly so the Funds hub rebalance panel picks it up immediately.
+      persistTargetWeightsV1(parsed.value);
+      setRows(
+        parsed.value.map((t) => ({
+          id: String(t.id ?? ''),
+          label: String(t.label ?? ''),
+          targetPct: String(t.targetPct ?? ''),
+        }))
+      );
+      setIssues([]);
+      setWarnings(['Imported JSON and saved to localStorage.']);
+      setSaveStatus('ok');
+      window.setTimeout(() => setSaveStatus('idle'), 1200);
+    } catch {
+      setSaveStatus('error');
+      window.setTimeout(() => setSaveStatus('idle'), 2000);
+    }
+  }
+
   const headline = useMemo(() => {
     const st = loadTargetWeightsStateV1();
     const n = (st.targetWeights ?? []).length;
@@ -300,15 +333,18 @@ export default function DaaTargetWeightsEditorV0() {
             <textarea
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
-              placeholder='Paste {"SPY":0.6,"TLT":0.4} or [{"id":"SPY","label":"SPY","targetPct":0.6}, ...]'
+              placeholder='Paste {"SPY":0.6,"TLT":0.4} or [{"id":"SPY","label":"SPY","targetPct":0.6}, ...] or {"money_plan":{"allocations":[...]}}'
               style={{ width: '100%', minHeight: 120, fontFamily: 'ui-monospace, SFMono-Regular', fontSize: 12 }}
             />
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" onClick={doImportJson} style={{ padding: '6px 10px' }}>
                 Load JSON → editor
               </button>
+              <button type="button" className="button" onClick={doImportAndSaveJson} style={{ padding: '6px 10px' }}>
+                Import & Save
+              </button>
               <span className="muted" style={{ fontSize: 12 }}>
-                This does not persist until you click Save.
+                Import & Save persists immediately (recommended for the Funds hub rebalance flow).
               </span>
             </div>
           </div>
