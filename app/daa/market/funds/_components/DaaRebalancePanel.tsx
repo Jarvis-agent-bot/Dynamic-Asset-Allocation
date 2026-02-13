@@ -36,6 +36,7 @@ import {
 } from '@/src/daa/rebalanceOrderStatusRunStoreV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { buildRebalancePlanCsvV0 } from '@/src/daa/rebalancePlanCsvV0';
+import { summarizeTradesForConfirmationV0 } from '@/src/daa/tradesSummaryV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -2437,6 +2438,51 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               </button>
             </div>
 
+            <div
+              style={{
+                marginTop: 12,
+                padding: '10px 12px',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 12,
+                background: 'rgba(0,0,0,0.10)',
+              }}
+            >
+              {(() => {
+                const ccy = baseCcy ? ` ${baseCcy}` : '';
+                const s = summarizeTradesForConfirmationV0(preflightPreviewOrders, { topN: 8 });
+                const w = preflightPreviewWhatIf;
+
+                const bits: string[] = [];
+                bits.push(`orders=${s.orderCount}`);
+                bits.push(`trades=${s.tradeCount} (buy=${s.buyCount}; sell=${s.sellCount})`);
+                if (Number.isFinite(s.buyNotional)) bits.push(`buy≈${s.buyNotional.toFixed(2)}${ccy}`);
+                if (Number.isFinite(s.sellNotional)) bits.push(`sell≈${s.sellNotional.toFixed(2)}${ccy}`);
+                if (Number.isFinite(s.netNotional)) bits.push(`net≈${s.netNotional.toFixed(2)}${ccy}`);
+                if (w && Number.isFinite(w.costTotal)) bits.push(`cost≈${w.costTotal.toFixed(2)}${ccy}`);
+
+                return (
+                  <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
+                    <div>
+                      Preview: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{bits.join('; ')}</span>
+                    </div>
+
+                    {s.topTrades.length ? (
+                      <details style={{ marginTop: 8 }}>
+                        <summary style={{ cursor: 'pointer' }}>Trades summary (largest first)</summary>
+                        <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                          {s.topTrades.map((t, idx) => (
+                            <div key={`${t.symbol}-${idx}`} style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>
+                              {t.side} {t.symbol} {t.notional.toFixed(2)}{ccy}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                );
+              })()}
+            </div>
+
             <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
                 <div>
@@ -2705,11 +2751,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 const scheduleEnabled = loadRebalanceScheduleStateV1().schedule.enabled;
                 const ccy = baseCcy ? ` ${baseCcy}` : '';
 
-                const n = safetyStopPreviewOrders.length;
+                const s = summarizeTradesForConfirmationV0(safetyStopPreviewOrders, { topN: 8 });
                 const w = safetyStopPreviewWhatIf;
 
                 const bits: string[] = [];
-                bits.push(`orders=${n}`);
+                bits.push(`orders=${s.orderCount}`);
+                bits.push(`trades=${s.tradeCount} (buy=${s.buyCount}; sell=${s.sellCount})`);
+                if (Number.isFinite(s.buyNotional)) bits.push(`buy≈${s.buyNotional.toFixed(2)}${ccy}`);
+                if (Number.isFinite(s.sellNotional)) bits.push(`sell≈${s.sellNotional.toFixed(2)}${ccy}`);
+                if (Number.isFinite(s.netNotional)) bits.push(`net≈${s.netNotional.toFixed(2)}${ccy}`);
                 if (w && Number.isFinite(w.turnoverNotional)) bits.push(`turnover≈${w.turnoverNotional.toFixed(2)}${ccy}`);
                 if (w && Number.isFinite(w.costTotal)) bits.push(`cost≈${w.costTotal.toFixed(2)}${ccy}`);
 
@@ -2718,7 +2768,21 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     <div>
                       Preview: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{bits.join('; ')}</span>
                     </div>
-                    <div>
+
+                    {s.topTrades.length ? (
+                      <details style={{ marginTop: 8 }}>
+                        <summary style={{ cursor: 'pointer' }}>Trades summary (largest first)</summary>
+                        <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                          {s.topTrades.map((t, idx) => (
+                            <div key={`${t.symbol}-${idx}`} style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>
+                              {t.side} {t.symbol} {t.notional.toFixed(2)}{ccy}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+
+                    <div style={{ marginTop: 8 }}>
                       Dynamic schedule: <b>{scheduleEnabled ? 'enabled' : 'disabled'}</b>
                     </div>
                     <div>
