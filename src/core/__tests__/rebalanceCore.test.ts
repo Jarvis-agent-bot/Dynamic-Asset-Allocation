@@ -111,6 +111,7 @@ describe("rebalanceCore", () => {
     expect(res.orders).toEqual([]);
     expect(res.trigger.shouldRebalance).toBe(false);
     expect(res.trigger.reasons.join("\n")).toMatch(/minTradeNotional:/);
+    expect(res.warnings.join("\n")).toMatch(/blocks all trades/i);
   });
 
   it("respects cooldownSeconds when lastRebalanceAt is recent", () => {
