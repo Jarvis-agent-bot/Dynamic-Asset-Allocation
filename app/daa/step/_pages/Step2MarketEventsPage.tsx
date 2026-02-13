@@ -397,6 +397,11 @@ export default function Step2MarketEventsPage() {
       // Convert twitterdata's nested timeline payload into a stable JSON array.
       const payload = j?.payload;
       const normalized = extractTwitterdataTweets(payload);
+      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
+      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
+      setTagIssues([]);
+
 
       setTwitterText((prev) => {
         const prevArr = safeParseJsonArray(prev);
@@ -404,7 +409,7 @@ export default function Step2MarketEventsPage() {
         return pretty(merged);
       });
 
-      setFetchState(`twitter list fetched: ${normalized.length} (extracted + merged)`);
+      setFetchState(`twitter list fetched: ${normalized.length} -> ${ingestR.events.length} events (auto-ingested)`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter list fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -437,6 +442,11 @@ export default function Step2MarketEventsPage() {
       if (nextCursor) setTwitterCommunityCursor(nextCursor);
 
       const normalized = extractTwitterdataTweets(payload);
+      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
+      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
+      setTagIssues([]);
+
 
       setTwitterText((prev) => {
         const prevArr = safeParseJsonArray(prev);
@@ -444,7 +454,7 @@ export default function Step2MarketEventsPage() {
         return pretty(merged);
       });
 
-      setFetchState(`twitter community fetched: ${normalized.length}${nextCursor ? " (cursor updated)" : ""}`);
+      setFetchState(`twitter community fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter community fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -503,6 +513,11 @@ export default function Step2MarketEventsPage() {
       if (nextCursor) setTwitterUserCursor(nextCursor);
 
       const normalized = extractTwitterdataTweets(payload);
+      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
+      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
+      setTagIssues([]);
+
       setTwitterText((prev) => {
         const prevArr = safeParseJsonArray(prev);
         const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
@@ -510,7 +525,7 @@ export default function Step2MarketEventsPage() {
       });
 
       setFetchState(
-        `twitter user ${includeReplies ? "tweets+replies" : "tweets"} fetched: ${normalized.length}${nextCursor ? " (cursor updated)" : ""}`,
+        `twitter user ${includeReplies ? "tweets+replies" : "tweets"} fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`,
       );
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
@@ -544,13 +559,18 @@ export default function Step2MarketEventsPage() {
       if (nextCursor) setTwitterSearchCursor(nextCursor);
 
       const normalized = extractTwitterdataTweets(payload);
+      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
+      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
+      setTagIssues([]);
+
       setTwitterText((prev) => {
         const prevArr = safeParseJsonArray(prev);
         const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
         return pretty(merged);
       });
 
-      setFetchState(`twitter search fetched: ${normalized.length}${nextCursor ? " (cursor updated)" : ""}`);
+      setFetchState(`twitter search fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter search failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -575,9 +595,14 @@ export default function Step2MarketEventsPage() {
           summary: it?.summary,
         };
       });
+      const ingestR = normalizeYahooFinanceNewsInput(JSON.stringify(arr));
+      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+      setIngestIssues(ingestR.issues.map((x) => `yfinance: ${x}`));
+      setTagIssues([]);
+
 
       setYfinanceText(pretty(arr));
-      setFetchState(`yahoo rss fetched: ${arr.length}`);
+      setFetchState(`yahoo rss fetched: ${arr.length} -> ${ingestR.events.length} events (auto-ingested)`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`yahoo rss fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -607,9 +632,14 @@ export default function Step2MarketEventsPage() {
           },
         ],
       };
+      const ingestR = normalizeXueqiuNewsInput(JSON.stringify(wrapped));
+      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+      setIngestIssues(ingestR.issues.map((x) => `xueqiu: ${x}`));
+      setTagIssues([]);
+
 
       setXueqiuText(pretty(wrapped));
-      setFetchState("xueqiu quote fetched: 1");
+      setFetchState(`xueqiu quote fetched: 1 -> ${ingestR.events.length} events (auto-ingested)`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`xueqiu quote fetch failed: ${e instanceof Error ? e.message : String(e)}`);
