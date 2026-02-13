@@ -12,6 +12,7 @@ import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } fro
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
+import { rebalanceCore, type RebalanceCoreRequest, type RebalanceCoreResponse } from '@/src/core/rebalanceCore';
 import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from '@/src/core/backtestDriftRebalance';
 import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
 import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
@@ -860,10 +861,82 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     };
   }, [currentWeights, driftThresholdPct, portfolioCash, rebalancePolicy, rebalanceTableRows]);
 
+  const corePreview = useMemo((): { req: RebalanceCoreRequest; resp: RebalanceCoreResponse } | null => {
+    // Keep the "recompute" preview path consistent with the actual core route:
+    // cash buffer (scaled weights) + minTradeNotional lot rounding should match.
+    try {
+      const st = loadPortfolioStateV1();
+
+      const mp: any = moneyPlan as any;
+      const mpConstraints: any = mp?.constraints ?? {};
+
+      const constraints: any = { minNotional: 0.01 };
+      const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
+      const maxIn = toFiniteNumber(mpConstraints?.maxIn);
+      const maxOut = toFiniteNumber(mpConstraints?.maxOut);
+      if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
+      if (maxIn !== null) constraints.maxIn = maxIn;
+      if (maxOut !== null) constraints.maxOut = maxOut;
+
+      const holdingsMap: Record<string, number> = {};
+      for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
+        const sym = String(symRaw ?? '').trim();
+        if (!sym) continue;
+
+        const qty = toFiniteNumber((p as any)?.qty);
+        if (!qty || qty <= 0) continue;
+        holdingsMap[sym] = qty;
+      }
+
+      const byCode = new Map<string, FundLike>();
+      for (const f of funds ?? []) {
+        const code = String(f?.code ?? '').trim();
+        if (code) byCode.set(code, f);
+      }
+
+      const pricesMap: Record<string, number> = {};
+      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsEffective.map((t) => t.id)]);
+      for (const sym of symbols) {
+        const manual = getSnapshotPrice(priceSnapshot, sym);
+        const nav = manual ?? pickFundNav(byCode.get(sym));
+        if (nav && nav > 0) pricesMap[sym] = nav;
+      }
+
+      const basePolicy = loadRebalancePolicyV1();
+      const policy = {
+        ...basePolicy,
+        // What-if: allow users to override drift threshold without persisting it to the policy store.
+        thresholdPct: driftThresholdPct,
+        lastRebalanceAt: st.lastRebalance?.at,
+      };
+
+      const account: any = { cash: st.cash };
+      if (baseCcy) account.baseCcy = baseCcy;
+
+      const req: RebalanceCoreRequest = {
+        account,
+        constraints,
+        policy,
+        holdings: holdingsMap,
+        prices: pricesMap,
+        targetWeights: targetWeightsEffective,
+      };
+
+      return { req, resp: rebalanceCore(req) };
+    } catch {
+      return null;
+    }
+  }, [baseCcy, driftThresholdPct, funds, moneyPlan, priceSnapshot, rev, targetWeightsEffective]);
+
+  const recomputeOrders = useMemo(() => {
+    if (corePreview?.resp) return normalizeOrders(corePreview.resp.orders);
+    return naiveOrders;
+  }, [corePreview, naiveOrders]);
+
   const effectiveOrders = useMemo(() => {
     if (ordersPreviewSourceV0 === 'ENGINE_LAST_RUN') return engineOrders;
-    return naiveOrders;
-  }, [engineOrders, naiveOrders, ordersPreviewSourceV0]);
+    return recomputeOrders;
+  }, [engineOrders, ordersPreviewSourceV0, recomputeOrders]);
 
   const [whatIfFeeBps, setWhatIfFeeBps] = useState(() => {
     if (typeof window === 'undefined') return 0;
@@ -913,25 +986,42 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return out;
   }, [currentWeights]);
 
+  const previewTargetWeightsPre = useMemo(() => {
+    if (ordersPreviewSourceV0 === 'ENGINE_LAST_RUN') return lastRunTargetWeightsPre;
+    return targetWeightsEffective;
+  }, [lastRunTargetWeightsPre, ordersPreviewSourceV0, targetWeightsEffective]);
+
+  const previewTargetWeightsPost = useMemo(() => {
+    if (ordersPreviewSourceV0 === 'ENGINE_LAST_RUN') return lastRunTargetWeightsPost;
+
+    // Core normalizes weights (caps, implicit cash, etc). Use the core output if we have it.
+    if (corePreview?.resp) {
+      const tw = normalizeTargetWeightsAny((corePreview.resp as any).targetWeights);
+      return tw.length ? tw : previewTargetWeightsPre;
+    }
+
+    return previewTargetWeightsPre;
+  }, [corePreview, lastRunTargetWeightsPost, ordersPreviewSourceV0, previewTargetWeightsPre]);
+
   const whatIfTargetWeightsPreBySymbol = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const t of lastRunTargetWeightsPre) out[t.id] = t.targetPct;
+    for (const t of previewTargetWeightsPre) out[t.id] = t.targetPct;
     return out;
-  }, [lastRunTargetWeightsPre]);
+  }, [previewTargetWeightsPre]);
 
   const whatIfTargetWeightsPostBySymbol = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const t of lastRunTargetWeightsPost) out[t.id] = t.targetPct;
+    for (const t of previewTargetWeightsPost) out[t.id] = t.targetPct;
     return out;
-  }, [lastRunTargetWeightsPost]);
+  }, [previewTargetWeightsPost]);
 
   const whatIfLabelsBySymbol = useMemo(() => {
     const out: Record<string, string> = {};
     for (const r of currentWeights) out[r.id] = r.label;
-    for (const t of lastRunTargetWeightsPre) out[t.id] = t.label;
-    for (const t of lastRunTargetWeightsPost) out[t.id] = t.label;
+    for (const t of previewTargetWeightsPre) out[t.id] = t.label;
+    for (const t of previewTargetWeightsPost) out[t.id] = t.label;
     return out;
-  }, [currentWeights, lastRunTargetWeightsPre, lastRunTargetWeightsPost]);
+  }, [currentWeights, previewTargetWeightsPost, previewTargetWeightsPre]);
 
   const whatIf = useMemo(() => {
     if (!effectiveOrders.length) return null;
@@ -999,7 +1089,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   async function doCopyOrders() {
     try {
       const payload = {
-        source: engineOrders.length ? 'engine' : 'naive',
+        source:
+          ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'
+            ? 'core:last-run'
+            : corePreview?.resp
+              ? 'core:recompute'
+              : 'naive:recompute',
         at: new Date().toISOString(),
         orders: effectiveOrders,
       };
@@ -1354,7 +1449,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       }
 
       const pricesMap: Record<string, number> = {};
-      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeights.map((t) => t.id)]);
+      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsEffective.map((t) => t.id)]);
 
       for (const sym of symbols) {
         const manual = getSnapshotPrice(priceSnapshot, sym);
@@ -1503,7 +1598,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             }
           } else {
             // Fallback (shouldn't happen for core): use the request targetWeights.
-            for (const t of targetWeights) {
+            for (const t of targetWeightsEffective) {
               const id = String((t as any)?.id ?? '').trim();
               if (!id) continue;
               const w = toFiniteNumber((t as any)?.targetPct);
@@ -2075,7 +2170,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       onClick={() => setOrdersPreviewSourceV0('RECOMPUTE')}
                       style={{ padding: '4px 8px' }}
                       aria-pressed={ordersPreviewSourceV0 === 'RECOMPUTE'}
-                      title="Recompute orders from current drift vs target using the current threshold"
+                      title="Recompute orders via the core engine using current inputs + threshold"
                     >
                       Recompute
                     </button>
@@ -2095,11 +2190,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     <span className="muted" style={{ fontSize: 11 }}>
                       {ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'
                         ? 'Using saved engine orders; adjust threshold then re-run core to refresh.'
-                        : 'Instant: adjusts with the threshold slider.'}
+                        : 'Computed by core; adjusts with the threshold slider.'}
                     </span>
                   </div>
 
-                  {ordersPreviewSourceV0 === 'RECOMPUTE' && naiveOrdersDiagnostics && naiveOrdersDiagnostics.suppressedCount ? (
+                  {ordersPreviewSourceV0 === 'RECOMPUTE' && !corePreview?.resp && naiveOrdersDiagnostics && naiveOrdersDiagnostics.suppressedCount ? (
                     <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
                       {(() => {
                         const ccy = baseCcy ? ` ${baseCcy}` : '';
@@ -2282,7 +2377,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <div style={{ fontSize: 12 }}>
                   {(() => {
                     const ccy = baseCcy ? ` ${baseCcy}` : '';
-                    const diag = ordersPreviewSourceV0 === 'RECOMPUTE' ? naiveOrdersDiagnostics : null;
+                    const diag = ordersPreviewSourceV0 === 'RECOMPUTE' && !corePreview?.resp ? naiveOrdersDiagnostics : null;
 
                     // If we expected orders (drift exceeds threshold) but none were produced, surface a blocker.
                     if (diag && diag.candidateCount > 0 && diag.producedCount === 0) {

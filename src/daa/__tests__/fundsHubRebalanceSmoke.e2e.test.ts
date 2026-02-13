@@ -92,6 +92,40 @@ describe("funds hub rebalance e2e smoke", () => {
     expect(report.run.response).toEqual(resp);
   });
 
+  it("keeps cash buffer + lot rounding internally consistent", () => {
+    // Model a cash buffer by making target weights sum to < 1, and ensure the core's
+    // minTradeNotional (lot-step) rounding doesn't break the implied cash target.
+    const req = {
+      account: { cash: 90 },
+      holdings: { AAA: 10 },
+      prices: { AAA: 11, BBB: 10 },
+      // Sum=0.666 => ~33.4% implicit cash buffer.
+      targetWeights: {
+        AAA: 0.333,
+        BBB: 0.333,
+      },
+      constraints: { maxIn: 1e9, maxOut: 1e9, minNotional: 0.01 },
+      policy: { thresholdPct: 0, minTradeNotional: 10, cooldownSeconds: 0 },
+    };
+
+    expect(isRebalanceCoreRequest(req)).toBe(true);
+
+    const resp = rebalanceCore(req);
+    expect(resp.trigger.shouldRebalance).toBe(true);
+
+    const step = 10;
+    for (const o of resp.orders) {
+      const q = o.notional / step;
+      expect(Math.abs(q - Math.round(q))).toBeLessThan(1e-9);
+    }
+
+    const equity = resp.explain.equity;
+    const desiredCash = equity * Math.max(0, 1 - resp.explain.targetSumFinal);
+
+    // Rounding can move us off the perfect target by up to 1 lot step.
+    expect(Math.abs(resp.explain.cashEnd - desiredCash)).toBeLessThanOrEqual(step + 1e-6);
+  });
+
   it("updates suggested orders when prices drift between runs", () => {
     const storage = new MemoryStorage();
 
