@@ -11,6 +11,7 @@ export type RebalanceOrder = {
 
 export type RebalanceLogEntryV0 = {
   id: string;
+  runId?: string;
   at: string; // ISO timestamp
   kind: "rebalance";
   source: RebalanceLogSource;
@@ -69,6 +70,7 @@ function normalizeEntry(x: unknown): RebalanceLogEntryV0 | null {
   if (!id || !at || !kind || !src) return null;
 
   const orders = normalizeOrders(e?.orders);
+  const runId = typeof e.runId === "string" && e.runId.trim() ? e.runId.trim() : undefined;
 
   const out: RebalanceLogEntryV0 = {
     id,
@@ -78,6 +80,7 @@ function normalizeEntry(x: unknown): RebalanceLogEntryV0 | null {
     orders,
   };
 
+  if (runId) out.runId = runId;
   if (e.request !== undefined) out.request = e.request;
   if (e.response !== undefined) out.response = e.response;
   if (e.note !== undefined) out.note = String(e.note);
@@ -101,6 +104,7 @@ function extractOrdersFromResponse(resp: unknown): unknown {
 export function appendRebalanceLog(args: {
   storage: Pick<Storage, "getItem" | "setItem"> | null | undefined;
   source: RebalanceLogSource;
+  runId?: string;
   request?: unknown;
   response?: unknown;
   note?: string;
@@ -109,8 +113,11 @@ export function appendRebalanceLog(args: {
 }): { ok: true; entry: RebalanceLogEntryV0; log: RebalanceLogEntryV0[] } | { ok: false; error: string } {
   if (!args.storage) return { ok: false, error: "missing storage" };
 
+  const runId = typeof args.runId === "string" && args.runId.trim() ? args.runId.trim() : undefined;
+
   const entry: RebalanceLogEntryV0 = {
     id: makeId(),
+    runId,
     at: typeof args.at === "string" && args.at ? args.at : nowIso(),
     kind: "rebalance",
     source: args.source,

@@ -1639,6 +1639,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const r = exec.executeOrders({
         storage: window.localStorage,
         source: 'rebalance-core',
+        runId: statusRunId ?? undefined,
         orders,
         note: runNote,
       });
@@ -1757,7 +1758,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunHealthcheck({ expected: expectedSummary, actual: actualSummary, pass, notes });
 
       // Record the latest run in the portfolio store so cooldown debouncing can work.
-      recordPortfolioLastRebalance({ kind: 'core', request: req, response: respValue, logNote: runNote });
+      recordPortfolioLastRebalance({ kind: 'core', runId: statusRunId ?? undefined, request: req, response: respValue, logNote: runNote });
     } catch (e) {
       const isAbort =
         typeof e === 'object' &&

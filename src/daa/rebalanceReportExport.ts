@@ -67,7 +67,14 @@ export function buildLatestRebalanceRunReportV1(storage: Pick<Storage, "getItem"
 
   const executionLog = loadPaperExecutionLog(storage);
   const execPaperOnly = executionLog.filter((e) => e.note === PAPER_RUN_NOTE);
-  const paperExecutionLogEntry = pickLatestByAt(execPaperOnly.length ? execPaperOnly : executionLog);
+  const execCandidates = execPaperOnly.length ? execPaperOnly : executionLog;
+
+  // When available, use runId to pair the plan (rebalanceLog) with its execution snapshot.
+  const runId = rebalanceLogEntry?.runId;
+  const paperExecutionLogEntryByRunId = runId ? pickLatestByAt(execCandidates.filter((e) => e.runId === runId)) : null;
+  const paperExecutionLogEntry = paperExecutionLogEntryByRunId ?? pickLatestByAt(execCandidates);
+
+  if (runId && !paperExecutionLogEntryByRunId) notes.push(`missing paperExecutionLog entry for runId=${runId}`);
 
   // Prefer request/response attached to the rebalance log entry (it should be the source of truth for the run).
   const request = rebalanceLogEntry?.request !== undefined ? rebalanceLogEntry.request : safeJsonParse(storage?.getItem(LS_REBALANCE_REQUEST) ?? null);

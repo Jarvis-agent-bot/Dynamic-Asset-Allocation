@@ -5,6 +5,7 @@ export type ExecutionAdapterKindV0 = "paper" | "real";
 export type ExecuteOrdersArgsV0 = {
   storage: Pick<Storage, "getItem" | "setItem"> | null | undefined;
   source: PaperExecutionLogEntryV0["source"];
+  runId?: string;
   orders: unknown;
   note?: string;
   at?: string;
@@ -26,6 +27,7 @@ export function makePaperExecutionAdapterV0(): ExecutionAdapterV0 {
       const r = appendPaperExecutionLog({
         storage: args.storage,
         source: args.source,
+        runId: args.runId,
         orders: args.orders,
         note: args.note,
         at: args.at,

@@ -2,8 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { loadPaperExecutionLog, type PaperExecutionLogEntryV0 } from '@/src/daa/executionLogStore';
 import { buildLatestRebalanceRunReportV1 } from '@/src/daa/rebalanceReportExport';
 import { loadRebalanceLog, type RebalanceLogEntryV0 } from '@/src/daa/rebalanceLogStore';
+import {
+  loadRebalanceOrderStatusRunHistoryV0,
+  type RebalanceOrderStatusRunV0,
+} from '@/src/daa/rebalanceOrderStatusRunStoreV0';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { WIZARD_DATA_EVENT, pretty } from '../../../wizardStorage';
@@ -128,6 +133,48 @@ export default function DaaRebalanceLogViewV0() {
   }, []);
 
   const all = useMemo(() => (typeof window === 'undefined' ? [] : loadRebalanceLog(window.localStorage)), [rev]);
+  const allExec = useMemo(() => (typeof window === 'undefined' ? [] : loadPaperExecutionLog(window.localStorage)), [rev]);
+  const statusHistory = useMemo(() => (typeof window === 'undefined' ? [] : loadRebalanceOrderStatusRunHistoryV0(window.localStorage)), [rev]);
+
+  const execByRunId = useMemo(() => {
+    const m = new Map<string, PaperExecutionLogEntryV0>();
+    const bestMs = new Map<string, number>();
+
+    for (const e of allExec) {
+      const runId = typeof e?.runId === 'string' && e.runId ? e.runId : null;
+      if (!runId) continue;
+      const ms = Date.parse(String(e.at ?? ''));
+      if (!Number.isFinite(ms)) continue;
+
+      const prev = bestMs.get(runId);
+      if (prev === undefined || ms >= prev) {
+        bestMs.set(runId, ms);
+        m.set(runId, e);
+      }
+    }
+
+    return m;
+  }, [allExec]);
+
+  const statusByRunId = useMemo(() => {
+    const m = new Map<string, RebalanceOrderStatusRunV0>();
+    const bestMs = new Map<string, number>();
+
+    for (const r of statusHistory) {
+      const runId = typeof r?.runId === 'string' && r.runId ? r.runId : null;
+      if (!runId) continue;
+      const ms = Date.parse(String(r.updatedAt ?? ''));
+      if (!Number.isFinite(ms)) continue;
+
+      const prev = bestMs.get(runId);
+      if (prev === undefined || ms >= prev) {
+        bestMs.set(runId, ms);
+        m.set(runId, r);
+      }
+    }
+
+    return m;
+  }, [statusHistory]);
 
   const filtered = useMemo(() => {
     if (showAllSources) return all;
@@ -251,6 +298,15 @@ export default function DaaRebalanceLogViewV0() {
             const { rows: weightRows, equity } = extractWeightRows(e.response);
             const topWeights = weightRows.slice(0, 8);
 
+            const runId = typeof e.runId === 'string' && e.runId ? e.runId : null;
+            const execEntry = runId ? execByRunId.get(runId) ?? null : null;
+            const statusRun = runId ? statusByRunId.get(runId) ?? null : null;
+
+            const execOrders = execEntry?.orders ?? [];
+            const statusOrders = statusRun?.orders ?? [];
+            const filledCount = statusOrders.filter((o) => o.status === 'filled').length;
+            const failedCount = statusOrders.filter((o) => o.status === 'failed').length;
+
             const isOpen = !!expanded[e.id];
             const badgeBg = should ? '#0a7' : '#666';
 
@@ -268,10 +324,20 @@ export default function DaaRebalanceLogViewV0() {
                       </span>
                     ) : null}
                     <span className="muted" style={{ fontSize: 12 }}>
-                      orders: <b>{orders.length}</b>
+                      orders: <b>{orders.length}</b> · exec: <b>{execOrders.length}</b>
+                      {statusRun ? (
+                        <>
+                          {' '}· status: <b>{statusRun.state}</b> (filled <b>{filledCount}</b>, failed <b>{failedCount}</b>)
+                        </>
+                      ) : null}
                       {equity ? (
                         <>
                           {' '}· equity: <b>{equity.toFixed(2)}</b>
+                        </>
+                      ) : null}
+                      {runId ? (
+                        <>
+                          {' '}· runId: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{runId.slice(0, 8)}</span>
                         </>
                       ) : null}
                     </span>
@@ -378,6 +444,114 @@ export default function DaaRebalanceLogViewV0() {
                             Copy orders JSON
                           </button>
                         </div>
+                      </div>
+                    ) : null}
+
+                    {statusRun || execEntry ? (
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Executed trades</div>
+
+                        {runId ? (
+                          <div className="muted" style={{ fontSize: 11, marginBottom: 6, fontFamily: 'ui-monospace, SFMono-Regular' }}>
+                            runId={runId}
+                          </div>
+                        ) : null}
+
+                        {statusRun ? (
+                          <>
+                            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
+                              state=<b>{statusRun.state}</b> · phase={statusRun.phase}
+                              {statusRun.message ? (
+                                <>
+                                  {' '}· {statusRun.message}
+                                </>
+                              ) : null}
+                              {statusRun.error ? (
+                                <>
+                                  {' '}· <span style={{ color: 'var(--danger)' }}>error: {statusRun.error}</span>
+                                </>
+                              ) : null}
+                            </div>
+
+                            {statusOrders.length ? (
+                              <div style={{ overflowX: 'auto' as const }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                  <thead>
+                                    <tr>
+                                      <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>#</th>
+                                      <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Symbol</th>
+                                      <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Side</th>
+                                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Notional</th>
+                                      <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Status</th>
+                                      <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Detail</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {statusOrders.map((o) => (
+                                      <tr key={o.id} style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                        <td style={{ padding: '6px 0', fontFamily: 'ui-monospace, SFMono-Regular' }}>{o.id}</td>
+                                        <td style={{ padding: '6px 0' }}>{o.symbol}</td>
+                                        <td style={{ padding: '6px 0' }}>{o.side}</td>
+                                        <td style={{ padding: '6px 0', textAlign: 'right' }}>{o.notional.toFixed(2)}</td>
+                                        <td style={{ padding: '6px 0' }}>{o.status}</td>
+                                        <td style={{ padding: '6px 0' }} className="muted">
+                                          {o.detail ?? ''}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="muted" style={{ fontSize: 11 }}>
+                                No orders recorded in status snapshot.
+                              </div>
+                            )}
+
+                            <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                              <button type="button" className="button secondary" onClick={() => copyJson(pretty(statusRun))} style={{ padding: '6px 10px' }}>
+                                Copy status JSON
+                              </button>
+                            </div>
+                          </>
+                        ) : execEntry && execOrders.length ? (
+                          <>
+                            <div className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
+                              executionLog: source={execEntry.source}
+                            </div>
+
+                            <div style={{ overflowX: 'auto' as const }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Symbol</th>
+                                    <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Side</th>
+                                    <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Notional</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {execOrders.map((o, idx) => (
+                                    <tr key={`${o.symbol}-${idx}`} style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                      <td style={{ padding: '6px 0' }}>{o.symbol}</td>
+                                      <td style={{ padding: '6px 0' }}>{o.side}</td>
+                                      <td style={{ padding: '6px 0', textAlign: 'right' }}>{o.notional.toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                              <button type="button" className="button secondary" onClick={() => copyJson(pretty(execEntry))} style={{ padding: '6px 10px' }}>
+                                Copy execution JSON
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="muted" style={{ fontSize: 11 }}>
+                            No execution snapshot recorded.
+                          </div>
+                        )}
                       </div>
                     ) : null}
 

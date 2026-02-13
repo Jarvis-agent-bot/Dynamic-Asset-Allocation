@@ -1,6 +1,7 @@
 import type { ExecutionOrder } from "./executionLogStore";
 
 export const LS_REBALANCE_ORDER_STATUS_RUN_V0 = "daa.rebalance.orderStatus.run.v0";
+export const LS_REBALANCE_ORDER_STATUS_RUN_HISTORY_V0 = "daa.rebalance.orderStatus.run.history.v0";
 
 export type OrderStatusV0 = "queued" | "submitted" | "filled" | "failed";
 
@@ -140,6 +141,46 @@ export function clearRebalanceOrderStatusRunV0(storage: Pick<Storage, "setItem">
   }
 }
 
+export function loadRebalanceOrderStatusRunHistoryV0(
+  storage: Pick<Storage, "getItem"> | null | undefined,
+): RebalanceOrderStatusRunV0[] {
+  if (!storage) return [];
+  const raw = safeJsonParse(storage.getItem(LS_REBALANCE_ORDER_STATUS_RUN_HISTORY_V0));
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeRunV0).filter((r): r is RebalanceOrderStatusRunV0 => !!r);
+}
+
+export function upsertRebalanceOrderStatusRunHistoryV0(args: {
+  storage: Pick<Storage, "getItem" | "setItem"> | null | undefined;
+  run: RebalanceOrderStatusRunV0;
+  maxEntries?: number;
+}): { ok: true; history: RebalanceOrderStatusRunV0[] } | { ok: false; error: string } {
+  if (!args.storage) return { ok: false, error: "missing storage" };
+
+  const prev = loadRebalanceOrderStatusRunHistoryV0(args.storage);
+  const idx = prev.findIndex((r) => r.runId === args.run.runId);
+  const updated = idx >= 0 ? [...prev.slice(0, idx), args.run, ...prev.slice(idx + 1)] : [...prev, args.run];
+
+  const max = Number.isFinite(args.maxEntries) && (args.maxEntries as number) > 0 ? (args.maxEntries as number) : 200;
+  const next = updated.slice(-max);
+
+  try {
+    args.storage.setItem(LS_REBALANCE_ORDER_STATUS_RUN_HISTORY_V0, JSON.stringify(next));
+    return { ok: true, history: next };
+  } catch {
+    return { ok: false, error: "failed to persist rebalance order status run history" };
+  }
+}
+
+export function clearRebalanceOrderStatusRunHistoryV0(storage: Pick<Storage, "setItem"> | null | undefined) {
+  if (!storage) return;
+  try {
+    storage.setItem(LS_REBALANCE_ORDER_STATUS_RUN_HISTORY_V0, JSON.stringify([]));
+  } catch {
+    // ignore
+  }
+}
+
 export function startRebalanceOrderStatusRunV0(args: {
   storage: Pick<Storage, "setItem"> | null | undefined;
   message?: string;
@@ -268,6 +309,10 @@ export function finishRebalanceOrderStatusRunV0(args: {
 
   const saved = saveRebalanceOrderStatusRunV0(args.storage, run);
   if (!saved.ok) return saved;
+
+  // Best-effort: keep a rolling history so runs can be inspected after the snapshot is cleared.
+  upsertRebalanceOrderStatusRunHistoryV0({ storage: args.storage, run });
+
   return { ok: true, run };
 }
 
@@ -294,5 +339,9 @@ export function failRebalanceOrderStatusRunV0(args: {
 
   const saved = saveRebalanceOrderStatusRunV0(args.storage, run);
   if (!saved.ok) return saved;
+
+  // Best-effort: keep a rolling history so runs can be inspected after the snapshot is cleared.
+  upsertRebalanceOrderStatusRunHistoryV0({ storage: args.storage, run });
+
   return { ok: true, run };
 }

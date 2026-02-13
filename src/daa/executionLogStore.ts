@@ -11,6 +11,7 @@ export type ExecutionOrder = {
 
 export type PaperExecutionLogEntryV0 = {
   id: string;
+  runId?: string;
   at: string; // ISO timestamp
   kind: "paper";
   source: "rebalance-simulate" | "rebalance-core";
@@ -68,9 +69,10 @@ function normalizeEntries(x: unknown): PaperExecutionLogEntryV0[] {
       const src = e?.source === "rebalance-core" || e?.source === "rebalance-simulate" ? e.source : null;
       const orders = normalizeOrders(e?.orders);
       const note = e?.note === undefined ? undefined : String(e.note);
+      const runId = typeof e?.runId === "string" && e.runId.trim() ? e.runId.trim() : undefined;
 
       if (!id || !at || !kind || !src) return null;
-      return { id, at, kind, source: src, orders, note } as PaperExecutionLogEntryV0;
+      return { id, runId, at, kind, source: src, orders, note } as PaperExecutionLogEntryV0;
     })
     .filter((e): e is PaperExecutionLogEntryV0 => !!e);
 }
@@ -84,6 +86,7 @@ export function loadPaperExecutionLog(storage: Pick<Storage, "getItem"> | null |
 export function appendPaperExecutionLog(args: {
   storage: Pick<Storage, "getItem" | "setItem"> | null | undefined;
   source: PaperExecutionLogEntryV0["source"];
+  runId?: string;
   orders: unknown;
   note?: string;
   at?: string;
@@ -94,8 +97,11 @@ export function appendPaperExecutionLog(args: {
   const orders = normalizeOrders(args.orders);
   if (!orders.length) return { ok: false, error: "no valid orders" };
 
+  const runId = typeof args.runId === "string" && args.runId.trim() ? args.runId.trim() : undefined;
+
   const entry: PaperExecutionLogEntryV0 = {
     id: makeId(),
+    runId,
     at: typeof args.at === "string" && args.at ? args.at : nowIso(),
     kind: "paper",
     source: args.source,
