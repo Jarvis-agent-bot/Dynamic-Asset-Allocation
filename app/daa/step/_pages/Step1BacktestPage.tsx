@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { backtestSingleAsset, rankBacktestResults, type RankedBacktestResult } from "../../../../src/core/backtest";
 import { recommendEnsembleWeightsFromRankedResults } from "../../../../src/core/recommendEnsembleWeights";
-import { fetchValidatedPriceSeriesEnforcingRange, createDeterministicMockPriceSeriesProvider } from "../../../../src/core/providers";
+import {
+  createDeterministicMockPriceSeriesProvider,
+  createOkxPublicPriceSeriesProvider,
+  fetchValidatedPriceSeriesEnforcingRange,
+} from "../../../../src/core/providers";
 import { buyAndHold, smaCrossover } from "../../../../src/core/strategies";
 
 import { LS_STEP1_BACKTEST, saveJsonToLs } from "../../wizardStorage";
@@ -31,6 +35,7 @@ function jsonPretty(x: unknown) {
 }
 
 export default function Step1BacktestPage() {
+  const [dataSource, setDataSource] = useState<"mock" | "okx">("mock");
   const [symbol, setSymbol] = useState("SPY");
   const [start, setStart] = useState("2026-01-01");
   const [end, setEnd] = useState("2026-02-01");
@@ -49,8 +54,7 @@ export default function Step1BacktestPage() {
   const [series, setSeries] = useState<Array<{ date: string; close: number }>>([]);
   const [seriesError, setSeriesError] = useState<string | null>(null);
 
-  // v0: deterministic mock provider (framework v0) so the UI can ship before
-  // market-data ingestion exists.
+  // v0: support both a deterministic mock series and a real OKX (public) candle fetch.
   useEffect(() => {
     let cancelled = false;
 
@@ -58,9 +62,11 @@ export default function Step1BacktestPage() {
       setSeriesError(null);
 
       try {
-        const provider = createDeterministicMockPriceSeriesProvider({ maxDays: 200 });
+        const provider =
+          dataSource === "okx" ? createOkxPublicPriceSeriesProvider({ bar: "1D" }) : createDeterministicMockPriceSeriesProvider({ maxDays: 200 });
+
         const next = await fetchValidatedPriceSeriesEnforcingRange(provider, {
-          symbol: String(symbol || "").toUpperCase(),
+          symbol: String(symbol || "").trim().toUpperCase(),
           start,
           end,
         });
@@ -84,7 +90,7 @@ export default function Step1BacktestPage() {
     return () => {
       cancelled = true;
     };
-  }, [symbol, start, end, validationError]);
+  }, [dataSource, symbol, start, end, validationError]);
 
   const strategies = useMemo(() => {
     return [buyAndHold(), smaCrossover({ fast: 3, slow: 10 })];
@@ -140,7 +146,7 @@ export default function Step1BacktestPage() {
     <main>
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 1 — 回测算法组合</h1>
       <p style={{ color: "#444" }}>
-        v0：先用 mock 价格序列把页面交互、结果结构、可复制 JSON 做出来；后续再接入市场数据（Twitter/雪球/yfinance）。
+        v0：支持 mock 价格序列（快速回归）+ OKX public candles（crypto，server-side 拉取并标准化成 PriceBar[]）。
       </p>
 
       <form
@@ -149,13 +155,28 @@ export default function Step1BacktestPage() {
           run();
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>Data</span>
+            <select
+              value={dataSource}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDataSource(v === "okx" ? "okx" : "mock");
+              }}
+              style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6, background: "#fff" }}
+            >
+              <option value="mock">Mock (deterministic)</option>
+              <option value="okx">OKX (public, 1D candles)</option>
+            </select>
+          </label>
+
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, color: "#666" }}>Symbol</span>
             <input
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              placeholder="e.g. SPY"
+              placeholder={dataSource === "okx" ? "e.g. BTC-USDT" : "e.g. SPY"}
               style={{ padding: 8, border: "1px solid #ddd", borderRadius: 6 }}
             />
           </label>
@@ -201,7 +222,12 @@ export default function Step1BacktestPage() {
       </form>
 
       <div style={{ marginTop: 10, fontSize: 12, color: series.length ? "#555" : "#b00020" }} aria-live="polite">
-        Mock series: {series.length} points (capped at 200 days) — {start} → {end}
+        Series ({dataSource}): {series.length} points — {start} → {end}
+        {dataSource === "mock" ? (
+          <span style={{ marginLeft: 6 }}>(capped at 200 days)</span>
+        ) : (
+          <span style={{ marginLeft: 6 }}>(OKX: best-effort; may truncate to recent bars)</span>
+        )}
         {seriesError ? <span style={{ marginLeft: 8 }}>({seriesError})</span> : null}
       </div>
 
