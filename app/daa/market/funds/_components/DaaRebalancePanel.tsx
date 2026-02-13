@@ -1594,6 +1594,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             feeBps: whatIfFeeBps,
             slippageBps: whatIfSlippageBpsUsed,
             labelsBySymbol: whatIfLabelsBySymbol,
+            pricesBySymbol: pricesMap,
           });
         } catch {
           return null;
@@ -1796,6 +1797,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             feeBps: whatIfFeeBps,
             slippageBps: whatIfSlippageBpsUsed,
             labelsBySymbol,
+            pricesBySymbol: pricesMap,
           });
         } catch {
           return null;
@@ -2101,6 +2103,75 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 {paperRunPostSummary?.warnings?.length ? (
                   <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
                     What-if warnings: {paperRunPostSummary.warnings.slice(0, 2).join('; ')}
+                  </div>
+                ) : null}
+
+                {paperRunPostSummary?.orderBreakdownRowsV0?.length ? (
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 12 }}>Asset-level order breakdown (qty + est fee/slippage)</div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                      qty≈notional/price; BUY uses (notional - fee - slippage)/price. fee/slippage are estimated from the what-if bps.
+                    </div>
+
+                    {(() => {
+                      const rows = paperRunPostSummary.orderBreakdownRowsV0;
+                      const feeTotal = rows.reduce((acc, r) => acc + (Number.isFinite(r.feeEst) ? r.feeEst : 0), 0);
+                      const slippageTotal = rows.reduce((acc, r) => acc + (Number.isFinite(r.slippageEst) ? r.slippageEst : 0), 0);
+                      const costTotal = rows.reduce((acc, r) => acc + (Number.isFinite(r.costEst) ? r.costEst : 0), 0);
+                      const ccy = baseCcy ? ` ${baseCcy}` : '';
+
+                      return (
+                        <>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                            est fee≈<b>{feeTotal.toFixed(2)}</b>{ccy} · est slippage≈<b>{slippageTotal.toFixed(2)}</b>{ccy} · est totalCost≈<b>{costTotal.toFixed(2)}</b>{ccy}
+                          </div>
+
+                          <div style={{ marginTop: 8, overflowX: 'auto' as const }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Asset</th>
+                                  <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Side</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Price</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Notional</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Qty</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Est fee</th>
+                                  <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Est slippage</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map((r) => {
+                                  const sideColor = r.side === 'BUY' ? 'var(--primary)' : 'var(--danger)';
+                                  const qty = r.qty;
+                                  const qtyText = qty === null || !Number.isFinite(qty) ? 'n/a' : qty >= 1 ? qty.toFixed(4) : qty.toFixed(6);
+                                  const priceText = r.price === null || !Number.isFinite(r.price) ? 'n/a' : r.price.toFixed(6);
+
+                                  return (
+                                    <tr key={r.id}>
+                                      <td style={{ padding: '6px 0' }}>
+                                        {r.label} <span className="muted">({r.symbol})</span>
+                                      </td>
+                                      <td style={{ padding: '6px 0', color: sideColor, fontWeight: 700 }}>{r.side}</td>
+                                      <td style={{ padding: '6px 0', textAlign: 'right' }}>{priceText}</td>
+                                      <td style={{ padding: '6px 0', textAlign: 'right' }}>
+                                        {r.notional.toFixed(2)}{ccy}
+                                      </td>
+                                      <td style={{ padding: '6px 0', textAlign: 'right' }}>{qtyText}</td>
+                                      <td style={{ padding: '6px 0', textAlign: 'right' }}>
+                                        {r.feeEst.toFixed(2)}{ccy}
+                                      </td>
+                                      <td style={{ padding: '6px 0', textAlign: 'right' }}>
+                                        {r.slippageEst.toFixed(2)}{ccy}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 ) : null}
 
