@@ -8,6 +8,7 @@ import { loadPaperExecutionLog } from "@/src/daa/executionLogStore";
 import { loadRebalanceLog } from "@/src/daa/rebalanceLogStore";
 
 import { loadPortfolioStateV1 } from "./portfolioStateStore";
+import { loadRebalanceScheduleStateV1 } from "./rebalanceScheduleStore";
 
 import {
   LS_HUMAN_PROFILE,
@@ -35,6 +36,9 @@ export type DaaWorkflowExportBundleV1 = {
   portfolio_state: unknown;
   rebalance_log: unknown;
   paper_execution_log: unknown;
+
+  // Optional v0 UI config for dynamic scheduling.
+  rebalance_schedule?: unknown;
 
   meta: {
     tagTaxonomyConfigured: boolean;
@@ -65,6 +69,7 @@ export function useDaaWorkflowExportBundleV1() {
   const portfolioState = useMemo(() => (typeof window === "undefined" ? null : loadPortfolioStateV1()), [rev]);
   const rebalanceLog = useMemo(() => (typeof window === "undefined" ? [] : loadRebalanceLog(window.localStorage)), [rev]);
   const paperExecutionLog = useMemo(() => (typeof window === "undefined" ? [] : loadPaperExecutionLog(window.localStorage)), [rev]);
+  const rebalanceSchedule = useMemo(() => (typeof window === "undefined" ? null : loadRebalanceScheduleStateV1()), [rev]);
 
   const aiExplain = useMemo(() => {
     if (!rebalanceReq || !rebalanceResp) return null;
@@ -94,6 +99,7 @@ export function useDaaWorkflowExportBundleV1() {
       portfolio_state: portfolioState,
       rebalance_log: rebalanceLog,
       paper_execution_log: paperExecutionLog,
+      rebalance_schedule: rebalanceSchedule,
 
       meta: {
         tagTaxonomyConfigured: !!tagTaxonomyRaw,
@@ -104,6 +110,7 @@ export function useDaaWorkflowExportBundleV1() {
       humanProfile,
       marketEvents,
       paperExecutionLog,
+      rebalanceSchedule,
       portfolioState,
       rebalanceLog,
       rebalanceReq,
