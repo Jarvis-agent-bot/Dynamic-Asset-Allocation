@@ -13,6 +13,7 @@ import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
+import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
@@ -753,6 +754,16 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     });
   }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBps, whatIfTargetWeightsPostBySymbol, whatIfValuesBySymbol]);
 
+  const preTradeCashCheck = useMemo(() => {
+    return getPreTradeCashCheckV0({
+      cashStart: portfolioCash,
+      orders: effectiveOrders,
+      feeBps: whatIfFeeBps,
+      slippageBps: whatIfSlippageBps,
+      baseCcy,
+    });
+  }, [baseCcy, effectiveOrders, portfolioCash, whatIfFeeBps, whatIfSlippageBps]);
+
   const whatIfRows = useMemo(() => {
     if (!whatIf) return [] as Array<{
       id: string;
@@ -863,6 +874,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunError('Live execution is not configured yet. Please switch to Dry run.');
       persistExecutionModeV0('paper');
       setPaperRunExecutionMode('paper');
+      return;
+    }
+
+    if (preTradeCashCheck.blocking) {
+      // Conservative UX: treat insufficient settled cash as a pre-trade blocker.
+      setPaperRunError(preTradeCashCheck.message);
       return;
     }
 
@@ -1002,6 +1019,19 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       if (!orders.length) {
         setPaperRunSummary('未返回 orders（未记录）。');
+        return;
+      }
+
+      const coreCashCheck = getPreTradeCashCheckV0({
+        cashStart: st.cash,
+        orders,
+        feeBps: whatIfFeeBps,
+        slippageBps: whatIfSlippageBps,
+        baseCcy: baseCcy || null,
+      });
+
+      if (coreCashCheck.blocking) {
+        setPaperRunError(coreCashCheck.message);
         return;
       }
 
@@ -1223,7 +1253,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   className="button secondary"
                   onClick={runPaperRebalanceCore}
                   style={{ padding: '6px 10px' }}
-                  disabled={paperRunLoading || !targetWeights.length}
+                  disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
+                  title={preTradeCashCheck.blocking ? preTradeCashCheck.message : undefined}
                 >
                   {paperRunLoading ? 'Running...' : executionMode === 'live' ? 'Run rebalance (live)' : 'Run rebalance (dry run)'}
                 </button>
@@ -1258,6 +1289,35 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                 portfolioState.lastRebalance.at:{' '}
                 <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{portfolioLastRebalanceAt}</span>
+              </div>
+            ) : null}
+
+            {effectiveOrders.length ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  border: preTradeCashCheck.blocking ? '1px solid rgba(176, 0, 32, 0.5)' : '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 10,
+                  background: preTradeCashCheck.blocking ? 'rgba(176, 0, 32, 0.08)' : 'rgba(0,0,0,0.10)',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, color: preTradeCashCheck.blocking ? 'var(--danger)' : 'var(--muted)' }}>
+                  Pre-trade cash/settlement check {preTradeCashCheck.blocking ? '(BLOCKED)' : '(ok)'}
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                  cashStart=<b>{preTradeCashCheck.cashStart.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
+                  {' '}· buy=<b>{preTradeCashCheck.buyNotional.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
+                  {' '}· sell=<b>{preTradeCashCheck.sellNotional.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
+                  {' '}· cashAfter≈<b>{preTradeCashCheck.cashAfter.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
+                </div>
+                {preTradeCashCheck.blocking ? (
+                  <div style={{ fontSize: 11, marginTop: 6, color: 'var(--danger)' }}>{preTradeCashCheck.message}</div>
+                ) : (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                    Assumption: sell proceeds may settle later (T+1/T+2), so BUY notional must be covered by starting cash.
+                  </div>
+                )}
               </div>
             ) : null}
 
