@@ -11,6 +11,9 @@ import {
   saveJsonToLs,
 } from "../../wizardStorage";
 import { isValidTagTaxonomy, LS_TAG_TAXONOMY } from "../../tagTaxonomy";
+import { LS_LEGACY_HOLDINGS, LS_PORTFOLIO_STATE, loadLegacyHoldingsFromPortfolioState } from "../../portfolioStateStore";
+import { LS_PAPER_EXECUTION_LOG_V0 } from "@/src/daa/executionLogStore";
+import { LS_REBALANCE_LOG_V0 } from "@/src/daa/rebalanceLogStore";
 
 type DashboardBundleV1 = {
   schemaVersion: 1;
@@ -20,6 +23,12 @@ type DashboardBundleV1 = {
   recommendation: unknown;
   human_profile: unknown;
   tag_taxonomy: unknown;
+
+  // Observability + funds hub integration.
+  portfolio_state?: unknown;
+  rebalance_log?: unknown;
+  paper_execution_log?: unknown;
+
   meta?: unknown;
   ai_explain?: unknown;
 };
@@ -73,6 +82,9 @@ function parseBundle(raw: string): { ok: true; bundle: DashboardBundleV1; warnin
   if (parsed.rebalance_request == null) warnings.push("rebalance_request is null (Step4 inputs may be missing)");
   if (parsed.recommendation == null) warnings.push("recommendation is null (Step4 output may be missing)");
   if (parsed.human_profile == null) warnings.push("human_profile is null (Step6 human factors may be missing)");
+  if (!hasOwn(parsed, "portfolio_state") || parsed.portfolio_state == null) {
+    warnings.push("portfolio_state missing (portfolio holdings/cash may stay unchanged)");
+  }
 
   return { ok: true, bundle: parsed as DashboardBundleV1, warnings };
 }
@@ -98,9 +110,29 @@ export default function DaaDashboardImport() {
     saveJsonToLs(LS_HUMAN_PROFILE, res.bundle.human_profile);
     saveJsonToLs(LS_TAG_TAXONOMY, res.bundle.tag_taxonomy);
 
+    // Funds hub / rebalance E2E: restore portfolio holdings + logs when present in the bundle.
+    if (res.bundle.portfolio_state != null) {
+      saveJsonToLs(LS_PORTFOLIO_STATE, res.bundle.portfolio_state);
+
+      // Keep legacy key in sync so Market/Funds holds state stays consistent with DAA panels.
+      try {
+        saveJsonToLs(LS_LEGACY_HOLDINGS, loadLegacyHoldingsFromPortfolioState());
+      } catch {
+        // ignore
+      }
+    }
+
+    if (res.bundle.rebalance_log != null) {
+      saveJsonToLs(LS_REBALANCE_LOG_V0, res.bundle.rebalance_log);
+    }
+
+    if (res.bundle.paper_execution_log != null) {
+      saveJsonToLs(LS_PAPER_EXECUTION_LOG_V0, res.bundle.paper_execution_log);
+    }
+
     setStatus({
       kind: "success",
-      message: "Import OK. Wizard state restored to localStorage (Step2/4/5/6/7).",
+      message: "Import OK. localStorage restored (Step2/4/5/6/7 + portfolio + logs when present).",
       warnings: res.warnings,
     });
   }
@@ -111,7 +143,7 @@ export default function DaaDashboardImport() {
         <div>
           <div style={{ fontWeight: 800, fontSize: 14 }}>导入（Import bundle）</div>
           <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
-            粘贴从 Dashboard 导出的 JSON，一键恢复 Step2/4/5/6/7 的 localStorage 状态（不会触发任何外部 API 调用）。
+            粘贴从 Dashboard 导出的 JSON，一键恢复 Step2/4/5/6/7 + portfolio state + logs 的 localStorage 状态（不会触发任何外部 API 调用）。
           </div>
         </div>
 

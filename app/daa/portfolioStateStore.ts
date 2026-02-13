@@ -195,6 +195,9 @@ export function persistLegacyHoldingsToPortfolioState(holdings: LegacyHoldings) 
     positions: legacyHoldingsToPositions(holdings),
   };
   savePortfolioStateV1(next);
+
+  // Trigger UI refresh in the same tab (storage events don't fire locally).
+  window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
 }
 
 function extractCashFromRebalanceRequest(req: unknown): number | null {

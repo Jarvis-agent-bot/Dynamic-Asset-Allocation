@@ -9,6 +9,7 @@ import weixinImg from "../../../assets/weixin.png";
 import { DaaRebalancePanel } from "./_components/DaaRebalancePanel";
 
 import { loadLegacyHoldingsFromPortfolioState, persistLegacyHoldingsToPortfolioState } from "../../portfolioStateStore";
+import { WIZARD_DATA_EVENT } from "../../wizardStorage";
 
 function PlusIcon(props: any) {
   return (
@@ -1989,6 +1990,25 @@ const dedupeByCode: any = (list: any) => {
         setHoldings(savedHoldings);
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    // Keep holdings in sync when DAA panels import/restore portfolio state.
+    const refreshHoldings: any = () => {
+      try {
+        const savedHoldings = loadLegacyHoldingsFromPortfolioState();
+        if (savedHoldings && typeof savedHoldings === 'object') {
+          setHoldings(savedHoldings);
+        }
+      } catch {}
+    };
+
+    window.addEventListener(WIZARD_DATA_EVENT, refreshHoldings);
+    window.addEventListener('storage', refreshHoldings);
+    return () => {
+      window.removeEventListener(WIZARD_DATA_EVENT, refreshHoldings);
+      window.removeEventListener('storage', refreshHoldings);
+    };
   }, []);
 
   useEffect(() => {
