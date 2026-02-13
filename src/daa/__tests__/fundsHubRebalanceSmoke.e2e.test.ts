@@ -61,10 +61,12 @@ describe("funds hub rebalance e2e smoke", () => {
 
     const at = "2026-02-12T12:00:00.000Z";
     const note = "ui:market/funds:paper-run";
+    const runId = "rebalance_run_test_1";
 
     const log = appendRebalanceLog({
       storage,
       source: "core",
+      runId,
       request: req,
       response: resp,
       note,
@@ -76,6 +78,7 @@ describe("funds hub rebalance e2e smoke", () => {
     const executed = exec.executeOrders({
       storage,
       source: "rebalance-core",
+      runId,
       orders: resp.orders,
       note,
       at,
@@ -87,6 +90,9 @@ describe("funds hub rebalance e2e smoke", () => {
 
     expect(report.run.rebalanceLogEntry?.note).toBe(note);
     expect(report.run.paperExecutionLogEntry?.note).toBe(note);
+
+    expect(report.run.rebalanceLogEntry?.runId).toBe(runId);
+    expect(report.run.paperExecutionLogEntry?.runId).toBe(runId);
 
     expect(report.run.request).toEqual(req);
     expect(report.run.response).toEqual(resp);
@@ -130,6 +136,8 @@ describe("funds hub rebalance e2e smoke", () => {
     const storage = new MemoryStorage();
 
     const note = "ui:market/funds:paper-run";
+    const runId1 = "rebalance_run_test_drift_1";
+    const runId2 = "rebalance_run_test_drift_2";
 
     const req1 = {
       account: { cash: 0 },
@@ -156,6 +164,7 @@ describe("funds hub rebalance e2e smoke", () => {
     const log1 = appendRebalanceLog({
       storage,
       source: "core",
+      runId: runId1,
       request: req1,
       response: resp1,
       note,
@@ -184,6 +193,7 @@ describe("funds hub rebalance e2e smoke", () => {
     const log2 = appendRebalanceLog({
       storage,
       source: "core",
+      runId: runId2,
       request: req2,
       response: resp2,
       note,
@@ -195,6 +205,7 @@ describe("funds hub rebalance e2e smoke", () => {
     const executed = exec.executeOrders({
       storage,
       source: "rebalance-core",
+      runId: runId2,
       orders: resp2.orders,
       note,
       at: at2,
@@ -205,5 +216,7 @@ describe("funds hub rebalance e2e smoke", () => {
     expect(report.notes).toEqual([]);
     expect(report.run.request).toEqual(req2);
     expect(report.run.response).toEqual(resp2);
+    expect(report.run.rebalanceLogEntry?.runId).toBe(runId2);
+    expect(report.run.paperExecutionLogEntry?.runId).toBe(runId2);
   });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachOrdersToRebalanceRunV0,
   finishRebalanceOrderStatusRunV0,
+  loadRebalanceOrderStatusRunHistoryV0,
   loadRebalanceOrderStatusRunV0,
   startRebalanceOrderStatusRunV0,
   updateRebalanceOrderStatusV0,
@@ -63,6 +64,11 @@ describe("rebalanceOrderStatusRunStoreV0", () => {
     expect(loaded?.runId).toBe(runId);
     expect(loaded?.state).toBe("done");
     expect(loaded?.orders.find((o) => o.id === "1")?.status).toBe("filled");
+
+    const hist = loadRebalanceOrderStatusRunHistoryV0(st);
+    expect(hist).toHaveLength(1);
+    expect(hist[0].runId).toBe(runId);
+    expect(hist[0].state).toBe("done");
   });
 
   it("rejects updates for a stale runId", () => {

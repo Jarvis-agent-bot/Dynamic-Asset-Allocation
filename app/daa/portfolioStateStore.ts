@@ -219,7 +219,13 @@ function extractCashFromRebalanceRequest(req: unknown): number | null {
   return null;
 }
 
-export function recordPortfolioLastRebalance(args: { kind: "simulate" | "core"; request: unknown; response: unknown; logNote?: string }) {
+export function recordPortfolioLastRebalance(args: {
+  kind: "simulate" | "core";
+  runId?: string;
+  request: unknown;
+  response: unknown;
+  logNote?: string;
+}) {
   if (typeof window === "undefined") return;
 
   const st = loadPortfolioStateV1();
@@ -244,6 +250,7 @@ export function recordPortfolioLastRebalance(args: { kind: "simulate" | "core"; 
   appendRebalanceLog({
     storage: window.localStorage,
     source: args.kind,
+    runId: args.runId,
     request: args.request,
     response: args.response,
     note: args.logNote || "portfolio.lastRebalance",
