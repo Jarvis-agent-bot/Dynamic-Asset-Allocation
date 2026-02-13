@@ -2265,6 +2265,53 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     preflightAckCash &&
     (!preRunHasBlockingV0 || preflightOverrideBlockers);
 
+  const preflightPreviewOrders = useMemo(() => {
+    // Preflight should preview the *actual* orders we're about to execute.
+    // For cashSweep we recompute with thresholdPct=0 + cashSweepToTarget enabled.
+    if (!preflightPendingOpts?.cashSweep) return effectiveOrders;
+
+    try {
+      if (!corePreview?.req) return effectiveOrders;
+
+      const reqSweep: RebalanceCoreRequest = {
+        ...corePreview.req,
+        policy: {
+          ...((corePreview.req as any).policy ?? {}),
+          thresholdPct: 0,
+          cashSweepToTarget: true,
+        },
+      };
+
+      return normalizeOrders(rebalanceCore(reqSweep).orders);
+    } catch {
+      return effectiveOrders;
+    }
+  }, [corePreview?.req, effectiveOrders, preflightPendingOpts?.cashSweep]);
+
+  const preflightPreviewWhatIf = useMemo(() => {
+    if (!preflightPreviewOrders.length) return null;
+
+    return simulateRebalanceWhatIfV0({
+      cashStart: toFiniteNumber(portfolioCash) ?? 0,
+      valuesBySymbol: whatIfValuesBySymbol,
+      targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
+      orders: preflightPreviewOrders
+        .filter((o) => o && o.symbol && (o.side === "BUY" || o.side === "SELL") && Number.isFinite(o.notional) && o.notional > 0)
+        .map((o) => ({ symbol: o.symbol, side: o.side as "BUY" | "SELL", notional: o.notional })),
+      feeBps: whatIfFeeBps,
+      slippageBps: whatIfSlippageBpsUsed,
+      labelsBySymbol: whatIfLabelsBySymbol,
+    });
+  }, [
+    portfolioCash,
+    preflightPreviewOrders,
+    whatIfFeeBps,
+    whatIfLabelsBySymbol,
+    whatIfSlippageBpsUsed,
+    whatIfTargetWeightsPostBySymbol,
+    whatIfValuesBySymbol,
+  ]);
+
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
       {preflightOpen ? (
@@ -2395,6 +2442,64 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     {preTradeCashCheck.blocking ? 'BLOCKED' : 'OK'}
                   </span>
                   <button type="button" className="button secondary" onClick={() => closePreflightAndJump('rebalance')} style={{ padding: '6px 10px' }}>
+                    Review
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" as const }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>{preflightPendingOpts?.cashSweep ? "Cash sweep preview" : "Rebalance preview"}</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    {(() => {
+                      const ccy = baseCcy ? ` ${baseCcy}` : "";
+                      const w = preflightPreviewWhatIf;
+                      const n = preflightPreviewOrders.length;
+
+                      if (!n) return "No eligible orders under current inputs.";
+
+                      const bits: string[] = [];
+                      bits.push(`orders=${n}`);
+                      if (w && Number.isFinite(w.turnoverNotional)) bits.push(`turnover≈${w.turnoverNotional.toFixed(2)}${ccy}`);
+                      if (w && Number.isFinite(w.costTotal)) bits.push(`cost≈${w.costTotal.toFixed(2)}${ccy}`);
+                      if (w && Number.isFinite(w.feeTotal) && Number.isFinite(w.slippageTotal))
+                        bits.push(`(fee≈${w.feeTotal.toFixed(2)}${ccy}, slippage≈${w.slippageTotal.toFixed(2)}${ccy})`);
+                      return bits.join("; ");
+                    })()}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {(() => {
+                    const w = preflightPreviewWhatIf;
+                    const n = preflightPreviewOrders.length;
+                    const warn = (w?.warnings?.length ?? 0) > 0;
+                    const status = !n ? "EMPTY" : warn ? "WARN" : "OK";
+                    const bg =
+                      status === "WARN"
+                        ? "rgba(245, 158, 11, 0.20)"
+                        : status === "EMPTY"
+                          ? "rgba(100, 116, 139, 0.12)"
+                          : "rgba(34, 197, 94, 0.18)";
+                    const color = status === "WARN" ? "#f59e0b" : status === "EMPTY" ? "#64748b" : "#22c55e";
+
+                    return (
+                      <span
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: bg,
+                          color,
+                          fontSize: 12,
+                          whiteSpace: "nowrap",
+                        }}
+                        title={warn ? (w?.warnings ?? []).slice(0, 4).join("; ") : undefined}
+                      >
+                        {status}
+                      </span>
+                    );
+                  })()}
+                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump("rebalance")} style={{ padding: "6px 10px" }}>
                     Review
                   </button>
                 </div>
