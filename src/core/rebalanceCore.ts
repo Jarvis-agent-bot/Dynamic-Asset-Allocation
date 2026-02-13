@@ -481,6 +481,36 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   const eligibleNotionalSum = eligibleOrders.reduce((acc, o) => acc + o.notional, 0);
   if (!eligibleOrders.length) reasons.push(`minTradeNotional: no orders >= ${minN}`);
 
+  // UX hint: if the drift threshold is met but the engine produces no eligible orders,
+  // it's usually because minTradeNotional/lot sizing (or caps/cash) suppresses them.
+  if (!eligibleOrders.length && Number.isFinite(minN) && minN > 0 && maxAbsDriftSymbol) {
+    const maxAbsDeltaNotional = Math.abs(toFiniteNumber(deltas[maxAbsDriftSymbol], 0));
+
+    // If even the largest delta is smaller than the min trade size, nothing can be emitted.
+    if (Number.isFinite(maxAbsDeltaNotional) && maxAbsDeltaNotional > 0 && maxAbsDeltaNotional < minN) {
+      warnings.push(
+        `warning: minTradeNotional=${minN.toFixed(2)} blocks all trades; maxAbsDeltaNotional=${maxAbsDeltaNotional.toFixed(2)} (symbol=${maxAbsDriftSymbol}). Consider lowering minTradeNotional or increasing equity/adjusting targets.`
+      );
+    } else {
+      // Otherwise, highlight common blockers.
+      if (buyCandidates.length && cashAfterSells < minN) {
+        warnings.push(
+          `warning: insufficient cash for minTradeNotional=${minN.toFixed(2)}; cashAvail=${cashAfterSells.toFixed(2)}. Consider lowering minTradeNotional or selling overweight assets first.`
+        );
+      }
+      if (buyCandidates.length && Number.isFinite(constraints.maxIn) && constraints.maxIn < minN) {
+        warnings.push(
+          `warning: constraints.maxIn=${constraints.maxIn.toFixed(2)} < minTradeNotional=${minN.toFixed(2)}; BUY orders may be suppressed. Consider raising maxIn or lowering minTradeNotional.`
+        );
+      }
+      if (sellCandidates.length && Number.isFinite(constraints.maxOut) && constraints.maxOut < minN) {
+        warnings.push(
+          `warning: constraints.maxOut=${constraints.maxOut.toFixed(2)} < minTradeNotional=${minN.toFixed(2)}; SELL orders may be suppressed. Consider raising maxOut or lowering minTradeNotional.`
+        );
+      }
+    }
+  }
+
   let cooldownOk = true;
   if (cooldownSeconds > 0) {
     const nowMs = parseIsoMs(now || new Date().toISOString());

@@ -783,6 +783,81 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return out;
   }, [currentWeights, driftThresholdPct, portfolioCash, rebalancePolicy, rebalanceTableRows]);
 
+  const naiveOrdersDiagnostics = useMemo(() => {
+    if (!rebalanceTableRows.length) return null;
+
+    const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
+    if (!Number.isFinite(total) || total <= 0) return null;
+
+    const lotStep = Math.max(0, toFiniteNumber((rebalancePolicy as any)?.minTradeNotional) ?? 0);
+    const minNotional = Math.max(10, total * 0.002, lotStep);
+
+    let candidateCount = 0;
+    let producedCount = 0;
+
+    const suppressed: Array<{
+      id: string;
+      label: string;
+      side: 'BUY' | 'SELL';
+      driftPct: number;
+      rawNotional: number;
+      roundedNotional: number;
+      reason: 'below-min-notional' | 'rounded-to-zero';
+    }> = [];
+
+    for (const r of rebalanceTableRows) {
+      if (driftThresholdPct > 0 && Math.abs(r.deltaPct) < driftThresholdPct) continue;
+
+      const deltaValue = (r.targetPct - r.currentPct) * total;
+      const rawNotional = Math.abs(deltaValue);
+      if (!(Number.isFinite(rawNotional) && rawNotional > 0)) continue;
+
+      candidateCount += 1;
+
+      const roundedNotional = lotStep > 0 ? Math.floor(rawNotional / lotStep + 1e-12) * lotStep : rawNotional;
+
+      if (!(Number.isFinite(roundedNotional) && roundedNotional > 0)) {
+        suppressed.push({
+          id: r.id,
+          label: r.label,
+          side: deltaValue > 0 ? 'BUY' : 'SELL',
+          driftPct: r.deltaPct,
+          rawNotional,
+          roundedNotional: Number.isFinite(roundedNotional) ? roundedNotional : 0,
+          reason: 'rounded-to-zero',
+        });
+        continue;
+      }
+
+      if (roundedNotional < minNotional) {
+        suppressed.push({
+          id: r.id,
+          label: r.label,
+          side: deltaValue > 0 ? 'BUY' : 'SELL',
+          driftPct: r.deltaPct,
+          rawNotional,
+          roundedNotional,
+          reason: 'below-min-notional',
+        });
+        continue;
+      }
+
+      producedCount += 1;
+    }
+
+    suppressed.sort((a, b) => b.rawNotional - a.rawNotional);
+
+    return {
+      total,
+      lotStep,
+      minNotional,
+      candidateCount,
+      producedCount,
+      suppressedCount: suppressed.length,
+      suppressedTop: suppressed.slice(0, 3),
+    };
+  }, [currentWeights, driftThresholdPct, portfolioCash, rebalancePolicy, rebalanceTableRows]);
+
   const effectiveOrders = useMemo(() => {
     if (ordersPreviewSourceV0 === 'ENGINE_LAST_RUN') return engineOrders;
     return naiveOrders;
@@ -2060,6 +2135,25 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     </span>
                   </div>
 
+                  {ordersPreviewSourceV0 === 'RECOMPUTE' && naiveOrdersDiagnostics && naiveOrdersDiagnostics.suppressedCount ? (
+                    <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+                      {(() => {
+                        const ccy = baseCcy ? ` ${baseCcy}` : '';
+                        const top = (naiveOrdersDiagnostics.suppressedTop || [])
+                          .map((x) => `${x.side} ${x.id}: raw=${x.rawNotional.toFixed(2)}${ccy} → rounded=${x.roundedNotional.toFixed(2)}${ccy}`)
+                          .join('; ');
+
+                        return (
+                          <>
+                            Min trade/precision: suppressed {naiveOrdersDiagnostics.suppressedCount} candidate trade(s) below minNotional={naiveOrdersDiagnostics.minNotional.toFixed(2)}{ccy}
+                            {naiveOrdersDiagnostics.lotStep > 0 ? ` (lotStep=${naiveOrdersDiagnostics.lotStep.toFixed(2)}${ccy})` : ''}.
+                            {top ? ` Examples: ${top}.` : ''}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
+
                   {whatIf ? (
                     <div style={{ marginTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 10 }}>
                       <div style={{ fontWeight: 700, fontSize: 12 }}>What-if preview (fees/slippage + expected drift)</div>
@@ -2221,8 +2315,49 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   ) : null}
                 </div>
               ) : (
-                <div className="muted" style={{ fontSize: 12 }}>
-                  暂无 orders：请先跑一次 Step4，或确保 current vs target 数据齐全。（minTradeNotional={rebalancePolicy.minTradeNotional.toFixed(2)}）
+                <div style={{ fontSize: 12 }}>
+                  {(() => {
+                    const ccy = baseCcy ? ` ${baseCcy}` : '';
+                    const diag = ordersPreviewSourceV0 === 'RECOMPUTE' ? naiveOrdersDiagnostics : null;
+
+                    // If we expected orders (drift exceeds threshold) but none were produced, surface a blocker.
+                    if (diag && diag.candidateCount > 0 && diag.producedCount === 0) {
+                      const examples = (diag.suppressedTop || [])
+                        .map((x) => `${x.side} ${x.id}: raw=${x.rawNotional.toFixed(2)}${ccy} → rounded=${x.roundedNotional.toFixed(2)}${ccy}`)
+                        .join('; ');
+
+                      return (
+                        <div>
+                          <div style={{ color: 'var(--danger, #b00020)' }}>
+                            Blocked by min trade/precision: {diag.candidateCount} candidate trade(s), but all are below minNotional={diag.minNotional.toFixed(2)}{ccy}
+                            {diag.lotStep > 0 ? ` (lotStep=${diag.lotStep.toFixed(2)}${ccy})` : ''}.
+                          </div>
+                          <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                            Suggestion: lower policy.minTradeNotional, or increase position size/equity so the implied notional deltas exceed the minimum.
+                          </div>
+                          {examples ? (
+                            <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                              Examples: {examples}.
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    }
+
+                    if (diag && diag.candidateCount === 0) {
+                      return (
+                        <div className="muted">
+                          No orders: all drifts are within threshold ({(driftThresholdPct * 100).toFixed(2)}%). Lower the threshold if you expect more rebalances.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="muted">
+                        暂无 orders：请先跑一次 Step4，或确保 current vs target 数据齐全。（minTradeNotional={rebalancePolicy.minTradeNotional.toFixed(2)}）
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
