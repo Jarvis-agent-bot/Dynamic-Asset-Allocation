@@ -91,4 +91,85 @@ describe("funds hub rebalance e2e smoke", () => {
     expect(report.run.request).toEqual(req);
     expect(report.run.response).toEqual(resp);
   });
+
+  it("updates suggested orders when prices drift between runs", () => {
+    const storage = new MemoryStorage();
+
+    const note = "ui:market/funds:paper-run";
+
+    const req1 = {
+      account: { cash: 0 },
+      holdings: { AAA: 10 },
+      prices: { AAA: 10, BBB: 10 },
+      targetWeights: {
+        AAA: 0,
+        BBB: 1,
+      },
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0, minTradeNotional: 0, cooldownSeconds: 0 },
+    };
+
+    expect(isRebalanceCoreRequest(req1)).toBe(true);
+
+    const resp1 = rebalanceCore(req1);
+    expect(resp1.trigger.shouldRebalance).toBe(true);
+    expect(resp1.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["SELL:AAA:100", "BUY:BBB:100"]);
+
+    storage.setItem("daa.wizard.rebalanceRequest", JSON.stringify(req1));
+    storage.setItem("daa.wizard.rebalanceResponse", JSON.stringify(resp1));
+
+    const at1 = "2026-02-12T12:00:00.000Z";
+    const log1 = appendRebalanceLog({
+      storage,
+      source: "core",
+      request: req1,
+      response: resp1,
+      note,
+      at: at1,
+    });
+    expect(log1.ok).toBe(true);
+
+    // Simulate market drift during a multi-step UI flow (review/confirm) and ensure
+    // the suggested trade set updates when we rerun the engine.
+    const req2 = {
+      ...req1,
+      prices: { AAA: 12, BBB: 8 },
+    };
+
+    const resp2 = rebalanceCore(req2);
+    expect(resp2.trigger.shouldRebalance).toBe(true);
+    expect(resp2.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["SELL:AAA:120", "BUY:BBB:120"]);
+
+    // Ensure we do not keep showing stale suggestions.
+    expect(resp2.orders.map((o) => o.notional)).not.toEqual(resp1.orders.map((o) => o.notional));
+
+    storage.setItem("daa.wizard.rebalanceRequest", JSON.stringify(req2));
+    storage.setItem("daa.wizard.rebalanceResponse", JSON.stringify(resp2));
+
+    const at2 = "2026-02-12T12:01:00.000Z";
+    const log2 = appendRebalanceLog({
+      storage,
+      source: "core",
+      request: req2,
+      response: resp2,
+      note,
+      at: at2,
+    });
+    expect(log2.ok).toBe(true);
+
+    const exec = getDefaultExecutionAdapterV0();
+    const executed = exec.executeOrders({
+      storage,
+      source: "rebalance-core",
+      orders: resp2.orders,
+      note,
+      at: at2,
+    });
+    expect(executed.ok).toBe(true);
+
+    const report = buildLatestRebalanceRunReportV1(storage);
+    expect(report.notes).toEqual([]);
+    expect(report.run.request).toEqual(req2);
+    expect(report.run.response).toEqual(resp2);
+  });
 });
