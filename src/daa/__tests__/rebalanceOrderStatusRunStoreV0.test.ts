@@ -51,7 +51,7 @@ describe("rebalanceOrderStatusRunStoreV0", () => {
     const u1 = updateRebalanceOrderStatusV0({ storage: st, runId, orderId: "1", status: "submitted" });
     expect(u1.ok).toBe(true);
 
-    const u2 = updateRebalanceOrderStatusV0({ storage: st, runId, orderId: "1", status: "filled" });
+    const u2 = updateRebalanceOrderStatusV0({ storage: st, runId, orderId: "1", status: "filled", filledNotional: 100, fillPct01: 1 });
     expect(u2.ok).toBe(true);
 
     const finished = finishRebalanceOrderStatusRunV0({ storage: st, runId });
@@ -64,6 +64,8 @@ describe("rebalanceOrderStatusRunStoreV0", () => {
     expect(loaded?.runId).toBe(runId);
     expect(loaded?.state).toBe("done");
     expect(loaded?.orders.find((o) => o.id === "1")?.status).toBe("filled");
+    expect(loaded?.orders.find((o) => o.id === "1")?.filledNotional).toBe(100);
+    expect(loaded?.orders.find((o) => o.id === "1")?.fillPct01).toBe(1);
 
     const hist = loadRebalanceOrderStatusRunHistoryV0(st);
     expect(hist).toHaveLength(1);

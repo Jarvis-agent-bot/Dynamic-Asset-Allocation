@@ -1943,6 +1943,72 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     let statusRunId: string | null = null;
 
+    function makeAbortError(): any {
+      try {
+        return new DOMException('Aborted', 'AbortError');
+      } catch {
+        const e: any = new Error('aborted');
+        e.name = 'AbortError';
+        return e;
+      }
+    }
+
+    function abortableSleep(ms: number, signal: AbortSignal | null | undefined): Promise<void> {
+      return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(makeAbortError());
+          return;
+        }
+
+        let onAbort: (() => void) | null = null;
+
+        const id = window.setTimeout(() => {
+          if (onAbort) signal?.removeEventListener('abort', onAbort);
+          resolve();
+        }, ms);
+
+        onAbort = () => {
+          window.clearTimeout(id);
+          reject(makeAbortError());
+        };
+
+        if (signal) signal.addEventListener('abort', onAbort, { once: true });
+      });
+    }
+
+    async function simulatePaperBrokerFillProgressV0(args: {
+      storage: Storage;
+      runId: string;
+      orders: Array<{ notional: number }>;
+      signal: AbortSignal | null | undefined;
+    }) {
+      const steps = 4;
+      const totalTargetMs = 2500;
+      const perStepMs = Math.max(60, Math.min(250, Math.floor(totalTargetMs / Math.max(1, args.orders.length * steps))));
+
+      for (let i = 0; i < args.orders.length; i++) {
+        const orderId = String(i + 1);
+        const notional = Number(args.orders[i]?.notional ?? NaN);
+
+        for (let s = 1; s <= steps; s++) {
+          await abortableSleep(perStepMs, args.signal);
+          const pct = s / steps;
+          const filledNotional = Number.isFinite(notional) ? notional * pct : undefined;
+
+          updateRebalanceOrderStatusV0({
+            storage: args.storage,
+            runId: args.runId,
+            orderId,
+            status: s === steps ? 'filled' : 'submitted',
+            filledNotional,
+            fillPct01: pct,
+            detail: s === steps ? 'filled' : `partial fill: ${Math.round(pct * 100)}%`,
+            phase: 'executing',
+          });
+        }
+      }
+    }
+
     const mode: ExecutionModeV0 = executionMode;
     setPaperRunExecutionMode(mode);
 
@@ -2200,6 +2266,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           message: `executing ${orders.length} orders (paper)`,
         });
 
+        // v0: simulate broker-side partial fills so the UI can live-refresh progress during the run (E2E-friendly; no real broker).
         for (let i = 0; i < orders.length; i++) {
           const orderId = String(i + 1);
           updateRebalanceOrderStatusV0({
@@ -2207,13 +2274,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             runId: statusRunId,
             orderId,
             status: 'submitted',
-            phase: 'executing',
-          });
-          updateRebalanceOrderStatusV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            orderId,
-            status: 'filled',
+            filledNotional: 0,
+            fillPct01: 0,
+            detail: 'submitted (paper broker)',
             phase: 'executing',
           });
         }
@@ -2244,11 +2307,18 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       }
 
       if (statusRunId) {
+        await simulatePaperBrokerFillProgressV0({
+          storage: window.localStorage,
+          runId: statusRunId,
+          orders: orders as any,
+          signal: controller.signal,
+        });
+
         finishRebalanceOrderStatusRunV0({
           storage: window.localStorage,
           runId: statusRunId,
           phase: 'recorded',
-          message: `recorded ${orders.length} paper orders`,
+          message: `recorded ${orders.length} paper orders (simulated broker fills)`,
         });
       }
 
