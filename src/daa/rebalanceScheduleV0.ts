@@ -91,3 +91,38 @@ export function computeNextRunAtLocalV0(schedule: RebalanceScheduleV1, now: Date
 
   return candidate;
 }
+
+// Computes the most recent scheduled wall-clock run time (local) that is <= now.
+// Useful for detecting missed/overdue schedule ticks.
+export function computeMostRecentScheduledAtLocalV0(schedule: RebalanceScheduleV1, now: Date): Date | null {
+  const t = parseTimeLocalHHMM(schedule.timeLocalHHMM);
+  if (!t) return null;
+
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+
+  if (schedule.cadence === "daily") {
+    const today = new Date(y, m, d, t.hh, t.mm, 0, 0);
+    if (today.getTime() <= now.getTime()) return today;
+
+    const prev = new Date(today);
+    prev.setDate(today.getDate() - 1);
+    return prev;
+  }
+
+  // weekly
+  const weekday0Sun = normalizeWeekday0Sun(schedule.weekday0Sun);
+  const nowDow = now.getDay();
+  const diffBack = (nowDow - weekday0Sun + 7) % 7;
+
+  const candidate = new Date(y, m, d, t.hh, t.mm, 0, 0);
+  candidate.setDate(candidate.getDate() - diffBack);
+
+  // If it's today and the scheduled time hasn't happened yet, go back a week.
+  if (diffBack === 0 && candidate.getTime() > now.getTime()) {
+    candidate.setDate(candidate.getDate() - 7);
+  }
+
+  return candidate;
+}

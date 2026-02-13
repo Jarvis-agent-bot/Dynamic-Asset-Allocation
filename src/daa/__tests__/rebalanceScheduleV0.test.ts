@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { computeNextRunAtLocalV0, defaultRebalanceScheduleV1, type RebalanceScheduleV1 } from "../rebalanceScheduleV0";
+import {
+  computeMostRecentScheduledAtLocalV0,
+  computeNextRunAtLocalV0,
+  defaultRebalanceScheduleV1,
+  type RebalanceScheduleV1,
+} from "../rebalanceScheduleV0";
 
 describe("daa/rebalanceScheduleV0", () => {
   it("returns null when disabled", () => {
@@ -53,5 +58,36 @@ describe("daa/rebalanceScheduleV0", () => {
     expect(next?.getDate()).toBe(23);
     expect(next?.getHours()).toBe(9);
     expect(next?.getMinutes()).toBe(30);
+  });
+
+  it("computeMostRecentScheduledAtLocalV0 (daily): returns today when already past", () => {
+    const now = new Date(2026, 1, 14, 10, 0, 0);
+    const sch: RebalanceScheduleV1 = { enabled: true, cadence: "daily", timeLocalHHMM: "09:30" };
+    const prev = computeMostRecentScheduledAtLocalV0(sch, now);
+    expect(prev).not.toBe(null);
+    expect(prev?.getDate()).toBe(14);
+    expect(prev?.getHours()).toBe(9);
+    expect(prev?.getMinutes()).toBe(30);
+  });
+
+  it("computeMostRecentScheduledAtLocalV0 (daily): returns yesterday when time is in the future", () => {
+    const now = new Date(2026, 1, 14, 9, 0, 0);
+    const sch: RebalanceScheduleV1 = { enabled: true, cadence: "daily", timeLocalHHMM: "09:30" };
+    const prev = computeMostRecentScheduledAtLocalV0(sch, now);
+    expect(prev).not.toBe(null);
+    expect(prev?.getDate()).toBe(13);
+    expect(prev?.getHours()).toBe(9);
+    expect(prev?.getMinutes()).toBe(30);
+  });
+
+  it("computeMostRecentScheduledAtLocalV0 (weekly): when today before scheduled time, returns last week", () => {
+    // 2026-02-16 is Monday.
+    const now = new Date(2026, 1, 16, 9, 0, 0);
+    const sch: RebalanceScheduleV1 = { enabled: true, cadence: "weekly", timeLocalHHMM: "09:30", weekday0Sun: 1 };
+    const prev = computeMostRecentScheduledAtLocalV0(sch, now);
+    expect(prev).not.toBe(null);
+    expect(prev?.getDate()).toBe(9);
+    expect(prev?.getHours()).toBe(9);
+    expect(prev?.getMinutes()).toBe(30);
   });
 });
