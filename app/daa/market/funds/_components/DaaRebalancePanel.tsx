@@ -38,6 +38,7 @@ import {
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { buildRebalancePlanCsvV0 } from '@/src/daa/rebalancePlanCsvV0';
 import { summarizeTradesForConfirmationV0 } from '@/src/daa/tradesSummaryV0';
+import { estimateTaxLotsImpactV0 } from '@/src/daa/taxLotsImpactV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -1493,6 +1494,48 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         targetPct01: Number.isFinite((r as any).targetPct) ? (r as any).targetPct : 0,
       }));
   }, [whatIfRows]);
+
+  const taxLotsImpactV0 = useMemo(() => {
+    if (!whatIf) return null;
+
+    const sellOrders = (effectiveOrders ?? [])
+      .filter((o) => o && o.side === 'SELL' && o.symbol && Number.isFinite(o.notional) && o.notional > 0)
+      .map((o) => ({ symbol: String(o.symbol), side: 'SELL' as const, notional: o.notional }));
+
+    if (!sellOrders.length) return null;
+
+    // Prices: use the same resolver as the preview tables (snapshot preferred, fallback to fund dwjz price).
+    const byCode = new Map<string, FundLike>();
+    for (const f of funds ?? []) {
+      const code = String((f as any)?.code ?? '').trim();
+      if (code) byCode.set(code, f);
+    }
+
+    const pricesBySymbol: Record<string, number> = {};
+    for (const o of sellOrders) {
+      const sym = String(o.symbol ?? '').trim();
+      if (!sym) continue;
+      const fund = byCode.get(sym);
+      const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: fund ?? undefined });
+      if (pick.price && pick.price > 0) pricesBySymbol[sym] = pick.price;
+    }
+
+    let positionsBySymbol: any = {};
+    try {
+      positionsBySymbol = loadPortfolioStateV1().positions ?? {};
+    } catch {
+      positionsBySymbol = {};
+    }
+
+    const costBps = (toFiniteNumber(whatIfFeeBps) ?? 0) + (toFiniteNumber(whatIfSlippageBpsUsed) ?? 0);
+
+    return estimateTaxLotsImpactV0({
+      orders: sellOrders,
+      pricesBySymbol,
+      positionsBySymbol,
+      costBps,
+    });
+  }, [effectiveOrders, estimateTaxLotsImpactV0, funds, priceSnapshot, whatIf, whatIfFeeBps, whatIfSlippageBpsUsed]);
 
   async function doCopyOrders() {
     try {
@@ -4064,6 +4107,96 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           );
                         })()}
                       </div>
+
+                      {taxLotsImpactV0 ? (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            border: '1px solid rgba(255,255,255,0.10)',
+                            borderRadius: 12,
+                            padding: '10px 12px',
+                            background: 'rgba(0,0,0,0.12)',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, fontSize: 12 }}>Tax-lot / realized gain impact (preview)</div>
+                          <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
+                            Estimates realized gain for SELL legs using portfolio tax lots (FIFO by acquiredAt) or avg cost. Uses SELL proceeds net of fee+slippage (costBps).
+                          </div>
+
+                          {(() => {
+                            const ccy = baseCcy ? ` ${baseCcy}` : '';
+                            const g = taxLotsImpactV0.totals.realizedGainKnown;
+                            const color = g < 0 ? 'var(--danger)' : 'var(--text)';
+
+                            return (
+                              <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap' as const }}>
+                                <div style={{ minWidth: 220 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>realizedGain (known)</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800, color }}>{g.toFixed(2)}{ccy}</div>
+                                </div>
+                                <div style={{ minWidth: 220 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>proceedsNet (known+unknown)</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800 }}>{taxLotsImpactV0.totals.proceedsNet.toFixed(2)}{ccy}</div>
+                                </div>
+                                <div style={{ minWidth: 220 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>costBasis (known)</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800 }}>{taxLotsImpactV0.totals.costBasisKnown.toFixed(2)}{ccy}</div>
+                                </div>
+                                <div style={{ minWidth: 220 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>qty missing cost basis</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800 }}>{taxLotsImpactV0.totals.qtyUnknown.toFixed(4)}</div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {taxLotsImpactV0.warnings.length ? (
+                            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)' }}>
+                              {taxLotsImpactV0.warnings.slice(0, 6).join(' · ')}
+                              {taxLotsImpactV0.warnings.length > 6 ? ' · ...' : ''}
+                            </div>
+                          ) : null}
+
+                          {taxLotsImpactV0.rows.length ? (
+                            <details className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                              <summary style={{ cursor: 'pointer' }}>Details (per SELL order)</summary>
+                              <div style={{ marginTop: 6, overflowX: 'auto' as const }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                  <thead>
+                                    <tr>
+                                      <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Symbol</th>
+                                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Qty est</th>
+                                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Price</th>
+                                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Proceeds net</th>
+                                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Cost basis (known)</th>
+                                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Realized gain (known)</th>
+                                      <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Qty unknown</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {taxLotsImpactV0.rows.map((r, idx) => {
+                                      const ccy = baseCcy ? ` ${baseCcy}` : '';
+                                      const color = r.realizedGainKnown < 0 ? 'var(--danger)' : 'var(--text)';
+
+                                      return (
+                                        <tr key={`${r.symbol}-${idx}`}>
+                                          <td style={{ padding: '6px 0' }}>{r.symbol}</td>
+                                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.qtyEst.toFixed(4)}</td>
+                                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.price.toFixed(4)}</td>
+                                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.proceedsNet.toFixed(2)}{ccy}</td>
+                                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.costBasisKnown.toFixed(2)}{ccy}</td>
+                                          <td style={{ padding: '6px 0', textAlign: 'right', color }}>{r.realizedGainKnown.toFixed(2)}{ccy}</td>
+                                          <td style={{ padding: '6px 0', textAlign: 'right' }}>{r.qtyUnknown.toFixed(4)}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </details>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, marginTop: 8, alignItems: 'center' }}>
                         <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
