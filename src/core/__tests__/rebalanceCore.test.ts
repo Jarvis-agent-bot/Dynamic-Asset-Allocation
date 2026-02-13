@@ -150,4 +150,22 @@ describe("rebalanceCore", () => {
     expect(res.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["BUY:AAA:450", "BUY:BBB:300", "BUY:BBB:150"]);
     expect(res.explain.notes.join("\n")).toMatch(/cash sweep:/i);
   });
+
+  it("surfaces min order size rounding as warnings (skip remainder)", () => {
+    const res = rebalanceCore({
+      account: { cash: 0 },
+      holdings: { AAA: 27 },
+      prices: { AAA: 10, BBB: 10 },
+      targetWeights: { AAA: 0, BBB: 1 },
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0, minTradeNotional: 100 },
+    });
+
+    // 27*10=270; with minTradeNotional=100 (lot step), we can only sell/buy 200 and skip the 70 remainder.
+    expect(res.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["SELL:AAA:200", "BUY:BBB:200"]);
+    expect(res.warnings.join("\n")).toMatch(/min order size:/i);
+    expect(res.warnings.join("\n")).toMatch(/SELL AAA/i);
+    expect(res.warnings.join("\n")).toMatch(/skipped 70\.00/i);
+    expect(res.explain.notes.join("\n")).toMatch(/min order size:/i);
+  });
 });

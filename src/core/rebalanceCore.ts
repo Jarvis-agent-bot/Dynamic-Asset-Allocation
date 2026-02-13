@@ -390,6 +390,25 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   };
   let roundedAny = false;
 
+  // Exchange min-order-size behavior (v0): when we apply lot rounding (minTradeNotional as a lot step),
+  // we can end up skipping a remainder that is smaller than the minimum. Capture those so the UI can
+  // surface clear warnings instead of silently drifting.
+  const minOrderRemainders: Array<{
+    symbol: string;
+    side: "BUY" | "SELL";
+    rawNotional: number;
+    roundedNotional: number;
+    skippedNotional: number;
+  }> = [];
+
+  const minOrderSuppressed: Array<{
+    symbol: string;
+    side: "BUY" | "SELL";
+    desiredNotional: number;
+    cappedNotional: number;
+    reason: string;
+  }> = [];
+
   // Sells first to fund buys.
   const sellCandidates = Object.entries(deltas)
     .filter(([, d]) => d <= -minN)
@@ -405,15 +424,45 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
     const wantSell = Math.min(cur, -s.delta);
     const notionalRaw = Math.min(wantSell, constraints.maxOut);
+
     const notional = roundDownToLot(notionalRaw);
+    const skippedNotional = notionalRaw - notional;
+
     if (notional !== notionalRaw) roundedAny = true;
-    if (!(Number.isFinite(notional) && notional >= minN)) continue;
+
+    if (Number.isFinite(skippedNotional) && skippedNotional > 1e-9) {
+      minOrderRemainders.push({
+        symbol: s.symbol,
+        side: "SELL",
+        rawNotional: notionalRaw,
+        roundedNotional: notional,
+        skippedNotional,
+      });
+    }
+
+    if (!(Number.isFinite(notional) && notional >= minN)) {
+      if (Number.isFinite(wantSell) && wantSell >= minN) {
+        minOrderSuppressed.push({
+          symbol: s.symbol,
+          side: "SELL",
+          desiredNotional: wantSell,
+          cappedNotional: notionalRaw,
+          reason: notionalRaw < minN ? "capped-below-min" : "rounded-below-min",
+        });
+      }
+      continue;
+    }
+
+    const remainderHint =
+      Number.isFinite(skippedNotional) && skippedNotional > 1e-9
+        ? `; skippedRemainder≈${skippedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)})`
+        : "";
 
     orders.push({
       symbol: s.symbol,
       side: "SELL",
       notional,
-      reason: `rebalance: overweight by ${(-s.delta).toFixed(2)} notional; sell=${notional.toFixed(2)} (cap maxOut=${String(constraints.maxOut)})`,
+      reason: `rebalance: overweight by ${(-s.delta).toFixed(2)} notional; sell=${notional.toFixed(2)} (cap maxOut=${String(constraints.maxOut)})${remainderHint}`,
     });
 
     cashAvail += notional;
@@ -437,18 +486,91 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
     const wantBuy = b.delta;
     const cappedRaw = Math.min(wantBuy, constraints.maxIn, cashAvail);
+
     const capped = roundDownToLot(cappedRaw);
+    const skippedNotional = cappedRaw - capped;
+
     if (capped !== cappedRaw) roundedAny = true;
-    if (!(Number.isFinite(capped) && capped >= minN)) continue;
+
+    if (Number.isFinite(skippedNotional) && skippedNotional > 1e-9) {
+      minOrderRemainders.push({
+        symbol: b.symbol,
+        side: "BUY",
+        rawNotional: cappedRaw,
+        roundedNotional: capped,
+        skippedNotional,
+      });
+    }
+
+    if (!(Number.isFinite(capped) && capped >= minN)) {
+      if (Number.isFinite(wantBuy) && wantBuy >= minN) {
+        minOrderSuppressed.push({
+          symbol: b.symbol,
+          side: "BUY",
+          desiredNotional: wantBuy,
+          cappedNotional: cappedRaw,
+          reason: cappedRaw < minN ? "capped-below-min" : "rounded-below-min",
+        });
+      }
+      continue;
+    }
+
+    const remainderHint =
+      Number.isFinite(skippedNotional) && skippedNotional > 1e-9
+        ? `; skippedRemainder≈${skippedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)})`
+        : "";
 
     orders.push({
       symbol: b.symbol,
       side: "BUY",
       notional: capped,
-      reason: `rebalance: underweight by ${b.delta.toFixed(2)} notional; buy=${capped.toFixed(2)} (cap maxIn=${String(constraints.maxIn)})`,
+      reason: `rebalance: underweight by ${b.delta.toFixed(2)} notional; buy=${capped.toFixed(2)} (cap maxIn=${String(constraints.maxIn)})${remainderHint}`,
     });
 
     cashAvail -= capped;
+  }
+
+  // Surface min-order-size effects (split/skip) as warnings so the funds hub UI can show them.
+  if (minOrderRemainders.length || minOrderSuppressed.length) {
+    if (minOrderRemainders.length && lotStep > 0) {
+      notes.push(
+        `min order size: ${minOrderRemainders.length} order(s) rounded down to lot step=${lotStep}; small remainders may be skipped`
+      );
+
+      const top = [...minOrderRemainders]
+        .filter((x) => Number.isFinite(x.skippedNotional) && x.skippedNotional > 1e-9)
+        .sort((a, b) => b.skippedNotional - a.skippedNotional)
+        .slice(0, 6);
+
+      for (const x of top) {
+        warnings.push(
+          `warning: min order size: ${x.side} ${x.symbol} rounded ${x.rawNotional.toFixed(2)} -> ${x.roundedNotional.toFixed(2)}; skipped ${x.skippedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)})`
+        );
+      }
+
+      if (minOrderRemainders.length > top.length) {
+        warnings.push(`warning: min order size: ${minOrderRemainders.length - top.length} more rounded remainder(s) omitted`);
+      }
+    }
+
+    if (minOrderSuppressed.length) {
+      notes.push(`min order size: suppressed ${minOrderSuppressed.length} candidate order(s) that could not meet minTradeNotional=${minN.toFixed(2)}`);
+
+      const top = [...minOrderSuppressed]
+        .filter((x) => Number.isFinite(x.desiredNotional) && x.desiredNotional > 0)
+        .sort((a, b) => b.desiredNotional - a.desiredNotional)
+        .slice(0, 6);
+
+      for (const x of top) {
+        warnings.push(
+          `warning: min order size: suppressed ${x.side} ${x.symbol}; desired≈${x.desiredNotional.toFixed(2)}, capped≈${x.cappedNotional.toFixed(2)} (<minTradeNotional=${minN.toFixed(2)}; reason=${x.reason})`
+        );
+      }
+
+      if (minOrderSuppressed.length > top.length) {
+        warnings.push(`warning: min order size: ${minOrderSuppressed.length - top.length} more suppressed candidate(s) omitted`);
+      }
+    }
   }
 
   let cashEnd = cashAvail;
