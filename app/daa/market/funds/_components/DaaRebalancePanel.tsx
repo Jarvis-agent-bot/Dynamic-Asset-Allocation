@@ -946,6 +946,60 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return recomputeOrders;
   }, [engineOrders, ordersPreviewSourceV0, recomputeOrders]);
 
+  const tradeRationaleRowsV0 = useMemo(() => {
+    if (!effectiveOrders.length) return [] as Array<{
+      key: string;
+      symbol: string;
+      label: string;
+      side: 'BUY' | 'SELL';
+      notional: number;
+      notionalPct: number | null;
+      currentPct: number | null;
+      targetPct: number | null;
+      driftPct: number | null;
+      reason: string;
+    }>;
+
+    const total = currentWeights.reduce((acc, r) => acc + (Number.isFinite(r.value) ? r.value : 0), 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
+    const byId = new Map(rebalanceTableRows.map((r) => [String(r.id), r] as const));
+
+    return effectiveOrders.map((o, idx) => {
+      const symbol = String((o as any)?.symbol ?? '').trim();
+      const side = ((o as any)?.side === 'BUY' || (o as any)?.side === 'SELL' ? (o as any).side : 'BUY') as 'BUY' | 'SELL';
+      const notional = toFiniteNumber((o as any)?.notional) ?? 0;
+
+      const row = symbol ? byId.get(symbol) : undefined;
+      const label = row?.label ?? symbol;
+
+      const driftPct = row ? row.deltaPct : null;
+      const currentPct = row ? row.currentPct : null;
+      const targetPct = row ? row.targetPct : null;
+      const notionalPct = total > 0 && Number.isFinite(notional) ? notional / total : null;
+
+      const fallback =
+        driftPct === null
+          ? ''
+          : side === 'BUY'
+            ? `underweight ${(Math.abs(driftPct) * 100).toFixed(1)}% vs target`
+            : `overweight ${(Math.abs(driftPct) * 100).toFixed(1)}% vs target`;
+
+      const reason = String((o as any)?.reason ?? '').trim() || fallback;
+
+      return {
+        key: `${symbol || 'UNKNOWN'}-${idx}`,
+        symbol,
+        label,
+        side,
+        notional,
+        notionalPct,
+        currentPct,
+        targetPct,
+        driftPct,
+        reason,
+      };
+    });
+  }, [currentWeights, effectiveOrders, portfolioCash, rebalanceTableRows]);
+
   const [whatIfFeeBps, setWhatIfFeeBps] = useState(() => {
     if (typeof window === 'undefined') return 0;
     const raw = window.localStorage.getItem(LS_WHATIF_FEE_BPS);
@@ -2275,6 +2329,84 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     ccy={baseCcy}
                     feeBps={whatIfFeeBps}
                   />
+
+                  <details style={{ marginTop: 10 }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Trade rationale (why each trade)</summary>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                      Uses current vs target drift (best-effort) and the engine-provided per-order reason.
+                    </div>
+
+                    <div style={{ marginTop: 8, display: 'grid', gap: 10 }}>
+                      {tradeRationaleRowsV0.map((r) => {
+                        const ccy = baseCcy ? ` ${baseCcy}` : '';
+                        const driftKind =
+                          r.driftPct === null ? null : r.driftPct >= driftThresholdPct ? 'over' : r.driftPct <= -driftThresholdPct ? 'under' : 'ok';
+                        const driftAbsPct = r.driftPct === null ? null : (Math.abs(r.driftPct) * 100).toFixed(1);
+                        const badgeText =
+                          driftKind === null
+                            ? 'NO DRIFT'
+                            : driftKind === 'over'
+                              ? `OVER +${driftAbsPct}%`
+                              : driftKind === 'under'
+                                ? `UNDER -${driftAbsPct}%`
+                                : `OK ${driftAbsPct}%`;
+                        const badgeColor =
+                          driftKind === 'over' ? 'var(--danger)' : driftKind === 'under' ? 'var(--primary)' : 'var(--muted)';
+
+                        return (
+                          <div
+                            key={r.key}
+                            style={{
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              borderRadius: 10,
+                              padding: '8px 10px',
+                              background: 'rgba(0,0,0,0.08)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center' }}>
+                              <span className="badge" style={{ padding: '2px 8px', fontSize: 11 }}>
+                                {r.side}
+                              </span>
+                              <span style={{ fontWeight: 700, fontSize: 12 }}>
+                                {r.label} <span className="muted">({r.symbol})</span>
+                              </span>
+                              <span className="muted" style={{ fontSize: 12 }}>
+                                {Number.isFinite(r.notional) ? r.notional.toFixed(2) : String(r.notional)}{ccy}
+                              </span>
+                              {r.notionalPct !== null ? (
+                                <span className="badge" style={{ padding: '2px 8px', fontSize: 11, borderColor: badgeColor, color: badgeColor, background: 'rgba(0,0,0,0.12)' }}>
+                                  {(r.notionalPct * 100).toFixed(2)}% equity
+                                </span>
+                              ) : null}
+                              {r.driftPct !== null ? (
+                                <span
+                                  className="badge"
+                                  style={{ padding: '2px 8px', fontSize: 11, borderColor: badgeColor, color: badgeColor, background: 'rgba(0,0,0,0.12)' }}
+                                  title="currentPct - targetPct"
+                                >
+                                  {badgeText}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {r.driftPct !== null && r.currentPct !== null && r.targetPct !== null ? (
+                              <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                                Drift: current={(r.currentPct * 100).toFixed(1)}% vs target={(r.targetPct * 100).toFixed(1)}% (delta={(r.driftPct * 100).toFixed(1)}%)
+                              </div>
+                            ) : null}
+
+                            {r.reason ? (
+                              <div style={{ fontSize: 12, marginTop: 6 }}>{r.reason}</div>
+                            ) : (
+                              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                                No reason available.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginTop: 8 }}>
                     <span className="muted" style={{ fontSize: 11 }}>Preview orders:</span>

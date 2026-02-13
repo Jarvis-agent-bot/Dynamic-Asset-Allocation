@@ -53,6 +53,10 @@ describe("funds hub rebalance e2e smoke", () => {
       expect(o.side === "BUY" || o.side === "SELL").toBe(true);
       expect(Number.isFinite(o.notional)).toBe(true);
       expect(o.notional).not.toBe(0);
+
+      // E2E UX: the funds hub "trade rationale" panel depends on per-order reasons.
+      expect(typeof (o as any).reason).toBe("string");
+      expect(String((o as any).reason || "").trim().length).toBeGreaterThan(0);
     }
 
     // Keep wizard storage in sync (export fallback path)
