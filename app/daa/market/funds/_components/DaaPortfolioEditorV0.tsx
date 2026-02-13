@@ -10,6 +10,7 @@ type Row = {
   symbol: string;
   qty: string;
   cost: string;
+  lots: string;
 };
 
 function toFiniteNumber(x: string): number | null {
@@ -23,9 +24,10 @@ function rowsFromState(st: PortfolioStateV1): Row[] {
       symbol: String(symbol ?? ''),
       qty: String((p as any)?.qty ?? ''),
       cost: (p as any)?.cost === undefined ? '' : String((p as any)?.cost ?? ''),
+      lots: Array.isArray((p as any)?.lots) ? JSON.stringify((p as any).lots) : '',
     }))
     .sort((a, b) => a.symbol.localeCompare(b.symbol));
-  return rows.length ? rows : [{ symbol: '', qty: '', cost: '' }];
+  return rows.length ? rows : [{ symbol: '', qty: '', cost: '', lots: '' }];
 }
 
 function normalizeState(args: {
@@ -59,7 +61,44 @@ function normalizeState(args: {
       continue;
     }
 
-    positions[symbol] = costText ? { qty, cost: costNum as number } : { qty };
+    const lotsText = String((r as any).lots ?? '').trim();
+    let lots: Array<{ qty: number; cost: number; acquiredAt?: string }> | null = null;
+
+    if (lotsText) {
+      try {
+        const parsed = JSON.parse(lotsText) as unknown;
+        if (!Array.isArray(parsed)) {
+          issues.push(`lots must be a JSON array for ${symbol}`);
+          continue;
+        }
+
+        const normalized: Array<{ qty: number; cost: number; acquiredAt?: string }> = [];
+        for (const it of parsed) {
+          if (!it || typeof it !== 'object' || Array.isArray(it)) continue;
+          const rr: any = it as any;
+          const q = typeof rr.qty === 'number' ? rr.qty : Number(rr.qty);
+          const c = typeof rr.cost === 'number' ? rr.cost : Number(rr.cost);
+          if (!Number.isFinite(q) || q <= 0) continue;
+          if (!Number.isFinite(c) || c < 0) continue;
+
+          const acquiredAtRaw = rr.acquiredAt;
+          const acquiredAt = typeof acquiredAtRaw === 'string' && acquiredAtRaw.trim() ? acquiredAtRaw.trim() : undefined;
+
+          normalized.push(acquiredAt ? { qty: q, cost: c, acquiredAt } : { qty: q, cost: c });
+        }
+
+        lots = normalized.length ? normalized : null;
+      } catch {
+        issues.push(`lots must be valid JSON for ${symbol}`);
+        continue;
+      }
+    }
+
+    positions[symbol] = {
+      qty,
+      ...(costText ? { cost: costNum as number } : {}),
+      ...(lots ? { lots } : {}),
+    };
   }
 
   const next: PortfolioStateV1 = {
@@ -112,13 +151,13 @@ export default function DaaPortfolioEditorV0() {
   }
 
   function addRow() {
-    setRows((x) => [...x, { symbol: '', qty: '', cost: '' }]);
+    setRows((x) => [...x, { symbol: '', qty: '', cost: '', lots: '' }]);
   }
 
   function removeRow(idx: number) {
     setRows((x) => {
       const next = x.filter((_, i) => i !== idx);
-      return next.length ? next : [{ symbol: '', qty: '', cost: '' }];
+      return next.length ? next : [{ symbol: '', qty: '', cost: '', lots: '' }];
     });
   }
 
@@ -214,6 +253,7 @@ export default function DaaPortfolioEditorV0() {
                   <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Symbol</th>
                   <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Qty</th>
                   <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Cost (optional)</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Tax lots (optional JSON)</th>
                   <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}></th>
                 </tr>
               </thead>
@@ -244,6 +284,15 @@ export default function DaaPortfolioEditorV0() {
                         inputMode="decimal"
                         placeholder=""
                         style={{ width: 140, textAlign: 'right' as const }}
+                      />
+                    </td>
+                    <td style={{ padding: '6px 0' }}>
+                      <textarea
+                        value={r.lots}
+                        onChange={(e) => updateRow(idx, { lots: e.target.value })}
+                        placeholder='[{"qty": 1, "cost": 10, "acquiredAt": "2025-01-01"}]'
+                        rows={2}
+                        style={{ width: 320, fontFamily: 'ui-monospace, SFMono-Regular', fontSize: 11 }}
                       />
                     </td>
                     <td style={{ padding: '6px 0', textAlign: 'right' }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { appendRebalanceLog } from "@/src/daa/rebalanceLogStore";
+import type { TaxLotV0 } from "@/src/daa/taxLotsImpactV0";
 
 import { WIZARD_DATA_EVENT } from "./wizardStorage";
 
@@ -13,7 +14,7 @@ export const LS_LEGACY_HOLDINGS = "holdings";
 export type PortfolioStateV1 = {
   schemaVersion: 1;
   updatedAt: string;
-  positions: Record<string, { qty: number; cost?: number }>;
+  positions: Record<string, { qty: number; cost?: number; lots?: TaxLotV0[] }>;
   cash: number;
   lastRebalance?: {
     at: string;
@@ -47,6 +48,29 @@ function defaultStateV1(): PortfolioStateV1 {
   return { schemaVersion: 1, updatedAt: nowIso(), positions: {}, cash: 0 };
 }
 
+function normalizeTaxLotsV0(x: unknown): TaxLotV0[] {
+  if (!Array.isArray(x)) return [];
+  const out: TaxLotV0[] = [];
+
+  for (const it of x) {
+    if (!it || typeof it !== "object" || Array.isArray(it)) continue;
+    const r: any = it as any;
+
+    const qty = toFiniteNumber(r.qty, NaN);
+    const cost = toFiniteNumber(r.cost, NaN);
+
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    if (!Number.isFinite(cost) || cost < 0) continue;
+
+    const acquiredAtRaw = r.acquiredAt;
+    const acquiredAt = typeof acquiredAtRaw === "string" && acquiredAtRaw.trim() ? acquiredAtRaw.trim() : undefined;
+
+    out.push(acquiredAt ? { qty, cost, acquiredAt } : { qty, cost });
+  }
+
+  return out;
+}
+
 function normalizePositions(x: unknown): PortfolioStateV1["positions"] {
   if (!x || typeof x !== "object" || Array.isArray(x)) return {};
   const out: PortfolioStateV1["positions"] = {};
@@ -62,7 +86,13 @@ function normalizePositions(x: unknown): PortfolioStateV1["positions"] {
     const costNum = vv?.cost === undefined ? undefined : toFiniteNumber(vv.cost, NaN);
     const cost = costNum !== undefined && Number.isFinite(costNum) ? costNum : undefined;
 
-    out[sym] = cost === undefined ? { qty } : { qty, cost };
+    const lots = normalizeTaxLotsV0(vv?.lots);
+
+    out[sym] = {
+      qty,
+      ...(cost === undefined ? {} : { cost }),
+      ...(lots.length ? { lots } : {}),
+    };
   }
 
   return out;
