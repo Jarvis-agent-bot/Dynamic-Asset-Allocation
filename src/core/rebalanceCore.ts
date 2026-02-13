@@ -373,9 +373,20 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
   const minN = effectiveMinNotional;
 
+  // v0 UX realism: model notional lot sizes by rounding down to a step.
+  // We reuse the effective minimum trade notional as the step, which matches
+  // common "min order" + "increment" behavior for retail products.
+  const lotStep = Number.isFinite(minN) && minN > 0 ? minN : 0;
+  const roundDownToLot = (x: number) => {
+    if (!(Number.isFinite(x) && x > 0) || !(lotStep > 0)) return x;
+    const q = Math.floor(x / lotStep + 1e-12);
+    return q * lotStep;
+  };
+  let roundedAny = false;
+
   // Sells first to fund buys.
   const sellCandidates = Object.entries(deltas)
-    .filter(([, d]) => d < -minN)
+    .filter(([, d]) => d <= -minN)
     .map(([symbol, delta]) => ({ symbol, delta }))
     .sort((a, b) => a.delta - b.delta); // most negative first
 
@@ -387,8 +398,10 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     if (cur <= 0) continue;
 
     const wantSell = Math.min(cur, -s.delta);
-    const notional = Math.min(wantSell, constraints.maxOut);
-    if (!(Number.isFinite(notional) && notional > minN)) continue;
+    const notionalRaw = Math.min(wantSell, constraints.maxOut);
+    const notional = roundDownToLot(notionalRaw);
+    if (notional !== notionalRaw) roundedAny = true;
+    if (!(Number.isFinite(notional) && notional >= minN)) continue;
 
     orders.push({
       symbol: s.symbol,
@@ -403,12 +416,12 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   const cashAfterSells = cashAvail;
 
   const buyCandidates = Object.entries(deltas)
-    .filter(([, d]) => d > minN)
+    .filter(([, d]) => d >= minN)
     .map(([symbol, delta]) => ({ symbol, delta }))
     .sort((a, b) => b.delta - a.delta);
 
   for (const b of buyCandidates) {
-    if (cashAvail <= minN) break;
+    if (cashAvail < minN) break;
 
     const px = prices[b.symbol];
     if (!Number.isFinite(px) || px <= 0) {
@@ -417,8 +430,10 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     }
 
     const wantBuy = b.delta;
-    const capped = Math.min(wantBuy, constraints.maxIn, cashAvail);
-    if (!(Number.isFinite(capped) && capped > minN)) continue;
+    const cappedRaw = Math.min(wantBuy, constraints.maxIn, cashAvail);
+    const capped = roundDownToLot(cappedRaw);
+    if (capped !== cappedRaw) roundedAny = true;
+    if (!(Number.isFinite(capped) && capped >= minN)) continue;
 
     orders.push({
       symbol: b.symbol,
@@ -431,6 +446,10 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   }
 
   const cashEnd = cashAvail;
+
+  if (roundedAny && lotStep > 0) {
+    notes.push(`applied lot rounding step=${lotStep}; orders rounded down to multiples of step`);
+  }
 
   if (tw.finalSum < 0.999) {
     notes.push(`target weights sum to ${(tw.finalSum * 100).toFixed(2)}%; remaining ${(100 - tw.finalSum * 100).toFixed(2)}% is implicit cash`);
@@ -458,9 +477,9 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     );
   }
 
-  const eligibleOrders = orders.filter((o) => Number.isFinite(o.notional) && o.notional > minN);
+  const eligibleOrders = orders.filter((o) => Number.isFinite(o.notional) && o.notional >= minN);
   const eligibleNotionalSum = eligibleOrders.reduce((acc, o) => acc + o.notional, 0);
-  if (!eligibleOrders.length) reasons.push(`minTradeNotional: no orders > ${minN}`);
+  if (!eligibleOrders.length) reasons.push(`minTradeNotional: no orders >= ${minN}`);
 
   let cooldownOk = true;
   if (cooldownSeconds > 0) {

@@ -584,6 +584,26 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const targetWeights = manualTargetWeights.length ? manualTargetWeights : computedTargetWeights;
   const targetWeightsSource = manualTargetWeights.length ? 'manual' : 'engine/money_plan';
 
+  // Money-plan cash buffer: if investable < totalEquity, treat the remainder as target cash.
+  // We model it by scaling down all asset target weights by investable/totalEquity.
+  const investablePct01 = useMemo(() => {
+    const mp: any = moneyPlan as any;
+    const total = toFiniteNumber(mp?.account?.totalEquity);
+    const investable = toFiniteNumber(mp?.account?.investable);
+
+    if (total !== null && total > 0 && investable !== null && investable >= 0) {
+      const pct = investable / total;
+      if (Number.isFinite(pct)) return Math.max(0, Math.min(1, pct));
+    }
+
+    return 1;
+  }, [moneyPlan]);
+
+  const targetWeightsEffective = useMemo(() => {
+    if (!(investablePct01 >= 0 && investablePct01 <= 1) || investablePct01 === 1) return targetWeights;
+    return targetWeights.map((t) => ({ ...t, targetPct: t.targetPct * investablePct01 }));
+  }, [investablePct01, targetWeights]);
+
   const lastRunTargetWeightsPre = useMemo(() => {
     if (rebalanceReq && typeof rebalanceReq === 'object') {
       const r: any = rebalanceReq as any;
@@ -591,8 +611,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const tw = normalizeTargetWeightsAny(raw);
       if (tw.length) return tw;
     }
-    return targetWeights;
-  }, [rebalanceReq, targetWeights]);
+    return targetWeightsEffective;
+  }, [rebalanceReq, targetWeightsEffective]);
 
   const lastRunTargetWeightsPost = useMemo(() => {
     if (rebalanceResp && typeof rebalanceResp === 'object') {
@@ -689,7 +709,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     for (const r of currentWeights) currentById.set(r.id, { label: r.label, currentPct: r.value / total });
 
     const targetById = new Map<string, { label: string; targetPct: number }>();
-    for (const t of targetWeights) targetById.set(t.id, { label: t.label, targetPct: t.targetPct });
+    for (const t of targetWeightsEffective) targetById.set(t.id, { label: t.label, targetPct: t.targetPct });
 
     const ids = Array.from(new Set([...Array.from(currentById.keys()), ...Array.from(targetById.keys())]));
 
@@ -707,7 +727,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     rows.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
     return rows;
-  }, [currentWeights, portfolioCash, targetWeights]);
+  }, [currentWeights, portfolioCash, targetWeightsEffective]);
 
   const driftCounts = useMemo(() => {
     let over = 0;
@@ -735,29 +755,33 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
     if (!Number.isFinite(total) || total <= 0) return [];
 
-    // v0: ignore taxes/fees and lot sizes; generate notional-based orders.
-    const minNotional = Math.max(10, total * 0.002); // >=0.2% or 10 base units
+    // v0: notional-based orders. Apply a simple lot-size rounding step so the preview diff
+    // reflects real-world min-order/increment constraints.
+    const lotStep = Math.max(0, toFiniteNumber((rebalancePolicy as any)?.minTradeNotional) ?? 0);
+    const minNotional = Math.max(10, total * 0.002, lotStep); // >=0.2% or 10 base units (and >= lotStep)
 
     const out: SuggestedOrder[] = [];
     for (const r of rebalanceTableRows) {
       if (driftThresholdPct > 0 && Math.abs(r.deltaPct) < driftThresholdPct) continue;
 
       const deltaValue = (r.targetPct - r.currentPct) * total;
-      if (!Number.isFinite(deltaValue) || Math.abs(deltaValue) < minNotional) continue;
+      const rawNotional = Math.abs(deltaValue);
+
+      const notional = lotStep > 0 ? Math.floor(rawNotional / lotStep + 1e-12) * lotStep : rawNotional;
+      if (!Number.isFinite(notional) || notional < minNotional) continue;
 
       const side = deltaValue > 0 ? 'BUY' : 'SELL';
-      const notional = Math.abs(deltaValue);
       out.push({
         symbol: r.id,
         side,
         notional,
-        reason: `delta=${((r.targetPct - r.currentPct) * 100).toFixed(1)}% (naive)`
+        reason: `delta=${((r.targetPct - r.currentPct) * 100).toFixed(1)}% (naive${lotStep > 0 ? `, lot=${lotStep}` : ''})`
       });
     }
 
     out.sort((a, b) => b.notional - a.notional);
     return out;
-  }, [currentWeights, driftThresholdPct, portfolioCash, rebalanceTableRows]);
+  }, [currentWeights, driftThresholdPct, portfolioCash, rebalancePolicy, rebalanceTableRows]);
 
   const effectiveOrders = useMemo(() => {
     if (ordersPreviewSourceV0 === 'ENGINE_LAST_RUN') return engineOrders;
@@ -1347,7 +1371,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         policy,
         holdings: holdingsMap,
         prices: pricesMap,
-        targetWeights,
+        targetWeights: targetWeightsEffective,
       };
 
       saveJsonToLs(LS_REBALANCE_REQUEST, req);
