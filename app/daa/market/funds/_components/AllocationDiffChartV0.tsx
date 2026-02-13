@@ -7,7 +7,11 @@ function fmtPct01(x: number) {
   return `${(x * 100).toFixed(1)}%`;
 }
 
-export default function AllocationDiffChartV0(props: { rows: AllocationDiffRowV0[] }) {
+export default function AllocationDiffChartV0(props: {
+  rows: AllocationDiffRowV0[];
+  title?: string;
+  description?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const rowsSorted = useMemo(() => {
@@ -26,7 +30,7 @@ export default function AllocationDiffChartV0(props: { rows: AllocationDiffRowV0
   return (
     <div style={{ marginTop: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
-        <div style={{ fontWeight: 700, fontSize: 12 }}>Allocation diff (pre vs post)</div>
+        <div style={{ fontWeight: 700, fontSize: 12 }}>{props.title ?? 'Allocation diff (pre vs post)'}</div>
         {rowsSorted.length > 12 ? (
           <button
             type="button"
@@ -40,7 +44,7 @@ export default function AllocationDiffChartV0(props: { rows: AllocationDiffRowV0
       </div>
 
       <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-        Before/After bars are weights vs total portfolio (including cash). Dashed marker = target.
+        {props.description ?? 'Before/After bars are weights vs total portfolio (including cash). Dashed marker = target.'}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
