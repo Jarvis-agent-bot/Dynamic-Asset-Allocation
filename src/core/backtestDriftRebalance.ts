@@ -35,6 +35,16 @@ export type DriftRebalanceBacktestRequest = {
 
   /** When starting from cash-only, buy into target weights on day 0. Default: true. */
   bootstrapToTarget?: boolean;
+
+  /** When enabled, include before/after portfolio weight snapshots on each event (for UI "plan diff"). */
+  includeEventStates?: boolean;
+};
+
+export type PortfolioWeightsSnapshotV0 = {
+  equityAbs: number;
+  cashAbs: number;
+  cashPct01: number;
+  weightsBySymbolPct01: Record<string, number>;
 };
 
 export type DriftRebalanceBacktestEvent = {
@@ -44,6 +54,10 @@ export type DriftRebalanceBacktestEvent = {
   orders: SuggestedOrder[];
   executed: SuggestedOrder[];
   turnoverNotional: number;
+
+  // Optional: used by UI to render a before/after weight diff for each planned action.
+  before?: PortfolioWeightsSnapshotV0;
+  after?: PortfolioWeightsSnapshotV0;
 };
 
 export type DriftRebalanceBacktestResult = {
@@ -64,6 +78,12 @@ export type DriftRebalanceBacktestResult = {
 
   events: DriftRebalanceBacktestEvent[];
   warnings: string[];
+
+  // Optional: overall before/after snapshots (useful for showing a top-level preview diff).
+  states?: {
+    initial: PortfolioWeightsSnapshotV0;
+    final: PortfolioWeightsSnapshotV0;
+  };
 };
 
 function toFiniteNumber(x: unknown, fallback: number): number {
@@ -144,6 +164,44 @@ function portfolioValueAbs(holdings: Record<string, number>, cash: number, price
   }
   return v;
 }
+function computeWeightsSnapshot(opts: {
+  holdings: Record<string, number>;
+  cash: number;
+  prices: Record<string, number>;
+  warnings: string[];
+}): PortfolioWeightsSnapshotV0 {
+  const cashAbs = Math.max(0, toFiniteNumber(opts.cash, 0));
+  const valuesBySymbol: Record<string, number> = {};
+
+  let equityAbs = cashAbs;
+  for (const [sym, qtyRaw] of Object.entries(opts.holdings || {})) {
+    const qty = toFiniteNumber(qtyRaw, 0);
+    if (!Number.isFinite(qty) || qty === 0) continue;
+    const px = opts.prices[sym];
+    if (!Number.isFinite(px) || px <= 0) {
+      opts.warnings.push(`warning: missing price for holding ${sym}; excluded from valuation`);
+      continue;
+    }
+    const v = qty * px;
+    if (!Number.isFinite(v)) continue;
+    valuesBySymbol[sym] = v;
+    equityAbs += v;
+  }
+
+  const denom = equityAbs > 0 ? equityAbs : 1;
+  const weightsBySymbolPct01: Record<string, number> = {};
+  for (const [sym, v] of Object.entries(valuesBySymbol)) {
+    weightsBySymbolPct01[sym] = v / denom;
+  }
+
+  return {
+    equityAbs,
+    cashAbs,
+    cashPct01: cashAbs / denom,
+    weightsBySymbolPct01,
+  };
+}
+
 
 function executeOrders(opts: {
   holdings: Record<string, number>;
@@ -214,6 +272,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   const constraints = req.constraints;
   const policy = req.policy || {};
   const bootstrapToTarget = req.bootstrapToTarget !== false;
+  const includeEventStates = req.includeEventStates === true;
 
   let holdings = cloneHoldings(req.initialHoldings || {});
   let cash = Math.max(0, toFiniteNumber(req.initialCash, 0));
@@ -230,6 +289,8 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   if (!(Number.isFinite(equity0) && equity0 > 0)) {
     throw new Error("initial equity must be > 0 (check initialCash/holdings and day-0 prices)");
   }
+
+  const initialState = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : null;
 
   let lastRebalanceAt = "";
 
@@ -248,7 +309,11 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       },
     });
 
+    const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : undefined;
+
     const ex = executeOrders({ holdings: {}, cash: equity0, prices: prices0, orders: res.orders, warnings });
+    const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: prices0, warnings }) : undefined;
+
     holdings = ex.holdings;
     cash = ex.cash;
     equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
@@ -260,6 +325,8 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       orders: res.orders,
       executed: ex.executed,
       turnoverNotional: ex.turnoverNotional,
+      before,
+      after,
     });
 
     lastRebalanceAt = isoToIsoDateTime(dates[0]);
@@ -297,7 +364,10 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     });
 
     if (res.trigger.shouldRebalance) {
+      const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
       const ex = executeOrders({ holdings, cash, prices: px, orders: res.orders, warnings });
+      const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
+
       holdings = ex.holdings;
       cash = ex.cash;
       turnoverNotional += ex.turnoverNotional;
@@ -310,6 +380,8 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
         orders: res.orders,
         executed: ex.executed,
         turnoverNotional: ex.turnoverNotional,
+        before,
+        after,
       });
 
       lastRebalanceAt = now;
@@ -332,6 +404,12 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   const equity = cumulativeProduct(dailyReturns, 1);
   const metrics: BacktestMetrics = computeMetrics(equity, dailyReturns);
 
+  const finalState = (() => {
+    if (!includeEventStates) return null;
+    const pxLast = buildPricesAtIndex(req.seriesBySymbol, dates.length - 1, warnings);
+    return computeWeightsSnapshot({ holdings, cash, prices: pxLast, warnings });
+  })();
+
   return {
     schemaVersion: 1,
     dates: dates.slice(1),
@@ -346,5 +424,6 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     },
     events,
     warnings,
+    states: includeEventStates && initialState && finalState ? { initial: initialState, final: finalState } : undefined,
   };
 }
