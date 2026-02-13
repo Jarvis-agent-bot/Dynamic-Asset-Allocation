@@ -857,12 +857,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     const mode: ExecutionModeV0 = executionMode;
     setPaperRunExecutionMode(mode);
 
+    // Funds hub v0 safety: "live" execution is intentionally disabled until a broker adapter exists.
+    // If a user has stale localStorage pointing to "live", force them back to dry run.
     if (mode === 'live') {
-      const ok = window.confirm('Live execution may place real trades (broker adapter not configured yet). Continue?');
-      if (!ok) {
-        setPaperRunSummary('已取消（未确认 live execution）。');
-        return;
-      }
+      setPaperRunError('Live execution is not configured yet. Please switch to Dry run.');
+      persistExecutionModeV0('paper');
+      setPaperRunExecutionMode('paper');
+      return;
     }
 
     setPaperRunLoading(true);
@@ -1004,8 +1005,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         return;
       }
 
-      const runNote = mode === 'live' ? 'ui:market/funds:live-run' : 'ui:market/funds:paper-run';
-      const exec = getExecutionAdapterV0(mode === 'live' ? 'real' : 'paper');
+      const runNote = 'ui:market/funds:dry-run';
+      const exec = getExecutionAdapterV0('paper');
       const r = exec.executeOrders({
         storage: window.localStorage,
         source: 'rebalance-core',
@@ -1014,12 +1015,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       });
 
       if (!r.ok) {
-        setPaperRunError(mode === 'live' ? `live execution failed: ${r.error}` : r.error);
+        setPaperRunError(r.error);
         return;
       }
 
       setPaperRunRecordedAt(r.entry.at);
-      setPaperRunSummary(`已记录 ${r.kind} execution：${orders.length} 条 orders。`);
+      setPaperRunSummary(`已记录 Dry run（不发送真实订单）：${orders.length} 条 orders。`);
 
       const actualSummary: RebalancePostRunSummaryV0 | null = (() => {
         try {
@@ -1198,19 +1199,24 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <button type="button" className="button" onClick={doCopyOrders} style={{ padding: '6px 10px' }} disabled={!effectiveOrders.length}>
                   {copyOrdersStatus === 'ok' ? 'Copied' : copyOrdersStatus === 'error' ? 'Copy failed' : 'Copy suggested orders'}
                 </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
                   <span className="muted" style={{ fontSize: 12 }}>
-                    Execution:
+                    Mode:
                   </span>
                   <select
                     value={executionMode}
                     onChange={(e) => persistExecutionModeV0(e.target.value)}
                     style={{ padding: '6px 10px', borderRadius: 10 }}
-                    aria-label="Execution mode"
+                    aria-label="Rebalance execution mode"
                   >
-                    <option value="paper">paper</option>
-                    <option value="live">live</option>
+                    <option value="paper">Dry run (no orders sent)</option>
+                    <option value="live" disabled>
+                      Live (real orders) — not configured
+                    </option>
                   </select>
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    Dry run only records the orders to the local execution log.
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -1219,7 +1225,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   style={{ padding: '6px 10px' }}
                   disabled={paperRunLoading || !targetWeights.length}
                 >
-                  {paperRunLoading ? 'Running...' : executionMode === 'live' ? 'Run live rebalance' : 'Run paper rebalance'}
+                  {paperRunLoading ? 'Running...' : executionMode === 'live' ? 'Run rebalance (live)' : 'Run rebalance (dry run)'}
                 </button>
                 {paperRunLoading ? (
                   <button
@@ -1267,7 +1273,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
                   <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary)' }}>
-                    Execution recorded ({paperRunExecutionMode})
+                    Execution recorded ({paperRunExecutionMode === 'live' ? 'live' : 'dry-run'})
                     <span className="muted" style={{ marginLeft: 8, fontWeight: 500, fontFamily: 'ui-monospace, SFMono-Regular' }}>{paperRunRecordedAt}</span>
                   </div>
                   <button type="button" className="button secondary" onClick={() => scrollToId('rebalance-log')} style={{ padding: '6px 10px' }}>
