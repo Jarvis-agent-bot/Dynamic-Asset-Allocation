@@ -83,6 +83,7 @@ const LS_WHATIF_SLIPPAGE_BPS = 'daa.whatif.slippageBps';
 const LS_WHATIF_SLIPPAGE_SENSITIVITY_V0 = 'daa.whatif.slippageSensitivityV0';
 const LS_WHATIF_DRIFT_THRESHOLD_PCT_V0 = 'daa.whatif.driftThresholdPctV0';
 const LS_WHATIF_ORDERS_PREVIEW_SOURCE_V0 = 'daa.whatif.ordersPreviewSourceV0';
+const LS_REBALANCE_ASSET_BLACKLIST_V0 = 'daa.rebalance.assetBlacklist.v0';
 
 type SlippageSensitivityV0 = 'LOW' | 'BASE' | 'HIGH';
 
@@ -520,6 +521,30 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return whatIfDriftThresholdPctV0 !== null ? whatIfDriftThresholdPctV0 : policyDriftThresholdPct;
   }, [policyDriftThresholdPct, whatIfDriftThresholdPctV0]);
 
+  const [assetBlacklistTextV0, setAssetBlacklistTextV0] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return String(window.localStorage.getItem(LS_REBALANCE_ASSET_BLACKLIST_V0) ?? '');
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(LS_REBALANCE_ASSET_BLACKLIST_V0, String(assetBlacklistTextV0 ?? ''));
+  }, [assetBlacklistTextV0]);
+
+  const assetBlacklistV0 = useMemo(() => {
+    const raw = String(assetBlacklistTextV0 ?? '').trim();
+    if (!raw) return [] as string[];
+
+    const tokens = raw
+      .split(/[\s,;]+/g)
+      .map((x) => normalizePlanSymbol(x))
+      .filter(Boolean);
+
+    return Array.from(new Set(tokens)).sort();
+  }, [assetBlacklistTextV0]);
+
+  const assetBlacklistSetV0 = useMemo(() => new Set(assetBlacklistV0), [assetBlacklistV0]);
+
   const autoPlanInputText = autoPlanScenario === 'A' ? autoPlanInputTextA : autoPlanInputTextB;
   const autoPlanThresholdOverridePct = autoPlanScenario === 'A' ? autoPlanThresholdOverridePctA : autoPlanThresholdOverridePctB;
   const autoPlanThresholdPctUsed = autoPlanThresholdOverridePct !== null ? autoPlanThresholdOverridePct : driftThresholdPct;
@@ -710,9 +735,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }, [moneyPlan]);
 
   const targetWeightsEffective = useMemo(() => {
-    if (!(investablePct01 >= 0 && investablePct01 <= 1) || investablePct01 === 1) return targetWeights;
-    return targetWeights.map((t) => ({ ...t, targetPct: t.targetPct * investablePct01 }));
-  }, [investablePct01, targetWeights]);
+    const scaled = !(investablePct01 >= 0 && investablePct01 <= 1) || investablePct01 === 1 ? targetWeights : targetWeights.map((t) => ({ ...t, targetPct: t.targetPct * investablePct01 }));
+
+    if (!assetBlacklistSetV0.size) return scaled;
+    return scaled.filter((t) => !assetBlacklistSetV0.has(normalizePlanSymbol((t as any)?.id)));
+  }, [assetBlacklistSetV0, investablePct01, targetWeights]);
 
   const lastRunTargetWeightsPre = useMemo(() => {
     if (rebalanceReq && typeof rebalanceReq === 'object') {
@@ -780,8 +807,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
   }, [holdings, rev]);
 
+  const holdingsForWeightsEffective = useMemo(() => {
+    if (!assetBlacklistSetV0.size) return holdingsForWeights;
+    const out: HoldingsLike = {};
+    for (const [codeRaw, h] of Object.entries(holdingsForWeights ?? {})) {
+      const code = normalizePlanSymbol(codeRaw);
+      if (!code) continue;
+      if (assetBlacklistSetV0.has(code)) continue;
+      out[codeRaw] = h as any;
+    }
+    return out;
+  }, [assetBlacklistSetV0, holdingsForWeights]);
+
   const currentWeights = useMemo(() => {
-    if (!holdingsForWeights || !Object.keys(holdingsForWeights).length) return [] as Array<{ id: string; label: string; value: number }>;
+    if (!holdingsForWeightsEffective || !Object.keys(holdingsForWeightsEffective).length) return [] as Array<{ id: string; label: string; value: number }>;
 
     const byCode = new Map<string, FundLike>();
     for (const f of funds ?? []) {
@@ -790,7 +829,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
 
     const rows: Array<{ id: string; label: string; value: number }> = [];
-    for (const [codeRaw, h] of Object.entries(holdingsForWeights ?? {})) {
+    for (const [codeRaw, h] of Object.entries(holdingsForWeightsEffective ?? {})) {
       const code = String(codeRaw ?? '').trim();
       if (!code) continue;
 
@@ -809,7 +848,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     rows.sort((a, b) => b.value - a.value);
     return rows;
-  }, [funds, holdingsForWeights, priceSnapshot]);
+  }, [funds, holdingsForWeightsEffective, priceSnapshot]);
 
   const rebalanceTableRows = useMemo(() => {
     const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
@@ -984,11 +1023,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
       if (maxIn !== null) constraints.maxIn = maxIn;
       if (maxOut !== null) constraints.maxOut = maxOut;
+      if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
 
       const holdingsMap: Record<string, number> = {};
       for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
         const sym = String(symRaw ?? '').trim();
         if (!sym) continue;
+        if (assetBlacklistSetV0.has(normalizePlanSymbol(sym))) continue;
 
         const qty = toFiniteNumber((p as any)?.qty);
         if (!qty || qty <= 0) continue;
@@ -1455,6 +1496,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
         const sym = normalizePlanSymbol(symRaw);
         if (!sym) continue;
+        if (assetBlacklistSetV0.has(sym)) continue;
 
         const qty = toFiniteNumber((p as any)?.qty);
         if (!qty || qty <= 0) continue;
@@ -1469,7 +1511,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       }
 
       const pricesMap: Record<string, number> = {};
-      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeights.map((t) => normalizePlanSymbol((t as any)?.id))]);
+      const symbols = new Set<string>([
+        ...Object.keys(holdingsMap),
+        ...targetWeightsEffective.map((t) => normalizePlanSymbol((t as any)?.id)),
+      ]);
 
       for (const sym of symbols) {
         const manual = getSnapshotPrice(priceSnapshot, sym);
@@ -1543,6 +1588,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
       const sym = normalizePlanSymbol(symRaw);
       if (!sym) continue;
+      if (assetBlacklistSetV0.has(sym)) continue;
 
       const qty = toFiniteNumber((p as any)?.qty);
       if (!qty || qty <= 0) continue;
@@ -1551,7 +1597,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
 
     const targetWeightsMap: Record<string, number> = {};
-    for (const t of targetWeights) {
+    for (const t of targetWeightsEffective) {
       const id = normalizePlanSymbol((t as any)?.id);
       const w = toFiniteNumber((t as any)?.targetPct);
       if (!id) continue;
@@ -1581,6 +1627,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
     if (maxIn !== null) constraints.maxIn = maxIn;
     if (maxOut !== null) constraints.maxOut = maxOut;
+    if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
 
     const cash0 = toFiniteNumber((st as any)?.cash) ?? 0;
 
@@ -1671,11 +1718,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
       if (maxIn !== null) constraints.maxIn = maxIn;
       if (maxOut !== null) constraints.maxOut = maxOut;
+      if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
 
       const holdingsMap: Record<string, number> = {};
       for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
         const sym = String(symRaw ?? '').trim();
         if (!sym) continue;
+        if (assetBlacklistSetV0.has(normalizePlanSymbol(sym))) continue;
 
         const qty = toFiniteNumber((p as any)?.qty);
         if (!qty || qty <= 0) continue;
@@ -2185,6 +2234,36 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{targetWeightsSource}</span>
               </span>
             </div>
+
+            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 8 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+                Asset blacklist
+              </div>
+              <input
+                value={assetBlacklistTextV0}
+                onChange={(e) => setAssetBlacklistTextV0(e.target.value)}
+                placeholder="Comma/space separated symbols to exclude (e.g. USDT BTC 005963)"
+                style={{
+                  flex: '1 1 360px',
+                  minWidth: 260,
+                  padding: '6px 10px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  background: 'rgba(0,0,0,0.14)',
+                }}
+                aria-label="Rebalance asset blacklist"
+              />
+              <div className="muted" style={{ fontSize: 11 }}>
+                Excluded from holdings + targetWeights (and their prices) when generating plans.
+              </div>
+            </div>
+
+            {assetBlacklistV0.length ? (
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                Active blacklist:{' '}
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{assetBlacklistV0.join(', ')}</span>
+              </div>
+            ) : null}
 
             {portfolioLastRebalanceAt ? (
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>

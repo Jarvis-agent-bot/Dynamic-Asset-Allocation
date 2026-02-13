@@ -110,6 +110,30 @@ describe("funds hub rebalance e2e smoke", () => {
     expect(decoded).toEqual(report);
   });
 
+  it("supports assetBlacklist by excluding holdings + targets", () => {
+    const req = {
+      account: { cash: 0 },
+      holdings: { AAA: 10, BBB: 10 },
+      prices: { AAA: 10, BBB: 10, CCC: 10 },
+      targetWeights: {
+        AAA: 0,
+        CCC: 1,
+      },
+      constraints: { maxIn: 1e9, maxOut: 1e9, assetBlacklist: ["AAA"] },
+      policy: { thresholdPct: 0, minTradeNotional: 0, cooldownSeconds: 0 },
+    };
+
+    expect(isRebalanceCoreRequest(req)).toBe(true);
+
+    const resp = rebalanceCore(req);
+
+    expect(resp.orders.map((o) => `${o.side}:${o.symbol}:${o.notional}`)).toEqual(["SELL:BBB:100", "BUY:CCC:100"]);
+    expect(resp.orders.some((o) => o.symbol === "AAA")).toBe(false);
+
+    // Ensure the filtered targetWeights are reflected back to the UI.
+    expect(resp.targetWeights.map((w) => w.id)).toEqual(["CCC"]);
+  });
+
   it("keeps cash buffer + lot rounding internally consistent", () => {
     // Model a cash buffer by making target weights sum to < 1, and ensure the core's
     // minTradeNotional (lot-step) rounding doesn't break the implied cash target.
