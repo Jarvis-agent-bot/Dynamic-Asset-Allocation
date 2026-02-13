@@ -18,6 +18,13 @@ import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
 import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
+import {
+  attachOrdersToRebalanceRunV0,
+  failRebalanceOrderStatusRunV0,
+  finishRebalanceOrderStatusRunV0,
+  startRebalanceOrderStatusRunV0,
+  updateRebalanceOrderStatusV0,
+} from '@/src/daa/rebalanceOrderStatusRunStoreV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
@@ -48,6 +55,7 @@ import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
 import DaaRebalancePolicyEditorV0 from './DaaRebalancePolicyEditorV0';
 import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
+import { DaaOrderStatusTrackerV0 } from './DaaOrderStatusTrackerV0';
 
 type FundLike = {
   code: string;
@@ -1388,6 +1396,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     if (typeof window === 'undefined') return;
 
+    let statusRunId: string | null = null;
+
     const mode: ExecutionModeV0 = executionMode;
     setPaperRunExecutionMode(mode);
 
@@ -1405,6 +1415,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunError(preTradeCashCheck.message);
       return;
     }
+
+    // v0: best-effort local snapshot so the UI can show per-order status while a run is in flight.
+    const startedStatus = startRebalanceOrderStatusRunV0({
+      storage: window.localStorage,
+      message: `Funds hub rebalance (${mode})`,
+    });
+    if (startedStatus.ok) statusRunId = startedStatus.run.runId;
 
     setPaperRunLoading(true);
 
@@ -1539,11 +1556,31 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       if (!shouldRebalance) {
         setPaperRunSummary('触发策略: shouldRebalance=false（未记录）。');
+
+        if (statusRunId) {
+          finishRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            phase: 'done',
+            message: 'shouldRebalance=false (no orders executed)',
+          });
+        }
+
         return;
       }
 
       if (!orders.length) {
         setPaperRunSummary('未返回 orders（未记录）。');
+
+        if (statusRunId) {
+          finishRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            phase: 'done',
+            message: 'no orders returned by core',
+          });
+        }
+
         return;
       }
 
@@ -1557,7 +1594,44 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       if (coreCashCheck.blocking) {
         setPaperRunError(coreCashCheck.message);
+
+        if (statusRunId) {
+          failRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            error: coreCashCheck.message,
+            message: 'pre-trade cash check blocked',
+          });
+        }
+
         return;
+      }
+
+      if (statusRunId) {
+        attachOrdersToRebalanceRunV0({
+          storage: window.localStorage,
+          runId: statusRunId,
+          orders,
+          message: `executing ${orders.length} orders (paper)`,
+        });
+
+        for (let i = 0; i < orders.length; i++) {
+          const orderId = String(i + 1);
+          updateRebalanceOrderStatusV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            orderId,
+            status: 'submitted',
+            phase: 'executing',
+          });
+          updateRebalanceOrderStatusV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            orderId,
+            status: 'filled',
+            phase: 'executing',
+          });
+        }
       }
 
       const runNote = 'ui:market/funds:dry-run';
@@ -1571,7 +1645,26 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       if (!r.ok) {
         setPaperRunError(r.error);
+
+        if (statusRunId) {
+          failRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            error: r.error,
+            message: 'paper execution log failed',
+          });
+        }
+
         return;
+      }
+
+      if (statusRunId) {
+        finishRebalanceOrderStatusRunV0({
+          storage: window.localStorage,
+          runId: statusRunId,
+          phase: 'recorded',
+          message: `recorded ${orders.length} paper orders`,
+        });
       }
 
       setPaperRunRecordedAt(r.entry.at);
@@ -1674,8 +1767,27 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       if (isAbort) {
         setPaperRunSummary('已取消（abort）。');
+
+        if (statusRunId) {
+          failRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            error: 'aborted',
+            message: 'user aborted run',
+          });
+        }
       } else {
-        setPaperRunError(e instanceof Error ? e.message : String(e));
+        const msg = e instanceof Error ? e.message : String(e);
+        setPaperRunError(msg);
+
+        if (statusRunId) {
+          failRebalanceOrderStatusRunV0({
+            storage: window.localStorage,
+            runId: statusRunId,
+            error: msg,
+            message: 'run failed',
+          });
+        }
       }
     } finally {
       paperRunAbortRef.current = null;
@@ -1820,6 +1932,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{portfolioLastRebalanceAt}</span>
               </div>
             ) : null}
+
+            <DaaOrderStatusTrackerV0 pollMs={paperRunLoading ? 500 : 1500} />
 
             {effectiveOrders.length ? (
               <div
