@@ -6,6 +6,7 @@ import { copyTextToClipboard } from '../../../copyToClipboard';
 import { pretty } from '../../../wizardStorage';
 
 import { computeNextRunAtLocalV0, defaultRebalanceScheduleV1, type RebalanceScheduleCadenceV0, type RebalanceScheduleV1 } from '@/src/daa/rebalanceScheduleV0';
+import { computeNextCnMarketOpenShanghaiV0, isCnMarketOpenShanghaiV0 } from '@/src/daa/dynamicRebalancePausedReasonV0';
 import { loadRebalanceScheduleStateV1, persistRebalanceScheduleV1 } from '../../../rebalanceScheduleStore';
 
 const WEEKDAYS: Array<{ value: number; label: string }> = [
@@ -33,6 +34,45 @@ function formatLocalCompact(d: Date): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${y}-${m}-${day} ${hh}:${mm}`;
+}
+
+function formatCountdownCompactMs(deltaMs: number): string {
+  if (!Number.isFinite(deltaMs)) return '';
+  if (deltaMs <= 0) return 'due';
+
+  const totalSec = Math.floor(deltaMs / 1000);
+  const totalMin = Math.floor(totalSec / 60);
+
+  if (totalMin < 1) return 'in <1m';
+
+  const days = Math.floor(totalMin / (24 * 60));
+  const hours = Math.floor((totalMin % (24 * 60)) / 60);
+  const mins = totalMin % 60;
+
+  if (days > 0) return `in ${days}d ${hours}h`;
+  if (hours > 0) return `in ${hours}h ${mins}m`;
+  return `in ${mins}m`;
+}
+
+function computeShanghaiSessionWindowLabelV0(at: Date): '09:30-11:30' | '13:00-15:00' | null {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+
+  const parts = fmt.formatToParts(at);
+  const hh = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const mm = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+
+  const h = Number.isFinite(hh) ? Math.trunc(hh) : 0;
+  const m = Number.isFinite(mm) ? Math.trunc(mm) : 0;
+
+  const min = h * 60 + m;
+  if (min >= 9 * 60 + 30 && min < 11 * 60 + 30) return '09:30-11:30';
+  if (min >= 13 * 60 && min < 15 * 60) return '13:00-15:00';
+  return null;
 }
 
 export default function DaaRebalanceScheduleV0() {
@@ -83,9 +123,13 @@ export default function DaaRebalanceScheduleV0() {
 
     const next = schedule ? computeNextRunAtLocalV0(schedule, new Date()) : null;
 
+    // CN market-hours constraint: estimate the next eligible execution time.
+    const nextExecAt = enabled && next ? (isCnMarketOpenShanghaiV0(next) ? next : computeNextCnMarketOpenShanghaiV0(next)) : null;
+    const nextExecWindow = nextExecAt ? computeShanghaiSessionWindowLabelV0(nextExecAt) : null;
+
     if (enabled && !next) warn.push('Enabled but next run cannot be computed (check time/weekday).');
 
-    return { issues: iss, warnings: warn, schedule, nextRunAt: next };
+    return { issues: iss, warnings: warn, schedule, nextRunAt: next, nextExecAt, nextExecWindow };
   }, [cadence, enabled, timeLocalHHMM, weekday0Sun]);
 
   const headline = useMemo(() => {
@@ -217,8 +261,14 @@ export default function DaaRebalanceScheduleV0() {
             </div>
           ) : null}
 
-          <div className="muted" style={{ fontSize: 12 }}>
-            Next run: {computed.nextRunAt ? `${formatLocalCompact(computed.nextRunAt)} (local)` : '<disabled/invalid>'}
+          <div className="muted" style={{ fontSize: 12, display: 'grid', gridTemplateColumns: '1fr', gap: 4 }}>
+            <div>Next scheduled: {computed.nextRunAt ? `${formatLocalCompact(computed.nextRunAt)} (local)` : '<disabled/invalid>'}</div>
+            <div>
+              Next exec (CN market):{' '}
+              {computed.nextExecAt ? `${formatLocalCompact(computed.nextExecAt)} (local)` : '<n/a>'}
+              {computed.nextExecAt ? ` (${formatCountdownCompactMs(computed.nextExecAt.getTime() - Date.now())})` : ''}
+              {computed.nextExecWindow ? ` · window ${computed.nextExecWindow} SH` : ''}
+            </div>
           </div>
 
           {issues.length ? (
