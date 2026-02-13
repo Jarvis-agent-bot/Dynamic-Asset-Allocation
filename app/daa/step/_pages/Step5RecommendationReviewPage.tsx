@@ -2,30 +2,6 @@
 
 import { RebalanceSimulatePanel } from "../_components/RebalanceSimulatePanel";
 
-const SAMPLE_REBALANCE_SIMULATE_REQUEST = {
-  money_plan: {
-    account: {
-      baseCcy: "USD",
-      totalEquity: 10000,
-      cash: 2500,
-      investable: 8000,
-    },
-    constraints: {
-      maxPositionPct: 0.2,
-      maxIn: 1200,
-      maxOut: 1200,
-    },
-    allocations: [
-      { id: "SPY", label: "US Equity (SPY)", targetPct: 0.6, tags: { riskPreference: "mid" } },
-      { id: "TLT", label: "US Bonds (TLT)", targetPct: 0.4, tags: { riskPreference: "low" } },
-    ],
-  },
-  signals: [
-    { symbol: "SPY", action: "BUY", score: 0.82, reason: "trend up" },
-    { symbol: "TLT", action: "HOLD", score: 0.55, reason: "neutral" },
-  ],
-};
-
 /**
  * Step5 v0 — 推荐结果展示（Recommendation Review）
  *
@@ -41,7 +17,10 @@ export default function Step5RecommendationReviewPage() {
         <span style={{ marginLeft: 8, color: "#999", fontSize: 12 }}>(rebalance-simulate-ui)</span>
       </p>
 
-      <RebalanceSimulatePanel title="Generate & inspect recommendation" defaultRequest={SAMPLE_REBALANCE_SIMULATE_REQUEST} />
+      <RebalanceSimulatePanel
+        title="Generate & inspect recommendation"
+        fixtureEndpoint="/api/daa/fixtures/rebalance-simulate-request-v0"
+      />
     </section>
   );
 }

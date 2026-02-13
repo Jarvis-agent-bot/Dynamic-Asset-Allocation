@@ -26,29 +26,7 @@ export function generateMetadata({ params }: StepPageProps) {
   };
 }
 
-const SAMPLE_REBALANCE_SIMULATE_REQUEST = {
-  money_plan: {
-    account: {
-      baseCcy: "USD",
-      totalEquity: 10000,
-      cash: 2500,
-      investable: 8000,
-    },
-    constraints: {
-      maxPositionPct: 0.2,
-      maxIn: 1200,
-      maxOut: 1200,
-    },
-    allocations: [
-      { id: "SPY", label: "US Equity (SPY)", targetPct: 0.6, tags: { riskPreference: "mid" } },
-      { id: "TLT", label: "US Bonds (TLT)", targetPct: 0.4, tags: { riskPreference: "low" } },
-    ],
-  },
-  signals: [
-    { symbol: "SPY", action: "BUY", score: 0.82, reason: "trend up" },
-    { symbol: "TLT", action: "HOLD", score: 0.55, reason: "neutral" },
-  ],
-};
+// Demo request is available via server-side fixtures (see /api/daa/fixtures).
 
 function Nav({ stepId }: { stepId: number }) {
   const idx = DAA_STEPS.findIndex((s) => s.id === stepId);
@@ -155,7 +133,7 @@ export default function StepPage({ params }: StepPageProps) {
         <div style={{ marginTop: 12 }}>
           <RebalanceSimulatePanel
             title={step.id === 4 ? "Generate v0 rebalance recommendation" : "Generate & inspect recommendation"}
-            defaultRequest={SAMPLE_REBALANCE_SIMULATE_REQUEST}
+            fixtureEndpoint="/api/daa/fixtures/rebalance-simulate-request-v0"
           />
         </div>
 
