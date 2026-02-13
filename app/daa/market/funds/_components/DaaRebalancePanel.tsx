@@ -1489,7 +1489,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
                       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, marginTop: 8, alignItems: 'center' }}>
                         <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
-                          feeBps
+                          brokerageFeeBps
                           <input
                             type="number"
                             value={whatIfFeeBps}
@@ -1512,13 +1512,34 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           />
                         </label>
 
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          turnover={whatIf.turnoverNotional.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''} ({(whatIf.turnoverPctOfTotalBefore * 100).toFixed(2)}% of totalBefore)
-                        </div>
+                        {(() => {
+                          const ccy = baseCcy ? ` ${baseCcy}` : '';
+                          const netImpact = whatIf.totalAfter - whatIf.totalBefore;
+                          const netImpactPct = whatIf.totalBefore > 0 ? netImpact / whatIf.totalBefore : null;
+                          const netColor = netImpact < 0 ? 'var(--danger)' : 'var(--text)';
 
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          costPct={(whatIf.costPct * 100).toFixed(2)}%
-                        </div>
+                          return (
+                            <>
+                              <div className="muted" style={{ fontSize: 12 }}>
+                                turnover={whatIf.turnoverNotional.toFixed(2)}{ccy} ({(whatIf.turnoverPctOfTotalBefore * 100).toFixed(2)}% of totalBefore)
+                              </div>
+
+                              <div className="muted" style={{ fontSize: 12 }}>
+                                brokerageFee≈{whatIf.feeTotal.toFixed(2)}{ccy}; slippage≈{whatIf.slippageTotal.toFixed(2)}{ccy}
+                              </div>
+
+                              <div className="muted" style={{ fontSize: 12 }}>
+                                totalCost≈{whatIf.costTotal.toFixed(2)}{ccy} (costPct={(whatIf.costPct * 100).toFixed(2)}%)
+                              </div>
+
+                              <div style={{ fontSize: 12, color: netColor }}>
+                                netImpact={netImpact.toFixed(2)}{ccy}
+                                {netImpactPct !== null ? ` (${(netImpactPct * 100).toFixed(2)}%)` : ''}
+                                <span className="muted">{' '}= totalAfter - totalBefore</span>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {whatIf.warnings.length ? (
@@ -1527,11 +1548,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         </div>
                       ) : null}
 
-                      <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                        turnover={whatIf.turnoverNotional.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''} (buy={whatIf.buyNotional.toFixed(2)}, sell={whatIf.sellNotional.toFixed(2)});
-                        feeTotal={whatIf.feeTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; slippageTotal={whatIf.slippageTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''};
-                        costTotal={whatIf.costTotal.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; totalBefore={whatIf.totalBefore.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; totalAfter={whatIf.totalAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; cashAfter={whatIf.cashAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}.
-                      </div>
+                      <details className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                        <summary style={{ cursor: 'pointer' }}>Raw totals</summary>
+                        <div style={{ marginTop: 6 }}>
+                          buy={whatIf.buyNotional.toFixed(2)}; sell={whatIf.sellNotional.toFixed(2)}; totalBefore={whatIf.totalBefore.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; totalAfter={whatIf.totalAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}; cashAfter={whatIf.cashAfter.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}.
+                        </div>
+                      </details>
 
                       <div style={{ marginTop: 10, overflowX: 'auto' as const }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
