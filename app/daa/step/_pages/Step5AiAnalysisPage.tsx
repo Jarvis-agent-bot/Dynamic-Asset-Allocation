@@ -9,29 +9,7 @@ import { analyzeDaaRecommendation } from "@/src/core/aiAnalysis";
 import { LS_MARKET_EVENTS, WIZARD_DATA_EVENT, pretty, readJsonFromLs } from "../../wizardStorage";
 import { RebalanceSimulatePanel } from "../_components/RebalanceSimulatePanel";
 
-const SAMPLE_REBALANCE_SIMULATE_REQUEST = {
-  money_plan: {
-    account: {
-      baseCcy: "USD",
-      totalEquity: 10000,
-      cash: 2500,
-      investable: 8000,
-    },
-    constraints: {
-      maxPositionPct: 0.2,
-      maxIn: 1200,
-      maxOut: 1200,
-    },
-    allocations: [
-      { id: "SPY", label: "US Equity (SPY)", targetPct: 0.6, tags: { riskPreference: "mid" } },
-      { id: "TLT", label: "US Bonds (TLT)", targetPct: 0.4, tags: { riskPreference: "low" } },
-    ],
-  },
-  signals: [
-    { symbol: "SPY", action: "BUY", score: 0.82, reason: "trend up" },
-    { symbol: "TLT", action: "HOLD", score: 0.55, reason: "neutral" },
-  ],
-};
+// Demo request is loaded from server-side fixtures (see /api/daa/fixtures).
 
 export default function Step5AiAnalysisPage() {
   const [latestRun, setLatestRun] = useState<{ request: unknown; responseJson: unknown; ok: boolean; httpStatus: number | null } | null>(null);
@@ -68,7 +46,7 @@ export default function Step5AiAnalysisPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
         <RebalanceSimulatePanel
           title="1) Generate baseline recommendation (engine)"
-          defaultRequest={SAMPLE_REBALANCE_SIMULATE_REQUEST}
+          fixtureEndpoint="/api/daa/fixtures/rebalance-simulate-request-v0"
           onResult={(r) => setLatestRun({ request: r.request, responseJson: r.responseJson, ok: r.ok, httpStatus: r.httpStatus })}
         />
 

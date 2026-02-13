@@ -20,69 +20,12 @@ function fmtTs(ts: string) {
   return d.toLocaleString("zh-CN", { hour12: false });
 }
 
-const SAMPLE_TWITTER_JSON = pretty([
-  {
-    id: "1870000000000000000",
-    created_at: "2026-02-10T08:30:00.000Z",
-    text: "Macro: CPI print looks softer than expected. $SPY $QQQ\nAnalyst view: risk-on may persist.",
-    author: "@analyst_list",
-    url: "https://twitter.com/",
-    tags: ["macro", "rates"],
-  },
-]);
-
-const SAMPLE_YFINANCE_JSON = pretty([
-  {
-    uuid: "yf-1",
-    title: "Company earnings beat estimates",
-    link: "https://finance.yahoo.com/",
-    providerPublishTime: 1765414200,
-    relatedTickers: ["AAPL"],
-    summary: "Objective news example from yfinance export.",
-  },
-]);
-
-const SAMPLE_XUEQIU_JSON = pretty({
-  items: [
-    {
-      id: "xq-1",
-      created_at: 1765417800,
-      title: "雪球：市场快讯",
-      summary: "示例：可粘贴雪球 API/抓取导出的 JSON。",
-      symbols: ["SH600519"],
-      url: "https://xueqiu.com/",
-    },
-  ],
-});
-
-const DEFAULT_EVENTS: MarketEvent[] = [
-  {
-    id: "tw-sample",
-    source: "twitter",
-    ts: "2026-02-06T08:30:00.000Z",
-    title: "Macro: CPI print looks softer than expected",
-    summary: "Analyst view: risk-on may persist if follow-through continues.",
-    symbols: ["SPY", "QQQ"],
-    author: "@analyst_list",
-    tags: ["macro", "rates"],
-    url: "https://twitter.com",
-  },
-  {
-    id: "news-sample",
-    source: "news",
-    ts: "2026-02-06T06:10:00.000Z",
-    title: "Company earnings beat estimates",
-    summary: "Objective news stub. Later: yfinance/xueqiu ingestion.",
-    symbols: ["AAPL"],
-    tags: ["earnings"],
-    url: "https://finance.yahoo.com",
-  },
-];
+// Demo samples are served from server-side fixtures (see /api/daa/fixtures).
 
 export default function Step2MarketEventsPage() {
   const marketData = useMarketDataClient();
 
-  const [events, setEvents] = useState<MarketEvent[]>(DEFAULT_EVENTS);
+  const [events, setEvents] = useState<MarketEvent[]>([]);
   const [selected, setSelected] = useState<MarketEvent | null>(null);
 
   const [showTwitter, setShowTwitter] = useState(true);
@@ -169,24 +112,24 @@ export default function Step2MarketEventsPage() {
     return out;
   }, [selected, allowedEventTagSet]);
 
-  function ingest() {
+  function ingestFromTexts(next: { twitterText: string; yfinanceText: string; xueqiuText: string }) {
     const issues: string[] = [];
     const added: MarketEvent[] = [];
 
-    if (twitterText.trim()) {
-      const r = normalizeTwitterInput(twitterText, {});
+    if (next.twitterText.trim()) {
+      const r = normalizeTwitterInput(next.twitterText, {});
       issues.push(...r.issues.map((x) => `twitter: ${x}`));
       added.push(...r.events);
     }
 
-    if (yfinanceText.trim()) {
-      const r = normalizeYahooFinanceNewsInput(yfinanceText);
+    if (next.yfinanceText.trim()) {
+      const r = normalizeYahooFinanceNewsInput(next.yfinanceText);
       issues.push(...r.issues.map((x) => `yfinance: ${x}`));
       added.push(...r.events);
     }
 
-    if (xueqiuText.trim()) {
-      const r = normalizeXueqiuNewsInput(xueqiuText);
+    if (next.xueqiuText.trim()) {
+      const r = normalizeXueqiuNewsInput(next.xueqiuText);
       issues.push(...r.issues.map((x) => `xueqiu: ${x}`));
       added.push(...r.events);
     }
@@ -200,6 +143,10 @@ export default function Step2MarketEventsPage() {
     setEvents((prev) => mergeMarketEvents(prev, added));
     setIngestIssues(issues);
     setTagIssues([]);
+  }
+
+  function ingest() {
+    ingestFromTexts({ twitterText, yfinanceText, xueqiuText });
   }
 
   function safeParseJsonArray(text: string): any[] {
@@ -717,6 +664,37 @@ export default function Step2MarketEventsPage() {
     window.setTimeout(() => setCopyState(""), 1200);
   }
 
+  async function loadDemoAndIngest() {
+    setFetchState("loading demo fixtures...");
+
+    try {
+      const res = await fetch("/api/daa/fixtures/step2-market-events-v0", {
+        method: "GET",
+        headers: { accept: "application/json" },
+      });
+
+      const payload = (await res.json()) as any;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const tw = pretty(payload?.twitter ?? []);
+      const yf = pretty(payload?.yfinance ?? []);
+      const xq = pretty(payload?.xueqiu ?? {});
+
+      setTwitterText(tw);
+      setYfinanceText(yf);
+      setXueqiuText(xq);
+      setIngestIssues([]);
+
+      ingestFromTexts({ twitterText: tw, yfinanceText: yf, xueqiuText: xq });
+
+      setFetchState("demo loaded + ingested");
+      window.setTimeout(() => setFetchState(""), 1200);
+    } catch (e) {
+      setFetchState(`demo load failed: ${e instanceof Error ? e.message : String(e)}`);
+      window.setTimeout(() => setFetchState(""), 2000);
+    }
+  }
+
   return (
     <main>
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 2 — 市场信息</h1>
@@ -732,15 +710,10 @@ export default function Step2MarketEventsPage() {
               Ingest
             </button>
             <button
-              onClick={() => {
-                setTwitterText(SAMPLE_TWITTER_JSON);
-                setYfinanceText(SAMPLE_YFINANCE_JSON);
-                setXueqiuText(SAMPLE_XUEQIU_JSON);
-                setIngestIssues([]);
-              }}
+              onClick={loadDemoAndIngest}
               style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
             >
-              Load samples
+              Load demo & ingest
             </button>
             <button
               onClick={() => {

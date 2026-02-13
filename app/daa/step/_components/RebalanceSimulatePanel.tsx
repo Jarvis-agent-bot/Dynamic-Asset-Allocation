@@ -21,9 +21,15 @@ import { OrdersReviewV0 } from "../../_components/OrdersReviewV0";
 
 type Props = {
   title: string;
-  defaultRequest: unknown;
+  // Optional initial request. If omitted, we'll prefer any persisted request from localStorage.
+  defaultRequest?: unknown;
+  // Optional server-side fixture endpoint (GET) to load a demo request with one click.
+  fixtureEndpoint?: string;
   // Defaults to rebalance-simulate endpoints; override for other API-backed panels.
   endpoints?: string[];
+  // Override localStorage keys to avoid cross-panel pollution (e.g. core vs simulate).
+  storageKeyRequest?: string;
+  storageKeyResponse?: string;
   // When enabled, merge Step2 market events into the UI output as traceable citations.
   includeMarketContext?: boolean;
   // Optional hook for Step5 AI analysis: capture the latest run's request/response.
@@ -84,8 +90,28 @@ function normalizeCitations(x: unknown): MarketEventCitation[] {
     .filter((c) => c.symbol && c.eventId && c.ts && c.title);
 }
 
-export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpointOverrides, includeMarketContext, onResult }: Props) {
-  const [requestText, setRequestText] = useState(() => pretty(defaultRequest));
+export function RebalanceSimulatePanel({
+  title,
+  defaultRequest,
+  fixtureEndpoint,
+  endpoints: endpointOverrides,
+  storageKeyRequest,
+  storageKeyResponse,
+  includeMarketContext,
+  onResult,
+}: Props) {
+  const requestKey = storageKeyRequest ?? LS_REBALANCE_REQUEST;
+  const responseKey = storageKeyResponse ?? LS_REBALANCE_RESPONSE;
+
+  const [requestText, setRequestText] = useState(() => {
+    const stored = readJsonFromLs(requestKey);
+    if (stored !== null) return pretty(stored);
+    if (defaultRequest !== undefined) return pretty(defaultRequest);
+    return "{}";
+  });
+  const [fixtureStatus, setFixtureStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [fixtureError, setFixtureError] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [httpStatus, setHttpStatus] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,8 +158,8 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
 
   useEffect(() => {
     if (!parsedReq.ok) return;
-    saveJsonToLs(LS_REBALANCE_REQUEST, parsedReq.value);
-  }, [parsedReq]);
+    saveJsonToLs(requestKey, parsedReq.value);
+  }, [parsedReq, requestKey]);
 
   const orders = useMemo(() => {
     if (!response || typeof response !== "object") return [];
@@ -202,6 +228,30 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
       .map((a: any) => ({ id: String(a?.id ?? ""), label: String(a?.label ?? ""), targetPct: Number(a?.targetPct ?? 0) }))
       .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
   }, [parsedReq, response]);
+
+  async function loadFixture() {
+    if (!fixtureEndpoint) return;
+
+    setFixtureError(null);
+    setFixtureStatus("loading");
+
+    try {
+      const res = await fetch(fixtureEndpoint, {
+        method: "GET",
+        headers: { accept: "application/json" },
+      });
+
+      const payload = (await res.json()) as unknown;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      setRequestText(pretty(payload));
+      setFixtureStatus("ok");
+      window.setTimeout(() => setFixtureStatus("idle"), 1200);
+    } catch (e) {
+      setFixtureStatus("error");
+      setFixtureError(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   async function run() {
     setLastAttemptAt(new Date().toISOString());
@@ -321,7 +371,7 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
       // The output changed; clear the paper-exec status so users don't confuse it with a previous run.
       setPaperExecAt(null);
       setPaperExecError(null);
-      saveJsonToLs(LS_REBALANCE_RESPONSE, nextResp);
+      saveJsonToLs(responseKey, nextResp);
 
       if (res.ok) {
         const kind = isCore ? "core" : "simulate";
@@ -383,13 +433,43 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
     <section style={{ border: "1px solid #eee", borderRadius: 8, padding: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <div style={{ fontWeight: 600 }}>{title}</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {fixtureEndpoint ? (
+            <button
+              type="button"
+              onClick={loadFixture}
+              disabled={fixtureStatus === "loading"}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: "#fff",
+                opacity: fixtureStatus === "loading" ? 0.5 : 1,
+              }}
+            >
+              {fixtureStatus === "loading" ? "Loading demo..." : fixtureStatus === "ok" ? "Demo loaded" : "Load demo"}
+            </button>
+          ) : null}
           <button
-            onClick={() => setRequestText(pretty(defaultRequest))}
+            type="button"
+            onClick={() => {
+              setFixtureStatus("idle");
+              setFixtureError(null);
+              setRequestText("{}");
+            }}
             style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
           >
-            Reset sample
+            Clear
           </button>
+          {defaultRequest !== undefined ? (
+            <button
+              type="button"
+              onClick={() => setRequestText(pretty(defaultRequest))}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
+            >
+              Reset
+            </button>
+          ) : null}
           <button
             onClick={run}
             disabled={loading || !parsedReq.ok}
@@ -413,6 +493,8 @@ export function RebalanceSimulatePanel({ title, defaultRequest, endpoints: endpo
           ) : null}
         </div>
       </div>
+
+      {fixtureError ? <div style={{ fontSize: 12, color: "#b00020", marginBottom: 8 }}>{fixtureError}</div> : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div>

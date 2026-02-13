@@ -7,6 +7,8 @@ export const LS_ACTIVE_STEP = "daa.wizard.activeStep";
 export const LS_MONEY_PLAN = "daa.wizard.moneyPlan";
 export const LS_REBALANCE_REQUEST = "daa.wizard.rebalanceRequest";
 export const LS_REBALANCE_RESPONSE = "daa.wizard.rebalanceResponse";
+export const LS_REBALANCE_CORE_REQUEST = "daa.wizard.rebalanceCoreRequest";
+export const LS_REBALANCE_CORE_RESPONSE = "daa.wizard.rebalanceCoreResponse";
 export const LS_MARKET_EVENTS = "daa.wizard.marketEvents";
 
 // Step-specific storage keys (kept here so cross-step summary can read them).
