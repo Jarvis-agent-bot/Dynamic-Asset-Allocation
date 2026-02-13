@@ -94,8 +94,13 @@ export function appendPaperExecutionLog(args: {
 }): { ok: true; entry: PaperExecutionLogEntryV0; log: PaperExecutionLogEntryV0[] } | { ok: false; error: string } {
   if (!args.storage) return { ok: false, error: "missing storage" };
 
-  const orders = normalizeOrders(args.orders);
-  if (!orders.length) return { ok: false, error: "no valid orders" };
+  // Allow explicitly-empty order lists so the UI can record a no-op dry-run (and still surface expected allocations).
+  // Still reject non-array inputs or arrays with only invalid entries.
+  const rawOrders = args.orders;
+  if (!Array.isArray(rawOrders)) return { ok: false, error: "orders must be an array" };
+
+  const orders = normalizeOrders(rawOrders);
+  if (rawOrders.length && !orders.length) return { ok: false, error: "no valid orders" };
 
   const runId = typeof args.runId === "string" && args.runId.trim() ? args.runId.trim() : undefined;
 
