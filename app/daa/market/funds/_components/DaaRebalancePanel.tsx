@@ -978,6 +978,55 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return { total: rebalanceTableRows.length, over, under, within };
   }, [rebalanceTableRows, driftThresholdPct]);
 
+  const driftOverviewV0 = useMemo(() => {
+    if (!targetWeightsEffective.length) {
+      return {
+        kind: 'missing-targets' as const,
+        title: 'Set target weights to compute allocation drift.',
+      };
+    }
+
+    if (!rebalanceTableRows.length) {
+      return {
+        kind: 'empty' as const,
+        title: 'No holdings/quotes available to compute allocation drift.',
+      };
+    }
+
+    const alert = computeDriftAlertFromTableRows({ at: new Date().toISOString(), rows: rebalanceTableRows, thresholdPct: driftThresholdPct });
+
+    const sym = alert.maxAbsDriftSymbol;
+    const row = sym ? rebalanceTableRows.find((r) => r.id === sym) : null;
+    const label = (row?.label ?? sym ?? '').trim();
+
+    const maxAbsText = fmtPct01(alert.maxAbsDriftPct);
+    const thresholdText = fmtPct01(alert.thresholdPct);
+
+    const title = [
+      `Allocation drift vs target (source=${targetWeightsSource})`,
+      `maxAbs=${maxAbsText}${label ? ` (${label})` : ''}`,
+      `threshold=${thresholdText}`,
+      `breaches: over=${driftCounts.over}, under=${driftCounts.under}, within=${driftCounts.within}`,
+    ].join('; ');
+
+    return {
+      kind: 'ok' as const,
+      breached: alert.breached,
+      maxAbsText,
+      thresholdText,
+      label,
+      title,
+    };
+  }, [
+    driftCounts.over,
+    driftCounts.under,
+    driftCounts.within,
+    driftThresholdPct,
+    rebalanceTableRows,
+    targetWeightsEffective.length,
+    targetWeightsSource,
+  ]);
+
   const filteredRebalanceTableRows = useMemo(() => {
     if (driftFilter === 'over') return rebalanceTableRows.filter((r) => r.deltaPct >= driftThresholdPct);
     if (driftFilter === 'under') return rebalanceTableRows.filter((r) => r.deltaPct <= -driftThresholdPct);
@@ -2426,6 +2475,41 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
           <span style={{ fontWeight: 800 }}>DAA Workflow</span>
           <DaaDynamicRebalanceStatusPillV0 rev={rev} />
+          {driftOverviewV0.kind === 'ok' ? (
+            <span
+              className="badge"
+              title={driftOverviewV0.title}
+              style={{
+                padding: '4px 8px',
+                fontSize: 11,
+                borderColor: driftOverviewV0.breached ? 'var(--danger)' : '#64748b',
+                color: driftOverviewV0.breached ? 'var(--danger)' : '#64748b',
+                background: driftOverviewV0.breached ? 'rgba(248, 113, 113, 0.12)' : 'rgba(100, 116, 139, 0.12)',
+              }}
+            >
+              Drift
+              <span style={{ color: 'var(--muted)' }}>max|{driftOverviewV0.maxAbsText}|</span>
+              <span style={{ color: 'var(--muted)' }}>{driftOverviewV0.label || '<unknown>'}</span>
+            </span>
+          ) : driftOverviewV0.kind === 'missing-targets' ? (
+            <span
+              className="badge"
+              title={driftOverviewV0.title}
+              style={{ padding: '4px 8px', fontSize: 11, borderColor: '#64748b', color: '#64748b', background: 'rgba(100, 116, 139, 0.12)' }}
+            >
+              Drift
+              <span style={{ color: 'var(--muted)' }}>set targets</span>
+            </span>
+          ) : driftOverviewV0.kind === 'empty' ? (
+            <span
+              className="badge"
+              title={driftOverviewV0.title}
+              style={{ padding: '4px 8px', fontSize: 11, borderColor: '#64748b', color: '#64748b', background: 'rgba(100, 116, 139, 0.12)' }}
+            >
+              Drift
+              <span style={{ color: 'var(--muted)' }}>n/a</span>
+            </span>
+          ) : null}
           <span className="muted" style={{ fontSize: 12 }}>
             Hub on Market/Funds: checklist + jump actions + import/export
           </span>
@@ -2438,6 +2522,16 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           <Link href="/daa?step=1" className="muted" style={{ fontSize: 12 }}>
             Wizard
           </Link>
+          <button
+            type="button"
+            className={driftOverviewV0.kind === 'ok' && driftOverviewV0.breached ? 'button' : 'button secondary'}
+            onClick={() => jumpTo('rebalance')}
+            style={{ padding: '6px 10px' }}
+            disabled={driftOverviewV0.kind === 'missing-targets'}
+            title={driftOverviewV0.kind === 'missing-targets' ? driftOverviewV0.title : driftOverviewV0.kind === 'ok' ? driftOverviewV0.title : 'Jump to rebalance'}
+          >
+            Rebalance
+          </button>
           <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)} style={{ padding: '6px 10px' }}>
             {nextJump.buttonText}
           </button>
