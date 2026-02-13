@@ -93,8 +93,13 @@ const SLIPPAGE_SENSITIVITY_MULTIPLIER_V0: Record<SlippageSensitivityV0, number> 
   BASE: 1,
   HIGH: 2,
 };
+type AutoPlanScenarioKeyV0 = 'A' | 'B';
+
 const LS_AUTO_PLAN_INPUT = 'daa.market.funds.autoPlan.input.v0';
+// Legacy single-scenario key (kept for migration only).
 const LS_AUTO_PLAN_RESULT = 'daa.market.funds.autoPlan.result.v0';
+const LS_AUTO_PLAN_RESULT_A = 'daa.market.funds.autoPlan.result.A.v0';
+const LS_AUTO_PLAN_RESULT_B = 'daa.market.funds.autoPlan.result.B.v0';
 
 function scrollToId(id: string) {
   const el = document.getElementById(id);
@@ -396,18 +401,58 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [copyWeightsStatus, setCopyWeightsStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [sampleStatus, setSampleStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
-  const [autoPlanInputText, setAutoPlanInputText] = useState(() => {
+  const [autoPlanScenario, setAutoPlanScenario] = useState<AutoPlanScenarioKeyV0>(() => {
     const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
-    if (saved && typeof saved === 'object' && typeof (saved as any).text === 'string') return (saved as any).text;
+    const active = saved && typeof saved === 'object' ? String((saved as any).active ?? '') : '';
+    return active === 'B' ? 'B' : 'A';
+  });
+
+  const [autoPlanInputTextA, setAutoPlanInputTextA] = useState(() => {
+    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
+    if (saved && typeof saved === 'object') {
+      const a = (saved as any).a;
+      if (a && typeof a === 'object' && typeof a.text === 'string') return String(a.text);
+      if (typeof (saved as any).text === 'string') return String((saved as any).text); // legacy
+    }
     return '';
   });
 
-  const [autoPlanResult, setAutoPlanResult] = useState<DriftRebalanceBacktestResult | null>(() => {
-    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_RESULT);
-    return saved && typeof saved === 'object' && (saved as any).schemaVersion === 1 ? (saved as any as DriftRebalanceBacktestResult) : null;
+  const [autoPlanInputTextB, setAutoPlanInputTextB] = useState(() => {
+    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
+    if (saved && typeof saved === 'object') {
+      const b = (saved as any).b;
+      if (b && typeof b === 'object' && typeof b.text === 'string') return String(b.text);
+    }
+    return '';
   });
 
-  const [autoPlanError, setAutoPlanError] = useState<string | null>(null);
+  const [autoPlanThresholdOverridePctA, setAutoPlanThresholdOverridePctA] = useState<number | null>(() => {
+    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
+    const n = saved && typeof saved === 'object' ? Number((saved as any)?.a?.thresholdPctOverride ?? Number.NaN) : Number.NaN;
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  });
+
+  const [autoPlanThresholdOverridePctB, setAutoPlanThresholdOverridePctB] = useState<number | null>(() => {
+    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
+    const n = saved && typeof saved === 'object' ? Number((saved as any)?.b?.thresholdPctOverride ?? Number.NaN) : Number.NaN;
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  });
+
+  const [autoPlanResultA, setAutoPlanResultA] = useState<DriftRebalanceBacktestResult | null>(() => {
+    const savedA = readJsonFromLs<any>(LS_AUTO_PLAN_RESULT_A);
+    if (savedA && typeof savedA === 'object' && (savedA as any).schemaVersion === 1) return savedA as DriftRebalanceBacktestResult;
+
+    const legacy = readJsonFromLs<any>(LS_AUTO_PLAN_RESULT);
+    return legacy && typeof legacy === 'object' && (legacy as any).schemaVersion === 1 ? (legacy as any as DriftRebalanceBacktestResult) : null;
+  });
+
+  const [autoPlanResultB, setAutoPlanResultB] = useState<DriftRebalanceBacktestResult | null>(() => {
+    const savedB = readJsonFromLs<any>(LS_AUTO_PLAN_RESULT_B);
+    return savedB && typeof savedB === 'object' && (savedB as any).schemaVersion === 1 ? (savedB as any as DriftRebalanceBacktestResult) : null;
+  });
+
+  const [autoPlanErrorA, setAutoPlanErrorA] = useState<string | null>(null);
+  const [autoPlanErrorB, setAutoPlanErrorB] = useState<string | null>(null);
   const [autoPlanCopyStatus, setAutoPlanCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
   const [driftFilter, setDriftFilter] = useState<'all' | 'over' | 'under'>('all');
@@ -436,9 +481,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }, []);
 
   useEffect(() => {
-    // Persist the latest drift input so users can refresh and keep the plan editor state.
-    saveJsonToLs(LS_AUTO_PLAN_INPUT, { text: autoPlanInputText });
-  }, [autoPlanInputText]);
+    // Persist the latest drift input(s) so users can refresh and keep the plan editor state.
+    saveJsonToLs(LS_AUTO_PLAN_INPUT, {
+      schemaVersion: 2,
+      active: autoPlanScenario,
+      a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA },
+      b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB },
+    });
+  }, [autoPlanScenario, autoPlanInputTextA, autoPlanInputTextB, autoPlanThresholdOverridePctA, autoPlanThresholdOverridePctB]);
 
   const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
   const rebalanceReq = useMemo(() => readJsonFromLs(LS_REBALANCE_REQUEST), [rev]);
@@ -469,6 +519,32 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const driftThresholdPct = useMemo(() => {
     return whatIfDriftThresholdPctV0 !== null ? whatIfDriftThresholdPctV0 : policyDriftThresholdPct;
   }, [policyDriftThresholdPct, whatIfDriftThresholdPctV0]);
+
+  const autoPlanInputText = autoPlanScenario === 'A' ? autoPlanInputTextA : autoPlanInputTextB;
+  const autoPlanThresholdOverridePct = autoPlanScenario === 'A' ? autoPlanThresholdOverridePctA : autoPlanThresholdOverridePctB;
+  const autoPlanThresholdPctUsed = autoPlanThresholdOverridePct !== null ? autoPlanThresholdOverridePct : driftThresholdPct;
+  const autoPlanResult = autoPlanScenario === 'A' ? autoPlanResultA : autoPlanResultB;
+  const autoPlanError = autoPlanScenario === 'A' ? autoPlanErrorA : autoPlanErrorB;
+
+  function setAutoPlanInputTextForActive(text: string) {
+    if (autoPlanScenario === 'A') setAutoPlanInputTextA(text);
+    else setAutoPlanInputTextB(text);
+  }
+
+  function setAutoPlanThresholdOverridePctForActive(v: number | null) {
+    if (autoPlanScenario === 'A') setAutoPlanThresholdOverridePctA(v);
+    else setAutoPlanThresholdOverridePctB(v);
+  }
+
+  function setAutoPlanErrorForActive(err: string | null) {
+    if (autoPlanScenario === 'A') setAutoPlanErrorA(err);
+    else setAutoPlanErrorB(err);
+  }
+
+  function setAutoPlanResultForActive(res: DriftRebalanceBacktestResult | null) {
+    if (autoPlanScenario === 'A') setAutoPlanResultA(res);
+    else setAutoPlanResultB(res);
+  }
 
   const baseCcy = useMemo(() => {
     const mp: any = moneyPlan as any;
@@ -1403,7 +1479,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       const syms = Object.keys(pricesMap).sort();
       if (!syms.length) {
-        setAutoPlanError("No prices found to seed snapshots. Please fill in the Price Snapshot first.");
+        setAutoPlanErrorForActive("No prices found to seed snapshots. Please fill in the Price Snapshot first.");
         return;
       }
 
@@ -1426,38 +1502,38 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         (snap2.prices as any)[sym] = Number((px * 0.99).toFixed(6));
       }
 
-      setAutoPlanError(null);
-      setAutoPlanInputText(pretty({ snapshots: [snap0, snap1, snap2] }));
+      setAutoPlanErrorForActive(null);
+      setAutoPlanInputTextForActive(pretty({ snapshots: [snap0, snap1, snap2] }));
     } catch (e) {
-      setAutoPlanError(e instanceof Error ? e.message : String(e));
+      setAutoPlanErrorForActive(e instanceof Error ? e.message : String(e));
     }
   }
 
   function runAutoPlanV0() {
-    setAutoPlanError(null);
+    setAutoPlanErrorForActive(null);
 
     if (typeof window === "undefined") return;
 
     if (!targetWeights.length) {
-      setAutoPlanError("Missing targetWeights. Please configure target weights first.");
+      setAutoPlanErrorForActive("Missing targetWeights. Please configure target weights first.");
       return;
     }
 
     const raw = String(autoPlanInputText ?? "").trim();
     if (!raw) {
-      setAutoPlanError("Provide drift input (seriesBySymbol or snapshots). Tip: click Seed from current snapshot.");
+      setAutoPlanErrorForActive("Provide drift input (seriesBySymbol or snapshots). Tip: click Seed from current snapshot.");
       return;
     }
 
     const parsed = safeJsonParse(raw);
     if (!parsed.ok) {
-      setAutoPlanError(parsed.error);
+      setAutoPlanErrorForActive(parsed.error);
       return;
     }
 
     const seriesRes = tryBuildSeriesBySymbolForPlan(parsed.value);
     if (!seriesRes.ok) {
-      setAutoPlanError(seriesRes.error);
+      setAutoPlanErrorForActive(seriesRes.error);
       return;
     }
 
@@ -1487,7 +1563,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     const missing = Array.from(required).filter((sym) => !(sym in seriesRes.seriesBySymbol));
 
     if (missing.length) {
-      setAutoPlanError(
+      setAutoPlanErrorForActive(
         `Missing symbols in series: ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? " ..." : ""}`,
       );
       return;
@@ -1515,15 +1591,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         initialHoldings: holdingsMap,
         initialCash: cash0,
         constraints,
-        policy: { ...rebalancePolicy, thresholdPct: driftThresholdPct },
+        policy: { ...rebalancePolicy, thresholdPct: autoPlanThresholdPctUsed },
         bootstrapToTarget: false,
         includeEventStates: true,
       });
 
-      setAutoPlanResult(res);
-      saveJsonToLs(LS_AUTO_PLAN_RESULT, res);
+      setAutoPlanResultForActive(res);
+      if (autoPlanScenario === 'A') {
+        saveJsonToLs(LS_AUTO_PLAN_RESULT_A, res);
+        saveJsonToLs(LS_AUTO_PLAN_RESULT, res); // legacy
+      } else {
+        saveJsonToLs(LS_AUTO_PLAN_RESULT_B, res);
+      }
     } catch (e) {
-      setAutoPlanError(e instanceof Error ? e.message : String(e));
+      setAutoPlanErrorForActive(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -3007,6 +3088,28 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" as const }}>
               <div style={{ fontWeight: 800 }}>Auto plan v0</div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" as const }}>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span className="muted" style={{ fontSize: 12 }}>Scenario</span>
+                  <button
+                    type="button"
+                    className={autoPlanScenario === 'A' ? 'button' : 'button secondary'}
+                    onClick={() => setAutoPlanScenario('A')}
+                    style={{ padding: "6px 10px" }}
+                    title="Scenario A"
+                  >
+                    A
+                  </button>
+                  <button
+                    type="button"
+                    className={autoPlanScenario === 'B' ? 'button' : 'button secondary'}
+                    onClick={() => setAutoPlanScenario('B')}
+                    style={{ padding: "6px 10px" }}
+                    title="Scenario B"
+                  >
+                    B
+                  </button>
+                </div>
+
                 <button type="button" className="button secondary" onClick={seedAutoPlanFromCurrentSnapshotV0} style={{ padding: "6px 10px" }}>
                   Seed from current snapshot
                 </button>
@@ -3031,9 +3134,54 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             </div>
 
             <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" as const }}>
+                <div className="muted" style={{ fontSize: 12 }}>Trigger threshold (%)</div>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.1}
+                  value={autoPlanThresholdOverridePct === null ? "" : String((autoPlanThresholdOverridePct * 100).toFixed(2))}
+                  placeholder={String((driftThresholdPct * 100).toFixed(2))}
+                  onChange={(e) => {
+                    const v = String(e.target.value ?? '').trim();
+                    if (!v) {
+                      setAutoPlanThresholdOverridePctForActive(null);
+                      return;
+                    }
+                    const n = Number(v);
+                    if (!Number.isFinite(n) || n < 0) return;
+                    setAutoPlanThresholdOverridePctForActive(n / 100);
+                  }}
+                  style={{
+                    width: 120,
+                    fontFamily: "ui-monospace, SFMono-Regular",
+                    fontSize: 12,
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(127,127,127,0.35)",
+                    background: "rgba(0,0,0,0.12)",
+                  }}
+                  title="Override drift threshold for this scenario only (percent)"
+                />
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setAutoPlanThresholdOverridePctForActive(null)}
+                  disabled={autoPlanThresholdOverridePct === null}
+                  style={{ padding: "6px 10px" }}
+                  title="Clear per-scenario override"
+                >
+                  Use global
+                </button>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  used={(autoPlanThresholdPctUsed * 100).toFixed(2)}%; global={(driftThresholdPct * 100).toFixed(2)}%
+                </div>
+              </div>
+
               <textarea
                 value={autoPlanInputText}
-                onChange={(e) => setAutoPlanInputText(e.target.value)}
+                onChange={(e) => setAutoPlanInputTextForActive(e.target.value)}
                 rows={8}
                 placeholder={"Paste {seriesBySymbol: {...}} or {snapshots:[{date,prices}]}"}
                 style={{
@@ -3048,6 +3196,52 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               />
 
               {autoPlanError ? <div style={{ fontSize: 12, color: "var(--danger, #b00020)" }}>{autoPlanError}</div> : null}
+
+              {autoPlanResultA && autoPlanResultB ? (
+                <details style={{ marginTop: 6, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12 }}>
+                  <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Compare scenarios (A vs B)</summary>
+                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "140px 1fr 1fr 1fr", gap: 10, fontSize: 12, alignItems: "baseline" }}>
+                      <div />
+                      <div style={{ fontWeight: 800 }}>A</div>
+                      <div style={{ fontWeight: 800 }}>B</div>
+                      <div className="muted">Δ (B-A)</div>
+
+                      <div className="muted">rebalanceCount</div>
+                      <div>{autoPlanResultA.summary.rebalanceCount}</div>
+                      <div>{autoPlanResultB.summary.rebalanceCount}</div>
+                      <div className="muted">{autoPlanResultB.summary.rebalanceCount - autoPlanResultA.summary.rebalanceCount}</div>
+
+                      <div className="muted">turnoverNotional</div>
+                      <div>{autoPlanResultA.summary.turnoverNotional.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}</div>
+                      <div>{autoPlanResultB.summary.turnoverNotional.toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}</div>
+                      <div className="muted">{(autoPlanResultB.summary.turnoverNotional - autoPlanResultA.summary.turnoverNotional).toFixed(2)}{baseCcy ? ` ${baseCcy}` : ''}</div>
+
+                      <div className="muted">finalEquityAbs</div>
+                      <div>{autoPlanResultA.summary.finalEquityAbs.toFixed(2)}</div>
+                      <div>{autoPlanResultB.summary.finalEquityAbs.toFixed(2)}</div>
+                      <div className="muted">{(autoPlanResultB.summary.finalEquityAbs - autoPlanResultA.summary.finalEquityAbs).toFixed(2)}</div>
+                    </div>
+
+                    {autoPlanResultA.states?.final && autoPlanResultB.states?.final ? (
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Final weights diff (A → B)</div>
+                        <pre style={{ margin: 0, fontSize: 11, whiteSpace: "pre-wrap" }}>
+                          {formatWeightsDiffLines({ before: autoPlanResultA.states.final, after: autoPlanResultB.states.final }).join("\n")}
+                        </pre>
+                      </div>
+                    ) : (
+                      <div className="muted" style={{ fontSize: 11 }}>
+                        (Missing states.final for at least one scenario; re-generate to compare weight diffs.)
+                      </div>
+                    )}
+                  </div>
+                </details>
+              ) : autoPlanResultA || autoPlanResultB ? (
+                <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                  Tip: generate both Scenario A and Scenario B to compare.
+                </div>
+              ) : null}
 
               {autoPlanResult ? (
                 <div style={{ marginTop: 6, padding: "10px 12px", border: "1px solid rgba(127,127,127,0.35)", borderRadius: 12 }}>
@@ -3097,7 +3291,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         {(autoPlanResult as any).timeline.map((pt: any, idx: number) => {
                           const stats: any = pt?.trigger?.stats ?? {};
                           const maxAbs = Number(stats.maxAbsDriftPct ?? NaN);
-                          const threshold = Number(stats.thresholdPct ?? driftThresholdPct);
+                          const threshold = Number(stats.thresholdPct ?? autoPlanThresholdPctUsed);
                           const ratio = threshold > 0 && Number.isFinite(maxAbs) ? Math.min(1, Math.max(0, maxAbs / threshold)) : 0;
                           const hit = !!pt?.trigger?.shouldRebalance;
                           const top = Array.isArray(pt?.topAbsDriftsPct01) ? pt.topAbsDriftsPct01.slice(0, 3) : [];
