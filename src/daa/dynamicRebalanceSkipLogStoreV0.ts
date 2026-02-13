@@ -17,6 +17,7 @@ export type DynamicRebalanceSkipLogEntryV0 = {
 
   // Optional structured context for the UI.
   nextOpenAt?: string;
+  nextCloseAt?: string;
   priceUpdatedAt?: string;
   ageMin?: number;
 };
@@ -59,10 +60,11 @@ function normalizeEntry(x: unknown): DynamicRebalanceSkipLogEntryV0 | null {
   if (!id || !at || !recordedAt || !kind || !title || !detail) return null;
 
   const nextOpenAt = typeof e.nextOpenAt === "string" && e.nextOpenAt ? e.nextOpenAt : undefined;
+  const nextCloseAt = typeof e.nextCloseAt === "string" && e.nextCloseAt ? e.nextCloseAt : undefined;
   const priceUpdatedAt = typeof e.priceUpdatedAt === "string" && e.priceUpdatedAt ? e.priceUpdatedAt : undefined;
   const ageMin = typeof e.ageMin === "number" && Number.isFinite(e.ageMin) ? e.ageMin : undefined;
 
-  return { id, at, recordedAt, kind, title, detail, nextOpenAt, priceUpdatedAt, ageMin };
+  return { id, at, recordedAt, kind, title, detail, nextOpenAt, nextCloseAt, priceUpdatedAt, ageMin };
 }
 
 export function loadDynamicRebalanceSkipLogV0(storage: Pick<Storage, "getItem">): DynamicRebalanceSkipLogEntryV0[] {
@@ -107,6 +109,7 @@ export function appendDynamicRebalanceSkipLogV0(args: {
 
   if (args.reason.kind === "paused-market-closed") {
     entry.nextOpenAt = args.reason.nextOpenAt ? args.reason.nextOpenAt.toISOString() : undefined;
+    entry.nextCloseAt = args.reason.nextCloseAt ? args.reason.nextCloseAt.toISOString() : undefined;
   }
 
   if (args.reason.kind === "stalled-data-stale") {

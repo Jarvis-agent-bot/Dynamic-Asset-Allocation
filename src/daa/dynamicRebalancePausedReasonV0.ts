@@ -4,6 +4,10 @@ export type DynamicRebalancePauseReasonV0 =
       title: string;
       detail: string;
       nextOpenAt?: Date;
+      // Best-effort estimate of the session close for the next open window.
+      nextCloseAt?: Date;
+      // Optional: which CN session the next open belongs to.
+      session?: "am" | "pm";
     }
   | {
       kind: "stalled-data-stale";
@@ -47,7 +51,22 @@ function getShanghaiParts(date: Date): { y: number; m: number; d: number; dow0Su
   const mm = toInt(get("minute"), 0);
 
   const weekday = String(get("weekday") ?? "");
-  const dow0Sun = weekday === "Sun" ? 0 : weekday === "Mon" ? 1 : weekday === "Tue" ? 2 : weekday === "Wed" ? 3 : weekday === "Thu" ? 4 : weekday === "Fri" ? 5 : weekday === "Sat" ? 6 : 0;
+  const dow0Sun =
+    weekday === "Sun"
+      ? 0
+      : weekday === "Mon"
+        ? 1
+        : weekday === "Tue"
+          ? 2
+          : weekday === "Wed"
+            ? 3
+            : weekday === "Thu"
+              ? 4
+              : weekday === "Fri"
+                ? 5
+                : weekday === "Sat"
+                  ? 6
+                  : 0;
 
   return { y, m, d, dow0Sun, hh, mm };
 }
@@ -58,7 +77,31 @@ function dateFromShanghaiLocal(args: { y: number; m1: number; d: number; hh: num
   return new Date(Date.UTC(args.y, args.m1 - 1, args.d, args.hh - 8, args.mm, 0, 0));
 }
 
-function isCnMarketOpenShanghaiV0(now: Date): boolean {
+export function formatShanghaiCompactV0(date: Date): string {
+  // Keep formatting stable regardless of env locale.
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+
+  // en-CA with these parts yields YYYY-MM-DD, then add time.
+  const parts = fmt.formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+  const y = get("year");
+  const m = get("month");
+  const d = get("day");
+  const hh = get("hour");
+  const mm = get("minute");
+
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
+
+export function isCnMarketOpenShanghaiV0(now: Date): boolean {
   const p = getShanghaiParts(now);
   if (p.dow0Sun === 0 || p.dow0Sun === 6) return false;
 
@@ -68,7 +111,28 @@ function isCnMarketOpenShanghaiV0(now: Date): boolean {
   return session1 || session2;
 }
 
-function computeNextCnMarketOpenShanghaiV0(now: Date): Date {
+function computeCnSessionForShanghaiTimeV0(args: { hh: number; mm: number }): "am" | "pm" | null {
+  if (args.hh === 9 && args.mm === 30) return "am";
+  if (args.hh === 13 && args.mm === 0) return "pm";
+  return null;
+}
+
+export function computeCnMarketSessionWindowForOpenAtShanghaiV0(openAt: Date): { openAt: Date; closeAt: Date; session: "am" | "pm" } {
+  const p = getShanghaiParts(openAt);
+  const session = computeCnSessionForShanghaiTimeV0({ hh: p.hh, mm: p.mm });
+
+  // Fallback: if openAt is not exactly 09:30 or 13:00, choose the closest valid session.
+  const s: "am" | "pm" = session ?? (p.hh < 13 ? "am" : "pm");
+
+  const close =
+    s === "am"
+      ? dateFromShanghaiLocal({ y: p.y, m1: p.m, d: p.d, hh: 11, mm: 30 })
+      : dateFromShanghaiLocal({ y: p.y, m1: p.m, d: p.d, hh: 15, mm: 0 });
+
+  return { openAt, closeAt: close, session: s };
+}
+
+export function computeNextCnMarketOpenShanghaiV0(now: Date): Date {
   const p = getShanghaiParts(now);
 
   const min = p.hh * 60 + p.mm;
@@ -105,30 +169,6 @@ function computeNextCnMarketOpenShanghaiV0(now: Date): Date {
   return nextTradingDayStart();
 }
 
-function formatShanghaiCompact(date: Date): string {
-  // Keep formatting stable regardless of env locale.
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-
-  // en-CA with these parts yields YYYY-MM-DD, then add time.
-  const parts = fmt.formatToParts(date);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value;
-  const y = get("year");
-  const m = get("month");
-  const d = get("day");
-  const hh = get("hour");
-  const mm = get("minute");
-
-  return `${y}-${m}-${d} ${hh}:${mm}`;
-}
-
 export function computeDynamicRebalancePauseReasonV0(args: {
   enabled: boolean;
   now: Date;
@@ -143,11 +183,17 @@ export function computeDynamicRebalancePauseReasonV0(args: {
 
   if (!marketOpen) {
     const nextOpenAt = computeNextCnMarketOpenShanghaiV0(now);
+    const window = computeCnMarketSessionWindowForOpenAtShanghaiV0(nextOpenAt);
+
+    const windowText = `${formatShanghaiCompactV0(window.openAt)}–${formatShanghaiCompactV0(window.closeAt)} (session=${window.session})`;
+
     return {
       kind: "paused-market-closed",
       title: "Paused (market closed)",
-      detail: `CN market hours (Asia/Shanghai) only. Next open: ${formatShanghaiCompact(nextOpenAt)}.`,
+      detail: `CN market hours (Asia/Shanghai) only. Next open: ${formatShanghaiCompactV0(nextOpenAt)}. Execution window: ${windowText}.`,
       nextOpenAt,
+      nextCloseAt: window.closeAt,
+      session: window.session,
     };
   }
 
@@ -159,7 +205,7 @@ export function computeDynamicRebalancePauseReasonV0(args: {
   const isStale = !updatedAt || ageMin > staleAfterMin;
 
   if (priceCount === 0 || isStale) {
-    const updatedText = updatedAt ? formatShanghaiCompact(updatedAt) : "<unknown>";
+    const updatedText = updatedAt ? formatShanghaiCompactV0(updatedAt) : "<unknown>";
     const ageText = Number.isFinite(ageMin) ? `${ageMin}m` : ">>";
 
     return {
