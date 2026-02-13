@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { copyTextToClipboard } from '../../../copyToClipboard';
+import { pushDynamicRebalanceNotificationV0 } from '../../../dynamicRebalanceNotificationsClientV0';
 import { LS_LEGACY_HOLDINGS, loadPortfolioStateV1, recordPortfolioLastRebalance, savePortfolioStateV1 } from '../../../portfolioStateStore';
 import { getSnapshotPrice, loadPriceSnapshotV1, savePriceSnapshotV1 } from '../../../priceSnapshotStore';
 import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeightsStore';
@@ -68,6 +69,8 @@ import DaaRebalanceScheduleV0 from './DaaRebalanceScheduleV0';
 import DaaDynamicRebalanceStatusPillV0 from './DaaDynamicRebalanceStatusPillV0';
 import DaaDynamicRebalancePausedReasonBannerV0 from './DaaDynamicRebalancePausedReasonBannerV0';
 import DaaDynamicRebalanceSkipHistoryV0 from './DaaDynamicRebalanceSkipHistoryV0';
+import DaaDynamicRebalanceNotificationWatcherV0 from './DaaDynamicRebalanceNotificationWatcherV0';
+import DaaDynamicRebalanceNotificationsV0 from './DaaDynamicRebalanceNotificationsV0';
 import DaaDynamicRebalanceRunHistoryV0 from './DaaDynamicRebalanceRunHistoryV0';
 import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
@@ -2178,6 +2181,18 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       setPaperRunRecordedAt(r.entry.at);
       setPaperRunSummary(`已记录 Dry run（不发送真实订单）：${orders.length} 条 orders。`);
 
+      try {
+        pushDynamicRebalanceNotificationV0({
+          storage: window.localStorage,
+          atIso: r.entry.at,
+          kind: 'run-recorded',
+          title: 'Dynamic rebalance recorded',
+          body: `Recorded ${orders.length} paper orders (${opts?.cashSweep ? 'cash sweep' : 'dry run'}).`,
+        });
+      } catch {
+        // ignore
+      }
+
       const actualSummary: RebalancePostRunSummaryV0 | null = (() => {
         try {
           const targetWeightsBySymbol: Record<string, number> = {};
@@ -2941,6 +2956,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         </div>
       </div>
 
+      <DaaDynamicRebalanceNotificationWatcherV0 rev={rev} />
       <DaaDynamicRebalancePausedReasonBannerV0 rev={rev} />
       <DaaDynamicRebalanceSkipHistoryV0 rev={rev} />
 
@@ -2969,6 +2985,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
           <div id="schedule" style={{ scrollMarginTop: 12 }}>
             <DaaRebalanceScheduleV0 />
+          </div>
+
+          <div id="notifications" style={{ scrollMarginTop: 12 }}>
+            <DaaDynamicRebalanceNotificationsV0 />
           </div>
 
           <div id="okx-sandbox" style={{ scrollMarginTop: 12 }}>
