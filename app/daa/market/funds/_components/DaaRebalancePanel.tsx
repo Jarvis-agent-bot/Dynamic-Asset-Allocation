@@ -20,6 +20,7 @@ import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
 import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
+import { buildRebalanceViolationsV0 } from '@/src/daa/rebalanceViolationsV0';
 import {
   attachOrdersToRebalanceRunV0,
   failRebalanceOrderStatusRunV0,
@@ -1125,6 +1126,34 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     });
   }, [baseCcy, effectiveOrders, portfolioCash, whatIfFeeBps, whatIfSlippageBpsUsed]);
 
+  const preRunViolationsV0 = useMemo(() => {
+    const respAny: any = ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' ? (rebalanceResp as any) : (corePreview?.resp as any);
+
+    const diag =
+      ordersPreviewSourceV0 === 'RECOMPUTE' && !corePreview?.resp && naiveOrdersDiagnostics
+        ? {
+            candidateCount: naiveOrdersDiagnostics.candidateCount,
+            producedCount: naiveOrdersDiagnostics.producedCount,
+            minNotional: naiveOrdersDiagnostics.minNotional,
+            lotStep: naiveOrdersDiagnostics.lotStep,
+            suppressedTop: (naiveOrdersDiagnostics.suppressedTop ?? []).map((x) => ({
+              id: x.id,
+              side: x.side,
+              rawNotional: x.rawNotional,
+              roundedNotional: x.roundedNotional,
+            })),
+          }
+        : null;
+
+    return buildRebalanceViolationsV0({
+      baseCcy,
+      preTradeCashCheck,
+      coreResp: respAny ?? null,
+      whatIf,
+      naiveMinTradeDiag: diag,
+    });
+  }, [baseCcy, corePreview, naiveOrdersDiagnostics, ordersPreviewSourceV0, preTradeCashCheck, rebalanceResp, whatIf]);
+
   const whatIfRows = useMemo(() => {
     if (!whatIf) return [] as Array<{
       id: string;
@@ -1878,6 +1907,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
   }
 
+  const preRunHasBlockingV0 = preRunViolationsV0.some((v) => v.level === 'blocker');
+  const preRunHasWarningsV0 = preRunViolationsV0.some((v) => v.level === 'warning');
+
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
       <div className="title" style={{ marginBottom: 12, justifyContent: 'space-between' as const }}>
@@ -2027,6 +2059,73 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             ) : null}
 
             <DaaOrderStatusTrackerV0 pollMs={paperRunLoading ? 500 : 1500} />
+
+            {preRunViolationsV0.length ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: '10px 12px',
+                  border: preRunHasBlockingV0
+                    ? '1px solid rgba(176, 0, 32, 0.55)'
+                    : preRunHasWarningsV0
+                      ? '1px solid rgba(245, 158, 11, 0.55)'
+                      : '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 12,
+                  background: preRunHasBlockingV0
+                    ? 'rgba(176, 0, 32, 0.08)'
+                    : preRunHasWarningsV0
+                      ? 'rgba(245, 158, 11, 0.08)'
+                      : 'rgba(0,0,0,0.10)',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 800, color: preRunHasBlockingV0 ? 'var(--danger)' : 'var(--muted)' }}>
+                  Constraints / validation (before execute)
+                </div>
+
+                {preRunViolationsV0.some((v) => v.level !== 'info') ? (
+                  preRunViolationsV0
+                    .filter((v) => v.level !== 'info')
+                    .map((v, idx) => {
+                      const color = v.level === 'blocker' ? 'var(--danger)' : '#f59e0b';
+                      return (
+                        <div key={`${v.kind}-${idx}`} style={{ marginTop: 8 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color }}>
+                            {v.level.toUpperCase()}: {v.title}
+                          </div>
+                          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                            {v.details.join(' ')}
+                          </div>
+                          {v.suggestion ? (
+                            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                              Suggestion: {v.suggestion}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
+                ) : (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+                    No blockers detected for current inputs.
+                  </div>
+                )}
+
+                {preRunViolationsV0.some((v) => v.level === 'info') ? (
+                  <details className="muted" style={{ marginTop: 10, fontSize: 11 }}>
+                    <summary style={{ cursor: 'pointer' }}>More details</summary>
+                    <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+                      {preRunViolationsV0
+                        .filter((v) => v.level === 'info')
+                        .map((v, idx) => (
+                          <div key={`info-${v.kind}-${idx}`}>
+                            <div style={{ fontWeight: 700 }}>{v.title}</div>
+                            <div style={{ marginTop: 4 }}>{v.details.join(' ')}</div>
+                          </div>
+                        ))}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+            ) : null}
 
             {effectiveOrders.length ? (
               <div
