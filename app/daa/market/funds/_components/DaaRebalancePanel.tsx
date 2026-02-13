@@ -2322,9 +2322,31 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       setWhatIfDriftThresholdPctV0(v / 100);
                     };
 
+                    const presets = [
+                      { id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' },
+                      { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' },
+                      { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' },
+                    ] as const;
+
+                    const activePresetId = presets.find((p) => Math.abs(pct - p.pct100) < 1e-6)?.id ?? null;
+
                     return (
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginLeft: 4 }}>
                         <span className="muted" style={{ fontSize: 12 }}>threshold</span>
+                        <span className="muted" style={{ fontSize: 12 }}>presets</span>
+                        {presets.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className={activePresetId === p.id ? 'button' : 'button secondary'}
+                            onClick={() => setPct(p.pct100)}
+                            style={{ padding: '4px 8px' }}
+                            title={p.title}
+                            aria-pressed={activePresetId === p.id}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
                         <input
                           type="range"
                           min={0}
