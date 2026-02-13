@@ -116,6 +116,158 @@ function clip(s: string, n: number): string {
   return t.slice(0, Math.max(0, n - 1)) + "…";
 }
 
+function getEnv(name: string): string | undefined {
+  const v = process.env[name];
+  const t = v ? v.trim() : "";
+  return t ? t : undefined;
+}
+
+type UpstreamResult<T> =
+  | { ok: true; status: number; data: T }
+  | { ok: false; status?: number; error: string };
+
+async function fetchTextWithTimeout(url: URL, init: RequestInit, timeoutMs: number): Promise<{ ok: boolean; status: number; text: string }> {
+  const ac = new AbortController();
+  const id = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { ...init, signal: ac.signal });
+    const text = await r.text();
+    return { ok: r.ok, status: r.status, text };
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function fetchTwitterListLatestTweets(listId: string, limit: number, timeoutMs: number): Promise<UpstreamResult<{ payload: unknown }>> {
+  const token = getEnv("TWITTERDATA_TOKEN");
+  if (!token) return { ok: false, error: "missing env: TWITTERDATA_TOKEN" };
+
+  const upstream = new URL("https://pro.twitterdata.com/ListLatestTweetsTimeline");
+  upstream.searchParams.set("listId", listId);
+  upstream.searchParams.set("token", token);
+  upstream.searchParams.set("limit", String(Math.min(200, Math.max(1, Math.trunc(limit)))));
+
+  try {
+    const { ok, status, text } = await fetchTextWithTimeout(
+      upstream,
+      {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+        },
+        cache: "no-store",
+      },
+      timeoutMs,
+    );
+
+    if (!ok) {
+      // Avoid echoing upstream body; it may include request details.
+      return { ok: false, status, error: "twitterdata upstream error" };
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { raw: text };
+    }
+
+    return { ok: true, status, data: { payload } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+async function fetchYahooRss(symbol: string, timeoutMs: number): Promise<UpstreamResult<{ items: Array<{ title: string; link?: string; pubDate?: string; summary?: string }> }>> {
+  const rss = new URL("https://feeds.finance.yahoo.com/rss/2.0/headline");
+  rss.searchParams.set("s", symbol);
+  rss.searchParams.set("region", "US");
+  rss.searchParams.set("lang", "en-US");
+
+  try {
+    const { ok, status, text: xml } = await fetchTextWithTimeout(rss, { cache: "no-store" }, timeoutMs);
+    if (!ok) {
+      return { ok: false, status, error: "yahoo rss upstream error" };
+    }
+
+    // Very small XML extraction (avoid dependencies).
+    const itemRe = /<item>([\s\S]*?)<\/item>/g;
+    const titleRe = /<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/;
+    const linkRe = /<link>([\s\S]*?)<\/link>/;
+    const pubRe = /<pubDate>([\s\S]*?)<\/pubDate>/;
+    const descRe = /<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>|<description>([\s\S]*?)<\/description>/;
+
+    const items: Array<{ title: string; link?: string; pubDate?: string; summary?: string }> = [];
+    let m: RegExpExecArray | null;
+    // eslint-disable-next-line no-cond-assign
+    while ((m = itemRe.exec(xml))) {
+      const chunk = m[1] ?? "";
+      const titleM = titleRe.exec(chunk);
+      const title = stripTags((titleM?.[1] ?? titleM?.[2] ?? "").trim());
+      if (!title) continue;
+
+      const link = (linkRe.exec(chunk)?.[1] ?? "").trim() || undefined;
+      const pubDate = (pubRe.exec(chunk)?.[1] ?? "").trim() || undefined;
+      const descM = descRe.exec(chunk);
+      const summary = stripTags((descM?.[1] ?? descM?.[2] ?? "").trim()) || undefined;
+
+      items.push({ title, link, pubDate, summary });
+      if (items.length >= 50) break;
+    }
+
+    return { ok: true, status, data: { items } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+async function fetchXueqiuQuotec(symbol: string, timeoutMs: number): Promise<UpstreamResult<{ payload: unknown }>> {
+  const cookie = getEnv("XUEQIU_TOKEN");
+  if (!cookie) return { ok: false, error: "missing env: XUEQIU_TOKEN" };
+
+  const upstream = new URL("https://stock.xueqiu.com/v5/stock/realtime/quotec.json");
+  upstream.searchParams.set("symbol", symbol);
+  upstream.searchParams.set("_", String(Date.now()));
+
+  try {
+    const { ok, status, text } = await fetchTextWithTimeout(
+      upstream,
+      {
+        method: "GET",
+        headers: {
+          accept: "application/json, text/plain, */*",
+          cookie,
+          origin: "https://xueqiu.com",
+          referer: `https://xueqiu.com/S/${symbol}`,
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        },
+        cache: "no-store",
+      },
+      timeoutMs,
+    );
+
+    if (!ok) {
+      // Avoid echoing upstream body; it may contain auth-related hints.
+      return { ok: false, status, error: "xueqiu upstream error" };
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { raw: text };
+    }
+
+    return { ok: true, status, data: { payload } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 export async function GET(req: Request) {
   try {
     const url = mustBeLocalhost(req);
@@ -126,25 +278,39 @@ export async function GET(req: Request) {
 
     const tweetsLimit = Math.min(50, Math.max(1, Number(url.searchParams.get("tweetsLimit") ?? "10")));
 
-    // Use same-origin internal routes so tokens stay server-side.
-    const origin = url.origin;
+    // Cron should never hang forever: keep each upstream bounded.
+    const perUpstreamTimeoutMs = Math.min(25_000, Math.max(1_000, Number(url.searchParams.get("timeoutMs") ?? "8000")));
 
     const [tw, yf, xq] = await Promise.all([
-      fetch(`${origin}/api/daa/market/twitter/list?listId=${encodeURIComponent(listId)}&limit=${encodeURIComponent(String(Math.max(20, tweetsLimit)))}`, {
-        cache: "no-store",
-      }).then((r) => r.json()),
-      fetch(`${origin}/api/daa/market/yahoo/rss?symbol=${encodeURIComponent(yahooSymbol)}`, { cache: "no-store" }).then((r) => r.json()),
-      fetch(`${origin}/api/daa/market/xueqiu/quotec?symbol=${encodeURIComponent(xueqiuSymbol)}`, { cache: "no-store" }).then((r) => r.json()),
+      fetchTwitterListLatestTweets(listId, Math.max(20, tweetsLimit), perUpstreamTimeoutMs),
+      fetchYahooRss(yahooSymbol, perUpstreamTimeoutMs),
+      fetchXueqiuQuotec(xueqiuSymbol, perUpstreamTimeoutMs),
     ]);
 
-    const tweets = extractTwitterdataTweets((tw as any)?.payload).slice(0, tweetsLimit);
+    const tweets = tw.ok ? extractTwitterdataTweets((tw.data as any)?.payload).slice(0, tweetsLimit) : [];
 
-    const yahooItems: any[] = Array.isArray((yf as any)?.items) ? (yf as any).items : [];
-    const xqQuote = (xq as any)?.payload?.data?.[0] ?? (xq as any)?.payload?.data?.quote ?? (xq as any)?.payload?.data ?? (xq as any)?.payload;
+    const yahooItems: any[] = yf.ok && Array.isArray((yf.data as any)?.items) ? (yf.data as any).items : [];
+    const xqPayload = xq.ok ? (xq.data as any)?.payload : undefined;
+    const xqQuote = (xqPayload as any)?.data?.[0] ?? (xqPayload as any)?.data?.quote ?? (xqPayload as any)?.data ?? xqPayload;
+
+    const sources = {
+      twitter: tw.ok ? { ok: true, status: tw.status } : { ok: false, status: tw.status, error: tw.error },
+      yahoo: yf.ok ? { ok: true, status: yf.status } : { ok: false, status: yf.status, error: yf.error },
+      xueqiu: xq.ok ? { ok: true, status: xq.status } : { ok: false, status: xq.status, error: xq.error },
+    };
+
+    const warnings: string[] = [];
+    if (!tw.ok) warnings.push(`twitter: ${tw.error}`);
+    if (!yf.ok) warnings.push(`yahoo: ${yf.error}`);
+    if (!xq.ok) warnings.push(`xueqiu: ${xq.error}`);
 
     const lines: string[] = [];
     lines.push(`[DAA][MarketDigest] list=${listId} yahoo=${yahooSymbol} xq=${xueqiuSymbol}`);
     lines.push(`- tweets: ${tweets.length}, yahoo items: ${yahooItems.length}`);
+
+    if (warnings.length) {
+      lines.push(`- warnings: ${warnings.map((w) => clip(w, 120)).join(" | ")}`);
+    }
 
     for (const t of tweets.slice(0, Math.min(3, tweets.length))) {
       const head = `${t.author ? t.author + ": " : ""}${clip(t.text.replace(/\s+/g, " "), 160)}`;
@@ -159,17 +325,23 @@ export async function GET(req: Request) {
     }
 
     if (xqQuote) {
-      const name = String(xqQuote?.name ?? xqQuote?.symbol ?? xueqiuSymbol);
-      const last = xqQuote?.current ?? xqQuote?.last ?? xqQuote?.price;
-      const chg = xqQuote?.percent ?? xqQuote?.percent_change ?? xqQuote?.change;
+      const name = String((xqQuote as any)?.name ?? (xqQuote as any)?.symbol ?? xueqiuSymbol);
+      const last = (xqQuote as any)?.current ?? (xqQuote as any)?.last ?? (xqQuote as any)?.price;
+      const chg = (xqQuote as any)?.percent ?? (xqQuote as any)?.percent_change ?? (xqQuote as any)?.change;
       const brief = `${name}${last !== undefined ? " last=" + String(last) : ""}${chg !== undefined ? " chg=" + String(chg) : ""}`;
       lines.push(`- xq quote: ${clip(brief, 160)}`);
     }
 
+    // Make cron happy: never 500 for upstream/network issues.
+    // Callers can still check `ok` / `sources` / `warnings` for health.
+    const ok = Boolean(tw.ok || yf.ok || xq.ok);
+
     return json({
-      ok: true,
+      ok,
       generatedAt: new Date().toISOString(),
-      inputs: { listId, yahooSymbol, xueqiuSymbol, tweetsLimit },
+      inputs: { listId, yahooSymbol, xueqiuSymbol, tweetsLimit, timeoutMs: perUpstreamTimeoutMs },
+      sources,
+      warnings,
       tweets,
       yahooItems: yahooItems.slice(0, 10),
       xueqiuQuote: xqQuote,
