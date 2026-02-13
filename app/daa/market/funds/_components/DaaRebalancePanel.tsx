@@ -11,6 +11,7 @@ import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } from '../../../executionModeStore';
 import { loadSellProceedsRoutingV0, persistSellProceedsRoutingV0 } from '../../../sellProceedsRoutingStoreV0';
 import { loadCashBucketTargetPct01V0, persistCashBucketTargetPct01V0 } from '../../../cashBucketTargetStoreV0';
+import { loadMaxTurnoverPct01V0, persistMaxTurnoverPct01V0 } from '../../../dynamicRebalanceGuardrailsStoreV0';
 import { type SellProceedsRoutingV0 } from '@/src/daa/sellProceedsRoutingV0';
 import { deriveInvestablePct01V0, scaleTargetWeightsByInvestablePct01V0 } from '@/src/daa/cashBucketTargetsV0';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
@@ -488,6 +489,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const executionMode: ExecutionModeV0 = useMemo(() => loadExecutionModeV0(), [rev]);
   const sellProceedsRoutingV0: SellProceedsRoutingV0 = useMemo(() => loadSellProceedsRoutingV0(), [rev]);
   const cashBucketTargetPct01 = useMemo(() => loadCashBucketTargetPct01V0(), [rev]);
+  const maxTurnoverPct01V0 = useMemo(() => loadMaxTurnoverPct01V0(), [rev]);
 
   const [paperRunLoading, setPaperRunLoading] = useState(false);
   const [paperRunError, setPaperRunError] = useState<string | null>(null);
@@ -1363,9 +1365,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       preTradeCashCheck,
       coreResp: respAny ?? null,
       whatIf,
+      maxTurnoverPct01: maxTurnoverPct01V0,
       naiveMinTradeDiag: diag,
     });
-  }, [baseCcy, corePreview, naiveOrdersDiagnostics, ordersPreviewSourceV0, preTradeCashCheck, rebalanceResp, whatIf]);
+  }, [baseCcy, corePreview, maxTurnoverPct01V0, naiveOrdersDiagnostics, ordersPreviewSourceV0, preTradeCashCheck, rebalanceResp, whatIf]);
 
   const whatIfRows = useMemo(() => {
     if (!whatIf) return [] as Array<{
@@ -2381,38 +2384,78 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               </div>
             </div>
 
-            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 8 }}>
+            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap' as const, alignItems: 'center', gap: 10 }}>
               <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
-                Cash bucket target
+                Guardrails
               </div>
-              <input
-                type="number"
-                min={0}
-                max={95}
-                step={1}
-                value={Math.round(cashBucketTargetPct01 * 100)}
-                onChange={(e) => persistCashBucketTargetPct01V0(Number(e.target.value) / 100)}
-                style={{
-                  width: 92,
-                  padding: '6px 10px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  background: 'rgba(0,0,0,0.14)',
-                }}
-                aria-label="Rebalance cash bucket target percent"
-              />
-              <div className="muted" style={{ fontSize: 11 }}>
-                % (keep cash vs invest). Effective investable≈<b>{(investablePct01 * 100).toFixed(0)}%</b>
-                {moneyPlanInvestablePct01 !== null ? (
-                  <>
-                    {' '}· money_plan investable≈{(moneyPlanInvestablePct01 * 100).toFixed(0)}%
-                  </>
-                ) : (
-                  <>
-                    {' '}· money_plan investable: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>n/a</span>
-                  </>
-                )}
-              </div>
+
+              <label className="muted" style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center' }}>
+                cash buffer (%)
+                <input
+                  type="number"
+                  min={0}
+                  max={95}
+                  step={1}
+                  value={Math.round(cashBucketTargetPct01 * 100)}
+                  onChange={(e) => persistCashBucketTargetPct01V0(Number(e.target.value) / 100)}
+                  style={{
+                    width: 92,
+                    padding: '6px 10px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    background: 'rgba(0,0,0,0.14)',
+                  }}
+                  aria-label="Rebalance cash buffer target percent"
+                />
+              </label>
+
+              <label className="muted" style={{ fontSize: 11, display: 'flex', gap: 6, alignItems: 'center' }}>
+                max turnover (%)
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(maxTurnoverPct01V0 * 100)}
+                  onChange={(e) => persistMaxTurnoverPct01V0(Number(e.target.value) / 100)}
+                  style={{
+                    width: 92,
+                    padding: '6px 10px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    background: 'rgba(0,0,0,0.14)',
+                  }}
+                  aria-label="Rebalance max turnover percent"
+                />
+              </label>
+
+              {(() => {
+                const ccy = baseCcy ? ` ${baseCcy}` : '';
+                const minOrder = rebalancePolicy.minTradeNotional;
+
+                const effectiveTurnoverPct = whatIf ? whatIf.turnoverPctOfTotalBefore : null;
+                const turnoverBlocked = effectiveTurnoverPct !== null && maxTurnoverPct01V0 > 0 && effectiveTurnoverPct > maxTurnoverPct01V0 + 1e-12;
+                const turnoverText =
+                  effectiveTurnoverPct !== null
+                    ? `turnover≈${(effectiveTurnoverPct * 100).toFixed(1)}%${turnoverBlocked ? ' (exceeds)' : ''}`
+                    : 'turnover≈n/a';
+
+                return (
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    min order≈<b>{minOrder.toFixed(2)}</b>{ccy} · investable≈<b>{(investablePct01 * 100).toFixed(0)}%</b> · {turnoverText}
+                    {moneyPlanInvestablePct01 !== null ? (
+                      <>
+                        {' '}· money_plan investable≈{(moneyPlanInvestablePct01 * 100).toFixed(0)}%
+                      </>
+                    ) : (
+                      <>
+                        {' '}· money_plan investable: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>n/a</span>
+                      </>
+                    )}
+                    <span className="muted">{' '}· set max turnover=0 to disable</span>
+                  </div>
+                );
+              })()}
             </div>
 
             {assetBlacklistV0.length ? (
