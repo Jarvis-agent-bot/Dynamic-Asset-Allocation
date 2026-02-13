@@ -29,6 +29,7 @@ import {
   updateRebalanceOrderStatusV0,
 } from '@/src/daa/rebalanceOrderStatusRunStoreV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
+import { buildRebalancePlanCsvV0 } from '@/src/daa/rebalancePlanCsvV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -99,6 +100,25 @@ function scrollToId(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function downloadTextAsFile(args: { filename: string; text: string; mime: string }) {
+  try {
+    const blob = new Blob([args.text], { type: args.mime });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = args.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    // Give the click a tick before cleanup.
+    window.setTimeout(() => URL.revokeObjectURL(url), 250);
+  } catch {
+    // ignore
+  }
 }
 
 function toFiniteNumber(x: unknown): number | null {
@@ -1242,6 +1262,31 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
   }
 
+  function doExportPlanCsvV0() {
+    const source =
+      ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'
+        ? 'core:last-run'
+        : corePreview?.resp
+          ? 'core:recompute'
+          : 'naive:recompute';
+
+    const atIso = new Date().toISOString();
+    const csv = buildRebalancePlanCsvV0({
+      atIso,
+      source,
+      baseCcy,
+      allocations: rebalanceTableRows,
+      orders: effectiveOrders,
+    });
+
+    const ts = atIso.slice(0, 19).replace(/[:T]/g, '-');
+    downloadTextAsFile({
+      filename: `daa-rebalance-plan-${ts}.csv`,
+      text: csv,
+      mime: 'text/csv;charset=utf-8',
+    });
+  }
+
   function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
     try {
       return { ok: true, value: JSON.parse(text) as unknown };
@@ -1984,6 +2029,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 </button>
                 <button type="button" className="button" onClick={doCopyOrders} style={{ padding: '6px 10px' }} disabled={!effectiveOrders.length}>
                   {copyOrdersStatus === 'ok' ? 'Copied' : copyOrdersStatus === 'error' ? 'Copy failed' : 'Copy suggested orders'}
+                </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={doExportPlanCsvV0}
+                  style={{ padding: '6px 10px' }}
+                  disabled={!rebalanceTableRows.length && !effectiveOrders.length}
+                >
+                  Export plan CSV
                 </button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
                   <span className="muted" style={{ fontSize: 12 }}>
