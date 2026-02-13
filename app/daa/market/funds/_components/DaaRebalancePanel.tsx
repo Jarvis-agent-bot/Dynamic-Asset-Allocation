@@ -8,6 +8,7 @@ import { LS_LEGACY_HOLDINGS, loadPortfolioStateV1, recordPortfolioLastRebalance,
 import { getSnapshotPrice, loadPriceSnapshotV1, savePriceSnapshotV1 } from '../../../priceSnapshotStore';
 import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeightsStore';
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
+import { loadRebalanceScheduleStateV1, persistRebalanceScheduleV1 } from '../../../rebalanceScheduleStore';
 import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } from '../../../executionModeStore';
 import { loadSellProceedsRoutingV0, persistSellProceedsRoutingV0 } from '../../../sellProceedsRoutingStoreV0';
 import { loadCashBucketTargetPct01V0, persistCashBucketTargetPct01V0 } from '../../../cashBucketTargetStoreV0';
@@ -509,6 +510,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [preflightAckConstraints, setPreflightAckConstraints] = useState(false);
   const [preflightAckCash, setPreflightAckCash] = useState(false);
   const [preflightOverrideBlockers, setPreflightOverrideBlockers] = useState(false);
+
+  // Safety-stop confirmation (v0): last-step modal before executing a dynamic rebalance run.
+  // Also offers a quick "kill switch" to disable the local dynamic schedule.
+  const [safetyStopOpen, setSafetyStopOpen] = useState(false);
+  const [safetyStopPendingOpts, setSafetyStopPendingOpts] = useState<{ cashSweep?: boolean } | null>(null);
 
   useEffect(() => {
     const onData = () => setRev((x) => x + 1);
@@ -1820,9 +1826,36 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     setTimeout(() => scrollToId(id), 0);
   }
 
+  function closeSafetyStop() {
+    setSafetyStopOpen(false);
+    setSafetyStopPendingOpts(null);
+  }
+
+  function safetyStopDisableDynamicScheduleV0() {
+    // "Kill switch" for accidental one-click runs: disable the local dynamic schedule.
+    try {
+      const st = loadRebalanceScheduleStateV1();
+      if (st.schedule.enabled) persistRebalanceScheduleV1({ ...st.schedule, enabled: false });
+    } catch {
+      // ignore
+    }
+
+    closeSafetyStop();
+  }
+
   async function proceedFromPreflight() {
     const pending = preflightPendingOpts;
     closePreflight();
+
+    if (!pending) return;
+
+    setSafetyStopPendingOpts(pending);
+    setSafetyStopOpen(true);
+  }
+
+  async function proceedFromSafetyStop() {
+    const pending = safetyStopPendingOpts;
+    closeSafetyStop();
 
     if (pending && pending.cashSweep) return runPaperRebalanceCore({ cashSweep: true });
     return runPaperRebalanceCore();
@@ -2312,6 +2345,53 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     whatIfValuesBySymbol,
   ]);
 
+  const safetyStopPreviewOrders = useMemo(() => {
+    // Safety-stop should preview the *actual* orders we're about to execute.
+    // For cashSweep we recompute with thresholdPct=0 + cashSweepToTarget enabled.
+    if (!safetyStopPendingOpts?.cashSweep) return effectiveOrders;
+
+    try {
+      if (!corePreview?.req) return effectiveOrders;
+
+      const reqSweep: RebalanceCoreRequest = {
+        ...corePreview.req,
+        policy: {
+          ...((corePreview.req as any).policy ?? {}),
+          thresholdPct: 0,
+          cashSweepToTarget: true,
+        },
+      };
+
+      return normalizeOrders(rebalanceCore(reqSweep).orders);
+    } catch {
+      return effectiveOrders;
+    }
+  }, [corePreview?.req, effectiveOrders, safetyStopPendingOpts?.cashSweep]);
+
+  const safetyStopPreviewWhatIf = useMemo(() => {
+    if (!safetyStopPreviewOrders.length) return null;
+
+    return simulateRebalanceWhatIfV0({
+      cashStart: toFiniteNumber(portfolioCash) ?? 0,
+      valuesBySymbol: whatIfValuesBySymbol,
+      targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
+      orders: safetyStopPreviewOrders
+        .filter((o) => o && o.symbol && (o.side === "BUY" || o.side === "SELL") && Number.isFinite(o.notional) && o.notional > 0)
+        .map((o) => ({ symbol: o.symbol, side: o.side as "BUY" | "SELL", notional: o.notional })),
+      feeBps: whatIfFeeBps,
+      slippageBps: whatIfSlippageBpsUsed,
+      labelsBySymbol: whatIfLabelsBySymbol,
+    });
+  }, [
+    portfolioCash,
+    safetyStopPreviewOrders,
+    whatIfFeeBps,
+    whatIfLabelsBySymbol,
+    whatIfSlippageBpsUsed,
+    whatIfTargetWeightsPostBySymbol,
+    whatIfValuesBySymbol,
+  ]);
+
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
       {preflightOpen ? (
@@ -2571,6 +2651,113 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 }
               >
                 {preflightPendingOpts?.cashSweep ? 'Proceed & cash sweep' : 'Proceed & run rebalance'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {safetyStopOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Safety stop confirmation"
+          onClick={() => closeSafetyStop()}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(720px, 100%)',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.10)',
+              background: 'rgba(0,0,0,0.92)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' as const }}>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 14 }}>Safety stop confirmation</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  About to <b>{safetyStopPendingOpts?.cashSweep ? 'cash sweep' : 'execute dynamic rebalance'}</b> (dry run).
+                </div>
+              </div>
+              <button type="button" className="button secondary" onClick={() => closeSafetyStop()} style={{ padding: '6px 10px' }}>
+                Close
+              </button>
+            </div>
+
+            <div style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.10)' }}>
+              {(() => {
+                const scheduleEnabled = loadRebalanceScheduleStateV1().schedule.enabled;
+                const ccy = baseCcy ? ` ${baseCcy}` : '';
+
+                const n = safetyStopPreviewOrders.length;
+                const w = safetyStopPreviewWhatIf;
+
+                const bits: string[] = [];
+                bits.push(`orders=${n}`);
+                if (w && Number.isFinite(w.turnoverNotional)) bits.push(`turnover≈${w.turnoverNotional.toFixed(2)}${ccy}`);
+                if (w && Number.isFinite(w.costTotal)) bits.push(`cost≈${w.costTotal.toFixed(2)}${ccy}`);
+
+                return (
+                  <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
+                    <div>
+                      Preview: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{bits.join('; ')}</span>
+                    </div>
+                    <div>
+                      Dynamic schedule: <b>{scheduleEnabled ? 'enabled' : 'disabled'}</b>
+                    </div>
+                    <div>
+                      Execution: <b>{executionMode === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b> — records to local execution log only.
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+              If anything looks off (wrong prices/targets/orders), click "Safety stop" to disable the dynamic schedule and cancel.
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" onClick={() => closeSafetyStop()} style={{ padding: '6px 10px' }}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button danger"
+                onClick={() => safetyStopDisableDynamicScheduleV0()}
+                style={{ padding: '6px 10px' }}
+                disabled={!loadRebalanceScheduleStateV1().schedule.enabled}
+                title={
+                  loadRebalanceScheduleStateV1().schedule.enabled
+                    ? 'Disable the local dynamic schedule and cancel this run.'
+                    : 'Schedule is already disabled.'
+                }
+              >
+                Safety stop (disable schedule)
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => proceedFromSafetyStop()}
+                style={{ padding: '6px 10px' }}
+                disabled={paperRunLoading || preTradeCashCheck.blocking || !targetWeights.length}
+                title={preTradeCashCheck.blocking ? preTradeCashCheck.message : undefined}
+              >
+                {safetyStopPendingOpts?.cashSweep ? 'Execute cash sweep (dry run)' : 'Execute rebalance (dry run)'}
               </button>
             </div>
           </div>
