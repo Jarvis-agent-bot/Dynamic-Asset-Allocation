@@ -3259,6 +3259,136 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       <DaaDynamicRebalancePausedReasonBannerV0 rev={rev} />
       <DaaDynamicRebalanceSkipHistoryV0 rev={rev} />
 
+      {(() => {
+        const scheduleEnabled = !!loadRebalanceScheduleStateV1().schedule.enabled;
+
+        const missingTargets = !targetWeights.length;
+        const hasPriceWarnings = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0;
+
+        const blockers = preRunViolationsV0.filter((v) => v.level === 'blocker');
+        const warnings = preRunViolationsV0.filter((v) => v.level === 'warning');
+
+        const cashBlocked = !!preTradeCashCheck.blocking;
+
+        const hasBlockingIssues = missingTargets || cashBlocked || blockers.length > 0;
+        const hasAnyIssues = hasBlockingIssues || hasPriceWarnings || warnings.length > 0;
+
+        if (!hasAnyIssues) return null;
+
+        const ui = hasBlockingIssues
+          ? {
+              border: 'rgba(239, 68, 68, 0.55)',
+              bg: 'rgba(239, 68, 68, 0.08)',
+              title: 'var(--danger)',
+            }
+          : {
+              border: 'rgba(245, 158, 11, 0.55)',
+              bg: 'rgba(245, 158, 11, 0.08)',
+              title: '#f59e0b',
+            };
+
+        const title = scheduleEnabled ? 'Dynamic rebalance preflight' : 'Preflight checks';
+        const subtitle = scheduleEnabled
+          ? 'Schedule is enabled. Fix these before the next run.'
+          : 'Fix these before running a rebalance.';
+
+        return (
+          <div
+            role="alert"
+            aria-label="Preflight issues"
+            style={{
+              marginTop: 8,
+              padding: '10px 12px',
+              borderRadius: 12,
+              border: `1px solid ${ui.border}`,
+              background: ui.bg,
+              fontSize: 12,
+            }}
+          >
+            <div style={{ fontWeight: 800, color: ui.title }}>{title}{hasBlockingIssues ? ' (action required)' : ' (review)'}</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{subtitle}</div>
+
+            <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+              {missingTargets ? (
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                  - Target weights missing. Dynamic rebalance can’t run until you configure targets.
+                  <span style={{ marginLeft: 8 }}>
+                    <button type="button" className="button secondary" onClick={() => jumpTo('target-weights')} style={{ padding: '4px 8px' }}>
+                      Set target weights
+                    </button>
+                  </span>
+                </div>
+              ) : null}
+
+              {hasPriceWarnings ? (
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                  - Price data warnings: missing={priceDataWarningsV0.missing.length}; lastCloseFallback={priceDataWarningsV0.lastClose.length}.
+                  <span style={{ marginLeft: 8 }}>
+                    <button type="button" className="button secondary" onClick={() => jumpTo('prices')} style={{ padding: '4px 8px' }}>
+                      Update prices
+                    </button>
+                  </span>
+                </div>
+              ) : null}
+
+              {cashBlocked ? (
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                  - Cash/settlement BLOCKED: <span style={{ color: 'var(--danger)' }}>{preTradeCashCheck.message}</span>
+                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
+                    <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
+                      Review cash routing
+                    </button>
+                    <Link href="/daa?step=3" className="muted" style={{ fontSize: 11 }}>
+                      Edit money plan
+                    </Link>
+                  </span>
+                </div>
+              ) : null}
+
+              {blockers.length ? (
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                  - Constraints/validation BLOCKERS: {blockers.length}.{' '}
+                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{blockers.slice(0, 2).map((x) => x.title).join('; ')}</span>
+                  {blockers.length > 2 ? ' …' : ''}
+                  <span style={{ marginLeft: 8 }}>
+                    <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
+                      Review blockers
+                    </button>
+                  </span>
+                </div>
+              ) : null}
+
+              {!blockers.length && warnings.length ? (
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                  - Constraints/validation warnings: {warnings.length}.{' '}
+                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{warnings.slice(0, 2).map((x) => x.title).join('; ')}</span>
+                  {warnings.length > 2 ? ' …' : ''}
+                  <span style={{ marginLeft: 8 }}>
+                    <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
+                      Review warnings
+                    </button>
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' as const, justifyContent: 'flex-end' }}>
+              {scheduleEnabled ? (
+                <button type="button" className="button secondary" onClick={() => jumpTo('schedule')} style={{ padding: '4px 8px' }}>
+                  Review schedule
+                </button>
+              ) : null}
+
+              {!missingTargets && !cashBlocked ? (
+                <button type="button" className="button secondary" onClick={() => openPreflightForRun()} style={{ padding: '4px 8px' }}>
+                  Open preflight checklist
+                </button>
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
