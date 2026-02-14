@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import type { ReactNode } from "react";
 
+import { Toaster } from "@/components/ui/sonner";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -37,7 +39,10 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

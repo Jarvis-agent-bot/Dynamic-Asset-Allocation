@@ -1,4 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
+  /* App theme tokens (existing; keep as source of truth). */
   --bg: #0f172a;
   --card: #111827;
   --text: #e5e7eb;
@@ -8,6 +13,38 @@
   --success: #34d399;
   --danger: #f87171;
   --border: #1f2937;
+
+  /* shadcn/ui tokens (HSL) aligned to the palette above.
+     We keep these separate to avoid breaking existing CSS that expects hex vars. */
+  --shadcn-background: 222 47% 11%;
+  --shadcn-foreground: 220 13% 91%;
+
+  --shadcn-card: 221 39% 11%;
+  --shadcn-card-foreground: 220 13% 91%;
+
+  --shadcn-popover: 221 39% 11%;
+  --shadcn-popover-foreground: 220 13% 91%;
+
+  --shadcn-primary: 191 91% 56%;
+  --shadcn-primary-foreground: 198 100% 12%;
+
+  --shadcn-secondary: 215 28% 17%;
+  --shadcn-secondary-foreground: 220 13% 91%;
+
+  --shadcn-muted: 215 28% 17%;
+  --shadcn-muted-foreground: 215 20% 65%;
+
+  --shadcn-accent: 217 91% 67%;
+  --shadcn-accent-foreground: 222 47% 11%;
+
+  --shadcn-destructive: 0 91% 71%;
+  --shadcn-destructive-foreground: 222 47% 11%;
+
+  --shadcn-border: 215 28% 17%;
+  --shadcn-input: 215 28% 17%;
+  --shadcn-ring: 191 91% 56%;
+
+  --shadcn-radius: 0.75rem;
 }
 
 * {
