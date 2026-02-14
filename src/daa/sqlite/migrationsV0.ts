@@ -104,4 +104,19 @@ export const DAA_SQLITE_MIGRATIONS_V0: SqliteMigrationV0[] = [
         ON schema_migration_audit_events(migration_id, created_at);
     `,
   },
+
+  // v3: allow operators to activate/deactivate admin tokens without redeploying.
+  {
+    id: "0004_admin_user_status",
+    sql: `
+      CREATE TABLE IF NOT EXISTS daa_admin_user_status (
+        user_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_daa_admin_user_status_status
+        ON daa_admin_user_status(status);
+    `,
+  },
 ];

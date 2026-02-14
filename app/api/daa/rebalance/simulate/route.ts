@@ -11,7 +11,7 @@ import { parsePositiveIntEnv } from "@/src/daa/env";
 // behind nginx (/daa-api/...). This keeps the UI independent from deployment routing.
 
 export async function POST(req: Request) {
-  const denied = requireDaaAdminViewerAuth(req);
+  const denied = await requireDaaAdminViewerAuth(req);
   if (denied) return denied;
 
   const parsed = await readJsonBody<RebalanceSimulateRequest>(req);

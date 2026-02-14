@@ -8,6 +8,7 @@ type AdminUserV0 = {
   id: "viewer-token" | "editor-token" | "legacy-token";
   role: "viewer" | "editor";
   configured: boolean;
+  active: boolean;
   source: "env";
 };
 
@@ -35,8 +36,9 @@ function fmtBool(v: boolean): string {
   return v ? "yes" : "no";
 }
 
-function fmtStatus(u: AdminUserV0): "configured" | "missing" {
-  return u.configured ? "configured" : "missing";
+function fmtStatus(u: AdminUserV0): "active" | "inactive" | "missing" {
+  if (!u.configured) return "missing";
+  return u.active ? "active" : "inactive";
 }
 
 function toNeedle(raw: string): string {
@@ -54,6 +56,14 @@ function sortLabel(key: SortKey): string {
   if (key === "status") return "Status";
   if (key === "me") return "Me";
   return "Sort";
+}
+
+function statusRank(u: AdminUserV0): number {
+  // Higher is "better".
+  const s = fmtStatus(u);
+  if (s === "active") return 2;
+  if (s === "inactive") return 1;
+  return 0;
 }
 
 function compareUsers(a: AdminUserV0, b: AdminUserV0, opts: { sortKey: SortKey; sortDir: SortDir; meTokenKind: AdminUsersApiV0["me"]["tokenKind"] }): number {
@@ -78,9 +88,7 @@ function compareUsers(a: AdminUserV0, b: AdminUserV0, opts: { sortKey: SortKey; 
     primary = cmp(aRole, bRole);
   }
   if (sortKey === "status") {
-    const aStatus = a.configured ? 1 : 0;
-    const bStatus = b.configured ? 1 : 0;
-    primary = cmp(aStatus, bStatus);
+    primary = cmp(statusRank(a), statusRank(b));
   }
   if (sortKey === "me") {
     const am = aIsMe ? 1 : 0;
@@ -101,6 +109,9 @@ export default function DaaDashboardAdminUsers() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<AdminUserV0["id"] | null>(null);
+
+  const [mutating, setMutating] = useState<AdminUserV0["id"] | null>(null);
+  const [mutateError, setMutateError] = useState<string>("");
 
   const [query, setQuery] = useState<string>("");
   const [sortKey, setSortKey] = useState<SortKey>("status");
@@ -128,6 +139,40 @@ export default function DaaDashboardAdminUsers() {
     } catch (e: any) {
       setStatus("error");
       setError(String(e?.message || e));
+    }
+  }
+
+  async function setActive(id: AdminUserV0["id"], active: boolean) {
+    setMutateError("");
+
+    const label = active ? "activate" : "deactivate";
+    const ok = window.confirm(`Are you sure you want to ${label} ${id}?`);
+    if (!ok) return;
+
+    setMutating(id);
+    try {
+      const headers: Record<string, string> = {
+        accept: "application/json",
+        "content-type": "application/json",
+        ...buildDaaAdminAuthHeadersV0(),
+      };
+
+      const res = await fetch("/api/daa/admin/users", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ id, active }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` :: ${text.slice(0, 200)}` : ""}`);
+      }
+
+      await load();
+    } catch (e: any) {
+      setMutateError(String(e?.message || e));
+    } finally {
+      setMutating(null);
     }
   }
 
@@ -180,7 +225,7 @@ export default function DaaDashboardAdminUsers() {
         <div>
           <div style={{ fontWeight: 900, fontSize: 13 }}>Admin users</div>
           <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
-            This is a read-only diagnostics view of configured admin tokens (viewer/editor/legacy).
+            Diagnostics view of configured admin tokens (viewer/editor/legacy), with an enable/disable switch backed by SQLite.
           </div>
         </div>
 
@@ -227,6 +272,22 @@ export default function DaaDashboardAdminUsers() {
         </div>
       </div>
 
+      {mutateError ? (
+        <div
+          style={{
+            marginTop: 10,
+            padding: 10,
+            border: "1px solid #f0c5c5",
+            background: "#fff6f6",
+            borderRadius: 10,
+            fontSize: 12,
+            color: "#7a1f1f",
+          }}
+        >
+          <b>Update failed</b>: {mutateError}
+        </div>
+      ) : null}
+
       {status === "error" ? (
         <div
           style={{
@@ -247,7 +308,7 @@ export default function DaaDashboardAdminUsers() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "220px 120px 140px 80px 90px",
+            gridTemplateColumns: "220px 120px 140px 80px 170px",
             gap: 8,
             padding: "8px 10px",
             background: "#fafafa",
@@ -324,22 +385,39 @@ export default function DaaDashboardAdminUsers() {
           >
             Me{sortIndicator(sortKey === "me", sortDir)}
           </button>
-          <div />
+          <div style={{ textAlign: "right" }}>Actions</div>
         </div>
 
         {filteredSortedUsers.map((u) => {
           const isMe = tokenKindForUserId(u.id) === meTokenKind;
           const statusLabel = fmtStatus(u);
-          const statusBg = u.configured ? "#f0fff4" : "#fff6f6";
-          const statusBorder = u.configured ? "#c6f6d5" : "#f0c5c5";
-          const statusText = u.configured ? "#22543d" : "#7a1f1f";
+
+          let statusBg = "#f7fafc";
+          let statusBorder = "#e2e8f0";
+          let statusText = "#4a5568";
+          if (statusLabel === "active") {
+            statusBg = "#f0fff4";
+            statusBorder = "#c6f6d5";
+            statusText = "#22543d";
+          } else if (statusLabel === "inactive") {
+            statusBg = "#fffaf0";
+            statusBorder = "#fbd38d";
+            statusText = "#7b341e";
+          } else {
+            statusBg = "#edf2f7";
+            statusBorder = "#e2e8f0";
+            statusText = "#4a5568";
+          }
+
+          const canToggle = u.configured;
+          const isBusy = mutating === u.id;
 
           return (
             <div
               key={u.id}
               style={{
                 display: "grid",
-                gridTemplateColumns: "220px 120px 140px 80px 90px",
+                gridTemplateColumns: "220px 120px 140px 80px 170px",
                 gap: 8,
                 padding: "8px 10px",
                 borderTop: "1px solid #eee",
@@ -364,7 +442,26 @@ export default function DaaDashboardAdminUsers() {
                 </span>
               </div>
               <div style={{ color: isMe ? "#111" : "#bbb" }}>{isMe ? "yes" : "-"}</div>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
+                {canToggle ? (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => setActive(u.id, !u.active)}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #e5e5e5",
+                      background: "#fafafa",
+                      fontSize: 12,
+                      opacity: isBusy ? 0.6 : 1,
+                      cursor: isBusy ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isBusy ? "Updating..." : u.active ? "Deactivate" : "Activate"}
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -386,7 +483,7 @@ export default function DaaDashboardAdminUsers() {
       </div>
 
       <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
-        Note: last login is not tracked yet; this drawer surfaces role/config/configuration source only.
+        Note: last login is not tracked yet; this view surfaces role/configuration status only.
       </div>
 
       {drawerOpen ? (
@@ -438,7 +535,10 @@ export default function DaaDashboardAdminUsers() {
                     <b>configured</b>: {fmtBool(selectedUser.configured)}
                   </div>
                   <div>
-                    <b>status</b>: {selectedUser.configured ? "configured" : "missing"}
+                    <b>active</b>: {fmtBool(selectedUser.active)}
+                  </div>
+                  <div>
+                    <b>status</b>: {fmtStatus(selectedUser)}
                   </div>
                   <div>
                     <b>source</b>: {selectedUser.source}
@@ -449,10 +549,6 @@ export default function DaaDashboardAdminUsers() {
                   <div>
                     <b>last login</b>: <span style={{ color: "#666" }}>N/A (not tracked yet)</span>
                   </div>
-                </div>
-
-                <div style={{ fontSize: 12, color: "#666", lineHeight: 1.5 }}>
-                  If you want a real "last login" signal, we can add a small server-side write path that records token usage into SQLite (rate-limited) and surface it here.
                 </div>
               </div>
             ) : (
