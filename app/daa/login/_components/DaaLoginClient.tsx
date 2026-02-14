@@ -79,6 +79,49 @@ function formatSeconds(s: number): string {
   return `${ss}s`;
 }
 
+
+type MailboxLink = { label: string; href: string };
+
+function buildMailboxLinks(email: string): MailboxLink[] {
+  const v = email.trim().toLowerCase();
+  const at = v.lastIndexOf("@");
+  const domain = at >= 0 ? v.slice(at + 1) : "";
+
+  const links: MailboxLink[] = [];
+  const push = (label: string, href: string) => {
+    if (!label || !href) return;
+    if (links.some((x) => x.href === href)) return;
+    links.push({ label, href });
+  };
+
+  const gmail = "https://mail.google.com/mail/u/0/#inbox";
+  const outlook = "https://outlook.live.com/mail/0/inbox";
+  const icloud = "https://www.icloud.com/mail/";
+  const yahoo = "https://mail.yahoo.com/d/folders/1";
+  const proton = "https://mail.proton.me/u/0/inbox";
+  const qq = "https://mail.qq.com/";
+  const netease163 = "https://mail.163.com/";
+  const netease126 = "https://mail.126.com/";
+  const neteaseYeah = "https://mail.yeah.net/";
+
+  if (domain === "gmail.com" || domain === "googlemail.com") push("Gmail", gmail);
+  if (domain === "outlook.com" || domain === "hotmail.com" || domain === "live.com") push("Outlook", outlook);
+  if (domain === "icloud.com" || domain === "me.com" || domain === "mac.com") push("iCloud", icloud);
+  if (domain === "yahoo.com" || domain === "ymail.com") push("Yahoo", yahoo);
+  if (domain === "proton.me" || domain === "protonmail.com") push("Proton", proton);
+  if (domain === "qq.com" || domain === "foxmail.com") push("QQ Mail", qq);
+  if (domain === "163.com") push("163 Mail", netease163);
+  if (domain === "126.com") push("126 Mail", netease126);
+  if (domain === "yeah.net") push("yeah.net Mail", neteaseYeah);
+
+  // Common fallbacks (still deduped by href)
+  push("Gmail", gmail);
+  push("Outlook", outlook);
+  push("iCloud", icloud);
+
+  return links;
+}
+
 export default function DaaLoginClient({ returnTo, error }: Props) {
   const emailLinkEmailId = useId();
   const passwordEmailId = useId();
@@ -148,6 +191,11 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
     const elapsed = Math.floor((nowMs - emailLink.requestedAtMs) / 1000);
     return Math.max(0, emailLink.cooldownSeconds - elapsed);
   }, [emailLink, nowMs]);
+
+  const mailboxLinks = useMemo(() => {
+    if (emailLink.kind !== "sent") return [];
+    return buildMailboxLinks(emailLink.email);
+  }, [emailLink]);
 
   useEffect(() => {
     let cancelled = false;
@@ -480,6 +528,22 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                     <div className="font-medium">Check your inbox</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       If <span className="font-medium">{emailLink.email}</span> is registered, you'll receive a sign-in link within a minute. It expires in about 15 minutes.
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Tip: look for an email with subject <span className="font-medium">Your DAA sign-in link</span>.
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {mailboxLinks.map((l) => (
+                        <Button
+                          key={l.href}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(l.href, "_blank", "noopener,noreferrer")}
+                        >
+                          Open {l.label}
+                        </Button>
+                      ))}
                     </div>
                     <div className="mt-2 text-xs text-muted-foreground">Check your spam or promotions folder if you don't see it.</div>
                   </div>
