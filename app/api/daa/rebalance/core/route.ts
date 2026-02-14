@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { rebalanceCore } from "@/src/core/rebalanceCore";
-import { requireDaaAdminAuth } from "@/src/daa/adminAuth";
+import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { isRebalanceCoreRequest, type RebalanceCoreRequest } from "@/src/daa/rebalanceCoreContracts";
 import { readJsonBody } from "@/src/daa/requestJson";
 
 export async function POST(req: Request) {
-  const denied = requireDaaAdminAuth(req);
+  const denied = requireDaaAdminViewerAuth(req);
   if (denied) return denied;
 
   const parsed = await readJsonBody<RebalanceCoreRequest>(req);

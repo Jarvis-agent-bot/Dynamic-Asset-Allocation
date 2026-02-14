@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 
+import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+
 import { listDaaRunsV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  const denied = requireDaaAdminViewerAuth(req);
+  if (denied) return denied;
+
   const url = new URL(req.url);
 
   const limitRaw = url.searchParams.get("limit");

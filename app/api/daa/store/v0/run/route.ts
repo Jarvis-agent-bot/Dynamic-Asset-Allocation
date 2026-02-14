@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { requireDaaAdminAuth } from "@/src/daa/adminAuth";
+import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { createDaaRunV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const denied = requireDaaAdminAuth(req);
+  const denied = requireDaaAdminEditorAuth(req);
   if (denied) return denied;
 
   let body: any = null;

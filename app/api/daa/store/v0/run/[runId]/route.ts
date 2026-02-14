@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 
+import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+
 import { getDaaRunBundleV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
 
 export const runtime = "nodejs";
 
-export async function GET(_req: Request, ctx: { params: { runId: string } }) {
+export async function GET(req: Request, ctx: { params: { runId: string } }) {
   const runId = String(ctx?.params?.runId ?? "").trim();
   if (!runId) return NextResponse.json({ ok: false, error: "missing runId" }, { status: 400 });
 
