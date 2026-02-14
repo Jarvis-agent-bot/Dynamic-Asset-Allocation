@@ -20,6 +20,7 @@ import DaaDashboardHistoryAudit from "../_components/DaaDashboardHistoryAudit";
 import DaaDashboardAdminUsers from "../_components/DaaDashboardAdminUsers";
 
 import DaaMarketFundsTab from "../_tabs/DaaMarketFundsTab";
+import DaaSessionBanner from "./DaaSessionBanner";
 
 type Tab = "dashboard" | "wizard" | "market-funds";
 
@@ -209,14 +210,19 @@ export default function DaaDashboardPageClient() {
   const searchParams = useSearchParams();
   const tab = normalizeTab(searchParams.get("tab"));
 
-  if (tab === "wizard") {
-    const initialStepId = parseInitialStepId(searchParams.get("step"));
-    return <DaaWizard initialStepId={initialStepId} />;
-  }
+  const content =
+    tab === "wizard" ? (
+      <DaaWizard initialStepId={parseInitialStepId(searchParams.get("step"))} />
+    ) : tab === "market-funds" ? (
+      <DaaMarketFundsTab />
+    ) : (
+      <DashboardMain />
+    );
 
-  if (tab === "market-funds") {
-    return <DaaMarketFundsTab />;
-  }
-
-  return <DashboardMain />;
+  return (
+    <div className="space-y-4">
+      <DaaSessionBanner />
+      {content}
+    </div>
+  );
 }
