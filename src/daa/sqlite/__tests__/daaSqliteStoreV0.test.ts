@@ -28,14 +28,14 @@ describe("daa/sqlite store v0", () => {
     process.env.DAA_SQLITE_PATH = dbPath;
     await resetDbFile(dbPath);
 
-    const { runId } = await createDaaRunV0({ kind: "rebalance", payload: { foo: 1 } });
+    const { runId } = await createDaaRunV0({ kind: "rebalance", payload: { foo: 1 }, createdAt: "2026-01-01T00:00:01.000Z" });
 
-    await setDaaRunPortfolioV0({ runId, payload: { holdings: [{ symbol: "SPY", qty: 1 }] } });
-    await setDaaRunConfirmV0({ runId, payload: { ok: true, note: "user confirmed" } });
-    await setDaaRunExecutedV0({ runId, payload: { mode: "paper", fills: [] } });
+    await setDaaRunPortfolioV0({ runId, payload: { holdings: [{ symbol: "SPY", qty: 1 }] }, createdAt: "2026-01-01T00:00:02.000Z" });
+    await setDaaRunConfirmV0({ runId, payload: { ok: true, note: "user confirmed" }, createdAt: "2026-01-01T00:00:03.000Z" });
+    await setDaaRunExecutedV0({ runId, payload: { mode: "paper", fills: [] }, createdAt: "2026-01-01T00:00:04.000Z" });
 
-    const a1 = await appendDaaRunAuditEventV0({ runId, kind: "ai_orders_draft", payload: { orders: [] } });
-    await appendDaaRunAuditEventV0({ runId, kind: "note", payload: { text: "hello" } });
+    const a1 = await appendDaaRunAuditEventV0({ runId, kind: "ai_orders_draft", payload: { orders: [] }, createdAt: "2026-01-01T00:00:05.000Z" });
+    await appendDaaRunAuditEventV0({ runId, kind: "note", payload: { text: "hello" }, createdAt: "2026-01-01T00:00:06.000Z" });
 
     const bundle1 = await getDaaRunBundleV0(runId);
     expect(bundle1.run.runId).toBe(runId);
@@ -43,15 +43,15 @@ describe("daa/sqlite store v0", () => {
     expect(bundle1.portfolio?.payload).toEqual({ holdings: [{ symbol: "SPY", qty: 1 }] });
     expect(bundle1.confirm?.payload).toEqual({ ok: true, note: "user confirmed" });
     expect(bundle1.executed?.payload).toEqual({ mode: "paper", fills: [] });
-    expect(bundle1.audit.length).toBe(2);
-    expect(bundle1.audit[0]?.eventId).toBe(a1.eventId);
+    expect(bundle1.audit.length).toBe(5);
+    expect(bundle1.audit.some((e) => e.eventId === a1.eventId)).toBe(true);
 
     // Prove persistence: drop in-memory cache and reload from disk.
     delete (globalThis as any)[GLOBAL_KEY];
 
     const bundle2 = await getDaaRunBundleV0(runId);
     expect(bundle2.run.payload).toEqual({ foo: 1 });
-    expect(bundle2.audit.map((e) => e.kind)).toEqual(["ai_orders_draft", "note"]);
+    expect(bundle2.audit.map((e) => e.kind)).toEqual(["run_created", "confirm_set", "executed_set", "ai_orders_draft", "note"]);
 
     await resetDbFile(dbPath);
   });
@@ -77,7 +77,7 @@ describe("daa/sqlite store v0", () => {
     expect(page1[0]?.hasExecuted).toBe(true);
     expect(page1[0]?.hasConfirm).toBe(false);
     expect(page1[1]?.hasConfirm).toBe(true);
-    expect(page1[1]?.auditCount).toBe(2);
+    expect(page1[1]?.auditCount).toBe(4);
 
     const page2 = await listDaaRunsV0({ limit: 10, beforeCreatedAt: page1[1]!.createdAt, beforeRunId: page1[1]!.runId });
     expect(page2.map((r) => r.runId)).toEqual([r1.runId]);

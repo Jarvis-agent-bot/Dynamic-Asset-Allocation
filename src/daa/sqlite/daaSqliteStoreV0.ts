@@ -23,6 +23,28 @@ function parseJson<T = unknown>(raw: string): T {
   return JSON.parse(raw) as T;
 }
 
+function insertRunAuditEventV0(args: { db: any; markDirty: () => void; runId: string; createdAt: string; kind: string; payload: unknown }): string {
+  const runId = String(args.runId ?? "").trim();
+  const kind = String(args.kind ?? "").trim();
+  if (!runId) throw new Error("missing runId");
+  if (!kind) throw new Error("missing kind");
+
+  const eventId = makeId("audit");
+  const payloadJson = safeJsonStringify(args.payload);
+
+  const stmt = args.db.prepare(
+    "INSERT INTO daa_run_audit_events (event_id, run_id, created_at, kind, payload_json) VALUES (?, ?, ?, ?, ?)"
+  );
+  try {
+    stmt.run([eventId, runId, args.createdAt, kind, payloadJson]);
+  } finally {
+    stmt.free();
+  }
+
+  args.markDirty();
+  return eventId;
+}
+
 function deriveRunActorSourceV0(args: { kind: string; payload: unknown }): { actor: string; source: string } {
   const kind = String(args.kind ?? "").trim();
 
@@ -95,7 +117,16 @@ export async function createDaaRunV0(args: {
     } finally {
       stmt.free();
     }
-    markDirty();
+
+    // Record admin write action as an audit event so the dashboard has a reliable timeline.
+    insertRunAuditEventV0({
+      db,
+      markDirty,
+      runId,
+      createdAt,
+      kind: "run_created",
+      payload: { kind, status, payload: args.payload, actor, source },
+    });
   });
 
   return { runId, createdAt };
@@ -106,6 +137,8 @@ async function upsertRunAttachment(args: {
   runId: string;
   createdAt?: string;
   payload: unknown;
+  auditKind?: string;
+  auditPayload?: unknown;
 }) {
   const runId = String(args.runId ?? "").trim();
   if (!runId) throw new Error("missing runId");
@@ -134,6 +167,18 @@ async function upsertRunAttachment(args: {
     }
 
     markDirty();
+
+    const auditKind = String(args.auditKind ?? "").trim();
+    if (auditKind) {
+      insertRunAuditEventV0({
+        db,
+        markDirty,
+        runId,
+        createdAt,
+        kind: auditKind,
+        payload: args.auditPayload ?? { table: args.table, payload: args.payload },
+      });
+    }
   });
 }
 
@@ -142,11 +187,11 @@ export async function setDaaRunPortfolioV0(args: { runId: string; payload: unkno
 }
 
 export async function setDaaRunConfirmV0(args: { runId: string; payload: unknown; createdAt?: string }) {
-  return upsertRunAttachment({ table: "daa_run_confirm", ...args });
+  return upsertRunAttachment({ table: "daa_run_confirm", auditKind: "confirm_set", auditPayload: { payload: args.payload }, ...args });
 }
 
 export async function setDaaRunExecutedV0(args: { runId: string; payload: unknown; createdAt?: string }) {
-  return upsertRunAttachment({ table: "daa_run_executed", ...args });
+  return upsertRunAttachment({ table: "daa_run_executed", auditKind: "executed_set", auditPayload: { payload: args.payload }, ...args });
 }
 
 export async function appendDaaRunAuditEventV0(args: {
