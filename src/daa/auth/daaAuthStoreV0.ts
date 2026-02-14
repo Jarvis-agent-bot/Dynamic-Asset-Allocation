@@ -193,6 +193,72 @@ export async function createDaaAuthAccountV0(args: {
   });
 }
 
+export async function hasAnyDaaAuthAccountsV0(): Promise<boolean> {
+  return withDaaSqliteDbV0(async ({ db }) => {
+    const stmt = db.prepare("SELECT 1 FROM daa_auth_accounts LIMIT 1");
+    try {
+      return stmt.step();
+    } finally {
+      stmt.free();
+    }
+  });
+}
+
+export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
+  username: string;
+  password: string;
+  roles?: DaaAuthRoleV0[];
+  createdAt?: string;
+}): Promise<DaaAuthAccountV0> {
+  const username = normalizeEmailStrict(args.username);
+  const passwordHash = hashPasswordV0(args.password);
+
+  // First admin should always be able to administer the dashboard.
+  const roles = uniqRoles(args.roles);
+  if (!roles.includes("editor")) roles.unshift("editor");
+
+  const createdAt = ensureIsoOrNow(args.createdAt);
+  const updatedAt = createdAt;
+  const accountId = randomUUID();
+
+  return withDaaSqliteDbV0(async ({ db, markDirty }) => {
+    db.exec("BEGIN");
+    try {
+      const countStmt = db.prepare("SELECT COUNT(1) AS n FROM daa_auth_accounts");
+      let n = 0;
+      try {
+        countStmt.step();
+        const row = countStmt.getAsObject();
+        n = Number((row as any).n ?? 0) || 0;
+      } finally {
+        countStmt.free();
+      }
+
+      if (n > 0) throw new Error("bootstrap not allowed: accounts already exist");
+
+      const stmt = db.prepare(
+        "INSERT INTO daa_auth_accounts (account_id, username, password_hash, roles_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      );
+      try {
+        stmt.run([accountId, username, passwordHash, JSON.stringify(roles), "active", createdAt, updatedAt]);
+      } finally {
+        stmt.free();
+      }
+
+      db.exec("COMMIT");
+      markDirty();
+      return { accountId, username, roles, status: "active", createdAt, updatedAt };
+    } catch (e) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw e;
+    }
+  });
+}
+
 export async function getDaaAuthAccountByUsernameV0(usernameRaw: unknown): Promise<DaaAuthAccountV0 | null> {
   const username = normalizeEmailStrict(usernameRaw);
 

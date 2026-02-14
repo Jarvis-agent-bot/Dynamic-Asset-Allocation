@@ -12,6 +12,8 @@ import {
   revokeDaaAuthSessionV0,
   verifyPasswordV0,
   hashPasswordV0,
+  bootstrapCreateFirstDaaAuthAccountV0,
+  hasAnyDaaAuthAccountsV0,
 } from "../daaAuthStoreV0";
 
 const GLOBAL_KEY = "__daa_sqlite_state_v0__";
@@ -52,6 +54,31 @@ describe("daa/auth store v0", () => {
     expect(bad).toBe(null);
 
     await expect(createDaaAuthAccountV0({ username: "not-an-email", password: "pw-x", roles: ["viewer"] })).rejects.toThrow(/invalid email/i);
+
+    await resetDbFile(dbPath);
+  });
+
+  it("bootstraps the first admin only when there are no accounts", async () => {
+    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-auth-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
+    process.env.DAA_SQLITE_PATH = dbPath;
+    await resetDbFile(dbPath);
+
+    expect(await hasAnyDaaAuthAccountsV0()).toBe(false);
+
+    const a1 = await bootstrapCreateFirstDaaAuthAccountV0({
+      username: "FirstAdmin@Example.com",
+      password: "pw-boot",
+      roles: ["viewer"],
+    });
+
+    expect(a1.username).toBe("firstadmin@example.com");
+    expect(a1.roles.includes("editor")).toBe(true);
+
+    expect(await hasAnyDaaAuthAccountsV0()).toBe(true);
+
+    await expect(
+      bootstrapCreateFirstDaaAuthAccountV0({ username: "admin2@example.com", password: "pw-2" }),
+    ).rejects.toThrow(/bootstrap not allowed|accounts already exist/i);
 
     await resetDbFile(dbPath);
   });

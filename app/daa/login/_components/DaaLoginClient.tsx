@@ -134,8 +134,10 @@ export default function DaaLoginClient({ returnTo }: Props) {
               <div role="alert" className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                 <div>Login failed: {error}</div>
                 <div className="text-xs text-muted-foreground">
-                  If this is a fresh deployment, create an account via{" "}
-                  <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (admin-only).
+                  If this is a fresh deployment, bootstrap the first admin via{" "}
+                  <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires server env{" "}
+                  <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and sending{" "}
+                  <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
                 </div>
               </div>
             ) : null}
