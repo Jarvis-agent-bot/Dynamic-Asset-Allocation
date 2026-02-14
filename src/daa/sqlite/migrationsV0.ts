@@ -84,4 +84,24 @@ export const DAA_SQLITE_MIGRATIONS_V0: SqliteMigrationV0[] = [
       CREATE INDEX IF NOT EXISTS idx_daa_runs_actor_created_at ON daa_runs(actor, created_at);
     `,
   },
+
+  // v2: migration audit table for boot-time runner diagnostics.
+  {
+    id: "0003_schema_migration_audit",
+    sql: `
+      CREATE TABLE IF NOT EXISTS schema_migration_audit_events (
+        event_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        migration_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload_json TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_schema_migration_audit_events_created_at
+        ON schema_migration_audit_events(created_at);
+
+      CREATE INDEX IF NOT EXISTS idx_schema_migration_audit_events_migration_id_created_at
+        ON schema_migration_audit_events(migration_id, created_at);
+    `,
+  },
 ];
