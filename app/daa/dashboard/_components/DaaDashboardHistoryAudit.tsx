@@ -35,6 +35,32 @@ function fmtTime(iso: unknown) {
   return new Date(t).toLocaleString();
 }
 
+function csvEscapeCell(x: unknown): string {
+  if (x === null || x === undefined) return "";
+
+  const s = typeof x === "string" ? x : String(x);
+  // RFC4180-ish: quote if contains comma, quote, CR or LF.
+  if (!/[\",\r\n]/.test(s)) return s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function toCsv(lines: unknown[][]): string {
+  return lines.map((row) => row.map(csvEscapeCell).join(",")).join("\n") + "\n";
+}
+
+function downloadTextAsFile(args: { filename: string; text: string; mime: string }) {
+  const blob = new Blob([args.text], { type: args.mime });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = args.filename;
+  a.click();
+
+  // Best-effort cleanup; keep URL alive briefly for the download to start.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 function toIsoFromDatetimeLocal(s: string): string {
   const raw = String(s ?? "").trim();
   if (!raw) return "";
@@ -263,6 +289,54 @@ export default function DaaDashboardHistoryAudit() {
           >
             Refresh
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+              const lines: unknown[][] = [
+                [
+                  "runId",
+                  "createdAt",
+                  "kind",
+                  "status",
+                  "actor",
+                  "source",
+                  "hasPortfolio",
+                  "hasConfirm",
+                  "hasExecuted",
+                  "auditCount",
+                ],
+              ];
+
+              for (const r of runs) {
+                lines.push([
+                  r.runId,
+                  r.createdAt,
+                  r.kind,
+                  r.status,
+                  r.actor,
+                  r.source,
+                  r.hasPortfolio ? "yes" : "no",
+                  r.hasConfirm ? "yes" : "no",
+                  r.hasExecuted ? "yes" : "no",
+                  r.auditCount,
+                ]);
+              }
+
+              const csv = toCsv(lines);
+              downloadTextAsFile({
+                filename: `daa-audit-log-${stamp}.csv`,
+                text: csv,
+                mime: "text/csv",
+              });
+            }}
+            disabled={runsStatus === "loading" || !runs.length}
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+          >
+            Export CSV
+          </button>
+
           <button
             type="button"
             onClick={() => loadRuns("more")}
