@@ -29,8 +29,30 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function normalizeUsername(raw: unknown): string {
-  return typeof raw === "string" ? raw.trim().toLowerCase() : "";
+function normalizeEmailLoose(raw: unknown): string {
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (!v) return "";
+
+  // Basic sanity check; keep server contract minimal and dependency-free.
+  if (v.length > 254) return "";
+  if (/\s/.test(v)) return "";
+
+  const at = v.indexOf("@");
+  if (at <= 0 || at !== v.lastIndexOf("@")) return "";
+
+  const domain = v.slice(at + 1);
+  if (!domain || domain.startsWith(".") || domain.endsWith(".")) return "";
+  if (!domain.includes(".")) return "";
+
+  return v;
+}
+
+function normalizeEmailStrict(raw: unknown): string {
+  const provided = typeof raw === "string" ? raw.trim() : "";
+  const email = normalizeEmailLoose(raw);
+  if (!provided) throw new Error("missing email");
+  if (!email) throw new Error("invalid email");
+  return email;
 }
 
 function normalizeRole(raw: unknown): DaaAuthRoleV0 | null {
@@ -147,8 +169,7 @@ export async function createDaaAuthAccountV0(args: {
   roles?: DaaAuthRoleV0[];
   createdAt?: string;
 }): Promise<DaaAuthAccountV0> {
-  const username = normalizeUsername(args.username);
-  if (!username) throw new Error("missing username");
+  const username = normalizeEmailStrict(args.username);
 
   const passwordHash = hashPasswordV0(args.password);
   const roles = uniqRoles(args.roles);
@@ -173,8 +194,7 @@ export async function createDaaAuthAccountV0(args: {
 }
 
 export async function getDaaAuthAccountByUsernameV0(usernameRaw: unknown): Promise<DaaAuthAccountV0 | null> {
-  const username = normalizeUsername(usernameRaw);
-  if (!username) throw new Error("missing username");
+  const username = normalizeEmailStrict(usernameRaw);
 
   return withDaaSqliteDbV0(async ({ db }) => {
     const stmt = db.prepare(
@@ -203,7 +223,7 @@ export async function authenticateDaaAuthAccountV0(args: {
   username: string;
   password: string;
 }): Promise<DaaAuthAccountV0 | null> {
-  const username = normalizeUsername(args.username);
+  const username = normalizeEmailLoose(args.username);
   const password = typeof args.password === "string" ? args.password : "";
   if (!username || !password) return null;
 

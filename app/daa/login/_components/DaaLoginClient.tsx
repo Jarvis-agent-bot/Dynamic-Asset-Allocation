@@ -19,15 +19,38 @@ export default function DaaLoginClient({ returnTo }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function normalizeEmailLoose(raw: string): string {
+    const v = raw.trim().toLowerCase();
+    if (!v) return "";
+    if (v.length > 254) return "";
+    if (/\s/.test(v)) return "";
+
+    const at = v.indexOf("@");
+    if (at <= 0 || at !== v.lastIndexOf("@")) return "";
+
+    const domain = v.slice(at + 1);
+    if (!domain || domain.startsWith(".") || domain.endsWith(".")) return "";
+    if (!domain.includes(".")) return "";
+
+    return v;
+  }
+
   async function submit() {
     setBusy(true);
     setError(null);
+
+    const email = normalizeEmailLoose(username);
+    if (!email) {
+      setError("invalid email");
+      setBusy(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/daa/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: email, password }),
       });
 
       const text = await res.text();
@@ -71,14 +94,19 @@ export default function DaaLoginClient({ returnTo }: Props) {
           >
             <div className="grid gap-2">
               <label htmlFor={usernameId} className="text-sm font-medium">
-                Username
+                Email
               </label>
               <Input
                 id={usernameId}
+                type="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                placeholder="admin"
+                autoComplete="email"
+                placeholder="you@example.com"
                 disabled={busy}
               />
             </div>
