@@ -71,6 +71,7 @@ import DaaRebalancePolicyEditorV0 from './DaaRebalancePolicyEditorV0';
 import DaaRebalanceScheduleV0 from './DaaRebalanceScheduleV0';
 import DaaDynamicRebalanceStatusPillV0 from './DaaDynamicRebalanceStatusPillV0';
 import DaaDynamicRebalancePausedReasonBannerV0 from './DaaDynamicRebalancePausedReasonBannerV0';
+import DaaDynamicRebalanceLastOutcomeBannerV0 from './DaaDynamicRebalanceLastOutcomeBannerV0';
 import DaaDynamicRebalanceSkipHistoryV0 from './DaaDynamicRebalanceSkipHistoryV0';
 import DaaDynamicRebalanceNotificationWatcherV0 from './DaaDynamicRebalanceNotificationWatcherV0';
 import DaaDynamicRebalanceNotificationsV0 from './DaaDynamicRebalanceNotificationsV0';
@@ -3259,6 +3260,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       <DaaDynamicRebalanceNotificationWatcherV0 rev={rev} />
       <DaaDynamicRebalancePausedReasonBannerV0 rev={rev} />
+      <DaaDynamicRebalanceLastOutcomeBannerV0 rev={rev} />
       <DaaDynamicRebalanceSkipHistoryV0 rev={rev} />
 
       {(() => {

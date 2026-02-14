@@ -116,6 +116,7 @@ export default function DaaDynamicRebalanceSkipHistoryV0(props: { rev?: number }
 
   return (
     <div
+      id="dyn-skip-history-v0"
       style={{
         marginTop: 8,
         padding: '8px 10px',
@@ -158,7 +159,7 @@ export default function DaaDynamicRebalanceSkipHistoryV0(props: { rev?: number }
                   : e.kind;
 
           return (
-            <div key={e.id} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
+            <div key={e.id} id={`dyn-skip-${e.id}`} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
               <span className="badge" style={{ padding: '2px 6px', fontSize: 10, borderColor: '#64748b', color: '#64748b', background: 'rgba(100, 116, 139, 0.10)' }}>
                 {atText}
               </span>

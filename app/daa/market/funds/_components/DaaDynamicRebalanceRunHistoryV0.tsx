@@ -227,7 +227,7 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
   if (!all.length) return null;
 
   return (
-    <section style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginTop: 10 }}>
+    <section id="dyn-run-history-v0" style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginTop: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
         <div>
           <div style={{ fontWeight: 800 }}>Dynamic rebalance run history v0</div>
