@@ -23,7 +23,7 @@ function parseJson<T = unknown>(raw: string): T {
   return JSON.parse(raw) as T;
 }
 
-function insertRunAuditEventV0(args: { db: any; markDirty: () => void; runId: string; createdAt: string; kind: string; payload: unknown }): string {
+function insertRunAuditEventV0(args: { db: any; markDirty: () => void; runId: string; createdAt: string; kind: string; payload: unknown; actorUserId?: string }): string {
   const runId = String(args.runId ?? "").trim();
   const kind = String(args.kind ?? "").trim();
   if (!runId) throw new Error("missing runId");
@@ -33,10 +33,10 @@ function insertRunAuditEventV0(args: { db: any; markDirty: () => void; runId: st
   const payloadJson = safeJsonStringify(args.payload);
 
   const stmt = args.db.prepare(
-    "INSERT INTO daa_run_audit_events (event_id, run_id, created_at, kind, payload_json) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO daa_run_audit_events (event_id, run_id, created_at, kind, payload_json, actor_user_id) VALUES (?, ?, ?, ?, ?, ?)"
   );
   try {
-    stmt.run([eventId, runId, args.createdAt, kind, payloadJson]);
+    stmt.run([eventId, runId, args.createdAt, kind, payloadJson, args.actorUserId || null]);
   } finally {
     stmt.free();
   }
@@ -82,6 +82,7 @@ export type DaaRunAuditEventV0 = {
   runId: string;
   createdAt: string;
   kind: string;
+  actorUserId: string;
   payload: unknown;
 };
 
@@ -98,6 +99,7 @@ export async function createDaaRunV0(args: {
   status?: string;
   payload: unknown;
   createdAt?: string;
+  actorUserId?: string;
 }): Promise<{ runId: string; createdAt: string }> {
   const createdAt = typeof args.createdAt === "string" && args.createdAt ? args.createdAt : nowIso();
   const kind = String(args.kind ?? "").trim();
@@ -126,6 +128,7 @@ export async function createDaaRunV0(args: {
       createdAt,
       kind: "run_created",
       payload: { kind, status, payload: args.payload, actor, source },
+      actorUserId: args.actorUserId,
     });
   });
 
@@ -139,6 +142,7 @@ async function upsertRunAttachment(args: {
   payload: unknown;
   auditKind?: string;
   auditPayload?: unknown;
+  auditActorUserId?: string;
 }) {
   const runId = String(args.runId ?? "").trim();
   if (!runId) throw new Error("missing runId");
@@ -177,21 +181,22 @@ async function upsertRunAttachment(args: {
         createdAt,
         kind: auditKind,
         payload: args.auditPayload ?? { table: args.table, payload: args.payload },
+        actorUserId: args.auditActorUserId,
       });
     }
   });
 }
 
-export async function setDaaRunPortfolioV0(args: { runId: string; payload: unknown; createdAt?: string }) {
-  return upsertRunAttachment({ table: "daa_run_portfolio", ...args });
+export async function setDaaRunPortfolioV0(args: { runId: string; payload: unknown; createdAt?: string; actorUserId?: string }) {
+  return upsertRunAttachment({ table: "daa_run_portfolio", auditActorUserId: args.actorUserId, ...args });
 }
 
-export async function setDaaRunConfirmV0(args: { runId: string; payload: unknown; createdAt?: string }) {
-  return upsertRunAttachment({ table: "daa_run_confirm", auditKind: "confirm_set", auditPayload: { payload: args.payload }, ...args });
+export async function setDaaRunConfirmV0(args: { runId: string; payload: unknown; createdAt?: string; actorUserId?: string }) {
+  return upsertRunAttachment({ table: "daa_run_confirm", auditKind: "confirm_set", auditPayload: { payload: args.payload }, auditActorUserId: args.actorUserId, ...args });
 }
 
-export async function setDaaRunExecutedV0(args: { runId: string; payload: unknown; createdAt?: string }) {
-  return upsertRunAttachment({ table: "daa_run_executed", auditKind: "executed_set", auditPayload: { payload: args.payload }, ...args });
+export async function setDaaRunExecutedV0(args: { runId: string; payload: unknown; createdAt?: string; actorUserId?: string }) {
+  return upsertRunAttachment({ table: "daa_run_executed", auditKind: "executed_set", auditPayload: { payload: args.payload }, auditActorUserId: args.actorUserId, ...args });
 }
 
 export async function appendDaaRunAuditEventV0(args: {
@@ -199,6 +204,7 @@ export async function appendDaaRunAuditEventV0(args: {
   kind: string;
   payload: unknown;
   createdAt?: string;
+  actorUserId?: string;
 }): Promise<{ eventId: string; createdAt: string }> {
   const runId = String(args.runId ?? "").trim();
   const kind = String(args.kind ?? "").trim();
@@ -211,10 +217,10 @@ export async function appendDaaRunAuditEventV0(args: {
 
   await withDaaSqliteDbV0(async ({ db, markDirty }) => {
     const stmt = db.prepare(
-      "INSERT INTO daa_run_audit_events (event_id, run_id, created_at, kind, payload_json) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO daa_run_audit_events (event_id, run_id, created_at, kind, payload_json, actor_user_id) VALUES (?, ?, ?, ?, ?, ?)"
     );
     try {
-      stmt.run([eventId, runId, createdAt, kind, payloadJson]);
+      stmt.run([eventId, runId, createdAt, kind, payloadJson, args.actorUserId || null]);
     } finally {
       stmt.free();
     }
@@ -287,7 +293,7 @@ export async function getDaaRunBundleV0(runIdRaw: string): Promise<DaaRunBundleV
     });
 
     const auditStmt = db.prepare(
-      "SELECT event_id, run_id, created_at, kind, payload_json FROM daa_run_audit_events WHERE run_id = ? ORDER BY created_at ASC"
+      "SELECT event_id, run_id, created_at, kind, payload_json, actor_user_id FROM daa_run_audit_events WHERE run_id = ? ORDER BY created_at ASC"
     );
 
     const audit: DaaRunAuditEventV0[] = [];
@@ -301,6 +307,7 @@ export async function getDaaRunBundleV0(runIdRaw: string): Promise<DaaRunBundleV
           runId: String((row as any).run_id ?? ""),
           createdAt: String((row as any).created_at ?? ""),
           kind: String((row as any).kind ?? ""),
+          actorUserId: String((row as any).actor_user_id ?? "").trim(),
           payload: payloadJson ? parseJson(payloadJson) : null,
         });
       }
@@ -440,6 +447,101 @@ export async function listDaaRunsV0(args?: {
           hasConfirm: Number((row as any).has_confirm ?? 0) > 0,
           hasExecuted: Number((row as any).has_executed ?? 0) > 0,
           auditCount: Number((row as any).audit_count ?? 0) || 0,
+        });
+
+        if (out.length >= limit) break;
+      }
+      return out;
+    } finally {
+      stmt.free();
+    }
+  });
+}
+
+
+export type DaaRunAuditEventListRowV0 = {
+  eventId: string;
+  runId: string;
+  createdAt: string;
+  kind: string;
+  actorUserId: string;
+  payload: unknown;
+};
+
+export async function listDaaRunAuditEventsV0(args?: {
+  limit?: number;
+  beforeCreatedAt?: string;
+  beforeEventId?: string;
+  fromCreatedAt?: string;
+  toCreatedAt?: string;
+  actorUserId?: string;
+}): Promise<DaaRunAuditEventListRowV0[]> {
+  const limitRaw = args?.limit;
+  const limit = Math.max(1, Math.min(200, Number.isFinite(Number(limitRaw)) ? Math.trunc(Number(limitRaw)) : 50));
+
+  const beforeCreatedAt = typeof args?.beforeCreatedAt === "string" ? args?.beforeCreatedAt.trim() : "";
+  const beforeEventId = typeof args?.beforeEventId === "string" ? args?.beforeEventId.trim() : "";
+
+  const fromCreatedAt = typeof args?.fromCreatedAt === "string" ? args?.fromCreatedAt.trim() : "";
+  const toCreatedAt = typeof args?.toCreatedAt === "string" ? args?.toCreatedAt.trim() : "";
+
+  const actorUserIdRaw = typeof args?.actorUserId === "string" ? args?.actorUserId.trim() : "";
+  const actorUserId = actorUserIdRaw && actorUserIdRaw !== "all" ? actorUserIdRaw : "";
+
+  return withDaaSqliteDbV0(async ({ db }) => {
+    let sql = `
+      SELECT event_id, run_id, created_at, kind, payload_json, actor_user_id
+      FROM daa_run_audit_events
+    `.trim();
+
+    const bind: any[] = [];
+    const where: string[] = [];
+
+    if (fromCreatedAt) {
+      where.push("created_at >= ?");
+      bind.push(fromCreatedAt);
+    }
+
+    if (toCreatedAt) {
+      where.push("created_at <= ?");
+      bind.push(toCreatedAt);
+    }
+
+    if (actorUserId) {
+      where.push("actor_user_id = ?");
+      bind.push(actorUserId);
+    }
+
+    if (beforeCreatedAt && beforeEventId) {
+      where.push("(created_at < ? OR (created_at = ? AND event_id < ?))");
+      bind.push(beforeCreatedAt, beforeCreatedAt, beforeEventId);
+    } else if (beforeCreatedAt) {
+      where.push("created_at < ?");
+      bind.push(beforeCreatedAt);
+    }
+
+    if (where.length) {
+      sql += ` WHERE ${where.join(" AND ")}`;
+    }
+
+    sql += " ORDER BY created_at DESC, event_id DESC LIMIT ?";
+    bind.push(limit);
+
+    const stmt = db.prepare(sql);
+    try {
+      stmt.bind(bind);
+      const out: DaaRunAuditEventListRowV0[] = [];
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        const payloadJson = String((row as any).payload_json ?? "");
+
+        out.push({
+          eventId: String((row as any).event_id ?? ""),
+          runId: String((row as any).run_id ?? ""),
+          createdAt: String((row as any).created_at ?? ""),
+          kind: String((row as any).kind ?? ""),
+          actorUserId: String((row as any).actor_user_id ?? "").trim(),
+          payload: payloadJson ? parseJson(payloadJson) : null,
         });
 
         if (out.length >= limit) break;

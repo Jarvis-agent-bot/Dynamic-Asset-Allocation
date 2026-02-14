@@ -78,6 +78,23 @@ function parseBearer(req: Request): string {
   return normalizeToken(m ? m[1] : "");
 }
 
+export type DaaAdminActorUserIdV0 = "viewer-token" | "editor-token" | "legacy-token" | "unknown-token";
+
+export function inferDaaAdminActorUserIdV0(providedToken: string | null | undefined): DaaAdminActorUserIdV0 {
+  const t = normalizeToken(providedToken);
+  if (!t) return "unknown-token";
+
+  const { legacy, viewer, editor } = getAdminTokens();
+  if (viewer && t === viewer) return "viewer-token";
+  if (editor && t === editor) return "editor-token";
+  if (legacy && t === legacy) return "legacy-token";
+  return "unknown-token";
+}
+
+export function getDaaAdminActorUserIdFromRequestV0(req: Request): DaaAdminActorUserIdV0 {
+  return inferDaaAdminActorUserIdV0(parseBearer(req));
+}
+
 function requiredEnvFor(role: DaaAdminRole): string {
   // Keep it explicit to help deployment debugging.
   if (role === "editor") return "DAA_ADMIN_EDITOR_TOKEN (or legacy DAA_ADMIN_TOKEN)";

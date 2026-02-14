@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
+import { getDaaAdminActorUserIdFromRequestV0, requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { setDaaRunPortfolioV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
 
 export const runtime = "nodejs";
@@ -24,7 +24,8 @@ export async function POST(req: Request, ctx: { params: { runId: string } }) {
   }
 
   try {
-    await setDaaRunPortfolioV0({ runId, payload: (body as any).payload ?? body });
+    const actorUserId = getDaaAdminActorUserIdFromRequestV0(req);
+    await setDaaRunPortfolioV0({ runId, payload: (body as any).payload ?? body, actorUserId });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     const msg = String(e?.message ?? e ?? "error");

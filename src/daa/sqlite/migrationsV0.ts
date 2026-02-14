@@ -119,4 +119,15 @@ export const DAA_SQLITE_MIGRATIONS_V0: SqliteMigrationV0[] = [
         ON daa_admin_user_status(status);
     `,
   },
+
+  // v4: add actor_user_id on audit events so the dashboard can filter edits by admin user/token.
+  {
+    id: "0005_run_audit_events_actor_user_id",
+    sql: `
+      ALTER TABLE daa_run_audit_events ADD COLUMN actor_user_id TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_at
+        ON daa_run_audit_events(actor_user_id, created_at, event_id);
+    `,
+  },
 ];

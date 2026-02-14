@@ -8,6 +8,7 @@ import {
   createDaaRunV0,
   getDaaRunBundleV0,
   listDaaRunsV0,
+  listDaaRunAuditEventsV0,
   setDaaRunConfirmV0,
   setDaaRunExecutedV0,
   setDaaRunPortfolioV0,
@@ -127,6 +128,31 @@ describe("daa/sqlite store v0", () => {
 
     // Sanity: r3 is outside the range.
     expect(janRange.some((r) => r.runId === r3.runId)).toBe(false);
+
+    await resetDbFile(dbPath);
+  });
+
+
+  it("lists audit events with actorUserId filter", async () => {
+    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
+    process.env.DAA_SQLITE_PATH = dbPath;
+    await resetDbFile(dbPath);
+
+    const a = await createDaaRunV0({ kind: "rebalance", payload: { foo: 1 }, actorUserId: "editor-token", createdAt: "2026-01-01T00:00:01.000Z" });
+    const b = await createDaaRunV0({ kind: "rebalance", payload: { foo: 2 }, actorUserId: "viewer-token", createdAt: "2026-01-02T00:00:01.000Z" });
+
+    await setDaaRunConfirmV0({ runId: a.runId, payload: { ok: true }, actorUserId: "editor-token", createdAt: "2026-01-01T00:00:02.000Z" });
+    await appendDaaRunAuditEventV0({ runId: a.runId, kind: "note", payload: { text: "hi" }, actorUserId: "editor-token", createdAt: "2026-01-01T00:00:03.000Z" });
+
+    await appendDaaRunAuditEventV0({ runId: b.runId, kind: "note", payload: { text: "hello" }, actorUserId: "viewer-token", createdAt: "2026-01-02T00:00:02.000Z" });
+
+    const editorOnly = await listDaaRunAuditEventsV0({ limit: 50, actorUserId: "editor-token" });
+    expect(editorOnly.every((e) => e.actorUserId === "editor-token")).toBe(true);
+    expect(editorOnly.some((e) => e.runId === a.runId)).toBe(true);
+    expect(editorOnly.some((e) => e.runId === b.runId)).toBe(false);
+
+    const bundle = await getDaaRunBundleV0(a.runId);
+    expect(bundle.audit.some((e) => e.actorUserId === "editor-token")).toBe(true);
 
     await resetDbFile(dbPath);
   });
