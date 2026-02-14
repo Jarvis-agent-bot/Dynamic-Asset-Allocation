@@ -579,7 +579,7 @@ export default function DaaDashboardHistoryAudit() {
                               <div
                                 style={{
                                   display: "grid",
-                                  gridTemplateColumns: "160px 220px 1fr 90px",
+                                  gridTemplateColumns: "160px 220px 1fr 190px",
                                   gap: 8,
                                   padding: "8px 10px",
                                   background: "#fafafa",
@@ -604,7 +604,7 @@ export default function DaaDashboardHistoryAudit() {
                                     key={eventId || kind + "_" + String(createdAt ?? "")}
                                     style={{
                                       display: "grid",
-                                      gridTemplateColumns: "160px 220px 1fr 90px",
+                                      gridTemplateColumns: "160px 220px 1fr 190px",
                                       gap: 8,
                                       padding: "8px 10px",
                                       borderTop: "1px solid #eee",
@@ -615,7 +615,21 @@ export default function DaaDashboardHistoryAudit() {
                                     <div style={{ color: "#444" }}>{fmtTime(createdAt)}</div>
                                     <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{kind || "-"}</div>
                                     <div style={{ color: "#666" }}>{payloadSummary || "-"}</div>
-                                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => doCopyAudit(pretty(e))}
+                                        style={{
+                                          padding: "6px 10px",
+                                          borderRadius: 10,
+                                          border: "1px solid #e5e5e5",
+                                          background: "#fafafa",
+                                          fontSize: 12,
+                                        }}
+                                      >
+                                        Copy JSON
+                                      </button>
+
                                       <button
                                         type="button"
                                         onClick={() => {
