@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
 import { useEffect, useMemo, useState } from "react";
 
 import { buildDaaAdminAuthHeadersV0 } from "../../adminTokenStore";
@@ -25,6 +27,15 @@ type AdminUsersApiV0 = {
 type SortKey = "id" | "role" | "status" | "me";
 
 type SortDir = "asc" | "desc";
+
+type StatusFilter = "all" | "active" | "inactive" | "missing";
+
+function normalizeStatusFilter(raw: string | null): StatusFilter {
+  if (raw === "active") return "active";
+  if (raw === "inactive") return "inactive";
+  if (raw === "missing") return "missing";
+  return "all";
+}
 
 function tokenKindForUserId(id: AdminUserV0["id"]): AdminUsersApiV0["me"]["tokenKind"] {
   if (id === "viewer-token") return "viewer";
@@ -104,6 +115,9 @@ function compareUsers(a: AdminUserV0, b: AdminUserV0, opts: { sortKey: SortKey; 
 }
 
 export default function DaaDashboardAdminUsers() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string>("");
   const [data, setData] = useState<AdminUsersApiV0 | null>(null);
@@ -117,6 +131,7 @@ export default function DaaDashboardAdminUsers() {
   const [toast, setToast] = useState<{ kind: "ok" | "error"; message: string; updatedAtMs: number } | null>(null);
 
   const [query, setQuery] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -190,6 +205,12 @@ export default function DaaDashboardAdminUsers() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  const statusFilterFromUrl = useMemo(() => normalizeStatusFilter(searchParams.get("adminUsersStatus")), [searchParams]);
+
+  useEffect(() => {
+    setStatusFilter((cur) => (cur === statusFilterFromUrl ? cur : statusFilterFromUrl));
+  }, [statusFilterFromUrl]);
+
   const selectedUser = useMemo(() => {
     if (!data || !selectedId) return null;
     return data.users.find((u) => u.id === selectedId) ?? null;
@@ -209,9 +230,11 @@ export default function DaaDashboardAdminUsers() {
         })
       : users;
 
-    filtered.sort((a, b) => compareUsers(a, b, { sortKey, sortDir, meTokenKind }));
-    return filtered;
-  }, [data, query, sortKey, sortDir, meTokenKind]);
+    const filteredByStatus = statusFilter === "all" ? filtered : filtered.filter((u) => fmtStatus(u) === statusFilter);
+
+    filteredByStatus.sort((a, b) => compareUsers(a, b, { sortKey, sortDir, meTokenKind }));
+    return filteredByStatus;
+  }, [data, query, statusFilter, sortKey, sortDir, meTokenKind]);
 
   const totalUsers = data?.users?.length ?? 0;
   const visibleUsers = filteredSortedUsers.length;
@@ -235,6 +258,17 @@ export default function DaaDashboardAdminUsers() {
     // Default directions tuned for a small diagnostics table.
     if (nextKey === "id") setSortDir("asc");
     else setSortDir("desc");
+  }
+
+  function updateStatusFilter(next: StatusFilter) {
+    setStatusFilter(next);
+
+    const sp = new URLSearchParams(Array.from(searchParams.entries()));
+    if (next === "all") sp.delete("adminUsersStatus");
+    else sp.set("adminUsersStatus", next);
+
+    const qs = sp.toString();
+    router.replace(qs ? pathname + "?" + qs : pathname);
   }
 
   return (
@@ -283,6 +317,26 @@ export default function DaaDashboardAdminUsers() {
               Clear
             </button>
           ) : null}
+
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#666" }}>
+            Status
+            <select
+              value={statusFilter}
+              onChange={(e) => updateStatusFilter(normalizeStatusFilter(e.target.value))}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 10,
+                border: "1px solid #e5e5e5",
+                background: "#fff",
+                fontSize: 12,
+              }}
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="missing">Missing</option>
+            </select>
+          </label>
         </div>
 
         <div style={{ fontSize: 12, color: "#666" }}>
@@ -430,7 +484,18 @@ export default function DaaDashboardAdminUsers() {
           const canToggle = u.configured;
           const isBusy = mutating === u.id;
 
-          return (
+          function updateStatusFilter(next: StatusFilter) {
+    setStatusFilter(next);
+
+    const sp = new URLSearchParams(Array.from(searchParams.entries()));
+    if (next === "all") sp.delete("adminUsersStatus");
+    else sp.set("adminUsersStatus", next);
+
+    const qs = sp.toString();
+    router.replace(qs ? pathname + "?" + qs : pathname);
+  }
+
+  return (
             <div
               key={u.id}
               style={{
