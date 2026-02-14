@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { useId, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,38 +11,68 @@ type Props = {
   returnTo: string;
 };
 
+type FormErrors = {
+  email?: string;
+  password?: string;
+  form?: string;
+};
+
+function normalizeEmailLoose(raw: string): string {
+  const v = raw.trim().toLowerCase();
+  if (!v) return "";
+  if (v.length > 254) return "";
+  if (/\s/.test(v)) return "";
+
+  const at = v.indexOf("@");
+  if (at <= 0 || at !== v.lastIndexOf("@")) return "";
+
+  const domain = v.slice(at + 1);
+  if (!domain || domain.startsWith(".") || domain.endsWith(".")) return "";
+  if (!domain.includes(".")) return "";
+
+  return v;
+}
+
+function normalizeReturnTo(raw: string): string {
+  const v = raw.trim();
+  if (!v) return "/daa/dashboard";
+  if (!v.startsWith("/")) return "/daa/dashboard";
+  if (v.startsWith("//")) return "/daa/dashboard";
+
+  // Keep post-login redirects inside the DAA surface.
+  if (!v.startsWith("/daa")) return "/daa/dashboard";
+
+  return v;
+}
+
 export default function DaaLoginClient({ returnTo }: Props) {
   const usernameId = useId();
   const passwordId = useId();
 
+  const emailHelpId = useId();
+  const passwordHelpId = useId();
+  const formErrorId = useId();
+
+  const safeReturnTo = useMemo(() => normalizeReturnTo(returnTo), [returnTo]);
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function normalizeEmailLoose(raw: string): string {
-    const v = raw.trim().toLowerCase();
-    if (!v) return "";
-    if (v.length > 254) return "";
-    if (/\s/.test(v)) return "";
-
-    const at = v.indexOf("@");
-    if (at <= 0 || at !== v.lastIndexOf("@")) return "";
-
-    const domain = v.slice(at + 1);
-    if (!domain || domain.startsWith(".") || domain.endsWith(".")) return "";
-    if (!domain.includes(".")) return "";
-
-    return v;
-  }
+  const [errors, setErrors] = useState<FormErrors>({});
 
   async function submit() {
     setBusy(true);
-    setError(null);
+    setErrors({});
 
     const email = normalizeEmailLoose(username);
-    if (!email) {
-      setError("invalid email");
+    const pwd = password;
+
+    const nextErrors: FormErrors = {};
+    if (!email) nextErrors.email = "Enter a valid email address.";
+    if (!pwd.trim()) nextErrors.password = "Password is required.";
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       setBusy(false);
       return;
     }
@@ -50,7 +81,7 @@ export default function DaaLoginClient({ returnTo }: Props) {
       const res = await fetch("/api/daa/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ username: email, password }),
+        body: JSON.stringify({ username: email, password: pwd }),
       });
 
       const text = await res.text();
@@ -63,14 +94,14 @@ export default function DaaLoginClient({ returnTo }: Props) {
 
       if (!res.ok || !json?.ok) {
         const msg = String(json?.error ?? `HTTP ${res.status}`);
-        setError(msg);
+        setErrors({ form: msg });
         return;
       }
 
       // Cookie is set by the server; redirect into the console.
-      window.location.href = returnTo || "/daa/dashboard";
+      window.location.href = safeReturnTo;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setErrors({ form: e instanceof Error ? e.message : String(e) });
     } finally {
       setBusy(false);
     }
@@ -91,6 +122,8 @@ export default function DaaLoginClient({ returnTo }: Props) {
               e.preventDefault();
               void submit();
             }}
+            aria-busy={busy}
+            aria-describedby={errors.form ? formErrorId : undefined}
           >
             <div className="grid gap-2">
               <label htmlFor={usernameId} className="text-sm font-medium">
@@ -104,11 +137,21 @@ export default function DaaLoginClient({ returnTo }: Props) {
                 autoCorrect="off"
                 spellCheck={false}
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+                }}
                 autoComplete="email"
                 placeholder="you@example.com"
                 disabled={busy}
+                aria-invalid={Boolean(errors.email) || undefined}
+                aria-describedby={errors.email ? emailHelpId : undefined}
               />
+              {errors.email ? (
+                <div id={emailHelpId} className="text-xs text-destructive">
+                  {errors.email}
+                </div>
+              ) : null}
             </div>
 
             <div className="grid gap-2">
@@ -119,25 +162,46 @@ export default function DaaLoginClient({ returnTo }: Props) {
                 id={passwordId}
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrors((prev) => ({ ...prev, password: undefined, form: undefined }));
+                }}
                 autoComplete="current-password"
                 placeholder="••••••••"
                 disabled={busy}
+                aria-invalid={Boolean(errors.password) || undefined}
+                aria-describedby={errors.password ? passwordHelpId : undefined}
               />
+              {errors.password ? (
+                <div id={passwordHelpId} className="text-xs text-destructive">
+                  {errors.password}
+                </div>
+              ) : null}
             </div>
 
             <Button type="submit" disabled={busy}>
-              {busy ? "Signing in..." : "Sign in"}
+              {busy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Signing in...
+                </span>
+              ) : (
+                "Sign in"
+              )}
             </Button>
 
-            {error ? (
-              <div role="alert" className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                <div>Login failed: {error}</div>
+            {errors.form ? (
+              <div
+                id={formErrorId}
+                role="alert"
+                className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+              >
+                <div>Login failed: {errors.form}</div>
                 <div className="text-xs text-muted-foreground">
                   If this is a fresh deployment, bootstrap the first admin via{" "}
                   <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires server env{" "}
                   <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and sending{" "}
-                  <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
+                  <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>.
                 </div>
               </div>
             ) : null}
@@ -147,3 +211,4 @@ export default function DaaLoginClient({ returnTo }: Props) {
     </div>
   );
 }
+
