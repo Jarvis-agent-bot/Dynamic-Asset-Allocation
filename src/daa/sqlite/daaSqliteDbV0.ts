@@ -42,7 +42,7 @@ function getDbPathV0(): string {
   return path.join(process.cwd(), ".data", "daa.sqlite");
 }
 
-function applyMigrationsV0(db: Database) {
+function applyMigrationsV0(db: Database): string[] {
   db.exec(
     "CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);"
   );
@@ -56,6 +56,7 @@ function applyMigrationsV0(db: Database) {
     }
   }
 
+  const newlyApplied: string[] = [];
   for (const m of DAA_SQLITE_MIGRATIONS_V0) {
     if (applied.has(m.id)) continue;
     db.exec("BEGIN");
@@ -68,6 +69,7 @@ function applyMigrationsV0(db: Database) {
         stmt.free();
       }
       db.exec("COMMIT");
+      newlyApplied.push(m.id);
     } catch (e) {
       try {
         db.exec("ROLLBACK");
@@ -77,6 +79,8 @@ function applyMigrationsV0(db: Database) {
       throw e;
     }
   }
+
+  return newlyApplied;
 }
 
 async function openDbOnceV0(): Promise<{ db: Database; dbPath: string }> {
@@ -96,7 +100,12 @@ async function openDbOnceV0(): Promise<{ db: Database; dbPath: string }> {
   // Enforce FK constraints for cascades.
   db.exec("PRAGMA foreign_keys=ON;");
 
-  applyMigrationsV0(db);
+  const newlyApplied = applyMigrationsV0(db);
+  if (newlyApplied.length) {
+    // Persist DDL + schema_migrations so a "migrations-only" boot doesn't lose state.
+    await flushDbToDiskV0(db, dbPath);
+    console.info(`[daa_sqlite] applied migrations: ${newlyApplied.join(", ")}`);
+  }
 
   return { db, dbPath };
 }
