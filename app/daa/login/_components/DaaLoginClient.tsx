@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { formatRateLimitedMessageV0, parseRetryAfterSecondsV0 } from "@/src/daa/auth/uiRateLimitV0";
+
 type Props = {
   returnTo: string;
   error?: string;
@@ -348,6 +350,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           return;
         }
 
+        if (res.status === 429) {
+          const retryAfterSeconds = parseRetryAfterSecondsV0(res.headers.get("retry-after"));
+          setPasswordErrors({ form: formatRateLimitedMessageV0({ action: "sign in", retryAfterSeconds }) });
+          return;
+        }
+
         // Avoid overly technical errors for the common cases.
         if (res.status >= 500) {
           setPasswordErrors({ form: "We couldn't sign you in right now. Please try again." });
@@ -402,7 +410,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       }
 
       if (!res.ok) {
-        setEmailLinkError(parseApiError(json, `HTTP ${res.status}`));
+        if (res.status === 429) {
+          const retryAfterSeconds = parseRetryAfterSecondsV0(res.headers.get("retry-after"));
+          setEmailLinkError(formatRateLimitedMessageV0({ action: "send a sign-in link", retryAfterSeconds }));
+        } else {
+          setEmailLinkError(parseApiError(json, `HTTP ${res.status}`));
+        }
         setEmailLink({ kind: "idle" });
         return;
       }
