@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getDaaAuthContextFromRequestV0 } from "./auth/daaAuthRequestV0";
 import { getDaaAdminUserStatusV0 } from "./sqlite/daaAdminUserStatusStoreV0";
 
 export type DaaAdminRole = "viewer" | "editor";
@@ -95,6 +96,14 @@ export function getDaaAdminActorUserIdFromRequestV0(req: Request): DaaAdminActor
   return inferDaaAdminActorUserIdV0(parseBearer(req));
 }
 
+// Session-based actor id; used by write endpoints so audit logs can attribute actions.
+export async function getDaaAdminActorUserIdFromRequestV1(req: Request): Promise<string> {
+  const ctx = await getDaaAuthContextFromRequestV0(req);
+  if (ctx?.account?.username) return `auth:${ctx.account.username}`;
+  if (ctx?.account?.accountId) return `auth:${ctx.account.accountId}`;
+  return getDaaAdminActorUserIdFromRequestV0(req);
+}
+
 function requiredEnvFor(role: DaaAdminRole): string {
   // Keep it explicit to help deployment debugging.
   if (role === "editor") return "DAA_ADMIN_EDITOR_TOKEN (or legacy DAA_ADMIN_TOKEN)";
@@ -132,18 +141,28 @@ async function isTokenKindActiveV0(kind: DaaAdminTokenKindV0): Promise<boolean> 
   return false;
 }
 
+function roleSatisfied(required: DaaAdminRole, rolesRaw: unknown): boolean {
+  const roles = Array.isArray(rolesRaw) ? (rolesRaw as unknown[]) : [];
+  const hasViewer = roles.includes("viewer");
+  const hasEditor = roles.includes("editor");
+  if (required === "viewer") return hasViewer || hasEditor;
+  return hasEditor;
+}
+
 /**
- * Bearer auth for DAA admin-only endpoints, with viewer/editor roles.
- *
- * Behavior:
- * - If no relevant token is configured: allow in dev/test; return 500 in production.
- * - If configured: require `Authorization: Bearer <token>`.
- *
- * Role rules:
- * - viewer endpoints accept: viewer token OR editor token OR legacy token.
- * - editor endpoints accept: editor token OR legacy token.
+ * DAA admin auth, supporting:
+ * - Cookie-backed account sessions (preferred for dashboard UX)
+ * - Legacy bearer tokens (back-compat for scripts/curl)
  */
 export async function requireDaaAdminRole(req: Request, role: DaaAdminRole): Promise<NextResponse | null> {
+  // 1) Session cookie auth (preferred).
+  const ctx = await getDaaAuthContextFromRequestV0(req);
+  if (ctx) {
+    if (!roleSatisfied(role, ctx.account.roles)) return unauthorized();
+    return null;
+  }
+
+  // 2) Legacy bearer-token auth (back-compat).
   const { legacy, viewer, editor } = getAdminTokens();
 
   const viewerAllowed = uniqNonEmpty([viewer, editor, legacy]);

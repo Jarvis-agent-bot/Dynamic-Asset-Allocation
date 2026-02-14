@@ -14,11 +14,9 @@ import {
   LS_REBALANCE_RESPONSE,
   WIZARD_DATA_EVENT,
   readJsonFromLs,
-  saveJsonToLs,
-} from "../../wizardStorage";
+  saveJsonToLs} from "../../wizardStorage";
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from "../../portfolioStateStore";
 import { OrdersReviewV0 } from "../../_components/OrdersReviewV0";
-import { buildDaaAdminAuthHeadersV0 } from "../../adminTokenStore";
 
 type Props = {
   title: string;
@@ -70,8 +68,7 @@ function normalizeOrders(x: unknown): SuggestedOrder[] {
       symbol: String(o?.symbol ?? ""),
       side: String(o?.side ?? ""),
       notional: Number(o?.notional ?? 0),
-      reason: o?.reason === undefined ? undefined : String(o?.reason),
-    }))
+      reason: o?.reason === undefined ? undefined : String(o?.reason)}))
     .filter((o) => o.symbol && o.side && Number.isFinite(o.notional));
 }
 
@@ -86,8 +83,7 @@ function normalizeCitations(x: unknown): MarketEventCitation[] {
       ts: String(c?.ts ?? ""),
       title: String(c?.title ?? ""),
       summary: c?.summary === undefined ? undefined : String(c?.summary),
-      url: c?.url === undefined ? undefined : String(c?.url),
-    }))
+      url: c?.url === undefined ? undefined : String(c?.url)}))
     .filter((c) => c.symbol && c.eventId && c.ts && c.title);
 }
 
@@ -99,8 +95,7 @@ export function RebalanceSimulatePanel({
   storageKeyRequest,
   storageKeyResponse,
   includeMarketContext,
-  onResult,
-}: Props) {
+  onResult}: Props) {
   const requestKey = storageKeyRequest ?? LS_REBALANCE_REQUEST;
   const responseKey = storageKeyResponse ?? LS_REBALANCE_RESPONSE;
 
@@ -208,8 +203,7 @@ export function RebalanceSimulatePanel({
           .map((a: any) => ({
             id: String(a?.id ?? a?.symbol ?? ""),
             label: String(a?.label ?? a?.name ?? a?.id ?? a?.symbol ?? ""),
-            targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0),
-          }))
+            targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0)}))
           .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
       }
 
@@ -239,8 +233,7 @@ export function RebalanceSimulatePanel({
     try {
       const res = await fetch(fixtureEndpoint, {
         method: "GET",
-        headers: { accept: "application/json" },
-      });
+        headers: { accept: "application/json" }});
 
       const payload = (await res.json()) as unknown;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -313,10 +306,9 @@ export function RebalanceSimulatePanel({
       for (const url of endpoints) {
         const r = await fetch(url, {
           method: "POST",
-          headers: { "content-type": "application/json", ...buildDaaAdminAuthHeadersV0() },
+          headers: { "content-type": "application/json"},
           body: bodyText,
-          signal: controller.signal,
-        });
+          signal: controller.signal});
         res = r;
         // Retry only when the route is missing (common VPS misroute); otherwise return the actual error.
         if (r.status !== 404) break;
@@ -384,8 +376,7 @@ export function RebalanceSimulatePanel({
         httpStatus: res.status,
         responseText: text,
         responseJson: nextResp,
-        ok: res.ok,
-      });
+        ok: res.ok});
 
       if (!res.ok) {
         setError(`HTTP ${res.status}`);
@@ -413,8 +404,7 @@ export function RebalanceSimulatePanel({
       storage: window.localStorage,
       source: isCoreEndpoint ? "rebalance-core" : "rebalance-simulate",
       orders,
-      note: `ui:${title}`,
-    });
+      note: `ui:${title}`});
 
     if (!r.ok) {
       setPaperExecError(r.error);
@@ -445,8 +435,7 @@ export function RebalanceSimulatePanel({
                 borderRadius: 8,
                 border: "1px solid #ddd",
                 background: "#fff",
-                opacity: fixtureStatus === "loading" ? 0.5 : 1,
-              }}
+                opacity: fixtureStatus === "loading" ? 0.5 : 1}}
             >
               {fixtureStatus === "loading" ? "Loading demo..." : fixtureStatus === "ok" ? "Demo loaded" : "Load demo"}
             </button>
@@ -479,8 +468,7 @@ export function RebalanceSimulatePanel({
               borderRadius: 8,
               border: "1px solid #ddd",
               background: "#fff",
-              opacity: loading || !parsedReq.ok ? 0.5 : 1,
-            }}
+              opacity: loading || !parsedReq.ok ? 0.5 : 1}}
           >
             {loading ? "Running..." : error ? "Retry" : "Generate recommendation"}
           </button>
@@ -510,8 +498,7 @@ export function RebalanceSimulatePanel({
                 border: "1px solid #ddd",
                 background: "#fff",
                 opacity: canCopyReq ? 1 : 0.5,
-                fontSize: 12,
-              }}
+                fontSize: 12}}
             >
               Copy
             </button>
@@ -525,8 +512,7 @@ export function RebalanceSimulatePanel({
               padding: 10,
               border: "1px solid #ddd",
               borderRadius: 6,
-              fontFamily: "ui-monospace, SFMono-Regular",
-            }}
+              fontFamily: "ui-monospace, SFMono-Regular"}}
           />
           {!parsedReq.ok ? <div style={{ fontSize: 12, color: "#b00020", marginTop: 6 }}>{parsedReq.error}</div> : null}
         </div>
@@ -545,8 +531,7 @@ export function RebalanceSimulatePanel({
                 border: "1px solid #ddd",
                 background: "#fff",
                 opacity: canCopyResp ? 1 : 0.5,
-                fontSize: 12,
-              }}
+                fontSize: 12}}
             >
               Copy JSON
             </button>
@@ -584,8 +569,7 @@ export function RebalanceSimulatePanel({
                     border: "1px solid #ddd",
                     background: "#fff",
                     opacity: canRecordPaperExec ? 1 : 0.5,
-                    fontSize: 12,
-                  }}
+                    fontSize: 12}}
                 >
                   Record paper execution (log only)
                 </button>

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { applyNotionalOrdersToPositionsV0, normalizeNotionalOrdersV0 } from "@/src/daa/portfolioApplyNotionalOrdersV0";
 
-import { buildDaaAdminAuthHeadersV0 } from "../../adminTokenStore";
 import { copyTextToClipboard } from "../../copyToClipboard";
 
 type RunListRow = {
@@ -223,8 +222,7 @@ export default function DaaDashboardHistoryAudit() {
     setAuditPage(1);
 
     try {
-      // Optional auth header; read endpoints currently allow unauthenticated access.
-      const headers: Record<string, string> = { accept: "application/json", ...buildDaaAdminAuthHeadersV0() };
+      const headers: Record<string, string> = { accept: "application/json" };
       const res = await fetch(`/api/daa/store/v0/run/${encodeURIComponent(rid)}`, { method: "GET", headers });
       const payload = (await res.json()) as BundleResp;
       if (!res.ok || !payload?.ok) throw new Error(String(payload?.error ?? `HTTP ${res.status}`));
@@ -265,8 +263,7 @@ export default function DaaDashboardHistoryAudit() {
       cash,
       positions: positionsQty,
       orders,
-      pricesBySymbol,
-    });
+      pricesBySymbol});
 
     return { portfolioState, priceSnapshot, orders, normalizedOrders, applied };
   }, [bundle]);
@@ -395,9 +392,7 @@ export default function DaaDashboardHistoryAudit() {
                   "hasPortfolio",
                   "hasConfirm",
                   "hasExecuted",
-                  "auditCount",
-                ],
-              ];
+                  "auditCount"]];
 
               for (const r of runs) {
                 lines.push([
@@ -410,16 +405,14 @@ export default function DaaDashboardHistoryAudit() {
                   r.hasPortfolio ? "yes" : "no",
                   r.hasConfirm ? "yes" : "no",
                   r.hasExecuted ? "yes" : "no",
-                  r.auditCount,
-                ]);
+                  r.auditCount]);
               }
 
               const csv = toCsv(lines);
               downloadTextAsFile({
                 filename: `daa-audit-log-${stamp}.csv`,
                 text: csv,
-                mime: "text/csv",
-              });
+                mime: "text/csv"});
             }}
             disabled={runsStatus === "loading" || !runs.length}
             style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
@@ -519,8 +512,7 @@ export default function DaaDashboardHistoryAudit() {
                             <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
                               {pretty({
                                 orders_normalize_issues: derived.normalizedOrders.issues,
-                                applied: derived.applied,
-                              })}
+                                applied: derived.applied})}
                             </pre>
                           </div>
                         ) : null}
@@ -584,8 +576,7 @@ export default function DaaDashboardHistoryAudit() {
                                   padding: "8px 10px",
                                   background: "#fafafa",
                                   fontSize: 12,
-                                  fontWeight: 700,
-                                }}
+                                  fontWeight: 700}}
                               >
                                 <div>Time</div>
                                 <div>Kind</div>
@@ -609,8 +600,7 @@ export default function DaaDashboardHistoryAudit() {
                                       padding: "8px 10px",
                                       borderTop: "1px solid #eee",
                                       fontSize: 12,
-                                      alignItems: "center",
-                                    }}
+                                      alignItems: "center"}}
                                   >
                                     <div style={{ color: "#444" }}>{fmtTime(createdAt)}</div>
                                     <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{kind || "-"}</div>
@@ -624,8 +614,7 @@ export default function DaaDashboardHistoryAudit() {
                                           borderRadius: 10,
                                           border: "1px solid #e5e5e5",
                                           background: "#fafafa",
-                                          fontSize: 12,
-                                        }}
+                                          fontSize: 12}}
                                       >
                                         Copy JSON
                                       </button>
@@ -644,8 +633,7 @@ export default function DaaDashboardHistoryAudit() {
                                           borderRadius: 10,
                                           border: "1px solid #e5e5e5",
                                           background: "#fafafa",
-                                          fontSize: 12,
-                                        }}
+                                          fontSize: 12}}
                                       >
                                         Details
                                       </button>
@@ -673,8 +661,7 @@ export default function DaaDashboardHistoryAudit() {
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                zIndex: 1000,
-                              }}
+                                zIndex: 1000}}
                             >
                               <div
                                 onClick={(ev) => ev.stopPropagation()}
@@ -685,8 +672,7 @@ export default function DaaDashboardHistoryAudit() {
                                   background: "#fff",
                                   borderRadius: 12,
                                   border: "1px solid #eee",
-                                  padding: 12,
-                                }}
+                                  padding: 12}}
                               >
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
                                   <div style={{ fontWeight: 800, fontSize: 13 }}>Audit event details</div>
@@ -743,8 +729,7 @@ export default function DaaDashboardHistoryAudit() {
                                           border: "1px solid #eee",
                                           borderRadius: 10,
                                           padding: 10,
-                                          fontSize: 12,
-                                        }}
+                                          fontSize: 12}}
                                       >
                                         {pretty((selectedAuditEvent as any)?.payload)}
                                       </pre>
