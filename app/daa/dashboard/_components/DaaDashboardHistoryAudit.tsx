@@ -279,7 +279,7 @@ export default function DaaDashboardHistoryAudit() {
       <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
         {runs.length ? (
           runs.map((r) => {
-            const selected = selectedRunId && selectedRunId === r.runId;
+            const selected = selectedRunId === r.runId;
             return (
               <div key={r.runId} style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: 10, background: selected ? "#fafcff" : "#fff" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
