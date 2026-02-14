@@ -1,9 +1,8 @@
 import Link from "next/link";
 import type React from "react";
 
-import { Button } from "@/components/ui/button";
-
 import DaaUserMenuDialog from "./DaaUserMenuDialog";
+import DaaTopNav from "./DaaTopNav";
 
 type Props = {
   children: React.ReactNode;
@@ -15,25 +14,18 @@ export default function DaaShell({ children }: Props) {
       <header className="mb-6 flex flex-col gap-3 sm:mb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
-            <Link href="/daa/dashboard" className="text-base font-semibold tracking-tight sm:text-lg" aria-label="DAA dashboard">
+            <Link
+              href="/daa/dashboard"
+              className="rounded-sm text-base font-semibold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background sm:text-lg"
+              aria-label="DAA dashboard"
+            >
               Dynamic Asset Allocation
             </Link>
             <div className="text-xs text-muted-foreground sm:text-sm">Console — dashboard-first</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <nav className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/daa/dashboard">Dashboard</Link>
-              </Button>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/daa/dashboard?tab=wizard&step=1">Wizard</Link>
-              </Button>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
-              </Button>
-            </nav>
-
+            <DaaTopNav />
             <DaaUserMenuDialog />
           </div>
         </div>
