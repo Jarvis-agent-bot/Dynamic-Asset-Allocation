@@ -3,6 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import { applyNotionalOrdersToPositionsV0, normalizeNotionalOrdersV0 } from "@/src/daa/portfolioApplyNotionalOrdersV0";
@@ -298,17 +313,6 @@ export default function DaaDashboardHistoryAudit() {
     return auditEvents.find((e) => String((e as any)?.eventId ?? "").trim() === id) ?? null;
   }, [auditEvents, selectedAuditEventId]);
 
-  useEffect(() => {
-    if (!auditModalOpen) return;
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setAuditModalOpen(false);
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [auditModalOpen]);
-
   async function doCopyAudit(text: string) {
     try {
       await copyTextToClipboard(text);
@@ -321,81 +325,71 @@ export default function DaaDashboardHistoryAudit() {
   }
 
   return (
-    <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontWeight: 800 }}>History / Audit (SQLite)</div>
-          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-            Recent runs + audit events. For safety: this page never executes trades; it only shows history and stored payloads.
-          </div>
-        </div>
+    <Card>
+      <CardHeader className="space-y-1">
+        <CardTitle>History / Audit (SQLite)</CardTitle>
+        <CardDescription>
+          Recent runs + audit events. For safety: this page never executes trades; it only shows history and stored payloads.
+        </CardDescription>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <select
-            value={actorFilter}
-            onChange={(e) => setActorFilter(String(e.target.value ?? ""))}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
-          >
-            <option value="">All actors</option>
-            <option value="dashboard">dashboard</option>
-            <option value="market-funds">market-funds</option>
-            <option value="unknown">unknown</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-2 pt-2">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Actor
+            <select
+              value={actorFilter}
+              onChange={(e) => setActorFilter(String(e.target.value ?? ""))}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">All</option>
+              <option value="dashboard">dashboard</option>
+              <option value="market-funds">market-funds</option>
+              <option value="unknown">unknown</option>
+            </select>
+          </label>
 
-          <input
+          <Input
             type="datetime-local"
             value={fromLocal}
             onChange={(e) => setFromLocal(String(e.target.value ?? ""))}
             title="From (local time)"
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
+            className="h-9 w-[min(240px,92vw)]"
           />
 
-          <input
+          <Input
             type="datetime-local"
             value={toLocal}
             onChange={(e) => setToLocal(String(e.target.value ?? ""))}
             title="To (local time)"
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
+            className="h-9 w-[min(240px,92vw)]"
           />
 
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               setActorFilter("");
               setFromLocal("");
               setToLocal("");
             }}
             disabled={runsStatus === "loading"}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
           >
             Clear
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={() => loadRuns("reset")}
-            disabled={runsStatus === "loading"}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={() => loadRuns("reset")} disabled={runsStatus === "loading"}>
             Refresh
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => {
               const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
               const lines: unknown[][] = [
-                [
-                  "runId",
-                  "createdAt",
-                  "kind",
-                  "status",
-                  "actor",
-                  "source",
-                  "hasPortfolio",
-                  "hasConfirm",
-                  "hasExecuted",
-                  "auditCount"]];
+                ["runId", "createdAt", "kind", "status", "actor", "source", "hasPortfolio", "hasConfirm", "hasExecuted", "auditCount"],
+              ];
 
               for (const r of runs) {
                 lines.push([
@@ -408,329 +402,262 @@ export default function DaaDashboardHistoryAudit() {
                   r.hasPortfolio ? "yes" : "no",
                   r.hasConfirm ? "yes" : "no",
                   r.hasExecuted ? "yes" : "no",
-                  r.auditCount]);
+                  r.auditCount,
+                ]);
               }
 
               const csv = toCsv(lines);
               downloadTextAsFile({
                 filename: `daa-audit-log-${stamp}.csv`,
                 text: csv,
-                mime: "text/csv"});
+                mime: "text/csv",
+              });
             }}
             disabled={runsStatus === "loading" || !runs.length}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
           >
             Export CSV
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={() => loadRuns("more")}
-            disabled={runsStatus === "loading" || !cursor}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={() => loadRuns("more")} disabled={runsStatus === "loading" || !cursor}>
             Load more
-          </button>
+          </Button>
         </div>
-      </div>
+      </CardHeader>
 
-      {runsError ? <div style={{ marginTop: 10, color: "#a00", fontSize: 12 }}>Runs error: {runsError}</div> : null}
+      <CardContent className="space-y-3">
+        {runsError ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <b>Runs error</b>: {runsError}
+          </div>
+        ) : null}
 
-      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-        {runs.length ? (
-          runs.map((r) => {
-            const selected = selectedRunId === r.runId;
-            return (
-              <div key={r.runId} style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: 10, background: selected ? "#fafcff" : "#fff" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>
-                      {r.kind} <span style={{ color: "#aaa" }}>·</span> {r.status}
+        <div className="space-y-2">
+          {runs.length ? (
+            runs.map((r) => {
+              const selected = selectedRunId === r.runId;
+              return (
+                <div key={r.runId} className={selected ? "rounded-md border bg-muted/20 p-3" : "rounded-md border p-3"}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">
+                        {r.kind} <span className="text-muted-foreground">·</span> {r.status}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {fmtTime(r.createdAt)} <span className="text-muted-foreground">·</span> {r.runId}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        portfolio:{r.hasPortfolio ? "yes" : "no"} <span className="text-muted-foreground">·</span> confirm:{r.hasConfirm ? "yes" : "no"}{" "}
+                        <span className="text-muted-foreground">·</span> executed:{r.hasExecuted ? "yes" : "no"} <span className="text-muted-foreground">·</span> audit:{r.auditCount}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        actor:{String(r.actor ?? "")} <span className="text-muted-foreground">·</span> source:{String(r.source ?? "") || "-"}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>
-                      {fmtTime(r.createdAt)} <span style={{ color: "#bbb" }}>·</span> {r.runId}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>
-                      portfolio:{r.hasPortfolio ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> confirm:{r.hasConfirm ? "yes" : "no"}{" "}
-                      <span style={{ color: "#bbb" }}>·</span> executed:{r.hasExecuted ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> audit:{r.auditCount}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>
-                      actor:{String(r.actor ?? "")} <span style={{ color: "#bbb" }}>·</span> source:{String(r.source ?? "") || "-"}
-                    </div>
-                  </div>
 
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <button
-                      type="button"
-                      onClick={() => loadBundle(r.runId)}
-                      disabled={bundleStatus === "loading" && selected}
-                      style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => loadBundle(r.runId)} disabled={bundleStatus === "loading" && selected}>
                       {selected ? "Reload details" : "View details"}
-                    </button>
+                    </Button>
                   </div>
-                </div>
 
-                {selected ? (
-                  <div style={{ marginTop: 10 }}>
-                    {bundleStatus === "loading" ? <div style={{ fontSize: 12, color: "#666" }}>Loading bundle...</div> : null}
-                    {bundleError ? <div style={{ fontSize: 12, color: "#a00" }}>Bundle error: {bundleError}</div> : null}
-
-                    {bundle ? (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 12 }}>Run</div>
-                          <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
-                            {pretty(bundle.run)}
-                          </pre>
+                  {selected ? (
+                    <div className="mt-3 space-y-3">
+                      {bundleStatus === "loading" ? <div className="text-sm text-muted-foreground">Loading bundle...</div> : null}
+                      {bundleError ? (
+                        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                          <b>Bundle error</b>: {bundleError}
                         </div>
+                      ) : null}
 
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 12 }}>Portfolio snapshot (stored)</div>
-                          <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
-                            {pretty(bundle.portfolio)}
-                          </pre>
-                        </div>
-
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 12 }}>Confirm (stored)</div>
-                          <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
-                            {pretty(bundle.confirm)}
-                          </pre>
-                        </div>
-
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 12 }}>Executed (stored)</div>
-                          <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
-                            {pretty(bundle.executed)}
-                          </pre>
-                        </div>
-
-                        {derived ? (
+                      {bundle ? (
+                        <div className="space-y-4">
                           <div>
-                            <div style={{ fontWeight: 800, fontSize: 12 }}>Before/After (derived, not executed)</div>
-                            <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                              This derives positionsAfter by applying stored/manual orders onto the stored portfolio snapshot using the stored price snapshot.
-                            </div>
-                            <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
-                              {pretty({
-                                orders_normalize_issues: derived.normalizedOrders.issues,
-                                applied: derived.applied})}
-                            </pre>
-                          </div>
-                        ) : null}
-
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 12 }}>Audit events</div>
-                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                            Click a row to view payload + metadata (read-only). This never executes trades.
+                            <div className="text-sm font-semibold">Run</div>
+                            <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty(bundle.run)}</pre>
                           </div>
 
-                          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <div style={{ fontSize: 12, color: "#444" }}>Total: <b>{auditTotal}</b></div>
-
-                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                              <div style={{ fontSize: 12, color: "#666" }}>Page size</div>
-                              <select
-                                value={String(auditPageSize)}
-                                onChange={(e) => {
-                                  const n = Number(String(e.target.value ?? ""));
-                                  setAuditPageSize(Number.isFinite(n) && n > 0 ? n : 25);
-                                  setAuditPage(1);
-                                }}
-                                style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
-                              >
-                                <option value="10">10</option>
-                                <option value="25">25</option>
-                                <option value="50">50</option>
-                                <option value="100">100</option>
-                              </select>
-                            </div>
-
-                            <div style={{ fontSize: 12, color: "#666" }}>
-                              Page <b>{auditPage}</b> / <b>{auditPageCount}</b>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
-                              disabled={auditPageCount <= 1 || auditPage <= 1}
-                              style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                            >
-                              Prev
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setAuditPage((p) => Math.min(auditPageCount, p + 1))}
-                              disabled={auditPageCount <= 1 || auditPage >= auditPageCount}
-                              style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                            >
-                              Next
-                            </button>
+                          <div>
+                            <div className="text-sm font-semibold">Portfolio snapshot (stored)</div>
+                            <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty(bundle.portfolio)}</pre>
                           </div>
 
-                          {auditEvents.length ? (
-                            <div className="mt-2 rounded-md border">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead className="w-[160px]">Time</TableHead>
-                                    <TableHead className="w-[240px]">Kind</TableHead>
-                                    <TableHead>Payload</TableHead>
-                                    <TableHead className="w-[220px]" />
-                                  </TableRow>
-                                </TableHeader>
+                          <div>
+                            <div className="text-sm font-semibold">Confirm (stored)</div>
+                            <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty(bundle.confirm)}</pre>
+                          </div>
 
-                                <TableBody>
-                                  {auditPageEvents.map((e: any) => {
-                                    const eventId = String(e?.eventId ?? "").trim();
-                                    const createdAt = e?.createdAt;
-                                    const kind = String(e?.kind ?? "").trim();
-                                    const payloadSummary = summarizeAuditPayload(e?.payload);
+                          <div>
+                            <div className="text-sm font-semibold">Executed (stored)</div>
+                            <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty(bundle.executed)}</pre>
+                          </div>
 
-                                    return (
-                                      <TableRow key={eventId || kind + "_" + String(createdAt ?? "")}>
-                                        <TableCell className="text-xs text-muted-foreground">{fmtTime(createdAt)}</TableCell>
-                                        <TableCell className="font-mono text-xs">{kind || "-"}</TableCell>
-                                        <TableCell className="text-xs text-muted-foreground">{payloadSummary || "-"}</TableCell>
-                                        <TableCell>
-                                          <div className="flex justify-end gap-2">
-                                            <Button type="button" variant="outline" size="sm" onClick={() => doCopyAudit(pretty(e))}>
-                                              Copy JSON
-                                            </Button>
-                                            <Button
-                                              type="button"
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={() => {
-                                                if (!eventId) return;
-                                                setSelectedAuditEventId(eventId);
-                                                setAuditModalOpen(true);
-                                                setAuditCopyStatus("idle");
-                                              }}
-                                              disabled={!eventId}
-                                            >
-                                              Details
-                                            </Button>
-                                          </div>
-                                        </TableCell>
-                                      </TableRow>
-                                    );
-                                  })}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          ) : (
-                            <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
-                              {pretty(bundle.audit)}
-                            </pre>
-                          )}
-
-                          {auditModalOpen ? (
-                            <div
-                              role="dialog"
-                              aria-modal="true"
-                              onClick={() => setAuditModalOpen(false)}
-                              style={{
-                                position: "fixed",
-                                inset: 0,
-                                background: "rgba(0,0,0,0.4)",
-                                padding: 12,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                zIndex: 1000}}
-                            >
-                              <div
-                                onClick={(ev) => ev.stopPropagation()}
-                                style={{
-                                  width: "min(980px, 96vw)",
-                                  maxHeight: "90vh",
-                                  overflow: "auto",
-                                  background: "#fff",
-                                  borderRadius: 12,
-                                  border: "1px solid #eee",
-                                  padding: 12}}
-                              >
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-                                  <div style={{ fontWeight: 800, fontSize: 13 }}>Audit event details</div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setAuditModalOpen(false)}
-                                    style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                                  >
-                                    Close
-                                  </button>
-                                </div>
-
-                                {selectedAuditEvent ? (
-                                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-                                    <div style={{ fontSize: 12, color: "#444" }}>
-                                      <div>
-                                        <b>kind</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{String((selectedAuditEvent as any)?.kind ?? "")}</span>
-                                      </div>
-                                      <div>
-                                        <b>createdAt</b>: {fmtTime((selectedAuditEvent as any)?.createdAt)}
-                                      </div>
-                                      <div>
-                                        <b>eventId</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{String((selectedAuditEvent as any)?.eventId ?? "")}</span>
-                                      </div>
-                                      <div>
-                                        <b>runId</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{String((selectedAuditEvent as any)?.runId ?? "")}</span>
-                                      </div>
-                                    </div>
-
-                                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => doCopyAudit(pretty((selectedAuditEvent as any)?.payload))}
-                                        style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", fontSize: 12 }}
-                                      >
-                                        {auditCopyStatus === "ok" ? "Copied" : auditCopyStatus === "error" ? "Copy failed" : "Copy payload JSON"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => doCopyAudit(pretty(selectedAuditEvent))}
-                                        style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                                      >
-                                        Copy full event JSON
-                                      </button>
-                                    </div>
-
-                                    <div>
-                                      <div style={{ fontWeight: 800, fontSize: 12 }}>Payload</div>
-                                      <pre
-                                        style={{
-                                          marginTop: 6,
-                                          whiteSpace: "pre-wrap",
-                                          background: "#fafafa",
-                                          border: "1px solid #eee",
-                                          borderRadius: 10,
-                                          padding: 10,
-                                          fontSize: 12}}
-                                      >
-                                        {pretty((selectedAuditEvent as any)?.payload)}
-                                      </pre>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>No audit event selected.</div>
-                                )}
+                          {derived ? (
+                            <div>
+                              <div className="text-sm font-semibold">Before/After (derived, not executed)</div>
+                              <div className="mt-1 text-sm text-muted-foreground">
+                                This derives positionsAfter by applying stored/manual orders onto the stored portfolio snapshot using the stored price snapshot.
                               </div>
+                              <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty({ orders_normalize_issues: derived.normalizedOrders.issues, applied: derived.applied })}</pre>
                             </div>
                           ) : null}
+
+                          <div>
+                            <div className="text-sm font-semibold">Audit events</div>
+                            <div className="mt-1 text-sm text-muted-foreground">
+                              Click a row to view payload + metadata (read-only). This never executes trades.
+                            </div>
+
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <div className="text-sm text-muted-foreground">
+                                Total: <b className="text-foreground">{auditTotal}</b>
+                              </div>
+
+                              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                                Page size
+                                <select
+                                  value={String(auditPageSize)}
+                                  onChange={(e) => {
+                                    const n = Number(String(e.target.value ?? ""));
+                                    setAuditPageSize(Number.isFinite(n) && n > 0 ? n : 25);
+                                    setAuditPage(1);
+                                  }}
+                                  className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                >
+                                  <option value="10">10</option>
+                                  <option value="25">25</option>
+                                  <option value="50">50</option>
+                                  <option value="100">100</option>
+                                </select>
+                              </label>
+
+                              <div className="text-sm text-muted-foreground">
+                                Page <b className="text-foreground">{auditPage}</b> / <b className="text-foreground">{auditPageCount}</b>
+                              </div>
+
+                              <Button type="button" variant="outline" size="sm" onClick={() => setAuditPage((p) => Math.max(1, p - 1))} disabled={auditPageCount <= 1 || auditPage <= 1}>
+                                Prev
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => setAuditPage((p) => Math.min(auditPageCount, p + 1))} disabled={auditPageCount <= 1 || auditPage >= auditPageCount}>
+                                Next
+                              </Button>
+                            </div>
+
+                            {auditEvents.length ? (
+                              <div className="mt-2 rounded-md border">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="w-[160px]">Time</TableHead>
+                                      <TableHead className="w-[240px]">Kind</TableHead>
+                                      <TableHead>Payload</TableHead>
+                                      <TableHead className="w-[220px]" />
+                                    </TableRow>
+                                  </TableHeader>
+
+                                  <TableBody>
+                                    {auditPageEvents.map((e: any) => {
+                                      const eventId = String(e?.eventId ?? "").trim();
+                                      const createdAt = e?.createdAt;
+                                      const kind = String(e?.kind ?? "").trim();
+                                      const payloadSummary = summarizeAuditPayload(e?.payload);
+
+                                      return (
+                                        <TableRow key={eventId || kind + "_" + String(createdAt ?? "")} className="hover:bg-muted/30">
+                                          <TableCell className="text-xs text-muted-foreground">{fmtTime(createdAt)}</TableCell>
+                                          <TableCell className="font-mono text-xs">{kind || "-"}</TableCell>
+                                          <TableCell className="text-xs text-muted-foreground">{payloadSummary || "-"}</TableCell>
+                                          <TableCell>
+                                            <div className="flex justify-end gap-2">
+                                              <Button type="button" variant="outline" size="sm" onClick={() => doCopyAudit(pretty(e))}>
+                                                Copy JSON
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                  if (!eventId) return;
+                                                  setSelectedAuditEventId(eventId);
+                                                  setAuditModalOpen(true);
+                                                  setAuditCopyStatus("idle");
+                                                }}
+                                                disabled={!eventId}
+                                              >
+                                                Details
+                                              </Button>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            ) : (
+                              <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty(bundle.audit)}</pre>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-sm text-muted-foreground">{runsStatus === "loading" ? "Loading..." : "No runs yet."}</div>
+          )}
+        </div>
+      </CardContent>
+
+      <Dialog
+        open={auditModalOpen}
+        onOpenChange={(open) => {
+          setAuditModalOpen(open);
+          if (!open) setSelectedAuditEventId("");
+        }}
+      >
+        <DialogContent className="max-w-[980px]">
+          <DialogHeader>
+            <DialogTitle>Audit event details</DialogTitle>
+            <DialogDescription>Read-only view of the stored audit event payload + metadata.</DialogDescription>
+          </DialogHeader>
+
+          {selectedAuditEvent ? (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                <div>
+                  <b className="text-foreground">kind</b>: <span className="font-mono">{String((selectedAuditEvent as any)?.kind ?? "")}</span>
+                </div>
+                <div>
+                  <b className="text-foreground">createdAt</b>: {fmtTime((selectedAuditEvent as any)?.createdAt)}
+                </div>
+                <div>
+                  <b className="text-foreground">eventId</b>: <span className="font-mono">{String((selectedAuditEvent as any)?.eventId ?? "")}</span>
+                </div>
+                <div>
+                  <b className="text-foreground">runId</b>: <span className="font-mono">{String((selectedAuditEvent as any)?.runId ?? "")}</span>
+                </div>
               </div>
-            );
-          })
-        ) : (
-          <div style={{ fontSize: 12, color: "#666" }}>{runsStatus === "loading" ? "Loading..." : "No runs yet."}</div>
-        )}
-      </div>
-    </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" onClick={() => doCopyAudit(pretty((selectedAuditEvent as any)?.payload))}>
+                  {auditCopyStatus === "ok" ? "Copied" : auditCopyStatus === "error" ? "Copy failed" : "Copy payload JSON"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => doCopyAudit(pretty(selectedAuditEvent))}>
+                  Copy full event JSON
+                </Button>
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold">Payload</div>
+                <pre className="mt-2 max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty((selectedAuditEvent as any)?.payload)}</pre>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No audit event selected.</div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
