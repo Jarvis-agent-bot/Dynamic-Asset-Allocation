@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type MeResponse =
   | {
@@ -104,6 +105,20 @@ export default function DaaSessionBanner() {
     } finally {
       setLogoutBusy(false);
     }
+  }
+
+  if (model.kind === "loading") {
+    return (
+      <Card className="border-muted-foreground/20">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-[220px]" />
+            <Skeleton className="h-3 w-[320px]" />
+          </div>
+          <Skeleton className="h-8 w-[120px]" />
+        </CardContent>
+      </Card>
+    );
   }
 
   const title =
