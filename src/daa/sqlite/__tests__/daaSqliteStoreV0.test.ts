@@ -85,4 +85,49 @@ describe("daa/sqlite store v0", () => {
 
     await resetDbFile(dbPath);
   });
+
+  it("lists runs with date range + actor filter", async () => {
+    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
+    process.env.DAA_SQLITE_PATH = dbPath;
+    await resetDbFile(dbPath);
+
+    const r1 = await createDaaRunV0({
+      kind: "rebalance",
+      payload: { source: "/daa/dashboard" },
+      createdAt: "2026-01-01T00:00:01.000Z",
+    });
+    const r2 = await createDaaRunV0({
+      kind: "rebalance",
+      payload: { actor: "market-funds", source: "/daa/market/funds" },
+      createdAt: "2026-01-02T00:00:01.000Z",
+    });
+    const r3 = await createDaaRunV0({
+      kind: "rebalance",
+      payload: { foo: 3 },
+      createdAt: "2026-02-01T00:00:01.000Z",
+    });
+
+    const dashOnly = await listDaaRunsV0({ limit: 50, actor: "dashboard" });
+    expect(dashOnly.map((r) => r.runId)).toEqual([r1.runId]);
+
+    const janRange = await listDaaRunsV0({
+      limit: 50,
+      fromCreatedAt: "2026-01-01T00:00:00.000Z",
+      toCreatedAt: "2026-01-31T23:59:59.999Z",
+    });
+    expect(janRange.map((r) => r.runId)).toEqual([r2.runId, r1.runId]);
+
+    const janMarketFunds = await listDaaRunsV0({
+      limit: 50,
+      actor: "market-funds",
+      fromCreatedAt: "2026-01-01T00:00:00.000Z",
+      toCreatedAt: "2026-01-31T23:59:59.999Z",
+    });
+    expect(janMarketFunds.map((r) => r.runId)).toEqual([r2.runId]);
+
+    // Sanity: r3 is outside the range.
+    expect(janRange.some((r) => r.runId === r3.runId)).toBe(false);
+
+    await resetDbFile(dbPath);
+  });
 });

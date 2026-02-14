@@ -11,6 +11,8 @@ type RunListRow = {
   createdAt: string;
   kind: string;
   status: string;
+  source: string;
+  actor: string;
   hasPortfolio: boolean;
   hasConfirm: boolean;
   hasExecuted: boolean;
@@ -31,6 +33,14 @@ function fmtTime(iso: unknown) {
   const t = Date.parse(s);
   if (!Number.isFinite(t)) return s;
   return new Date(t).toLocaleString();
+}
+
+function toIsoFromDatetimeLocal(s: string): string {
+  const raw = String(s ?? "").trim();
+  if (!raw) return "";
+  const t = Date.parse(raw);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toISOString();
 }
 
 function extractOrdersFromAny(x: any): unknown {
@@ -85,6 +95,13 @@ export default function DaaDashboardHistoryAudit() {
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<any | null>(null);
 
+  const [actorFilter, setActorFilter] = useState<string>("");
+  const [fromLocal, setFromLocal] = useState<string>("");
+  const [toLocal, setToLocal] = useState<string>("");
+
+  const fromIso = useMemo(() => toIsoFromDatetimeLocal(fromLocal), [fromLocal]);
+  const toIso = useMemo(() => toIsoFromDatetimeLocal(toLocal), [toLocal]);
+
   const cursor = useMemo(() => {
     const last = runs.length ? runs[runs.length - 1] : null;
     if (!last) return null;
@@ -93,11 +110,22 @@ export default function DaaDashboardHistoryAudit() {
   }, [runs]);
 
   async function loadRuns(mode: "reset" | "more") {
+    if (mode === "reset") {
+      setSelectedRunId("");
+      setBundle(null);
+      setBundleStatus("idle");
+      setBundleError(null);
+    }
+
     setRunsError(null);
     setRunsStatus("loading");
 
     const qs = new URLSearchParams();
     qs.set("limit", "20");
+
+    if (actorFilter) qs.set("actor", actorFilter);
+    if (fromIso) qs.set("fromCreatedAt", fromIso);
+    if (toIso) qs.set("toCreatedAt", toIso);
 
     if (mode === "more" && cursor) {
       qs.set("beforeCreatedAt", cursor.beforeCreatedAt);
@@ -144,7 +172,7 @@ export default function DaaDashboardHistoryAudit() {
 
   useEffect(() => {
     void loadRuns("reset");
-  }, []);
+  }, [actorFilter, fromIso, toIso]);
 
   const derived = useMemo(() => {
     if (!bundle) return null;
@@ -186,7 +214,47 @@ export default function DaaDashboardHistoryAudit() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select
+            value={actorFilter}
+            onChange={(e) => setActorFilter(String(e.target.value ?? ""))}
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
+          >
+            <option value="">All actors</option>
+            <option value="dashboard">dashboard</option>
+            <option value="market-funds">market-funds</option>
+            <option value="unknown">unknown</option>
+          </select>
+
+          <input
+            type="datetime-local"
+            value={fromLocal}
+            onChange={(e) => setFromLocal(String(e.target.value ?? ""))}
+            title="From (local time)"
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
+          />
+
+          <input
+            type="datetime-local"
+            value={toLocal}
+            onChange={(e) => setToLocal(String(e.target.value ?? ""))}
+            title="To (local time)"
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
+          />
+
+          <button
+            type="button"
+            onClick={() => {
+              setActorFilter("");
+              setFromLocal("");
+              setToLocal("");
+            }}
+            disabled={runsStatus === "loading"}
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
+          >
+            Clear
+          </button>
+
           <button
             type="button"
             onClick={() => loadRuns("reset")}
@@ -224,6 +292,9 @@ export default function DaaDashboardHistoryAudit() {
                     </div>
                     <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>
                       portfolio:{r.hasPortfolio ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> confirm:{r.hasConfirm ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> executed:{r.hasExecuted ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> audit:{r.auditCount}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>
+                      actor:{String(r.actor ?? "")} <span style={{ color: "#bbb" }}>·</span> source:{String(r.source ?? "") || "-"}
                     </div>
                   </div>
 
