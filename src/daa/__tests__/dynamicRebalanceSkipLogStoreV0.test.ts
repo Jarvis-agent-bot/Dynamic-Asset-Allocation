@@ -67,6 +67,23 @@ describe("daa/dynamicRebalanceSkipLogStoreV0", () => {
     expect(loadDynamicRebalanceSkipLogV0(st as any)).toHaveLength(1);
   });
 
+  it("appendDynamicRebalanceSkipLogV0 supports user-cancelled", () => {
+    const st = new MemStorage();
+
+    const r = appendDynamicRebalanceSkipLogV0({
+      storage: st as any,
+      at: "2026-02-14T01:00:00.000Z",
+      recordedAt: "2026-02-14T02:00:00.000Z",
+      reason: { kind: "user-cancelled", title: "Cancelled (user)", detail: "User cancelled the run" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("unreachable");
+
+    const loaded = loadDynamicRebalanceSkipLogV0(st as any);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].kind).toBe("user-cancelled");
+  });
+
   it("appendDynamicRebalanceSkipLogV0 respects maxEntries", () => {
     const st = new MemStorage();
 

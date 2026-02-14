@@ -5,9 +5,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { pretty } from '../../../wizardStorage';
 
-import { computeNextRunAtLocalV0, defaultRebalanceScheduleV1, type RebalanceScheduleCadenceV0, type RebalanceScheduleV1 } from '@/src/daa/rebalanceScheduleV0';
+import {
+  computeMostRecentScheduledAtLocalV0,
+  computeNextRunAtLocalV0,
+  defaultRebalanceScheduleV1,
+  type RebalanceScheduleCadenceV0,
+  type RebalanceScheduleV1,
+} from '@/src/daa/rebalanceScheduleV0';
 import { computeNextCnMarketOpenShanghaiV0, isCnMarketOpenShanghaiV0 } from '@/src/daa/dynamicRebalancePausedReasonV0';
+import { loadPortfolioStateV1 } from '../../../portfolioStateStore';
 import { loadRebalanceScheduleStateV1, persistRebalanceScheduleV1 } from '../../../rebalanceScheduleStore';
+
+import { appendDynamicRebalanceSkipLogV0, loadDynamicRebalanceSkipLogV0 } from '@/src/daa/dynamicRebalanceSkipLogStoreV0';
 
 const WEEKDAYS: Array<{ value: number; label: string }> = [
   { value: 0, label: 'Sun' },
@@ -24,6 +33,12 @@ function normalizeTimeInput(raw: string): string {
   // `input[type=time]` is already HH:MM, but keep a tiny guard.
   if (/^([01]\d|2[0-3]):([0-5]\d)$/.test(s)) return s;
   return '';
+}
+
+function safeParseIso(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
 function formatLocalCompact(d: Date): string {
@@ -79,6 +94,8 @@ export default function DaaRebalanceScheduleV0() {
   const [open, setOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [cancelStatus, setCancelStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [cancelConfirm, setCancelConfirm] = useState<{ atIso: string; label: string; mode: 'queued' | 'scheduled' } | null>(null);
 
   const [enabled, setEnabled] = useState(false);
   const [cadence, setCadence] = useState<RebalanceScheduleCadenceV0>('weekly');
@@ -147,6 +164,70 @@ export default function DaaRebalanceScheduleV0() {
     return `enabled; cadence=${s.cadence}${weekly}; time=${s.timeLocalHHMM}${nextText}; schemaVersion=${st.schemaVersion}`;
   }, [open, saveStatus]);
 
+  const cancelModel = useMemo(() => {
+    if (typeof window === 'undefined') return { kind: 'none' as const };
+
+    const now = new Date();
+
+    const st = loadRebalanceScheduleStateV1();
+    const s = st.schedule;
+    if (!s.enabled) return { kind: 'none' as const };
+
+    const log = loadDynamicRebalanceSkipLogV0(window.localStorage);
+    const isCancelledAt = (d: Date | null) =>
+      !!d && log.some((e) => e.kind === 'user-cancelled' && e.at === d.toISOString());
+
+    const lastScheduledAt = computeMostRecentScheduledAtLocalV0(s, now);
+
+    const portfolio = loadPortfolioStateV1();
+    const lastEvalAt = safeParseIso(portfolio.lastRebalance?.at ?? null);
+
+    const dueAt =
+      lastScheduledAt && (!lastEvalAt || lastEvalAt.getTime() < lastScheduledAt.getTime()) ? lastScheduledAt : null;
+
+    if (dueAt && !isCancelledAt(dueAt)) {
+      return { kind: 'queued' as const, at: dueAt, label: formatLocalCompact(dueAt) };
+    }
+
+    const nextAt = computeNextRunAtLocalV0(s, now);
+    if (nextAt && !isCancelledAt(nextAt)) {
+      return { kind: 'scheduled' as const, at: nextAt, label: formatLocalCompact(nextAt) };
+    }
+
+    return { kind: 'none' as const };
+  }, [open, saveStatus, cancelStatus]);
+
+  function openCancelConfirm(mode: 'queued' | 'scheduled', at: Date) {
+    setCancelConfirm({ atIso: at.toISOString(), label: formatLocalCompact(at), mode });
+  }
+
+  function doConfirmCancel() {
+    if (typeof window === 'undefined' || !cancelConfirm) return;
+
+    const modeText = cancelConfirm.mode === 'queued' ? 'queued/due' : 'scheduled';
+
+    const r = appendDynamicRebalanceSkipLogV0({
+      storage: window.localStorage,
+      at: cancelConfirm.atIso,
+      reason: {
+        kind: 'user-cancelled',
+        title: 'Cancelled (user)',
+        detail: `User cancelled a ${modeText} dynamic rebalance run scheduled at ${cancelConfirm.label} (local).`,
+      },
+    });
+
+    setCancelConfirm(null);
+
+    if (!r.ok) {
+      setCancelStatus('error');
+      window.setTimeout(() => setCancelStatus('idle'), 2000);
+      return;
+    }
+
+    setCancelStatus('ok');
+    window.setTimeout(() => setCancelStatus('idle'), 1200);
+  }
+
   async function doCopy() {
     try {
       await copyTextToClipboard(pretty(loadRebalanceScheduleStateV1()));
@@ -202,11 +283,84 @@ export default function DaaRebalanceScheduleV0() {
           <button type="button" className="button" onClick={doCopy} style={{ padding: '6px 10px' }}>
             {copyStatus === 'ok' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy schedule JSON'}
           </button>
+
+          {cancelModel.kind !== 'none' ? (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => openCancelConfirm(cancelModel.kind, cancelModel.at)}
+              style={{ padding: '6px 10px' }}
+              title={
+                cancelModel.kind === 'queued'
+                  ? `Cancel the queued/due run scheduled at ${cancelModel.label} (local).`
+                  : `Cancel the next scheduled run at ${cancelModel.label} (local).`
+              }
+            >
+              {cancelStatus === 'ok'
+                ? 'Cancelled'
+                : cancelStatus === 'error'
+                  ? 'Cancel failed'
+                  : cancelModel.kind === 'queued'
+                    ? 'Cancel due run'
+                    : 'Cancel next run'}
+            </button>
+          ) : null}
+
           <button type="button" className="button secondary" onClick={() => setOpen((v) => !v)} style={{ padding: '6px 10px' }} aria-expanded={open}>
             {open ? '收起' : '编辑'}
           </button>
         </div>
       </div>
+
+      {cancelConfirm ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Cancel scheduled dynamic rebalance run"
+          onClick={() => setCancelConfirm(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10000,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(560px, 100%)',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              padding: 14,
+              borderRadius: 12,
+              border: '1px solid rgba(255,255,255,0.10)',
+              background: 'rgba(0,0,0,0.92)',
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 14 }}>Cancel dynamic rebalance run?</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>
+              About to cancel a <b>{cancelConfirm.mode === 'queued' ? 'queued/due' : 'scheduled'}</b> run scheduled at{' '}
+              <b>{cancelConfirm.label}</b> (local).
+              <div style={{ marginTop: 6 }}>
+                This records a local cancel decision (skip log) and will suppress "schedule due" notifications for that tick. It does not disable the schedule.
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" onClick={() => setCancelConfirm(null)} style={{ padding: '6px 10px' }}>
+                Cancel
+              </button>
+              <button type="button" className="button danger" onClick={() => doConfirmCancel()} style={{ padding: '6px 10px' }}>
+                Confirm cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {open ? (
         <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>

@@ -10,6 +10,7 @@ import { pushDynamicRebalanceNotificationV0 } from '../../../dynamicRebalanceNot
 
 import { computeDynamicRebalancePauseReasonV0 } from '@/src/daa/dynamicRebalancePausedReasonV0';
 import { loadDynamicRebalanceNotifyPrefsStateV1 } from '@/src/daa/dynamicRebalanceNotificationPrefsStoreV0';
+import { loadDynamicRebalanceSkipLogV0 } from '@/src/daa/dynamicRebalanceSkipLogStoreV0';
 import { computeMostRecentScheduledAtLocalV0 } from '@/src/daa/rebalanceScheduleV0';
 
 function safeParseIso(s: string | null): Date | null {
@@ -52,6 +53,11 @@ export default function DaaDynamicRebalanceNotificationWatcherV0(props: { rev?: 
         const lastEvalAt = safeParseIso(portfolio.lastRebalance?.at ?? null);
 
         if (lastEvalAt && lastEvalAt.getTime() >= lastScheduledAt.getTime()) return;
+
+        const cancelled = loadDynamicRebalanceSkipLogV0(window.localStorage).some(
+          (e) => e.kind === 'user-cancelled' && e.at === lastScheduledAt.toISOString(),
+        );
+        if (cancelled) return;
 
         const snapshot = loadPriceSnapshotV1();
         const priceCount = Object.keys(snapshot.prices ?? {}).length;
