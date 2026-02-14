@@ -29,6 +29,7 @@ import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
 import { appendRebalanceLog } from '@/src/daa/rebalanceLogStore';
 import { buildRebalanceViolationsV0 } from '@/src/daa/rebalanceViolationsV0';
+import { buildRebalanceApprovalSummaryMarkdownV0 } from '@/src/daa/rebalanceApprovalSummaryMarkdownV0';
 import {
   attachOrdersToRebalanceRunV0,
   failRebalanceOrderStatusRunV0,
@@ -438,6 +439,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyOrdersStatus, setCopyOrdersStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyWeightsStatus, setCopyWeightsStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [copyApprovalSummaryStatus, setCopyApprovalSummaryStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [sampleStatus, setSampleStatus] = useState<'idle' | 'ok' | 'error'>('idle');
 
   const [autoPlanScenario, setAutoPlanScenario] = useState<AutoPlanScenarioKeyV0>(() => {
@@ -1566,6 +1568,39 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     } catch {
       setCopyOrdersStatus('error');
       window.setTimeout(() => setCopyOrdersStatus('idle'), 2000);
+    }
+  }
+
+  async function doCopyApprovalSummaryV0() {
+    try {
+      const scheduleEnabled = loadRebalanceScheduleStateV1().schedule.enabled;
+      const action = safetyStopPendingOpts?.cashSweep ? 'cash-sweep' : 'dynamic-rebalance';
+
+      const md = buildRebalanceApprovalSummaryMarkdownV0({
+        atIso: new Date().toISOString(),
+        action,
+        baseCcy,
+        scheduleEnabled,
+        executionMode: executionMode === 'live' ? 'live' : 'dry-run',
+        feeBps: whatIfFeeBps,
+        slippageBpsBase: whatIfSlippageBps,
+        slippageSensitivity: whatIfSlippageSensitivityV0,
+        slippageBpsEffective: whatIfSlippageBpsUsed,
+        sellProceedsRouting: sellProceedsRoutingV0,
+        overrideBlockers: preflightOverrideBlockers,
+        orders: (safetyStopPreviewOrders ?? [])
+          .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
+          .map((o) => ({ symbol: String(o.symbol), side: o.side as 'BUY' | 'SELL', notional: o.notional, reason: (o as any).reason })),
+        whatIf: safetyStopPreviewWhatIf,
+        violations: preRunViolationsV0,
+      });
+
+      await copyTextToClipboard(md);
+      setCopyApprovalSummaryStatus('ok');
+      window.setTimeout(() => setCopyApprovalSummaryStatus('idle'), 1200);
+    } catch {
+      setCopyApprovalSummaryStatus('error');
+      window.setTimeout(() => setCopyApprovalSummaryStatus('idle'), 2000);
     }
   }
 
@@ -2933,9 +2968,25 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   About to <b>{safetyStopPendingOpts?.cashSweep ? 'cash sweep' : 'execute dynamic rebalance'}</b> (dry run).
                 </div>
               </div>
-              <button type="button" className="button secondary" onClick={() => closeSafetyStop()} style={{ padding: '6px 10px' }}>
-                Close
-              </button>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={doCopyApprovalSummaryV0}
+                  style={{ padding: '6px 10px' }}
+                  disabled={!safetyStopPreviewOrders.length}
+                  title={!safetyStopPreviewOrders.length ? 'No orders to summarize yet.' : 'Copy a markdown approval summary (orders/costs/constraints).'}
+                >
+                  {copyApprovalSummaryStatus === 'ok'
+                    ? 'Copied'
+                    : copyApprovalSummaryStatus === 'error'
+                      ? 'Copy failed'
+                      : 'Copy approval summary'}
+                </button>
+                <button type="button" className="button secondary" onClick={() => closeSafetyStop()} style={{ padding: '6px 10px' }}>
+                  Close
+                </button>
+              </div>
             </div>
 
             <div style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.10)' }}>
@@ -2997,6 +3048,66 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     <div>
                       Execution: <b>{executionMode === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b> — records to local execution log only.
                     </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div style={{ marginTop: 12, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.10)' }}>
+              <div style={{ fontSize: 12, fontWeight: 800 }}>Approval summary (orders / costs / constraints)</div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                For human approval / review: copy-paste via <b>Copy approval summary</b>.
+              </div>
+
+              {(() => {
+                const blockers = preRunViolationsV0.filter((v) => v.level === 'blocker');
+                const warnings = preRunViolationsV0.filter((v) => v.level === 'warning');
+
+                return (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: blockers.length ? 'var(--danger)' : warnings.length ? '#f59e0b' : 'var(--muted)' }}>
+                      Constraints: {blockers.length ? `BLOCKERS=${blockers.length}` : 'ok'}
+                      {warnings.length ? `; warnings=${warnings.length}` : ''}
+                      {preTradeCashCheck.blocking ? ' (cash/settlement BLOCKED)' : ''}
+                    </div>
+
+                    {preflightOverrideBlockers ? (
+                      <div style={{ marginTop: 6, fontSize: 11, color: 'var(--danger)' }}>
+                        NOTE: Override blockers is enabled.
+                      </div>
+                    ) : null}
+
+                    {(blockers.length || warnings.length) ? (
+                      <details className="muted" style={{ marginTop: 8, fontSize: 11 }}>
+                        <summary style={{ cursor: 'pointer' }}>Details</summary>
+                        <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+                          {[...blockers, ...warnings].map((v, idx) => (
+                            <div key={`${v.kind}-${idx}`}>
+                              <div style={{ fontWeight: 700, color: v.level === 'blocker' ? 'var(--danger)' : '#f59e0b' }}>
+                                {v.level.toUpperCase()}: {v.title}
+                              </div>
+                              <div style={{ marginTop: 4 }}>{v.details.join(' ')}</div>
+                              {v.suggestion ? <div style={{ marginTop: 4 }}>Suggestion: {v.suggestion}</div> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+
+                    <details style={{ marginTop: 10 }}>
+                      <summary style={{ cursor: 'pointer' }}>Orders (full)</summary>
+                      <div style={{ marginTop: 8 }}>
+                        <OrdersReviewV0
+                          orders={(safetyStopPreviewOrders ?? [])
+                            .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
+                            .map((o) => ({ symbol: o.symbol, side: o.side, notional: o.notional, reason: (o as any).reason }))}
+                          cashStart={toFiniteNumber(portfolioCash)}
+                          minTradeNotional={rebalancePolicy.minTradeNotional}
+                          ccy={baseCcy}
+                          feeBps={whatIfFeeBps}
+                        />
+                      </div>
+                    </details>
                   </div>
                 );
               })()}
