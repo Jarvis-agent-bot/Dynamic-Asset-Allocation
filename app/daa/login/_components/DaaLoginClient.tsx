@@ -37,7 +37,7 @@ type SessionModel =
 type EmailLinkModel =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "sent"; requestedAtMs: number; cooldownSeconds: number };
+  | { kind: "sent"; email: string; requestedAtMs: number; cooldownSeconds: number };
 
 function normalizeEmailLoose(raw: string): string {
   const v = raw.trim().toLowerCase();
@@ -317,7 +317,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
       }
 
       const cooldownSeconds = typeof json?.cooldownSeconds === "number" && Number.isFinite(json.cooldownSeconds) ? Math.max(0, Math.floor(json.cooldownSeconds)) : 30;
-      setEmailLink({ kind: "sent", requestedAtMs: Date.now(), cooldownSeconds });
+      setEmailLink({ kind: "sent", email, requestedAtMs: Date.now(), cooldownSeconds });
     } catch (e) {
       setEmailLinkError(e instanceof Error ? e.message : String(e));
       setEmailLink({ kind: "idle" });
@@ -420,6 +420,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                     onChange={(e) => {
                       setUsername(e.target.value);
                       setEmailLinkError(null);
+                      setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
                     }}
                     autoComplete="email"
                     placeholder="you@example.com"
@@ -438,32 +439,39 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button type="submit" disabled={emailDisabled || !emailLinkFormValid}>
+                  <Button type="submit" disabled={emailDisabled || !emailLinkFormValid || emailLink.kind === "sent"}>
                     {emailLink.kind === "sending" ? (
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Sending...
                       </span>
+                    ) : emailLink.kind === "sent" ? (
+                      "Link sent"
                     ) : (
                       "Send sign-in link"
                     )}
                   </Button>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void requestEmailLink()}
-                    disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
-                  >
-                    {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
-                  </Button>
+                  {emailLink.kind === "sent" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void requestEmailLink()}
+                      disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
+                    >
+                      {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
+                    </Button>
+                  ) : null}
                 </div>
 
                 {emailLink.kind === "sent" ? (
                   <div className="rounded-md border bg-muted/20 p-3 text-sm">
                     <div className="font-medium">Check your inbox</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      If this email is registered, you'll receive a sign-in link shortly. It expires in about 15 minutes.
+                      If <span className="font-medium">{emailLink.email}</span> is registered, you'll receive a sign-in link shortly. It expires in about 15 minutes.
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {resendRemainingSeconds > 0 ? `You can resend in ${formatSeconds(resendRemainingSeconds)}.` : "You can resend now if you didn't receive it."}
                     </div>
                   </div>
                 ) : null}
@@ -520,6 +528,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value);
+                      setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
                       setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
                     }}
                     autoComplete="email"
