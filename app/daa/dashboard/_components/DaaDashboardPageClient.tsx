@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
 import Step2MarketEventsPage from "../../step/_pages/Step2MarketEventsPage";
 import Step4BaselineRecommendationPage from "../../step/_pages/Step4BaselineRecommendationPage";
 import Step6HumanFactorPage from "../../step/_pages/Step6HumanFactorPage";
@@ -44,168 +47,122 @@ function scrollToId(id: string) {
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+const QUICK_NAV: Array<{ id: string; label: string }> = [
+  { id: "import", label: "Import" },
+  { id: "export", label: "Export" },
+  { id: "confirm-executed", label: "Confirm/Executed" },
+  { id: "history-audit", label: "History/Audit" },
+  { id: "admin-users", label: "Admin Users" },
+  { id: "backtest", label: "Backtest" },
+  { id: "step2", label: "Step2 — Events" },
+  { id: "step4", label: "Step4 — Recommendation" },
+  { id: "step5", label: "Step5 — Explain" },
+  { id: "step6", label: "Step6 — Human" },
+  { id: "step7", label: "Step7 — Tags" },
+];
+
 function DashboardMain() {
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22 }}>DAA Dashboard（v1）</h1>
-          <p style={{ margin: "6px 0 0", color: "#444" }}>
-            把 <b>Step2 → Step4/5 → Step6 → Step7</b> 串成一条“可执行路径”。这里是默认入口：补缺口 → 运行 → 导出。
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">DAA Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Run path: <span className="font-medium text-foreground">Step2 → Step4/5 → Step6 → Step7</span>.
+            <span className="hidden sm:inline"> </span>
+            Here is the default entry: fill gaps → run → export.
           </p>
         </div>
 
-        <div style={{ fontSize: 12, color: "#666", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <Link href="/daa/dashboard?tab=wizard&step=1" style={{ color: "#111" }}>
-            Wizard
-          </Link>
-          <span style={{ color: "#bbb" }}>|</span>
-          <Link href="/daa/dashboard?tab=market-funds" style={{ color: "#111" }}>
-            Market/Funds
-          </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/daa/dashboard?tab=wizard&step=1">Open Wizard</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
+          </Button>
         </div>
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <DaaDashboardOverviewCards />
-      </div>
+      <DaaDashboardOverviewCards />
 
-      <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
-        <div style={{ fontWeight: 800, fontSize: 13 }}>Quick nav</div>
-        <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={() => scrollToId("import")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Import
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("export")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Export
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("confirm-executed")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Confirm/Executed
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("history-audit")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            History/Audit
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("admin-users")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Admin Users
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("backtest")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Backtest
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("step2")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Step2 — Events
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("step4")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Step4 — Recommendation
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("step5")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Step5 — Explain
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("step6")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Step6 — Human
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToId("step7")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            Step7 — Tags
-          </button>
-        </div>
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Quick nav</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {QUICK_NAV.map((it) => (
+            <Button
+              key={it.id}
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => scrollToId(it.id)}
+              className="justify-start"
+            >
+              {it.label}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
 
       <DaaDashboardRunChecklist onJump={scrollToId} />
 
-      <div id="import" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="import" className="scroll-mt-6">
         <DaaDashboardImport />
-      </div>
+      </section>
 
-      <div id="export" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="export" className="scroll-mt-6">
         <DaaDashboardExport />
-      </div>
+      </section>
 
-      <div id="confirm-executed" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="confirm-executed" className="scroll-mt-6">
         <DaaDashboardConfirmExecuted />
-      </div>
+      </section>
 
-      <div id="history-audit" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="history-audit" className="scroll-mt-6">
         <DaaDashboardHistoryAudit />
-      </div>
+      </section>
 
-      <div id="admin-users" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="admin-users" className="scroll-mt-6">
         <DaaDashboardAdminUsers />
-      </div>
+      </section>
 
-      <div id="backtest" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="backtest" className="scroll-mt-6">
         <DaaDashboardBacktestDriftRebalance />
-      </div>
+      </section>
 
-      <div id="step2" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="step2" className="scroll-mt-6">
         <Step2MarketEventsPage />
-      </div>
+      </section>
 
-      <div id="step4" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="step4" className="scroll-mt-6">
         <Step4BaselineRecommendationPage />
-      </div>
+      </section>
 
-      <div id="step5" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="step5" className="scroll-mt-6">
         <DaaDashboardAiExplain />
-      </div>
+      </section>
 
-      <div id="step6" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="step6" className="scroll-mt-6">
         <Step6HumanFactorPage />
-      </div>
+      </section>
 
-      <div id="step7" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+      <section id="step7" className="scroll-mt-6">
         <Step7TagsPage />
-      </div>
+      </section>
 
-      <div style={{ marginTop: 14, fontSize: 12, color: "#666" }}>
-        Tips:
-        <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
-          <li>Step4 生成的 recommendation 会持久化到 localStorage，Step5 explain 与 export 都会自动读取。</li>
-          <li>如果在多个标签页同时打开，数据会通过 storage event 尝试同步刷新。</li>
-        </ul>
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Tips</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Step4 recommendations persist to localStorage; Step5 explain and export load them automatically.</li>
+            <li>Multiple tabs attempt to revalidate via the storage event for best-effort sync.</li>
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -223,5 +180,5 @@ export default function DaaDashboardPageClient() {
       <DashboardMain />
     );
 
-  return <div className="space-y-4">{content}</div>;
+  return <div className={tab === "dashboard" ? "space-y-4" : undefined}>{content}</div>;
 }
