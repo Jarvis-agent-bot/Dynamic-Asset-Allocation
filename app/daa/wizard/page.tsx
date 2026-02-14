@@ -8,9 +8,9 @@ type DaaWizardCompatPageProps = {
 
 export default function DaaWizardCompatPage({ searchParams }: DaaWizardCompatPageProps) {
   const stepId = Number(searchParams?.step);
-  const initialStepId = Number.isFinite(stepId) ? Math.trunc(stepId) : undefined;
+  const step = Number.isFinite(stepId) && stepId > 0 ? Math.trunc(stepId) : 1;
 
   // Compatibility route: keep old `/daa/wizard` links working, but avoid fragmenting URLs.
-  // Canonical wizard URL is `/daa?step=...` (and `/daa/` remains dashboard-first).
-  redirect(`/daa?step=${initialStepId && initialStepId > 0 ? initialStepId : 1}`);
+  // Canonical wizard URL is `/daa/dashboard?tab=wizard&step=...`.
+  redirect(`/daa/dashboard?tab=wizard&step=${step}`);
 }

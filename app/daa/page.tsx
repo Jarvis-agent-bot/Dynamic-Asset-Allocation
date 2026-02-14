@@ -1,21 +1,39 @@
 import { redirect } from "next/navigation";
 
-import { DaaWizard } from "./_components/DaaWizard";
-
-type DaaPageProps = {
-  searchParams?: {
-    step?: string;
-  };
+type DaaLegacyEntryProps = {
+  searchParams?: Record<string, string | string[] | undefined>;
 };
 
-export default function DaaConsoleHome({ searchParams }: DaaPageProps) {
-  const stepId = Number(searchParams?.step);
-  const initialStepId = Number.isFinite(stepId) ? Math.trunc(stepId) : undefined;
+function firstString(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
 
-  // Make /daa/dashboard the default entry, but preserve existing deep-links like /daa?step=2.
-  if (!initialStepId || initialStepId <= 0) {
-    redirect("/daa/dashboard");
+export default function DaaLegacyEntry({ searchParams }: DaaLegacyEntryProps) {
+  // Legacy entrypoint: keep `/daa` working, but always funnel into the canonical
+  // `/daa/dashboard` URL to avoid fragmented state.
+  const params = new URLSearchParams();
+
+  for (const [k, v] of Object.entries(searchParams ?? {})) {
+    if (typeof v === "undefined") continue;
+    if (Array.isArray(v)) {
+      for (const vv of v) params.append(k, vv);
+    } else {
+      params.append(k, v);
+    }
   }
 
-  return <DaaWizard initialStepId={initialStepId} />;
+  const stepRaw = firstString(searchParams?.step);
+  const stepNum = stepRaw ? Number(stepRaw) : NaN;
+  const step = Number.isFinite(stepNum) && stepNum > 0 ? Math.trunc(stepNum) : null;
+
+  if (step) {
+    params.set("tab", "wizard");
+    params.set("step", String(step));
+  } else {
+    // Drop invalid legacy step values.
+    params.delete("step");
+  }
+
+  const qs = params.toString();
+  redirect(`/daa/dashboard${qs ? `?${qs}` : ""}`);
 }

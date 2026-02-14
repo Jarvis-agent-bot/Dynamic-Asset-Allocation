@@ -3200,7 +3200,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           <Link href="/daa/dashboard" className="muted" style={{ fontSize: 12 }}>
             Dashboard
           </Link>
-          <Link href="/daa?step=1" className="muted" style={{ fontSize: 12 }}>
+          <Link href="/daa/dashboard?tab=wizard&step=1" className="muted" style={{ fontSize: 12 }}>
             Wizard
           </Link>
           <button
@@ -3342,7 +3342,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
                       Review cash routing
                     </button>
-                    <Link href="/daa?step=3" className="muted" style={{ fontSize: 11 }}>
+                    <Link href="/daa/dashboard?tab=wizard&step=3" className="muted" style={{ fontSize: 11 }}>
                       Edit money plan
                     </Link>
                   </span>
@@ -3496,10 +3496,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     Cancel
                   </button>
                 ) : null}
-                <Link href="/daa?step=3" className="muted" style={{ fontSize: 12 }}>
+                <Link href="/daa/dashboard?tab=wizard&step=3" className="muted" style={{ fontSize: 12 }}>
                   Edit money plan
                 </Link>
-                <Link href="/daa?step=4" className="muted" style={{ fontSize: 12 }}>
+                <Link href="/daa/dashboard?tab=wizard&step=4" className="muted" style={{ fontSize: 12 }}>
                   Run recommendation
                 </Link>
               </div>

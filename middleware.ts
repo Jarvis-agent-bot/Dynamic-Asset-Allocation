@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getDaaWizardCompatRedirect } from "./src/daa/wizardCompat";
+import { getDaaDashboardCompatRedirect } from "./src/daa/dashboardCompat";
 
 // VPS smoke checks for v0 hit explicit trailing-slash URLs like `/daa/step/4/`.
 // Some deployments still treat the non-slash form as canonical and will 308-redirect.
@@ -8,7 +8,7 @@ import { getDaaWizardCompatRedirect } from "./src/daa/wizardCompat";
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
-  const compatRedirect = getDaaWizardCompatRedirect(pathname, search);
+  const compatRedirect = getDaaDashboardCompatRedirect(pathname, search);
   if (compatRedirect) {
     return NextResponse.redirect(new URL(compatRedirect, req.url), 307);
   }
@@ -23,5 +23,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/daa/:path*"],
+  matcher: ["/daa", "/daa/:path*"],
 };

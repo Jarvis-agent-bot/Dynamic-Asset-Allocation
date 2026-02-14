@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import Step2MarketEventsPage from "../step/_pages/Step2MarketEventsPage";
 import Step4BaselineRecommendationPage from "../step/_pages/Step4BaselineRecommendationPage";
 import Step6HumanFactorPage from "../step/_pages/Step6HumanFactorPage";
 import Step7TagsPage from "../step/_pages/Step7TagsPage";
+
+import { DaaWizard } from "../_components/DaaWizard";
 
 import DaaDashboardAiExplain from "./_components/DaaDashboardAiExplain";
 import DaaDashboardExport from "./_components/DaaDashboardExport";
@@ -13,13 +16,31 @@ import DaaDashboardImport from "./_components/DaaDashboardImport";
 import DaaDashboardRunChecklist from "./_components/DaaDashboardRunChecklist";
 import DaaDashboardBacktestDriftRebalance from "./_components/DaaDashboardBacktestDriftRebalance";
 
+import DaaMarketFundsTab from "./_tabs/DaaMarketFundsTab";
+
+type Tab = "dashboard" | "wizard" | "market-funds";
+
+function normalizeTab(raw: string | null): Tab {
+  if (raw === "wizard") return "wizard";
+  if (raw === "market-funds") return "market-funds";
+  return "dashboard";
+}
+
+function parseInitialStepId(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  const t = Math.trunc(n);
+  return t > 0 ? t : undefined;
+}
+
 function scrollToId(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-export default function DaaDashboardPage() {
+function DashboardMain() {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -30,9 +51,13 @@ export default function DaaDashboardPage() {
           </p>
         </div>
 
-        <div style={{ fontSize: 12, color: "#666" }}>
-          <Link href="/daa?step=1" style={{ color: "#111" }}>
-            ← Wizard
+        <div style={{ fontSize: 12, color: "#666", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <Link href="/daa/dashboard?tab=wizard&step=1" style={{ color: "#111" }}>
+            Wizard
+          </Link>
+          <span style={{ color: "#bbb" }}>|</span>
+          <Link href="/daa/dashboard?tab=market-funds" style={{ color: "#111" }}>
+            Market/Funds
           </Link>
         </div>
       </div>
@@ -110,4 +135,20 @@ export default function DaaDashboardPage() {
       </div>
     </div>
   );
+}
+
+export default function DaaDashboardPage() {
+  const searchParams = useSearchParams();
+  const tab = normalizeTab(searchParams.get("tab"));
+
+  if (tab === "wizard") {
+    const initialStepId = parseInitialStepId(searchParams.get("step"));
+    return <DaaWizard initialStepId={initialStepId} />;
+  }
+
+  if (tab === "market-funds") {
+    return <DaaMarketFundsTab />;
+  }
+
+  return <DashboardMain />;
 }
