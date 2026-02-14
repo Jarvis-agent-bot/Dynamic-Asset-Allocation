@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { applyNotionalOrdersToPositionsV0, normalizeNotionalOrdersV0 } from "@/src/daa/portfolioApplyNotionalOrdersV0";
 
 import { buildDaaAdminAuthHeadersV0 } from "../../adminTokenStore";
+import { copyTextToClipboard } from "../../copyToClipboard";
 
 type RunListRow = {
   runId: string;
@@ -111,6 +112,30 @@ function buildPositionsQty(portfolioState: any): { cash: unknown; positionsQty: 
   return { cash: portfolioState?.cash, positionsQty };
 }
 
+function shortText(s: unknown, max = 120): string {
+  const one = String(s ?? "").replace(/\s+/g, " ").trim();
+  if (!one) return "";
+  if (one.length <= max) return one;
+  if (max <= 3) return one.slice(0, max);
+  return one.slice(0, max - 3) + "...";
+}
+
+function summarizeAuditPayload(payload: unknown): string {
+  if (payload === null || payload === undefined) return "";
+
+  if (Array.isArray(payload)) return "array(" + payload.length + ")";
+
+  if (typeof payload === "object") {
+    const keys = Object.keys(payload as any)
+      .map((k) => String(k ?? "").trim())
+      .filter((k) => k && k !== "payload")
+      .slice(0, 6);
+    return keys.length ? "keys: " + keys.join(", ") : "object";
+  }
+
+  return shortText(payload);
+}
+
 export default function DaaDashboardHistoryAudit() {
   const [runs, setRuns] = useState<RunListRow[]>([]);
   const [runsStatus, setRunsStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
@@ -120,6 +145,10 @@ export default function DaaDashboardHistoryAudit() {
   const [bundleStatus, setBundleStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<any | null>(null);
+
+  const [selectedAuditEventId, setSelectedAuditEventId] = useState<string>("");
+  const [auditModalOpen, setAuditModalOpen] = useState<boolean>(false);
+  const [auditCopyStatus, setAuditCopyStatus] = useState<"idle" | "ok" | "error">("idle");
 
   const [actorFilter, setActorFilter] = useState<string>("");
   const [fromLocal, setFromLocal] = useState<string>("");
@@ -141,6 +170,9 @@ export default function DaaDashboardHistoryAudit() {
       setBundle(null);
       setBundleStatus("idle");
       setBundleError(null);
+      setSelectedAuditEventId("");
+      setAuditModalOpen(false);
+      setAuditCopyStatus("idle");
     }
 
     setRunsError(null);
@@ -180,6 +212,10 @@ export default function DaaDashboardHistoryAudit() {
     setBundle(null);
     setBundleError(null);
     setBundleStatus("loading");
+
+    setSelectedAuditEventId("");
+    setAuditModalOpen(false);
+    setAuditCopyStatus("idle");
 
     try {
       // Optional auth header; read endpoints currently allow unauthenticated access.
@@ -229,6 +265,36 @@ export default function DaaDashboardHistoryAudit() {
 
     return { portfolioState, priceSnapshot, orders, normalizedOrders, applied };
   }, [bundle]);
+
+  const auditEvents = useMemo(() => (Array.isArray(bundle?.audit) ? (bundle.audit as any[]) : []), [bundle]);
+
+  const selectedAuditEvent = useMemo(() => {
+    const id = String(selectedAuditEventId ?? "").trim();
+    if (!id) return null;
+    return auditEvents.find((e) => String((e as any)?.eventId ?? "").trim() === id) ?? null;
+  }, [auditEvents, selectedAuditEventId]);
+
+  useEffect(() => {
+    if (!auditModalOpen) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setAuditModalOpen(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [auditModalOpen]);
+
+  async function doCopyAudit(text: string) {
+    try {
+      await copyTextToClipboard(text);
+      setAuditCopyStatus("ok");
+      window.setTimeout(() => setAuditCopyStatus("idle"), 1200);
+    } catch {
+      setAuditCopyStatus("error");
+      window.setTimeout(() => setAuditCopyStatus("idle"), 2000);
+    }
+  }
 
   return (
     <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
@@ -365,7 +431,8 @@ export default function DaaDashboardHistoryAudit() {
                       {fmtTime(r.createdAt)} <span style={{ color: "#bbb" }}>·</span> {r.runId}
                     </div>
                     <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>
-                      portfolio:{r.hasPortfolio ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> confirm:{r.hasConfirm ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> executed:{r.hasExecuted ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> audit:{r.auditCount}
+                      portfolio:{r.hasPortfolio ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> confirm:{r.hasConfirm ? "yes" : "no"}{" "}
+                      <span style={{ color: "#bbb" }}>·</span> executed:{r.hasExecuted ? "yes" : "no"} <span style={{ color: "#bbb" }}>·</span> audit:{r.auditCount}
                     </div>
                     <div style={{ fontSize: 12, color: "#666", marginTop: 3 }}>
                       actor:{String(r.actor ?? "")} <span style={{ color: "#bbb" }}>·</span> source:{String(r.source ?? "") || "-"}
@@ -436,9 +503,178 @@ export default function DaaDashboardHistoryAudit() {
 
                         <div>
                           <div style={{ fontWeight: 800, fontSize: 12 }}>Audit events</div>
-                          <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
-                            {pretty(bundle.audit)}
-                          </pre>
+                          <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                            Click a row to view payload + metadata (read-only). This never executes trades.
+                          </div>
+
+                          {Array.isArray(bundle.audit) && bundle.audit.length ? (
+                            <div style={{ marginTop: 8, border: "1px solid #eee", borderRadius: 10, overflow: "hidden" }}>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "160px 220px 1fr 90px",
+                                  gap: 8,
+                                  padding: "8px 10px",
+                                  background: "#fafafa",
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                <div>Time</div>
+                                <div>Kind</div>
+                                <div>Payload</div>
+                                <div />
+                              </div>
+
+                              {bundle.audit.map((e: any) => {
+                                const eventId = String(e?.eventId ?? "").trim();
+                                const createdAt = e?.createdAt;
+                                const kind = String(e?.kind ?? "").trim();
+                                const payloadSummary = summarizeAuditPayload(e?.payload);
+
+                                return (
+                                  <div
+                                    key={eventId || kind + "_" + String(createdAt ?? "")}
+                                    style={{
+                                      display: "grid",
+                                      gridTemplateColumns: "160px 220px 1fr 90px",
+                                      gap: 8,
+                                      padding: "8px 10px",
+                                      borderTop: "1px solid #eee",
+                                      fontSize: 12,
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <div style={{ color: "#444" }}>{fmtTime(createdAt)}</div>
+                                    <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{kind || "-"}</div>
+                                    <div style={{ color: "#666" }}>{payloadSummary || "-"}</div>
+                                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!eventId) return;
+                                          setSelectedAuditEventId(eventId);
+                                          setAuditModalOpen(true);
+                                          setAuditCopyStatus("idle");
+                                        }}
+                                        disabled={!eventId}
+                                        style={{
+                                          padding: "6px 10px",
+                                          borderRadius: 10,
+                                          border: "1px solid #e5e5e5",
+                                          background: "#fafafa",
+                                          fontSize: 12,
+                                        }}
+                                      >
+                                        Details
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
+                              {pretty(bundle.audit)}
+                            </pre>
+                          )}
+
+                          {auditModalOpen ? (
+                            <div
+                              role="dialog"
+                              aria-modal="true"
+                              onClick={() => setAuditModalOpen(false)}
+                              style={{
+                                position: "fixed",
+                                inset: 0,
+                                background: "rgba(0,0,0,0.4)",
+                                padding: 12,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                zIndex: 1000,
+                              }}
+                            >
+                              <div
+                                onClick={(ev) => ev.stopPropagation()}
+                                style={{
+                                  width: "min(980px, 96vw)",
+                                  maxHeight: "90vh",
+                                  overflow: "auto",
+                                  background: "#fff",
+                                  borderRadius: 12,
+                                  border: "1px solid #eee",
+                                  padding: 12,
+                                }}
+                              >
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+                                  <div style={{ fontWeight: 800, fontSize: 13 }}>Audit event details</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setAuditModalOpen(false)}
+                                    style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+
+                                {selectedAuditEvent ? (
+                                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                                    <div style={{ fontSize: 12, color: "#444" }}>
+                                      <div>
+                                        <b>kind</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{String((selectedAuditEvent as any)?.kind ?? "")}</span>
+                                      </div>
+                                      <div>
+                                        <b>createdAt</b>: {fmtTime((selectedAuditEvent as any)?.createdAt)}
+                                      </div>
+                                      <div>
+                                        <b>eventId</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{String((selectedAuditEvent as any)?.eventId ?? "")}</span>
+                                      </div>
+                                      <div>
+                                        <b>runId</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{String((selectedAuditEvent as any)?.runId ?? "")}</span>
+                                      </div>
+                                    </div>
+
+                                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => doCopyAudit(pretty((selectedAuditEvent as any)?.payload))}
+                                        style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", fontSize: 12 }}
+                                      >
+                                        {auditCopyStatus === "ok" ? "Copied" : auditCopyStatus === "error" ? "Copy failed" : "Copy payload JSON"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => doCopyAudit(pretty(selectedAuditEvent))}
+                                        style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+                                      >
+                                        Copy full event JSON
+                                      </button>
+                                    </div>
+
+                                    <div>
+                                      <div style={{ fontWeight: 800, fontSize: 12 }}>Payload</div>
+                                      <pre
+                                        style={{
+                                          marginTop: 6,
+                                          whiteSpace: "pre-wrap",
+                                          background: "#fafafa",
+                                          border: "1px solid #eee",
+                                          borderRadius: 10,
+                                          padding: 10,
+                                          fontSize: 12,
+                                        }}
+                                      >
+                                        {pretty((selectedAuditEvent as any)?.payload)}
+                                      </pre>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>No audit event selected.</div>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     ) : null}
