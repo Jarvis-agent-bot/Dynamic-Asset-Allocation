@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 type Props = {
   returnTo: string;
   error?: string;
+  notice?: string;
 };
 
 type PasswordFormErrors = {
@@ -124,7 +126,7 @@ function buildMailboxLinks(email: string): MailboxLink[] {
   return links;
 }
 
-export default function DaaLoginClient({ returnTo, error }: Props) {
+export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const emailLinkEmailId = useId();
   const passwordEmailId = useId();
   const passwordId = useId();
@@ -137,6 +139,24 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
   const emailLinkEmailRef = useRef<HTMLInputElement | null>(null);
 
   const safeReturnTo = useMemo(() => normalizeReturnTo(returnTo), [returnTo]);
+
+  useEffect(() => {
+    const n = String(notice || "").trim();
+    if (!n) return;
+
+    if (n === "session_expired") {
+      toast.error("Session expired. Please sign in again.");
+    }
+
+    // Avoid repeating the toast on refresh.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("notice");
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // Ignore URL parsing / history errors.
+    }
+  }, [notice]);
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
 
