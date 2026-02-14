@@ -23,6 +23,30 @@ function parseJson<T = unknown>(raw: string): T {
   return JSON.parse(raw) as T;
 }
 
+function deriveRunActorSourceV0(args: { kind: string; payload: unknown }): { actor: string; source: string } {
+  const kind = String(args.kind ?? "").trim();
+
+  let source = "";
+  let actor = "";
+
+  const p: any = args.payload as any;
+  if (p && typeof p === "object" && !Array.isArray(p)) {
+    source = String(p.source ?? "").trim();
+    actor = String(p.actor ?? "").trim();
+  }
+
+  if (!actor) {
+    const sourceLower = source.toLowerCase();
+    const kindLower = kind.toLowerCase();
+
+    if (sourceLower.includes("/daa/dashboard") || kindLower.includes("dashboard")) actor = "dashboard";
+    else if (sourceLower.includes("/daa/market/funds") || kindLower.includes("market-funds")) actor = "market-funds";
+    else actor = "unknown";
+  }
+
+  return { actor, source };
+}
+
 export type DaaRunRowV0 = {
   runId: string;
   createdAt: string;
@@ -60,13 +84,14 @@ export async function createDaaRunV0(args: {
 
   const runId = makeId("run");
   const payloadJson = safeJsonStringify(args.payload);
+  const { actor, source } = deriveRunActorSourceV0({ kind, payload: args.payload });
 
   await withDaaSqliteDbV0(async ({ db, markDirty }) => {
     const stmt = db.prepare(
-      "INSERT INTO daa_runs (run_id, created_at, kind, status, payload_json) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO daa_runs (run_id, created_at, kind, status, payload_json, actor, source) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
     try {
-      stmt.run([runId, createdAt, kind, status, payloadJson]);
+      stmt.run([runId, createdAt, kind, status, payloadJson, actor, source]);
     } finally {
       stmt.free();
     }
@@ -275,9 +300,6 @@ export async function listDaaRunsV0(args?: {
   const actorRaw = typeof args?.actor === "string" ? args?.actor.trim() : "";
   const actorFilter = actorRaw && actorRaw !== "all" ? actorRaw : "";
 
-  // We derive actor/source from run payload_json, so actor filtering happens in app code.
-  // To keep pagination usable, we overfetch a bit when actor filter is used.
-  const fetchLimit = actorFilter ? Math.min(2000, limit * 10) : limit;
 
   return withDaaSqliteDbV0(async ({ db }) => {
     let sql = `
@@ -287,6 +309,8 @@ export async function listDaaRunsV0(args?: {
         r.kind,
         r.status,
         r.payload_json,
+        r.actor,
+        r.source,
         CASE WHEN p.run_id IS NULL THEN 0 ELSE 1 END AS has_portfolio,
         CASE WHEN c.run_id IS NULL THEN 0 ELSE 1 END AS has_confirm,
         CASE WHEN e.run_id IS NULL THEN 0 ELSE 1 END AS has_executed,
@@ -310,6 +334,11 @@ export async function listDaaRunsV0(args?: {
       bind.push(toCreatedAt);
     }
 
+    if (actorFilter) {
+      where.push("r.actor = ?");
+      bind.push(actorFilter);
+    }
+
     if (beforeCreatedAt && beforeRunId) {
       where.push("(r.created_at < ? OR (r.created_at = ? AND r.run_id < ?))");
       bind.push(beforeCreatedAt, beforeCreatedAt, beforeRunId);
@@ -323,7 +352,7 @@ export async function listDaaRunsV0(args?: {
     }
 
     sql += " ORDER BY r.created_at DESC, r.run_id DESC LIMIT ?";
-    bind.push(fetchLimit);
+    bind.push(limit);
 
     const stmt = db.prepare(sql);
     try {
@@ -334,32 +363,26 @@ export async function listDaaRunsV0(args?: {
         const kind = String((row as any).kind ?? "");
         const payloadJson = String((row as any).payload_json ?? "");
 
-        let source = "";
-        let actor = "unknown";
+        let source = String((row as any).source ?? "").trim();
+        let actor = String((row as any).actor ?? "").trim();
 
-        if (payloadJson) {
-          try {
-            const payload: any = parseJson(payloadJson) as any;
-            if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-              source = String(payload.source ?? "").trim();
-              const actorRaw2 = String(payload.actor ?? "").trim();
-              if (actorRaw2) actor = actorRaw2;
+        // Backward-compat: for old rows / partial migrations, derive actor/source from payload_json or heuristics.
+        if (!source || !actor) {
+          let payload: any = null;
+          if (payloadJson) {
+            try {
+              payload = parseJson(payloadJson) as any;
+            } catch {
+              payload = null;
             }
-          } catch {
-            // Ignore invalid payload_json; keep actor/source empty.
           }
+
+          const derived = deriveRunActorSourceV0({ kind, payload: payload ?? { source, actor } });
+          if (!source) source = derived.source;
+          if (!actor) actor = derived.actor;
         }
 
-        const sourceLower = source.toLowerCase();
-        const kindLower = kind.toLowerCase();
-        if (actor === "unknown") {
-          if (sourceLower.includes("/daa/dashboard") || kindLower.includes("dashboard")) actor = "dashboard";
-          else if (sourceLower.includes("/daa/market/funds") || kindLower.includes("market-funds")) actor = "market-funds";
-        }
-
-        if (actorFilter && actor !== actorFilter) {
-          continue;
-        }
+        if (!actor) actor = "unknown";
 
         out.push({
           runId: String((row as any).run_id ?? ""),
