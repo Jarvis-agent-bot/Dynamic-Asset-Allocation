@@ -15,6 +15,7 @@ import DaaDashboardExport from "../_components/DaaDashboardExport";
 import DaaDashboardImport from "../_components/DaaDashboardImport";
 import DaaDashboardRunChecklist from "../_components/DaaDashboardRunChecklist";
 import DaaDashboardBacktestDriftRebalance from "../_components/DaaDashboardBacktestDriftRebalance";
+import DaaDashboardConfirmExecuted from "../_components/DaaDashboardConfirmExecuted";
 
 import DaaMarketFundsTab from "../_tabs/DaaMarketFundsTab";
 
@@ -81,6 +82,13 @@ function DashboardMain() {
           </button>
           <button
             type="button"
+            onClick={() => scrollToId("confirm-executed")}
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+          >
+            Confirm/Executed
+          </button>
+          <button
+            type="button"
             onClick={() => scrollToId("backtest")}
             style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
           >
@@ -132,6 +140,10 @@ function DashboardMain() {
 
       <div id="export" style={{ marginTop: 14, scrollMarginTop: 12 }}>
         <DaaDashboardExport />
+      </div>
+
+      <div id="confirm-executed" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+        <DaaDashboardConfirmExecuted />
       </div>
 
       <div id="backtest" style={{ marginTop: 14, scrollMarginTop: 12 }}>
