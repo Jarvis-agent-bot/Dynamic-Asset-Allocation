@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { buildDaaAdminAuthHeadersV0 } from "../../adminTokenStore";
+import { copyTextToClipboard } from "../../copyToClipboard";
 
 type AdminUserV0 = {
   id: "viewer-token" | "editor-token" | "legacy-token";
@@ -113,6 +114,8 @@ export default function DaaDashboardAdminUsers() {
   const [mutating, setMutating] = useState<AdminUserV0["id"] | null>(null);
   const [mutateError, setMutateError] = useState<string>("");
 
+  const [toast, setToast] = useState<{ kind: "ok" | "error"; message: string; updatedAtMs: number } | null>(null);
+
   const [query, setQuery] = useState<string>("");
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -181,6 +184,12 @@ export default function DaaDashboardAdminUsers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
   const selectedUser = useMemo(() => {
     if (!data || !selectedId) return null;
     return data.users.find((u) => u.id === selectedId) ?? null;
@@ -206,6 +215,15 @@ export default function DaaDashboardAdminUsers() {
 
   const totalUsers = data?.users?.length ?? 0;
   const visibleUsers = filteredSortedUsers.length;
+
+  async function copyUserId(id: AdminUserV0["id"]) {
+    try {
+      await copyTextToClipboard(id);
+      setToast({ kind: "ok", message: `Copied user id: ${id}`, updatedAtMs: Date.now() });
+    } catch (e: any) {
+      setToast({ kind: "error", message: `Copy failed: ${String(e?.message || e)}`, updatedAtMs: Date.now() });
+    }
+  }
 
   function toggleSort(nextKey: SortKey) {
     if (nextKey === sortKey) {
@@ -308,7 +326,7 @@ export default function DaaDashboardAdminUsers() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "220px 120px 140px 80px 170px",
+            gridTemplateColumns: "220px 120px 140px 80px 240px",
             gap: 8,
             padding: "8px 10px",
             background: "#fafafa",
@@ -417,7 +435,7 @@ export default function DaaDashboardAdminUsers() {
               key={u.id}
               style={{
                 display: "grid",
-                gridTemplateColumns: "220px 120px 140px 80px 170px",
+                gridTemplateColumns: "220px 120px 140px 80px 240px",
                 gap: 8,
                 padding: "8px 10px",
                 borderTop: "1px solid #eee",
@@ -464,6 +482,14 @@ export default function DaaDashboardAdminUsers() {
 
                 <button
                   type="button"
+                  onClick={() => void copyUserId(u.id)}
+                  style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+                >
+                  Copy ID
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => {
                     setSelectedId(u.id);
                     setDrawerOpen(true);
@@ -485,6 +511,31 @@ export default function DaaDashboardAdminUsers() {
       <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
         Note: last login is not tracked yet; this view surfaces role/configuration status only.
       </div>
+
+      {toast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            zIndex: 1100,
+            maxWidth: "min(520px, 92vw)",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: toast.kind === "ok" ? "1px solid rgba(16, 185, 129, 0.35)" : "1px solid rgba(239, 68, 68, 0.45)",
+            background: toast.kind === "ok" ? "rgba(236, 253, 245, 0.98)" : "rgba(254, 242, 242, 0.98)",
+            color: toast.kind === "ok" ? "#065f46" : "#7f1d1d",
+            fontSize: 12,
+            boxShadow: "0 8px 30px rgba(0,0,0,0.15)",
+          }}
+          onClick={() => setToast(null)}
+          title="Click to dismiss"
+        >
+          {toast.message}
+        </div>
+      ) : null}
 
       {drawerOpen ? (
         <div
@@ -525,8 +576,17 @@ export default function DaaDashboardAdminUsers() {
             {selectedUser ? (
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
                 <div style={{ fontSize: 12, color: "#444" }}>
-                  <div>
-                    <b>id</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{selectedUser.id}</span>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <b>id</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{selectedUser.id}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void copyUserId(selectedUser.id)}
+                      style={{ padding: "4px 8px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+                    >
+                      Copy id
+                    </button>
                   </div>
                   <div>
                     <b>role</b>: {selectedUser.role}
