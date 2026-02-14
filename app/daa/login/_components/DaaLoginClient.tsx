@@ -1,12 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
 type Props = {
   returnTo: string;
 };
 
 export default function DaaLoginClient({ returnTo }: Props) {
+  const usernameId = useId();
+  const passwordId = useId();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,60 +54,66 @@ export default function DaaLoginClient({ returnTo }: Props) {
   }
 
   return (
-    <div style={{ maxWidth: 420 }}>
-      <h1 style={{ fontSize: 18, margin: 0 }}>DAA Login</h1>
-      <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>Sign in to access the /daa/dashboard console.</div>
+    <div className="mx-auto w-full max-w-md">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl">DAA Login</CardTitle>
+          <CardDescription>Sign in to access the /daa/dashboard console.</CardDescription>
+        </CardHeader>
 
-      <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 700 }}>Username</div>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            style={{ padding: "10px 12px", border: "1px solid #e5e5e5", borderRadius: 10, fontSize: 13 }}
-            placeholder="admin"
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 700 }}>Password</div>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            style={{ padding: "10px 12px", border: "1px solid #e5e5e5", borderRadius: 10, fontSize: 13 }}
-            placeholder="••••••••"
-          />
-        </label>
-
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void submit()}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #111",
-            background: "#111",
-            color: "#fff",
-            fontSize: 13,
-            fontWeight: 700,
-          }}
-        >
-          {busy ? "Signing in..." : "Sign in"}
-        </button>
-
-        {error ? (
-          <div style={{ fontSize: 12, color: "#a8071a" }}>
-            Login failed: {error}
-            <div style={{ marginTop: 6, color: "#666" }}>
-              If this is a fresh deployment, create an account via <code>/api/daa/auth/bootstrap</code> (admin-only).
+        <CardContent>
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
+            <div className="grid gap-2">
+              <label htmlFor={usernameId} className="text-sm font-medium">
+                Username
+              </label>
+              <Input
+                id={usernameId}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                placeholder="admin"
+                disabled={busy}
+              />
             </div>
-          </div>
-        ) : null}
-      </div>
+
+            <div className="grid gap-2">
+              <label htmlFor={passwordId} className="text-sm font-medium">
+                Password
+              </label>
+              <Input
+                id={passwordId}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                disabled={busy}
+              />
+            </div>
+
+            <Button type="submit" disabled={busy}>
+              {busy ? "Signing in..." : "Sign in"}
+            </Button>
+
+            {error ? (
+              <div role="alert" className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                <div>Login failed: {error}</div>
+                <div className="text-xs text-muted-foreground">
+                  If this is a fresh deployment, create an account via{" "}
+                  <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (admin-only).
+                </div>
+              </div>
+            ) : null}
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
