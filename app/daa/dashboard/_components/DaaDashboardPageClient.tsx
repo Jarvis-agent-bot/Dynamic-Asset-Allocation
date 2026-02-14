@@ -70,8 +70,6 @@ function DashboardMain() {
         <DaaDashboardOverviewCards />
       </div>
 
-      </div>
-
       <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
         <div style={{ fontWeight: 800, fontSize: 13 }}>Quick nav</div>
         <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
