@@ -119,6 +119,30 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
     };
   }, []);
 
+  // Allow deep-linking a run card from elsewhere in the Funds hub UI.
+  // Example: #dyn-run-rebalance_run_<uuid>
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const applyHash = () => {
+      const h = String(window.location.hash ?? '');
+      if (!h.startsWith('#dyn-run-')) return;
+
+      const runId = decodeURIComponent(h.slice('#dyn-run-'.length));
+      if (!runId) return;
+
+      // Ensure defaults so the targeted run is likely visible.
+      setStateFilter('all');
+      setOrderFilter('any');
+      setLimit((v) => Math.max(v, 20));
+      setExpanded((m) => ({ ...m, [runId]: true }));
+    };
+
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
+
   const all = useMemo(() => {
     if (typeof window === 'undefined') return [] as RebalanceOrderStatusRunV0[];
     // Best-effort history stored in localStorage.
@@ -286,7 +310,7 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
             const badgeBg = run.state === 'done' ? '#0a7' : run.state === 'error' ? '#b91c1c' : '#666';
 
             return (
-              <div key={key} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10 }}>
+              <div key={key} id={`dyn-run-${run.runId}`} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' as const }}>
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: badgeBg, color: '#fff' }}>

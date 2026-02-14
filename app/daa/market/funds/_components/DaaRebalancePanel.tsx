@@ -78,6 +78,7 @@ import DaaDynamicRebalanceRunHistoryV0 from './DaaDynamicRebalanceRunHistoryV0';
 import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
 import { DaaRebalanceRunProgressV0 } from './DaaRebalanceRunProgressV0';
+import { DaaDynamicRebalanceRunCompletionToastV0 } from './DaaDynamicRebalanceRunCompletionToastV0';
 import { DaaOrderStatusTrackerV0 } from './DaaOrderStatusTrackerV0';
 
 type FundLike = {
@@ -3503,6 +3504,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             </div>
 
             <DaaRebalanceRunProgressV0 pollMs={paperRunLoading ? 250 : 750} />
+            <DaaDynamicRebalanceRunCompletionToastV0 pollMs={paperRunLoading ? 250 : 750} />
 
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
               Current = holdings × (manual price or estGsz/gsz/dwjz) + cash; Target = manual targetWeights (if configured) else engine targetWeights/money_plan.allocations; Orders = engine orders or naive diff.
