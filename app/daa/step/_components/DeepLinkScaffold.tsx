@@ -35,7 +35,7 @@ export function DeepLinkScaffold({ stepId, children }: { stepId: number; childre
             <Link href="/daa/dashboard" style={{ color: "#111", fontSize: 12 }}>
               Dashboard
             </Link>
-            <Link href={`/daa?step=${stepId}`} style={{ color: "#111", fontSize: 12 }}>
+            <Link href={`/daa/dashboard?tab=wizard&step=${stepId}`} style={{ color: "#111", fontSize: 12 }}>
               Open in Wizard
             </Link>
           </div>
@@ -47,7 +47,7 @@ export function DeepLinkScaffold({ stepId, children }: { stepId: number; childre
         {rt.nextStepId ? (
           <div style={{ marginTop: 8 }}>
             <Link
-              href={`/daa?step=${rt.nextStepId}`}
+              href={`/daa/dashboard?tab=wizard&step=${rt.nextStepId}`}
               style={{
                 display: "inline-block",
                 padding: "6px 10px",
@@ -65,7 +65,7 @@ export function DeepLinkScaffold({ stepId, children }: { stepId: number; childre
         ) : null}
 
         <div style={{ marginTop: 8, fontSize: 11, color: "#888" }}>
-          Canonical: <code>/daa?step={stepId}</code> · Permalink: <code>/daa/step/{stepId}</code>
+          Canonical: <code>/daa/dashboard?tab=wizard&amp;step={stepId}</code> · Legacy permalink: <code>/daa/step/{stepId}</code>
         </div>
       </section>
 
@@ -81,14 +81,14 @@ export function DeepLinkScaffold({ stepId, children }: { stepId: number; childre
         </Link>
         <span style={{ color: "#999" }}>|</span>
         {prev ? (
-          <Link href={`/daa?step=${prev.id}`} style={{ color: "#111" }}>
+          <Link href={`/daa/dashboard?tab=wizard&step=${prev.id}`} style={{ color: "#111" }}>
             ← {prev.title}
           </Link>
         ) : (
           <span style={{ color: "#bbb" }}>← 上一步</span>
         )}
         {next ? (
-          <Link href={`/daa?step=${next.id}`} style={{ color: "#111" }}>
+          <Link href={`/daa/dashboard?tab=wizard&step=${next.id}`} style={{ color: "#111" }}>
             {next.title} →
           </Link>
         ) : (

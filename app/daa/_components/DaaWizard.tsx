@@ -61,15 +61,16 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
   }, [activeStepId]);
 
   useEffect(() => {
-    // If user lands on /daa/ without a ?step=, restore last used step.
-    if (pathname !== "/daa") return;
+    // If user lands on the wizard tab without a ?step=, restore last used step.
+    const isWizardTab = pathname === "/daa/dashboard" && searchParams.get("tab") === "wizard";
+    if (!isWizardTab) return;
     if (searchParams.get("step")) return;
 
     try {
       const raw = window.localStorage.getItem(LS_ACTIVE_STEP);
       const restored = clampStepId(parseStepParam(raw));
       if (restored !== activeStepId) {
-        router.replace(`/daa?step=${restored}`);
+        router.replace(`/daa/dashboard?tab=wizard&step=${restored}`);
       }
     } catch {
       // ignore
@@ -86,7 +87,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
   function go(stepId: number) {
     const next = clampStepId(stepId);
     setActiveStepId(next);
-    router.push(`/daa?step=${next}`);
+    router.push(`/daa/dashboard?tab=wizard&step=${next}`);
     // Keep the UX feeling like "one page".
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -99,7 +100,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>DAA Wizard（v0）</h1>
           <p style={{ margin: "6px 0 0", color: "#444" }}>
-            同一页面内串联 Step1-7；支持 Next/Back；canonical URL 为 <code>/daa?step=...</code>（dashboard-first）。
+            同一页面内串联 Step1-7；支持 Next/Back；canonical URL 为 <code>/daa/dashboard?tab=wizard&step=...</code>。
           </p>
         </div>
 

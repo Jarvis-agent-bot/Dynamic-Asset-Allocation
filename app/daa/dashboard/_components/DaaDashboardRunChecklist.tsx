@@ -79,7 +79,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12 }}>
-          <Link href="/daa?step=1" style={{ color: "#111" }}>
+          <Link href="/daa/dashboard?tab=wizard&step=1" style={{ color: "#111" }}>
             Open Wizard
           </Link>
         </div>
@@ -94,7 +94,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <Badge tone={rt.marketEventCount ? "ok" : "missing"} text={rt.marketEventCount ? `OK: ${rt.marketEventCount}` : "missing"} />
             <JumpButton onClick={() => onJump("step2")}>Go</JumpButton>
-            <Link href="/daa?step=2" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa/dashboard?tab=wizard&step=2" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -108,7 +108,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <Badge tone={rt.hasRecommendation ? "ok" : "missing"} text={rt.hasRecommendation ? "OK" : "missing"} />
             <JumpButton onClick={() => onJump("step4")}>Go</JumpButton>
-            <Link href="/daa?step=4" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa/dashboard?tab=wizard&step=4" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -125,7 +125,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
               text={step5Blocked ? "blocked" : step5Done ? `OK: citations ${rt.citationsCount}` : "waiting"}
             />
             <JumpButton onClick={() => onJump("step5")}>Go</JumpButton>
-            <Link href="/daa?step=5" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa/dashboard?tab=wizard&step=5" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -139,7 +139,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <Badge tone={rt.hasHumanProfile ? "ok" : "missing"} text={rt.hasHumanProfile ? "OK" : "missing"} />
             <JumpButton onClick={() => onJump("step6")}>Go</JumpButton>
-            <Link href="/daa?step=6" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa/dashboard?tab=wizard&step=6" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
@@ -153,7 +153,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <Badge tone={step7Badge.tone} text={step7Badge.text} />
             <JumpButton onClick={() => onJump("step7")}>Go</JumpButton>
-            <Link href="/daa?step=7" style={{ color: "#111", fontSize: 12 }}>
+            <Link href="/daa/dashboard?tab=wizard&step=7" style={{ color: "#111", fontSize: 12 }}>
               Open
             </Link>
           </div>
