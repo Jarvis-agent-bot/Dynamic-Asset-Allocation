@@ -3,6 +3,8 @@ import type React from "react";
 
 import { Button } from "@/components/ui/button";
 
+import DaaUserMenuDialog from "./DaaUserMenuDialog";
+
 type Props = {
   children: React.ReactNode;
 };
@@ -19,17 +21,21 @@ export default function DaaShell({ children }: Props) {
             <div className="text-xs text-muted-foreground sm:text-sm">Console — dashboard-first</div>
           </div>
 
-          <nav className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/daa/dashboard">Dashboard</Link>
-            </Button>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/daa/dashboard?tab=wizard&step=1">Wizard</Link>
-            </Button>
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
-            </Button>
-          </nav>
+          <div className="flex flex-wrap items-center gap-2">
+            <nav className="flex flex-wrap items-center gap-2">
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/daa/dashboard">Dashboard</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/daa/dashboard?tab=wizard&step=1">Wizard</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
+              </Button>
+            </nav>
+
+            <DaaUserMenuDialog />
+          </div>
         </div>
       </header>
 

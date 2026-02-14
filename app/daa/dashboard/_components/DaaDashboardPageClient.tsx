@@ -20,7 +20,6 @@ import DaaDashboardHistoryAudit from "../_components/DaaDashboardHistoryAudit";
 import DaaDashboardAdminUsers from "../_components/DaaDashboardAdminUsers";
 
 import DaaMarketFundsTab from "../_tabs/DaaMarketFundsTab";
-import DaaSessionBanner from "./DaaSessionBanner";
 
 type Tab = "dashboard" | "wizard" | "market-funds";
 
@@ -219,10 +218,5 @@ export default function DaaDashboardPageClient() {
       <DashboardMain />
     );
 
-  return (
-    <div className="space-y-4">
-      <DaaSessionBanner />
-      {content}
-    </div>
-  );
+  return <div className="space-y-4">{content}</div>;
 }
