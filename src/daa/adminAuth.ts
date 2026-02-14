@@ -2,6 +2,34 @@ import { NextResponse } from "next/server";
 
 export type DaaAdminRole = "viewer" | "editor";
 
+export type DaaAdminTokenKindV0 = "legacy" | "viewer" | "editor" | "unknown" | "none";
+
+export function getDaaAdminTokensConfiguredV0() {
+  const legacy = normalizeToken(process.env.DAA_ADMIN_TOKEN);
+  const viewer = normalizeToken(process.env.DAA_ADMIN_VIEWER_TOKEN);
+  const editor = normalizeToken(process.env.DAA_ADMIN_EDITOR_TOKEN);
+
+  return { legacy: Boolean(legacy), viewer: Boolean(viewer), editor: Boolean(editor) };
+}
+
+export function inferDaaAdminTokenKindV0(providedToken: string | null | undefined): DaaAdminTokenKindV0 {
+  const t = normalizeToken(providedToken);
+  if (!t) return "none";
+
+  const { legacy, viewer, editor } = getAdminTokens();
+  if (legacy && t === legacy) return "legacy";
+  if (editor && t === editor) return "editor";
+  if (viewer && t === viewer) return "viewer";
+  return "unknown";
+}
+
+export function inferDaaAdminRoleForTokenV0(providedToken: string | null | undefined): DaaAdminRole | null {
+  const kind = inferDaaAdminTokenKindV0(providedToken);
+  if (kind === "viewer") return "viewer";
+  if (kind === "editor" || kind === "legacy") return "editor";
+  return null;
+}
+
 function normalizeToken(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
