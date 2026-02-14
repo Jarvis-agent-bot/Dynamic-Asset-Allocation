@@ -217,3 +217,108 @@ export function buildDynamicRebalanceRunAllocationsCsvV0(args: {
 
   return toCsv(lines);
 }
+
+function tryAttachReasonsToRunOrders(args: {
+  runOrders: RebalanceOrderStatusRunV0["orders"];
+  coreOrders: RebalanceLogEntryV0["orders"];
+}): { reasonByIdx: Map<number, string> } {
+  const reasonByIdx = new Map<number, string>();
+
+  // Fast path: 1:1 positional match (most common).
+  if (args.coreOrders.length === args.runOrders.length) {
+    for (let i = 0; i < args.runOrders.length; i++) {
+      const reason = args.coreOrders[i]?.reason;
+      if (typeof reason === "string" && reason.trim()) reasonByIdx.set(i, reason);
+    }
+    return { reasonByIdx };
+  }
+
+  // Best-effort match: (symbol, side) then closest notional.
+  const used = new Set<number>();
+  for (let i = 0; i < args.runOrders.length; i++) {
+    const o = args.runOrders[i];
+    if (!o) continue;
+
+    let bestIdx = -1;
+    let bestDiff = Number.POSITIVE_INFINITY;
+
+    for (let j = 0; j < args.coreOrders.length; j++) {
+      if (used.has(j)) continue;
+      const c = args.coreOrders[j];
+      if (!c) continue;
+      if (String(c.symbol) !== String(o.symbol)) continue;
+      if (String(c.side) !== String(o.side)) continue;
+
+      const diff = Math.abs(Number(c.notional) - Number(o.notional));
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = j;
+      }
+    }
+
+    if (bestIdx >= 0) {
+      used.add(bestIdx);
+      const reason = args.coreOrders[bestIdx]?.reason;
+      if (typeof reason === "string" && reason.trim()) reasonByIdx.set(i, reason);
+    }
+  }
+
+  return { reasonByIdx };
+}
+
+export function buildDynamicRebalanceRunAuditLogCsvV0(args: {
+  run: RebalanceOrderStatusRunV0;
+  coreLogEntry?: RebalanceLogEntryV0 | null;
+}): string {
+  const run = args.run;
+  const runOrders = Array.isArray(run?.orders) ? run.orders : [];
+  const coreOrders = Array.isArray(args.coreLogEntry?.orders) ? args.coreLogEntry!.orders : [];
+  const reasonByIdx = tryAttachReasonsToRunOrders({ runOrders, coreOrders }).reasonByIdx;
+
+  const lines: unknown[][] = [
+    [
+      "runId",
+      "runCreatedAt",
+      "runUpdatedAt",
+      "runState",
+      "runPhase",
+      "coreLoggedAt",
+      "orderId",
+      "symbol",
+      "side",
+      "notional",
+      "reason",
+      "status",
+      "orderUpdatedAt",
+      "filledNotional",
+      "fillPct01",
+      "detail",
+    ],
+  ];
+
+  const coreAt = args.coreLogEntry?.at ?? "";
+
+  for (let i = 0; i < runOrders.length; i++) {
+    const o = runOrders[i];
+    lines.push([
+      run.runId,
+      run.createdAt,
+      run.updatedAt,
+      run.state,
+      run.phase,
+      coreAt,
+      o.id,
+      o.symbol,
+      o.side,
+      o.notional,
+      reasonByIdx.get(i) ?? "",
+      o.status,
+      o.updatedAt,
+      o.filledNotional ?? "",
+      o.fillPct01 ?? "",
+      o.detail ?? "",
+    ]);
+  }
+
+  return toCsv(lines);
+}

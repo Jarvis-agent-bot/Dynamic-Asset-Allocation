@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { loadPaperExecutionLog, type PaperExecutionLogEntryV0 } from '@/src/daa/executionLogStore';
+import { buildDynamicRebalanceRunAuditLogCsvV0 } from '@/src/daa/dynamicRebalanceRunExportV0';
 import { buildRebalanceOrderReceiptsV1 } from '@/src/daa/rebalanceOrderReceiptsExportV1';
 import { buildLatestRebalanceRunReportV1 } from '@/src/daa/rebalanceReportExport';
 import { encodeRebalanceRunReportToShareToken } from '@/src/daa/rebalanceRunShareCodec';
@@ -384,22 +385,41 @@ export default function DaaRebalanceLogViewV0() {
                     </button>
 
                     {statusRun ? (
-                      <button
-                        type="button"
-                        className="button secondary"
-                        onClick={() => {
-                          const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-                          const receipts = buildRebalanceOrderReceiptsV1({ run: statusRun });
-                          downloadTextAsFile({
-                            filename: `daa-order-receipts-${statusRun.runId.slice(0, 8)}-${stamp}.json`,
-                            text: pretty(receipts),
-                            mime: 'application/json',
-                          });
-                        }}
-                        style={{ padding: '6px 10px' }}
-                      >
-                        Export receipts
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => {
+                            const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                            const receipts = buildRebalanceOrderReceiptsV1({ run: statusRun });
+                            downloadTextAsFile({
+                              filename: `daa-order-receipts-${statusRun.runId.slice(0, 8)}-${stamp}.json`,
+                              text: pretty(receipts),
+                              mime: 'application/json',
+                            });
+                          }}
+                          style={{ padding: '6px 10px' }}
+                        >
+                          Export receipts
+                        </button>
+
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => {
+                            const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                            const csv = buildDynamicRebalanceRunAuditLogCsvV0({ run: statusRun, coreLogEntry: e });
+                            downloadTextAsFile({
+                              filename: `daa-dynamic-rebalance-audit-${statusRun.runId.slice(0, 8)}-${stamp}.csv`,
+                              text: csv,
+                              mime: 'text/csv',
+                            });
+                          }}
+                          style={{ padding: '6px 10px' }}
+                        >
+                          Export audit CSV
+                        </button>
+                      </>
                     ) : null}
 
                     <button type="button" className="button" onClick={() => setExpanded((m) => ({ ...m, [e.id]: !isOpen }))} style={{ padding: '6px 10px' }}>
