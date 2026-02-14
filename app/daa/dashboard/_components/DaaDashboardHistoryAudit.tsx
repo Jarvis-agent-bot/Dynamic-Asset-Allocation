@@ -665,7 +665,7 @@ export default function DaaDashboardHistoryAudit() {
                 Create the first run in the "Confirm/Executed" section (save snapshot + confirm). This view is read-only and never executes trades.
               </div>
               <div className="mt-3">
-                <Button type="button" variant="outline" size="sm" onClick={() => loadRuns("reset")} disabled={runsStatus === "loading"}>
+                <Button type="button" variant="outline" size="sm" onClick={() => loadRuns("reset")}>
                   Refresh
                 </Button>
               </div>

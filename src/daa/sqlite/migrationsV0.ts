@@ -171,4 +171,31 @@ export const DAA_SQLITE_MIGRATIONS_V0: SqliteMigrationV0[] = [
         ON daa_auth_sessions(revoked_at);
     `,
   },
+
+  // v6: email login tokens (passwordless magic link) for dashboard auth.
+  {
+    id: "0007_auth_email_login_tokens",
+    sql: `
+      CREATE TABLE IF NOT EXISTS daa_auth_email_login_tokens (
+        token_id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        token_sha256 TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        user_agent TEXT,
+        ip TEXT,
+        FOREIGN KEY(account_id) REFERENCES daa_auth_accounts(account_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_daa_auth_email_login_tokens_account_created_at
+        ON daa_auth_email_login_tokens(account_id, created_at);
+
+      CREATE INDEX IF NOT EXISTS idx_daa_auth_email_login_tokens_expires_at
+        ON daa_auth_email_login_tokens(expires_at);
+
+      CREATE INDEX IF NOT EXISTS idx_daa_auth_email_login_tokens_used_at
+        ON daa_auth_email_login_tokens(used_at);
+    `,
+  },
 ];

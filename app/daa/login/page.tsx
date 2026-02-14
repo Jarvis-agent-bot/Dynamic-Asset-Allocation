@@ -1,8 +1,11 @@
 import DaaLoginClient from "./_components/DaaLoginClient";
 
 export default function DaaLoginPage(props: { searchParams?: Record<string, string | string[] | undefined> }) {
-  const raw = props?.searchParams?.returnTo;
-  const returnTo = typeof raw === "string" ? raw.trim() : "";
+  const rawReturnTo = props?.searchParams?.returnTo;
+  const returnTo = typeof rawReturnTo === "string" ? rawReturnTo.trim() : "";
 
-  return <DaaLoginClient returnTo={returnTo || "/daa/dashboard"} />;
+  const rawError = props?.searchParams?.error;
+  const error = typeof rawError === "string" ? rawError.trim() : "";
+
+  return <DaaLoginClient returnTo={returnTo || "/daa/dashboard"} error={error} />;
 }
