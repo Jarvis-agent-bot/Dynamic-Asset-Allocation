@@ -247,6 +247,8 @@ export type DaaRunListRowV0 = {
   createdAt: string;
   kind: string;
   status: string;
+  source: string;
+  actor: string;
   hasPortfolio: boolean;
   hasConfirm: boolean;
   hasExecuted: boolean;
@@ -257,12 +259,25 @@ export async function listDaaRunsV0(args?: {
   limit?: number;
   beforeCreatedAt?: string;
   beforeRunId?: string;
+  fromCreatedAt?: string;
+  toCreatedAt?: string;
+  actor?: string;
 }): Promise<DaaRunListRowV0[]> {
   const limitRaw = args?.limit;
   const limit = Math.max(1, Math.min(200, Number.isFinite(Number(limitRaw)) ? Math.trunc(Number(limitRaw)) : 50));
 
   const beforeCreatedAt = typeof args?.beforeCreatedAt === "string" ? args?.beforeCreatedAt.trim() : "";
   const beforeRunId = typeof args?.beforeRunId === "string" ? args?.beforeRunId.trim() : "";
+
+  const fromCreatedAt = typeof args?.fromCreatedAt === "string" ? args?.fromCreatedAt.trim() : "";
+  const toCreatedAt = typeof args?.toCreatedAt === "string" ? args?.toCreatedAt.trim() : "";
+
+  const actorRaw = typeof args?.actor === "string" ? args?.actor.trim() : "";
+  const actorFilter = actorRaw && actorRaw !== "all" ? actorRaw : "";
+
+  // We derive actor/source from run payload_json, so actor filtering happens in app code.
+  // To keep pagination usable, we overfetch a bit when actor filter is used.
+  const fetchLimit = actorFilter ? Math.min(2000, limit * 10) : limit;
 
   return withDaaSqliteDbV0(async ({ db }) => {
     let sql = `
@@ -271,6 +286,7 @@ export async function listDaaRunsV0(args?: {
         r.created_at,
         r.kind,
         r.status,
+        r.payload_json,
         CASE WHEN p.run_id IS NULL THEN 0 ELSE 1 END AS has_portfolio,
         CASE WHEN c.run_id IS NULL THEN 0 ELSE 1 END AS has_confirm,
         CASE WHEN e.run_id IS NULL THEN 0 ELSE 1 END AS has_executed,
@@ -282,17 +298,32 @@ export async function listDaaRunsV0(args?: {
     `.trim();
 
     const bind: any[] = [];
+    const where: string[] = [];
+
+    if (fromCreatedAt) {
+      where.push("r.created_at >= ?");
+      bind.push(fromCreatedAt);
+    }
+
+    if (toCreatedAt) {
+      where.push("r.created_at <= ?");
+      bind.push(toCreatedAt);
+    }
 
     if (beforeCreatedAt && beforeRunId) {
-      sql += " WHERE (r.created_at < ? OR (r.created_at = ? AND r.run_id < ?))";
+      where.push("(r.created_at < ? OR (r.created_at = ? AND r.run_id < ?))");
       bind.push(beforeCreatedAt, beforeCreatedAt, beforeRunId);
     } else if (beforeCreatedAt) {
-      sql += " WHERE r.created_at < ?";
+      where.push("r.created_at < ?");
       bind.push(beforeCreatedAt);
     }
 
+    if (where.length) {
+      sql += ` WHERE ${where.join(" AND ")}`;
+    }
+
     sql += " ORDER BY r.created_at DESC, r.run_id DESC LIMIT ?";
-    bind.push(limit);
+    bind.push(fetchLimit);
 
     const stmt = db.prepare(sql);
     try {
@@ -300,16 +331,50 @@ export async function listDaaRunsV0(args?: {
       const out: DaaRunListRowV0[] = [];
       while (stmt.step()) {
         const row = stmt.getAsObject();
+        const kind = String((row as any).kind ?? "");
+        const payloadJson = String((row as any).payload_json ?? "");
+
+        let source = "";
+        let actor = "unknown";
+
+        if (payloadJson) {
+          try {
+            const payload: any = parseJson(payloadJson) as any;
+            if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+              source = String(payload.source ?? "").trim();
+              const actorRaw2 = String(payload.actor ?? "").trim();
+              if (actorRaw2) actor = actorRaw2;
+            }
+          } catch {
+            // Ignore invalid payload_json; keep actor/source empty.
+          }
+        }
+
+        const sourceLower = source.toLowerCase();
+        const kindLower = kind.toLowerCase();
+        if (actor === "unknown") {
+          if (sourceLower.includes("/daa/dashboard") || kindLower.includes("dashboard")) actor = "dashboard";
+          else if (sourceLower.includes("/daa/market/funds") || kindLower.includes("market-funds")) actor = "market-funds";
+        }
+
+        if (actorFilter && actor !== actorFilter) {
+          continue;
+        }
+
         out.push({
           runId: String((row as any).run_id ?? ""),
           createdAt: String((row as any).created_at ?? ""),
-          kind: String((row as any).kind ?? ""),
+          kind,
           status: String((row as any).status ?? ""),
+          source,
+          actor,
           hasPortfolio: Number((row as any).has_portfolio ?? 0) > 0,
           hasConfirm: Number((row as any).has_confirm ?? 0) > 0,
           hasExecuted: Number((row as any).has_executed ?? 0) > 0,
           auditCount: Number((row as any).audit_count ?? 0) || 0,
         });
+
+        if (out.length >= limit) break;
       }
       return out;
     } finally {

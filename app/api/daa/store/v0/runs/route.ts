@@ -14,8 +14,13 @@ export async function GET(req: Request) {
   const beforeCreatedAt = String(url.searchParams.get("beforeCreatedAt") ?? "").trim() || undefined;
   const beforeRunId = String(url.searchParams.get("beforeRunId") ?? "").trim() || undefined;
 
+  // Optional filters for the dashboard audit list.
+  const fromCreatedAt = String(url.searchParams.get("fromCreatedAt") ?? "").trim() || undefined;
+  const toCreatedAt = String(url.searchParams.get("toCreatedAt") ?? "").trim() || undefined;
+  const actor = String(url.searchParams.get("actor") ?? "").trim() || undefined;
+
   try {
-    const runs = await listDaaRunsV0({ limit, beforeCreatedAt, beforeRunId });
+    const runs = await listDaaRunsV0({ limit, beforeCreatedAt, beforeRunId, fromCreatedAt, toCreatedAt, actor });
     return NextResponse.json({ ok: true, runs });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message ?? e ?? "error") }, { status: 500 });
