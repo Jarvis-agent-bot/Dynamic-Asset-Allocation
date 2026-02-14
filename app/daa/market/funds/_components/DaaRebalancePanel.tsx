@@ -4492,6 +4492,77 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         })()}
                       </div>
 
+                      <div
+                        style={{
+                          marginTop: 8,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                          background: 'rgba(0,0,0,0.12)',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: 12 }}>Cash impact breakdown (preview)</div>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
+                          BUY spends full notional cash (cost reduces acquired value). SELL receives proceeds net of fee+slippage.
+                        </div>
+
+                        {(() => {
+                          const ccy = baseCcy ? ` ${baseCcy}` : '';
+
+                          const cashDelta = whatIf.cashAfter - whatIf.cashBefore;
+                          const cashDeltaPct = whatIf.cashBefore > 0 ? cashDelta / whatIf.cashBefore : null;
+                          const deltaColor = cashDelta < 0 ? 'var(--danger)' : 'var(--text)';
+
+                          const buy = whatIf.buyCashOutflow;
+                          const sellGross = whatIf.sellProceedsGross;
+                          const sellNet = whatIf.sellProceedsNet;
+
+                          const cashAfterImplied = whatIf.cashBefore + sellNet - buy;
+                          const cashEqOk = Math.abs(cashAfterImplied - whatIf.cashAfter) <= 1e-6;
+
+                          return (
+                            <>
+                              <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap' as const }}>
+                                <div style={{ minWidth: 200 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>cashBefore</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800 }}>{whatIf.cashBefore.toFixed(2)}{ccy}</div>
+                                </div>
+
+                                <div style={{ minWidth: 240 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>+ sell proceeds (net)</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800 }}>{sellNet.toFixed(2)}{ccy}</div>
+                                </div>
+
+                                <div style={{ minWidth: 240 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>- buy cash outflow (gross)</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800 }}>{buy.toFixed(2)}{ccy}</div>
+                                </div>
+
+                                <div style={{ minWidth: 200 }}>
+                                  <div className="muted" style={{ fontSize: 11 }}>cashAfter</div>
+                                  <div style={{ fontSize: 13, fontWeight: 800 }}>{whatIf.cashAfter.toFixed(2)}{ccy}</div>
+                                </div>
+                              </div>
+
+                              <div style={{ marginTop: 8, fontSize: 12, color: deltaColor }}>
+                                cashDelta={cashDelta.toFixed(2)}{ccy}
+                                {cashDeltaPct !== null ? ` (${(cashDeltaPct * 100).toFixed(2)}%)` : ''}
+                                <span className="muted">{' '}= cashAfter - cashBefore</span>
+                              </div>
+
+                              <details className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                                <summary style={{ cursor: 'pointer' }}>Details</summary>
+                                <div style={{ marginTop: 6, lineHeight: 1.5 }}>
+                                  sellGross={sellGross.toFixed(2)}{ccy}; sellCost≈{whatIf.costSellTotal.toFixed(2)}{ccy}; buyCost≈{whatIf.costBuyTotal.toFixed(2)}{ccy}.{' '}
+                                  <span className="muted">Check: cashAfter ≈ cashBefore + sellNet - buy</span>
+                                  {!cashEqOk ? <span style={{ color: 'var(--danger)' }}>{' '} (mismatch; check inputs)</span> : null}
+                                </div>
+                              </details>
+                            </>
+                          );
+                        })()}
+                      </div>
+
                       {taxLotsImpactV0 ? (
                         <div
                           style={{
