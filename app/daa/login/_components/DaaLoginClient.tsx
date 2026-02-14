@@ -83,10 +83,35 @@ export default function DaaLoginClient({ returnTo }: Props) {
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
 
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [touched, setTouched] = useState({ email: false, password: false });
+
+  const normalizedEmail = useMemo(() => normalizeEmailLoose(username), [username]);
+  const passwordTrimmed = password.trim();
+
+  const clientErrors = useMemo<FormErrors>(() => {
+    const e: FormErrors = {};
+    const showEmail = submitAttempted || touched.email;
+    const showPassword = submitAttempted || touched.password;
+
+    if (showEmail && !normalizedEmail) {
+      e.email = username.trim()
+        ? "Enter a valid email address (for example, you@example.com)."
+        : "Enter your email address (for example, you@example.com).";
+    }
+    if (showPassword && !passwordTrimmed) e.password = "Enter your password.";
+
+    return e;
+  }, [normalizedEmail, passwordTrimmed, submitAttempted, touched.email, touched.password, username]);
+
+  const mergedErrors = useMemo<FormErrors>(() => ({ ...errors, ...clientErrors }), [errors, clientErrors]);
+  const formValid = Boolean(normalizedEmail) && Boolean(passwordTrimmed);
+
   const [logoutBusy, setLogoutBusy] = useState(false);
 
   const checkingSession = session.kind === "checking";
   const disabled = busy || checkingSession;
+  const submitDisabled = disabled || !formValid;
 
   useEffect(() => {
     let cancelled = false;
@@ -151,21 +176,20 @@ export default function DaaLoginClient({ returnTo }: Props) {
   async function submit() {
     if (disabled) return;
 
-    setBusy(true);
-    setErrors({});
+    setSubmitAttempted(true);
 
     const email = normalizeEmailLoose(username);
     const pwd = password;
 
-    const nextErrors: FormErrors = {};
-    if (!email) nextErrors.email = "Enter your email address (for example, you@example.com).";
-    if (!pwd.trim()) nextErrors.password = "Enter your password.";
-
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
-      setBusy(false);
+    // Gate network requests behind a valid form (also covers pressing Enter).
+    if (!email || !pwd.trim()) {
+      // Clear generic form errors so field-level validation has priority.
+      setErrors((prev) => ({ ...prev, form: undefined }));
       return;
     }
+
+    setBusy(true);
+    setErrors({});
 
     try {
       const res = await fetch("/api/daa/auth/login", {
@@ -263,7 +287,7 @@ export default function DaaLoginClient({ returnTo }: Props) {
               void submit();
             }}
             aria-busy={busy || checkingSession}
-            aria-describedby={errors.form ? formErrorId : undefined}
+            aria-describedby={mergedErrors.form ? formErrorId : undefined}
           >
             {checkingSession ? (
               <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
@@ -291,12 +315,13 @@ export default function DaaLoginClient({ returnTo }: Props) {
                 autoComplete="email"
                 placeholder="you@example.com"
                 disabled={disabled}
-                aria-invalid={Boolean(errors.email) || undefined}
-                aria-describedby={errors.email ? emailHelpId : undefined}
+                onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                aria-invalid={Boolean(mergedErrors.email) || undefined}
+                aria-describedby={mergedErrors.email ? emailHelpId : undefined}
               />
-              {errors.email ? (
+              {mergedErrors.email ? (
                 <div id={emailHelpId} className="text-xs text-destructive">
-                  {errors.email}
+                  {mergedErrors.email}
                 </div>
               ) : (
                 <div className="text-xs text-muted-foreground">Your username is your email address.</div>
@@ -318,19 +343,20 @@ export default function DaaLoginClient({ returnTo }: Props) {
                 autoComplete="current-password"
                 placeholder="••••••••"
                 disabled={disabled}
-                aria-invalid={Boolean(errors.password) || undefined}
-                aria-describedby={errors.password ? passwordHelpId : undefined}
+                onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
+                aria-invalid={Boolean(mergedErrors.password) || undefined}
+                aria-describedby={mergedErrors.password ? passwordHelpId : undefined}
               />
-              {errors.password ? (
+              {mergedErrors.password ? (
                 <div id={passwordHelpId} className="text-xs text-destructive">
-                  {errors.password}
+                  {mergedErrors.password}
                 </div>
               ) : (
                 <div className="text-xs text-muted-foreground">Passwords are case-sensitive.</div>
               )}
             </div>
 
-            <Button type="submit" disabled={disabled}>
+            <Button type="submit" disabled={submitDisabled}>
               {checkingSession ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -358,13 +384,13 @@ export default function DaaLoginClient({ returnTo }: Props) {
               </div>
             </details>
 
-            {errors.form ? (
+            {mergedErrors.form ? (
               <div
                 id={formErrorId}
                 role="alert"
                 className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
               >
-                <div>Couldn't sign you in: {errors.form}</div>
+                <div>Couldn't sign you in: {mergedErrors.form}</div>
                 <div className="text-xs text-muted-foreground">Double-check your email/password or ask an admin to resend/reset your credentials.</div>
               </div>
             ) : null}
