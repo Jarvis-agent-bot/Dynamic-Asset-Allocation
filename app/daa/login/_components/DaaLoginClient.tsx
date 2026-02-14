@@ -7,12 +7,14 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Props = {
   returnTo: string;
+  error?: string;
 };
 
-type FormErrors = {
+type PasswordFormErrors = {
   email?: string;
   password?: string;
   form?: string;
@@ -31,6 +33,11 @@ type SessionModel =
   | { kind: "signedOut" }
   | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> }
   | { kind: "error"; message: string };
+
+type EmailLinkModel =
+  | { kind: "idle" }
+  | { kind: "sending" }
+  | { kind: "sent"; requestedAtMs: number; cooldownSeconds: number };
 
 function normalizeEmailLoose(raw: string): string {
   const v = raw.trim().toLowerCase();
@@ -66,11 +73,19 @@ function parseApiError(json: any, fallback: string): string {
   return fallback;
 }
 
-export default function DaaLoginClient({ returnTo }: Props) {
-  const usernameId = useId();
+function formatSeconds(s: number): string {
+  if (!Number.isFinite(s)) return "0s";
+  const ss = Math.max(0, Math.floor(s));
+  return `${ss}s`;
+}
+
+export default function DaaLoginClient({ returnTo, error }: Props) {
+  const emailLinkEmailId = useId();
+  const passwordEmailId = useId();
   const passwordId = useId();
 
-  const emailHelpId = useId();
+  const emailLinkEmailHelpId = useId();
+  const passwordEmailHelpId = useId();
   const passwordHelpId = useId();
   const formErrorId = useId();
 
@@ -78,21 +93,29 @@ export default function DaaLoginClient({ returnTo }: Props) {
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
 
+  const [tab, setTab] = useState<"email" | "password">(error === "email-link-invalid" ? "email" : "password");
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [errors, setErrors] = useState<FormErrors>({});
-
-  const [submitAttempted, setSubmitAttempted] = useState(false);
-  const [touched, setTouched] = useState({ email: false, password: false });
 
   const normalizedEmail = useMemo(() => normalizeEmailLoose(username), [username]);
   const passwordTrimmed = password.trim();
 
-  const clientErrors = useMemo<FormErrors>(() => {
-    const e: FormErrors = {};
-    const showEmail = submitAttempted || touched.email;
-    const showPassword = submitAttempted || touched.password;
+  // Password form state
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<PasswordFormErrors>({});
+  const [passwordSubmitAttempted, setPasswordSubmitAttempted] = useState(false);
+  const [touched, setTouched] = useState({ email: false, password: false });
+
+  // Email-link form state
+  const [emailLink, setEmailLink] = useState<EmailLinkModel>({ kind: "idle" });
+  const [emailLinkError, setEmailLinkError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const passwordClientErrors = useMemo<PasswordFormErrors>(() => {
+    const e: PasswordFormErrors = {};
+    const showEmail = passwordSubmitAttempted || touched.email;
+    const showPassword = passwordSubmitAttempted || touched.password;
 
     if (showEmail && !normalizedEmail) {
       e.email = username.trim()
@@ -102,16 +125,29 @@ export default function DaaLoginClient({ returnTo }: Props) {
     if (showPassword && !passwordTrimmed) e.password = "Enter your password.";
 
     return e;
-  }, [normalizedEmail, passwordTrimmed, submitAttempted, touched.email, touched.password, username]);
+  }, [normalizedEmail, passwordTrimmed, passwordSubmitAttempted, touched.email, touched.password, username]);
 
-  const mergedErrors = useMemo<FormErrors>(() => ({ ...errors, ...clientErrors }), [errors, clientErrors]);
-  const formValid = Boolean(normalizedEmail) && Boolean(passwordTrimmed);
+  const mergedPasswordErrors = useMemo<PasswordFormErrors>(
+    () => ({ ...passwordErrors, ...passwordClientErrors }),
+    [passwordErrors, passwordClientErrors]
+  );
+
+  const passwordFormValid = Boolean(normalizedEmail) && Boolean(passwordTrimmed);
+  const emailLinkFormValid = Boolean(normalizedEmail);
 
   const [logoutBusy, setLogoutBusy] = useState(false);
 
   const checkingSession = session.kind === "checking";
-  const disabled = busy || checkingSession;
-  const submitDisabled = disabled || !formValid;
+  const passwordDisabled = passwordBusy || checkingSession;
+  const emailDisabled = emailLink.kind === "sending" || checkingSession;
+
+  const passwordSubmitDisabled = passwordDisabled || !passwordFormValid;
+
+  const resendRemainingSeconds = useMemo(() => {
+    if (emailLink.kind !== "sent") return 0;
+    const elapsed = Math.floor((nowMs - emailLink.requestedAtMs) / 1000);
+    return Math.max(0, emailLink.cooldownSeconds - elapsed);
+  }, [emailLink, nowMs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +198,12 @@ export default function DaaLoginClient({ returnTo }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    if (emailLink.kind !== "sent") return;
+    const t = window.setInterval(() => setNowMs(Date.now()), 500);
+    return () => window.clearInterval(t);
+  }, [emailLink.kind]);
+
   async function logout() {
     setLogoutBusy(true);
     try {
@@ -173,10 +215,10 @@ export default function DaaLoginClient({ returnTo }: Props) {
     }
   }
 
-  async function submit() {
-    if (disabled) return;
+  async function submitPassword() {
+    if (passwordDisabled) return;
 
-    setSubmitAttempted(true);
+    setPasswordSubmitAttempted(true);
 
     const email = normalizeEmailLoose(username);
     const pwd = password;
@@ -184,12 +226,12 @@ export default function DaaLoginClient({ returnTo }: Props) {
     // Gate network requests behind a valid form (also covers pressing Enter).
     if (!email || !pwd.trim()) {
       // Clear generic form errors so field-level validation has priority.
-      setErrors((prev) => ({ ...prev, form: undefined }));
+      setPasswordErrors((prev) => ({ ...prev, form: undefined }));
       return;
     }
 
-    setBusy(true);
-    setErrors({});
+    setPasswordBusy(true);
+    setPasswordErrors({});
 
     try {
       const res = await fetch("/api/daa/auth/login", {
@@ -207,7 +249,7 @@ export default function DaaLoginClient({ returnTo }: Props) {
       }
 
       if (!json || typeof json.ok !== "boolean") {
-        setErrors({ form: "Unexpected response from the server. Please try again." });
+        setPasswordErrors({ form: "Unexpected response from the server. Please try again." });
         return;
       }
 
@@ -216,27 +258,69 @@ export default function DaaLoginClient({ returnTo }: Props) {
 
         // Invalid credentials is the most common case; keep it inline.
         if (res.status === 401) {
-          setErrors({ password: "Email or password is incorrect." });
+          setPasswordErrors({ password: "Email or password is incorrect." });
           setPassword("");
           return;
         }
 
         // Avoid overly technical errors for the common cases.
         if (res.status >= 500) {
-          setErrors({ form: "We couldn't sign you in right now. Please try again." });
+          setPasswordErrors({ form: "We couldn't sign you in right now. Please try again." });
           return;
         }
 
-        setErrors({ form: msg });
+        setPasswordErrors({ form: msg });
         return;
       }
 
       // Cookie is set by the server; redirect into the console.
       window.location.href = safeReturnTo;
     } catch (e) {
-      setErrors({ form: e instanceof Error ? e.message : String(e) });
+      setPasswordErrors({ form: e instanceof Error ? e.message : String(e) });
     } finally {
-      setBusy(false);
+      setPasswordBusy(false);
+    }
+  }
+
+  async function requestEmailLink() {
+    if (emailDisabled) return;
+
+    setEmailLinkError(null);
+
+    const email = normalizeEmailLoose(username);
+    if (!email) {
+      setTouched((prev) => ({ ...prev, email: true }));
+      return;
+    }
+
+    setEmailLink({ kind: "sending" });
+
+    try {
+      const res = await fetch("/api/daa/auth/email-login/request", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ email, returnTo: safeReturnTo }),
+      });
+
+      const text = await res.text().catch(() => "");
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+
+      if (!res.ok) {
+        setEmailLinkError(parseApiError(json, `HTTP ${res.status}`));
+        setEmailLink({ kind: "idle" });
+        return;
+      }
+
+      const cooldownSeconds = typeof json?.cooldownSeconds === "number" && Number.isFinite(json.cooldownSeconds) ? Math.max(0, Math.floor(json.cooldownSeconds)) : 30;
+      setEmailLink({ kind: "sent", requestedAtMs: Date.now(), cooldownSeconds });
+    } catch (e) {
+      setEmailLinkError(e instanceof Error ? e.message : String(e));
+      setEmailLink({ kind: "idle" });
     }
   }
 
@@ -265,8 +349,19 @@ export default function DaaLoginClient({ returnTo }: Props) {
     );
   }
 
+  const emailInvalidEmailLink = touched.email && !normalizedEmail;
+  const emailHelpText = username.trim()
+    ? "Enter a valid email address (for example, you@example.com)."
+    : "Enter your email address (for example, you@example.com).";
+
   return (
     <div className="mx-auto w-full max-w-md space-y-3">
+      {error === "email-link-invalid" ? (
+        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          This sign-in link is invalid or has expired. Request a new link.
+        </div>
+      ) : null}
+
       {session.kind === "error" ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           Couldn't verify your session. You can still try signing in. ({session.message})
@@ -280,121 +375,239 @@ export default function DaaLoginClient({ returnTo }: Props) {
         </CardHeader>
 
         <CardContent>
-          <form
-            className="grid gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submit();
+          <Tabs
+            value={tab}
+            onValueChange={(v) => {
+              const vv = v === "email" ? "email" : "password";
+              setTab(vv);
+              setPasswordErrors({});
+              setEmailLinkError(null);
             }}
-            aria-busy={busy || checkingSession}
-            aria-describedby={mergedErrors.form ? formErrorId : undefined}
           >
-            {checkingSession ? (
-              <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Checking session...
-              </div>
-            ) : null}
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="email">Email link</TabsTrigger>
+              <TabsTrigger value="password">Password</TabsTrigger>
+            </TabsList>
 
-            <div className="grid gap-2">
-              <label htmlFor={usernameId} className="text-sm font-medium">
-                Email
-              </label>
-              <Input
-                id={usernameId}
-                type="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  setErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+            <TabsContent value="email">
+              <form
+                className="grid gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void requestEmailLink();
                 }}
-                autoComplete="email"
-                placeholder="you@example.com"
-                disabled={disabled}
-                onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
-                aria-invalid={Boolean(mergedErrors.email) || undefined}
-                aria-describedby={mergedErrors.email ? emailHelpId : undefined}
-              />
-              {mergedErrors.email ? (
-                <div id={emailHelpId} className="text-xs text-destructive">
-                  {mergedErrors.email}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">Your username is your email address.</div>
-              )}
-            </div>
-
-            <div className="grid gap-2">
-              <label htmlFor={passwordId} className="text-sm font-medium">
-                Password
-              </label>
-              <Input
-                id={passwordId}
-                type="password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setErrors((prev) => ({ ...prev, password: undefined, form: undefined }));
-                }}
-                autoComplete="current-password"
-                placeholder="••••••••"
-                disabled={disabled}
-                onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
-                aria-invalid={Boolean(mergedErrors.password) || undefined}
-                aria-describedby={mergedErrors.password ? passwordHelpId : undefined}
-              />
-              {mergedErrors.password ? (
-                <div id={passwordHelpId} className="text-xs text-destructive">
-                  {mergedErrors.password}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">Passwords are case-sensitive.</div>
-              )}
-            </div>
-
-            <Button type="submit" disabled={submitDisabled}>
-              {checkingSession ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Checking session...
-                </span>
-              ) : busy ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing in...
-                </span>
-              ) : (
-                "Sign in"
-              )}
-            </Button>
-
-            <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
-              <summary className="cursor-pointer select-none font-medium">Need access?</summary>
-              <div className="mt-2 grid gap-1 text-muted-foreground">
-                <div>• Ask an admin to (re)send your credentials (no self-service reset yet).</div>
-                <div>
-                  • Fresh deployment: bootstrap the first admin via <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires server env{" "}
-                  <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and sending{" "}
-                  <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
-                </div>
-              </div>
-            </details>
-
-            {mergedErrors.form ? (
-              <div
-                id={formErrorId}
-                role="alert"
-                className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                aria-busy={emailDisabled}
               >
-                <div>Couldn't sign you in: {mergedErrors.form}</div>
-                <div className="text-xs text-muted-foreground">Double-check your email/password or ask an admin to resend/reset your credentials.</div>
-              </div>
-            ) : null}
-          </form>
+                {checkingSession ? (
+                  <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Checking session...
+                  </div>
+                ) : null}
+
+                <div className="grid gap-2">
+                  <label htmlFor={emailLinkEmailId} className="text-sm font-medium">
+                    Email
+                  </label>
+                  <Input
+                    id={emailLinkEmailId}
+                    type="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setEmailLinkError(null);
+                    }}
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    disabled={emailDisabled}
+                    onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                    aria-invalid={emailInvalidEmailLink || undefined}
+                    aria-describedby={emailInvalidEmailLink ? emailLinkEmailHelpId : undefined}
+                  />
+                  {emailInvalidEmailLink ? (
+                    <div id={emailLinkEmailHelpId} className="text-xs text-destructive">
+                      {emailHelpText}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">We'll send you a single-use sign-in link.</div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="submit" disabled={emailDisabled || !emailLinkFormValid}>
+                    {emailLink.kind === "sending" ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Sending...
+                      </span>
+                    ) : (
+                      "Send sign-in link"
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void requestEmailLink()}
+                    disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
+                  >
+                    {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
+                  </Button>
+                </div>
+
+                {emailLink.kind === "sent" ? (
+                  <div className="rounded-md border bg-muted/20 p-3 text-sm">
+                    <div className="font-medium">Check your inbox</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      If this email is registered, you'll receive a sign-in link shortly. It expires in about 15 minutes.
+                    </div>
+                  </div>
+                ) : null}
+
+                {emailLinkError ? (
+                  <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    Couldn't send a sign-in link: {emailLinkError}
+                  </div>
+                ) : null}
+
+                <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
+                  <summary className="cursor-pointer select-none font-medium">Need access?</summary>
+                  <div className="mt-2 grid gap-1 text-muted-foreground">
+                    <div>• Ask an admin to grant you an account.</div>
+                    <div>
+                      • Fresh deployment: bootstrap the first admin via{" "}
+                      <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires server env{" "}
+                      <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and sending{" "}
+                      <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
+                    </div>
+                  </div>
+                </details>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="password">
+              <form
+                className="grid gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void submitPassword();
+                }}
+                aria-busy={passwordBusy || checkingSession}
+                aria-describedby={mergedPasswordErrors.form ? formErrorId : undefined}
+              >
+                {checkingSession ? (
+                  <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Checking session...
+                  </div>
+                ) : null}
+
+                <div className="grid gap-2">
+                  <label htmlFor={passwordEmailId} className="text-sm font-medium">
+                    Email
+                  </label>
+                  <Input
+                    id={passwordEmailId}
+                    type="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+                    }}
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    disabled={passwordDisabled}
+                    onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                    aria-invalid={Boolean(mergedPasswordErrors.email) || undefined}
+                    aria-describedby={mergedPasswordErrors.email ? passwordEmailHelpId : undefined}
+                  />
+                  {mergedPasswordErrors.email ? (
+                    <div id={passwordEmailHelpId} className="text-xs text-destructive">
+                      {mergedPasswordErrors.email}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Your username is your email address.</div>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <label htmlFor={passwordId} className="text-sm font-medium">
+                    Password
+                  </label>
+                  <Input
+                    id={passwordId}
+                    type="password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setPasswordErrors((prev) => ({ ...prev, password: undefined, form: undefined }));
+                    }}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    disabled={passwordDisabled}
+                    onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
+                    aria-invalid={Boolean(mergedPasswordErrors.password) || undefined}
+                    aria-describedby={mergedPasswordErrors.password ? passwordHelpId : undefined}
+                  />
+                  {mergedPasswordErrors.password ? (
+                    <div id={passwordHelpId} className="text-xs text-destructive">
+                      {mergedPasswordErrors.password}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Passwords are case-sensitive.</div>
+                  )}
+                </div>
+
+                <Button type="submit" disabled={passwordSubmitDisabled}>
+                  {checkingSession ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Checking session...
+                    </span>
+                  ) : passwordBusy ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Signing in...
+                    </span>
+                  ) : (
+                    "Sign in"
+                  )}
+                </Button>
+
+                <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
+                  <summary className="cursor-pointer select-none font-medium">Need access?</summary>
+                  <div className="mt-2 grid gap-1 text-muted-foreground">
+                    <div>• Ask an admin to (re)send your credentials (no self-service reset yet).</div>
+                    <div>
+                      • Fresh deployment: bootstrap the first admin via{" "}
+                      <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires server env{" "}
+                      <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and sending{" "}
+                      <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
+                    </div>
+                  </div>
+                </details>
+
+                {mergedPasswordErrors.form ? (
+                  <div
+                    id={formErrorId}
+                    role="alert"
+                    className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                  >
+                    <div>Couldn't sign you in: {mergedPasswordErrors.form}</div>
+                    <div className="text-xs text-muted-foreground">Double-check your email/password or ask an admin to resend/reset your credentials.</div>
+                  </div>
+                ) : null}
+              </form>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

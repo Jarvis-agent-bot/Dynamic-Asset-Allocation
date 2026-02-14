@@ -1,0 +1,46 @@
+import { NextResponse } from "next/server";
+
+import { DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
+import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
+import { consumeDaaAuthEmailLoginTokenV0 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
+
+export const runtime = "nodejs";
+
+function normalizeReturnTo(raw: unknown): string {
+  const v = typeof raw === "string" ? raw.trim() : "";
+  if (!v) return "/daa/dashboard";
+  if (!v.startsWith("/")) return "/daa/dashboard";
+  if (v.startsWith("//")) return "/daa/dashboard";
+  if (!v.startsWith("/daa")) return "/daa/dashboard";
+  return v;
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const token = url.searchParams.get("token") || "";
+  const returnTo = normalizeReturnTo(url.searchParams.get("returnTo"));
+
+  const ua = getUserAgentFromRequestV0(req) || null;
+  const ip = getClientIpFromRequestV0(req) || null;
+
+  const found = await consumeDaaAuthEmailLoginTokenV0({ token, userAgent: ua, ip });
+  if (!found) {
+    const loginUrl = new URL("/daa/login", url);
+    loginUrl.searchParams.set("error", "email-link-invalid");
+    loginUrl.searchParams.set("returnTo", returnTo);
+    return NextResponse.redirect(loginUrl, 302);
+  }
+
+  const res = NextResponse.redirect(new URL(returnTo, url), 302);
+  res.cookies.set({
+    name: DAA_AUTH_SESSION_COOKIE_V0,
+    value: found.sessionToken,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: new Date(found.session.expiresAt),
+  });
+
+  return res;
+}
