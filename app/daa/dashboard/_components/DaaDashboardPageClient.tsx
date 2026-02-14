@@ -17,6 +17,7 @@ import DaaDashboardRunChecklist from "../_components/DaaDashboardRunChecklist";
 import DaaDashboardBacktestDriftRebalance from "../_components/DaaDashboardBacktestDriftRebalance";
 import DaaDashboardConfirmExecuted from "../_components/DaaDashboardConfirmExecuted";
 import DaaDashboardHistoryAudit from "../_components/DaaDashboardHistoryAudit";
+import DaaDashboardAdminUsers from "../_components/DaaDashboardAdminUsers";
 
 import DaaMarketFundsTab from "../_tabs/DaaMarketFundsTab";
 
@@ -97,6 +98,13 @@ function DashboardMain() {
           </button>
           <button
             type="button"
+            onClick={() => scrollToId("admin-users")}
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+          >
+            Admin Users
+          </button>
+          <button
+            type="button"
             onClick={() => scrollToId("backtest")}
             style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
           >
@@ -156,6 +164,10 @@ function DashboardMain() {
 
       <div id="history-audit" style={{ marginTop: 14, scrollMarginTop: 12 }}>
         <DaaDashboardHistoryAudit />
+      </div>
+
+      <div id="admin-users" style={{ marginTop: 14, scrollMarginTop: 12 }}>
+        <DaaDashboardAdminUsers />
       </div>
 
       <div id="backtest" style={{ marginTop: 14, scrollMarginTop: 12 }}>
