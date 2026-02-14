@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isDaaEngineRebalanceSimulateResponse } from "@/src/core/contracts/daaEngine";
+import { requireDaaAdminAuth } from "@/src/daa/adminAuth";
 import { isRebalanceSimulateRequest, type RebalanceSimulateRequest } from "@/src/daa/engineContracts";
 import { proxyToEngineJson } from "@/src/daa/proxyToEngine";
 import { readJsonBody } from "@/src/daa/requestJson";
@@ -10,6 +11,9 @@ import { parsePositiveIntEnv } from "@/src/daa/env";
 // behind nginx (/daa-api/...). This keeps the UI independent from deployment routing.
 
 export async function POST(req: Request) {
+  const denied = requireDaaAdminAuth(req);
+  if (denied) return denied;
+
   const parsed = await readJsonBody<RebalanceSimulateRequest>(req);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 

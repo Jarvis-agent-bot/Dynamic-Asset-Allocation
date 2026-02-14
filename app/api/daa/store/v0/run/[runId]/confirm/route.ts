@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { requireDaaAdminAuth } from "@/src/daa/adminAuth";
 import { setDaaRunConfirmV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request, ctx: { params: { runId: string } }) {
+  const denied = requireDaaAdminAuth(req);
+  if (denied) return denied;
+
   const runId = String(ctx?.params?.runId ?? "").trim();
   if (!runId) return NextResponse.json({ ok: false, error: "missing runId" }, { status: 400 });
 

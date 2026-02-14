@@ -18,6 +18,7 @@ import {
 } from "../../wizardStorage";
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from "../../portfolioStateStore";
 import { OrdersReviewV0 } from "../../_components/OrdersReviewV0";
+import { buildDaaAdminAuthHeadersV0 } from "../../adminTokenStore";
 
 type Props = {
   title: string;
@@ -312,7 +313,7 @@ export function RebalanceSimulatePanel({
       for (const url of endpoints) {
         const r = await fetch(url, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...buildDaaAdminAuthHeadersV0() },
           body: bodyText,
           signal: controller.signal,
         });

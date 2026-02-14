@@ -17,6 +17,7 @@ import { loadMaxTurnoverPct01V0, persistMaxTurnoverPct01V0 } from '../../../dyna
 import { type SellProceedsRoutingV0 } from '@/src/daa/sellProceedsRoutingV0';
 import { deriveInvestablePct01V0, scaleTargetWeightsByInvestablePct01V0 } from '@/src/daa/cashBucketTargetsV0';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
+import { buildDaaAdminAuthHeadersV0 } from '../../../adminTokenStore';
 
 import AllocationDiffChartV0 from './AllocationDiffChartV0';
 
@@ -2190,7 +2191,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       // Core is deterministic and runs in-process (Next.js route), so this stays fast.
       const res = await fetch('/api/daa/rebalance/core', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...buildDaaAdminAuthHeadersV0() },
         body: JSON.stringify(req),
         signal: controller.signal,
       });
