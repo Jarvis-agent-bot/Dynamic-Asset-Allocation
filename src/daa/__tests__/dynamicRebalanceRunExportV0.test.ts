@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   buildDynamicRebalanceRunAllocationsCsvV0,
   buildDynamicRebalanceRunAuditBundleV0,
+  buildDynamicRebalanceRunAuditLogCsvV0,
   buildDynamicRebalanceRunOrdersCsvV0,
 } from "../dynamicRebalanceRunExportV0";
 import type { RebalanceLogEntryV0 } from "../rebalanceLogStore";
@@ -68,6 +69,33 @@ describe("dynamicRebalanceRunExportV0", () => {
 
     // Detail field should be quoted and quotes doubled.
     expect(csv).toContain('"has,comma and ""quote""\nand newline"');
+  });
+
+  test("audit log CSV includes reason when core log has per-order reasons", () => {
+    const r = run({
+      runId: "rebalance_run_reason",
+      orders: [
+        { id: "1", symbol: "AAA", side: "BUY", notional: 10, status: "filled", updatedAt: "2026-02-14T00:01:00.000Z" },
+        { id: "2", symbol: "BBB", side: "SELL", notional: 20, status: "failed", updatedAt: "2026-02-14T00:02:00.000Z", detail: "broker rejected" },
+      ],
+    });
+
+    const entry = coreEntry({
+      id: "e_reason",
+      at: "2026-02-14T00:00:30.000Z",
+      runId: r.runId,
+      orders: [
+        { symbol: "AAA", side: "BUY", notional: 10, reason: "top up to target" },
+        { symbol: "BBB", side: "SELL", notional: 20, reason: "reduce overweight" },
+      ],
+    });
+
+    const csv = buildDynamicRebalanceRunAuditLogCsvV0({ run: r, coreLogEntry: entry });
+    expect(csv).toContain("runId,runCreatedAt,runUpdatedAt,runState,runPhase,coreLoggedAt,orderId,symbol,side,notional,reason,status,orderUpdatedAt,filledNotional,fillPct01,detail\n");
+    expect(csv).toContain("rebalance_run_reason");
+    expect(csv).toContain("top up to target");
+    expect(csv).toContain("reduce overweight");
+    expect(csv).toContain("broker rejected");
   });
 
   test("audit bundle includes derived counts + allocations snapshot when available", () => {
