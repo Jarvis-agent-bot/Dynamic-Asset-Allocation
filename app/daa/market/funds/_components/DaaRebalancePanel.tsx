@@ -3210,6 +3210,30 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           >
             Rebalance
           </button>
+
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => openPreflightForRun()}
+            style={{ padding: '6px 10px' }}
+            disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
+            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Manual trigger: open preflight and run a paper rebalance now.'}
+          >
+            {paperRunLoading ? 'Running...' : 'Manual run now'}
+          </button>
+
+          {paperRunLoading ? (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => paperRunAbortRef.current?.abort()}
+              style={{ padding: '6px 10px' }}
+              title="Abort the in-flight paper run"
+            >
+              Cancel run
+            </button>
+          ) : null}
+
           <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)} style={{ padding: '6px 10px' }}>
             {nextJump.buttonText}
           </button>
