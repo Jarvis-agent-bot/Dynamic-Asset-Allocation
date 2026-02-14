@@ -91,7 +91,7 @@ describe("dynamicRebalanceRunExportV0", () => {
     });
 
     const csv = buildDynamicRebalanceRunAuditLogCsvV0({ run: r, coreLogEntry: entry });
-    expect(csv).toContain("runId,runCreatedAt,runUpdatedAt,runState,runPhase,coreLoggedAt,orderId,symbol,side,notional,reason,status,orderUpdatedAt,filledNotional,fillPct01,detail\n");
+    expect(csv).toContain("runId,runCreatedAt,runUpdatedAt,runState,runPhase,runNotes,runTags,coreLoggedAt,orderId,symbol,side,notional,reason,status,orderUpdatedAt,filledNotional,fillPct01,detail\n");
     expect(csv).toContain("rebalance_run_reason");
     expect(csv).toContain("top up to target");
     expect(csv).toContain("reduce overweight");
