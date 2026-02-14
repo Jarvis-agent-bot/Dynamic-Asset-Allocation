@@ -7,5 +7,8 @@ export default function DaaLoginPage(props: { searchParams?: Record<string, stri
   const rawError = props?.searchParams?.error;
   const error = typeof rawError === "string" ? rawError.trim() : "";
 
-  return <DaaLoginClient returnTo={returnTo || "/daa/dashboard"} error={error} />;
+  const rawNotice = props?.searchParams?.notice;
+  const notice = typeof rawNotice === "string" ? rawNotice.trim() : "";
+
+  return <DaaLoginClient returnTo={returnTo || "/daa/dashboard"} error={error} notice={notice} />;
 }

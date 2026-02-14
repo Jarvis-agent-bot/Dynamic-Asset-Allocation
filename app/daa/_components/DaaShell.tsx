@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import type React from "react";
 
+import DaaSessionGuard from "./DaaSessionGuard";
 import DaaUserMenuDialog from "./DaaUserMenuDialog";
 import DaaTopNav from "./DaaTopNav";
 
@@ -11,6 +13,7 @@ type Props = {
 export default function DaaShell({ children }: Props) {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+      <DaaSessionGuard />
       <header className="mb-6 flex flex-col gap-3 sm:mb-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
@@ -25,7 +28,9 @@ export default function DaaShell({ children }: Props) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <DaaTopNav />
+            <Suspense fallback={null}>
+              <DaaTopNav />
+            </Suspense>
             <DaaUserMenuDialog />
           </div>
         </div>
