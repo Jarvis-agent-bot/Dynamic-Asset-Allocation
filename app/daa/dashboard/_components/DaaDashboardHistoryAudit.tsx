@@ -158,6 +158,8 @@ export default function DaaDashboardHistoryAudit() {
   const [runsStatus, setRunsStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [runsError, setRunsError] = useState<string | null>(null);
 
+  const [runsPageSize, setRunsPageSize] = useState<number>(20);
+
   const [selectedRunId, setSelectedRunId] = useState<string>("");
   const [bundleStatus, setBundleStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [bundleError, setBundleError] = useState<string | null>(null);
@@ -199,7 +201,8 @@ export default function DaaDashboardHistoryAudit() {
     setRunsStatus("loading");
 
     const qs = new URLSearchParams();
-    qs.set("limit", "20");
+    const runLimit = Math.max(1, Math.min(200, Math.floor(runsPageSize || 20)));
+    qs.set("limit", String(runLimit));
 
     if (actorFilter) qs.set("actor", actorFilter);
     if (fromIso) qs.set("fromCreatedAt", fromIso);
@@ -255,7 +258,7 @@ export default function DaaDashboardHistoryAudit() {
 
   useEffect(() => {
     void loadRuns("reset");
-  }, [actorFilter, fromIso, toIso]);
+  }, [actorFilter, fromIso, toIso, runsPageSize]);
 
   const derived = useMemo(() => {
     if (!bundle) return null;
@@ -344,6 +347,23 @@ export default function DaaDashboardHistoryAudit() {
               <option value="dashboard">dashboard</option>
               <option value="market-funds">market-funds</option>
               <option value="unknown">unknown</option>
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Runs page size
+            <select
+              value={String(runsPageSize)}
+              onChange={(e) => {
+                const n = Number(String(e.target.value ?? ""));
+                setRunsPageSize(Number.isFinite(n) && n > 0 ? n : 20);
+              }}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
             </select>
           </label>
 
