@@ -4,6 +4,25 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useEffect, useMemo, useState } from "react";
 
+import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+
 import { copyTextToClipboard } from "../../copyToClipboard";
 
 type AdminUserV0 = {
@@ -29,6 +48,8 @@ type SortDir = "asc" | "desc";
 
 type StatusFilter = "all" | "active" | "inactive" | "missing";
 
+type UiToast = { variant: "success" | "error"; message: string; updatedAtMs: number };
+
 function normalizeStatusFilter(raw: string | null): StatusFilter {
   if (raw === "active") return "active";
   if (raw === "inactive") return "inactive";
@@ -36,7 +57,9 @@ function normalizeStatusFilter(raw: string | null): StatusFilter {
   return "all";
 }
 
-function tokenKindForUserId(id: AdminUserV0["id"]): AdminUsersApiV0["me"]["tokenKind"] {
+function tokenKindForUserId(
+  id: AdminUserV0["id"]
+): AdminUsersApiV0["me"]["tokenKind"] {
   if (id === "viewer-token") return "viewer";
   if (id === "editor-token") return "editor";
   if (id === "legacy-token") return "legacy";
@@ -53,12 +76,9 @@ function fmtStatus(u: AdminUserV0): "active" | "inactive" | "missing" {
 }
 
 function toNeedle(raw: string): string {
-  return String(raw || "").trim().toLowerCase();
-}
-
-function sortIndicator(active: boolean, dir: SortDir): string {
-  if (!active) return "";
-  return dir === "asc" ? " ^" : " v";
+  return String(raw || "")
+    .trim()
+    .toLowerCase();
 }
 
 function sortLabel(key: SortKey): string {
@@ -77,7 +97,15 @@ function statusRank(u: AdminUserV0): number {
   return 0;
 }
 
-function compareUsers(a: AdminUserV0, b: AdminUserV0, opts: { sortKey: SortKey; sortDir: SortDir; meTokenKind: AdminUsersApiV0["me"]["tokenKind"] }): number {
+function compareUsers(
+  a: AdminUserV0,
+  b: AdminUserV0,
+  opts: {
+    sortKey: SortKey;
+    sortDir: SortDir;
+    meTokenKind: AdminUsersApiV0["me"]["tokenKind"];
+  }
+): number {
   const { sortKey, sortDir, meTokenKind } = opts;
   const dir = sortDir === "asc" ? 1 : -1;
 
@@ -98,14 +126,8 @@ function compareUsers(a: AdminUserV0, b: AdminUserV0, opts: { sortKey: SortKey; 
     const bRole = b.role === "editor" ? 1 : 0;
     primary = cmp(aRole, bRole);
   }
-  if (sortKey === "status") {
-    primary = cmp(statusRank(a), statusRank(b));
-  }
-  if (sortKey === "me") {
-    const am = aIsMe ? 1 : 0;
-    const bm = bIsMe ? 1 : 0;
-    primary = cmp(am, bm);
-  }
+  if (sortKey === "status") primary = cmp(statusRank(a), statusRank(b));
+  if (sortKey === "me") primary = cmp(aIsMe ? 1 : 0, bIsMe ? 1 : 0);
 
   if (primary !== 0) return primary * dir;
 
@@ -113,10 +135,73 @@ function compareUsers(a: AdminUserV0, b: AdminUserV0, opts: { sortKey: SortKey; 
   return a.id.localeCompare(b.id);
 }
 
+function StatusPill({ status }: { status: ReturnType<typeof fmtStatus> }) {
+  const base =
+    "inline-flex items-center rounded-full border px-2 py-0.5 text-xs";
+
+  if (status === "active") {
+    return (
+      <span
+        className={`${base} border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300`}
+      >
+        active
+      </span>
+    );
+  }
+
+  if (status === "inactive") {
+    return (
+      <span
+        className={`${base} border-amber-500/30 bg-amber-500/5 text-amber-800 dark:text-amber-200`}
+      >
+        inactive
+      </span>
+    );
+  }
+
+  return (
+    <span className={`${base} border-border bg-muted/40 text-foreground`}>
+      missing
+    </span>
+  );
+}
+
+function SortHeaderButton({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+      className="-ml-2 h-8 px-2 font-semibold"
+    >
+      {label}
+      {active ? (
+        dir === "asc" ? (
+          <ArrowUp className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowDown className="h-3.5 w-3.5" />
+        )
+      ) : null}
+    </Button>
+  );
+}
+
 export default function DaaDashboardAdminUsers() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [error, setError] = useState<string>("");
   const [data, setData] = useState<AdminUsersApiV0 | null>(null);
@@ -127,7 +212,7 @@ export default function DaaDashboardAdminUsers() {
   const [mutating, setMutating] = useState<AdminUserV0["id"] | null>(null);
   const [mutateError, setMutateError] = useState<string>("");
 
-  const [toast, setToast] = useState<{ kind: "ok" | "error"; message: string; updatedAtMs: number } | null>(null);
+  const [toast, setToast] = useState<UiToast | null>(null);
 
   const [query, setQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -139,13 +224,17 @@ export default function DaaDashboardAdminUsers() {
     setError("");
 
     try {
-      const headers: Record<string, string> = {
-        accept: "application/json"};
+      const headers: Record<string, string> = { accept: "application/json" };
 
-      const res = await fetch("/api/daa/admin/users", { headers, cache: "no-store" });
+      const res = await fetch("/api/daa/admin/users", {
+        headers,
+        cache: "no-store",
+      });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` :: ${text.slice(0, 200)}` : ""}`);
+        throw new Error(
+          `HTTP ${res.status} ${res.statusText}${text ? ` :: ${text.slice(0, 200)}` : ""}`
+        );
       }
 
       const j = (await res.json()) as AdminUsersApiV0;
@@ -168,16 +257,20 @@ export default function DaaDashboardAdminUsers() {
     try {
       const headers: Record<string, string> = {
         accept: "application/json",
-        "content-type": "application/json"};
+        "content-type": "application/json",
+      };
 
       const res = await fetch("/api/daa/admin/users", {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ id, active })});
+        body: JSON.stringify({ id, active }),
+      });
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` :: ${text.slice(0, 200)}` : ""}`);
+        throw new Error(
+          `HTTP ${res.status} ${res.statusText}${text ? ` :: ${text.slice(0, 200)}` : ""}`
+        );
       }
 
       await load();
@@ -199,10 +292,15 @@ export default function DaaDashboardAdminUsers() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const statusFilterFromUrl = useMemo(() => normalizeStatusFilter(searchParams.get("adminUsersStatus")), [searchParams]);
+  const statusFilterFromUrl = useMemo(
+    () => normalizeStatusFilter(searchParams.get("adminUsersStatus")),
+    [searchParams]
+  );
 
   useEffect(() => {
-    setStatusFilter((cur) => (cur === statusFilterFromUrl ? cur : statusFilterFromUrl));
+    setStatusFilter((cur) =>
+      cur === statusFilterFromUrl ? cur : statusFilterFromUrl
+    );
   }, [statusFilterFromUrl]);
 
   const selectedUser = useMemo(() => {
@@ -210,7 +308,9 @@ export default function DaaDashboardAdminUsers() {
     return data.users.find((u) => u.id === selectedId) ?? null;
   }, [data, selectedId]);
 
-  const meTokenKind = String(data?.me?.tokenKind ?? "none") as AdminUsersApiV0["me"]["tokenKind"];
+  const meTokenKind = String(
+    data?.me?.tokenKind ?? "none"
+  ) as AdminUsersApiV0["me"]["tokenKind"];
 
   const filteredSortedUsers = useMemo(() => {
     const needle = toNeedle(query);
@@ -219,14 +319,28 @@ export default function DaaDashboardAdminUsers() {
     const filtered = needle
       ? users.filter((u) => {
           const isMe = tokenKindForUserId(u.id) === meTokenKind;
-          const hay = [u.id, u.role, fmtStatus(u), u.source, tokenKindForUserId(u.id), isMe ? "me" : ""].join(" ").toLowerCase();
+          const hay = [
+            u.id,
+            u.role,
+            fmtStatus(u),
+            u.source,
+            tokenKindForUserId(u.id),
+            isMe ? "me" : "",
+          ]
+            .join(" ")
+            .toLowerCase();
           return hay.includes(needle);
         })
       : users;
 
-    const filteredByStatus = statusFilter === "all" ? filtered : filtered.filter((u) => fmtStatus(u) === statusFilter);
+    const filteredByStatus =
+      statusFilter === "all"
+        ? filtered
+        : filtered.filter((u) => fmtStatus(u) === statusFilter);
 
-    filteredByStatus.sort((a, b) => compareUsers(a, b, { sortKey, sortDir, meTokenKind }));
+    filteredByStatus.sort((a, b) =>
+      compareUsers(a, b, { sortKey, sortDir, meTokenKind })
+    );
     return filteredByStatus;
   }, [data, query, statusFilter, sortKey, sortDir, meTokenKind]);
 
@@ -236,9 +350,17 @@ export default function DaaDashboardAdminUsers() {
   async function copyUserId(id: AdminUserV0["id"]) {
     try {
       await copyTextToClipboard(id);
-      setToast({ kind: "ok", message: `Copied user id: ${id}`, updatedAtMs: Date.now() });
+      setToast({
+        variant: "success",
+        message: `Copied user id: ${id}`,
+        updatedAtMs: Date.now(),
+      });
     } catch (e: any) {
-      setToast({ kind: "error", message: `Copy failed: ${String(e?.message || e)}`, updatedAtMs: Date.now() });
+      setToast({
+        variant: "error",
+        message: `Copy failed: ${String(e?.message || e)}`,
+        updatedAtMs: Date.now(),
+      });
     }
   }
 
@@ -265,373 +387,291 @@ export default function DaaDashboardAdminUsers() {
     router.replace(qs ? pathname + "?" + qs : pathname);
   }
 
+  function openDetails(id: AdminUserV0["id"]) {
+    setSelectedId(id);
+    setDrawerOpen(true);
+  }
+
+  const isRefreshing = status === "loading";
+
   return (
-    <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontWeight: 900, fontSize: 13 }}>Admin users</div>
-          <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
-            Diagnostics view of configured admin tokens (viewer/editor/legacy), with an enable/disable switch backed by SQLite.
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Admin Users</CardTitle>
+            <CardDescription>
+              Diagnostics view of configured admin tokens (viewer/editor/legacy),
+              with an enable/disable toggle backed by SQLite.
+            </CardDescription>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => load()}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Refreshing
+              </>
+            ) : (
+              "Refresh"
+            )}
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search (id/role/status/source/me)"
+              className="h-9 w-[min(360px,92vw)]"
+            />
+
+            {query.trim() ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setQuery("")}
+              >
+                Clear
+              </Button>
+            ) : null}
+
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              Status
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  updateStatusFilter(normalizeStatusFilter(e.target.value))
+                }
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="missing">Missing</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            Showing {visibleUsers}/{totalUsers} (sort: {sortLabel(sortKey)}
+            {" "}
+            {sortDir})
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <button
-            type="button"
-            onClick={() => load()}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-          >
-            {status === "loading" ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search (id/role/status/source/me)"
-            style={{
-              width: "min(360px, 92vw)",
-              padding: "6px 10px",
-              borderRadius: 10,
-              border: "1px solid #e5e5e5",
-              fontSize: 12,
-              background: "#fff"}}
-          />
-
-          {query.trim() ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-            >
-              Clear
-            </button>
-          ) : null}
-
-          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#666" }}>
-            Status
-            <select
-              value={statusFilter}
-              onChange={(e) => updateStatusFilter(normalizeStatusFilter(e.target.value))}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 10,
-                border: "1px solid #e5e5e5",
-                background: "#fff",
-                fontSize: 12}}
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="missing">Missing</option>
-            </select>
-          </label>
-        </div>
-
-        <div style={{ fontSize: 12, color: "#666" }}>
-          Showing {visibleUsers}/{totalUsers} (sort: {sortLabel(sortKey)} {sortDir})
-        </div>
-      </div>
-
-      {mutateError ? (
-        <div
-          style={{
-            marginTop: 10,
-            padding: 10,
-            border: "1px solid #f0c5c5",
-            background: "#fff6f6",
-            borderRadius: 10,
-            fontSize: 12,
-            color: "#7a1f1f"}}
-        >
-          <b>Update failed</b>: {mutateError}
-        </div>
-      ) : null}
-
-      {status === "error" ? (
-        <div
-          style={{
-            marginTop: 10,
-            padding: 10,
-            border: "1px solid #f0c5c5",
-            background: "#fff6f6",
-            borderRadius: 10,
-            fontSize: 12,
-            color: "#7a1f1f"}}
-        >
-          <b>Failed to load</b>: {error || "unknown error"}
-        </div>
-      ) : null}
-
-      <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 12, overflow: "hidden" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "220px 120px 140px 80px 240px",
-            gap: 8,
-            padding: "8px 10px",
-            background: "#fafafa",
-            borderBottom: "1px solid #eee",
-            fontSize: 12,
-            fontWeight: 700,
-            color: "#333"}}
-        >
-          <button
-            type="button"
-            onClick={() => toggleSort("id")}
-            style={{
-              textAlign: "left",
-              padding: 0,
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-              color: "#333"}}
-          >
-            ID{sortIndicator(sortKey === "id", sortDir)}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => toggleSort("role")}
-            style={{
-              textAlign: "left",
-              padding: 0,
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-              color: "#333"}}
-          >
-            Role{sortIndicator(sortKey === "role", sortDir)}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => toggleSort("status")}
-            style={{
-              textAlign: "left",
-              padding: 0,
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-              color: "#333"}}
-          >
-            Status{sortIndicator(sortKey === "status", sortDir)}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => toggleSort("me")}
-            style={{
-              textAlign: "left",
-              padding: 0,
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: 12,
-              color: "#333"}}
-          >
-            Me{sortIndicator(sortKey === "me", sortDir)}
-          </button>
-          <div style={{ textAlign: "right" }}>Actions</div>
-        </div>
-
-        {filteredSortedUsers.map((u) => {
-          const isMe = tokenKindForUserId(u.id) === meTokenKind;
-          const statusLabel = fmtStatus(u);
-
-          let statusBg = "#f7fafc";
-          let statusBorder = "#e2e8f0";
-          let statusText = "#4a5568";
-          if (statusLabel === "active") {
-            statusBg = "#f0fff4";
-            statusBorder = "#c6f6d5";
-            statusText = "#22543d";
-          } else if (statusLabel === "inactive") {
-            statusBg = "#fffaf0";
-            statusBorder = "#fbd38d";
-            statusText = "#7b341e";
-          } else {
-            statusBg = "#edf2f7";
-            statusBorder = "#e2e8f0";
-            statusText = "#4a5568";
-          }
-
-          const canToggle = u.configured;
-          const isBusy = mutating === u.id;
-
-          function updateStatusFilter(next: StatusFilter) {
-    setStatusFilter(next);
-
-    const sp = new URLSearchParams(Array.from(searchParams.entries()));
-    if (next === "all") sp.delete("adminUsersStatus");
-    else sp.set("adminUsersStatus", next);
-
-    const qs = sp.toString();
-    router.replace(qs ? pathname + "?" + qs : pathname);
-  }
-
-  return (
-            <div
-              key={u.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "220px 120px 140px 80px 240px",
-                gap: 8,
-                padding: "8px 10px",
-                borderTop: "1px solid #eee",
-                fontSize: 12,
-                alignItems: "center"}}
-            >
-              <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{u.id}</div>
-              <div>{u.role}</div>
-              <div>
-                <span
-                  style={{
-                    display: "inline-block",
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    border: `1px solid ${statusBorder}`,
-                    background: statusBg,
-                    color: statusText}}
-                >
-                  {statusLabel}
-                </span>
-              </div>
-              <div style={{ color: isMe ? "#111" : "#bbb" }}>{isMe ? "yes" : "-"}</div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
-                {canToggle ? (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => setActive(u.id, !u.active)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #e5e5e5",
-                      background: "#fafafa",
-                      fontSize: 12,
-                      opacity: isBusy ? 0.6 : 1,
-                      cursor: isBusy ? "not-allowed" : "pointer"}}
-                  >
-                    {isBusy ? "Updating..." : u.active ? "Deactivate" : "Activate"}
-                  </button>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={() => void copyUserId(u.id)}
-                  style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                >
-                  Copy ID
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(u.id);
-                    setDrawerOpen(true);
-                  }}
-                  style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                >
-                  Details
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        {!filteredSortedUsers.length ? (
-          <div style={{ padding: 10, fontSize: 12, color: "#666" }}>{status === "loading" ? "Loading..." : "No users."}</div>
+        {mutateError ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <b>Update failed</b>: {mutateError}
+          </div>
         ) : null}
-      </div>
 
-      <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
-        Note: last login is not tracked yet; this view surfaces role/configuration status only.
-      </div>
+        {status === "error" ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <b>Failed to load</b>: {error || "unknown error"}
+          </div>
+        ) : null}
 
-      {toast ? (
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            position: "fixed",
-            right: 16,
-            bottom: 16,
-            zIndex: 1100,
-            maxWidth: "min(520px, 92vw)",
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: toast.kind === "ok" ? "1px solid rgba(16, 185, 129, 0.35)" : "1px solid rgba(239, 68, 68, 0.45)",
-            background: toast.kind === "ok" ? "rgba(236, 253, 245, 0.98)" : "rgba(254, 242, 242, 0.98)",
-            color: toast.kind === "ok" ? "#065f46" : "#7f1d1d",
-            fontSize: 12,
-            boxShadow: "0 8px 30px rgba(0,0,0,0.15)"}}
-          onClick={() => setToast(null)}
-          title="Click to dismiss"
-        >
-          {toast.message}
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="text-left">
+                <th className="w-[220px] px-3 py-2">
+                  <SortHeaderButton
+                    label="ID"
+                    active={sortKey === "id"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("id")}
+                  />
+                </th>
+                <th className="w-[120px] px-3 py-2">
+                  <SortHeaderButton
+                    label="Role"
+                    active={sortKey === "role"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("role")}
+                  />
+                </th>
+                <th className="w-[140px] px-3 py-2">
+                  <SortHeaderButton
+                    label="Status"
+                    active={sortKey === "status"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("status")}
+                  />
+                </th>
+                <th className="w-[80px] px-3 py-2">
+                  <SortHeaderButton
+                    label="Me"
+                    active={sortKey === "me"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("me")}
+                  />
+                </th>
+                <th className="px-3 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredSortedUsers.map((u) => {
+                const isMe = tokenKindForUserId(u.id) === meTokenKind;
+                const statusLabel = fmtStatus(u);
+
+                const canToggle = u.configured;
+                const isBusy = mutating === u.id;
+
+                return (
+                  <tr key={u.id} className="border-t">
+                    <td className="px-3 py-2 font-mono">{u.id}</td>
+                    <td className="px-3 py-2">{u.role}</td>
+                    <td className="px-3 py-2">
+                      <StatusPill status={statusLabel} />
+                    </td>
+                    <td className="px-3 py-2">
+                      {isMe ? (
+                        <span className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs">
+                          me
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-2">
+                        {canToggle ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isBusy}
+                            onClick={() => setActive(u.id, !u.active)}
+                          >
+                            {isBusy
+                              ? "Updating..."
+                              : u.active
+                                ? "Deactivate"
+                                : "Activate"}
+                          </Button>
+                        ) : null}
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void copyUserId(u.id)}
+                        >
+                          Copy ID
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openDetails(u.id)}
+                        >
+                          Details
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {!filteredSortedUsers.length ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-3 py-3 text-sm text-muted-foreground"
+                  >
+                    {status === "loading" ? "Loading..." : "No users."}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
-      ) : null}
 
-      {drawerOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setDrawerOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.35)",
-            zIndex: 1000,
-            display: "flex",
-            justifyContent: "flex-end"}}
-        >
+        <div className="text-sm text-muted-foreground">
+          Note: last login is not tracked yet; this view surfaces
+          role/configuration status only.
+        </div>
+
+        {toast ? (
           <div
-            onClick={(ev) => ev.stopPropagation()}
-            style={{
-              width: "min(560px, 96vw)",
-              height: "100vh",
-              background: "#fff",
-              borderLeft: "1px solid #eee",
-              padding: 12,
-              overflow: "auto"}}
+            role="status"
+            aria-live="polite"
+            className={`fixed bottom-4 right-4 z-[1100] max-w-[min(520px,92vw)] cursor-pointer rounded-md border px-3 py-2 text-sm shadow-lg ${toast.variant === "success" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300" : "border-destructive/30 bg-destructive/5 text-destructive"}`}
+            onClick={() => setToast(null)}
+            title="Click to dismiss"
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 900, fontSize: 13 }}>User details</div>
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(false)}
-                style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-              >
-                Close
-              </button>
-            </div>
+            {toast.message}
+          </div>
+        ) : null}
+
+        <Dialog
+          open={drawerOpen}
+          onOpenChange={(open) => {
+            setDrawerOpen(open);
+            if (!open) setSelectedId(null);
+          }}
+        >
+          <DialogContent
+            className="fixed right-0 top-0 bottom-0 left-auto grid h-[100dvh] w-full max-w-[560px] translate-x-0 translate-y-0 gap-4 overflow-auto rounded-none border-l p-6 sm:rounded-none"
+          >
+            <DialogHeader className="pr-8">
+              <DialogTitle>User details</DialogTitle>
+              <DialogDescription>
+                Token config status only (last login not tracked yet).
+              </DialogDescription>
+            </DialogHeader>
 
             {selectedUser ? (
-              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-                <div style={{ fontSize: 12, color: "#444" }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <div>
-                      <b>id</b>: <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{selectedUser.id}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void copyUserId(selectedUser.id)}
-                      style={{ padding: "4px 8px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-                    >
-                      Copy id
-                    </button>
+              <div className="space-y-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-mono text-base font-semibold">
+                    {selectedUser.id}
                   </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copyUserId(selectedUser.id)}
+                    >
+                      Copy ID
+                    </Button>
+
+                    {selectedUser.configured ? (
+                      <Button
+                        type="button"
+                        variant={selectedUser.active ? "destructive" : "default"}
+                        size="sm"
+                        disabled={mutating === selectedUser.id}
+                        onClick={() =>
+                          void setActive(selectedUser.id, !selectedUser.active)
+                        }
+                      >
+                        {mutating === selectedUser.id
+                          ? "Updating..."
+                          : selectedUser.active
+                            ? "Deactivate"
+                            : "Activate"}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="grid gap-1">
                   <div>
                     <b>role</b>: {selectedUser.role}
                   </div>
@@ -642,7 +682,7 @@ export default function DaaDashboardAdminUsers() {
                     <b>active</b>: {fmtBool(selectedUser.active)}
                   </div>
                   <div>
-                    <b>status</b>: {fmtStatus(selectedUser)}
+                    <b>status</b>: <StatusPill status={fmtStatus(selectedUser)} />
                   </div>
                   <div>
                     <b>source</b>: {selectedUser.source}
@@ -650,17 +690,16 @@ export default function DaaDashboardAdminUsers() {
                   <div>
                     <b>tokenKind</b>: {tokenKindForUserId(selectedUser.id)}
                   </div>
-                  <div>
-                    <b>last login</b>: <span style={{ color: "#666" }}>N/A (not tracked yet)</span>
-                  </div>
                 </div>
               </div>
             ) : (
-              <div style={{ marginTop: 10, fontSize: 12, color: "#666" }}>No user selected.</div>
+              <div className="text-sm text-muted-foreground">
+                No user selected.
+              </div>
             )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }
