@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 import { applyNotionalOrdersToPositionsV0, normalizeNotionalOrdersV0 } from "@/src/daa/portfolioApplyNotionalOrdersV0";
 
 import { copyTextToClipboard } from "../../copyToClipboard";
@@ -567,80 +570,55 @@ export default function DaaDashboardHistoryAudit() {
                           </div>
 
                           {auditEvents.length ? (
-                            <div style={{ marginTop: 8, border: "1px solid #eee", borderRadius: 10, overflow: "hidden" }}>
-                              <div
-                                style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "160px 220px 1fr 190px",
-                                  gap: 8,
-                                  padding: "8px 10px",
-                                  background: "#fafafa",
-                                  fontSize: 12,
-                                  fontWeight: 700}}
-                              >
-                                <div>Time</div>
-                                <div>Kind</div>
-                                <div>Payload</div>
-                                <div />
-                              </div>
+                            <div className="mt-2 rounded-md border">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-[160px]">Time</TableHead>
+                                    <TableHead className="w-[240px]">Kind</TableHead>
+                                    <TableHead>Payload</TableHead>
+                                    <TableHead className="w-[220px]" />
+                                  </TableRow>
+                                </TableHeader>
 
-                              {auditPageEvents.map((e: any) => {
-                                const eventId = String(e?.eventId ?? "").trim();
-                                const createdAt = e?.createdAt;
-                                const kind = String(e?.kind ?? "").trim();
-                                const payloadSummary = summarizeAuditPayload(e?.payload);
+                                <TableBody>
+                                  {auditPageEvents.map((e: any) => {
+                                    const eventId = String(e?.eventId ?? "").trim();
+                                    const createdAt = e?.createdAt;
+                                    const kind = String(e?.kind ?? "").trim();
+                                    const payloadSummary = summarizeAuditPayload(e?.payload);
 
-                                return (
-                                  <div
-                                    key={eventId || kind + "_" + String(createdAt ?? "")}
-                                    style={{
-                                      display: "grid",
-                                      gridTemplateColumns: "160px 220px 1fr 190px",
-                                      gap: 8,
-                                      padding: "8px 10px",
-                                      borderTop: "1px solid #eee",
-                                      fontSize: 12,
-                                      alignItems: "center"}}
-                                  >
-                                    <div style={{ color: "#444" }}>{fmtTime(createdAt)}</div>
-                                    <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{kind || "-"}</div>
-                                    <div style={{ color: "#666" }}>{payloadSummary || "-"}</div>
-                                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => doCopyAudit(pretty(e))}
-                                        style={{
-                                          padding: "6px 10px",
-                                          borderRadius: 10,
-                                          border: "1px solid #e5e5e5",
-                                          background: "#fafafa",
-                                          fontSize: 12}}
-                                      >
-                                        Copy JSON
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (!eventId) return;
-                                          setSelectedAuditEventId(eventId);
-                                          setAuditModalOpen(true);
-                                          setAuditCopyStatus("idle");
-                                        }}
-                                        disabled={!eventId}
-                                        style={{
-                                          padding: "6px 10px",
-                                          borderRadius: 10,
-                                          border: "1px solid #e5e5e5",
-                                          background: "#fafafa",
-                                          fontSize: 12}}
-                                      >
-                                        Details
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                                    return (
+                                      <TableRow key={eventId || kind + "_" + String(createdAt ?? "")}>
+                                        <TableCell className="text-xs text-muted-foreground">{fmtTime(createdAt)}</TableCell>
+                                        <TableCell className="font-mono text-xs">{kind || "-"}</TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">{payloadSummary || "-"}</TableCell>
+                                        <TableCell>
+                                          <div className="flex justify-end gap-2">
+                                            <Button type="button" variant="outline" size="sm" onClick={() => doCopyAudit(pretty(e))}>
+                                              Copy JSON
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => {
+                                                if (!eventId) return;
+                                                setSelectedAuditEventId(eventId);
+                                                setAuditModalOpen(true);
+                                                setAuditCopyStatus("idle");
+                                              }}
+                                              disabled={!eventId}
+                                            >
+                                              Details
+                                            </Button>
+                                          </div>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
                             </div>
                           ) : (
                             <pre style={{ marginTop: 6, whiteSpace: "pre-wrap", background: "#fafafa", border: "1px solid #eee", borderRadius: 10, padding: 10, fontSize: 12 }}>
