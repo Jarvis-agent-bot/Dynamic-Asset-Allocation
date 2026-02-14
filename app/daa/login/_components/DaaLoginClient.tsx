@@ -459,15 +459,19 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                   </Button>
 
                   {emailLink.kind === "sent" ? (
-                    <Button
-                      type="button"
-                      className="w-full sm:w-auto"
-                      variant="outline"
-                      onClick={() => void requestEmailLink()}
-                      disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
-                    >
-                      {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
-                    </Button>
+                    <div className="text-xs text-muted-foreground">
+                      Didn't receive it?{" "}
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 align-baseline"
+                        onClick={() => void requestEmailLink()}
+                        disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
+                      >
+                        {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
 
@@ -475,11 +479,9 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                   <div className="rounded-md border bg-muted/20 p-3 text-sm">
                     <div className="font-medium">Check your inbox</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      If <span className="font-medium">{emailLink.email}</span> is registered, you'll receive a sign-in link shortly. It expires in about 15 minutes.
+                      If <span className="font-medium">{emailLink.email}</span> is registered, you'll receive a sign-in link within a minute. It expires in about 15 minutes.
                     </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {resendRemainingSeconds > 0 ? `You can resend in ${formatSeconds(resendRemainingSeconds)}.` : "You can resend now if you didn't receive it."}
-                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">Check your spam or promotions folder if you don't see it.</div>
                   </div>
                 ) : null}
 
