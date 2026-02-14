@@ -6,7 +6,7 @@ import { isRebalanceCoreRequest, type RebalanceCoreRequest } from "@/src/daa/reb
 import { readJsonBody } from "@/src/daa/requestJson";
 
 export async function POST(req: Request) {
-  const denied = requireDaaAdminViewerAuth(req);
+  const denied = await requireDaaAdminViewerAuth(req);
   if (denied) return denied;
 
   const parsed = await readJsonBody<RebalanceCoreRequest>(req);

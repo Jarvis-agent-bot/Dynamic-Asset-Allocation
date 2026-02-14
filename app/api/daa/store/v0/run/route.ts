@@ -6,7 +6,7 @@ import { createDaaRunV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const denied = requireDaaAdminEditorAuth(req);
+  const denied = await requireDaaAdminEditorAuth(req);
   if (denied) return denied;
 
   let body: any = null;

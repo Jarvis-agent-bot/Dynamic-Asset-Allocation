@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getDaaAdminUserStatusV0 } from "./sqlite/daaAdminUserStatusStoreV0";
+
 export type DaaAdminRole = "viewer" | "editor";
 
 export type DaaAdminTokenKindV0 = "legacy" | "viewer" | "editor" | "unknown" | "none";
@@ -82,6 +84,37 @@ function requiredEnvFor(role: DaaAdminRole): string {
   return "DAA_ADMIN_VIEWER_TOKEN (or DAA_ADMIN_EDITOR_TOKEN, or legacy DAA_ADMIN_TOKEN)";
 }
 
+async function isTokenKindActiveV0(kind: DaaAdminTokenKindV0): Promise<boolean> {
+  // Only the configured tokens can be activated/deactivated.
+  if (kind === "viewer") {
+    try {
+      return (await getDaaAdminUserStatusV0("viewer-token")) === "active";
+    } catch (e) {
+      console.warn("[daa_adminAuth] failed to read viewer-token status; defaulting to active", e);
+      return true;
+    }
+  }
+  if (kind === "editor") {
+    try {
+      return (await getDaaAdminUserStatusV0("editor-token")) === "active";
+    } catch (e) {
+      console.warn("[daa_adminAuth] failed to read editor-token status; defaulting to active", e);
+      return true;
+    }
+  }
+  if (kind === "legacy") {
+    try {
+      return (await getDaaAdminUserStatusV0("legacy-token")) === "active";
+    } catch (e) {
+      console.warn("[daa_adminAuth] failed to read legacy-token status; defaulting to active", e);
+      return true;
+    }
+  }
+
+  // unknown/none: not active.
+  return false;
+}
+
 /**
  * Bearer auth for DAA admin-only endpoints, with viewer/editor roles.
  *
@@ -93,7 +126,7 @@ function requiredEnvFor(role: DaaAdminRole): string {
  * - viewer endpoints accept: viewer token OR editor token OR legacy token.
  * - editor endpoints accept: editor token OR legacy token.
  */
-export function requireDaaAdminRole(req: Request, role: DaaAdminRole): NextResponse | null {
+export async function requireDaaAdminRole(req: Request, role: DaaAdminRole): Promise<NextResponse | null> {
   const { legacy, viewer, editor } = getAdminTokens();
 
   const viewerAllowed = uniqNonEmpty([viewer, editor, legacy]);
@@ -111,18 +144,22 @@ export function requireDaaAdminRole(req: Request, role: DaaAdminRole): NextRespo
   if (!provided) return unauthorized();
 
   if (!allowed.includes(provided)) return unauthorized();
+
+  const kind = inferDaaAdminTokenKindV0(provided);
+  if (!(await isTokenKindActiveV0(kind))) return unauthorized();
+
   return null;
 }
 
-export function requireDaaAdminViewerAuth(req: Request): NextResponse | null {
+export async function requireDaaAdminViewerAuth(req: Request): Promise<NextResponse | null> {
   return requireDaaAdminRole(req, "viewer");
 }
 
-export function requireDaaAdminEditorAuth(req: Request): NextResponse | null {
+export async function requireDaaAdminEditorAuth(req: Request): Promise<NextResponse | null> {
   return requireDaaAdminRole(req, "editor");
 }
 
 // Back-compat alias: historically all admin endpoints were effectively editor-level.
-export function requireDaaAdminAuth(req: Request): NextResponse | null {
+export async function requireDaaAdminAuth(req: Request): Promise<NextResponse | null> {
   return requireDaaAdminEditorAuth(req);
 }
