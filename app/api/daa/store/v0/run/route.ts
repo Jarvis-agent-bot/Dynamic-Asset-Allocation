@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
+import { getDaaAdminActorUserIdFromRequestV0, requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { createDaaRunV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
 
 export const runtime = "nodejs";
@@ -27,7 +27,8 @@ export async function POST(req: Request) {
   if (!kind) return NextResponse.json({ ok: false, error: "missing kind" }, { status: 400 });
 
   try {
-    const { runId, createdAt } = await createDaaRunV0({ kind, status, payload });
+    const actorUserId = getDaaAdminActorUserIdFromRequestV0(req);
+    const { runId, createdAt } = await createDaaRunV0({ kind, status, payload, actorUserId });
     return NextResponse.json({ ok: true, runId, createdAt });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message ?? e ?? "error") }, { status: 500 });
