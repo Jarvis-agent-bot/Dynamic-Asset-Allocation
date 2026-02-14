@@ -56,7 +56,8 @@ function sortLabel(key: SortKey): string {
   return "Sort";
 }
 
-function compareUsers(a: AdminUserV0, b: AdminUserV0, *, sortKey: SortKey, sortDir: SortDir, meTokenKind: AdminUsersApiV0["me"]["tokenKind"]): number {
+function compareUsers(a: AdminUserV0, b: AdminUserV0, opts: { sortKey: SortKey; sortDir: SortDir; meTokenKind: AdminUsersApiV0["me"]["tokenKind"] }): number {
+  const { sortKey, sortDir, meTokenKind } = opts;
   const dir = sortDir === "asc" ? 1 : -1;
 
   function cmp(x: number | string, y: number | string): number {
