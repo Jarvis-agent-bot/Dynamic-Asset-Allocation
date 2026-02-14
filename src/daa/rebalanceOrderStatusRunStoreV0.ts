@@ -28,6 +28,11 @@ export type RebalanceOrderStatusRunPhaseV0 =
   | "done"
   | "error";
 
+export type RebalanceOrderStatusRunMetaV0 = {
+  notes?: string;
+  tags?: string[];
+};
+
 export type RebalanceOrderStatusRunV0 = {
   schemaVersion: 1;
   runId: string;
@@ -37,6 +42,7 @@ export type RebalanceOrderStatusRunV0 = {
   phase: RebalanceOrderStatusRunPhaseV0;
   message?: string;
   error?: string;
+  meta?: RebalanceOrderStatusRunMetaV0;
   orders: RebalanceOrderStatusV0[];
 };
 
@@ -72,6 +78,55 @@ function normalizePhaseV0(x: unknown): RebalanceOrderStatusRunPhaseV0 {
     x === "error"
     ? x
     : "idle";
+}
+
+
+function normalizeTagsV0(x: unknown): string[] {
+  if (!Array.isArray(x)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const t of x) {
+    const raw = typeof t === "string" ? t : String(t ?? "");
+    const tag = raw.trim();
+    if (!tag) continue;
+
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    out.push(tag);
+    if (out.length >= 24) break;
+  }
+
+  return out;
+}
+
+function normalizeMetaV0(x: unknown): RebalanceOrderStatusRunMetaV0 | undefined {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return undefined;
+  const r: any = x as any;
+
+  const notes = typeof r?.notes === "string" ? String(r.notes).trim() : "";
+  const tags = normalizeTagsV0(r?.tags);
+
+  const meta: RebalanceOrderStatusRunMetaV0 = {};
+  if (notes) meta.notes = notes;
+  if (tags.length) meta.tags = tags;
+
+  return meta.notes || meta.tags ? meta : undefined;
+}
+
+function normalizeMetaInputV0(x: RebalanceOrderStatusRunMetaV0 | null | undefined): RebalanceOrderStatusRunMetaV0 | undefined {
+  if (!x) return undefined;
+
+  const notes = typeof x.notes === "string" ? String(x.notes).trim() : "";
+  const tags = normalizeTagsV0(x.tags);
+
+  const meta: RebalanceOrderStatusRunMetaV0 = {};
+  if (notes) meta.notes = notes;
+  if (tags.length) meta.tags = tags;
+
+  return meta.notes || meta.tags ? meta : undefined;
 }
 
 function normalizeOrdersV0(x: unknown): RebalanceOrderStatusV0[] {
@@ -118,7 +173,9 @@ function normalizeRunV0(x: unknown): RebalanceOrderStatusRunV0 | null {
   const message = typeof r.message === "string" && r.message ? r.message : undefined;
   const error = typeof r.error === "string" && r.error ? r.error : undefined;
 
-  return { schemaVersion: 1, runId, createdAt, updatedAt, state, phase, message, error, orders };
+  const meta = normalizeMetaV0(r.meta);
+
+  return { schemaVersion: 1, runId, createdAt, updatedAt, state, phase, message, error, meta, orders };
 }
 
 export function loadRebalanceOrderStatusRunV0(
@@ -194,6 +251,7 @@ export function clearRebalanceOrderStatusRunHistoryV0(storage: Pick<Storage, "se
 export function startRebalanceOrderStatusRunV0(args: {
   storage: Pick<Storage, "setItem"> | null | undefined;
   message?: string;
+  meta?: RebalanceOrderStatusRunMetaV0;
 }): { ok: true; run: RebalanceOrderStatusRunV0 } | { ok: false; error: string } {
   const t = nowIso();
   const run: RebalanceOrderStatusRunV0 = {
@@ -204,6 +262,7 @@ export function startRebalanceOrderStatusRunV0(args: {
     state: "running",
     phase: "fetching_core",
     message: args.message,
+    meta: normalizeMetaInputV0(args.meta),
     orders: [],
   };
 
@@ -374,5 +433,39 @@ export function failRebalanceOrderStatusRunV0(args: {
   // Best-effort: keep a rolling history so runs can be inspected after the snapshot is cleared.
   upsertRebalanceOrderStatusRunHistoryV0({ storage: args.storage, run });
 
+  return { ok: true, run };
+}
+
+export function setRebalanceOrderStatusRunMetaV0(args: {
+  storage: Pick<Storage, "getItem" | "setItem"> | null | undefined;
+  runId: string;
+  meta: RebalanceOrderStatusRunMetaV0 | null | undefined;
+}): { ok: true; run: RebalanceOrderStatusRunV0 } | { ok: false; error: string } {
+  if (!args.storage) return { ok: false, error: "missing storage" };
+
+  const runId = String(args.runId ?? "").trim();
+  if (!runId) return { ok: false, error: "missing runId" };
+
+  // Prefer the snapshot if it matches, otherwise fall back to the rolling history.
+  const snap = loadRebalanceOrderStatusRunV0(args.storage);
+  const hist = loadRebalanceOrderStatusRunHistoryV0(args.storage);
+  const base = snap && snap.runId === runId ? snap : hist.find((r) => r.runId === runId) ?? null;
+  if (!base) return { ok: false, error: "runId not found" };
+
+  const t = nowIso();
+  const meta = normalizeMetaInputV0(args.meta);
+
+  const run: RebalanceOrderStatusRunV0 = {
+    ...base,
+    updatedAt: t,
+    meta,
+  };
+
+  if (snap && snap.runId === runId) {
+    const saved = saveRebalanceOrderStatusRunV0(args.storage, run);
+    if (!saved.ok) return saved;
+  }
+
+  upsertRebalanceOrderStatusRunHistoryV0({ storage: args.storage, run });
   return { ok: true, run };
 }
