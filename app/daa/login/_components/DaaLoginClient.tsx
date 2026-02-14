@@ -85,6 +85,9 @@ export default function DaaLoginClient({ returnTo }: Props) {
 
   const [logoutBusy, setLogoutBusy] = useState(false);
 
+  const checkingSession = session.kind === "checking";
+  const disabled = busy || checkingSession;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -146,6 +149,8 @@ export default function DaaLoginClient({ returnTo }: Props) {
   }
 
   async function submit() {
+    if (disabled) return;
+
     setBusy(true);
     setErrors({});
 
@@ -153,8 +158,8 @@ export default function DaaLoginClient({ returnTo }: Props) {
     const pwd = password;
 
     const nextErrors: FormErrors = {};
-    if (!email) nextErrors.email = "Enter a valid email address.";
-    if (!pwd.trim()) nextErrors.password = "Password is required.";
+    if (!email) nextErrors.email = "Enter your email address (for example, you@example.com).";
+    if (!pwd.trim()) nextErrors.password = "Enter your password.";
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -177,12 +182,24 @@ export default function DaaLoginClient({ returnTo }: Props) {
         json = null;
       }
 
-      if (!res.ok || !json?.ok) {
+      if (!json || typeof json.ok !== "boolean") {
+        setErrors({ form: "Unexpected response from the server. Please try again." });
+        return;
+      }
+
+      if (!res.ok || !json.ok) {
         const msg = parseApiError(json, `HTTP ${res.status}`);
 
-        // Prefer inline field errors for the common case.
-        if (res.status === 401 && msg.toLowerCase().includes("invalid")) {
+        // Invalid credentials is the most common case; keep it inline.
+        if (res.status === 401) {
           setErrors({ password: "Email or password is incorrect." });
+          setPassword("");
+          return;
+        }
+
+        // Avoid overly technical errors for the common cases.
+        if (res.status >= 500) {
+          setErrors({ form: "We couldn't sign you in right now. Please try again." });
           return;
         }
 
@@ -228,7 +245,7 @@ export default function DaaLoginClient({ returnTo }: Props) {
     <div className="mx-auto w-full max-w-md space-y-3">
       {session.kind === "error" ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          Session check failed: {session.message}
+          Couldn't verify your session. You can still try signing in. ({session.message})
         </div>
       ) : null}
 
@@ -245,9 +262,16 @@ export default function DaaLoginClient({ returnTo }: Props) {
               e.preventDefault();
               void submit();
             }}
-            aria-busy={busy}
+            aria-busy={busy || checkingSession}
             aria-describedby={errors.form ? formErrorId : undefined}
           >
+            {checkingSession ? (
+              <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking session...
+              </div>
+            ) : null}
+
             <div className="grid gap-2">
               <label htmlFor={usernameId} className="text-sm font-medium">
                 Email
@@ -266,7 +290,7 @@ export default function DaaLoginClient({ returnTo }: Props) {
                 }}
                 autoComplete="email"
                 placeholder="you@example.com"
-                disabled={busy}
+                disabled={disabled}
                 aria-invalid={Boolean(errors.email) || undefined}
                 aria-describedby={errors.email ? emailHelpId : undefined}
               />
@@ -293,7 +317,7 @@ export default function DaaLoginClient({ returnTo }: Props) {
                 }}
                 autoComplete="current-password"
                 placeholder="••••••••"
-                disabled={busy}
+                disabled={disabled}
                 aria-invalid={Boolean(errors.password) || undefined}
                 aria-describedby={errors.password ? passwordHelpId : undefined}
               />
@@ -306,8 +330,13 @@ export default function DaaLoginClient({ returnTo }: Props) {
               )}
             </div>
 
-            <Button type="submit" disabled={busy}>
-              {busy ? (
+            <Button type="submit" disabled={disabled}>
+              {checkingSession ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking session...
+                </span>
+              ) : busy ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Signing in...
@@ -335,10 +364,8 @@ export default function DaaLoginClient({ returnTo }: Props) {
                 role="alert"
                 className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
               >
-                <div>Login failed: {errors.form}</div>
-                <div className="text-xs text-muted-foreground">
-                  If you keep seeing this, double-check your email/password or ask an admin to resend/reset your credentials.
-                </div>
+                <div>Couldn't sign you in: {errors.form}</div>
+                <div className="text-xs text-muted-foreground">Double-check your email/password or ask an admin to resend/reset your credentials.</div>
               </div>
             ) : null}
           </form>
