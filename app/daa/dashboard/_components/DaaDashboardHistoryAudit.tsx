@@ -150,6 +150,9 @@ export default function DaaDashboardHistoryAudit() {
   const [auditModalOpen, setAuditModalOpen] = useState<boolean>(false);
   const [auditCopyStatus, setAuditCopyStatus] = useState<"idle" | "ok" | "error">("idle");
 
+  const [auditPageSize, setAuditPageSize] = useState<number>(25);
+  const [auditPage, setAuditPage] = useState<number>(1);
+
   const [actorFilter, setActorFilter] = useState<string>("");
   const [fromLocal, setFromLocal] = useState<string>("");
   const [toLocal, setToLocal] = useState<string>("");
@@ -217,6 +220,8 @@ export default function DaaDashboardHistoryAudit() {
     setAuditModalOpen(false);
     setAuditCopyStatus("idle");
 
+    setAuditPage(1);
+
     try {
       // Optional auth header; read endpoints currently allow unauthenticated access.
       const headers: Record<string, string> = { accept: "application/json", ...buildDaaAdminAuthHeadersV0() };
@@ -267,6 +272,25 @@ export default function DaaDashboardHistoryAudit() {
   }, [bundle]);
 
   const auditEvents = useMemo(() => (Array.isArray(bundle?.audit) ? (bundle.audit as any[]) : []), [bundle]);
+
+  const auditTotal = auditEvents.length;
+
+  const auditPageCount = useMemo(() => {
+    const size = Math.max(1, Math.floor(auditPageSize || 25));
+    return Math.max(1, Math.ceil(auditTotal / size));
+  }, [auditTotal, auditPageSize]);
+
+  useEffect(() => {
+    // Clamp after loading a different run or changing page size.
+    setAuditPage((p) => Math.min(Math.max(1, p), auditPageCount));
+  }, [auditPageCount]);
+
+  const auditPageEvents = useMemo(() => {
+    const size = Math.max(1, Math.floor(auditPageSize || 25));
+    const page = Math.min(Math.max(1, auditPage), auditPageCount);
+    const start = (page - 1) * size;
+    return auditEvents.slice(start, start + size);
+  }, [auditEvents, auditPage, auditPageCount, auditPageSize]);
 
   const selectedAuditEvent = useMemo(() => {
     const id = String(selectedAuditEventId ?? "").trim();
@@ -507,7 +531,50 @@ export default function DaaDashboardHistoryAudit() {
                             Click a row to view payload + metadata (read-only). This never executes trades.
                           </div>
 
-                          {Array.isArray(bundle.audit) && bundle.audit.length ? (
+                          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <div style={{ fontSize: 12, color: "#444" }}>Total: <b>{auditTotal}</b></div>
+
+                            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <div style={{ fontSize: 12, color: "#666" }}>Page size</div>
+                              <select
+                                value={String(auditPageSize)}
+                                onChange={(e) => {
+                                  const n = Number(String(e.target.value ?? ""));
+                                  setAuditPageSize(Number.isFinite(n) && n > 0 ? n : 25);
+                                  setAuditPage(1);
+                                }}
+                                style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", fontSize: 12 }}
+                              >
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                              </select>
+                            </div>
+
+                            <div style={{ fontSize: 12, color: "#666" }}>
+                              Page <b>{auditPage}</b> / <b>{auditPageCount}</b>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                              disabled={auditPageCount <= 1 || auditPage <= 1}
+                              style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+                            >
+                              Prev
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAuditPage((p) => Math.min(auditPageCount, p + 1))}
+                              disabled={auditPageCount <= 1 || auditPage >= auditPageCount}
+                              style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
+                            >
+                              Next
+                            </button>
+                          </div>
+
+                          {auditEvents.length ? (
                             <div style={{ marginTop: 8, border: "1px solid #eee", borderRadius: 10, overflow: "hidden" }}>
                               <div
                                 style={{
@@ -526,7 +593,7 @@ export default function DaaDashboardHistoryAudit() {
                                 <div />
                               </div>
 
-                              {bundle.audit.map((e: any) => {
+                              {auditPageEvents.map((e: any) => {
                                 const eventId = String(e?.eventId ?? "").trim();
                                 const createdAt = e?.createdAt;
                                 const kind = String(e?.kind ?? "").trim();
