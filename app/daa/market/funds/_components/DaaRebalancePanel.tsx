@@ -3355,6 +3355,34 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               </span>
             </div>
 
+            <div
+              style={{
+                marginTop: 8,
+                padding: '10px 12px',
+                border: '1px solid rgba(59, 130, 246, 0.45)',
+                borderRadius: 12,
+                background: 'rgba(59, 130, 246, 0.08)',
+              }}
+              role="note"
+              aria-label="Risk disclosure"
+            >
+              <div style={{ fontSize: 12, fontWeight: 800 }}>Risk disclosure</div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.6 }}>
+                Dynamic rebalancing suggestions are generated from local inputs (holdings, prices, target weights, policy). They can be wrong and may increase turnover/costs.
+              </div>
+              <details style={{ marginTop: 6 }}>
+                <summary className="muted" style={{ cursor: 'pointer', fontSize: 11 }}>
+                  Learn more
+                </summary>
+                <div className="muted" style={{ fontSize: 11, marginTop: 6, lineHeight: 1.6, display: 'grid', gap: 4 }}>
+                  <div>- Not financial advice. Review inputs and constraints before executing.</div>
+                  <div>- Data risk: stale/missing quotes, wrong symbols, rounding/lot sizes.</div>
+                  <div>- Cost risk: fees, slippage/spread, taxes, min-trade constraints.</div>
+                  <div>- Safety: start with dry runs; keep a cash buffer; consider cooldown.</div>
+                </div>
+              </details>
+            </div>
+
             {priceDataWarningsV0.missing.length || priceDataWarningsV0.lastClose.length ? (
               <div
                 style={{
