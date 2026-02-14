@@ -241,3 +241,79 @@ export async function getDaaRunBundleV0(runIdRaw: string): Promise<DaaRunBundleV
     return { run, portfolio, confirm, executed, audit };
   });
 }
+
+export type DaaRunListRowV0 = {
+  runId: string;
+  createdAt: string;
+  kind: string;
+  status: string;
+  hasPortfolio: boolean;
+  hasConfirm: boolean;
+  hasExecuted: boolean;
+  auditCount: number;
+};
+
+export async function listDaaRunsV0(args?: {
+  limit?: number;
+  beforeCreatedAt?: string;
+  beforeRunId?: string;
+}): Promise<DaaRunListRowV0[]> {
+  const limitRaw = args?.limit;
+  const limit = Math.max(1, Math.min(200, Number.isFinite(Number(limitRaw)) ? Math.trunc(Number(limitRaw)) : 50));
+
+  const beforeCreatedAt = typeof args?.beforeCreatedAt === "string" ? args?.beforeCreatedAt.trim() : "";
+  const beforeRunId = typeof args?.beforeRunId === "string" ? args?.beforeRunId.trim() : "";
+
+  return withDaaSqliteDbV0(async ({ db }) => {
+    let sql = `
+      SELECT
+        r.run_id,
+        r.created_at,
+        r.kind,
+        r.status,
+        CASE WHEN p.run_id IS NULL THEN 0 ELSE 1 END AS has_portfolio,
+        CASE WHEN c.run_id IS NULL THEN 0 ELSE 1 END AS has_confirm,
+        CASE WHEN e.run_id IS NULL THEN 0 ELSE 1 END AS has_executed,
+        (SELECT COUNT(1) FROM daa_run_audit_events a WHERE a.run_id = r.run_id) AS audit_count
+      FROM daa_runs r
+      LEFT JOIN daa_run_portfolio p ON p.run_id = r.run_id
+      LEFT JOIN daa_run_confirm c ON c.run_id = r.run_id
+      LEFT JOIN daa_run_executed e ON e.run_id = r.run_id
+    `.trim();
+
+    const bind: any[] = [];
+
+    if (beforeCreatedAt && beforeRunId) {
+      sql += " WHERE (r.created_at < ? OR (r.created_at = ? AND r.run_id < ?))";
+      bind.push(beforeCreatedAt, beforeCreatedAt, beforeRunId);
+    } else if (beforeCreatedAt) {
+      sql += " WHERE r.created_at < ?";
+      bind.push(beforeCreatedAt);
+    }
+
+    sql += " ORDER BY r.created_at DESC, r.run_id DESC LIMIT ?";
+    bind.push(limit);
+
+    const stmt = db.prepare(sql);
+    try {
+      stmt.bind(bind);
+      const out: DaaRunListRowV0[] = [];
+      while (stmt.step()) {
+        const row = stmt.getAsObject();
+        out.push({
+          runId: String((row as any).run_id ?? ""),
+          createdAt: String((row as any).created_at ?? ""),
+          kind: String((row as any).kind ?? ""),
+          status: String((row as any).status ?? ""),
+          hasPortfolio: Number((row as any).has_portfolio ?? 0) > 0,
+          hasConfirm: Number((row as any).has_confirm ?? 0) > 0,
+          hasExecuted: Number((row as any).has_executed ?? 0) > 0,
+          auditCount: Number((row as any).audit_count ?? 0) || 0,
+        });
+      }
+      return out;
+    } finally {
+      stmt.free();
+    }
+  });
+}

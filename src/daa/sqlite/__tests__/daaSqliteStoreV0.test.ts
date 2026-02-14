@@ -7,6 +7,7 @@ import {
   appendDaaRunAuditEventV0,
   createDaaRunV0,
   getDaaRunBundleV0,
+  listDaaRunsV0,
   setDaaRunConfirmV0,
   setDaaRunExecutedV0,
   setDaaRunPortfolioV0,
@@ -51,6 +52,36 @@ describe("daa/sqlite store v0", () => {
     const bundle2 = await getDaaRunBundleV0(runId);
     expect(bundle2.run.payload).toEqual({ foo: 1 });
     expect(bundle2.audit.map((e) => e.kind)).toEqual(["ai_orders_draft", "note"]);
+
+    await resetDbFile(dbPath);
+  });
+
+  it("lists runs with cursor", async () => {
+    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
+    process.env.DAA_SQLITE_PATH = dbPath;
+    await resetDbFile(dbPath);
+
+    const r1 = await createDaaRunV0({ kind: "rebalance", payload: { i: 1 }, createdAt: "2026-01-01T00:00:01.000Z" });
+    const r2 = await createDaaRunV0({ kind: "rebalance", payload: { i: 2 }, createdAt: "2026-01-02T00:00:01.000Z" });
+    const r3 = await createDaaRunV0({ kind: "rebalance", payload: { i: 3 }, createdAt: "2026-01-03T00:00:01.000Z" });
+
+    await setDaaRunPortfolioV0({ runId: r1.runId, payload: { p: 1 } });
+    await setDaaRunConfirmV0({ runId: r2.runId, payload: { c: 2 } });
+    await setDaaRunExecutedV0({ runId: r3.runId, payload: { e: 3 } });
+
+    await appendDaaRunAuditEventV0({ runId: r2.runId, kind: "note", payload: { text: "hello" } });
+    await appendDaaRunAuditEventV0({ runId: r2.runId, kind: "ai_orders_draft", payload: { orders: [] } });
+
+    const page1 = await listDaaRunsV0({ limit: 2 });
+    expect(page1.map((r) => r.runId)).toEqual([r3.runId, r2.runId]);
+    expect(page1[0]?.hasExecuted).toBe(true);
+    expect(page1[0]?.hasConfirm).toBe(false);
+    expect(page1[1]?.hasConfirm).toBe(true);
+    expect(page1[1]?.auditCount).toBe(2);
+
+    const page2 = await listDaaRunsV0({ limit: 10, beforeCreatedAt: page1[1]!.createdAt, beforeRunId: page1[1]!.runId });
+    expect(page2.map((r) => r.runId)).toEqual([r1.runId]);
+    expect(page2[0]?.hasPortfolio).toBe(true);
 
     await resetDbFile(dbPath);
   });
