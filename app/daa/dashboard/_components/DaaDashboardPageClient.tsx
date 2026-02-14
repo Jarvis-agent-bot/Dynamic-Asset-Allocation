@@ -14,6 +14,7 @@ import DaaDashboardAiExplain from "../_components/DaaDashboardAiExplain";
 import DaaDashboardExport from "../_components/DaaDashboardExport";
 import DaaDashboardImport from "../_components/DaaDashboardImport";
 import DaaDashboardRunChecklist from "../_components/DaaDashboardRunChecklist";
+import DaaDashboardOverviewCards from "../_components/DaaDashboardOverviewCards";
 import DaaDashboardBacktestDriftRebalance from "../_components/DaaDashboardBacktestDriftRebalance";
 import DaaDashboardConfirmExecuted from "../_components/DaaDashboardConfirmExecuted";
 import DaaDashboardHistoryAudit from "../_components/DaaDashboardHistoryAudit";
@@ -63,6 +64,12 @@ function DashboardMain() {
             Market/Funds
           </Link>
         </div>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <DaaDashboardOverviewCards />
+      </div>
+
       </div>
 
       <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
