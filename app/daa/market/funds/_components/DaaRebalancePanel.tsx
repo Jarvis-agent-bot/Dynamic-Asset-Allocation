@@ -17,7 +17,6 @@ import { loadMaxTurnoverPct01V0, persistMaxTurnoverPct01V0 } from '../../../dyna
 import { type SellProceedsRoutingV0 } from '@/src/daa/sellProceedsRoutingV0';
 import { deriveInvestablePct01V0, scaleTargetWeightsByInvestablePct01V0 } from '@/src/daa/cashBucketTargetsV0';
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
-import { buildDaaAdminAuthHeadersV0 } from '../../../adminTokenStore';
 
 import AllocationDiffChartV0 from './AllocationDiffChartV0';
 
@@ -36,8 +35,7 @@ import {
   failRebalanceOrderStatusRunV0,
   finishRebalanceOrderStatusRunV0,
   startRebalanceOrderStatusRunV0,
-  updateRebalanceOrderStatusV0,
-} from '@/src/daa/rebalanceOrderStatusRunStoreV0';
+  updateRebalanceOrderStatusV0} from '@/src/daa/rebalanceOrderStatusRunStoreV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { buildRebalancePlanCsvV0 } from '@/src/daa/rebalancePlanCsvV0';
 import { summarizeTradesForConfirmationV0 } from '@/src/daa/tradesSummaryV0';
@@ -51,8 +49,7 @@ import {
   WIZARD_DATA_EVENT,
   pretty,
   readJsonFromLs,
-  saveJsonToLs,
-} from '../../../wizardStorage';
+  saveJsonToLs} from '../../../wizardStorage';
 
 import DaaDashboardAiExplain from '../../../dashboard/_components/DaaDashboardAiExplain';
 import DaaDashboardExport from '../../../dashboard/_components/DaaDashboardExport';
@@ -114,8 +111,7 @@ type OrdersPreviewSourceV0 = 'RECOMPUTE' | 'ENGINE_LAST_RUN';
 const SLIPPAGE_SENSITIVITY_MULTIPLIER_V0: Record<SlippageSensitivityV0, number> = {
   LOW: 0.5,
   BASE: 1,
-  HIGH: 2,
-};
+  HIGH: 2};
 type AutoPlanScenarioKeyV0 = 'A' | 'B';
 
 const LS_AUTO_PLAN_INPUT = 'daa.market.funds.autoPlan.input.v0';
@@ -210,8 +206,7 @@ function normalizeOrders(x: unknown): SuggestedOrder[] {
       symbol: String(o?.symbol ?? ''),
       side: String(o?.side ?? ''),
       notional: Number(o?.notional ?? 0),
-      reason: o?.reason === undefined ? undefined : String(o?.reason),
-    }))
+      reason: o?.reason === undefined ? undefined : String(o?.reason)}))
     .filter((o) => o.symbol && o.side && Number.isFinite(o.notional) && o.notional !== 0);
 }
 
@@ -227,8 +222,7 @@ function normalizeTargetWeights(args: { response: unknown; moneyPlan: unknown })
         .map((a: any) => ({
           id: String(a?.id ?? a?.symbol ?? ''),
           label: String(a?.label ?? a?.name ?? a?.id ?? a?.symbol ?? ''),
-          targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0),
-        }))
+          targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0)}))
         .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
     }
 
@@ -248,8 +242,7 @@ function normalizeTargetWeights(args: { response: unknown; moneyPlan: unknown })
     .map((a: any) => ({
       id: String(a?.id ?? ''),
       label: String(a?.label ?? a?.id ?? ''),
-      targetPct: Number(a?.targetPct ?? 0),
-    }))
+      targetPct: Number(a?.targetPct ?? 0)}))
     .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
 }
 
@@ -262,8 +255,7 @@ function normalizeTargetWeightsAny(raw: unknown): TargetWeight[] {
       .map((a: any) => ({
         id: String(a?.id ?? a?.symbol ?? ''),
         label: String(a?.label ?? a?.name ?? a?.id ?? a?.symbol ?? ''),
-        targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0),
-      }))
+        targetPct: Number(a?.targetPct ?? a?.target_pct ?? a?.weight ?? 0)}))
       .filter((a) => a.id && a.label && Number.isFinite(a.targetPct));
   }
 
@@ -281,8 +273,7 @@ function formatOrdersMarkdown(orders: SuggestedOrder[]) {
   return [
     '| Symbol | Side | Notional | Why |',
     '| --- | --- | ---: | --- |',
-    ...rows,
-  ].join('\n');
+    ...rows].join('\n');
 }
 
 function formatWeightsMarkdown(rows: Array<{ id: string; label: string; currentPct: number; targetPct: number; deltaPct: number }>) {
@@ -354,8 +345,7 @@ function computeDriftAlertFromTableRows(args: {
     maxAbsDriftPct: maxAbs,
     maxAbsDriftSymbol: maxSym,
     breached: thresholdPct > 0 && maxAbs >= thresholdPct,
-    breaches,
-  };
+    breaches};
 }
 
 function computeDriftAlertFromCoreResponse(args: { at: string; resp: any; fallbackThresholdPct: number }): DriftAlertV0 {
@@ -430,8 +420,7 @@ function computeDriftAlertFromCoreResponse(args: { at: string; resp: any; fallba
     breaches: topBreaches,
     shouldRebalance: !!args.resp?.trigger?.shouldRebalance,
     eligibleOrderCount: toFiniteNumber(stats?.eligibleOrderCount) ?? undefined,
-    reasons,
-  };
+    reasons};
 }
 
 export function DaaRebalancePanel({ funds, holdings }: Props) {
@@ -551,8 +540,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       schemaVersion: 2,
       active: autoPlanScenario,
       a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA },
-      b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB },
-    });
+      b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB }});
   }, [autoPlanScenario, autoPlanInputTextA, autoPlanInputTextB, autoPlanThresholdOverridePctA, autoPlanThresholdOverridePctB]);
 
   const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
@@ -664,8 +652,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
       const legacyHoldings: HoldingsLike = {
         '005963': { share: 1000, cost: 1.2 },
-        '007300': { share: 500, cost: 1.0 },
-      };
+        '007300': { share: 500, cost: 1.0 }};
 
       // Keep the legacy `holdings` key in sync so the Market/Funds page and older exports keep working.
       window.localStorage.setItem(LS_LEGACY_HOLDINGS, JSON.stringify(legacyHoldings));
@@ -676,9 +663,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         cash: 1000,
         positions: {
           '005963': { qty: 1000, cost: 1.2 },
-          '007300': { qty: 500, cost: 1.0 },
-        },
-      });
+          '007300': { qty: 500, cost: 1.0 }}});
 
       savePriceSnapshotV1({
         schemaVersion: 1,
@@ -686,15 +671,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         prices: {
           '005963': { price: 1.234 },
           '007300': { price: 1.052 },
-          '000001': { price: 1.4 },
-        },
-      });
+          '000001': { price: 1.4 }}});
 
       persistTargetWeightsV1([
         { id: '005963', label: '005963', targetPct: 0.4 },
         { id: '007300', label: '007300', targetPct: 0.3 },
-        { id: '000001', label: '000001', targetPct: 0.3 },
-      ]);
+        { id: '000001', label: '000001', targetPct: 0.3 }]);
 
       // Clear stale outputs so the demo reflects the newly loaded scenario.
       window.localStorage.removeItem(LS_REBALANCE_REQUEST);
@@ -935,8 +917,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     const symbols = new Set<string>([
       ...Object.keys(holdingsForWeightsEffective ?? {}).map((x) => normalizePlanSymbol(x)),
-      ...(targetWeightsEffective ?? []).map((t) => normalizePlanSymbol((t as any)?.id)),
-    ]);
+      ...(targetWeightsEffective ?? []).map((t) => normalizePlanSymbol((t as any)?.id))]);
 
     const missing: Array<{ sym: string; label: string }> = [];
     const lastClose: Array<{ sym: string; label: string; price: number }> = [];
@@ -1007,15 +988,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     if (!targetWeightsEffective.length) {
       return {
         kind: 'missing-targets' as const,
-        title: 'Set target weights to compute allocation drift.',
-      };
+        title: 'Set target weights to compute allocation drift.'};
     }
 
     if (!rebalanceTableRows.length) {
       return {
         kind: 'empty' as const,
-        title: 'No holdings/quotes available to compute allocation drift.',
-      };
+        title: 'No holdings/quotes available to compute allocation drift.'};
     }
 
     const alert = computeDriftAlertFromTableRows({ at: new Date().toISOString(), rows: rebalanceTableRows, thresholdPct: driftThresholdPct });
@@ -1031,8 +1010,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       `Allocation drift vs target (source=${targetWeightsSource})`,
       `maxAbs=${maxAbsText}${label ? ` (${label})` : ''}`,
       `threshold=${thresholdText}`,
-      `breaches: over=${driftCounts.over}, under=${driftCounts.under}, within=${driftCounts.within}`,
-    ].join('; ');
+      `breaches: over=${driftCounts.over}, under=${driftCounts.under}, within=${driftCounts.within}`].join('; ');
 
     return {
       kind: 'ok' as const,
@@ -1040,8 +1018,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       maxAbsText,
       thresholdText,
       label,
-      title,
-    };
+      title};
   }, [
     driftCounts.over,
     driftCounts.under,
@@ -1049,8 +1026,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     driftThresholdPct,
     rebalanceTableRows,
     targetWeightsEffective.length,
-    targetWeightsSource,
-  ]);
+    targetWeightsSource]);
 
   const filteredRebalanceTableRows = useMemo(() => {
     if (driftFilter === 'over') return rebalanceTableRows.filter((r) => r.deltaPct >= driftThresholdPct);
@@ -1133,8 +1109,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           driftPct: r.deltaPct,
           rawNotional,
           roundedNotional: Number.isFinite(roundedNotional) ? roundedNotional : 0,
-          reason: 'rounded-to-zero',
-        });
+          reason: 'rounded-to-zero'});
         continue;
       }
 
@@ -1146,8 +1121,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           driftPct: r.deltaPct,
           rawNotional,
           roundedNotional,
-          reason: 'below-min-notional',
-        });
+          reason: 'below-min-notional'});
         continue;
       }
 
@@ -1163,8 +1137,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       candidateCount,
       producedCount,
       suppressedCount: suppressed.length,
-      suppressedTop: suppressed.slice(0, 3),
-    };
+      suppressedTop: suppressed.slice(0, 3)};
   }, [currentWeights, driftThresholdPct, portfolioCash, rebalancePolicy, rebalanceTableRows]);
 
   const corePreview = useMemo((): { req: RebalanceCoreRequest; resp: RebalanceCoreResponse } | null => {
@@ -1215,8 +1188,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         ...basePolicy,
         // What-if: allow users to override drift threshold without persisting it to the policy store.
         thresholdPct: driftThresholdPct,
-        lastRebalanceAt: st.lastRebalance?.at,
-      };
+        lastRebalanceAt: st.lastRebalance?.at};
 
       const account: any = { cash: st.cash };
       if (baseCcy) account.baseCcy = baseCcy;
@@ -1227,8 +1199,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         policy,
         holdings: holdingsMap,
         prices: pricesMap,
-        targetWeights: targetWeightsEffective,
-      };
+        targetWeights: targetWeightsEffective};
 
       return { req, resp: rebalanceCore(req) };
     } catch {
@@ -1307,8 +1278,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         currentPct,
         targetPct,
         driftPct,
-        reason,
-      };
+        reason};
     });
   }, [currentWeights, effectiveOrders, portfolioCash, rebalanceTableRows]);
 
@@ -1409,8 +1379,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         .map((o) => ({ symbol: o.symbol, side: o.side as 'BUY' | 'SELL', notional: o.notional })),
       feeBps: whatIfFeeBps,
       slippageBps: whatIfSlippageBpsUsed,
-      labelsBySymbol: whatIfLabelsBySymbol,
-    });
+      labelsBySymbol: whatIfLabelsBySymbol});
   }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBpsUsed, whatIfTargetWeightsPostBySymbol, whatIfValuesBySymbol]);
 
   const preTradeCashCheck = useMemo(() => {
@@ -1420,8 +1389,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       orders: effectiveOrders,
       feeBps: whatIfFeeBps,
       slippageBps: whatIfSlippageBpsUsed,
-      baseCcy,
-    });
+      baseCcy});
   }, [baseCcy, effectiveOrders, portfolioCash, sellProceedsRoutingV0, whatIfFeeBps, whatIfSlippageBpsUsed]);
 
   const preRunViolationsV0 = useMemo(() => {
@@ -1438,9 +1406,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               id: x.id,
               side: x.side,
               rawNotional: x.rawNotional,
-              roundedNotional: x.roundedNotional,
-            })),
-          }
+              roundedNotional: x.roundedNotional}))}
         : null;
 
     return buildRebalanceViolationsV0({
@@ -1449,8 +1415,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       coreResp: respAny ?? null,
       whatIf,
       maxTurnoverPct01: maxTurnoverPct01V0,
-      naiveMinTradeDiag: diag,
-    });
+      naiveMinTradeDiag: diag});
   }, [baseCcy, corePreview, maxTurnoverPct01V0, naiveOrdersDiagnostics, ordersPreviewSourceV0, preTradeCashCheck, rebalanceResp, whatIf]);
 
   const whatIfRows = useMemo(() => {
@@ -1483,8 +1448,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       targetPrePct: targetCashPrePct,
       targetPct: targetCashPostPct,
       postPct: cashPostPct,
-      driftPct: cashPostPct - targetCashPostPct,
-    };
+      driftPct: cashPostPct - targetCashPostPct};
 
     const rows = whatIf.rows.map((r) => ({ ...r, targetPrePct: whatIfTargetWeightsPreBySymbol[r.id] ?? 0 }));
     return [cashRow, ...rows];
@@ -1498,8 +1462,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         label: String((r as any).label ?? r.id),
         beforePct01: Number.isFinite((r as any).currentPct) ? (r as any).currentPct : 0,
         afterPct01: Number.isFinite((r as any).postPct) ? (r as any).postPct : 0,
-        targetPct01: Number.isFinite((r as any).targetPct) ? (r as any).targetPct : 0,
-      }));
+        targetPct01: Number.isFinite((r as any).targetPct) ? (r as any).targetPct : 0}));
   }, [whatIfRows]);
 
   const taxLotsImpactV0 = useMemo(() => {
@@ -1540,8 +1503,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       orders: sellOrders,
       pricesBySymbol,
       positionsBySymbol,
-      costBps,
-    });
+      costBps});
   }, [effectiveOrders, estimateTaxLotsImpactV0, funds, priceSnapshot, whatIf, whatIfFeeBps, whatIfSlippageBpsUsed]);
 
   async function doCopyOrders() {
@@ -1554,8 +1516,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               ? 'core:recompute'
               : 'naive:recompute',
         at: new Date().toISOString(),
-        orders: effectiveOrders,
-      };
+        orders: effectiveOrders};
       const text = [
         '# Suggested Orders (v0)',
         '',
@@ -1563,8 +1524,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         '',
         '```json',
         JSON.stringify(payload, null, 2),
-        '```',
-      ].join('\n');
+        '```'].join('\n');
 
       await copyTextToClipboard(text);
       setCopyOrdersStatus('ok');
@@ -1596,8 +1556,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
           .map((o) => ({ symbol: String(o.symbol), side: o.side as 'BUY' | 'SELL', notional: o.notional, reason: (o as any).reason })),
         whatIf: safetyStopPreviewWhatIf,
-        violations: preRunViolationsV0,
-      });
+        violations: preRunViolationsV0});
 
       await copyTextToClipboard(md);
       setCopyApprovalSummaryStatus('ok');
@@ -1617,8 +1576,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         '',
         '```json',
         JSON.stringify({ at: new Date().toISOString(), rows: rebalanceTableRows }, null, 2),
-        '```',
-      ].join('\n');
+        '```'].join('\n');
       await copyTextToClipboard(text);
       setCopyWeightsStatus('ok');
       window.setTimeout(() => setCopyWeightsStatus('idle'), 1200);
@@ -1642,15 +1600,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       source,
       baseCcy,
       allocations: rebalanceTableRows,
-      orders: effectiveOrders,
-    });
+      orders: effectiveOrders});
 
     const ts = atIso.slice(0, 19).replace(/[:T]/g, '-');
     downloadTextAsFile({
       filename: `daa-rebalance-plan-${ts}.csv`,
       text: csv,
-      mime: 'text/csv;charset=utf-8',
-    });
+      mime: 'text/csv;charset=utf-8'});
   }
 
   function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
@@ -1666,8 +1622,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }
 
   function tryBuildSeriesBySymbolForPlan(
-    input: unknown,
-  ): { ok: true; seriesBySymbol: Record<string, any[]>; symbols: string[] } | { ok: false; error: string } {
+    input: unknown): { ok: true; seriesBySymbol: Record<string, any[]>; symbols: string[] } | { ok: false; error: string } {
     // 1) Accept direct series map or {seriesBySymbol: ...}
     const coerced = coerceSeriesBySymbolInput(input) as any;
     const symbolsFromSeries = Object.keys(coerced || {}).filter(Boolean).sort();
@@ -1762,8 +1717,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const pricesMap: Record<string, number> = {};
       const symbols = new Set<string>([
         ...Object.keys(holdingsMap),
-        ...targetWeightsEffective.map((t) => normalizePlanSymbol((t as any)?.id)),
-      ]);
+        ...targetWeightsEffective.map((t) => normalizePlanSymbol((t as any)?.id))]);
 
       for (const sym of symbols) {
         const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
@@ -1859,8 +1813,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
     if (missing.length) {
       setAutoPlanErrorForActive(
-        `Missing symbols in series: ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? " ..." : ""}`,
-      );
+        `Missing symbols in series: ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? " ..." : ""}`);
       return;
     }
 
@@ -1889,8 +1842,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         constraints,
         policy: { ...rebalancePolicy, thresholdPct: autoPlanThresholdPctUsed },
         bootstrapToTarget: false,
-        includeEventStates: true,
-      });
+        includeEventStates: true});
 
       setAutoPlanResultForActive(res);
       if (autoPlanScenario === 'A') {
@@ -2043,8 +1995,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             filledNotional,
             fillPct01: pct,
             detail: s === steps ? 'filled' : `partial fill: ${Math.round(pct * 100)}%`,
-            phase: 'executing',
-          });
+            phase: 'executing'});
         }
       }
     }
@@ -2070,8 +2021,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     // v0: best-effort local snapshot so the UI can show per-order status while a run is in flight.
     const startedStatus = startRebalanceOrderStatusRunV0({
       storage: window.localStorage,
-      message: opts?.cashSweep ? `Funds hub cash sweep (${mode})` : `Funds hub rebalance (${mode})`,
-    });
+      message: opts?.cashSweep ? `Funds hub cash sweep (${mode})` : `Funds hub rebalance (${mode})`});
     if (startedStatus.ok) statusRunId = startedStatus.run.runId;
 
     setPaperRunLoading(true);
@@ -2143,8 +2093,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         thresholdPct: thresholdPctForRun,
         lastRebalanceAt: st.lastRebalance?.at,
         now: new Date().toISOString(),
-        ...(opts?.cashSweep ? { cashSweepToTarget: true } : {}),
-      };
+        ...(opts?.cashSweep ? { cashSweepToTarget: true } : {})};
 
       const account: any = { cash: st.cash };
       if (baseCcy) account.baseCcy = baseCcy;
@@ -2155,8 +2104,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         policy,
         holdings: holdingsMap,
         prices: pricesMap,
-        targetWeights: targetWeightsEffective,
-      };
+        targetWeights: targetWeightsEffective};
 
       const expectedOrdersForRun = opts?.cashSweep
         ? (() => {
@@ -2179,8 +2127,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             feeBps: whatIfFeeBps,
             slippageBps: whatIfSlippageBpsUsed,
             labelsBySymbol: whatIfLabelsBySymbol,
-            pricesBySymbol: pricesMap,
-          });
+            pricesBySymbol: pricesMap});
         } catch {
           return null;
         }
@@ -2191,10 +2138,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       // Core is deterministic and runs in-process (Next.js route), so this stays fast.
       const res = await fetch('/api/daa/rebalance/core', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', ...buildDaaAdminAuthHeadersV0() },
+        headers: { 'content-type': 'application/json'},
         body: JSON.stringify(req),
-        signal: controller.signal,
-      });
+        signal: controller.signal});
 
       const text = await res.text();
       const parsed = safeJsonParse(text);
@@ -2219,8 +2165,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             storage: window.localStorage,
             runId: statusRunId,
             error: msg,
-            message: 'core request failed',
-          });
+            message: 'core request failed'});
         }
 
         return;
@@ -2238,8 +2183,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             storage: window.localStorage,
             runId: statusRunId,
             error: msg,
-            message: 'core response parse failed',
-          });
+            message: 'core response parse failed'});
         }
 
         return;
@@ -2268,8 +2212,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             storage: window.localStorage,
             runId: statusRunId,
             phase: 'done',
-            message: 'shouldRebalance=false (no-op)',
-          });
+            message: 'shouldRebalance=false (no-op)'});
         }
 
         // Keep a traceable snapshot even for no-op runs (so the run history can show allocations).
@@ -2280,8 +2223,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             runId: statusRunId ?? undefined,
             request: req,
             response: respValue,
-            note: runNote,
-          });
+            note: runNote});
           window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
         } catch {
           // ignore
@@ -2295,8 +2237,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           orders,
           feeBps: whatIfFeeBps,
           slippageBps: whatIfSlippageBpsUsed,
-          baseCcy: baseCcy || null,
-        });
+          baseCcy: baseCcy || null});
 
       if (coreCashCheck.blocking) {
         setPaperRunError(coreCashCheck.message);
@@ -2306,8 +2247,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             storage: window.localStorage,
             runId: statusRunId,
             error: coreCashCheck.message,
-            message: 'pre-trade cash check blocked',
-          });
+            message: 'pre-trade cash check blocked'});
         }
 
         return;
@@ -2318,8 +2258,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           storage: window.localStorage,
           runId: statusRunId,
           orders,
-          message: `executing ${orders.length} orders (paper)`,
-        });
+          message: `executing ${orders.length} orders (paper)`});
 
         // v0: simulate broker-side partial fills so the UI can live-refresh progress during the run (E2E-friendly; no real broker).
         for (let i = 0; i < orders.length; i++) {
@@ -2332,8 +2271,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             filledNotional: 0,
             fillPct01: 0,
             detail: 'submitted (paper broker)',
-            phase: 'executing',
-          });
+            phase: 'executing'});
         }
       }
 
@@ -2343,8 +2281,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         source: 'rebalance-core',
         runId: statusRunId ?? undefined,
         orders,
-        note: runNote,
-      });
+        note: runNote});
 
       if (!r.ok) {
         setPaperRunError(r.error);
@@ -2354,8 +2291,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             storage: window.localStorage,
             runId: statusRunId,
             error: r.error,
-            message: 'paper execution log failed',
-          });
+            message: 'paper execution log failed'});
         }
 
         return;
@@ -2366,15 +2302,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           storage: window.localStorage,
           runId: statusRunId,
           orders: orders as any,
-          signal: controller.signal,
-        });
+          signal: controller.signal});
 
         finishRebalanceOrderStatusRunV0({
           storage: window.localStorage,
           runId: statusRunId,
           phase: 'recorded',
-          message: `recorded ${orders.length} paper orders (simulated broker fills)`,
-        });
+          message: `recorded ${orders.length} paper orders (simulated broker fills)`});
       }
 
       setPaperRunRecordedAt(r.entry.at);
@@ -2386,8 +2320,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           atIso: r.entry.at,
           kind: 'run-recorded',
           title: 'Dynamic rebalance recorded',
-          body: `Recorded ${orders.length} paper orders (${opts?.cashSweep ? 'cash sweep' : 'dry run'}).`,
-        });
+          body: `Recorded ${orders.length} paper orders (${opts?.cashSweep ? 'cash sweep' : 'dry run'}).`});
       } catch {
         // ignore
       }
@@ -2438,8 +2371,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             feeBps: whatIfFeeBps,
             slippageBps: whatIfSlippageBpsUsed,
             labelsBySymbol,
-            pricesBySymbol: pricesMap,
-          });
+            pricesBySymbol: pricesMap});
         } catch {
           return null;
         }
@@ -2500,8 +2432,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             storage: window.localStorage,
             runId: statusRunId,
             error: 'aborted',
-            message: 'user aborted run',
-          });
+            message: 'user aborted run'});
         }
       } else {
         const msg = e instanceof Error ? e.message : String(e);
@@ -2512,8 +2443,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             storage: window.localStorage,
             runId: statusRunId,
             error: msg,
-            message: 'run failed',
-          });
+            message: 'run failed'});
         }
       }
     } finally {
@@ -2545,9 +2475,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         policy: {
           ...((corePreview.req as any).policy ?? {}),
           thresholdPct: 0,
-          cashSweepToTarget: true,
-        },
-      };
+          cashSweepToTarget: true}};
 
       return normalizeOrders(rebalanceCore(reqSweep).orders);
     } catch {
@@ -2567,8 +2495,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         .map((o) => ({ symbol: o.symbol, side: o.side as "BUY" | "SELL", notional: o.notional })),
       feeBps: whatIfFeeBps,
       slippageBps: whatIfSlippageBpsUsed,
-      labelsBySymbol: whatIfLabelsBySymbol,
-    });
+      labelsBySymbol: whatIfLabelsBySymbol});
   }, [
     portfolioCash,
     preflightPreviewOrders,
@@ -2576,8 +2503,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     whatIfLabelsBySymbol,
     whatIfSlippageBpsUsed,
     whatIfTargetWeightsPostBySymbol,
-    whatIfValuesBySymbol,
-  ]);
+    whatIfValuesBySymbol]);
 
   const safetyStopPreviewOrders = useMemo(() => {
     // Safety-stop should preview the *actual* orders we're about to execute.
@@ -2592,9 +2518,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         policy: {
           ...((corePreview.req as any).policy ?? {}),
           thresholdPct: 0,
-          cashSweepToTarget: true,
-        },
-      };
+          cashSweepToTarget: true}};
 
       return normalizeOrders(rebalanceCore(reqSweep).orders);
     } catch {
@@ -2614,8 +2538,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         .map((o) => ({ symbol: o.symbol, side: o.side as "BUY" | "SELL", notional: o.notional })),
       feeBps: whatIfFeeBps,
       slippageBps: whatIfSlippageBpsUsed,
-      labelsBySymbol: whatIfLabelsBySymbol,
-    });
+      labelsBySymbol: whatIfLabelsBySymbol});
   }, [
     portfolioCash,
     safetyStopPreviewOrders,
@@ -2623,8 +2546,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     whatIfLabelsBySymbol,
     whatIfSlippageBpsUsed,
     whatIfTargetWeightsPostBySymbol,
-    whatIfValuesBySymbol,
-  ]);
+    whatIfValuesBySymbol]);
 
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
@@ -2642,8 +2564,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 20,
-          }}
+            padding: 20}}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -2654,8 +2575,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               padding: 14,
               borderRadius: 12,
               border: '1px solid rgba(255,255,255,0.10)',
-              background: 'rgba(0,0,0,0.92)',
-            }}
+              background: 'rgba(0,0,0,0.92)'}}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' as const }}>
               <div>
@@ -2675,8 +2595,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 padding: '10px 12px',
                 border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: 12,
-                background: 'rgba(0,0,0,0.10)',
-              }}
+                background: 'rgba(0,0,0,0.10)'}}
             >
               {(() => {
                 const ccy = baseCcy ? ` ${baseCcy}` : '';
@@ -2733,8 +2652,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       background: preflightHasPriceWarnings ? 'rgba(245, 158, 11, 0.20)' : 'rgba(34, 197, 94, 0.18)',
                       color: preflightHasPriceWarnings ? '#f59e0b' : '#22c55e',
                       fontSize: 12,
-                      whiteSpace: 'nowrap',
-                    }}
+                      whiteSpace: 'nowrap'}}
                   >
                     {preflightHasPriceWarnings ? 'WARN' : 'OK'}
                   </span>
@@ -2768,8 +2686,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           : 'rgba(34, 197, 94, 0.18)',
                       color: preRunHasBlockingV0 ? '#ef4444' : preRunHasWarningsV0 ? '#f59e0b' : '#22c55e',
                       fontSize: 12,
-                      whiteSpace: 'nowrap',
-                    }}
+                      whiteSpace: 'nowrap'}}
                   >
                     {preRunHasBlockingV0 ? 'BLOCKER' : preRunHasWarningsV0 ? 'WARN' : 'OK'}
                   </span>
@@ -2795,8 +2712,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       background: preTradeCashCheck.blocking ? 'rgba(239, 68, 68, 0.18)' : 'rgba(34, 197, 94, 0.18)',
                       color: preTradeCashCheck.blocking ? '#ef4444' : '#22c55e',
                       fontSize: 12,
-                      whiteSpace: 'nowrap',
-                    }}
+                      whiteSpace: 'nowrap'}}
                   >
                     {preTradeCashCheck.blocking ? 'BLOCKED' : 'OK'}
                   </span>
@@ -2850,8 +2766,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           background: bg,
                           color,
                           fontSize: 12,
-                          whiteSpace: "nowrap",
-                        }}
+                          whiteSpace: "nowrap"}}
                         title={warn ? (w?.warnings ?? []).slice(0, 4).join("; ") : undefined}
                       >
                         {status}
@@ -2950,8 +2865,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 20,
-          }}
+            padding: 20}}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -2962,8 +2876,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               padding: 14,
               borderRadius: 12,
               border: '1px solid rgba(255,255,255,0.10)',
-              background: 'rgba(0,0,0,0.92)',
-            }}
+              background: 'rgba(0,0,0,0.92)'}}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' as const }}>
               <div>
@@ -3166,8 +3079,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 fontSize: 11,
                 borderColor: driftOverviewV0.breached ? 'var(--danger)' : '#64748b',
                 color: driftOverviewV0.breached ? 'var(--danger)' : '#64748b',
-                background: driftOverviewV0.breached ? 'rgba(248, 113, 113, 0.12)' : 'rgba(100, 116, 139, 0.12)',
-              }}
+                background: driftOverviewV0.breached ? 'rgba(248, 113, 113, 0.12)' : 'rgba(100, 116, 139, 0.12)'}}
             >
               Drift
               <span style={{ color: 'var(--muted)' }}>max|{driftOverviewV0.maxAbsText}|</span>
@@ -3284,13 +3196,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           ? {
               border: 'rgba(239, 68, 68, 0.55)',
               bg: 'rgba(239, 68, 68, 0.08)',
-              title: 'var(--danger)',
-            }
+              title: 'var(--danger)'}
           : {
               border: 'rgba(245, 158, 11, 0.55)',
               bg: 'rgba(245, 158, 11, 0.08)',
-              title: '#f59e0b',
-            };
+              title: '#f59e0b'};
 
         const title = scheduleEnabled ? 'Dynamic rebalance preflight' : 'Preflight checks';
         const subtitle = scheduleEnabled
@@ -3307,8 +3217,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               borderRadius: 12,
               border: `1px solid ${ui.border}`,
               background: ui.bg,
-              fontSize: 12,
-            }}
+              fontSize: 12}}
           >
             <div style={{ fontWeight: 800, color: ui.title }}>{title}{hasBlockingIssues ? ' (action required)' : ' (review)'}</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{subtitle}</div>
@@ -3523,8 +3432,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 padding: '10px 12px',
                 border: '1px solid rgba(59, 130, 246, 0.45)',
                 borderRadius: 12,
-                background: 'rgba(59, 130, 246, 0.08)',
-              }}
+                background: 'rgba(59, 130, 246, 0.08)'}}
               role="note"
               aria-label="Risk disclosure"
             >
@@ -3552,8 +3460,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   padding: '10px 12px',
                   border: '1px solid rgba(245, 158, 11, 0.55)',
                   borderRadius: 12,
-                  background: 'rgba(245, 158, 11, 0.08)',
-                }}
+                  background: 'rgba(245, 158, 11, 0.08)'}}
               >
                 <div style={{ fontSize: 12, fontWeight: 800 }}>Price data warnings</div>
 
@@ -3601,8 +3508,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   padding: '6px 10px',
                   borderRadius: 10,
                   border: '1px solid rgba(255,255,255,0.10)',
-                  background: 'rgba(0,0,0,0.14)',
-                }}
+                  background: 'rgba(0,0,0,0.14)'}}
                 aria-label="Rebalance asset blacklist"
               />
               <div className="muted" style={{ fontSize: 11 }}>
@@ -3629,8 +3535,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     padding: '6px 10px',
                     borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.10)',
-                    background: 'rgba(0,0,0,0.14)',
-                  }}
+                    background: 'rgba(0,0,0,0.14)'}}
                   aria-label="Rebalance cash buffer target percent"
                 />
               </label>
@@ -3649,8 +3554,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     padding: '6px 10px',
                     borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.10)',
-                    background: 'rgba(0,0,0,0.14)',
-                  }}
+                    background: 'rgba(0,0,0,0.14)'}}
                   aria-label="Rebalance max turnover percent"
                 />
               </label>
@@ -3715,8 +3619,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     ? 'rgba(176, 0, 32, 0.08)'
                     : preRunHasWarningsV0
                       ? 'rgba(245, 158, 11, 0.08)'
-                      : 'rgba(0,0,0,0.10)',
-                }}
+                      : 'rgba(0,0,0,0.10)'}}
               >
                 <div style={{ fontSize: 12, fontWeight: 800, color: preRunHasBlockingV0 ? 'var(--danger)' : 'var(--muted)' }}>
                   Constraints / validation (before execute)
@@ -3774,8 +3677,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   padding: '8px 10px',
                   border: preTradeCashCheck.blocking ? '1px solid rgba(176, 0, 32, 0.5)' : '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 10,
-                  background: preTradeCashCheck.blocking ? 'rgba(176, 0, 32, 0.08)' : 'rgba(0,0,0,0.10)',
-                }}
+                  background: preTradeCashCheck.blocking ? 'rgba(176, 0, 32, 0.08)' : 'rgba(0,0,0,0.10)'}}
               >
                 <div style={{ fontSize: 12, fontWeight: 700, color: preTradeCashCheck.blocking ? 'var(--danger)' : 'var(--muted)' }}>
                   Pre-trade cash/settlement check {preTradeCashCheck.blocking ? '(BLOCKED)' : '(ok)'}
@@ -3792,8 +3694,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       borderRadius: 8,
                       background: 'rgba(0,0,0,0.15)',
                       border: '1px solid rgba(255,255,255,0.12)',
-                      color: 'inherit',
-                    }}
+                      color: 'inherit'}}
                   >
                     <option value="TARGET_CASH_BUCKET">Target cash bucket (conservative, T+1/T+2)</option>
                     <option value="CASH">Cash (allow sells to fund buys)</option>
@@ -3825,8 +3726,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   padding: '10px 12px',
                   border: '1px solid rgba(0, 170, 119, 0.35)',
                   borderRadius: 12,
-                  background: 'rgba(0, 170, 119, 0.08)',
-                }}
+                  background: 'rgba(0, 170, 119, 0.08)'}}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
                   <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary)' }}>
@@ -3947,8 +3847,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                             padding: '2px 8px',
                             borderRadius: 999,
                             background: paperRunHealthcheck.pass ? '#0a7' : '#b00020',
-                            color: '#fff',
-                          }}
+                            color: '#fff'}}
                         >
                           {paperRunHealthcheck.pass ? 'PASS' : 'FAIL'}
                         </span>
@@ -3990,8 +3889,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   padding: '10px 12px',
                   border: '1px solid rgba(176, 0, 32, 0.55)',
                   borderRadius: 12,
-                  background: 'rgba(176, 0, 32, 0.08)',
-                }}
+                  background: 'rgba(176, 0, 32, 0.08)'}}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
                   <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--danger)' }}>Run failed</div>
@@ -4042,8 +3940,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   padding: '8px 10px',
                   border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 10,
-                  background: 'rgba(0,0,0,0.12)',
-                }}
+                  background: 'rgba(0,0,0,0.12)'}}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: paperRunDriftAlert.breached ? 'var(--danger)' : 'var(--muted)' }}>
@@ -4132,8 +4029,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     const presets = [
                       { id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' },
                       { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' },
-                      { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' },
-                    ] as const;
+                      { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' }] as const;
 
                     const activePresetId = presets.find((p) => Math.abs(pct - p.pct100) < 1e-6)?.id ?? null;
 
@@ -4277,8 +4173,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         padding: "8px 10px",
                         border: "1px solid rgba(176,0,32,0.35)",
                         borderRadius: 10,
-                        background: "rgba(176,0,32,0.08)",
-                      }}
+                        background: "rgba(176,0,32,0.08)"}}
                     >
                       <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 4 }}>Engine warnings</div>
                       <div style={{ display: "grid", gap: 4 }}>
@@ -4340,8 +4235,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                               border: '1px solid rgba(255,255,255,0.12)',
                               borderRadius: 10,
                               padding: '8px 10px',
-                              background: 'rgba(0,0,0,0.08)',
-                            }}
+                              background: 'rgba(0,0,0,0.08)'}}
                           >
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center' }}>
                               <span className="badge" style={{ padding: '2px 8px', fontSize: 11 }}>
@@ -4453,8 +4347,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           border: '1px solid rgba(255,255,255,0.10)',
                           borderRadius: 12,
                           padding: '10px 12px',
-                          background: 'rgba(0,0,0,0.12)',
-                        }}
+                          background: 'rgba(0,0,0,0.12)'}}
                       >
                         <div style={{ fontWeight: 700, fontSize: 12 }}>Impact summary (preview)</div>
                         {(() => {
@@ -4501,8 +4394,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           border: '1px solid rgba(255,255,255,0.10)',
                           borderRadius: 12,
                           padding: '10px 12px',
-                          background: 'rgba(0,0,0,0.12)',
-                        }}
+                          background: 'rgba(0,0,0,0.12)'}}
                       >
                         <div style={{ fontWeight: 700, fontSize: 12 }}>Cash impact breakdown (preview)</div>
                         <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
@@ -4573,8 +4465,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                             border: '1px solid rgba(255,255,255,0.10)',
                             borderRadius: 12,
                             padding: '10px 12px',
-                            background: 'rgba(0,0,0,0.12)',
-                          }}
+                            background: 'rgba(0,0,0,0.12)'}}
                         >
                           <div style={{ fontWeight: 700, fontSize: 12 }}>Tax-lot / realized gain impact (preview)</div>
                           <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
@@ -4703,8 +4594,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                   borderColor: active ? 'var(--text)' : 'rgba(255,255,255,0.18)',
                                   color: active ? 'var(--text)' : 'var(--muted)',
                                   background: active ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.12)',
-                                  cursor: 'pointer',
-                                }}
+                                  cursor: 'pointer'}}
                                 title={`effectiveSlippageBps = base * ${mult}`}
                               >
                                 {label}
@@ -4872,8 +4762,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               scrollMarginTop: 12,
               border: "1px solid rgba(255,255,255,0.08)",
               borderRadius: 12,
-              padding: 12,
-            }}
+              padding: 12}}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, flexWrap: "wrap" as const }}>
               <div style={{ fontWeight: 800 }}>Auto plan v0</div>
@@ -4950,8 +4839,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     padding: "6px 10px",
                     borderRadius: 10,
                     border: "1px solid rgba(127,127,127,0.35)",
-                    background: "rgba(0,0,0,0.12)",
-                  }}
+                    background: "rgba(0,0,0,0.12)"}}
                   title="Override drift threshold for this scenario only (percent)"
                 />
                 <button
@@ -4981,8 +4869,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   padding: 10,
                   borderRadius: 10,
                   border: "1px solid rgba(127,127,127,0.35)",
-                  background: "rgba(0,0,0,0.12)",
-                }}
+                  background: "rgba(0,0,0,0.12)"}}
               />
 
               {autoPlanError ? <div style={{ fontSize: 12, color: "var(--danger, #b00020)" }}>{autoPlanError}</div> : null}
@@ -5093,8 +4980,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                 display: "grid",
                                 gridTemplateColumns: "110px 1fr 90px",
                                 gap: 10,
-                                alignItems: "center",
-                              }}
+                                alignItems: "center"}}
                             >
                               <div style={{ fontFamily: "ui-monospace, SFMono-Regular", fontSize: 11 }}>{String(pt?.date ?? "")}</div>
                               <div style={{ height: 10, borderRadius: 999, background: "rgba(127,127,127,0.25)", overflow: "hidden" }}>
@@ -5102,8 +4988,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                   style={{
                                     width: `${(ratio * 100).toFixed(1)}%`,
                                     height: "100%",
-                                    background: hit ? "rgba(176,0,32,0.8)" : "rgba(64,160,255,0.7)",
-                                  }}
+                                    background: hit ? "rgba(176,0,32,0.8)" : "rgba(64,160,255,0.7)"}}
                                 />
                               </div>
                               <div style={{ fontSize: 11, textAlign: "right" as const }}>

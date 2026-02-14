@@ -6,7 +6,6 @@ import { loadPaperExecutionLog, type PaperExecutionLogEntryV0 } from "@/src/daa/
 
 import { applyNotionalOrdersToPositionsV0 } from "@/src/daa/portfolioApplyNotionalOrdersV0";
 
-import { LS_DAA_ADMIN_TOKEN_V0, buildDaaAdminAuthHeadersV0, loadDaaAdminTokenV0 } from "../../adminTokenStore";
 import { LS_LEGACY_HOLDINGS, LS_PORTFOLIO_STATE, loadPortfolioStateV1 } from "../../portfolioStateStore";
 import { loadPriceSnapshotV1 } from "../../priceSnapshotStore";
 import { WIZARD_DATA_EVENT } from "../../wizardStorage";
@@ -47,9 +46,6 @@ type BundleResp = { ok: boolean; bundle?: any; error?: string };
 export default function DaaDashboardConfirmExecuted() {
   const { exportBundle } = useDaaWorkflowExportBundleV1();
 
-  const [adminTokenText, setAdminTokenText] = useState("");
-  const [adminTokenStatus, setAdminTokenStatus] = useState<string | null>(null);
-
   const [runId, setRunId] = useState<string>("");
   const [runStatus, setRunStatus] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
@@ -66,9 +62,6 @@ export default function DaaDashboardConfirmExecuted() {
 
   useEffect(() => {
     // Bootstrap local UI state from localStorage.
-    const t = loadDaaAdminTokenV0();
-    if (t) setAdminTokenText(t);
-
     const storedRunId = typeof window !== "undefined" ? String(window.localStorage.getItem(LS_DASHBOARD_ACTIVE_RUN_ID_V0) ?? "") : "";
     if (storedRunId.trim()) setRunId(storedRunId.trim());
 
@@ -91,15 +84,12 @@ export default function DaaDashboardConfirmExecuted() {
   async function apiPost(path: string, body: unknown): Promise<any> {
     const headers: Record<string, string> = {
       accept: "application/json",
-      "content-type": "application/json",
-      ...buildDaaAdminAuthHeadersV0(),
-    };
+      "content-type": "application/json"};
 
     const res = await fetch(path, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
-    });
+      body: JSON.stringify(body)});
 
     const text = await res.text();
     let json: any = null;
@@ -140,12 +130,6 @@ export default function DaaDashboardConfirmExecuted() {
   async function createRun() {
     setActionResult(null);
 
-    const token = loadDaaAdminTokenV0();
-    if (!token) {
-      setActionResult("Missing admin token. Set it first.");
-      return;
-    }
-
     setActionBusy("create-run");
     try {
       const payload = {
@@ -155,9 +139,7 @@ export default function DaaDashboardConfirmExecuted() {
           createdAt: nowIso(),
           source: "/daa/dashboard",
           export_bundle: exportBundle,
-          price_snapshot: priceSnapshot,
-        },
-      };
+          price_snapshot: priceSnapshot}};
 
       const r = await apiPost("/api/daa/store/v0/run", payload);
       const rid = String(r?.runId ?? "").trim();
@@ -184,21 +166,13 @@ export default function DaaDashboardConfirmExecuted() {
       return;
     }
 
-    const token = loadDaaAdminTokenV0();
-    if (!token) {
-      setActionResult("Missing admin token. Set it first.");
-      return;
-    }
-
     setActionBusy("save-portfolio");
     try {
       const payload = {
         payload: {
           at: nowIso(),
           portfolio_state: portfolioState,
-          price_snapshot: priceSnapshot,
-        },
-      };
+          price_snapshot: priceSnapshot}};
 
       await apiPost(`/api/daa/store/v0/run/${encodeURIComponent(rid)}/portfolio`, payload);
       setActionResult("Saved portfolio snapshot to SQLite store.");
@@ -219,12 +193,6 @@ export default function DaaDashboardConfirmExecuted() {
       return;
     }
 
-    const token = loadDaaAdminTokenV0();
-    if (!token) {
-      setActionResult("Missing admin token. Set it first.");
-      return;
-    }
-
     const recommendation = exportBundle?.recommendation;
     const orders = (recommendation as any)?.orders;
     const ordersCount = Array.isArray(orders) ? orders.length : 0;
@@ -240,9 +208,7 @@ export default function DaaDashboardConfirmExecuted() {
           recommendation,
           orders,
           ordersCount,
-          price_snapshot: priceSnapshot,
-        },
-      };
+          price_snapshot: priceSnapshot}};
 
       await apiPost(`/api/daa/store/v0/run/${encodeURIComponent(rid)}/confirm`, payload);
       setActionResult(`Confirmed (orders: ${ordersCount}). This does NOT execute trades.`);
@@ -260,12 +226,6 @@ export default function DaaDashboardConfirmExecuted() {
     const rid = String(runId ?? "").trim();
     if (!rid) {
       setActionResult("Missing runId. Create or set one first.");
-      return;
-    }
-
-    const token = loadDaaAdminTokenV0();
-    if (!token) {
-      setActionResult("Missing admin token. Set it first.");
       return;
     }
 
@@ -289,10 +249,8 @@ export default function DaaDashboardConfirmExecuted() {
             executedAt: nowIso(),
             mode: "paper",
             paper_entry: selectedPaperEntry,
-            note: noteText.trim() ? noteText.trim() : undefined,
-          },
-          orders: selectedPaperEntry.orders,
-        };
+            note: noteText.trim() ? noteText.trim() : undefined},
+          orders: selectedPaperEntry.orders};
       }
 
       const parsed = safeJsonParse(executedJsonText);
@@ -308,10 +266,8 @@ export default function DaaDashboardConfirmExecuted() {
           executedAt: nowIso(),
           mode: "manual",
           note: noteText.trim() ? noteText.trim() : undefined,
-          raw: parsed.value,
-        },
-        orders,
-      };
+          raw: parsed.value},
+        orders};
     })();
 
     if (!executedPayload.ok) {
@@ -344,8 +300,7 @@ export default function DaaDashboardConfirmExecuted() {
         cash: (portfolioState as any)?.cash,
         positions: positionsQty,
         orders: executedPayload.orders,
-        pricesBySymbol,
-      });
+        pricesBySymbol});
 
       // Persist updated portfolio state (and legacy `holdings` for backward compat).
       const nextPositions: Record<string, { qty: number; cost?: number }> = { ...positionsMeta };
@@ -362,8 +317,7 @@ export default function DaaDashboardConfirmExecuted() {
         schemaVersion: 1,
         updatedAt: nowIso(),
         cash: applied.cashAfter,
-        positions: nextPositions,
-      };
+        positions: nextPositions};
 
       window.localStorage.setItem(LS_PORTFOLIO_STATE, JSON.stringify(nextState));
       window.localStorage.setItem(LS_LEGACY_HOLDINGS, JSON.stringify(positionsToLegacyHoldings(nextPositions)));
@@ -377,21 +331,6 @@ export default function DaaDashboardConfirmExecuted() {
       setActionResult(e instanceof Error ? e.message : String(e));
     } finally {
       setActionBusy(null);
-    }
-  }
-
-  function saveAdminToken() {
-    const t = String(adminTokenText ?? "").trim();
-    if (!t) {
-      setAdminTokenStatus("empty token");
-      return;
-    }
-    try {
-      window.localStorage.setItem(LS_DAA_ADMIN_TOKEN_V0, t);
-      setAdminTokenStatus("saved");
-      window.setTimeout(() => setAdminTokenStatus(null), 1200);
-    } catch {
-      setAdminTokenStatus("failed");
     }
   }
 
@@ -430,8 +369,7 @@ export default function DaaDashboardConfirmExecuted() {
       portfolioAt: r.portfolio?.createdAt ?? null,
       confirmAt: r.confirm?.createdAt ?? null,
       executedAt: r.executed?.createdAt ?? null,
-      auditCount: Array.isArray(r.audit) ? r.audit.length : 0,
-    };
+      auditCount: Array.isArray(r.audit) ? r.audit.length : 0};
   }, [runBundle]);
 
   return (
@@ -449,26 +387,6 @@ export default function DaaDashboardConfirmExecuted() {
       </div>
 
       <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-        <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 13 }}>Admin token</div>
-          <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              type="password"
-              value={adminTokenText}
-              onChange={(e) => setAdminTokenText(e.target.value)}
-              placeholder="DAA admin bearer token (saved in localStorage)"
-              style={{ flex: "1 1 320px", padding: "8px 10px", border: "1px solid #e5e5e5", borderRadius: 10, fontSize: 12 }}
-            />
-            <button
-              type="button"
-              onClick={saveAdminToken}
-              style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}
-            >
-              Save
-            </button>
-            {adminTokenStatus ? <span style={{ fontSize: 12, color: "#666" }}>{adminTokenStatus}</span> : null}
-          </div>
-        </div>
 
         <div style={{ border: "1px solid #f0f0f0", borderRadius: 12, padding: 10 }}>
           <div style={{ fontWeight: 800, fontSize: 13 }}>Run (SQLite)</div>

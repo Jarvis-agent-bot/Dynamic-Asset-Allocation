@@ -4,7 +4,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { useEffect, useMemo, useState } from "react";
 
-import { buildDaaAdminAuthHeadersV0 } from "../../adminTokenStore";
 import { copyTextToClipboard } from "../../copyToClipboard";
 
 type AdminUserV0 = {
@@ -141,9 +140,7 @@ export default function DaaDashboardAdminUsers() {
 
     try {
       const headers: Record<string, string> = {
-        accept: "application/json",
-        ...buildDaaAdminAuthHeadersV0(),
-      };
+        accept: "application/json"};
 
       const res = await fetch("/api/daa/admin/users", { headers, cache: "no-store" });
       if (!res.ok) {
@@ -171,15 +168,12 @@ export default function DaaDashboardAdminUsers() {
     try {
       const headers: Record<string, string> = {
         accept: "application/json",
-        "content-type": "application/json",
-        ...buildDaaAdminAuthHeadersV0(),
-      };
+        "content-type": "application/json"};
 
       const res = await fetch("/api/daa/admin/users", {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ id, active }),
-      });
+        body: JSON.stringify({ id, active })});
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
@@ -304,8 +298,7 @@ export default function DaaDashboardAdminUsers() {
               borderRadius: 10,
               border: "1px solid #e5e5e5",
               fontSize: 12,
-              background: "#fff",
-            }}
+              background: "#fff"}}
           />
 
           {query.trim() ? (
@@ -328,8 +321,7 @@ export default function DaaDashboardAdminUsers() {
                 borderRadius: 10,
                 border: "1px solid #e5e5e5",
                 background: "#fff",
-                fontSize: 12,
-              }}
+                fontSize: 12}}
             >
               <option value="all">All</option>
               <option value="active">Active</option>
@@ -353,8 +345,7 @@ export default function DaaDashboardAdminUsers() {
             background: "#fff6f6",
             borderRadius: 10,
             fontSize: 12,
-            color: "#7a1f1f",
-          }}
+            color: "#7a1f1f"}}
         >
           <b>Update failed</b>: {mutateError}
         </div>
@@ -369,8 +360,7 @@ export default function DaaDashboardAdminUsers() {
             background: "#fff6f6",
             borderRadius: 10,
             fontSize: 12,
-            color: "#7a1f1f",
-          }}
+            color: "#7a1f1f"}}
         >
           <b>Failed to load</b>: {error || "unknown error"}
         </div>
@@ -387,8 +377,7 @@ export default function DaaDashboardAdminUsers() {
             borderBottom: "1px solid #eee",
             fontSize: 12,
             fontWeight: 700,
-            color: "#333",
-          }}
+            color: "#333"}}
         >
           <button
             type="button"
@@ -401,8 +390,7 @@ export default function DaaDashboardAdminUsers() {
               cursor: "pointer",
               fontWeight: 700,
               fontSize: 12,
-              color: "#333",
-            }}
+              color: "#333"}}
           >
             ID{sortIndicator(sortKey === "id", sortDir)}
           </button>
@@ -418,8 +406,7 @@ export default function DaaDashboardAdminUsers() {
               cursor: "pointer",
               fontWeight: 700,
               fontSize: 12,
-              color: "#333",
-            }}
+              color: "#333"}}
           >
             Role{sortIndicator(sortKey === "role", sortDir)}
           </button>
@@ -435,8 +422,7 @@ export default function DaaDashboardAdminUsers() {
               cursor: "pointer",
               fontWeight: 700,
               fontSize: 12,
-              color: "#333",
-            }}
+              color: "#333"}}
           >
             Status{sortIndicator(sortKey === "status", sortDir)}
           </button>
@@ -452,8 +438,7 @@ export default function DaaDashboardAdminUsers() {
               cursor: "pointer",
               fontWeight: 700,
               fontSize: 12,
-              color: "#333",
-            }}
+              color: "#333"}}
           >
             Me{sortIndicator(sortKey === "me", sortDir)}
           </button>
@@ -505,8 +490,7 @@ export default function DaaDashboardAdminUsers() {
                 padding: "8px 10px",
                 borderTop: "1px solid #eee",
                 fontSize: 12,
-                alignItems: "center",
-              }}
+                alignItems: "center"}}
             >
               <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}>{u.id}</div>
               <div>{u.role}</div>
@@ -518,8 +502,7 @@ export default function DaaDashboardAdminUsers() {
                     borderRadius: 999,
                     border: `1px solid ${statusBorder}`,
                     background: statusBg,
-                    color: statusText,
-                  }}
+                    color: statusText}}
                 >
                   {statusLabel}
                 </span>
@@ -538,8 +521,7 @@ export default function DaaDashboardAdminUsers() {
                       background: "#fafafa",
                       fontSize: 12,
                       opacity: isBusy ? 0.6 : 1,
-                      cursor: isBusy ? "not-allowed" : "pointer",
-                    }}
+                      cursor: isBusy ? "not-allowed" : "pointer"}}
                   >
                     {isBusy ? "Updating..." : u.active ? "Deactivate" : "Activate"}
                   </button>
@@ -593,8 +575,7 @@ export default function DaaDashboardAdminUsers() {
             background: toast.kind === "ok" ? "rgba(236, 253, 245, 0.98)" : "rgba(254, 242, 242, 0.98)",
             color: toast.kind === "ok" ? "#065f46" : "#7f1d1d",
             fontSize: 12,
-            boxShadow: "0 8px 30px rgba(0,0,0,0.15)",
-          }}
+            boxShadow: "0 8px 30px rgba(0,0,0,0.15)"}}
           onClick={() => setToast(null)}
           title="Click to dismiss"
         >
@@ -613,8 +594,7 @@ export default function DaaDashboardAdminUsers() {
             background: "rgba(0,0,0,0.35)",
             zIndex: 1000,
             display: "flex",
-            justifyContent: "flex-end",
-          }}
+            justifyContent: "flex-end"}}
         >
           <div
             onClick={(ev) => ev.stopPropagation()}
@@ -624,8 +604,7 @@ export default function DaaDashboardAdminUsers() {
               background: "#fff",
               borderLeft: "1px solid #eee",
               padding: 12,
-              overflow: "auto",
-            }}
+              overflow: "auto"}}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontWeight: 900, fontSize: 13 }}>User details</div>
