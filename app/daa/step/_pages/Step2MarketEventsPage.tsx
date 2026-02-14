@@ -699,33 +699,26 @@ export default function Step2MarketEventsPage() {
     <main>
       <h1 style={{ margin: 0, fontSize: 20 }}>Step 2 — 市场信息</h1>
       <p style={{ color: "#444" }}>
-        v0：支持把 Twitter（主观）与 yfinance/雪球（客观新闻）标准化为统一 <code>MarketEvent</code> JSON，并在页面里过滤/查看/复制。
+        v1：优先用 <b>Fetch-first</b>（非 JSON-first）的方式，把 Twitter / Yahoo Finance(yfinance-like) / 雪球 的信息标准化为统一 <code>MarketEvent</code>，并在页面里过滤/查看/复制。
       </p>
 
       <section style={{ border: "1px solid #eee", borderRadius: 10, overflow: "hidden", marginTop: 12 }}>
-        <div style={{ padding: 10, borderBottom: "1px solid #eee", background: "#fafafa", fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>Ingest / Fetch（自动拉取 → 标准化 → 合并到事件列表）</div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button onClick={ingest} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}>
-              Ingest
-            </button>
-            <button
-              onClick={loadDemoAndIngest}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
-            >
-              Load demo & ingest
-            </button>
-            <button
-              onClick={() => {
-                setTwitterText("");
-                setYfinanceText("");
-                setXueqiuText("");
-                setIngestIssues([]);
-              }}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
-            >
-              Clear
-            </button>
+        <div
+          style={{
+            padding: 10,
+            borderBottom: "1px solid #eee",
+            background: "#fafafa",
+            fontWeight: 600,
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            alignItems: "baseline",
+          }}
+        >
+          <div>Sources（Fetch → 标准化 → 合并到事件列表）</div>
+          <div style={{ fontSize: 12, color: "#666", fontWeight: 500 }}>
+            {fetchState ? fetchState : "Fetch-first UI (非 JSON-first)。需要手动粘贴时见 Advanced。"}
           </div>
         </div>
 
@@ -734,7 +727,6 @@ export default function Step2MarketEventsPage() {
             <div style={{ fontSize: 12, color: "#666" }}>
               自动拉取（token 仅在服务端 env）：<code>TWITTERDATA_TOKEN</code> / <code>XUEQIU_TOKEN</code>
             </div>
-            {fetchState ? <span style={{ fontSize: 12, color: "#666" }}>{fetchState}</span> : null}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px", gap: 8, alignItems: "center" }}>
@@ -864,14 +856,14 @@ export default function Step2MarketEventsPage() {
             </button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
-            <input value={yahooSymbol} onChange={(e) => setYahooSymbol(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Yahoo symbol (AAPL)" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 8, alignItems: "center" }}>
+            <input value={yahooSymbol} onChange={(e) => setYahooSymbol(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Symbol (AAPL / SPY / TSLA)" />
             <button onClick={fetchYahooRss} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
-              Fetch Yahoo RSS
+              Fetch Yahoo Finance RSS (News)
             </button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 8, alignItems: "center" }}>
             <input value={xueqiuSymbol} onChange={(e) => setXueqiuSymbol(e.target.value)} style={{ padding: 8, borderRadius: 10, border: "1px solid #eee" }} placeholder="Xueqiu symbol (SH603533)" />
             <button onClick={fetchXueqiuQuote} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd", background: "#fff" }}>
               Fetch Xueqiu Quote
@@ -879,54 +871,90 @@ export default function Step2MarketEventsPage() {
           </div>
         </div>
 
-        <div style={{ padding: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <label style={{ fontSize: 12, color: "#666" }}>Twitter（主观）— 支持 JSON array 或纯文本（每行一条）</label>
+        {ingestIssues.length ? (
+          <div style={{ padding: 10, borderTop: "1px solid #eee", background: "#fff7ed", color: "#9a3412", fontSize: 12 }}>
+            Ingest issues: {ingestIssues[0]}
+            {ingestIssues.length > 1 ? ` (+${ingestIssues.length - 1} more)` : ""}
+          </div>
+        ) : null}
+
+        <details style={{ borderTop: "1px solid #eee" }}>
+          <summary style={{ padding: 10, background: "#fafafa", cursor: "pointer", fontWeight: 600 }}>
+            Advanced: paste raw inputs (JSON/text) + manual ingest
+          </summary>
+
+          <div style={{ padding: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={ingest} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}>
+                Ingest
+              </button>
               <button
-                onClick={copyTwitterJson}
-                style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
-                title="Copy the current Twitter textarea content (prefer JSON array)"
+                onClick={loadDemoAndIngest}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
               >
-                Copy Twitter JSON
+                Load demo & ingest
+              </button>
+              <button
+                onClick={() => {
+                  setTwitterText("");
+                  setYfinanceText("");
+                  setXueqiuText("");
+                  setIngestIssues([]);
+                }}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#fff" }}
+              >
+                Clear raw
               </button>
             </div>
-            <textarea
-              value={twitterText}
-              onChange={(e) => setTwitterText(e.target.value)}
-              placeholder="Paste Twitter list export JSON or plaintext..."
-              style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
-            />
-          </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-            <label style={{ fontSize: 12, color: "#666" }}>yfinance（客观）— 建议粘贴 Python 导出的 <code>list[dict]</code></label>
-            <textarea
-              value={yfinanceText}
-              onChange={(e) => setYfinanceText(e.target.value)}
-              placeholder="Paste yfinance news JSON..."
-              style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-            <label style={{ fontSize: 12, color: "#666" }}>雪球（客观）— 支持 <code>{"{items: [...] }"}</code> / <code>{"{list: [...] }"}</code> / array</label>
-            <textarea
-              value={xueqiuText}
-              onChange={(e) => setXueqiuText(e.target.value)}
-              placeholder="Paste xueqiu news JSON..."
-              style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
-            />
-          </div>
-
-          {ingestIssues.length ? (
-            <div style={{ padding: 10, borderRadius: 10, border: "1px solid #fee2e2", background: "#fff1f2", color: "#991b1b", fontSize: 12 }}>
-              {ingestIssues.map((x, i) => (
-                <div key={i}>{x}</div>
-              ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ fontSize: 12, color: "#666" }}>Twitter（主观）— 支持 JSON array 或纯文本（每行一条）</label>
+                <button
+                  onClick={copyTwitterJson}
+                  style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", fontSize: 12 }}
+                  title="Copy the current Twitter textarea content (prefer JSON array)"
+                >
+                  Copy Twitter JSON
+                </button>
+              </div>
+              <textarea
+                value={twitterText}
+                onChange={(e) => setTwitterText(e.target.value)}
+                placeholder="Paste Twitter list export JSON or plaintext..."
+                style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
+              />
             </div>
-          ) : null}
-        </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <label style={{ fontSize: 12, color: "#666" }}>yfinance（客观）— 建议粘贴 Python 导出的 <code>list[dict]</code></label>
+              <textarea
+                value={yfinanceText}
+                onChange={(e) => setYfinanceText(e.target.value)}
+                placeholder="Paste yfinance news JSON..."
+                style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <label style={{ fontSize: 12, color: "#666" }}>雪球（客观）— 支持 <code>{"{items: [...] }"}</code> / <code>{"{list: [...] }"}</code> / array</label>
+              <textarea
+                value={xueqiuText}
+                onChange={(e) => setXueqiuText(e.target.value)}
+                placeholder="Paste xueqiu news JSON..."
+                style={{ width: "100%", minHeight: 120, padding: 10, borderRadius: 10, border: "1px solid #eee", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace", fontSize: 12 }}
+              />
+            </div>
+
+            {ingestIssues.length ? (
+              <div style={{ padding: 10, borderRadius: 10, border: "1px solid #fee2e2", background: "#fff1f2", color: "#991b1b", fontSize: 12 }}>
+                {ingestIssues.map((x, i) => (
+                  <div key={i}>{x}</div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </details>
       </section>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
