@@ -447,8 +447,19 @@ export default function DaaDashboardHistoryAudit() {
 
       <CardContent className="space-y-3">
         {runsError ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            <b>Runs error</b>: {runsError}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <div>
+              <b>Runs error</b>: {runsError}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => loadRuns("reset")}
+              disabled={runsStatus === "loading"}
+            >
+              Retry
+            </Button>
           </div>
         ) : null}
 
@@ -484,8 +495,19 @@ export default function DaaDashboardHistoryAudit() {
                     <div className="mt-3 space-y-3">
                       {bundleStatus === "loading" ? <div className="text-sm text-muted-foreground">Loading bundle...</div> : null}
                       {bundleError ? (
-                        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                          <b>Bundle error</b>: {bundleError}
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                          <div>
+                            <b>Bundle error</b>: {bundleError}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => loadBundle(r.runId)}
+                            disabled={bundleStatus === "loading"}
+                          >
+                            Retry
+                          </Button>
                         </div>
                       ) : null}
 
@@ -641,6 +663,11 @@ export default function DaaDashboardHistoryAudit() {
               <div className="font-medium">No runs yet</div>
               <div className="mt-1 text-muted-foreground">
                 Create the first run in the "Confirm/Executed" section (save snapshot + confirm). This view is read-only and never executes trades.
+              </div>
+              <div className="mt-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => loadRuns("reset")} disabled={runsStatus === "loading"}>
+                  Refresh
+                </Button>
               </div>
             </div>
           )}

@@ -659,8 +659,17 @@ export default function DaaDashboardConfirmExecuted() {
             ) : null}
 
             {runError ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                Run error: {runError}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <div>Run error: {runError}</div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refreshRunBundle()}
+                  disabled={runStatus === "loading"}
+                >
+                  Retry
+                </Button>
               </div>
             ) : null}
           </CardContent>

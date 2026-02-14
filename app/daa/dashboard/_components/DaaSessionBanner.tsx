@@ -29,12 +29,13 @@ function formatRoles(roles: string[]): string {
 
 export default function DaaSessionBanner() {
   const [model, setModel] = useState<Model>({ kind: "loading" });
+  const [rev, setRev] = useState(0);
   const [logoutBusy, setLogoutBusy] = useState(false);
 
   const returnTo = useMemo(() => {
     if (typeof window === "undefined") return "/daa/dashboard";
     return `${window.location.pathname}${window.location.search}`;
-  }, []);
+  }, [rev]);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +158,20 @@ export default function DaaSessionBanner() {
           {model.kind === "signedIn" ? (
             <Button type="button" size="sm" variant="outline" onClick={() => void logout()} disabled={logoutBusy}>
               {logoutBusy ? "Signing out..." : "Logout"}
+            </Button>
+          ) : null}
+
+          {model.kind === "error" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setModel({ kind: "loading" });
+                setRev((x) => x + 1);
+              }}
+            >
+              Retry
             </Button>
           ) : null}
         </div>
