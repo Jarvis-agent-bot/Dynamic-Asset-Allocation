@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { loadPaperExecutionLog, type PaperExecutionLogEntryV0 } from '@/src/daa/executionLogStore';
+import { buildRebalanceOrderReceiptsV1 } from '@/src/daa/rebalanceOrderReceiptsExportV1';
 import { buildLatestRebalanceRunReportV1 } from '@/src/daa/rebalanceReportExport';
 import { encodeRebalanceRunReportToShareToken } from '@/src/daa/rebalanceRunShareCodec';
 import { loadRebalanceLog, type RebalanceLogEntryV0 } from '@/src/daa/rebalanceLogStore';
@@ -381,6 +382,26 @@ export default function DaaRebalanceLogViewV0() {
                     >
                       Export
                     </button>
+
+                    {statusRun ? (
+                      <button
+                        type="button"
+                        className="button secondary"
+                        onClick={() => {
+                          const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                          const receipts = buildRebalanceOrderReceiptsV1({ run: statusRun });
+                          downloadTextAsFile({
+                            filename: `daa-order-receipts-${statusRun.runId.slice(0, 8)}-${stamp}.json`,
+                            text: pretty(receipts),
+                            mime: 'application/json',
+                          });
+                        }}
+                        style={{ padding: '6px 10px' }}
+                      >
+                        Export receipts
+                      </button>
+                    ) : null}
+
                     <button type="button" className="button" onClick={() => setExpanded((m) => ({ ...m, [e.id]: !isOpen }))} style={{ padding: '6px 10px' }}>
                       {isOpen ? 'Hide' : 'Details'}
                     </button>
