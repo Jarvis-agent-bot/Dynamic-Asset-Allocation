@@ -130,4 +130,45 @@ export const DAA_SQLITE_MIGRATIONS_V0: SqliteMigrationV0[] = [
         ON daa_run_audit_events(actor_user_id, created_at, event_id);
     `,
   },
+
+  // v5: auth accounts + sessions (for dashboard login; replaces token-only auth over time).
+  {
+    id: "0006_auth_accounts_sessions",
+    sql: `
+      CREATE TABLE IF NOT EXISTS daa_auth_accounts (
+        account_id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        roles_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_daa_auth_accounts_status
+        ON daa_auth_accounts(status);
+
+      CREATE TABLE IF NOT EXISTS daa_auth_sessions (
+        session_id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        token_sha256 TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        user_agent TEXT,
+        ip TEXT,
+        last_seen_at TEXT,
+        FOREIGN KEY(account_id) REFERENCES daa_auth_accounts(account_id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_daa_auth_sessions_account_created_at
+        ON daa_auth_sessions(account_id, created_at);
+
+      CREATE INDEX IF NOT EXISTS idx_daa_auth_sessions_expires_at
+        ON daa_auth_sessions(expires_at);
+
+      CREATE INDEX IF NOT EXISTS idx_daa_auth_sessions_revoked_at
+        ON daa_auth_sessions(revoked_at);
+    `,
+  },
 ];
