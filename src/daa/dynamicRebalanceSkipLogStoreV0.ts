@@ -2,6 +2,16 @@ import type { DynamicRebalancePauseReasonV0 } from "./dynamicRebalancePausedReas
 
 export const LS_DYNAMIC_REBALANCE_SKIP_LOG_V0 = "daa.dynamicRebalance.skipLog.v0";
 
+export type DynamicRebalanceSkipReasonV0 =
+  | DynamicRebalancePauseReasonV0
+  | {
+      kind: "user-cancelled";
+      title: string;
+      detail: string;
+    };
+
+export type DynamicRebalanceSkipKindV0 = DynamicRebalanceSkipReasonV0["kind"] | "unknown";
+
 export type DynamicRebalanceSkipLogEntryV0 = {
   id: string;
 
@@ -11,7 +21,7 @@ export type DynamicRebalanceSkipLogEntryV0 = {
   // When we recorded the skip event.
   recordedAt: string; // ISO timestamp
 
-  kind: DynamicRebalancePauseReasonV0["kind"] | "unknown";
+  kind: DynamicRebalanceSkipKindV0;
   title: string;
   detail: string;
 
@@ -41,8 +51,8 @@ function safeJsonParse(raw: string | null): unknown {
   }
 }
 
-function normalizeKind(x: unknown): DynamicRebalanceSkipLogEntryV0["kind"] | null {
-  if (x === "paused-market-closed" || x === "stalled-data-stale") return x;
+function normalizeKind(x: unknown): DynamicRebalanceSkipKindV0 | null {
+  if (x === "paused-market-closed" || x === "stalled-data-stale" || x === "user-cancelled") return x;
   return x === "unknown" ? "unknown" : null;
 }
 
@@ -84,7 +94,7 @@ export function clearDynamicRebalanceSkipLogV0(storage: Pick<Storage, "setItem">
 export function appendDynamicRebalanceSkipLogV0(args: {
   storage: Pick<Storage, "getItem" | "setItem">;
   at: string;
-  reason: DynamicRebalancePauseReasonV0;
+  reason: DynamicRebalanceSkipReasonV0;
   recordedAt?: string;
   maxEntries?: number;
 }): { ok: true; entry: DynamicRebalanceSkipLogEntryV0 } | { ok: false; error: string } {
@@ -92,7 +102,7 @@ export function appendDynamicRebalanceSkipLogV0(args: {
   if (!at) return { ok: false, error: "missing at" };
 
   const recordedAt = String(args.recordedAt ?? nowIso()).trim() || nowIso();
-  const kind = args.reason?.kind ?? "unknown";
+  const kind: DynamicRebalanceSkipKindV0 = args.reason.kind;
 
   const prev = loadDynamicRebalanceSkipLogV0(args.storage);
   const existing = prev.find((e) => e.at === at && e.kind === kind);
@@ -103,8 +113,8 @@ export function appendDynamicRebalanceSkipLogV0(args: {
     at,
     recordedAt,
     kind,
-    title: String(args.reason?.title ?? "Skipped").trim() || "Skipped",
-    detail: String(args.reason?.detail ?? "").trim() || "<missing detail>",
+    title: String(args.reason.title ?? "Skipped").trim() || "Skipped",
+    detail: String(args.reason.detail ?? "").trim() || "<missing detail>",
   };
 
   if (args.reason.kind === "paused-market-closed") {

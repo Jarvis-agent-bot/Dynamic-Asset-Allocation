@@ -58,25 +58,31 @@ export default function DaaDynamicRebalanceSkipHistoryV0(props: { rev?: number }
     const lastEvalAt = safeParseIso(portfolio.lastRebalance?.at ?? null);
 
     if (schedule.enabled && lastScheduledAt && (!lastEvalAt || lastEvalAt.getTime() < lastScheduledAt.getTime())) {
-      // Compute the pause reason at the scheduled tick time (not "now"), so the log reflects
-      // the actual intended run window.
-      const snapshot = loadPriceSnapshotV1();
-      const priceCount = Object.keys(snapshot.prices ?? {}).length;
+      const cancelled = loadDynamicRebalanceSkipLogV0(window.localStorage).some(
+        (e) => e.kind === 'user-cancelled' && e.at === lastScheduledAt.toISOString(),
+      );
 
-      const reason = computeDynamicRebalancePauseReasonV0({
-        enabled: true,
-        now: lastScheduledAt,
-        priceSnapshotUpdatedAt: snapshot.updatedAt,
-        priceCount,
-        staleAfterMin: 60,
-      });
+      if (!cancelled) {
+        // Compute the pause reason at the scheduled tick time (not "now"), so the log reflects
+        // the actual intended run window.
+        const snapshot = loadPriceSnapshotV1();
+        const priceCount = Object.keys(snapshot.prices ?? {}).length;
 
-      if (reason) {
-        appendDynamicRebalanceSkipLogV0({
-          storage: window.localStorage,
-          at: lastScheduledAt.toISOString(),
-          reason,
+        const reason = computeDynamicRebalancePauseReasonV0({
+          enabled: true,
+          now: lastScheduledAt,
+          priceSnapshotUpdatedAt: snapshot.updatedAt,
+          priceCount,
+          staleAfterMin: 60,
         });
+
+        if (reason) {
+          appendDynamicRebalanceSkipLogV0({
+            storage: window.localStorage,
+            at: lastScheduledAt.toISOString(),
+            reason,
+          });
+        }
       }
     }
 
@@ -142,7 +148,14 @@ export default function DaaDynamicRebalanceSkipHistoryV0(props: { rev?: number }
           const atText = at ? formatLocalCompact(at) : e.at;
           const recText = recordedAt ? formatLocalCompact(recordedAt) : e.recordedAt;
 
-          const kindText = e.kind === 'paused-market-closed' ? 'market closed' : e.kind === 'stalled-data-stale' ? 'price stale' : e.kind;
+          const kindText =
+            e.kind === 'paused-market-closed'
+              ? 'market closed'
+              : e.kind === 'stalled-data-stale'
+                ? 'price stale'
+                : e.kind === 'user-cancelled'
+                  ? 'user cancelled'
+                  : e.kind;
 
           return (
             <div key={e.id} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
