@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import {
+  buildDynamicRebalanceRunAllocationsCsvV0,
+  buildDynamicRebalanceRunAuditBundleV0,
+  buildDynamicRebalanceRunOrdersCsvV0,
+} from '@/src/daa/dynamicRebalanceRunExportV0';
+import {
   loadRebalanceOrderStatusRunHistoryV0,
   type RebalanceOrderStatusRunV0,
 } from '@/src/daa/rebalanceOrderStatusRunStoreV0';
@@ -28,6 +33,24 @@ function formatLocalCompact(d: Date): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${y}-${m}-${day} ${hh}:${mm}`;
+}
+
+function downloadTextAsFile(args: { filename: string; text: string; mime: string }) {
+  try {
+    const blob = new Blob([args.text], { type: args.mime });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = args.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.setTimeout(() => URL.revokeObjectURL(url), 250);
+  } catch {
+    // ignore
+  }
 }
 
 function computeCounts(run: RebalanceOrderStatusRunV0): { total: number; filled: number; failed: number } {
@@ -356,6 +379,61 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
                     >
                       Copy
                     </button>
+
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => {
+                        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                        const bundle = buildDynamicRebalanceRunAuditBundleV0({ run, coreLogEntry: logEntry });
+                        downloadTextAsFile({
+                          filename: `daa-dyn-rebalance-run-${run.runId.slice(0, 8)}-${stamp}.json`,
+                          text: pretty(bundle),
+                          mime: 'application/json',
+                        });
+                      }}
+                      style={{ padding: '6px 10px' }}
+                    >
+                      Export JSON
+                    </button>
+
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => {
+                        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                        const csv = buildDynamicRebalanceRunOrdersCsvV0({ run });
+                        downloadTextAsFile({
+                          filename: `daa-dyn-rebalance-orders-${run.runId.slice(0, 8)}-${stamp}.csv`,
+                          text: csv,
+                          mime: 'text/csv',
+                        });
+                      }}
+                      style={{ padding: '6px 10px' }}
+                    >
+                      Export orders CSV
+                    </button>
+
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => {
+                        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                        const csv = buildDynamicRebalanceRunAllocationsCsvV0({ runId: run.runId, coreLogEntry: logEntry });
+                        if (!csv) return;
+                        downloadTextAsFile({
+                          filename: `daa-dyn-rebalance-allocations-${run.runId.slice(0, 8)}-${stamp}.csv`,
+                          text: csv,
+                          mime: 'text/csv',
+                        });
+                      }}
+                      style={{ padding: '6px 10px' }}
+                      disabled={!logEntry}
+                      title={logEntry ? undefined : 'No core log entry found for this runId'}
+                    >
+                      Export allocations CSV
+                    </button>
+
                     <button type="button" className="button" onClick={() => setExpanded((m) => ({ ...m, [key]: !isOpen }))} style={{ padding: '6px 10px' }}>
                       {isOpen ? 'Hide' : 'Details'}
                     </button>
