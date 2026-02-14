@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -47,6 +48,23 @@ function applyMigrationsV0(db: Database): string[] {
     "CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);"
   );
 
+  // Best-effort: keep a small audit trail for debugging migration issues in prod.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migration_audit_events (
+      event_id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      migration_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      payload_json TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_schema_migration_audit_events_created_at
+      ON schema_migration_audit_events(created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_schema_migration_audit_events_migration_id_created_at
+      ON schema_migration_audit_events(migration_id, created_at);
+  `);
+
   const rows = db.exec("SELECT id FROM schema_migrations ORDER BY id");
   const applied = new Set<string>();
   if (rows.length && rows[0]?.values) {
@@ -59,6 +77,7 @@ function applyMigrationsV0(db: Database): string[] {
   const newlyApplied: string[] = [];
   for (const m of DAA_SQLITE_MIGRATIONS_V0) {
     if (applied.has(m.id)) continue;
+    const startedAt = Date.now();
     db.exec("BEGIN");
     try {
       db.exec(m.sql);
@@ -68,6 +87,27 @@ function applyMigrationsV0(db: Database): string[] {
       } finally {
         stmt.free();
       }
+
+      // Best-effort audit; never block migrations if the audit insert fails.
+      try {
+        const a = db.prepare(
+          "INSERT INTO schema_migration_audit_events (event_id, created_at, migration_id, status, payload_json) VALUES (?, ?, ?, ?, ?)"
+        );
+        try {
+          a.run([
+            randomUUID(),
+            nowIso(),
+            m.id,
+            "applied",
+            JSON.stringify({ elapsedMs: Date.now() - startedAt }),
+          ]);
+        } finally {
+          a.free();
+        }
+      } catch {
+        // ignore
+      }
+
       db.exec("COMMIT");
       newlyApplied.push(m.id);
     } catch (e) {
@@ -76,6 +116,27 @@ function applyMigrationsV0(db: Database): string[] {
       } catch {
         // ignore
       }
+
+      // Try to record the failure (best-effort).
+      try {
+        const a = db.prepare(
+          "INSERT INTO schema_migration_audit_events (event_id, created_at, migration_id, status, payload_json) VALUES (?, ?, ?, ?, ?)"
+        );
+        try {
+          a.run([
+            randomUUID(),
+            nowIso(),
+            m.id,
+            "failed",
+            JSON.stringify({ elapsedMs: Date.now() - startedAt, error: String(e) }),
+          ]);
+        } finally {
+          a.free();
+        }
+      } catch {
+        // ignore
+      }
+
       throw e;
     }
   }
