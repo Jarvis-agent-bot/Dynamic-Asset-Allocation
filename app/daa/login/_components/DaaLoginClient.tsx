@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +38,8 @@ type EmailLinkModel =
   | { kind: "idle" }
   | { kind: "sending" }
   | { kind: "sent"; email: string; requestedAtMs: number; cooldownSeconds: number };
+
+const LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0 = "daa.emailLogin.lastEmail.v0";
 
 function normalizeEmailLoose(raw: string): string {
   const v = raw.trim().toLowerCase();
@@ -132,6 +134,8 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
   const passwordHelpId = useId();
   const formErrorId = useId();
 
+  const emailLinkEmailRef = useRef<HTMLInputElement | null>(null);
+
   const safeReturnTo = useMemo(() => normalizeReturnTo(returnTo), [returnTo]);
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
@@ -196,6 +200,19 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
     if (emailLink.kind !== "sent") return [];
     return buildMailboxLinks(emailLink.email);
   }, [emailLink]);
+
+  useEffect(() => {
+    // When a magic link is expired/invalid, we often bounce back to /daa/login.
+    // Prefill the last email so retrying is 1-click.
+    if (username.trim()) return;
+    try {
+      const last = window.localStorage.getItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0) || "";
+      const normalized = normalizeEmailLoose(last);
+      if (normalized) setUsername(normalized);
+    } catch {
+      // Ignore storage errors (private mode / blocked storage).
+    }
+  }, [username]);
 
   useEffect(() => {
     let cancelled = false;
@@ -341,6 +358,12 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
       return;
     }
 
+    try {
+      window.localStorage.setItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0, email);
+    } catch {
+      // Ignore storage errors.
+    }
+
     setEmailLink({ kind: "sending" });
 
     try {
@@ -406,7 +429,32 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
     <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
       {error === "email-link-invalid" ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          This sign-in link is invalid or has expired. Request a new link.
+          <div className="font-medium">This sign-in link is invalid or has expired.</div>
+          <div className="mt-1 text-xs text-destructive/90">Request a new link to continue.</div>
+          <div className="mt-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={emailDisabled}
+              onClick={() => {
+                setTab("email");
+                setEmailLinkError(null);
+                setEmailLink({ kind: "idle" });
+
+                const normalized = normalizeEmailLoose(username);
+                if (!normalized) {
+                  setTouched((prev) => ({ ...prev, email: true }));
+                  emailLinkEmailRef.current?.focus();
+                  return;
+                }
+
+                void requestEmailLink();
+              }}
+            >
+              Send a new sign-in link
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -461,6 +509,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                   </label>
                   <Input
                     id={emailLinkEmailId}
+                    ref={emailLinkEmailRef}
                     type="email"
                     inputMode="email"
                     autoCapitalize="none"
