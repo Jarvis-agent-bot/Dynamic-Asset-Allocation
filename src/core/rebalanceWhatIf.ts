@@ -33,9 +33,25 @@ export type RebalanceWhatIfV0 = {
 
   // Costs (v0): cost = fee + slippage, applied as a percent of notional.
   costPct: number;
+
+  // Total cost across BUY+SELL legs.
   feeTotal: number;
   slippageTotal: number;
   costTotal: number;
+
+  // Side-specific breakdown (useful for cash impact UI).
+  feeBuyTotal: number;
+  feeSellTotal: number;
+  slippageBuyTotal: number;
+  slippageSellTotal: number;
+  costBuyTotal: number;
+  costSellTotal: number;
+
+  // Cash-flow breakdown (v0): BUY spends full notional cash; SELL receives (notional - cost).
+  buyCashOutflow: number;
+  sellProceedsGross: number;
+  sellProceedsNet: number;
+  cashDelta: number;
 
   totalBefore: number;
   totalAfter: number;
@@ -132,9 +148,18 @@ export function simulateRebalanceWhatIfV0(args: {
 
   let buyNotional = 0;
   let sellNotional = 0;
+
   let feeTotal = 0;
   let slippageTotal = 0;
   let costTotal = 0;
+
+  // Split totals by leg so the UI can explain cash impact (SELL cost hits cash; BUY cost reduces acquired value).
+  let feeBuyTotal = 0;
+  let feeSellTotal = 0;
+  let slippageBuyTotal = 0;
+  let slippageSellTotal = 0;
+  let costBuyTotal = 0;
+  let costSellTotal = 0;
 
   for (const o of args.orders ?? []) {
     const id = String(o?.symbol ?? "").trim();
@@ -154,11 +179,19 @@ export function simulateRebalanceWhatIfV0(args: {
 
     if (side === "BUY") {
       buyNotional += notional;
+      feeBuyTotal += fee;
+      slippageBuyTotal += slippage;
+      costBuyTotal += cost;
+
       // Spend `notional` cash; acquire `notional - cost` of asset value.
       cashDelta -= notional;
       deltaById.set(id, (deltaById.get(id) ?? 0) + (notional - cost));
     } else {
       sellNotional += notional;
+      feeSellTotal += fee;
+      slippageSellTotal += slippage;
+      costSellTotal += cost;
+
       // Sell `notional` of asset value; receive `notional - cost` in cash.
       cashDelta += notional - cost;
       deltaById.set(id, (deltaById.get(id) ?? 0) - notional);
@@ -236,6 +269,18 @@ export function simulateRebalanceWhatIfV0(args: {
     feeTotal,
     slippageTotal,
     costTotal,
+
+    feeBuyTotal,
+    feeSellTotal,
+    slippageBuyTotal,
+    slippageSellTotal,
+    costBuyTotal,
+    costSellTotal,
+
+    buyCashOutflow: buyNotional,
+    sellProceedsGross: sellNotional,
+    sellProceedsNet: sellNotional - costSellTotal,
+    cashDelta,
 
     totalBefore,
     totalAfter,
