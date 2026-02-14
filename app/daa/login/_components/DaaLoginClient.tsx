@@ -328,7 +328,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
     const roles = session.me.account.roles?.filter(Boolean).join(", ") || "(no roles)";
 
     return (
-      <div className="mx-auto w-full max-w-md space-y-3">
+      <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">You are already signed in</CardTitle>
@@ -336,11 +336,11 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
               Signed in as <span className="font-medium">{session.me.account.username}</span> ({roles}).
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap items-center gap-2">
-            <Button asChild>
+          <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button asChild className="w-full sm:w-auto">
               <Link href={safeReturnTo}>Continue to dashboard</Link>
             </Button>
-            <Button type="button" variant="outline" onClick={() => void logout()} disabled={logoutBusy}>
+            <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void logout()} disabled={logoutBusy}>
               {logoutBusy ? "Signing out..." : "Sign out"}
             </Button>
           </CardContent>
@@ -355,7 +355,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
     : "Enter your email address (for example, you@example.com).";
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-3">
+    <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
       {error === "email-link-invalid" ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           This sign-in link is invalid or has expired. Request a new link.
@@ -370,8 +370,10 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">DAA Login</CardTitle>
-          <CardDescription>Sign in to access the /daa/dashboard console.</CardDescription>
+          <CardTitle className="text-xl">Sign in</CardTitle>
+          <CardDescription>
+            Choose a sign-in method to access <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>.
+          </CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -389,7 +391,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
               <TabsTrigger value="password">Password</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="email">
+            <TabsContent value="email" className="mt-4">
               <form
                 className="grid gap-4"
                 onSubmit={(e) => {
@@ -438,8 +440,12 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="submit" disabled={emailDisabled || !emailLinkFormValid || emailLink.kind === "sent"}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button
+                    type="submit"
+                    className="w-full sm:w-auto"
+                    disabled={emailDisabled || !emailLinkFormValid || emailLink.kind === "sent"}
+                  >
                     {emailLink.kind === "sending" ? (
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -455,6 +461,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                   {emailLink.kind === "sent" ? (
                     <Button
                       type="button"
+                      className="w-full sm:w-auto"
                       variant="outline"
                       onClick={() => void requestEmailLink()}
                       disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
@@ -497,7 +504,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
               </form>
             </TabsContent>
 
-            <TabsContent value="password">
+            <TabsContent value="password" className="mt-4">
               <form
                 className="grid gap-4"
                 onSubmit={(e) => {
@@ -575,7 +582,7 @@ export default function DaaLoginClient({ returnTo, error }: Props) {
                   )}
                 </div>
 
-                <Button type="submit" disabled={passwordSubmitDisabled}>
+                <Button type="submit" className="w-full" disabled={passwordSubmitDisabled}>
                   {checkingSession ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
