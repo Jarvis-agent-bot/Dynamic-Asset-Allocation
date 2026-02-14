@@ -38,18 +38,20 @@ describe("daa/auth store v0", () => {
     process.env.DAA_SQLITE_PATH = dbPath;
     await resetDbFile(dbPath);
 
-    const a1 = await createDaaAuthAccountV0({ username: "Admin", password: "pw-1", roles: ["editor"] });
-    expect(a1.username).toBe("admin");
+    const a1 = await createDaaAuthAccountV0({ username: "Admin@Example.com", password: "pw-1", roles: ["editor"] });
+    expect(a1.username).toBe("admin@example.com");
     expect(a1.roles).toEqual(["editor"]);
 
-    const a2 = await getDaaAuthAccountByUsernameV0("ADMIN");
+    const a2 = await getDaaAuthAccountByUsernameV0("ADMIN@EXAMPLE.COM");
     expect(a2?.accountId).toBe(a1.accountId);
 
-    const ok = await authenticateDaaAuthAccountV0({ username: "admin", password: "pw-1" });
+    const ok = await authenticateDaaAuthAccountV0({ username: "admin@example.com", password: "pw-1" });
     expect(ok?.accountId).toBe(a1.accountId);
 
-    const bad = await authenticateDaaAuthAccountV0({ username: "admin", password: "wrong" });
+    const bad = await authenticateDaaAuthAccountV0({ username: "admin@example.com", password: "wrong" });
     expect(bad).toBe(null);
+
+    await expect(createDaaAuthAccountV0({ username: "not-an-email", password: "pw-x", roles: ["viewer"] })).rejects.toThrow(/invalid email/i);
 
     await resetDbFile(dbPath);
   });
@@ -59,7 +61,7 @@ describe("daa/auth store v0", () => {
     process.env.DAA_SQLITE_PATH = dbPath;
     await resetDbFile(dbPath);
 
-    const a1 = await createDaaAuthAccountV0({ username: "user1", password: "pw-2", roles: ["viewer"] });
+    const a1 = await createDaaAuthAccountV0({ username: "user1@example.com", password: "pw-2", roles: ["viewer"] });
 
     const { session, token } = await createDaaAuthSessionV0({ accountId: a1.accountId, ttlDays: 7, userAgent: "ua", ip: "1.2.3.4" });
     expect(session.accountId).toBe(a1.accountId);
@@ -85,7 +87,7 @@ describe("daa/auth store v0", () => {
     process.env.DAA_SQLITE_PATH = dbPath;
     await resetDbFile(dbPath);
 
-    const a1 = await createDaaAuthAccountV0({ username: "user2", password: "pw-3", roles: ["viewer"] });
+    const a1 = await createDaaAuthAccountV0({ username: "user2@example.com", password: "pw-3", roles: ["viewer"] });
 
     const { token } = await createDaaAuthSessionV0({
       accountId: a1.accountId,
