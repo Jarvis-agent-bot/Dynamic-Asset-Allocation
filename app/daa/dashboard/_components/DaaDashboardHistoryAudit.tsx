@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import { applyNotionalOrdersToPositionsV0, normalizeNotionalOrdersV0 } from "@/src/daa/portfolioApplyNotionalOrdersV0";
@@ -623,8 +624,25 @@ export default function DaaDashboardHistoryAudit() {
                 </div>
               );
             })
+          ) : runsStatus === "loading" ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-md border p-3">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-[240px]" />
+                    <Skeleton className="h-3 w-[360px]" />
+                    <Skeleton className="h-3 w-[280px]" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <div className="text-sm text-muted-foreground">{runsStatus === "loading" ? "Loading..." : "No runs yet."}</div>
+            <div className="rounded-md border bg-muted/20 p-4 text-sm">
+              <div className="font-medium">No runs yet</div>
+              <div className="mt-1 text-muted-foreground">
+                Create the first run in the "Confirm/Executed" section (save snapshot + confirm). This view is read-only and never executes trades.
+              </div>
+            </div>
           )}
         </div>
       </CardContent>

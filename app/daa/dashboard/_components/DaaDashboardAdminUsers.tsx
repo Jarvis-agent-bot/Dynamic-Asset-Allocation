@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { copyTextToClipboard } from "../../copyToClipboard";
 
@@ -587,14 +588,38 @@ export default function DaaDashboardAdminUsers() {
               })}
 
               {!filteredSortedUsers.length ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-3 text-sm text-muted-foreground"
-                  >
-                    {status === "loading" ? "Loading..." : "No users."}
-                  </td>
-                </tr>
+                status === "loading" ? (
+                  <>
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <tr key={`sk_${i}`} className="border-t">
+                        <td className="px-3 py-2">
+                          <Skeleton className="h-4 w-[180px]" />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Skeleton className="h-4 w-[80px]" />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Skeleton className="h-4 w-[90px]" />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Skeleton className="h-4 w-[40px]" />
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex justify-end gap-2">
+                            <Skeleton className="h-8 w-[96px]" />
+                            <Skeleton className="h-8 w-[80px]" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-3 text-sm text-muted-foreground">
+                      No users match the current filters.
+                    </td>
+                  </tr>
+                )
               ) : null}
             </tbody>
           </table>
