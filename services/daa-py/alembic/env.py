@@ -8,6 +8,9 @@ from sqlalchemy import engine_from_config, pool
 
 from app.db import Base
 
+# Ensure models are registered on Base.metadata for autogenerate.
+import app.models  # noqa: F401
+
 # Alembic Config object, provides access to values within alembic.ini.
 config = context.config
 

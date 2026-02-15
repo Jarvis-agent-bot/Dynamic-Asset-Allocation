@@ -3,9 +3,14 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 from fastapi import FastAPI, Query
+
+from app.store_v0 import router as store_v0_router
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="DAA Python Engine", version="0.1.0")
+
+# Store API (v0): runs + audit events + bundles.
+app.include_router(store_v0_router)
 
 
 class HealthResponse(BaseModel):
