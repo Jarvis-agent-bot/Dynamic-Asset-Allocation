@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { formatRateLimitedMessageV0, parseRetryAfterSecondsV0 } from "@/src/daa/auth/uiRateLimitV0";
 
-import { appendNoticeParamV0 } from "@/src/daa/urlV0";
+import { appendNoticeParamV0, normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
 type Props = {
   returnTo: string;
@@ -65,17 +65,7 @@ function normalizeEmailLoose(raw: string): string {
   return v;
 }
 
-function normalizeReturnTo(raw: string): string {
-  const v = raw.trim();
-  if (!v) return "/daa/dashboard";
-  if (!v.startsWith("/")) return "/daa/dashboard";
-  if (v.startsWith("//")) return "/daa/dashboard";
-
-  // Keep post-login redirects inside the DAA surface.
-  if (!v.startsWith("/daa")) return "/daa/dashboard";
-
-  return v;
-}
+// returnTo normalization is shared via src/daa/urlV0.ts
 
 function parseApiError(json: any, fallback: string): string {
   const msg = typeof json?.error === "string" ? json.error.trim() : "";
@@ -151,7 +141,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   // (React's autoFocus only runs on mount, so this keeps keyboard flow predictable.)
   const passwordRef = useRef<HTMLInputElement | null>(null);
 
-  const safeReturnTo = useMemo(() => normalizeReturnTo(returnTo), [returnTo]);
+  const safeReturnTo = useMemo(() => normalizeDaaReturnToV0(returnTo), [returnTo]);
 
   useEffect(() => {
     const n = String(notice || "").trim();

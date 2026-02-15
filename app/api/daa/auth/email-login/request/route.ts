@@ -7,6 +7,7 @@ import {
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
 import { getDaaAuthAccountByUsernameV0 } from "@/src/daa/auth/daaAuthStoreV0";
 import { sendEmailV0 } from "@/src/daa/email/sendEmailV0";
+import { normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
 export const runtime = "nodejs";
 
@@ -26,14 +27,7 @@ function normalizeEmailLoose(raw: unknown): string {
   return v;
 }
 
-function normalizeReturnTo(raw: unknown): string {
-  const v = typeof raw === "string" ? raw.trim() : "";
-  if (!v) return "/daa/dashboard";
-  if (!v.startsWith("/")) return "/daa/dashboard";
-  if (v.startsWith("//")) return "/daa/dashboard";
-  if (!v.startsWith("/daa")) return "/daa/dashboard";
-  return v;
-}
+// returnTo normalization is shared via src/daa/urlV0.ts
 
 function getOriginFromRequestV0(req: Request): string | null {
   const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
@@ -51,7 +45,7 @@ export async function POST(req: Request) {
   }
 
   const email = normalizeEmailLoose(body?.email);
-  const returnTo = normalizeReturnTo(body?.returnTo);
+  const returnTo = normalizeDaaReturnToV0(body?.returnTo);
 
   // Cooldown is a practical anti-spam limiter, even if the endpoint is hidden behind the login UI.
   const cooldownSeconds = 30;

@@ -3,22 +3,16 @@ import { NextResponse } from "next/server";
 import { DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
 import { consumeDaaAuthEmailLoginTokenWithReasonV0 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
+import { normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
 export const runtime = "nodejs";
 
-function normalizeReturnTo(raw: unknown): string {
-  const v = typeof raw === "string" ? raw.trim() : "";
-  if (!v) return "/daa/dashboard";
-  if (!v.startsWith("/")) return "/daa/dashboard";
-  if (v.startsWith("//")) return "/daa/dashboard";
-  if (!v.startsWith("/daa")) return "/daa/dashboard";
-  return v;
-}
+// returnTo normalization is shared via src/daa/urlV0.ts
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const token = url.searchParams.get("token") || "";
-  const returnTo = normalizeReturnTo(url.searchParams.get("returnTo"));
+  const returnTo = normalizeDaaReturnToV0(url.searchParams.get("returnTo"));
 
   const ua = getUserAgentFromRequestV0(req) || null;
   const ip = getClientIpFromRequestV0(req) || null;
