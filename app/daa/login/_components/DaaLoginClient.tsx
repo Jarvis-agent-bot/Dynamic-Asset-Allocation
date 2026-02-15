@@ -964,6 +964,46 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-4">
+                      <div className="grid gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              // Best-effort: open the default mail app (may open a compose draft).
+                              try {
+                                window.location.href = "mailto:";
+                              } catch {
+                                // Ignore navigation errors.
+                              }
+                            }}
+                          >
+                            Open Mail app
+                          </Button>
+
+                          {mailboxLinks.length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {mailboxLinks.map((l) => (
+                                <Button
+                                  key={l.href}
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(l.href, "_blank", "noopener,noreferrer")}
+                                >
+                                  Open {l.label}
+                                </Button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="text-xs text-muted-foreground">
+                          If you use Gmail/Outlook/iCloud in a browser, use the webmail buttons. Otherwise, open your mail app and look for{" "}
+                          <span className="font-medium">Your DAA sign-in link</span>.
+                        </div>
+                      </div>
+
                       <ol className="ml-4 list-decimal space-y-1 text-sm text-muted-foreground">
                         <li>
                           Open the email titled <span className="font-medium">Your DAA sign-in link</span>.
@@ -972,22 +1012,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                         <li>If you don&apos;t see it, check spam/promotions.</li>
                         <li>For security, don&apos;t forward the email or share the link.</li>
                       </ol>
-
-                      {mailboxLinks.length ? (
-                        <div className="flex flex-wrap gap-2">
-                          {mailboxLinks.map((l) => (
-                            <Button
-                              key={l.href}
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(l.href, "_blank", "noopener,noreferrer")}
-                            >
-                              Open {l.label}
-                            </Button>
-                          ))}
-                        </div>
-                      ) : null}
 
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <Button
