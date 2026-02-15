@@ -6,9 +6,24 @@ import { Toaster as Sonner } from "sonner";
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const [theme, setTheme] = React.useState<"dark" | "light">("dark");
+
+  React.useEffect(() => {
+    const readTheme = () =>
+      document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+    setTheme(readTheme());
+    const observer = new MutationObserver(() => setTheme(readTheme()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Sonner
-      theme="dark"
+      theme={theme}
       className="toaster group"
       toastOptions={{
         classNames: {

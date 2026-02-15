@@ -4,6 +4,50 @@
 
 :root {
   /* App theme tokens (existing; keep as source of truth). */
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --primary: #0ea5e9;
+  --accent: #2563eb;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --border: #e2e8f0;
+
+  /* shadcn/ui tokens (HSL) aligned to the palette above.
+     We keep these separate to avoid breaking existing CSS that expects hex vars. */
+  --shadcn-background: 0 0% 100%;
+  --shadcn-foreground: 222 47% 11%;
+
+  --shadcn-card: 0 0% 100%;
+  --shadcn-card-foreground: 222 47% 11%;
+
+  --shadcn-popover: 0 0% 100%;
+  --shadcn-popover-foreground: 222 47% 11%;
+
+  --shadcn-primary: 191 91% 42%;
+  --shadcn-primary-foreground: 0 0% 100%;
+
+  --shadcn-secondary: 210 40% 96%;
+  --shadcn-secondary-foreground: 222 47% 11%;
+
+  --shadcn-muted: 210 40% 96%;
+  --shadcn-muted-foreground: 215 16% 47%;
+
+  --shadcn-accent: 217 91% 60%;
+  --shadcn-accent-foreground: 222 47% 11%;
+
+  --shadcn-destructive: 0 84% 60%;
+  --shadcn-destructive-foreground: 0 0% 100%;
+
+  --shadcn-border: 214 32% 91%;
+  --shadcn-input: 214 32% 91%;
+  --shadcn-ring: 191 91% 42%;
+
+  --shadcn-radius: 0.75rem;
+}
+
+.dark {
   --bg: #0f172a;
   --card: #111827;
   --text: #e5e7eb;
@@ -14,8 +58,6 @@
   --danger: #f87171;
   --border: #1f2937;
 
-  /* shadcn/ui tokens (HSL) aligned to the palette above.
-     We keep these separate to avoid breaking existing CSS that expects hex vars. */
   --shadcn-background: 222 47% 11%;
   --shadcn-foreground: 220 13% 91%;
 
@@ -43,8 +85,6 @@
   --shadcn-border: 215 28% 17%;
   --shadcn-input: 215 28% 17%;
   --shadcn-ring: 191 91% 56%;
-
-  --shadcn-radius: 0.75rem;
 }
 
 * {
@@ -164,7 +204,7 @@ body {
   padding: 0 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: #0b1220;
+  background: var(--card);
   color: var(--text);
   outline: none;
   font-size: 14px;

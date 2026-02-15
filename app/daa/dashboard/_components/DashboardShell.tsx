@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import type React from "react";
 
 import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
+import DaaThemeToggle from "../../_components/DaaThemeToggle";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
 
 import DaaDashboardRefreshIndicator from "./DaaDashboardRefreshIndicator";
@@ -37,6 +38,7 @@ export default function DashboardShell({ children }: Props) {
       <div className="min-w-0 flex-1">
         <header className="mb-6 hidden items-center justify-end gap-2 lg:flex">
           <DaaDashboardRefreshIndicator compact />
+          <DaaThemeToggle />
           <DaaUserMenuDialog />
         </header>
 
@@ -56,6 +58,7 @@ export default function DashboardShell({ children }: Props) {
 
           <div className="flex items-center gap-1">
             <DaaDashboardRefreshIndicator compact />
+            <DaaThemeToggle />
             <DaaUserMenuDialog />
           </div>
         </header>
