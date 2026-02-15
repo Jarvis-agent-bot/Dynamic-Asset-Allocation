@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import { useEffect } from "react";
+import { toast } from "sonner";
+
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -224,6 +227,25 @@ function DashboardMain() {
 
 export default function DaaDashboardPageClient() {
   const searchParams = useSearchParams();
+  const notice = searchParams.get("notice");
+
+  useEffect(() => {
+    const n = String(notice || "").trim();
+    if (!n) return;
+
+    if (n === "signed_in") {
+      toast.success("Signed in.");
+    }
+
+    // Avoid repeating the toast on refresh/back.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("notice");
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // Ignore URL parsing / history errors.
+    }
+  }, [notice]);
   const tab = normalizeTab(searchParams.get("tab"));
   const stepId = tab === "wizard" ? parseInitialStepId(searchParams.get("step")) : undefined;
 

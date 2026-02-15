@@ -96,7 +96,7 @@ export default function DaaSessionBanner() {
       });
 
       if (res.ok) {
-        window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}`;
+        window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}&notice=signed_out`;
         return;
       }
 
