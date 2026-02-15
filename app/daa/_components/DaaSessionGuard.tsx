@@ -2,6 +2,10 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
+
+const SESSION_EXPIRED_NOTICE_AT_KEY = "daa_notice_session_expired_at_v0";
+const SESSION_EXPIRED_REDIRECT_DELAY_MS = 650;
 
 function buildLoginHref(returnTo: string): string {
   const safe = returnTo && returnTo.startsWith("/") ? returnTo : "/daa/dashboard";
@@ -11,6 +15,7 @@ function buildLoginHref(returnTo: string): string {
 export default function DaaSessionGuard() {
   const pathname = usePathname() || "";
   const redirectingRef = useRef(false);
+  const toastShownRef = useRef(false);
 
   useEffect(() => {
     // Only guard DAA pages; let /daa/login be reachable even when signed out.
@@ -38,13 +43,28 @@ export default function DaaSessionGuard() {
           try {
             returnTo = `${window.location.pathname}${window.location.search}`;
           } catch {
-            // Ignore access errors (shouldn't happen in normal browsers).
+            // Ignore access errors (should not happen in normal browsers).
           }
 
-          window.location.href = buildLoginHref(returnTo);
+          // Show a toast *before* navigating away, so the user understands why they were bounced.
+          // We also stash a timestamp so /daa/login can avoid double-toasting on arrival.
+          if (!toastShownRef.current) {
+            toastShownRef.current = true;
+            try {
+              sessionStorage.setItem(SESSION_EXPIRED_NOTICE_AT_KEY, String(Date.now()));
+            } catch {
+              // Ignore storage errors (private mode / quota).
+            }
+            toast.error("Session expired. Please sign in again.");
+          }
+
+          const href = buildLoginHref(returnTo);
+          window.setTimeout(() => {
+            window.location.href = href;
+          }, SESSION_EXPIRED_REDIRECT_DELAY_MS);
         }
       } catch {
-        // Best-effort: network/edge errors shouldn't cause redirect loops.
+        // Best-effort: network/edge errors should not cause redirect loops.
       }
     }
 
