@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Copy } from "lucide-react";
+import { CheckCircle2, Circle, Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +48,15 @@ type DeployStatusOk = {
 
 type DeployStatusResp = { ok: false; error?: string } | DeployStatusOk;
 
+type ChecklistOk = boolean | null;
+
+type ChecklistItem = {
+  id: string;
+  ok: ChecklistOk;
+  label: string;
+  detail?: ReactNode;
+};
+
 function fmtCurrencyCny(n: number): string {
   if (!Number.isFinite(n)) return "-";
   try {
@@ -67,6 +76,22 @@ function fmtTime(iso: unknown) {
   const t = Date.parse(s);
   if (!Number.isFinite(t)) return s;
   return new Date(t).toLocaleString();
+}
+
+function ChecklistRow({ ok, label, detail }: { ok: ChecklistOk; label: string; detail?: ReactNode }) {
+  const Icon = ok === true ? CheckCircle2 : Circle;
+  const iconClass = ok === true ? "text-emerald-600" : "text-muted-foreground";
+  const title = ok === true ? "Done" : ok === false ? "Missing" : "Unknown";
+
+  return (
+    <div className="flex items-start gap-2">
+      <Icon className={`mt-0.5 h-4 w-4 ${iconClass}`} aria-label={title} />
+      <div className="space-y-0.5">
+        <div className="text-xs font-medium text-foreground">{label}</div>
+        {detail ? <div className="text-xs text-muted-foreground">{detail}</div> : null}
+      </div>
+    </div>
+  );
 }
 
 export default function DaaDashboardOverviewCards() {
@@ -158,11 +183,77 @@ export default function DaaDashboardOverviewCards() {
   const who = auth && auth.ok ? auth.account.username : "(not signed in)";
   const roles = auth && auth.ok ? (auth.account.roles || []).join(", ") || "-" : "-";
 
+  const authError = auth && !auth.ok ? String(auth.error ?? "").trim() : "";
+  const hasAnyAccounts: ChecklistOk =
+    auth === null
+      ? null
+      : auth.ok
+        ? true
+        : authError === "bootstrap_required"
+          ? false
+          : authError === "not_authenticated"
+            ? true
+            : null;
+
   const deployEnv = deployResp && deployResp.ok ? deployResp.env.deployEnv : "";
   const nodeEnv = deployResp && deployResp.ok ? deployResp.env.nodeEnv : "";
   const platform = deployResp && deployResp.ok ? deployResp.env.platform : "";
   const sha = deployResp && deployResp.ok ? String(deployResp.build.sha ?? "").trim() : "";
   const shaShort = deployResp && deployResp.ok ? deployResp.build.shaShort : "";
+
+  const deployPrereqs: ChecklistItem[] = useMemo(() => {
+    return [
+      {
+        id: "store",
+        ok: runsResp === null ? null : storeOk,
+        label: "SQLite store reachable",
+        detail: (
+          <>
+            Expect <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> to be set
+            (e.g. <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/var/lib/daa/daa.sqlite</code>).
+          </>
+        ),
+      },
+      {
+        id: "accounts",
+        ok: hasAnyAccounts,
+        label: "First admin account exists",
+        detail:
+          hasAnyAccounts === false ? (
+            <>
+              Create the first admin via the dashboard (Setup required) or using <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/api/daa/auth/bootstrap</code>.
+            </>
+          ) : (
+            <>
+              If this is a fresh deploy, set <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_AUTH_BOOTSTRAP_TOKEN</code> on the server.
+            </>
+          ),
+      },
+      {
+        id: "deploy_env",
+        ok: deployEnv ? true : false,
+        label: "Deploy env labelled",
+        detail: (
+          <>
+            Set <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_ENV</code> (or rely on platform env
+            like <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">VERCEL_ENV</code>) so the dashboard can
+            show which environment you are on.
+          </>
+        ),
+      },
+      {
+        id: "sha",
+        ok: sha ? true : false,
+        label: "Build SHA reported",
+        detail: (
+          <>
+            Set <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">NEXT_PUBLIC_BUILD_SHA</code> (or
+            <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_BUILD_SHA</code>/<code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">BUILD_SHA</code>) at deploy time.
+          </>
+        ),
+      },
+    ];
+  }, [deployEnv, hasAnyAccounts, runsResp, sha, storeOk]);
 
   async function copyBuildSha() {
     if (!sha) {
@@ -255,10 +346,7 @@ export default function DaaDashboardOverviewCards() {
                 <TooltipProvider>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>Build:</span>
-                    <code
-                      className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground"
-                      title={sha || ""}
-                    >
+                    <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground" title={sha || ""}>
                       {shaShort || "-"}
                     </code>
                     <Tooltip>
@@ -286,10 +374,11 @@ export default function DaaDashboardOverviewCards() {
                 </TooltipProvider>
               ) : (
                 <div className="rounded-md border border-dashed border-muted-foreground/30 p-2">
-                  <div className="text-xs font-medium text-foreground">No deployments yet</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    This instance did not report a build SHA. After your first deploy, set a build SHA env var (e.g.{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">NEXT_PUBLIC_BUILD_SHA</code>) so the dashboard can show version info.
+                  <div className="text-xs font-medium text-foreground">Deploy bootstrap</div>
+                  <div className="mt-1 space-y-2">
+                    {deployPrereqs.map((it) => (
+                      <ChecklistRow key={it.id} ok={it.ok} label={it.label} detail={it.detail} />
+                    ))}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button asChild size="sm" variant="outline">
