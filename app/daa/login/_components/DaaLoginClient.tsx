@@ -639,6 +639,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     }
   }
 
+  const offline = !online;
+
   if (session.kind === "signedIn") {
     const roles = session.me.account.roles?.filter(Boolean).join(", ") || "(no roles)";
 
@@ -686,7 +688,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     ? "Enter a valid email address (for example, you@example.com)."
     : "Enter your email address (for example, you@example.com).";
 
-  const offline = !online;
 
   return (
     <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">

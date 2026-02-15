@@ -26,17 +26,19 @@ export default function DaaTopNav() {
   const pathname = usePathname() || "";
   const searchParams = useSearchParams();
 
+  const isSettingsRoute = pathname === "/daa/dashboard/settings" || pathname === "/daa/dashboard/settings/";
+
   // All dashboard tabs share the same pathname; the tab lives in query string.
   const tab = normalizeTab(searchParams.get("tab"));
   const isOnDashboard = pathname === "/daa/dashboard" || pathname === "/daa/dashboard/";
 
-  const active: Tab | null = isOnDashboard ? tab : null;
+  const active: Tab | null = isSettingsRoute ? "settings" : isOnDashboard ? tab : null;
 
   const items: NavItem[] = [
     { key: "dashboard", href: "/daa/dashboard", label: "Dashboard", Icon: LayoutDashboard },
     { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard", Icon: Wand2 },
     { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds", Icon: BarChart3 },
-    { key: "settings", href: "/daa/dashboard?tab=settings", label: "Settings", Icon: Settings },
+    { key: "settings", href: "/daa/dashboard/settings", label: "Settings", Icon: Settings },
   ];
 
   return (

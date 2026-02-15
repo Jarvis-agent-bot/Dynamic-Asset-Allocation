@@ -44,5 +44,11 @@ describe("daa/urlV0", () => {
       expect(normalizeDaaReturnToV0("/daa/dashboard?tab=wizard&step=1#x")).toBe("/daa/dashboard?tab=wizard&step=1#x");
       expect(normalizeDaaReturnToV0("/daa/step/2#foo")).toBe("/daa/dashboard?tab=wizard&step=2#foo");
     });
+
+    it("allows /daa/dashboard/settings deep-links", () => {
+      expect(normalizeDaaReturnToV0("/daa/dashboard/settings")).toBe("/daa/dashboard/settings");
+      expect(normalizeDaaReturnToV0("/daa/dashboard/settings/")).toBe("/daa/dashboard/settings");
+      expect(normalizeDaaReturnToV0("/daa/dashboard/settings?x=1#y")).toBe("/daa/dashboard/settings?x=1#y");
+    });
   });
 });
