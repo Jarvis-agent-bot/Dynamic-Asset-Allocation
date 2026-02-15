@@ -1017,10 +1017,25 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                             } catch {
                               // Ignore storage errors.
                             }
-                            emailLinkEmailRef.current?.focus();
+
+                            const el = emailLinkEmailRef.current;
+                            if (!el) return;
+
+                            // Return to the email input so the user can edit the address after requesting a link.
+                            try {
+                              el.scrollIntoView({ block: "center" });
+                            } catch {
+                              // Ignore scrolling errors.
+                            }
+                            el.focus();
+                            try {
+                              if (el.value) el.setSelectionRange(0, el.value.length);
+                            } catch {
+                              // Ignore selection errors.
+                            }
                           }}
                         >
-                          Use a different email
+                          Change email
                         </Button>
                       </div>
                     </CardContent>
