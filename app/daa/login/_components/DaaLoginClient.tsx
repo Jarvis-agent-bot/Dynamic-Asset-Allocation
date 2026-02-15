@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -891,9 +892,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   <>
                     <div className="grid gap-2">
                   <div className="flex items-center gap-2">
-                    <label htmlFor={emailLinkEmailId} className="text-sm font-medium">
-                      Email
-                    </label>
+                    <Label htmlFor={emailLinkEmailId}>Email</Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -956,7 +955,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       }}
                       aria-invalid={emailInvalidEmailLink || undefined}
                       aria-describedby={emailLinkEmailHelpId}
-                      className="pr-10"
+                      className={`pr-10 ${emailInvalidEmailLink ? "border-destructive focus-visible:ring-destructive" : ""}`}
                     />
                     {username.trim() && !emailDisabled ? (
                       <Button
@@ -979,7 +978,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     role={emailInvalidEmailLink ? "alert" : undefined}
                   >
                     {emailInvalidEmailLink ? (
-                      emailHelpText
+                      <span className="inline-flex items-start gap-1.5">
+                        <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
+                        <span>{emailHelpText}</span>
+                      </span>
                     ) : (
                       <>
                         <div>
@@ -1195,9 +1197,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 ) : null}
 
                 <div className="grid gap-2">
-                  <label htmlFor={passwordEmailId} className="text-sm font-medium">
-                    Email
-                  </label>
+                  <Label htmlFor={passwordEmailId}>Email</Label>
                   <div className="relative">
                     <Input
                       id={passwordEmailId}
@@ -1244,7 +1244,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       }}
                       aria-invalid={Boolean(mergedPasswordErrors.email) || undefined}
                       aria-describedby={passwordEmailHelpId}
-                      className="pr-10"
+                      className={`pr-10 ${mergedPasswordErrors.email ? "border-destructive focus-visible:ring-destructive" : ""}`}
                     />
                     {username.trim() && !passwordDisabled ? (
                       <Button
@@ -1267,7 +1267,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     role={mergedPasswordErrors.email ? "alert" : undefined}
                   >
                     {mergedPasswordErrors.email ? (
-                      mergedPasswordErrors.email
+                      <span className="inline-flex items-start gap-1.5">
+                        <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
+                        <span>{mergedPasswordErrors.email}</span>
+                      </span>
                     ) : (
                       <>
                         <div>Your username is your email address.</div>
@@ -1282,9 +1285,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 </div>
 
                 <div className="grid gap-2">
-                  <label htmlFor={passwordId} className="text-sm font-medium">
-                    Password
-                  </label>
+                  <Label htmlFor={passwordId}>Password</Label>
                   <Input
                     id={passwordId}
                     ref={passwordRef}
