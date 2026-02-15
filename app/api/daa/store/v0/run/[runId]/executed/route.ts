@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getDaaAdminActorUserIdFromRequestV1, requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { setDaaRunExecutedV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
+import { setDaaRunExecutedV0 } from "@/src/daa/storeV0";
 
 export const runtime = "nodejs";
 

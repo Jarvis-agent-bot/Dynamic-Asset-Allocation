@@ -247,12 +247,23 @@ export default function DaaDashboardOverviewCards() {
   const deployPrereqs: ChecklistItem[] = useMemo(() => {
     return [
       {
-        id: "sqlite_path",
-        ok: sqlitePathOk,
-        label: "DAA_SQLITE_PATH set",
+        id: "db_url",
+        ok: dbUrlOk,
+        label: "DAA_DB_URL set",
         detail: (
           <>
-            The server needs <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> (e.g.
+            The server needs <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_DB_URL</code> (or
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DATABASE_URL</code>) pointing to Postgres.
+          </>
+        ),
+      },
+      {
+        id: "sqlite_path_legacy",
+        ok: sqlitePathOk,
+        label: "DAA_SQLITE_PATH set (legacy)",
+        detail: (
+          <>
+            Optional legacy fallback: <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> (e.g.
             <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/var/lib/daa/daa.sqlite</code>).
           </>
         ),
@@ -270,10 +281,11 @@ export default function DaaDashboardOverviewCards() {
       {
         id: "store",
         ok: runsResp === null ? null : storeOk,
-        label: "SQLite store reachable",
+        label: "Store reachable",
         detail: (
           <>
-            If this fails, confirm the sqlite path exists and is writable, and that the app process has permissions.
+            If this fails, confirm Postgres is reachable and credentials are configured (<code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_DB_URL</code>). For legacy sqlite,
+            ensure <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> exists and is writable.
           </>
         ),
       },
@@ -314,15 +326,18 @@ export default function DaaDashboardOverviewCards() {
         ),
       },
     ];
-  }, [bootstrapTokenOk, deployEnv, hasAnyAccounts, runsResp, sha, sqlitePathOk, storeOk]);
+  }, [bootstrapTokenOk, dbUrlOk, deployEnv, hasAnyAccounts, runsResp, sha, sqlitePathOk, storeOk]);
 
   const deployBootstrapEnvVarsText = useMemo(() => {
     // Keep the snippet copy/paste friendly for Vercel/Render/Fly/etc.
     const envLabel = deployEnv || "prod";
     return [
       "# Required (server)",
-      "DAA_SQLITE_PATH=/var/lib/daa/daa.sqlite",
+      "DAA_DB_URL=postgresql://daa:daa@localhost:15432/daa",
       "DAA_AUTH_BOOTSTRAP_TOKEN=...",
+      "",
+      "# Optional (legacy sqlite store)",
+      "# DAA_SQLITE_PATH=/var/lib/daa/daa.sqlite",
       "",
       "# Recommended (env label + build visibility)",
       `DAA_ENV=${envLabel}`,
@@ -343,8 +358,11 @@ export default function DaaDashboardOverviewCards() {
     const envLabel = deployEnv || "prod";
     return [
       "# Shell export snippet (bash/zsh)",
-      'export DAA_SQLITE_PATH="/var/lib/daa/daa.sqlite"',
+      'export DAA_DB_URL="postgresql://daa:daa@localhost:15432/daa"',
       'export DAA_AUTH_BOOTSTRAP_TOKEN="..."',
+      "",
+      "# Optional (legacy sqlite store)",
+      '# export DAA_SQLITE_PATH="/var/lib/daa/daa.sqlite"',
       "",
       "# Recommended (env label + build visibility)",
       `export DAA_ENV="${envLabel}"`,
@@ -369,7 +387,7 @@ export default function DaaDashboardOverviewCards() {
       deployBootstrapEnvExportsText,
       "",
       "# Quick troubleshooting",
-      "- Store not reachable: ensure DAA_SQLITE_PATH points to a writable sqlite file on the server (and the directory exists).",
+      "- Store not reachable: ensure DAA_DB_URL points to a reachable Postgres DB. (Legacy sqlite: ensure DAA_SQLITE_PATH points to a writable file and the directory exists.)",
       "- No accounts yet: set DAA_AUTH_BOOTSTRAP_TOKEN and create the first admin via /api/daa/auth/bootstrap (or the dashboard setup).",
       "- Build SHA missing: set NEXT_PUBLIC_BUILD_SHA at build/deploy time so /api/daa/deploy-status reports it.",
       "",
@@ -446,12 +464,13 @@ export default function DaaDashboardOverviewCards() {
   const deployChecklistPermissions: ChecklistItem[] = useMemo(() => {
     return [
       {
-        id: "sqlite_writable",
+        id: "store_access",
         ok: runsResp === null ? null : storeOk,
-        label: "App can read/write the SQLite DB",
+        label: "App can read/write the store",
         detail: (
           <>
-            Confirm the directory for <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> exists and is writable by the app process.
+            Confirm <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_DB_URL</code> is set and that the Postgres DB is reachable. For legacy sqlite,
+            confirm <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> exists and is writable by the app process.
           </>
         ),
       },
@@ -649,7 +668,7 @@ export default function DaaDashboardOverviewCards() {
                       <summary className="cursor-pointer text-xs font-medium text-foreground">Quick troubleshooting</summary>
                       <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
                         <li>
-                          Store errors: ensure <code>DAA_SQLITE_PATH</code> exists on the server and is writable by the app process.
+                          Store errors: ensure <code>DAA_DB_URL</code> points to a reachable Postgres DB. (Legacy sqlite: ensure <code>DAA_SQLITE_PATH</code> exists and is writable.)
                         </li>
                         <li>
                           No accounts yet: set <code>DAA_AUTH_BOOTSTRAP_TOKEN</code>, then create the first admin via the dashboard (Setup required) or
