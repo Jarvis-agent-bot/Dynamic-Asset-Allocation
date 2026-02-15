@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+
+import { copyTextToClipboard } from "../../copyToClipboard";
 
 const EVT_REFRESH = "daa:dashboard:refresh";
 const EVT_DATA_UPDATED = "daa:dashboard:data-updated";
@@ -155,7 +159,22 @@ export default function DaaDashboardOverviewCards() {
   const deployEnv = deployResp && deployResp.ok ? deployResp.env.deployEnv : "";
   const nodeEnv = deployResp && deployResp.ok ? deployResp.env.nodeEnv : "";
   const platform = deployResp && deployResp.ok ? deployResp.env.platform : "";
+  const sha = deployResp && deployResp.ok ? String(deployResp.build.sha ?? "").trim() : "";
   const shaShort = deployResp && deployResp.ok ? deployResp.build.shaShort : "";
+
+  async function copyBuildSha() {
+    if (!sha) {
+      toast.error("No build SHA available.");
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(sha);
+      toast.success("Copied build SHA.");
+    } catch (e) {
+      toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -230,7 +249,13 @@ export default function DaaDashboardOverviewCards() {
               </div>
               <div className="text-xs text-muted-foreground">Node: {nodeEnv || "-"}</div>
               <div className="text-xs text-muted-foreground">Platform: {platform || "-"}</div>
-              <div className="text-xs text-muted-foreground">Build: {shaShort || "-"}</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>Build:</span>
+                <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">{shaShort || "-"}</code>
+                <Button type="button" size="sm" variant="outline" disabled={!sha} onClick={() => void copyBuildSha()}>
+                  Copy SHA
+                </Button>
+              </div>
               <div className="text-xs text-muted-foreground">Server: {fmtTime(deployResp.serverTime)}</div>
             </>
           ) : (
