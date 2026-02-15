@@ -883,7 +883,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       name="email"
                       inputMode="email"
                       enterKeyHint="send"
-                      autoCapitalize="none"
+                      autoCapitalize="off"
                       autoCorrect="off"
                       spellCheck={false}
                       value={username}
@@ -1160,7 +1160,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       name="username"
                       inputMode="email"
                       enterKeyHint="next"
-                      autoCapitalize="none"
+                      autoCapitalize="off"
                       autoCorrect="off"
                       spellCheck={false}
                       value={username}
