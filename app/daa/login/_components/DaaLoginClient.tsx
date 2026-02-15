@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertCircle, Loader2, Mail, X } from "lucide-react";
+import { AlertCircle, CircleHelp, Loader2, Mail, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { formatRateLimitedMessageV0, parseRetryAfterSecondsV0 } from "@/src/daa/auth/uiRateLimitV0";
 
@@ -677,8 +678,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void logout()} disabled={logoutBusy}>
               {logoutBusy ? "Signing out..." : "Sign out"}
             </Button>
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
       </div>
     );
   }
@@ -782,20 +783,21 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         </CardHeader>
 
         <CardContent>
-          <Tabs
-            value={tab}
-            onValueChange={(v) => {
-              const vv = v === "email" ? "email" : "password";
-              setTab(vv);
-              try {
-                window.localStorage.setItem(LS_DAA_EMAIL_LOGIN_TAB_V0, vv);
-              } catch {
-                // Ignore storage errors.
-              }
-              setPasswordErrors({});
-              setEmailLinkError(null);
-            }}
-          >
+          <TooltipProvider>
+            <Tabs
+              value={tab}
+              onValueChange={(v) => {
+                const vv = v === "email" ? "email" : "password";
+                setTab(vv);
+                try {
+                  window.localStorage.setItem(LS_DAA_EMAIL_LOGIN_TAB_V0, vv);
+                } catch {
+                  // Ignore storage errors.
+                }
+                setPasswordErrors({});
+                setEmailLinkError(null);
+              }}
+            >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="email">Email link</TabsTrigger>
               <TabsTrigger value="password">Password</TabsTrigger>
@@ -818,9 +820,36 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 ) : null}
 
                 <div className="grid gap-2">
-                  <label htmlFor={emailLinkEmailId} className="text-sm font-medium">
-                    Email
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor={emailLinkEmailId} className="text-sm font-medium">
+                      Email
+                    </label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          aria-label="What is a magic link?"
+                          title="Magic link help"
+                        >
+                          <CircleHelp className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs p-3 text-xs leading-relaxed">
+                        <div className="font-medium">Magic link sign-in</div>
+                        <div className="mt-1 text-muted-foreground">
+                          We&apos;ll email you a single-use sign-in link. It expires in about 15 minutes.
+                        </div>
+                        <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
+                          <li>Check spam/promotions if you don&apos;t see it within a minute.</li>
+                          <li>Don&apos;t forward the email or share the link.</li>
+                          <li>You can resend after the cooldown, or use a password instead.</li>
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <div className="relative">
                     <Input
                       id={emailLinkEmailId}
@@ -1199,6 +1228,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             </div>
             <div className="text-[11px]">AI outputs are drafts only; it never executes trades automatically.</div>
           </div>
+          </TooltipProvider>
         </CardContent>
       </Card>
     </div>
