@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 
-import { getDaaRunBundleV0 } from "@/src/daa/sqlite/daaSqliteStoreV0";
+import { getDaaRunBundleV0 } from "@/src/daa/storeV0";
 
 export const runtime = "nodejs";
 

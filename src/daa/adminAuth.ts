@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getDaaAuthContextFromRequestV0 } from "./auth/daaAuthRequestV0";
-import { getDaaAdminUserStatusV0 } from "./sqlite/daaAdminUserStatusStoreV0";
+import { getDaaAdminUserStatusV0 } from "./adminUserStatusStoreV0";
 
 export type DaaAdminRole = "viewer" | "editor";
 

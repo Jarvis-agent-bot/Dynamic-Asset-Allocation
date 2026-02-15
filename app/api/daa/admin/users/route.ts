@@ -9,7 +9,7 @@ import {
   type DaaAdminRole,
 } from "@/src/daa/adminAuth";
 
-import { getDaaAdminUserStatusMapV0, setDaaAdminUserActiveV0 } from "@/src/daa/sqlite/daaAdminUserStatusStoreV0";
+import { getDaaAdminUserStatusMapV0, setDaaAdminUserActiveV0 } from "@/src/daa/adminUserStatusStoreV0";
 
 type AdminUserIdV0 = "viewer-token" | "editor-token" | "legacy-token";
 

@@ -7,7 +7,7 @@ describe("daa/deployStatusV0", () => {
     const payload = buildDeployStatusPayloadV0({ NODE_ENV: "production" }, "2026-02-16T00:00:00.000Z");
 
     expect(payload.ok).toBe(true);
-    expect(payload.bootstrap.missingRequired).toContain("DAA_SQLITE_PATH");
+    expect(payload.bootstrap.missingRequired).toContain("DAA_DB_URL");
     expect(payload.bootstrap.missingBootstrap).toContain("DAA_AUTH_BOOTSTRAP_TOKEN");
   });
 
@@ -15,7 +15,7 @@ describe("daa/deployStatusV0", () => {
     const payload = buildDeployStatusPayloadV0(
       {
         NODE_ENV: "production",
-        DAA_SQLITE_PATH: "/var/lib/daa/daa.sqlite",
+        DAA_DB_URL: "postgresql://daa:daa@localhost:15432/daa",
         DAA_AUTH_BOOTSTRAP_TOKEN: "secret",
         DAA_ENV: "prod",
         NEXT_PUBLIC_BUILD_SHA: "abc123",
