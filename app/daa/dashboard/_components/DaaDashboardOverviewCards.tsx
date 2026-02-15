@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Circle, Copy } from "lucide-react";
+import { CheckCircle2, Circle, Copy, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +83,7 @@ function ChecklistRow({ ok, label, detail }: { ok: ChecklistOk; label: string; d
   const iconClass = ok === true ? "text-emerald-600" : "text-muted-foreground";
   const title = ok === true ? "Done" : ok === false ? "Missing" : "Unknown";
 
+
   return (
     <div className="flex items-start gap-2">
       <Icon className={`mt-0.5 h-4 w-4 ${iconClass}`} aria-label={title} />
@@ -98,6 +99,7 @@ export default function DaaDashboardOverviewCards() {
   const [auth, setAuth] = useState<AuthMeResp | null>(null);
   const [runsResp, setRunsResp] = useState<RunsResp | null>(null);
   const [deployResp, setDeployResp] = useState<DeployStatusResp | null>(null);
+  const [deployLastOkServerTime, setDeployLastOkServerTime] = useState<string | null>(null);
 
   const portfolio = useMemo(() => {
     try {
@@ -155,7 +157,11 @@ export default function DaaDashboardOverviewCards() {
 
         if (deployRes.status === "fulfilled") {
           try {
-            setDeployResp((await deployRes.value.json()) as DeployStatusResp);
+            const json = (await deployRes.value.json()) as DeployStatusResp;
+            setDeployResp(json);
+            if (json && (json as any).ok && typeof (json as any).serverTime === "string") {
+              setDeployLastOkServerTime((json as any).serverTime);
+            }
           } catch {
             setDeployResp({ ok: false, error: "invalid_json" });
           }
@@ -331,6 +337,11 @@ export default function DaaDashboardOverviewCards() {
     }
   }
 
+  function requestRefresh() {
+    // Reuse the existing dashboard refresh event to avoid plumbing refs through hooks.
+    window.dispatchEvent(new Event(EVT_REFRESH));
+  }
+
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
       <Card>
@@ -388,8 +399,19 @@ export default function DaaDashboardOverviewCards() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-sm">Deploy</CardTitle>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-7 w-7"
+            onClick={() => requestRefresh()}
+            aria-label="Retry deploy status"
+            title="Retry deploy status"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </CardHeader>
         <CardContent className="space-y-1">
           {deployResp === null ? (
@@ -512,10 +534,19 @@ export default function DaaDashboardOverviewCards() {
                   </div>
                 </div>
               )}
-              <div className="text-xs text-muted-foreground">Server: {fmtTime(deployResp.serverTime)}</div>
+              <div className="text-xs text-muted-foreground">Last updated: {fmtTime(deployResp.serverTime)}</div>
             </>
           ) : (
-            <div className="text-xs text-muted-foreground">Deploy: {String(deployResp.error ?? "error")}</div>
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Deploy: {String(deployResp.error ?? "error")}</div>
+              {deployLastOkServerTime ? (
+                <div className="text-xs text-muted-foreground">Last updated: {fmtTime(deployLastOkServerTime)}</div>
+              ) : null}
+              <Button type="button" size="sm" variant="outline" onClick={() => requestRefresh()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
