@@ -826,7 +826,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   </div>
                 ) : null}
 
-                <div className="grid gap-2">
+                {emailLink.kind !== "sent" ? (
+                  <>
+                    <div className="grid gap-2">
                   <div className="flex items-center gap-2">
                     <label htmlFor={emailLinkEmailId} className="text-sm font-medium">
                       Email
@@ -929,8 +931,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                           <Loader2 className="h-4 w-4 animate-spin" />
                           Sending...
                         </span>
-                      ) : emailLink.kind === "sent" ? (
-                        emailLinkResendCooldownActive ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend sign-in link"
                       ) : (
                         "Send sign-in link"
                       )}
@@ -943,46 +943,29 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     ) : null}
                   </div>
                 </div>
+                  </>
+                ) : null}
 
                 {emailLink.kind === "sent" ? (
                   <Card className="border-muted/60 bg-muted/10">
-                    <CardHeader className="space-y-1 pb-3">
+                    <CardHeader className="space-y-1">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <Mail className="h-4 w-4" />
-                        Check your email
+                        Sign-in link sent
                       </CardTitle>
                       <CardDescription>
-                        If <span className="font-medium">{emailLink.email}</span> is registered, we just sent a single-use sign-in link. It expires in about 15 minutes.
+                        We just sent a single-use sign-in link to <span className="font-medium">{emailLink.email}</span> (if it&apos;s registered). It expires in about 15 minutes.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="grid gap-3">
-                      <ol className="ml-4 list-decimal space-y-1 text-xs text-muted-foreground">
+                    <CardContent className="grid gap-4">
+                      <ol className="ml-4 list-decimal space-y-1 text-sm text-muted-foreground">
                         <li>
                           Open the email titled <span className="font-medium">Your DAA sign-in link</span>.
                         </li>
                         <li>Click the sign-in button/link. This browser will refresh and you will be signed in automatically.</li>
-                        <li>
-                          If you don&apos;t see it, check spam/promotions. You can resend after the cooldown, or use a password instead. For security, don&apos;t forward the email.
-                        </li>
+                        <li>If you don&apos;t see it, check spam/promotions.</li>
+                        <li>For security, don&apos;t forward the email or share the link.</li>
                       </ol>
-
-                      <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
-                        <span>Didn&apos;t receive it?</span>
-                        {resendRemainingSeconds > 0 ? (
-                          <span>Resend in {formatSeconds(resendRemainingSeconds)}</span>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            className="h-auto p-0 align-baseline"
-                            onClick={() => void requestEmailLink()}
-                            disabled={emailDisabled || !emailLinkFormValid}
-                          >
-                            Resend link
-                          </Button>
-                        )}
-                      </div>
 
                       {mailboxLinks.length ? (
                         <div className="flex flex-wrap gap-2">
@@ -1001,6 +984,15 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       ) : null}
 
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void requestEmailLink()}
+                          disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
+                        >
+                          {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
+                        </Button>
+
                         <Button
                           type="button"
                           variant="secondary"
@@ -1048,6 +1040,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                           Change email
                         </Button>
                       </div>
+
+                      {resendRemainingSeconds > 0 ? (
+                        <div className="text-xs text-muted-foreground" role="status" aria-live="polite">
+                          Resend is temporarily disabled to prevent abuse. Try again in {formatSeconds(resendRemainingSeconds)}.
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
                 ) : null}
