@@ -717,7 +717,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       ) : null}
 
       {emailLinkErrorCode ? (
-        <Alert variant="destructive">
+        <Alert>
           <AlertCircle className="h-4 w-4" />
           <div>
             <AlertTitle>
@@ -725,10 +725,16 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 ? "This sign-in link has already been used."
                 : emailLinkErrorCode === "email-link-expired"
                   ? "This sign-in link has expired."
-                  : "This sign-in link is invalid."}
+                  : "This sign-in link is no longer valid."}
             </AlertTitle>
             <AlertDescription>
-              <div className="text-xs text-destructive/90">Request a new link or sign in with a password to continue.</div>
+              <div className="text-xs text-muted-foreground">
+                {emailLinkErrorCode === "email-link-used"
+                  ? "Sign-in links can only be used once. Request a new link to sign in."
+                  : emailLinkErrorCode === "email-link-expired"
+                    ? "Sign-in links expire after about 15 minutes. Request a new link to sign in."
+                    : "The link may be malformed or already used. Request a new link to sign in."}
+              </div>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
@@ -750,7 +756,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     void requestEmailLink();
                   }}
                 >
-                  Resend sign-in link
+                  Request new sign-in link
                 </Button>
 
                 <Button
