@@ -75,9 +75,12 @@ function parseApiError(json: any, fallback: string): string {
 }
 
 function formatSeconds(s: number): string {
-  if (!Number.isFinite(s)) return "0s";
+  // Cooldown timer display: mm:ss (e.g. 0:30)
+  if (!Number.isFinite(s)) return "0:00";
   const ss = Math.max(0, Math.floor(s));
-  return `${ss}s`;
+  const m = Math.floor(ss / 60);
+  const r = ss % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
 }
 
 
@@ -795,16 +798,20 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   {emailLink.kind === "sent" ? (
                     <div className="text-xs text-muted-foreground">
                       Didn't receive it?{" "}
-                      <Button
-                        type="button"
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 align-baseline"
-                        onClick={() => void requestEmailLink()}
-                        disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
-                      >
-                        {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
-                      </Button>
+                      {resendRemainingSeconds > 0 ? (
+                        <span>Resend in {formatSeconds(resendRemainingSeconds)}</span>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 align-baseline"
+                          onClick={() => void requestEmailLink()}
+                          disabled={emailDisabled || !emailLinkFormValid}
+                        >
+                          Resend link
+                        </Button>
+                      )}
                     </div>
                   ) : null}
                 </div>
