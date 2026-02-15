@@ -168,6 +168,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const passwordId = useId();
 
   const emailLinkEmailHelpId = useId();
+  const emailLinkResendHelpId = useId();
   const passwordEmailHelpId = useId();
   const passwordHelpId = useId();
   const formErrorId = useId();
@@ -340,6 +341,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     const elapsed = Math.floor((nowMs - emailLink.requestedAtMs) / 1000);
     return Math.max(0, emailLink.cooldownSeconds - elapsed);
   }, [emailLink, nowMs]);
+
+  const emailLinkResendCooldownActive = emailLink.kind === "sent" && resendRemainingSeconds > 0;
 
   const mailboxLinks = useMemo(() => {
     if (emailLink.kind !== "sent") return [];
@@ -913,23 +916,32 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Button
-                    type="submit"
-                    className="w-full sm:w-auto"
-                    disabled={emailDisabled || !emailLinkFormValid || (emailLink.kind === "sent" && resendRemainingSeconds > 0)}
-                  >
-                    {emailLink.kind === "sending" ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Sending...
-                      </span>
-                    ) : emailLink.kind === "sent" ? (
-                      resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend sign-in link"
-                    ) : (
-                      "Send sign-in link"
-                    )}
-                  </Button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                  <div className="flex w-full flex-col gap-1 sm:w-auto">
+                    <Button
+                      type="submit"
+                      className="w-full sm:w-auto"
+                      disabled={emailDisabled || !emailLinkFormValid || emailLinkResendCooldownActive}
+                      aria-describedby={emailLinkResendCooldownActive ? emailLinkResendHelpId : undefined}
+                    >
+                      {emailLink.kind === "sending" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Sending...
+                        </span>
+                      ) : emailLink.kind === "sent" ? (
+                        emailLinkResendCooldownActive ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend sign-in link"
+                      ) : (
+                        "Send sign-in link"
+                      )}
+                    </Button>
+
+                    {emailLinkResendCooldownActive ? (
+                      <div id={emailLinkResendHelpId} className="text-xs text-muted-foreground" role="status" aria-live="polite">
+                        Resend is temporarily disabled to prevent abuse. Try again in {formatSeconds(resendRemainingSeconds)}.
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 {emailLink.kind === "sent" ? (
