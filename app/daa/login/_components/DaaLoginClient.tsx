@@ -149,7 +149,18 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (!n) return;
 
     if (n === "session_expired") {
-      toast.error("Session expired. Please sign in again.");
+      let redirectToastRecent = false;
+      try {
+        const at = Number(sessionStorage.getItem("daa_notice_session_expired_at_v0") || "0");
+        if (at && Date.now() - at < 5000) redirectToastRecent = true;
+        sessionStorage.removeItem("daa_notice_session_expired_at_v0");
+      } catch {
+        // Ignore storage errors (private mode / quota).
+      }
+
+      if (!redirectToastRecent) {
+        toast.error("Session expired. Please sign in again.");
+      }
     }
 
     if (n === "signed_out") {
