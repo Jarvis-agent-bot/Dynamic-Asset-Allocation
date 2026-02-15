@@ -259,10 +259,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     e.preventDefault();
 
     const el = e.currentTarget;
-    const start = el.selectionStart ?? username.length;
+    // Prefer the live input value (more robust than state if React is mid-batch).
+    const baseValue = el.value ?? username;
+    const start = el.selectionStart ?? baseValue.length;
     const end = el.selectionEnd ?? start;
 
-    const r = applyEmailPasteNormalizationV0({ value: username, selectionStart: start, selectionEnd: end, pastedText: pasted });
+    const r = applyEmailPasteNormalizationV0({ value: baseValue, selectionStart: start, selectionEnd: end, pastedText: pasted });
 
     setUsername(r.nextValue);
 
