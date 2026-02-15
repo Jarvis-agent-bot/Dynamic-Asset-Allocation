@@ -13,6 +13,15 @@ export async function POST(req: Request) {
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set({ name: DAA_AUTH_SESSION_COOKIE_V0, value: "", path: "/", maxAge: 0 });
+  res.cookies.set({
+    name: DAA_AUTH_SESSION_COOKIE_V0,
+    value: "",
+    // Mirror login cookie attributes to avoid leaving a stale session token around.
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
   return res;
 }

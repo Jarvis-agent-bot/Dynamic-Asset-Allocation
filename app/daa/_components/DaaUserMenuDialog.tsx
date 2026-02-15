@@ -186,7 +186,7 @@ export default function DaaUserMenuDialog() {
           </DropdownMenuItem>
           <DropdownMenuItem disabled={logoutBusy} onSelect={() => void logout()} className="text-destructive">
             <LogOut className="mr-2 h-4 w-4" />
-            {logoutBusy ? "Signing out..." : "Sign out"}
+            {logoutBusy ? "Logging out..." : "Logout"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
