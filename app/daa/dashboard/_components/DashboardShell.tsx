@@ -32,12 +32,14 @@ export default function DashboardShell({ children }: Props) {
           <DaaSidebarNav />
         </Suspense>
 
-        <div className="mt-auto">
-          <DaaUserMenuDialog />
-        </div>
       </aside>
 
       <div className="min-w-0 flex-1">
+        <header className="mb-6 hidden items-center justify-end gap-2 lg:flex">
+          <DaaDashboardRefreshIndicator compact />
+          <DaaUserMenuDialog />
+        </header>
+
         <header className="mb-6 flex items-center justify-between gap-3 lg:hidden">
           <div className="flex min-w-0 items-center gap-2">
             <Suspense fallback={null}>
