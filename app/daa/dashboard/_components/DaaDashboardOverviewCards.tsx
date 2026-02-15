@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const EVT_REFRESH = "daa:dashboard:refresh";
+const EVT_DATA_UPDATED = "daa:dashboard:data-updated";
+
 import { loadPortfolioStateV1 } from "../../portfolioStateStore";
 
 type AuthMeOk = {
@@ -72,7 +75,14 @@ export default function DaaDashboardOverviewCards() {
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function load(opts?: { reset?: boolean }) {
+      const reset = !!opts?.reset;
+      if (reset) {
+        // Re-trigger skeletons while refreshing.
+        setAuth(null);
+        setRunsResp(null);
+      }
+
       // Fetch in parallel; all endpoints are cookie-auth friendly.
       const [authRes, runsRes] = await Promise.allSettled([
         fetch("/api/daa/auth/me", { method: "GET", headers: { accept: "application/json" } }),
@@ -99,12 +109,21 @@ export default function DaaDashboardOverviewCards() {
         } else {
           setRunsResp({ ok: false, error: String(runsRes.reason ?? "fetch_failed") });
         }
+
+        window.dispatchEvent(new CustomEvent(EVT_DATA_UPDATED, { detail: { ts: Date.now() } }));
       }
     }
 
+    const onRefresh = () => {
+      void load({ reset: true });
+    };
+
+    window.addEventListener(EVT_REFRESH, onRefresh);
     void load();
+
     return () => {
       cancelled = true;
+      window.removeEventListener(EVT_REFRESH, onRefresh);
     };
   }, []);
 
