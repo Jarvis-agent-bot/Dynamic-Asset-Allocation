@@ -19,12 +19,25 @@ export default function RootLayout({
   const GA_ID = "G-PD2JWJHVEM"; // Replace with your Google Analytics ID.
 
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" className="dark" suppressHydrationWarning>
       <head>
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
+        <meta name="color-scheme" content="dark light" />
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`
+            (function () {
+              try {
+                var theme = localStorage.getItem("theme");
+                if (theme === "light") document.documentElement.classList.remove("dark");
+                if (theme === "dark") document.documentElement.classList.add("dark");
+              } catch (e) {}
+            })();
+          `}
+        </Script>
+
         {/* Google Analytics */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
