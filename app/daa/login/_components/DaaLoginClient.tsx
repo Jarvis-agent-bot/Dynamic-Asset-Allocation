@@ -145,6 +145,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const emailLinkEmailRef = useRef<HTMLInputElement | null>(null);
   const passwordEmailRef = useRef<HTMLInputElement | null>(null);
 
+  const emailLinkRequestInFlightRef = useRef(false);
+
   // Focus the first relevant input after the session check completes and when switching tabs.
   // (React's autoFocus only runs on mount, so this keeps keyboard flow predictable.)
   const passwordRef = useRef<HTMLInputElement | null>(null);
@@ -479,6 +481,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   async function requestEmailLink() {
     if (emailDisabled) return;
+    if (emailLinkRequestInFlightRef.current) return;
 
     // Prevent Enter-to-submit from bypassing the resend cooldown (the button is disabled, but form submit can still fire).
     if (emailLink.kind === "sent") {
@@ -502,6 +505,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       // Ignore storage errors.
     }
 
+    emailLinkRequestInFlightRef.current = true;
     setEmailLink({ kind: "sending" });
 
     try {
@@ -543,6 +547,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     } catch (e) {
       setEmailLinkError(e instanceof Error ? e.message : String(e));
       setEmailLink({ kind: "idle" });
+    } finally {
+      emailLinkRequestInFlightRef.current = false;
     }
   }
 
