@@ -206,6 +206,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       toast.success("Signed out.");
     }
 
+    if (n === "bootstrapped") {
+      toast.success("First admin created. Please sign in.");
+    }
+
     // Avoid repeating the toast on refresh.
     try {
       const url = new URL(window.location.href);

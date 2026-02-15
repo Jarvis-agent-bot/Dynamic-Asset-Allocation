@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -93,6 +95,7 @@ type MeResponse =
 type AuthModel =
   | { kind: "loading" }
   | { kind: "signedOut" }
+  | { kind: "bootstrapRequired" }
   | { kind: "error"; message: string }
   | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
 
@@ -200,6 +203,123 @@ function SignedOutState({ returnTo }: { returnTo: string }) {
         </div>
         <div className="text-xs text-muted-foreground">
           Tip: <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> is the canonical DAA entry point; legacy <code className="rounded bg-muted px-1 py-0.5">/daa*</code> routes redirect here.
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [bootstrapToken, setBootstrapToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/daa/auth/bootstrap", {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "x-daa-bootstrap-token": bootstrapToken,
+        },
+        body: JSON.stringify({ username: email, password }),
+      });
+
+      const text = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+
+      if (!res.ok) {
+        setError(String(json?.error ?? `HTTP ${res.status}`));
+        return;
+      }
+
+      if (!json?.ok) {
+        setError(String(json?.error ?? "bootstrap failed"));
+        return;
+      }
+
+      toast.success("First admin created. Please sign in.");
+      window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}&notice=bootstrapped`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="border-muted-foreground/20">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Setup required</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="text-sm text-muted-foreground">
+          No DAA admin accounts exist yet (fresh deployment). Create the first admin using the server bootstrap token.
+        </div>
+
+        <div className="grid gap-3">
+          <div className="grid gap-1">
+            <Label htmlFor="daa-bootstrap-email">Admin email</Label>
+            <Input
+              id="daa-bootstrap-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="admin@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div className="grid gap-1">
+            <Label htmlFor="daa-bootstrap-password">Admin password</Label>
+            <Input
+              id="daa-bootstrap-password"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <div className="grid gap-1">
+            <Label htmlFor="daa-bootstrap-token">Bootstrap token</Label>
+            <Input
+              id="daa-bootstrap-token"
+              type="password"
+              autoComplete="off"
+              placeholder="DAA_AUTH_BOOTSTRAP_TOKEN"
+              value={bootstrapToken}
+              onChange={(e) => setBootstrapToken(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {error ? <div className="text-sm text-destructive">{error}</div> : null}
+
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={() => void submit()} disabled={busy}>
+            {busy ? "Creating..." : "Create first admin"}
+          </Button>
+          <Button asChild type="button" variant="outline" disabled={busy}>
+            <Link href="/daa/login">Open login</Link>
+          </Button>
+        </div>
+
+        <div className="text-xs text-muted-foreground">
+          This is only available when there are zero accounts, and requires the server env <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code>.
         </div>
       </CardContent>
     </Card>
@@ -402,19 +522,25 @@ export default function DaaDashboardPageClient() {
           cache: "no-store",
         });
 
-        if (cancelled) return;
-
-        if (res.status === 401) {
-          setAuth({ kind: "signedOut" });
-          return;
-        }
-
         const text = await res.text();
         let json: any = null;
         try {
           json = JSON.parse(text);
         } catch {
           json = null;
+        }
+
+        if (cancelled) return;
+
+        if (res.status === 401) {
+          const err = String(json?.error ?? "");
+          if (err === "bootstrap_required") {
+            setAuth({ kind: "bootstrapRequired" });
+            return;
+          }
+
+          setAuth({ kind: "signedOut" });
+          return;
         }
 
         if (!res.ok) {
@@ -460,6 +586,15 @@ export default function DaaDashboardPageClient() {
       <div className="space-y-4">
         {header}
         <SignedOutState returnTo={returnTo} />
+      </div>
+    );
+  }
+
+  if (auth.kind === "bootstrapRequired") {
+    return (
+      <div className="space-y-4">
+        {header}
+        <BootstrapRequiredState returnTo={returnTo} />
       </div>
     );
   }
