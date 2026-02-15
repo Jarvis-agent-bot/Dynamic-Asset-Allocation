@@ -5,6 +5,9 @@ import { useSearchParams } from "next/navigation";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Copy } from "lucide-react";
+
+import { copyTextToClipboard } from "../../copyToClipboard";
 
 import {
   Breadcrumb,
@@ -215,6 +218,40 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
   const [bootstrapToken, setBootstrapToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+
+  useEffect(() => {
+    try {
+      setBaseUrl(window.location.origin);
+    } catch {
+      // Ignore; will fall back to a placeholder in the CLI snippet.
+    }
+  }, []);
+
+  const bootstrapCurl = useMemo(() => {
+    const base = baseUrl || "https://YOUR_DOMAIN";
+    const u = (email || "admin@example.com").trim() || "admin@example.com";
+    const payload = JSON.stringify({ username: u, password: "YOUR_PASSWORD" });
+
+    return [
+      `curl -sS -X POST "${base}/api/daa/auth/bootstrap" \\`,
+      `  -H "accept: application/json" \\`,
+      `  -H "content-type: application/json" \\`,
+      `  -H "x-daa-bootstrap-token: $DAA_AUTH_BOOTSTRAP_TOKEN" \\`,
+      `  --data-binary @- <<'JSON'`,
+      payload,
+      "JSON",
+    ].join("\n");
+  }, [baseUrl, email]);
+
+  async function copyBootstrapCurl() {
+    try {
+      await copyTextToClipboard(bootstrapCurl);
+      toast.success("Copied bootstrap command.");
+    } catch (e) {
+      toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   async function submit() {
     if (busy) return;
@@ -316,6 +353,27 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
           <Button asChild type="button" variant="outline" disabled={busy}>
             <Link href="/daa/login">Open login</Link>
           </Button>
+        </div>
+
+        <div className="rounded-md border border-dashed border-muted-foreground/30 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-foreground">CLI (optional)</div>
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-7 w-7"
+              onClick={() => void copyBootstrapCurl()}
+              aria-label="Copy bootstrap command"
+              title="Copy bootstrap command"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{bootstrapCurl}</pre>
+          <div className="mt-2 text-xs text-muted-foreground">
+            Replace <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and <code className="rounded bg-muted px-1 py-0.5">YOUR_PASSWORD</code> before running.
+          </div>
         </div>
 
         <div className="text-xs text-muted-foreground">
