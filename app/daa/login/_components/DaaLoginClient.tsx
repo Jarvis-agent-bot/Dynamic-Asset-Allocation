@@ -67,6 +67,13 @@ function normalizeEmailLoose(raw: string): string {
   return v;
 }
 
+function normalizeEmailDraftV0(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  // Keep it predictable: lowercase + trim (no complex canonicalization beyond that).
+  return trimmed.slice(0, 254).toLowerCase();
+}
+
 // returnTo normalization is shared via src/daa/urlV0.ts
 
 function parseApiError(json: any, fallback: string): string {
@@ -245,6 +252,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const [password, setPassword] = useState("");
 
   const normalizedEmail = useMemo(() => normalizeEmailLoose(username), [username]);
+  const emailDraftNormalized = useMemo(() => normalizeEmailDraftV0(username), [username]);
+  const showEmailDraftNormalizationHint = Boolean(username.trim()) && emailDraftNormalized && username !== emailDraftNormalized;
+
   const passwordTrimmed = password.trim();
 
   // Password form state
@@ -399,10 +409,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   }, [emailLinkErrorCode]);
 
   useEffect(() => {
-    const draft = username.trim();
+    const draft = normalizeEmailDraftV0(username);
     if (!draft) return;
     try {
-      window.localStorage.setItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0, draft.slice(0, 254));
+      window.localStorage.setItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0, draft);
     } catch {
       // Ignore storage errors.
     }
@@ -893,7 +903,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       autoComplete="email"
                       placeholder="you@example.com"
                       disabled={emailDisabled || offline}
-                      onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                      onBlur={() => {
+                        setTouched((prev) => ({ ...prev, email: true }));
+                        const next = normalizeEmailDraftV0(username);
+                        if (next && next !== username) setUsername(next);
+                      }}
                       aria-invalid={emailInvalidEmailLink || undefined}
                       aria-describedby={emailLinkEmailHelpId}
                       className="pr-10"
@@ -918,9 +932,21 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     className={emailInvalidEmailLink ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
                     role={emailInvalidEmailLink ? "alert" : undefined}
                   >
-                    {emailInvalidEmailLink
-                      ? emailHelpText
-                      : "We'll email you a single-use sign-in link (\"magic link\") within about a minute. It expires in about 15 minutes — don't share it."}
+                    {emailInvalidEmailLink ? (
+                      emailHelpText
+                    ) : (
+                      <>
+                        <div>
+                          We&apos;ll email you a single-use sign-in link ("magic link") within about a minute. It expires in about 15 minutes —
+                          don&apos;t share it.
+                        </div>
+                        {showEmailDraftNormalizationHint ? (
+                          <div className="mt-1">
+                            We&apos;ll normalize to lowercase: <span className="font-medium">{emailDraftNormalized}</span>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1164,7 +1190,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       autoComplete="username"
                       placeholder="you@example.com"
                       disabled={passwordDisabled}
-                      onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                      onBlur={() => {
+                        setTouched((prev) => ({ ...prev, email: true }));
+                        const next = normalizeEmailDraftV0(username);
+                        if (next && next !== username) setUsername(next);
+                      }}
                       aria-invalid={Boolean(mergedPasswordErrors.email) || undefined}
                       aria-describedby={passwordEmailHelpId}
                       className="pr-10"
@@ -1189,7 +1219,18 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     className={mergedPasswordErrors.email ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
                     role={mergedPasswordErrors.email ? "alert" : undefined}
                   >
-                    {mergedPasswordErrors.email ? mergedPasswordErrors.email : "Your username is your email address."}
+                    {mergedPasswordErrors.email ? (
+                      mergedPasswordErrors.email
+                    ) : (
+                      <>
+                        <div>Your username is your email address.</div>
+                        {showEmailDraftNormalizationHint ? (
+                          <div className="mt-1">
+                            We&apos;ll normalize to lowercase: <span className="font-medium">{emailDraftNormalized}</span>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </div>
 
