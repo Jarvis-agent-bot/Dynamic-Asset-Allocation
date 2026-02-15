@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { createRequire } from "node:module";
 
 type PgStateV0 = {
   pool: Pool | null;
@@ -24,8 +25,12 @@ export function getDaaPgUrlV0(): string | null {
   return v.replace(/^postgresql\+psycopg:\/\//i, "postgresql://");
 }
 
+function isDaaPgMemEnabledV0(): boolean {
+  return typeof process.env.DAA_PG_MEM === "string" && process.env.DAA_PG_MEM.trim() === "1";
+}
+
 export function isDaaPgEnabledV0(): boolean {
-  return Boolean(getDaaPgUrlV0());
+  return Boolean(getDaaPgUrlV0() || isDaaPgMemEnabledV0());
 }
 
 export function daaPgPoolV0(): Pool {
@@ -33,10 +38,25 @@ export function daaPgPoolV0(): Pool {
   if (st.pool) return st.pool;
 
   const url = getDaaPgUrlV0();
-  if (!url) throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+  if (url) {
+    const pool = new Pool({ connectionString: url });
+    st.pool = pool;
+    return pool;
+  }
 
-  st.pool = new Pool({ connectionString: url });
-  return st.pool;
+  if (isDaaPgMemEnabledV0()) {
+    // Unit-test helper: create an in-memory Postgres-compatible pool via pg-mem.
+    // Use createRequire() so this works in ESM (vitest) and CJS (Next server).
+    const req = createRequire(import.meta.url);
+    const { newDb } = req("pg-mem");
+    const db = newDb({ autoCreateForeignKeyIndices: true });
+    const adapter = db.adapters.createPg();
+    const pool = new adapter.Pool();
+    st.pool = pool;
+    return pool;
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function withDaaPgClientV0<T>(fn: (client: { query: Pool["query"] }) => Promise<T>): Promise<T> {

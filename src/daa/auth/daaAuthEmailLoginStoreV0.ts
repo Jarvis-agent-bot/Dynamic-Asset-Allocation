@@ -1,6 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-import { withDaaSqliteDbV0 } from "../sqlite/daaSqliteDbV0";
 import { ensureDaaAuthSchemaPgV0, isDaaPgEnabledV0, withDaaPgClientV0 } from "../pg/daaPgV0";
 
 import {
@@ -35,7 +34,7 @@ function sha256Hex(s: string): string {
 }
 
 async function ensureAuthSchemaIfPgV0(): Promise<void> {
-  if (!isDaaPgEnabledV0()) return;
+  if (!isDaaPgEnabledV0()) throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   await ensureDaaAuthSchemaPgV0();
 }
 
@@ -100,17 +99,8 @@ export async function createDaaAuthEmailLoginTokenV0(args: {
       );
     });
   } else {
-    await withDaaSqliteDbV0(async ({ db, markDirty }) => {
-      const stmt = db.prepare(
-        "INSERT INTO daa_auth_email_login_tokens (token_id, account_id, token_sha256, created_at, expires_at, used_at, user_agent, ip) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
-      );
-      try {
-        stmt.run([tokenId, accountId, tokenSha256, createdAt, expiresAt, userAgent || null, ip || null]);
-      } finally {
-        stmt.free();
-      }
-      markDirty();
-    });
+
+    throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   }
 
   return {
@@ -144,19 +134,7 @@ export async function findLastDaaAuthEmailLoginTokenCreatedAtV0(args: { accountI
     });
   }
 
-  return withDaaSqliteDbV0(async ({ db }) => {
-    const stmt = db.prepare(
-      "SELECT created_at FROM daa_auth_email_login_tokens WHERE account_id = ? ORDER BY created_at DESC, token_id DESC LIMIT 1"
-    );
-    try {
-      stmt.bind([accountId]);
-      if (!stmt.step()) return null;
-      const row = stmt.getAsObject();
-      return typeof (row as any).created_at === "string" ? String((row as any).created_at) : null;
-    } finally {
-      stmt.free();
-    }
-  });
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export type DaaAuthEmailLoginConsumeErrorV0 = "invalid" | "missing" | "used" | "expired" | "inactive";
@@ -184,15 +162,14 @@ export async function consumeDaaAuthEmailLoginTokenWithReasonV0(args: {
   // Claim the token (single-use) and read the accountId in the same transaction.
   await ensureAuthSchemaIfPgV0();
 
-  const claim = isDaaPgEnabledV0()
-    ? await withDaaPgClientV0(async ({ query }) => {
+  const claim = await withDaaPgClientV0(async ({ query }) => {
         await query("BEGIN");
         try {
           const r = await query(
             "SELECT t.account_id, t.expires_at, t.used_at, a.status " +
               "FROM daa_auth_email_login_tokens t " +
               "JOIN daa_auth_accounts a ON a.account_id = t.account_id " +
-              "WHERE t.token_sha256 = $1 LIMIT 1 FOR UPDATE OF t",
+              "WHERE t.token_sha256 = $1 LIMIT 1 FOR UPDATE",
             [tokenSha256],
           );
 
@@ -241,73 +218,9 @@ export async function consumeDaaAuthEmailLoginTokenWithReasonV0(args: {
           }
           throw e;
         }
-      })
-    : await withDaaSqliteDbV0(async ({ db, markDirty }) => {
-        db.exec("BEGIN");
-        try {
-          const select = db.prepare(
-            "SELECT t.account_id, t.expires_at, t.used_at, a.status FROM daa_auth_email_login_tokens t JOIN daa_auth_accounts a ON a.account_id = t.account_id WHERE t.token_sha256 = ? LIMIT 1"
-          );
-          let row: any = null;
-          try {
-            select.bind([tokenSha256]);
-            if (select.step()) row = select.getAsObject();
-          } finally {
-            select.free();
-          }
+  });
 
-          if (!row) {
-            db.exec("ROLLBACK");
-            return { ok: false as const, error: "missing" as const };
-          }
-
-          const usedAt = typeof row.used_at === "string" && row.used_at.trim() ? row.used_at.trim() : "";
-          if (usedAt) {
-            db.exec("ROLLBACK");
-            return { ok: false as const, error: "used" as const };
-          }
-
-          const expiresAt = typeof row.expires_at === "string" ? row.expires_at : "";
-          if (!expiresAt || Date.parse(expiresAt) <= Date.parse(now)) {
-            db.exec("ROLLBACK");
-            return { ok: false as const, error: "expired" as const };
-          }
-
-          const status = typeof row.status === "string" ? row.status.trim().toLowerCase() : "";
-          if (status !== "active") {
-            db.exec("ROLLBACK");
-            return { ok: false as const, error: "inactive" as const };
-          }
-
-          const acct = typeof row.account_id === "string" ? row.account_id.trim() : "";
-          if (!acct) {
-            db.exec("ROLLBACK");
-            return { ok: false as const, error: "invalid" as const };
-          }
-
-          const update = db.prepare(
-            "UPDATE daa_auth_email_login_tokens SET used_at = ? WHERE token_sha256 = ? AND used_at IS NULL"
-          );
-          try {
-            update.run([now, tokenSha256]);
-          } finally {
-            update.free();
-          }
-
-          db.exec("COMMIT");
-          markDirty();
-          return { ok: true as const, accountId: acct };
-        } catch (e) {
-          try {
-            db.exec("ROLLBACK");
-          } catch {
-            // ignore
-          }
-          throw e;
-        }
-      });
-
-  if (!claim.ok) return claim;
+if (!claim.ok) return claim;
 
   // Create a normal cookie-backed session.
   const { session, token: sessionToken } = await createDaaAuthSessionV0({

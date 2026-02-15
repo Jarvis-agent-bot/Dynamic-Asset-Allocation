@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - PORT=3000
-      # Optional: when set, auth/session state uses Postgres instead of sql.js SQLite.
+      # Required: Postgres DB URL for auth + store persistence.
       - DAA_DB_URL=postgresql://daa:daa@postgres:5432/daa
       # Python engine container (nginx exposes it as /daa-api/* in prod).
       - DAA_PY_BASE_URL=http://daa-api:8000

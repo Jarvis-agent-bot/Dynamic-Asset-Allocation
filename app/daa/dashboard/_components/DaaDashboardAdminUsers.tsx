@@ -403,7 +403,7 @@ export default function DaaDashboardAdminUsers() {
             <CardTitle>Admin Users</CardTitle>
             <CardDescription>
               Diagnostics view of configured admin tokens (viewer/editor/legacy),
-              with an enable/disable toggle backed by SQLite.
+              with an enable/disable toggle backed by the store.
             </CardDescription>
           </div>
 

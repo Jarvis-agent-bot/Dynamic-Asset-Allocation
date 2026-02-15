@@ -1,25 +1,23 @@
-import { mkdir, rm } from "node:fs/promises";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { requireDaaAdminViewerAuth } from "../adminAuth";
-import { setDaaAdminUserActiveV0 } from "../sqlite/daaAdminUserStatusStoreV0";
+import { setDaaAdminUserActiveV0 } from "../adminUserStatusStoreV0";
 
-const GLOBAL_KEY = "__daa_sqlite_state_v0__";
+const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
+const STORE_PG_GLOBAL_KEY = "__daa_store_pg_state_v0__";
 
-async function resetDbFile(dbPath: string) {
-  await mkdir(path.dirname(dbPath), { recursive: true });
-  await rm(dbPath, { force: true });
-  await rm(`${dbPath}.tmp`, { force: true });
-  delete (globalThis as any)[GLOBAL_KEY];
+function resetPgMem() {
+  // Use in-memory Postgres emulation for unit tests.
+  process.env.DAA_PG_MEM = "1";
+  delete (globalThis as any)[PG_GLOBAL_KEY];
+  delete (globalThis as any)[STORE_PG_GLOBAL_KEY];
+  delete process.env.DAA_DB_URL;
+  delete process.env.DATABASE_URL;
 }
 
 describe("daa/adminAuth require* v0", () => {
   it("denies disabled tokens", async () => {
-    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-admin-auth-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
-    process.env.DAA_SQLITE_PATH = dbPath;
-    await resetDbFile(dbPath);
+    resetPgMem();
 
     const prev = {
       legacy: process.env.DAA_ADMIN_TOKEN,
@@ -44,7 +42,6 @@ describe("daa/adminAuth require* v0", () => {
       process.env.DAA_ADMIN_TOKEN = prev.legacy;
       process.env.DAA_ADMIN_VIEWER_TOKEN = prev.viewer;
       process.env.DAA_ADMIN_EDITOR_TOKEN = prev.editor;
-      await resetDbFile(dbPath);
     }
   });
 });
