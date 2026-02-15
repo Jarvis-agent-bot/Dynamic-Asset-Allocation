@@ -448,6 +448,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         if (res.status === 401) {
           setPasswordErrors({ password: "Email or password is incorrect." });
           setPassword("");
+          passwordRef.current?.focus();
           return;
         }
 
@@ -478,6 +479,13 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   async function requestEmailLink() {
     if (emailDisabled) return;
+
+    // Prevent Enter-to-submit from bypassing the resend cooldown (the button is disabled, but form submit can still fire).
+    if (emailLink.kind === "sent") {
+      const elapsed = Math.floor((Date.now() - emailLink.requestedAtMs) / 1000);
+      const remaining = Math.max(0, emailLink.cooldownSeconds - elapsed);
+      if (remaining > 0) return;
+    }
 
     setEmailLinkError(null);
 
