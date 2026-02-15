@@ -1,10 +1,6 @@
-import { DeepLinkScaffold } from "../_components/DeepLinkScaffold";
-import Step4BaselineRecommendationPage from "../_pages/Step4BaselineRecommendationPage";
+import { redirect } from "next/navigation";
 
-export default function Step4Page() {
-  return (
-    <DeepLinkScaffold stepId={4}>
-      <Step4BaselineRecommendationPage />
-    </DeepLinkScaffold>
-  );
+export default function LegacyDaaStep4() {
+  // Legacy entry: canonical step experience lives under /daa/dashboard.
+  redirect("/daa/dashboard?tab=wizard&step=4");
 }
