@@ -857,7 +857,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     id={passwordEmailId}
                     ref={passwordEmailRef}
                     type="email"
-                    name="email"
+                    name="username"
                     inputMode="email"
                     enterKeyHint="next"
                     autoCapitalize="none"
@@ -869,7 +869,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
                       setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
                     }}
-                    autoComplete="email"
+                    autoComplete="username"
                     placeholder="you@example.com"
                     disabled={passwordDisabled}
                     onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
