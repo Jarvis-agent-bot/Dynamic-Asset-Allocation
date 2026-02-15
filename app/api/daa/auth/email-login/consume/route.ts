@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
-import { consumeDaaAuthEmailLoginTokenV0 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
+import { consumeDaaAuthEmailLoginTokenWithReasonV0 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
 
 export const runtime = "nodejs";
 
@@ -23,10 +23,11 @@ export async function GET(req: Request) {
   const ua = getUserAgentFromRequestV0(req) || null;
   const ip = getClientIpFromRequestV0(req) || null;
 
-  const found = await consumeDaaAuthEmailLoginTokenV0({ token, userAgent: ua, ip });
-  if (!found) {
+  const found = await consumeDaaAuthEmailLoginTokenWithReasonV0({ token, userAgent: ua, ip });
+  if (!found.ok) {
     const loginUrl = new URL("/daa/login", url);
-    loginUrl.searchParams.set("error", "email-link-invalid");
+    const err = found.error === "used" ? "email-link-used" : found.error === "expired" ? "email-link-expired" : "email-link-invalid";
+    loginUrl.searchParams.set("error", err);
     loginUrl.searchParams.set("returnTo", returnTo);
     return NextResponse.redirect(loginUrl, 302);
   }

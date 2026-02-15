@@ -129,15 +129,21 @@ export async function findLastDaaAuthEmailLoginTokenCreatedAtV0(args: { accountI
   });
 }
 
-export async function consumeDaaAuthEmailLoginTokenV0(args: {
+export type DaaAuthEmailLoginConsumeErrorV0 = "invalid" | "missing" | "used" | "expired" | "inactive";
+
+export type DaaAuthEmailLoginConsumeResultV0 =
+  | { ok: true; account: DaaAuthAccountV0; session: DaaAuthSessionV0; sessionToken: string }
+  | { ok: false; error: DaaAuthEmailLoginConsumeErrorV0 };
+
+export async function consumeDaaAuthEmailLoginTokenWithReasonV0(args: {
   token: string;
   now?: string;
   userAgent?: string | null;
   ip?: string | null;
   sessionTtlDays?: number;
-}): Promise<{ account: DaaAuthAccountV0; session: DaaAuthSessionV0; sessionToken: string } | null> {
+}): Promise<DaaAuthEmailLoginConsumeResultV0> {
   const token = typeof args.token === "string" ? args.token.trim() : "";
-  if (!token) return null;
+  if (!token) return { ok: false, error: "invalid" };
 
   const tokenSha256 = sha256Hex(token);
   const now = typeof args.now === "string" && args.now.trim() ? args.now.trim() : nowIso();
@@ -146,7 +152,7 @@ export async function consumeDaaAuthEmailLoginTokenV0(args: {
   const ip = typeof args.ip === "string" ? args.ip.trim() : "";
 
   // Claim the token (single-use) and read the accountId in the same transaction.
-  const accountId = await withDaaSqliteDbV0(async ({ db, markDirty }) => {
+  const claim = await withDaaSqliteDbV0(async ({ db, markDirty }) => {
     db.exec("BEGIN");
     try {
       const select = db.prepare(
@@ -162,31 +168,31 @@ export async function consumeDaaAuthEmailLoginTokenV0(args: {
 
       if (!row) {
         db.exec("ROLLBACK");
-        return null;
+        return { ok: false as const, error: "missing" as const };
       }
 
       const usedAt = typeof row.used_at === "string" && row.used_at.trim() ? row.used_at.trim() : "";
       if (usedAt) {
         db.exec("ROLLBACK");
-        return null;
+        return { ok: false as const, error: "used" as const };
       }
 
       const expiresAt = typeof row.expires_at === "string" ? row.expires_at : "";
       if (!expiresAt || Date.parse(expiresAt) <= Date.parse(now)) {
         db.exec("ROLLBACK");
-        return null;
+        return { ok: false as const, error: "expired" as const };
       }
 
       const status = typeof row.status === "string" ? row.status.trim().toLowerCase() : "";
       if (status !== "active") {
         db.exec("ROLLBACK");
-        return null;
+        return { ok: false as const, error: "inactive" as const };
       }
 
       const acct = typeof row.account_id === "string" ? row.account_id.trim() : "";
       if (!acct) {
         db.exec("ROLLBACK");
-        return null;
+        return { ok: false as const, error: "invalid" as const };
       }
 
       const update = db.prepare(
@@ -200,7 +206,7 @@ export async function consumeDaaAuthEmailLoginTokenV0(args: {
 
       db.exec("COMMIT");
       markDirty();
-      return acct;
+      return { ok: true as const, accountId: acct };
     } catch (e) {
       try {
         db.exec("ROLLBACK");
@@ -211,11 +217,11 @@ export async function consumeDaaAuthEmailLoginTokenV0(args: {
     }
   });
 
-  if (!accountId) return null;
+  if (!claim.ok) return claim;
 
   // Create a normal cookie-backed session.
   const { session, token: sessionToken } = await createDaaAuthSessionV0({
-    accountId,
+    accountId: claim.accountId,
     ttlDays: args.sessionTtlDays,
     userAgent: userAgent || null,
     ip: ip || null,
@@ -223,9 +229,20 @@ export async function consumeDaaAuthEmailLoginTokenV0(args: {
   });
 
   const found = await getDaaAuthAccountBySessionTokenV0({ token: sessionToken, now, touch: false });
-  if (!found) return null;
+  if (!found) return { ok: false, error: "invalid" };
 
-  return { account: found.account, session: found.session, sessionToken };
+  return { ok: true, account: found.account, session: found.session, sessionToken };
+}
+
+export async function consumeDaaAuthEmailLoginTokenV0(args: {
+  token: string;
+  now?: string;
+  userAgent?: string | null;
+  ip?: string | null;
+  sessionTtlDays?: number;
+}): Promise<{ account: DaaAuthAccountV0; session: DaaAuthSessionV0; sessionToken: string } | null> {
+  const res = await consumeDaaAuthEmailLoginTokenWithReasonV0(args);
+  return res.ok ? { account: res.account, session: res.session, sessionToken: res.sessionToken } : null;
 }
 
 export async function requestDaaAuthEmailLoginV0(args: {
