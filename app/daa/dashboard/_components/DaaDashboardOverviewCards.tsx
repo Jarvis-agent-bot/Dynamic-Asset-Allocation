@@ -40,10 +40,25 @@ type RunListRow = {
 
 type RunsResp = { ok: boolean; runs?: RunListRow[]; error?: string };
 
+type DeployBootstrapCheck = {
+  id: string;
+  label: string;
+  group: "required" | "bootstrap" | "recommended" | "optional";
+  ok: boolean;
+  note?: string;
+  candidates?: string[];
+};
+
 type DeployStatusOk = {
   ok: true;
   env: { nodeEnv: string; deployEnv: string; platform: string };
   build: { sha: string; shaShort: string };
+  bootstrap?: {
+    checks: DeployBootstrapCheck[];
+    missingRequired: string[];
+    missingBootstrap: string[];
+    missingRecommended: string[];
+  };
   serverTime: string;
 };
 
@@ -208,16 +223,57 @@ export default function DaaDashboardOverviewCards() {
   const sha = deployResp && deployResp.ok ? String(deployResp.build.sha ?? "").trim() : "";
   const shaShort = deployResp && deployResp.ok ? deployResp.build.shaShort : "";
 
+  const deployBootstrapChecks = deployResp && deployResp.ok ? (deployResp.bootstrap?.checks ?? null) : null;
+
+  function deployBootstrapOk(id: string): ChecklistOk {
+    if (deployResp === null) return null;
+    if (!deployResp.ok) return null;
+    if (!Array.isArray(deployBootstrapChecks)) return null;
+    const it = deployBootstrapChecks.find((c) => c && typeof c === "object" && (c as any).id === id);
+    return it ? !!(it as any).ok : null;
+  }
+
+  const sqlitePathOk = deployBootstrapOk("DAA_SQLITE_PATH");
+  const bootstrapTokenOk = deployBootstrapOk("DAA_AUTH_BOOTSTRAP_TOKEN");
+
+  const deployBootstrapMissingRequiredCount = deployResp && deployResp.ok ? deployResp.bootstrap?.missingRequired?.length ?? 0 : 0;
+  const deployBootstrapMissingBootstrapCount = deployResp && deployResp.ok ? deployResp.bootstrap?.missingBootstrap?.length ?? 0 : 0;
+  const deployBootstrapMissingRecommendedCount = deployResp && deployResp.ok ? deployResp.bootstrap?.missingRecommended?.length ?? 0 : 0;
+
+  const showDeployBootstrapPanel =
+    !!(deployResp && deployResp.ok) &&
+    (!sha || deployBootstrapMissingRequiredCount + deployBootstrapMissingBootstrapCount + deployBootstrapMissingRecommendedCount > 0);
+
   const deployPrereqs: ChecklistItem[] = useMemo(() => {
     return [
+      {
+        id: "sqlite_path",
+        ok: sqlitePathOk,
+        label: "DAA_SQLITE_PATH set",
+        detail: (
+          <>
+            The server needs <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> (e.g.
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/var/lib/daa/daa.sqlite</code>).
+          </>
+        ),
+      },
+      {
+        id: "bootstrap_token",
+        ok: bootstrapTokenOk,
+        label: "DAA_AUTH_BOOTSTRAP_TOKEN set (fresh deploy)",
+        detail: (
+          <>
+            Used to create the first admin via <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/api/daa/auth/bootstrap</code>.
+          </>
+        ),
+      },
       {
         id: "store",
         ok: runsResp === null ? null : storeOk,
         label: "SQLite store reachable",
         detail: (
           <>
-            Expect <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> to be set
-            (e.g. <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/var/lib/daa/daa.sqlite</code>).
+            If this fails, confirm the sqlite path exists and is writable, and that the app process has permissions.
           </>
         ),
       },
@@ -231,9 +287,7 @@ export default function DaaDashboardOverviewCards() {
               Create the first admin via the dashboard (Setup required) or using <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/api/daa/auth/bootstrap</code>.
             </>
           ) : (
-            <>
-              If this is a fresh deploy, set <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_AUTH_BOOTSTRAP_TOKEN</code> on the server.
-            </>
+            <>If you are rotating credentials, ensure the deploy has the correct secrets configured.</>
           ),
       },
       {
@@ -260,7 +314,7 @@ export default function DaaDashboardOverviewCards() {
         ),
       },
     ];
-  }, [deployEnv, hasAnyAccounts, runsResp, sha, storeOk]);
+  }, [bootstrapTokenOk, deployEnv, hasAnyAccounts, runsResp, sha, sqlitePathOk, storeOk]);
 
   const deployBootstrapEnvVarsText = useMemo(() => {
     // Keep the snippet copy/paste friendly for Vercel/Render/Fly/etc.
@@ -486,7 +540,9 @@ export default function DaaDashboardOverviewCards() {
                     </Tooltip>
                   </div>
                 </TooltipProvider>
-              ) : (
+              ) : null}
+
+              {showDeployBootstrapPanel ? (
                 <Alert className="p-3">
                   <AlertTitle className="flex items-center justify-between gap-2 text-xs">
                     <span>Deploy bootstrap</span>
@@ -497,7 +553,7 @@ export default function DaaDashboardOverviewCards() {
                   </AlertTitle>
                   <AlertDescription className="text-xs">
                     <div className="text-muted-foreground">
-                      Build SHA is not reported yet. Use the snippets below to bootstrap a fresh deploy, then retry.
+                      Validate your deploy prerequisites (missing/ok) and use the snippets below to bootstrap or fix the server env.
                     </div>
 
                     <div className="mt-2 space-y-2">
@@ -593,7 +649,7 @@ export default function DaaDashboardOverviewCards() {
                     </div>
                   </AlertDescription>
                 </Alert>
-              )}
+              ) : null}
               <div className="text-xs text-muted-foreground">Last updated: {fmtTime(deployResp.serverTime)}</div>
             </>
           ) : (
