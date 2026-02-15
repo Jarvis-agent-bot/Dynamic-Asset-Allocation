@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -61,29 +62,83 @@ const QUICK_NAV: Array<{ id: string; label: string }> = [
   { id: "step7", label: "Step7 — Tags" },
 ];
 
-function DashboardMain() {
+function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
+  const title = tab === "wizard" ? "Wizard" : tab === "market-funds" ? "Market/Funds" : "Dashboard";
+
+  const desc =
+    tab === "wizard" ? (
+      <>
+        Canonical URL: <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard?tab=wizard&amp;step=...</code>. Use the steps to produce <code className="rounded bg-muted px-1 py-0.5">ai_orders_draft</code> (never auto-trade).
+      </>
+    ) : tab === "market-funds" ? (
+      <>Legacy market/funds tools, now hosted under <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> to avoid fragmented deep-links.</>
+    ) : (
+      <>
+        Run path: <span className="font-medium text-foreground">Step2 → Step4/5 → Step6 → Step7</span>. Fill gaps → run → export.
+      </>
+    );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/daa/dashboard">DAA</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          {tab === "wizard" && stepId ? (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
+                  <Link href={`/daa/dashboard?tab=wizard&step=${stepId}`}>Wizard</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{`Step ${stepId}`}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          ) : (
+            <BreadcrumbItem>
+              <BreadcrumbPage>{title}</BreadcrumbPage>
+            </BreadcrumbItem>
+          )}
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">DAA Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Run path: <span className="font-medium text-foreground">Step2 → Step4/5 → Step6 → Step7</span>.
-            <span className="hidden sm:inline"> </span>
-            Here is the default entry: fill gaps → run → export.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <p className="text-sm text-muted-foreground">{desc}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/daa/dashboard?tab=wizard&step=1">Open Wizard</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
-          </Button>
+          {tab !== "dashboard" ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/daa/dashboard">Dashboard</Link>
+            </Button>
+          ) : null}
+          {tab !== "wizard" ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/daa/dashboard?tab=wizard&step=1">Open Wizard</Link>
+            </Button>
+          ) : null}
+          {tab !== "market-funds" ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
+            </Button>
+          ) : null}
         </div>
       </div>
+    </div>
+  );
+}
 
+function DashboardMain() {
+  return (
+    <div className="space-y-4">
       <DaaDashboardOverviewCards />
 
       <Card>
@@ -170,15 +225,21 @@ function DashboardMain() {
 export default function DaaDashboardPageClient() {
   const searchParams = useSearchParams();
   const tab = normalizeTab(searchParams.get("tab"));
+  const stepId = tab === "wizard" ? parseInitialStepId(searchParams.get("step")) : undefined;
 
   const content =
     tab === "wizard" ? (
-      <DaaWizard initialStepId={parseInitialStepId(searchParams.get("step"))} />
+      <DaaWizard initialStepId={stepId} />
     ) : tab === "market-funds" ? (
       <DaaMarketFundsTab />
     ) : (
       <DashboardMain />
     );
 
-  return <div className={tab === "dashboard" ? "space-y-4" : undefined}>{content}</div>;
+  return (
+    <div className="space-y-4">
+      <DaaDashboardHeader tab={tab} stepId={stepId} />
+      {content}
+    </div>
+  );
 }
