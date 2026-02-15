@@ -5,15 +5,39 @@ services:
       dockerfile: Dockerfile
     environment:
       - PORT=3000
-      - DAA_PY_BASE_URL=http://daa-py:8000
+      # Python engine container (nginx exposes it as /daa-api/* in prod).
+      - DAA_PY_BASE_URL=http://daa-api:8000
     ports:
       - "127.0.0.1:3000:3000"
+    depends_on:
+      - daa-api
     restart: unless-stopped
 
-  daa-py:
+  # Canonical dev/prod name for the Python engine (served behind /daa-api/).
+  daa-api:
     build:
       context: ./services/daa-py
       dockerfile: Dockerfile
+    environment:
+      # Optional (for future persistence). Alembic reads this for migrations.
+      - DAA_DB_URL=postgresql+psycopg://daa:daa@postgres:5432/daa
     ports:
       - "127.0.0.1:18000:8000"
+    depends_on:
+      - postgres
     restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=daa
+      - POSTGRES_PASSWORD=daa
+      - POSTGRES_DB=daa
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - daa-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  daa-postgres-data:
