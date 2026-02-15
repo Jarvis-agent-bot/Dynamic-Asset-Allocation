@@ -873,7 +873,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     className={emailInvalidEmailLink ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
                     role={emailInvalidEmailLink ? "alert" : undefined}
                   >
-                    {emailInvalidEmailLink ? emailHelpText : "We'll email you a single-use sign-in link (usually within a minute). It expires in about 15 minutes."}
+                    {emailInvalidEmailLink
+                      ? emailHelpText
+                      : "We'll email you a single-use sign-in link (\"magic link\") within about a minute. It expires in about 15 minutes — don't share it."}
                   </div>
                 </div>
 
@@ -933,7 +935,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                           Open the email titled <span className="font-medium">Your DAA sign-in link</span>.
                         </li>
                         <li>Click the sign-in button/link. This browser will refresh and you will be signed in automatically.</li>
-                        <li>If you don't see it, check spam/promotions. You can resend after the cooldown, or use a password instead.</li>
+                        <li>
+                          If you don&apos;t see it, check spam/promotions. You can resend after the cooldown, or use a password instead. For security, don&apos;t forward the email.
+                        </li>
                       </ol>
 
                       {mailboxLinks.length ? (
