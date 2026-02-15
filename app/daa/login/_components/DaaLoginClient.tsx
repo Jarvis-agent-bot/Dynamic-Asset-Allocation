@@ -724,7 +724,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     className={emailInvalidEmailLink ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
                     role={emailInvalidEmailLink ? "alert" : undefined}
                   >
-                    {emailInvalidEmailLink ? emailHelpText : "We'll send you a single-use sign-in link."}
+                    {emailInvalidEmailLink ? emailHelpText : "We'll email you a single-use sign-in link (usually within a minute). It expires in about 15 minutes."}
                   </div>
                 </div>
 
