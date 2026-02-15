@@ -1,5 +1,8 @@
 "use client";
 
+import type { ComponentType } from "react";
+
+import { BarChart3, LayoutDashboard, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
@@ -7,6 +10,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Tab = "dashboard" | "wizard" | "market-funds";
+
+type IconType = ComponentType<{ className?: string }>;
+
+type NavItem = { key: Tab; href: string; label: string; Icon: IconType };
 
 function normalizeTab(raw: string | null): Tab {
   if (raw === "wizard") return "wizard";
@@ -24,10 +31,10 @@ export default function DaaTopNav() {
 
   const active: Tab | null = isOnDashboard ? tab : null;
 
-  const items: Array<{ key: Tab; href: string; label: string }> = [
-    { key: "dashboard", href: "/daa/dashboard", label: "Dashboard" },
-    { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard" },
-    { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds" },
+  const items: NavItem[] = [
+    { key: "dashboard", href: "/daa/dashboard", label: "Dashboard", Icon: LayoutDashboard },
+    { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard", Icon: Wand2 },
+    { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds", Icon: BarChart3 },
   ];
 
   return (
@@ -48,7 +55,8 @@ export default function DaaTopNav() {
             )}
           >
             <Link href={it.href} aria-current={isActive ? "page" : undefined}>
-              {it.label}
+              <it.Icon className="h-4 w-4" aria-hidden="true" />
+              <span>{it.label}</span>
             </Link>
           </Button>
         );
