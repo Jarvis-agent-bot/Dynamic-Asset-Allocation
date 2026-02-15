@@ -761,6 +761,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       ))}
                     </div>
                     <div className="mt-2 text-xs text-muted-foreground">Check your spam or promotions folder if you don't see it.</div>
+                    <div className="mt-2 text-xs text-muted-foreground">If it still doesn't arrive, allowlist the sender (add it to your contacts) and try resending.</div>
                   </div>
                 ) : null}
 
