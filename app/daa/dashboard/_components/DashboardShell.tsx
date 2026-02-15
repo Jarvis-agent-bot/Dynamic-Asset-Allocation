@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import type React from "react";
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
 import DaaThemeToggle from "../../_components/DaaThemeToggle";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
@@ -11,6 +13,20 @@ import DaaDashboardRefreshIndicator from "./DaaDashboardRefreshIndicator";
 type Props = {
   children: React.ReactNode;
 };
+
+function SidebarNavSkeleton() {
+  return (
+    <div className="flex flex-col gap-1" aria-hidden="true">
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-10 w-full" />
+    </div>
+  );
+}
+
+function MobileNavSkeleton() {
+  return <Skeleton className="h-10 w-10 shrink-0" aria-hidden="true" />;
+}
 
 // Dashboard-only shell (sidebar + topbar + content).
 export default function DashboardShell({ children }: Props) {
@@ -29,10 +45,9 @@ export default function DashboardShell({ children }: Props) {
           <DaaDashboardRefreshIndicator />
         </div>
 
-        <Suspense fallback={null}>
+        <Suspense fallback={<SidebarNavSkeleton />}>
           <DaaSidebarNav />
         </Suspense>
-
       </aside>
 
       <div className="min-w-0 flex-1">
@@ -44,7 +59,7 @@ export default function DashboardShell({ children }: Props) {
 
         <header className="mb-6 flex items-center justify-between gap-3 lg:hidden">
           <div className="flex min-w-0 items-center gap-2">
-            <Suspense fallback={null}>
+            <Suspense fallback={<MobileNavSkeleton />}>
               <DaaMobileNav />
             </Suspense>
             <Link
