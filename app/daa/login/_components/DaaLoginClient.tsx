@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -739,30 +739,76 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 </div>
 
                 {emailLink.kind === "sent" ? (
-                  <div className="rounded-md border bg-muted/20 p-3 text-sm">
-                    <div className="font-medium">Check your inbox</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      If <span className="font-medium">{emailLink.email}</span> is registered, you'll receive a sign-in link within a minute. It expires in about 15 minutes.
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      Tip: look for an email with subject <span className="font-medium">Your DAA sign-in link</span>.
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {mailboxLinks.map((l) => (
+                  <Card className="border-muted/60 bg-muted/10">
+                    <CardHeader className="space-y-1 pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Mail className="h-4 w-4" />
+                        Check your email
+                      </CardTitle>
+                      <CardDescription>
+                        If <span className="font-medium">{emailLink.email}</span> is registered, we just sent a single-use sign-in link. It expires in about 15 minutes.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3">
+                      <ol className="ml-4 list-decimal space-y-1 text-xs text-muted-foreground">
+                        <li>
+                          Open the email titled <span className="font-medium">Your DAA sign-in link</span>.
+                        </li>
+                        <li>Click the sign-in button/link. This browser will refresh and you will be signed in automatically.</li>
+                        <li>If you don't see it, check spam/promotions. You can resend after the cooldown, or use a password instead.</li>
+                      </ol>
+
+                      {mailboxLinks.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {mailboxLinks.map((l) => (
+                            <Button
+                              key={l.href}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(l.href, "_blank", "noopener,noreferrer")}
+                            >
+                              Open {l.label}
+                            </Button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <Button
-                          key={l.href}
                           type="button"
-                          variant="outline"
+                          variant="secondary"
                           size="sm"
-                          onClick={() => window.open(l.href, "_blank", "noopener,noreferrer")}
+                          onClick={() => {
+                            setTab("password");
+                            setPasswordErrors({});
+                            setEmailLinkError(null);
+                          }}
                         >
-                          Open {l.label}
+                          Use password instead
                         </Button>
-                      ))}
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">Check your spam or promotions folder if you don't see it.</div>
-                    <div className="mt-2 text-xs text-muted-foreground">If it still doesn't arrive, allowlist the sender (add it to your contacts) and try resending.</div>
-                  </div>
+
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => {
+                            setEmailLinkError(null);
+                            setEmailLink({ kind: "idle" });
+                            try {
+                              window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
+                            } catch {
+                              // Ignore storage errors.
+                            }
+                            emailLinkEmailRef.current?.focus();
+                          }}
+                        >
+                          Use a different email
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ) : null}
 
                 {emailLinkError ? (
