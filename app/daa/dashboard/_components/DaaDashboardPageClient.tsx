@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -351,6 +351,38 @@ export default function DaaDashboardPageClient() {
   const [auth, setAuth] = useState<AuthModel>({ kind: "loading" });
   const [authRev, setAuthRev] = useState(0);
 
+  const authRefreshInFlightRef = useRef(false);
+  const lastAuthRefreshAtRef = useRef(0);
+
+  // Refresh session state when the user returns to the tab (avoid stale signed-in UI).
+  useEffect(() => {
+    function requestRefresh() {
+      const now = Date.now();
+      if (authRefreshInFlightRef.current) return;
+      if (now - lastAuthRefreshAtRef.current < 2500) return;
+
+      lastAuthRefreshAtRef.current = now;
+      authRefreshInFlightRef.current = true;
+      setAuthRev((x) => x + 1);
+    }
+
+    function onFocus() {
+      requestRefresh();
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") requestRefresh();
+    }
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
   const returnTo = useMemo(() => {
     if (typeof window === "undefined") return "/daa/dashboard";
     return `${window.location.pathname}${window.location.search}`;
@@ -360,6 +392,9 @@ export default function DaaDashboardPageClient() {
     let cancelled = false;
 
     async function load() {
+      authRefreshInFlightRef.current = true;
+      lastAuthRefreshAtRef.current = Date.now();
+
       try {
         const res = await fetch("/api/daa/auth/me", {
           method: "GET",
@@ -397,6 +432,8 @@ export default function DaaDashboardPageClient() {
       } catch (e) {
         if (cancelled) return;
         setAuth({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+      } finally {
+        authRefreshInFlightRef.current = false;
       }
     }
 
