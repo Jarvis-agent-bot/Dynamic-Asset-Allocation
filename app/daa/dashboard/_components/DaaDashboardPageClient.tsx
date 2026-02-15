@@ -172,7 +172,7 @@ function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
             ) : null}
             {tab !== "settings" ? (
               <Button asChild variant="outline" size="sm">
-                <Link href="/daa/dashboard?tab=settings">Settings</Link>
+                <Link href="/daa/dashboard/settings">Settings</Link>
               </Button>
             ) : null}
           </>

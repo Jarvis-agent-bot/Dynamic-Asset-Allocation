@@ -27,6 +27,12 @@ export function normalizeDaaReturnToV0(raw: unknown): string {
     const compat = getDaaDashboardCompatRedirect(u.pathname, u.search);
     if (compat) return `${compat}${u.hash || ""}`;
 
+    // Canonicalize `/daa/dashboard/settings` (and tolerate `/daa/dashboard/settings/`).
+    if (u.pathname === "/daa/dashboard/settings" || u.pathname === "/daa/dashboard/settings/") {
+      const qs = u.searchParams.toString();
+      return `/daa/dashboard/settings${qs ? `?${qs}` : ""}${u.hash || ""}`;
+    }
+
     // Canonicalize `/daa/dashboard` (and tolerate `/daa/dashboard/`).
     if (u.pathname === "/daa/dashboard" || u.pathname === "/daa/dashboard/") {
       const qs = u.searchParams.toString();

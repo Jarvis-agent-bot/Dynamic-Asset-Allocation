@@ -28,6 +28,8 @@ function useActiveTab(): Tab | null {
   const pathname = usePathname() || "";
   const searchParams = useSearchParams();
 
+  if (pathname === "/daa/dashboard/settings" || pathname === "/daa/dashboard/settings/") return "settings";
+
   const tab = normalizeTab(searchParams.get("tab"));
   const isOnDashboard = pathname === "/daa/dashboard" || pathname === "/daa/dashboard/";
 
@@ -40,7 +42,7 @@ function useNavItems(): NavItem[] {
       { key: "dashboard", href: "/daa/dashboard", label: "Dashboard", Icon: LayoutDashboard },
       { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard", Icon: Wand2 },
       { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds", Icon: BarChart3 },
-      { key: "settings", href: "/daa/dashboard?tab=settings", label: "Settings", Icon: Settings },
+      { key: "settings", href: "/daa/dashboard/settings", label: "Settings", Icon: Settings },
     ],
     []
   );
