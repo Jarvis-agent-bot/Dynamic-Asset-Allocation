@@ -66,3 +66,35 @@ Index(
     DaaRunAuditEvent.created_at,
     DaaRunAuditEvent.event_id,
 )
+
+
+class DaaAuthLoginToken(Base):
+    __tablename__ = "daa_auth_login_tokens"
+
+    token_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[str] = mapped_column(Text, nullable=False)
+    used_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class DaaAuthSession(Base):
+    __tablename__ = "daa_auth_sessions"
+
+    session_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[str] = mapped_column(Text, nullable=False)
+
+    revoked_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_seen_at: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+Index("idx_daa_auth_login_tokens_email_created_at", DaaAuthLoginToken.email, DaaAuthLoginToken.created_at)
+Index("idx_daa_auth_login_tokens_expires_at", DaaAuthLoginToken.expires_at)
+
+Index("idx_daa_auth_sessions_email_created_at", DaaAuthSession.email, DaaAuthSession.created_at)
+Index("idx_daa_auth_sessions_expires_at", DaaAuthSession.expires_at)

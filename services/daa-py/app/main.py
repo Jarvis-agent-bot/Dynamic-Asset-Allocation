@@ -4,10 +4,14 @@ from typing import Literal, Optional
 
 from fastapi import FastAPI, Query
 
+from app.auth_magiclink_v0 import router as auth_v0_router
 from app.store_v0 import router as store_v0_router
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="DAA Python Engine", version="0.1.0")
+
+# Auth API (v0): passwordless email magic-link + cookie session.
+app.include_router(auth_v0_router)
 
 # Store API (v0): runs + audit events + bundles.
 app.include_router(store_v0_router)
