@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
 import { withDaaSqliteDbV0 } from "../sqlite/daaSqliteDbV0";
+import { ensureDaaAuthSchemaPgV0, isDaaPgEnabledV0, withDaaPgClientV0 } from "../pg/daaPgV0";
 
 export type DaaAuthRoleV0 = "viewer" | "editor";
 export type DaaAuthAccountStatusV0 = "active" | "inactive";
@@ -163,6 +164,16 @@ function addDaysIso(iso: string, days: number): string {
   return d.toISOString();
 }
 
+function isPgUniqueViolationV0(e: any): boolean {
+  // pg error code 23505 = unique_violation.
+  return Boolean(e && typeof e === "object" && (e as any).code === "23505");
+}
+
+async function ensureAuthSchemaIfPgV0(): Promise<void> {
+  if (!isDaaPgEnabledV0()) return;
+  await ensureDaaAuthSchemaPgV0();
+}
+
 export async function createDaaAuthAccountV0(args: {
   username: string;
   password: string;
@@ -177,6 +188,24 @@ export async function createDaaAuthAccountV0(args: {
   const createdAt = ensureIsoOrNow(args.createdAt);
   const updatedAt = createdAt;
   const accountId = randomUUID();
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    try {
+      await withDaaPgClientV0(async ({ query }) => {
+        await query(
+          "INSERT INTO daa_auth_accounts (account_id, username, password_hash, roles_json, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [accountId, username, passwordHash, JSON.stringify(roles), "active", createdAt, updatedAt],
+        );
+      });
+    } catch (e: any) {
+      if (isPgUniqueViolationV0(e)) throw new Error("unique constraint violation");
+      throw e;
+    }
+
+    return { accountId, username, roles, status: "active", createdAt, updatedAt };
+  }
 
   return withDaaSqliteDbV0(async ({ db, markDirty }) => {
     const stmt = db.prepare(
@@ -194,6 +223,16 @@ export async function createDaaAuthAccountV0(args: {
 }
 
 export async function hasAnyDaaAuthAccountsV0(): Promise<boolean> {
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const n = await withDaaPgClientV0(async ({ query }) => {
+      const r = await query("SELECT 1 FROM daa_auth_accounts LIMIT 1");
+      return r.rowCount || 0;
+    });
+    return n > 0;
+  }
+
   return withDaaSqliteDbV0(async ({ db }) => {
     const stmt = db.prepare("SELECT 1 FROM daa_auth_accounts LIMIT 1");
     try {
@@ -220,6 +259,43 @@ export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
   const createdAt = ensureIsoOrNow(args.createdAt);
   const updatedAt = createdAt;
   const accountId = randomUUID();
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    try {
+      await withDaaPgClientV0(async ({ query }) => {
+        await query("BEGIN");
+        try {
+          // Prevent races when two bootstraps are attempted concurrently.
+          await query("LOCK TABLE daa_auth_accounts IN EXCLUSIVE MODE");
+
+          const r0 = await query("SELECT COUNT(1) AS n FROM daa_auth_accounts");
+          const n = Number(r0.rows?.[0]?.n ?? 0) || 0;
+          if (n > 0) throw new Error("bootstrap not allowed: accounts already exist");
+
+          await query(
+            "INSERT INTO daa_auth_accounts (account_id, username, password_hash, roles_json, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            [accountId, username, passwordHash, JSON.stringify(roles), "active", createdAt, updatedAt],
+          );
+
+          await query("COMMIT");
+        } catch (e) {
+          try {
+            await query("ROLLBACK");
+          } catch {
+            // ignore
+          }
+          throw e;
+        }
+      });
+    } catch (e: any) {
+      if (isPgUniqueViolationV0(e)) throw new Error("unique constraint violation");
+      throw e;
+    }
+
+    return { accountId, username, roles, status: "active", createdAt, updatedAt };
+  }
 
   return withDaaSqliteDbV0(async ({ db, markDirty }) => {
     db.exec("BEGIN");
@@ -262,6 +338,30 @@ export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
 export async function getDaaAuthAccountByUsernameV0(usernameRaw: unknown): Promise<DaaAuthAccountV0 | null> {
   const username = normalizeEmailStrict(usernameRaw);
 
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const row = await withDaaPgClientV0(async ({ query }) => {
+      const r = await query(
+        "SELECT account_id, username, roles_json, status, created_at, updated_at FROM daa_auth_accounts WHERE username = $1",
+        [username],
+      );
+      return (r.rows && r.rows[0]) || null;
+    });
+
+    if (!row) return null;
+
+    const roles = uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json));
+    return {
+      accountId: String((row as any).account_id ?? ""),
+      username: String((row as any).username ?? ""),
+      roles,
+      status: normalizeStatus((row as any).status),
+      createdAt: String((row as any).created_at ?? ""),
+      updatedAt: String((row as any).updated_at ?? ""),
+    };
+  }
+
   return withDaaSqliteDbV0(async ({ db }) => {
     const stmt = db.prepare(
       "SELECT account_id, username, roles_json, status, created_at, updated_at FROM daa_auth_accounts WHERE username = ?",
@@ -292,6 +392,33 @@ export async function authenticateDaaAuthAccountV0(args: {
   const username = normalizeEmailLoose(args.username);
   const password = typeof args.password === "string" ? args.password : "";
   if (!username || !password) return null;
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const row = await withDaaPgClientV0(async ({ query }) => {
+      const r = await query(
+        "SELECT account_id, username, password_hash, roles_json, status, created_at, updated_at FROM daa_auth_accounts WHERE username = $1",
+        [username],
+      );
+      return (r.rows && r.rows[0]) || null;
+    });
+
+    if (!row) return null;
+    if (!verifyPasswordV0(password, (row as any).password_hash)) return null;
+
+    const status = normalizeStatus((row as any).status);
+    if (status !== "active") return null;
+
+    return {
+      accountId: String((row as any).account_id ?? ""),
+      username: String((row as any).username ?? ""),
+      roles: uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json)),
+      status,
+      createdAt: String((row as any).created_at ?? ""),
+      updatedAt: String((row as any).updated_at ?? ""),
+    };
+  }
 
   return withDaaSqliteDbV0(async ({ db }) => {
     const stmt = db.prepare(
@@ -352,17 +479,28 @@ export async function createDaaAuthSessionV0(args: {
     ip: ip || null,
   };
 
-  await withDaaSqliteDbV0(async ({ db, markDirty }) => {
-    const stmt = db.prepare(
-      "INSERT INTO daa_auth_sessions (session_id, account_id, token_sha256, created_at, expires_at, revoked_at, user_agent, ip, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL)",
-    );
-    try {
-      stmt.run([sessionId, accountId, tokenSha256, createdAt, expiresAt, session.userAgent, session.ip]);
-    } finally {
-      stmt.free();
-    }
-    markDirty();
-  });
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    await withDaaPgClientV0(async ({ query }) => {
+      await query(
+        "INSERT INTO daa_auth_sessions (session_id, account_id, token_sha256, created_at, expires_at, revoked_at, user_agent, ip, last_seen_at) VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, NULL)",
+        [sessionId, accountId, tokenSha256, createdAt, expiresAt, session.userAgent, session.ip],
+      );
+    });
+  } else {
+    await withDaaSqliteDbV0(async ({ db, markDirty }) => {
+      const stmt = db.prepare(
+        "INSERT INTO daa_auth_sessions (session_id, account_id, token_sha256, created_at, expires_at, revoked_at, user_agent, ip, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL)",
+      );
+      try {
+        stmt.run([sessionId, accountId, tokenSha256, createdAt, expiresAt, session.userAgent, session.ip]);
+      } finally {
+        stmt.free();
+      }
+      markDirty();
+    });
+  }
 
   return { session, token };
 }
@@ -378,6 +516,64 @@ export async function getDaaAuthAccountBySessionTokenV0(args: {
   const tokenSha256 = sha256Hex(token);
   const now = ensureIsoOrNow(args.now);
   const touch = args.touch !== false;
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    return withDaaPgClientV0(async ({ query }) => {
+      const r = await query(
+        "SELECT " +
+          " s.session_id, s.account_id, s.created_at, s.expires_at, s.revoked_at, s.user_agent, s.ip, s.last_seen_at, " +
+          " a.username, a.roles_json, a.status, a.created_at AS a_created_at, a.updated_at AS a_updated_at " +
+          "FROM daa_auth_sessions s " +
+          "JOIN daa_auth_accounts a ON a.account_id = s.account_id " +
+          "WHERE s.token_sha256 = $1 LIMIT 1",
+        [tokenSha256],
+      );
+
+      const row = (r.rows && r.rows[0]) || null;
+      if (!row) return null;
+
+      const revokedAt = typeof (row as any).revoked_at === "string" && (row as any).revoked_at.trim() ? String((row as any).revoked_at) : null;
+      if (revokedAt) return null;
+
+      const expiresAt = String((row as any).expires_at ?? "");
+      if (!expiresAt) return null;
+      if (Date.parse(expiresAt) <= Date.parse(now)) return null;
+
+      const status = normalizeStatus((row as any).status);
+      if (status !== "active") return null;
+
+      const account: DaaAuthAccountV0 = {
+        accountId: String((row as any).account_id ?? ""),
+        username: String((row as any).username ?? ""),
+        roles: uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json)),
+        status,
+        createdAt: String((row as any).a_created_at ?? ""),
+        updatedAt: String((row as any).a_updated_at ?? ""),
+      };
+
+      const session: DaaAuthSessionV0 = {
+        sessionId: String((row as any).session_id ?? ""),
+        accountId: String((row as any).account_id ?? ""),
+        createdAt: String((row as any).created_at ?? ""),
+        expiresAt,
+        revokedAt,
+        lastSeenAt:
+          typeof (row as any).last_seen_at === "string" && (row as any).last_seen_at.trim() ? String((row as any).last_seen_at) : null,
+        userAgent:
+          typeof (row as any).user_agent === "string" && (row as any).user_agent.trim() ? String((row as any).user_agent) : null,
+        ip: typeof (row as any).ip === "string" && (row as any).ip.trim() ? String((row as any).ip) : null,
+      };
+
+      if (touch) {
+        await query("UPDATE daa_auth_sessions SET last_seen_at = $1 WHERE session_id = $2", [now, session.sessionId]);
+        session.lastSeenAt = now;
+      }
+
+      return { account, session };
+    });
+  }
 
   return withDaaSqliteDbV0(async ({ db, markDirty }) => {
     const stmt = db.prepare(
@@ -450,15 +646,23 @@ export async function revokeDaaAuthSessionV0(args: { sessionId: string; revokedA
 
   const revokedAt = ensureIsoOrNow(args.revokedAt);
 
-  await withDaaSqliteDbV0(async ({ db, markDirty }) => {
-    const stmt = db.prepare("UPDATE daa_auth_sessions SET revoked_at = ? WHERE session_id = ?");
-    try {
-      stmt.run([revokedAt, sessionId]);
-    } finally {
-      stmt.free();
-    }
-    markDirty();
-  });
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    await withDaaPgClientV0(async ({ query }) => {
+      await query("UPDATE daa_auth_sessions SET revoked_at = $1 WHERE session_id = $2", [revokedAt, sessionId]);
+    });
+  } else {
+    await withDaaSqliteDbV0(async ({ db, markDirty }) => {
+      const stmt = db.prepare("UPDATE daa_auth_sessions SET revoked_at = ? WHERE session_id = ?");
+      try {
+        stmt.run([revokedAt, sessionId]);
+      } finally {
+        stmt.free();
+      }
+      markDirty();
+    });
+  }
 
   return { ok: true };
 }
