@@ -84,6 +84,41 @@ function formatSeconds(s: number): string {
 }
 
 
+function isBrowserOnline(): boolean {
+  // navigator.onLine is imperfect, but it is a useful hint for UX.
+  if (typeof navigator === "undefined") return true;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const n: any = navigator;
+  return typeof n.onLine === "boolean" ? Boolean(n.onLine) : true;
+}
+
+function isLikelyFetchNetworkFailure(message: string): boolean {
+  const m = (message || "").toLowerCase();
+  // Cross-browser fetch failures:
+  // - Chrome: "Failed to fetch"
+  // - Safari: "Load failed"
+  // - Firefox: "NetworkError when attempting to fetch resource."
+  if (m.includes("failed to fetch")) return true;
+  if (m.includes("networkerror")) return true;
+  if (m.includes("load failed")) return true;
+  if (m.includes("connection") && m.includes("refused")) return true;
+  return false;
+}
+
+function formatNetworkFailureMessage(e: unknown, action: string): string {
+  if (!isBrowserOnline()) {
+    return `You appear to be offline. Connect to the internet, then try again to ${action}.`;
+  }
+
+  const msg = e instanceof Error ? e.message : String(e);
+  if (isLikelyFetchNetworkFailure(msg)) {
+    return `Network error: could not reach the server. Please check your connection (Wi-Fi/VPN/captive portal) and try again to ${action}.`;
+  }
+
+  return msg || `Something went wrong. Please try again to ${action}.`;
+}
+
+
 type MailboxLink = { label: string; href: string };
 
 function buildMailboxLinks(email: string): MailboxLink[] {
@@ -181,6 +216,19 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   }, [notice]);
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
+
+  const [online, setOnline] = useState(() => isBrowserOnline());
+
+  useEffect(() => {
+    const on = () => setOnline(isBrowserOnline());
+    window.addEventListener("online", on);
+    window.addEventListener("offline", on);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", on);
+    };
+  }, []);
+
 
   const emailLinkErrorCode =
     error === "email-link-invalid" || error === "email-link-expired" || error === "email-link-used" ? error : "";
@@ -357,6 +405,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
     async function check() {
       try {
+        if (!isBrowserOnline()) {
+          setSession({ kind: "error", message: "You appear to be offline. Connect to the internet, then reload to verify your session." });
+          return;
+        }
+
         const res = await fetch("/api/daa/auth/me", {
           method: "GET",
           headers: { accept: "application/json" },
@@ -390,7 +443,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         setSession({ kind: "signedIn", me: payload });
       } catch (e) {
         if (cancelled) return;
-        setSession({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+        setSession({ kind: "error", message: formatNetworkFailureMessage(e, "check your session") });
       }
     }
 
@@ -440,6 +493,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
       setTouched((prev) => ({ ...prev, password: true }));
       passwordRef.current?.focus();
+      return;
+    }
+
+    if (!isBrowserOnline()) {
+      setPasswordErrors({ form: "You appear to be offline. Connect to the internet, then try signing in again." });
       return;
     }
 
@@ -496,7 +554,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       // Cookie is set by the server; redirect into the console.
       window.location.href = appendNoticeParamV0(safeReturnTo, "signed_in");
     } catch (e) {
-      setPasswordErrors({ form: e instanceof Error ? e.message : String(e) });
+      setPasswordErrors({ form: formatNetworkFailureMessage(e, "sign in") });
     } finally {
       setPasswordBusy(false);
     }
@@ -526,6 +584,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       window.localStorage.setItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0, email);
     } catch {
       // Ignore storage errors.
+    }
+
+    if (!isBrowserOnline()) {
+      setEmailLinkError("You appear to be offline. Connect to the internet, then try again.");
+      setEmailLink({ kind: "idle" });
+      return;
     }
 
     emailLinkRequestInFlightRef.current = true;
@@ -568,7 +632,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         // Ignore storage errors.
       }
     } catch (e) {
-      setEmailLinkError(e instanceof Error ? e.message : String(e));
+      setEmailLinkError(formatNetworkFailureMessage(e, "send a sign-in link"));
       setEmailLink({ kind: "idle" });
     } finally {
       emailLinkRequestInFlightRef.current = false;
@@ -580,6 +644,23 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
     return (
       <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
+      {offline ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <div>
+            <AlertTitle>You are offline.</AlertTitle>
+            <AlertDescription>
+              <div>Connect to the internet, then retry. Sign-in requests are disabled while offline.</div>
+              <div className="mt-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}>
+                  Reload
+                </Button>
+              </div>
+            </AlertDescription>
+          </div>
+        </Alert>
+      ) : null}
+
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">You are already signed in</CardTitle>
@@ -605,8 +686,27 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     ? "Enter a valid email address (for example, you@example.com)."
     : "Enter your email address (for example, you@example.com).";
 
+  const offline = !online;
+
   return (
     <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
+      {offline ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <div>
+            <AlertTitle>You are offline.</AlertTitle>
+            <AlertDescription>
+              <div>Connect to the internet, then retry. Sign-in requests are disabled while offline.</div>
+              <div className="mt-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}>
+                  Reload
+                </Button>
+              </div>
+            </AlertDescription>
+          </div>
+        </Alert>
+      ) : null}
+
       {emailLinkErrorCode ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -625,7 +725,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={emailDisabled}
+                  disabled={emailDisabled || offline}
                   onClick={() => {
                     setTab("email");
                     setEmailLinkError(null);
@@ -747,7 +847,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       }}
                       autoComplete="email"
                       placeholder="you@example.com"
-                      disabled={emailDisabled}
+                      disabled={emailDisabled || offline}
                       onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
                       aria-invalid={emailInvalidEmailLink || undefined}
                       aria-describedby={emailLinkEmailHelpId}
@@ -1033,7 +1133,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={passwordSubmitDisabled}>
+                <Button type="submit" className="w-full" disabled={passwordSubmitDisabled || offline}>
                   {checkingSession ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
