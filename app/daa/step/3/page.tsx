@@ -1,11 +1,6 @@
-import { DeepLinkScaffold } from "../_components/DeepLinkScaffold";
-import Step3MoneyManagementPage from "../_pages/Step3MoneyManagementPage";
+import { redirect } from "next/navigation";
 
-export default function Step3Page() {
-  // Deep-link page: render the actual Step UI (with the wizard summary + nav) instead of a placeholder.
-  return (
-    <DeepLinkScaffold stepId={3}>
-      <Step3MoneyManagementPage />
-    </DeepLinkScaffold>
-  );
+export default function LegacyDaaStep3() {
+  // Legacy entry: canonical step experience lives under /daa/dashboard.
+  redirect("/daa/dashboard?tab=wizard&step=3");
 }

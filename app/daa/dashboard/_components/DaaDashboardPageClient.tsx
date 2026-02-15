@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import Step2MarketEventsPage from "../../step/_pages/Step2MarketEventsPage";
@@ -108,30 +109,29 @@ function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          <p className="text-sm text-muted-foreground">{desc}</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {tab !== "dashboard" ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard">Dashboard</Link>
-            </Button>
-          ) : null}
-          {tab !== "wizard" ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard?tab=wizard&step=1">Open Wizard</Link>
-            </Button>
-          ) : null}
-          {tab !== "market-funds" ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
-            </Button>
-          ) : null}
-        </div>
-      </div>
+      <PageHeader
+        title={title}
+        description={desc}
+        actions={
+          <>
+            {tab !== "dashboard" ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/daa/dashboard">Dashboard</Link>
+              </Button>
+            ) : null}
+            {tab !== "wizard" ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/daa/dashboard?tab=wizard&step=1">Open Wizard</Link>
+              </Button>
+            ) : null}
+            {tab !== "market-funds" ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
+              </Button>
+            ) : null}
+          </>
+        }
+      />
     </div>
   );
 }

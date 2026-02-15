@@ -1,10 +1,6 @@
-import { DeepLinkScaffold } from "../_components/DeepLinkScaffold";
-import Step7TagsPage from "../_pages/Step7TagsPage";
+import { redirect } from "next/navigation";
 
-export default function Step7Page() {
-  return (
-    <DeepLinkScaffold stepId={7}>
-      <Step7TagsPage />
-    </DeepLinkScaffold>
-  );
+export default function LegacyDaaStep7() {
+  // Legacy entry: canonical step experience lives under /daa/dashboard.
+  redirect("/daa/dashboard?tab=wizard&step=7");
 }
