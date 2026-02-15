@@ -21,6 +21,13 @@ describe("getDaaLoginAuthedRedirect", () => {
       hasSession: true,
     });
     expect(u2).toBe("/daa/dashboard?tab=market-funds");
+
+    const u3 = getDaaLoginAuthedRedirect({
+      pathname: "/daa/login",
+      search: "?returnTo=%2Fdaa%2Fdashboard%2Fsettings%3Fsection%3Dsecurity%23x",
+      hasSession: true,
+    });
+    expect(u3).toBe("/daa/dashboard/settings?section=security#x");
   });
 
   it("ignores non-DAA returnTo values", () => {

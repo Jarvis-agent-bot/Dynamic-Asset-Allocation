@@ -1,4 +1,4 @@
-import { getDaaDashboardCompatRedirect } from "./dashboardCompat";
+import { normalizeDaaReturnToV0 } from "./urlV0";
 
 function parseSearchParams(search: string): URLSearchParams {
   return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -6,12 +6,6 @@ function parseSearchParams(search: string): URLSearchParams {
 
 function isLoginPath(pathname: string): boolean {
   return pathname === "/daa/login" || pathname === "/daa/login/" || pathname.startsWith("/daa/login/");
-}
-
-function canonicalizeDashboardPath(pathname: string, search: string): string | null {
-  if (pathname !== "/daa/dashboard" && pathname !== "/daa/dashboard/") return null;
-  const qs = parseSearchParams(search).toString();
-  return `/daa/dashboard${qs ? `?${qs}` : ""}`;
 }
 
 /**
@@ -28,21 +22,6 @@ export function getDaaLoginAuthedRedirect(args: {
   if (!isLoginPath(pathname)) return null;
 
   const params = parseSearchParams(search);
-  const returnTo = String(params.get("returnTo") || "").trim();
-
-  // Avoid open redirects: only allow same-origin, DAA-scoped paths.
-  if (returnTo.startsWith("/daa") && !returnTo.startsWith("/daa/login")) {
-    try {
-      const u = new URL(returnTo, "http://local");
-      const compat = getDaaDashboardCompatRedirect(u.pathname, u.search);
-      if (compat) return compat;
-
-      const canonical = canonicalizeDashboardPath(u.pathname, u.search);
-      if (canonical) return canonical;
-    } catch {
-      // Ignore parse errors; fall back to dashboard.
-    }
-  }
-
-  return "/daa/dashboard";
+  const returnTo = params.get("returnTo");
+  return normalizeDaaReturnToV0(returnTo);
 }
