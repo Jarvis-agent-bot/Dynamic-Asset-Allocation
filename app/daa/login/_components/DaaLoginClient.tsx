@@ -141,6 +141,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const formErrorId = useId();
 
   const emailLinkEmailRef = useRef<HTMLInputElement | null>(null);
+  const passwordEmailRef = useRef<HTMLInputElement | null>(null);
+
+  // Focus the first relevant input after the session check completes and when switching tabs.
+  // (React's autoFocus only runs on mount, so this keeps keyboard flow predictable.)
+  const passwordRef = useRef<HTMLInputElement | null>(null);
 
   const safeReturnTo = useMemo(() => normalizeReturnTo(returnTo), [returnTo]);
 
@@ -216,6 +221,35 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const emailDisabled = emailLink.kind === "sending" || checkingSession;
 
   const passwordSubmitDisabled = passwordDisabled || !passwordFormValid;
+
+  useEffect(() => {
+    if (checkingSession) return;
+
+    // Don't steal focus if the user is already interacting with a control.
+    const ae = typeof document === "undefined" ? null : document.activeElement;
+    if (
+      ae &&
+      ae !== document.body &&
+      (ae instanceof HTMLInputElement || ae instanceof HTMLTextAreaElement || ae instanceof HTMLButtonElement || ae instanceof HTMLSelectElement)
+    ) {
+      return;
+    }
+
+    const target =
+      tab === "email"
+        ? emailLinkEmailRef.current
+        : normalizedEmail
+          ? passwordRef.current || passwordEmailRef.current
+          : passwordEmailRef.current;
+    if (!target) return;
+
+    target.focus();
+    try {
+      if (target.value) target.setSelectionRange(0, target.value.length);
+    } catch {
+      // Ignore selection errors (e.g. unsupported input types).
+    }
+  }, [checkingSession, normalizedEmail, tab]);
 
   const resendRemainingSeconds = useMemo(() => {
     if (emailLink.kind !== "sent") return 0;
@@ -626,7 +660,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     id={emailLinkEmailId}
                     ref={emailLinkEmailRef}
                     type="email"
+                    name="email"
                     inputMode="email"
+                    enterKeyHint="send"
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
@@ -649,22 +685,22 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     disabled={emailDisabled}
                     onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
                     aria-invalid={emailInvalidEmailLink || undefined}
-                    aria-describedby={emailInvalidEmailLink ? emailLinkEmailHelpId : undefined}
+                    aria-describedby={emailLinkEmailHelpId}
                   />
-                  {emailInvalidEmailLink ? (
-                    <div id={emailLinkEmailHelpId} className="text-xs text-destructive">
-                      {emailHelpText}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">We'll send you a single-use sign-in link.</div>
-                  )}
+                  <div
+                    id={emailLinkEmailHelpId}
+                    className={emailInvalidEmailLink ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+                    role={emailInvalidEmailLink ? "alert" : undefined}
+                  >
+                    {emailInvalidEmailLink ? emailHelpText : "We'll send you a single-use sign-in link."}
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Button
                     type="submit"
                     className="w-full sm:w-auto"
-                    disabled={emailDisabled || !emailLinkFormValid || emailLink.kind === "sent"}
+                    disabled={emailDisabled || !emailLinkFormValid || (emailLink.kind === "sent" && resendRemainingSeconds > 0)}
                   >
                     {emailLink.kind === "sending" ? (
                       <span className="inline-flex items-center gap-2">
@@ -672,7 +708,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                         Sending...
                       </span>
                     ) : emailLink.kind === "sent" ? (
-                      "Link sent"
+                      resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend sign-in link"
                     ) : (
                       "Send sign-in link"
                     )}
@@ -765,8 +801,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   </label>
                   <Input
                     id={passwordEmailId}
+                    ref={passwordEmailRef}
                     type="email"
+                    name="email"
                     inputMode="email"
+                    enterKeyHint="next"
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
@@ -781,15 +820,15 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     disabled={passwordDisabled}
                     onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
                     aria-invalid={Boolean(mergedPasswordErrors.email) || undefined}
-                    aria-describedby={mergedPasswordErrors.email ? passwordEmailHelpId : undefined}
+                    aria-describedby={passwordEmailHelpId}
                   />
-                  {mergedPasswordErrors.email ? (
-                    <div id={passwordEmailHelpId} className="text-xs text-destructive">
-                      {mergedPasswordErrors.email}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">Your username is your email address.</div>
-                  )}
+                  <div
+                    id={passwordEmailHelpId}
+                    className={mergedPasswordErrors.email ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+                    role={mergedPasswordErrors.email ? "alert" : undefined}
+                  >
+                    {mergedPasswordErrors.email ? mergedPasswordErrors.email : "Your username is your email address."}
+                  </div>
                 </div>
 
                 <div className="grid gap-2">
@@ -798,7 +837,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   </label>
                   <Input
                     id={passwordId}
+                    ref={passwordRef}
                     type="password"
+                    name="password"
+                    enterKeyHint="go"
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -809,15 +851,15 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     disabled={passwordDisabled}
                     onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
                     aria-invalid={Boolean(mergedPasswordErrors.password) || undefined}
-                    aria-describedby={mergedPasswordErrors.password ? passwordHelpId : undefined}
+                    aria-describedby={passwordHelpId}
                   />
-                  {mergedPasswordErrors.password ? (
-                    <div id={passwordHelpId} className="text-xs text-destructive">
-                      {mergedPasswordErrors.password}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">Passwords are case-sensitive.</div>
-                  )}
+                  <div
+                    id={passwordHelpId}
+                    className={mergedPasswordErrors.password ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+                    role={mergedPasswordErrors.password ? "alert" : undefined}
+                  >
+                    {mergedPasswordErrors.password ? mergedPasswordErrors.password : "Passwords are case-sensitive."}
+                  </div>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={passwordSubmitDisabled}>
