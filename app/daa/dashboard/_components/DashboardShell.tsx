@@ -5,6 +5,8 @@ import type React from "react";
 import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
 
+import DaaDashboardRefreshIndicator from "./DaaDashboardRefreshIndicator";
+
 type Props = {
   children: React.ReactNode;
 };
@@ -23,6 +25,7 @@ export default function DashboardShell({ children }: Props) {
             Dynamic Asset Allocation
           </Link>
           <div className="text-sm text-muted-foreground">Console — dashboard-first</div>
+          <DaaDashboardRefreshIndicator />
         </div>
 
         <Suspense fallback={null}>
@@ -49,7 +52,10 @@ export default function DashboardShell({ children }: Props) {
             </Link>
           </div>
 
-          <DaaUserMenuDialog />
+          <div className="flex items-center gap-1">
+            <DaaDashboardRefreshIndicator compact />
+            <DaaUserMenuDialog />
+          </div>
         </header>
 
         {children}
