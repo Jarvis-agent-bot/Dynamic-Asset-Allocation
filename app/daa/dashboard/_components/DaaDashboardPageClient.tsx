@@ -37,12 +37,14 @@ import DaaDashboardOverviewCards from "../_components/DaaDashboardOverviewCards"
 import DaaDashboardRunChecklist from "../_components/DaaDashboardRunChecklist";
 
 import DaaMarketFundsTab from "../_tabs/DaaMarketFundsTab";
+import DaaSettingsTab from "../_tabs/DaaSettingsTab";
 
-type Tab = "dashboard" | "wizard" | "market-funds";
+type Tab = "dashboard" | "wizard" | "market-funds" | "settings";
 
 function normalizeTab(raw: string | null): Tab {
   if (raw === "wizard") return "wizard";
   if (raw === "market-funds") return "market-funds";
+  if (raw === "settings") return "settings";
   return "dashboard";
 }
 
@@ -95,7 +97,7 @@ type AuthModel =
   | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
 
 function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
-  const title = tab === "wizard" ? "Wizard" : tab === "market-funds" ? "Market/Funds" : "Dashboard";
+  const title = tab === "wizard" ? "Wizard" : tab === "market-funds" ? "Market/Funds" : tab === "settings" ? "Settings" : "Dashboard";
 
   const desc =
     tab === "wizard" ? (
@@ -107,6 +109,10 @@ function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
       <>
         Legacy market/funds tools, now hosted under <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> to avoid fragmented
         deep-links.
+      </>
+    ) : tab === "settings" ? (
+      <>
+        Account and session details for DAA. Canonical entry remains <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>.
       </>
     ) : (
       <>
@@ -162,6 +168,11 @@ function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
             {tab !== "market-funds" ? (
               <Button asChild variant="outline" size="sm">
                 <Link href="/daa/dashboard?tab=market-funds">Market/Funds</Link>
+              </Button>
+            ) : null}
+            {tab !== "settings" ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/daa/dashboard?tab=settings">Settings</Link>
               </Button>
             ) : null}
           </>
@@ -430,6 +441,8 @@ export default function DaaDashboardPageClient() {
       <DaaWizard initialStepId={stepId} />
     ) : tab === "market-funds" ? (
       <DaaMarketFundsTab />
+    ) : tab === "settings" ? (
+      <DaaSettingsTab me={auth.me} returnTo={returnTo} />
     ) : (
       <DashboardMain />
     );

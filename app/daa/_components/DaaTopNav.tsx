@@ -2,14 +2,14 @@
 
 import type { ComponentType } from "react";
 
-import { BarChart3, LayoutDashboard, Wand2 } from "lucide-react";
+import { BarChart3, LayoutDashboard, Settings, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type Tab = "dashboard" | "wizard" | "market-funds";
+type Tab = "dashboard" | "wizard" | "market-funds" | "settings";
 
 type IconType = ComponentType<{ className?: string }>;
 
@@ -18,6 +18,7 @@ type NavItem = { key: Tab; href: string; label: string; Icon: IconType };
 function normalizeTab(raw: string | null): Tab {
   if (raw === "wizard") return "wizard";
   if (raw === "market-funds") return "market-funds";
+  if (raw === "settings") return "settings";
   return "dashboard";
 }
 
@@ -35,6 +36,7 @@ export default function DaaTopNav() {
     { key: "dashboard", href: "/daa/dashboard", label: "Dashboard", Icon: LayoutDashboard },
     { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard", Icon: Wand2 },
     { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds", Icon: BarChart3 },
+    { key: "settings", href: "/daa/dashboard?tab=settings", label: "Settings", Icon: Settings },
   ];
 
   return (
