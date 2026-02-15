@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, Circle, Copy, RefreshCw } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -305,6 +306,35 @@ export default function DaaDashboardOverviewCards() {
     ].join("\n");
   }, [deployEnv]);
 
+  const deployBootstrapCopyAllText = useMemo(() => {
+    return [
+      "# Deploy bootstrap (DAA)",
+      "",
+      deployBootstrapEnvVarsText,
+      "",
+      deployBootstrapEnvExportsText,
+      "",
+      "# Quick troubleshooting",
+      "- Store not reachable: ensure DAA_SQLITE_PATH points to a writable sqlite file on the server (and the directory exists).",
+      "- No accounts yet: set DAA_AUTH_BOOTSTRAP_TOKEN and create the first admin via /api/daa/auth/bootstrap (or the dashboard setup).",
+      "- Build SHA missing: set NEXT_PUBLIC_BUILD_SHA at build/deploy time so /api/daa/deploy-status reports it.",
+      "",
+      "# Docs",
+      "- Deploy guide: https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/deploy/README.md",
+      "- Quickstart: https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/QUICKSTART.md",
+      "- Docs: https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/README.md",
+    ].join("\n");
+  }, [deployBootstrapEnvExportsText, deployBootstrapEnvVarsText]);
+
+  async function copyDeployBootstrapAll() {
+    try {
+      await copyTextToClipboard(deployBootstrapCopyAllText);
+      toast.success("Copied deploy bootstrap bundle.");
+    } catch (e) {
+      toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   async function copyBuildSha() {
     if (!sha) {
       toast.error("No build SHA available.");
@@ -457,82 +487,112 @@ export default function DaaDashboardOverviewCards() {
                   </div>
                 </TooltipProvider>
               ) : (
-                <div className="rounded-md border border-dashed border-muted-foreground/30 p-2">
-                  <div className="text-xs font-medium text-foreground">Deploy bootstrap</div>
-                  <div className="mt-1 space-y-2">
-                    {deployPrereqs.map((it) => (
-                      <ChecklistRow key={it.id} ok={it.ok} label={it.label} detail={it.detail} />
-                    ))}
-                  </div>
+                <Alert className="p-3">
+                  <AlertTitle className="flex items-center justify-between gap-2 text-xs">
+                    <span>Deploy bootstrap</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void copyDeployBootstrapAll()}>
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy all
+                    </Button>
+                  </AlertTitle>
+                  <AlertDescription className="text-xs">
+                    <div className="text-muted-foreground">
+                      Build SHA is not reported yet. Use the snippets below to bootstrap a fresh deploy, then retry.
+                    </div>
 
-                  <div className="mt-3 rounded-md border bg-muted/20 p-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-medium text-foreground">Env vars template</div>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-7 w-7"
-                        onClick={() => void copyDeployBootstrapEnvVars()}
-                        aria-label="Copy env vars template"
-                        title="Copy env vars template"
-                      >
-                        <Copy className="h-4 w-4" />
+                    <div className="mt-2 space-y-2">
+                      {deployPrereqs.map((it) => (
+                        <ChecklistRow key={it.id} ok={it.ok} label={it.label} detail={it.detail} />
+                      ))}
+                    </div>
+
+                    <div className="mt-3 rounded-md border bg-muted/20 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-medium text-foreground">Env vars template</div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7"
+                          onClick={() => void copyDeployBootstrapEnvVars()}
+                          aria-label="Copy env vars template"
+                          title="Copy env vars template"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{deployBootstrapEnvVarsText}</pre>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Replace <code>...</code> and <code>YOUR_DOMAIN</code> before using.
+                      </div>
+                    </div>
+
+                    <div className="mt-2 rounded-md border bg-muted/20 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-medium text-foreground">Shell export snippet</div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7"
+                          onClick={() => void copyDeployBootstrapEnvExports()}
+                          aria-label="Copy env export snippet"
+                          title="Copy env export snippet"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{deployBootstrapEnvExportsText}</pre>
+                      <div className="mt-1 text-xs text-muted-foreground">Use this for quick local testing (bash/zsh).</div>
+                    </div>
+
+                    <details className="mt-3 rounded-md border bg-muted/20 p-2">
+                      <summary className="cursor-pointer text-xs font-medium text-foreground">Quick troubleshooting</summary>
+                      <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                        <li>
+                          Store errors: ensure <code>DAA_SQLITE_PATH</code> exists on the server and is writable by the app process.
+                        </li>
+                        <li>
+                          No accounts yet: set <code>DAA_AUTH_BOOTSTRAP_TOKEN</code>, then create the first admin via the dashboard (Setup required) or
+                          <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/api/daa/auth/bootstrap</code>.
+                        </li>
+                        <li>
+                          Build SHA missing: set <code>NEXT_PUBLIC_BUILD_SHA</code> during deploy so <code>/api/daa/deploy-status</code> can report it.
+                        </li>
+                      </ul>
+                    </details>
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <a
+                          href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/deploy/README.md"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Deploy guide
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <a
+                          href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/QUICKSTART.md"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Quickstart
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <a
+                          href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/README.md"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Docs
+                        </a>
                       </Button>
                     </div>
-                    <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{deployBootstrapEnvVarsText}</pre>
-                    <div className="mt-1 text-xs text-muted-foreground">Replace <code>...</code> and <code>YOUR_DOMAIN</code> before using.</div>
-                  </div>
-
-                  <div className="mt-2 rounded-md border bg-muted/20 p-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-medium text-foreground">Shell export snippet</div>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-7 w-7"
-                        onClick={() => void copyDeployBootstrapEnvExports()}
-                        aria-label="Copy env export snippet"
-                        title="Copy env export snippet"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{deployBootstrapEnvExportsText}</pre>
-                    <div className="mt-1 text-xs text-muted-foreground">Use this for quick local testing (bash/zsh).</div>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button asChild size="sm" variant="outline">
-                      <a
-                        href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/deploy/README.md"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Deploy guide
-                      </a>
-                    </Button>
-                    <Button asChild size="sm" variant="outline">
-                      <a
-                        href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/QUICKSTART.md"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Quickstart
-                      </a>
-                    </Button>
-                    <Button asChild size="sm" variant="outline">
-                      <a
-                        href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/README.md"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Docs
-                      </a>
-                    </Button>
-                  </div>
-                </div>
+                  </AlertDescription>
+                </Alert>
               )}
               <div className="text-xs text-muted-foreground">Last updated: {fmtTime(deployResp.serverTime)}</div>
             </>
