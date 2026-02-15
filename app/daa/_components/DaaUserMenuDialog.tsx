@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { ChevronDown, LogOut, User } from "lucide-react";
+import { ChevronDown, Copy, LogOut, Mail, User } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+
+import { copyTextToClipboard } from "../copyToClipboard";
 
 type MeResponse =
   | {
@@ -135,6 +138,15 @@ export default function DaaUserMenuDialog() {
     }
   }
 
+  async function handleCopy(label: string, text: string) {
+    try {
+      await copyTextToClipboard(text);
+      toast.success("Copied " + label + ".");
+    } catch {
+      toast.error("Copy " + label + " failed.");
+    }
+  }
+
   if (model.kind === "loading") {
     return <Skeleton className="h-8 w-[140px] rounded-md" />;
   }
@@ -164,6 +176,8 @@ export default function DaaUserMenuDialog() {
   }
 
   const username = model.me.account.username;
+  const accountId = model.me.account.accountId;
+  const email = username;
   const roles = formatRoles(model.me.account.roles);
   const expiresAt = model.me.session.expiresAt;
 
@@ -179,6 +193,15 @@ export default function DaaUserMenuDialog() {
 
         <DropdownMenuContent align="end" className="w-[220px]">
           <DropdownMenuLabel className="max-w-[200px] truncate">{username}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void handleCopy("user id", accountId)}>
+            <Copy className="mr-2 h-4 w-4" />
+            Copy User ID
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void handleCopy("email", email)}>
+            <Mail className="mr-2 h-4 w-4" />
+            Copy Email
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
             <User className="mr-2 h-4 w-4" />
