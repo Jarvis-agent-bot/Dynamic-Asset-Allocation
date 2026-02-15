@@ -22,3 +22,14 @@ It will pull latest `main`, build the image, and restart the service.
   - `/daa-api/` → http://127.0.0.1:18000/
   - `/api/daa/` → http://127.0.0.1:3000/api/daa/ (Next.js API routes used by Step4/5)
 - No qlib / AI secrets are required for the v0 framework.
+
+## DAA API Auth (FastAPI)
+The Python engine exposes a passwordless (email magic-link) auth flow for dashboard-adjacent admin APIs.
+
+Env vars (recommended for production):
+- `DAA_ADMIN_EDITOR_EMAILS`: comma-separated allowlist (editor role)
+- `DAA_ADMIN_VIEWER_EMAILS`: comma-separated allowlist (viewer role)
+- `RESEND_API_KEY`: Resend API key
+- `DAA_AUTH_EMAIL_FROM`: sender (e.g. `DAA <no-reply@your-domain>`)
+- `DAA_AUTH_PUBLIC_BASE_URL`: public base URL for the engine, e.g. `https://exwxyzi.cn/daa-api`
+- Optional: `DAA_AUTH_COOKIE_NAME` (default: `daa_api_session`)

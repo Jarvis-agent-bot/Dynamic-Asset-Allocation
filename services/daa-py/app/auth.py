@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy.orm import Session
 
+from app.deps import get_db
+from app.session import require_session
 from app.util import get_admin_tokens, infer_actor_user_id_from_token, is_production, normalize_token
 
 
@@ -33,7 +36,12 @@ def _allowed_tokens(role: str) -> list[str]:
     return out
 
 
-def _require(role: str, authorization: str | None) -> AuthContext:
+def _require(role: str, authorization: str | None, request: Request, db: Session) -> AuthContext:
+    # Prefer cookie-session auth (dashboard login) when available.
+    ctx = require_session(role, request, db)
+    if ctx:
+        return ctx
+
     allowed = _allowed_tokens(role)
 
     # If no tokens are configured, keep dev friction low.
@@ -54,9 +62,17 @@ def _require(role: str, authorization: str | None) -> AuthContext:
     return AuthContext(role=role, actor_user_id=infer_actor_user_id_from_token(token))
 
 
-def require_viewer(authorization: str | None = Header(default=None)) -> AuthContext:
-    return _require("viewer", authorization)
+def require_viewer(
+    request: Request,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+) -> AuthContext:
+    return _require("viewer", authorization, request, db)
 
 
-def require_editor(authorization: str | None = Header(default=None)) -> AuthContext:
-    return _require("editor", authorization)
+def require_editor(
+    request: Request,
+    db: Session = Depends(get_db),
+    authorization: str | None = Header(default=None),
+) -> AuthContext:
+    return _require("editor", authorization, request, db)
