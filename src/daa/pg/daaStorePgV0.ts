@@ -4,7 +4,7 @@ import type {
   DaaRunBundleV0,
   DaaRunListRowV0,
   DaaRunRowV0,
-} from "../sqlite/daaSqliteStoreV0";
+} from "../storeTypesV0";
 
 import { withDaaPgClientV0 } from "./daaPgV0";
 
@@ -385,21 +385,22 @@ export async function listDaaRunsV0(args?: {
   return withDaaPgClientV0(async ({ query }) => {
     let sql = `
       SELECT
-        r.run_id,
-        r.created_at,
-        r.kind,
-        r.status,
-        r.payload,
-        r.actor,
-        r.source,
-        (p.run_id IS NOT NULL) AS has_portfolio,
-        (c.run_id IS NOT NULL) AS has_confirm,
-        (e.run_id IS NOT NULL) AS has_executed,
-        (SELECT COUNT(1) FROM daa_run_audit_events a WHERE a.run_id = r.run_id) AS audit_count
-      FROM daa_runs r
-      LEFT JOIN daa_run_portfolio p ON p.run_id = r.run_id
-      LEFT JOIN daa_run_confirm c ON c.run_id = r.run_id
-      LEFT JOIN daa_run_executed e ON e.run_id = r.run_id
+        run_id,
+        created_at,
+        kind,
+        status,
+        payload,
+        actor,
+        source,
+        COALESCE(has_portfolio, false) AS has_portfolio,
+        COALESCE(has_confirm, false) AS has_confirm,
+        COALESCE(has_executed, false) AS has_executed,
+        COALESCE(audit_count, 0) AS audit_count
+      FROM daa_runs
+      LEFT JOIN (SELECT run_id AS portfolio_run_id, TRUE AS has_portfolio FROM daa_run_portfolio) p ON p.portfolio_run_id = run_id
+      LEFT JOIN (SELECT run_id AS confirm_run_id, TRUE AS has_confirm FROM daa_run_confirm) c ON c.confirm_run_id = run_id
+      LEFT JOIN (SELECT run_id AS executed_run_id, TRUE AS has_executed FROM daa_run_executed) e ON e.executed_run_id = run_id
+      LEFT JOIN (SELECT run_id AS audit_run_id, COUNT(1) AS audit_count FROM daa_run_audit_events GROUP BY run_id) a ON a.audit_run_id = run_id
     `.trim();
 
     const bind: any[] = [];
@@ -410,22 +411,22 @@ export async function listDaaRunsV0(args?: {
       bind.push(...vals);
     }
 
-    if (fromCreatedAt) pushWhere(`r.created_at >= $${bind.length + 1}`, fromCreatedAt);
-    if (toCreatedAt) pushWhere(`r.created_at <= $${bind.length + 1}`, toCreatedAt);
-    if (actorFilter) pushWhere(`r.actor = $${bind.length + 1}`, actorFilter);
+    if (fromCreatedAt) pushWhere(`created_at >= $${bind.length + 1}`, fromCreatedAt);
+    if (toCreatedAt) pushWhere(`created_at <= $${bind.length + 1}`, toCreatedAt);
+    if (actorFilter) pushWhere(`actor = $${bind.length + 1}`, actorFilter);
 
     if (beforeCreatedAt && beforeRunId) {
       const a = `$${bind.length + 1}`;
       const b = `$${bind.length + 2}`;
-      pushWhere(`(r.created_at < ${a} OR (r.created_at = ${a} AND r.run_id < ${b}))`, beforeCreatedAt, beforeRunId);
+      pushWhere(`(created_at < ${a} OR (created_at = ${a} AND run_id < ${b}))`, beforeCreatedAt, beforeRunId);
     } else if (beforeCreatedAt) {
-      pushWhere(`r.created_at < $${bind.length + 1}`, beforeCreatedAt);
+      pushWhere(`created_at < $${bind.length + 1}`, beforeCreatedAt);
     }
 
     if (where.length) sql += ` WHERE ${where.join(" AND ")}`;
 
     bind.push(limit);
-    sql += ` ORDER BY r.created_at DESC, r.run_id DESC LIMIT $${bind.length}`;
+    sql += ` ORDER BY created_at DESC, run_id DESC LIMIT $${bind.length}`;
 
     const res = await query(sql, bind);
 

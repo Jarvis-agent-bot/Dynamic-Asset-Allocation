@@ -331,7 +331,7 @@ export default function DaaDashboardHistoryAudit() {
   return (
     <Card>
       <CardHeader className="space-y-1">
-        <CardTitle>History / Audit (SQLite)</CardTitle>
+        <CardTitle>History / Audit (Store)</CardTitle>
         <CardDescription>
           Recent runs + audit events. For safety: this page never executes trades; it only shows history and stored payloads.
         </CardDescription>

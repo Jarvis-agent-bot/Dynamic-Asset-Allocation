@@ -89,14 +89,6 @@ export function buildDeployBootstrapChecksV0(env: Record<string, string | undefi
     note: "Where the app should read/write the DAA store (Postgres preferred).",
   });
 
-  // Legacy fallback (kept mainly for local/dev or one-off recovery).
-  checks.push({
-    id: "DAA_SQLITE_PATH",
-    label: "SQLite path (legacy)",
-    group: "optional",
-    ok: isSet(env.DAA_SQLITE_PATH),
-    note: "Legacy DAA store path (e.g. /var/lib/daa/daa.sqlite).",
-  });
 
   // Required only on fresh deploy to create the first admin.
   checks.push({

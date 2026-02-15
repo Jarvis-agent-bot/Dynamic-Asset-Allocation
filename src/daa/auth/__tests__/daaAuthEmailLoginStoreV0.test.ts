@@ -1,6 +1,3 @@
-import { mkdir, rm } from "node:fs/promises";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -10,20 +7,18 @@ import {
 } from "../daaAuthEmailLoginStoreV0";
 import { createDaaAuthAccountV0 } from "../daaAuthStoreV0";
 
-const GLOBAL_KEY = "__daa_sqlite_state_v0__";
+const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
 
-async function resetDbFile(dbPath: string) {
-  await mkdir(path.dirname(dbPath), { recursive: true });
-  await rm(dbPath, { force: true });
-  await rm(`${dbPath}.tmp`, { force: true });
-  delete (globalThis as any)[GLOBAL_KEY];
+function resetPgMem() {
+  process.env.DAA_PG_MEM = "1";
+  delete (globalThis as any)[PG_GLOBAL_KEY];
+  delete process.env.DAA_DB_URL;
+  delete process.env.DATABASE_URL;
 }
 
 describe("daa/auth email login store v0", () => {
   it("creates + consumes a single-use email login token", async () => {
-    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-auth-email-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
-    process.env.DAA_SQLITE_PATH = dbPath;
-    await resetDbFile(dbPath);
+    resetPgMem();
 
     const a1 = await createDaaAuthAccountV0({ username: "user1@example.com", password: "pw-1", roles: ["viewer"] });
 
@@ -45,14 +40,10 @@ describe("daa/auth email login store v0", () => {
 
     const found2 = await consumeDaaAuthEmailLoginTokenV0({ token, userAgent: "ua2", ip: "5.6.7.8" });
     expect(found2).toBe(null);
-
-    await resetDbFile(dbPath);
   });
 
   it("rejects an expired token", async () => {
-    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-auth-email-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
-    process.env.DAA_SQLITE_PATH = dbPath;
-    await resetDbFile(dbPath);
+    resetPgMem();
 
     const a1 = await createDaaAuthAccountV0({ username: "user2@example.com", password: "pw-2", roles: ["viewer"] });
 
@@ -64,7 +55,5 @@ describe("daa/auth email login store v0", () => {
 
     const expired = await consumeDaaAuthEmailLoginTokenV0({ token, now: "2026-01-01T00:10:00.000Z" });
     expect(expired).toBe(null);
-
-    await resetDbFile(dbPath);
   });
 });

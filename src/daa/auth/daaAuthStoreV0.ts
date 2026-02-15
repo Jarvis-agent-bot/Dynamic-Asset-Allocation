@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
-import { withDaaSqliteDbV0 } from "../sqlite/daaSqliteDbV0";
 import { ensureDaaAuthSchemaPgV0, isDaaPgEnabledV0, withDaaPgClientV0 } from "../pg/daaPgV0";
 
 export type DaaAuthRoleV0 = "viewer" | "editor";
@@ -170,7 +169,7 @@ function isPgUniqueViolationV0(e: any): boolean {
 }
 
 async function ensureAuthSchemaIfPgV0(): Promise<void> {
-  if (!isDaaPgEnabledV0()) return;
+  if (!isDaaPgEnabledV0()) throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   await ensureDaaAuthSchemaPgV0();
 }
 
@@ -207,19 +206,7 @@ export async function createDaaAuthAccountV0(args: {
     return { accountId, username, roles, status: "active", createdAt, updatedAt };
   }
 
-  return withDaaSqliteDbV0(async ({ db, markDirty }) => {
-    const stmt = db.prepare(
-      "INSERT INTO daa_auth_accounts (account_id, username, password_hash, roles_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    );
-    try {
-      stmt.run([accountId, username, passwordHash, JSON.stringify(roles), "active", createdAt, updatedAt]);
-    } finally {
-      stmt.free();
-    }
-
-    markDirty();
-    return { accountId, username, roles, status: "active", createdAt, updatedAt };
-  });
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function hasAnyDaaAuthAccountsV0(): Promise<boolean> {
@@ -233,14 +220,7 @@ export async function hasAnyDaaAuthAccountsV0(): Promise<boolean> {
     return n > 0;
   }
 
-  return withDaaSqliteDbV0(async ({ db }) => {
-    const stmt = db.prepare("SELECT 1 FROM daa_auth_accounts LIMIT 1");
-    try {
-      return stmt.step();
-    } finally {
-      stmt.free();
-    }
-  });
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
@@ -268,7 +248,9 @@ export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
         await query("BEGIN");
         try {
           // Prevent races when two bootstraps are attempted concurrently.
-          await query("LOCK TABLE daa_auth_accounts IN EXCLUSIVE MODE");
+          if (process.env.DAA_PG_MEM !== "1") {
+            await query("LOCK TABLE daa_auth_accounts IN EXCLUSIVE MODE");
+          }
 
           const r0 = await query("SELECT COUNT(1) AS n FROM daa_auth_accounts");
           const n = Number(r0.rows?.[0]?.n ?? 0) || 0;
@@ -297,42 +279,7 @@ export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
     return { accountId, username, roles, status: "active", createdAt, updatedAt };
   }
 
-  return withDaaSqliteDbV0(async ({ db, markDirty }) => {
-    db.exec("BEGIN");
-    try {
-      const countStmt = db.prepare("SELECT COUNT(1) AS n FROM daa_auth_accounts");
-      let n = 0;
-      try {
-        countStmt.step();
-        const row = countStmt.getAsObject();
-        n = Number((row as any).n ?? 0) || 0;
-      } finally {
-        countStmt.free();
-      }
-
-      if (n > 0) throw new Error("bootstrap not allowed: accounts already exist");
-
-      const stmt = db.prepare(
-        "INSERT INTO daa_auth_accounts (account_id, username, password_hash, roles_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      );
-      try {
-        stmt.run([accountId, username, passwordHash, JSON.stringify(roles), "active", createdAt, updatedAt]);
-      } finally {
-        stmt.free();
-      }
-
-      db.exec("COMMIT");
-      markDirty();
-      return { accountId, username, roles, status: "active", createdAt, updatedAt };
-    } catch (e) {
-      try {
-        db.exec("ROLLBACK");
-      } catch {
-        // ignore
-      }
-      throw e;
-    }
-  });
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function getDaaAuthAccountByUsernameV0(usernameRaw: unknown): Promise<DaaAuthAccountV0 | null> {
@@ -362,27 +309,7 @@ export async function getDaaAuthAccountByUsernameV0(usernameRaw: unknown): Promi
     };
   }
 
-  return withDaaSqliteDbV0(async ({ db }) => {
-    const stmt = db.prepare(
-      "SELECT account_id, username, roles_json, status, created_at, updated_at FROM daa_auth_accounts WHERE username = ?",
-    );
-    try {
-      stmt.bind([username]);
-      if (!stmt.step()) return null;
-      const row = stmt.getAsObject();
-      const roles = uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json));
-      return {
-        accountId: String((row as any).account_id ?? ""),
-        username: String((row as any).username ?? ""),
-        roles,
-        status: normalizeStatus((row as any).status),
-        createdAt: String((row as any).created_at ?? ""),
-        updatedAt: String((row as any).updated_at ?? ""),
-      };
-    } finally {
-      stmt.free();
-    }
-  });
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function authenticateDaaAuthAccountV0(args: {
@@ -420,31 +347,7 @@ export async function authenticateDaaAuthAccountV0(args: {
     };
   }
 
-  return withDaaSqliteDbV0(async ({ db }) => {
-    const stmt = db.prepare(
-      "SELECT account_id, username, password_hash, roles_json, status, created_at, updated_at FROM daa_auth_accounts WHERE username = ?",
-    );
-    try {
-      stmt.bind([username]);
-      if (!stmt.step()) return null;
-      const row = stmt.getAsObject();
-      if (!verifyPasswordV0(password, (row as any).password_hash)) return null;
-
-      const status = normalizeStatus((row as any).status);
-      if (status !== "active") return null;
-
-      return {
-        accountId: String((row as any).account_id ?? ""),
-        username: String((row as any).username ?? ""),
-        roles: uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json)),
-        status,
-        createdAt: String((row as any).created_at ?? ""),
-        updatedAt: String((row as any).updated_at ?? ""),
-      };
-    } finally {
-      stmt.free();
-    }
-  });
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function createDaaAuthSessionV0(args: {
@@ -489,17 +392,8 @@ export async function createDaaAuthSessionV0(args: {
       );
     });
   } else {
-    await withDaaSqliteDbV0(async ({ db, markDirty }) => {
-      const stmt = db.prepare(
-        "INSERT INTO daa_auth_sessions (session_id, account_id, token_sha256, created_at, expires_at, revoked_at, user_agent, ip, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL)",
-      );
-      try {
-        stmt.run([sessionId, accountId, tokenSha256, createdAt, expiresAt, session.userAgent, session.ip]);
-      } finally {
-        stmt.free();
-      }
-      markDirty();
-    });
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   }
 
   return { session, token };
@@ -575,69 +469,7 @@ export async function getDaaAuthAccountBySessionTokenV0(args: {
     });
   }
 
-  return withDaaSqliteDbV0(async ({ db, markDirty }) => {
-    const stmt = db.prepare(
-      "SELECT " +
-        " s.session_id, s.account_id, s.created_at, s.expires_at, s.revoked_at, s.user_agent, s.ip, s.last_seen_at, " +
-        " a.username, a.roles_json, a.status, a.created_at AS a_created_at, a.updated_at AS a_updated_at " +
-        "FROM daa_auth_sessions s " +
-        "JOIN daa_auth_accounts a ON a.account_id = s.account_id " +
-        "WHERE s.token_sha256 = ? LIMIT 1",
-    );
-
-    try {
-      stmt.bind([tokenSha256]);
-      if (!stmt.step()) return null;
-      const row = stmt.getAsObject();
-
-      const revokedAt = typeof (row as any).revoked_at === "string" && (row as any).revoked_at.trim() ? String((row as any).revoked_at) : null;
-      if (revokedAt) return null;
-
-      const expiresAt = String((row as any).expires_at ?? "");
-      if (!expiresAt) return null;
-      if (Date.parse(expiresAt) <= Date.parse(now)) return null;
-
-      const status = normalizeStatus((row as any).status);
-      if (status !== "active") return null;
-
-      const account: DaaAuthAccountV0 = {
-        accountId: String((row as any).account_id ?? ""),
-        username: String((row as any).username ?? ""),
-        roles: uniqRoles(parseJsonArrayOrEmpty((row as any).roles_json)),
-        status,
-        createdAt: String((row as any).a_created_at ?? ""),
-        updatedAt: String((row as any).a_updated_at ?? ""),
-      };
-
-      const session: DaaAuthSessionV0 = {
-        sessionId: String((row as any).session_id ?? ""),
-        accountId: String((row as any).account_id ?? ""),
-        createdAt: String((row as any).created_at ?? ""),
-        expiresAt,
-        revokedAt,
-        lastSeenAt:
-          typeof (row as any).last_seen_at === "string" && (row as any).last_seen_at.trim() ? String((row as any).last_seen_at) : null,
-        userAgent:
-          typeof (row as any).user_agent === "string" && (row as any).user_agent.trim() ? String((row as any).user_agent) : null,
-        ip: typeof (row as any).ip === "string" && (row as any).ip.trim() ? String((row as any).ip) : null,
-      };
-
-      if (touch) {
-        const touchStmt = db.prepare("UPDATE daa_auth_sessions SET last_seen_at = ? WHERE session_id = ?");
-        try {
-          touchStmt.run([now, session.sessionId]);
-        } finally {
-          touchStmt.free();
-        }
-        markDirty();
-        session.lastSeenAt = now;
-      }
-
-      return { account, session };
-    } finally {
-      stmt.free();
-    }
-  });
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function revokeDaaAuthSessionV0(args: { sessionId: string; revokedAt?: string }): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -653,15 +485,8 @@ export async function revokeDaaAuthSessionV0(args: { sessionId: string; revokedA
       await query("UPDATE daa_auth_sessions SET revoked_at = $1 WHERE session_id = $2", [revokedAt, sessionId]);
     });
   } else {
-    await withDaaSqliteDbV0(async ({ db, markDirty }) => {
-      const stmt = db.prepare("UPDATE daa_auth_sessions SET revoked_at = ? WHERE session_id = ?");
-      try {
-        stmt.run([revokedAt, sessionId]);
-      } finally {
-        stmt.free();
-      }
-      markDirty();
-    });
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   }
 
   return { ok: true };

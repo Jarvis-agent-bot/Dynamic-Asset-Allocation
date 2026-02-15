@@ -1,33 +1,30 @@
-import { mkdir, rm } from "node:fs/promises";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import {
   appendDaaRunAuditEventV0,
   createDaaRunV0,
   getDaaRunBundleV0,
-  listDaaRunsV0,
   listDaaRunAuditEventsV0,
+  listDaaRunsV0,
   setDaaRunConfirmV0,
   setDaaRunExecutedV0,
   setDaaRunPortfolioV0,
-} from "../daaSqliteStoreV0";
+} from "../storeV0";
 
-const GLOBAL_KEY = "__daa_sqlite_state_v0__";
+const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
+const STORE_PG_GLOBAL_KEY = "__daa_store_pg_state_v0__";
 
-async function resetDbFile(dbPath: string) {
-  await mkdir(path.dirname(dbPath), { recursive: true });
-  await rm(dbPath, { force: true });
-  await rm(`${dbPath}.tmp`, { force: true });
-  delete (globalThis as any)[GLOBAL_KEY];
+function resetPgMem() {
+  process.env.DAA_PG_MEM = "1";
+  delete (globalThis as any)[PG_GLOBAL_KEY];
+  delete (globalThis as any)[STORE_PG_GLOBAL_KEY];
+  delete process.env.DAA_DB_URL;
+  delete process.env.DATABASE_URL;
 }
 
-describe("daa/sqlite store v0", () => {
+describe("daa/store v0 (pg)", () => {
   it("persists runs + portfolio/confirm/executed + audit", async () => {
-    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
-    process.env.DAA_SQLITE_PATH = dbPath;
-    await resetDbFile(dbPath);
+    resetPgMem();
 
     const { runId } = await createDaaRunV0({ kind: "rebalance", payload: { foo: 1 }, createdAt: "2026-01-01T00:00:01.000Z" });
 
@@ -47,20 +44,11 @@ describe("daa/sqlite store v0", () => {
     expect(bundle1.audit.length).toBe(5);
     expect(bundle1.audit.some((e) => e.eventId === a1.eventId)).toBe(true);
 
-    // Prove persistence: drop in-memory cache and reload from disk.
-    delete (globalThis as any)[GLOBAL_KEY];
-
-    const bundle2 = await getDaaRunBundleV0(runId);
-    expect(bundle2.run.payload).toEqual({ foo: 1 });
-    expect(bundle2.audit.map((e) => e.kind)).toEqual(["run_created", "confirm_set", "executed_set", "ai_orders_draft", "note"]);
-
-    await resetDbFile(dbPath);
+    expect(bundle1.audit.map((e) => e.kind)).toEqual(["run_created", "confirm_set", "executed_set", "ai_orders_draft", "note"]);
   });
 
   it("lists runs with cursor", async () => {
-    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
-    process.env.DAA_SQLITE_PATH = dbPath;
-    await resetDbFile(dbPath);
+    resetPgMem();
 
     const r1 = await createDaaRunV0({ kind: "rebalance", payload: { i: 1 }, createdAt: "2026-01-01T00:00:01.000Z" });
     const r2 = await createDaaRunV0({ kind: "rebalance", payload: { i: 2 }, createdAt: "2026-01-02T00:00:01.000Z" });
@@ -83,14 +71,10 @@ describe("daa/sqlite store v0", () => {
     const page2 = await listDaaRunsV0({ limit: 10, beforeCreatedAt: page1[1]!.createdAt, beforeRunId: page1[1]!.runId });
     expect(page2.map((r) => r.runId)).toEqual([r1.runId]);
     expect(page2[0]?.hasPortfolio).toBe(true);
-
-    await resetDbFile(dbPath);
   });
 
   it("lists runs with date range + actor filter", async () => {
-    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
-    process.env.DAA_SQLITE_PATH = dbPath;
-    await resetDbFile(dbPath);
+    resetPgMem();
 
     const r1 = await createDaaRunV0({
       kind: "rebalance",
@@ -128,15 +112,10 @@ describe("daa/sqlite store v0", () => {
 
     // Sanity: r3 is outside the range.
     expect(janRange.some((r) => r.runId === r3.runId)).toBe(false);
-
-    await resetDbFile(dbPath);
   });
 
-
   it("lists audit events with actorUserId filter", async () => {
-    const dbPath = path.join(process.cwd(), ".vitest-tmp", `daa-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
-    process.env.DAA_SQLITE_PATH = dbPath;
-    await resetDbFile(dbPath);
+    resetPgMem();
 
     const a = await createDaaRunV0({ kind: "rebalance", payload: { foo: 1 }, actorUserId: "editor-token", createdAt: "2026-01-01T00:00:01.000Z" });
     const b = await createDaaRunV0({ kind: "rebalance", payload: { foo: 2 }, actorUserId: "viewer-token", createdAt: "2026-01-02T00:00:01.000Z" });
@@ -153,7 +132,5 @@ describe("daa/sqlite store v0", () => {
 
     const bundle = await getDaaRunBundleV0(a.runId);
     expect(bundle.audit.some((e) => e.actorUserId === "editor-token")).toBe(true);
-
-    await resetDbFile(dbPath);
   });
 });

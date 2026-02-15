@@ -1,19 +1,23 @@
 // Next.js instrumentation hook.
-// Ensures the DAA SQLite schema is migrated once at process boot so failures surface early.
+// Best-effort schema check on boot so broken Postgres connectivity surfaces early.
 
 export async function register() {
   // This file only runs in the Node.js runtime (not Edge), but keep the guard explicit.
   if (process.env.NEXT_RUNTIME === "edge") return;
-  if (process.env.DAA_SQLITE_DISABLE_BOOT_MIGRATIONS === "1") return;
+  if (process.env.DAA_PG_DISABLE_BOOT_SCHEMA === "1") return;
 
   try {
-    const { withDaaSqliteDbV0 } = await import("@/src/daa/sqlite/daaSqliteDbV0");
-    await withDaaSqliteDbV0(({ db }) => {
-      db.exec("SELECT 1;");
-    });
+    const { isDaaPgEnabledV0, ensureDaaAuthSchemaPgV0 } = await import("@/src/daa/pg/daaPgV0");
+    const { ensureDaaStoreSchemaPgV0 } = await import("@/src/daa/pg/daaStorePgV0");
+
+    // Allow the app to boot without a DB configured (dev/preview), but when a DB is configured,
+    // fail fast so deployment issues are immediately visible.
+    if (!isDaaPgEnabledV0()) return;
+
+    await ensureDaaAuthSchemaPgV0();
+    await ensureDaaStoreSchemaPgV0();
   } catch (e) {
-    console.error("[daa_sqlite] boot-time migrations failed", e);
-    // Fail fast: a broken schema should block the server from starting.
+    console.error("[daa_pg] boot-time schema init failed", e);
     throw e;
   }
 }

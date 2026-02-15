@@ -278,7 +278,7 @@ export default function DaaDashboardConfirmExecuted() {
       );
       setNotice({
         variant: "success",
-        message: "Saved portfolio snapshot to SQLite store.",
+        message: "Saved portfolio snapshot to DAA store.",
       });
       await refreshRunBundle();
     } catch (e) {
@@ -547,7 +547,7 @@ export default function DaaDashboardConfirmExecuted() {
             Confirm / Executed (admin flow)
           </CardTitle>
           <CardDescription className="mt-2">
-            Persist a DAA run to SQLite, record{" "}
+            Persist a DAA run to the store, record{" "}
             <span className="font-medium">confirm</span> and{" "}
             <span className="font-medium">executed</span>, then auto-update{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
@@ -566,7 +566,7 @@ export default function DaaDashboardConfirmExecuted() {
       <CardContent className="grid gap-4">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Run (SQLite)</CardTitle>
+            <CardTitle className="text-sm">Run (Store)</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
             <div className="grid gap-2">
@@ -594,7 +594,7 @@ export default function DaaDashboardConfirmExecuted() {
                     type="button"
                     onClick={() => void createRun()}
                     disabled={actionBusy === "create-run"}
-                    title="Creates a new run in SQLite using the current export bundle + price snapshot"
+                    title="Creates a new run in the store using the current export bundle + price snapshot"
                   >
                     {actionBusy === "create-run" ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
