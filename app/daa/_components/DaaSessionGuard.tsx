@@ -22,6 +22,10 @@ export default function DaaSessionGuard() {
     if (!pathname.startsWith("/daa")) return;
     if (pathname.startsWith("/daa/login")) return;
 
+    // /daa/dashboard is the public entry point; show a friendly sign-in empty state
+    // instead of force-redirecting away. Other /daa/* deep-links remain guarded.
+    if (pathname === "/daa/dashboard" || pathname === "/daa/dashboard/") return;
+
     let cancelled = false;
 
     async function check() {
