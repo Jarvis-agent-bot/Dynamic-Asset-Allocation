@@ -277,6 +277,28 @@ export default function DaaDashboardOverviewCards() {
     ].join("\n");
   }, [deployEnv]);
 
+  const deployBootstrapEnvExportsText = useMemo(() => {
+    // Same content as the env vars template, but formatted for bash/zsh export.
+    const envLabel = deployEnv || "prod";
+    return [
+      "# Shell export snippet (bash/zsh)",
+      'export DAA_SQLITE_PATH="/var/lib/daa/daa.sqlite"',
+      'export DAA_AUTH_BOOTSTRAP_TOKEN="..."',
+      "",
+      "# Recommended (env label + build visibility)",
+      `export DAA_ENV="${envLabel}"`,
+      'export NEXT_PUBLIC_BUILD_SHA="..."',
+      "",
+      "# Optional (Python engine behind nginx; needed for some Step4/5 routes)",
+      'export DAA_ENGINE_BASE_URL="https://YOUR_DOMAIN"',
+      "",
+      "# Optional (email login)",
+      '# export RESEND_API_KEY="..."',
+      '# export DAA_AUTH_EMAIL_FROM="admin@YOUR_DOMAIN"',
+      '# export DAA_PUBLIC_ORIGIN="https://YOUR_DOMAIN"',
+    ].join("\n");
+  }, [deployEnv]);
+
   async function copyBuildSha() {
     if (!sha) {
       toast.error("No build SHA available.");
@@ -295,6 +317,15 @@ export default function DaaDashboardOverviewCards() {
     try {
       await copyTextToClipboard(deployBootstrapEnvVarsText);
       toast.success("Copied env vars template.");
+    } catch (e) {
+      toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function copyDeployBootstrapEnvExports() {
+    try {
+      await copyTextToClipboard(deployBootstrapEnvExportsText);
+      toast.success("Copied env export snippet.");
     } catch (e) {
       toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -429,6 +460,25 @@ export default function DaaDashboardOverviewCards() {
                     </div>
                     <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{deployBootstrapEnvVarsText}</pre>
                     <div className="mt-1 text-xs text-muted-foreground">Replace <code>...</code> and <code>YOUR_DOMAIN</code> before using.</div>
+                  </div>
+
+                  <div className="mt-2 rounded-md border bg-muted/20 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-medium text-foreground">Shell export snippet</div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7"
+                        onClick={() => void copyDeployBootstrapEnvExports()}
+                        aria-label="Copy env export snippet"
+                        title="Copy env export snippet"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{deployBootstrapEnvExportsText}</pre>
+                    <div className="mt-1 text-xs text-muted-foreground">Use this for quick local testing (bash/zsh).</div>
                   </div>
 
                   <div className="mt-2 flex flex-wrap gap-2">
