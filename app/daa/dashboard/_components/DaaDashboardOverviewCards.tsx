@@ -301,6 +301,24 @@ export default function DaaDashboardOverviewCards() {
                         Deploy guide
                       </a>
                     </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <a
+                        href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/QUICKSTART.md"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Quickstart
+                      </a>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <a
+                        href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/docs/README.md"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Docs
+                      </a>
+                    </Button>
                   </div>
                 </div>
               )}
