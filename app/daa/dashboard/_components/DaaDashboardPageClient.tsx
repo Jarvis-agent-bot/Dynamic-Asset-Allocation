@@ -313,6 +313,10 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
               id="daa-bootstrap-email"
               type="email"
               inputMode="email"
+              enterKeyHint="next"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoComplete="email"
               placeholder="admin@example.com"
               value={email}
