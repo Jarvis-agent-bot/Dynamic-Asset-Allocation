@@ -251,43 +251,59 @@ export default function DaaDashboardOverviewCards() {
               </div>
               <div className="text-xs text-muted-foreground">Node: {nodeEnv || "-"}</div>
               <div className="text-xs text-muted-foreground">Platform: {platform || "-"}</div>
-              <TooltipProvider>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span>Build:</span>
-                  <code
-                    className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground"
-                    title={sha || ""}
-                  >
-                    {shaShort || "-"}
-                  </code>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-7 w-7"
-                        disabled={!sha}
-                        onClick={() => void copyBuildSha()}
-                        aria-label="Copy build SHA"
-                        title="Copy build SHA"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-sm p-2 text-xs">
-                      {sha ? (
+              {sha ? (
+                <TooltipProvider>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>Build:</span>
+                    <code
+                      className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground"
+                      title={sha || ""}
+                    >
+                      {shaShort || "-"}
+                    </code>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7"
+                          onClick={() => void copyBuildSha()}
+                          aria-label="Copy build SHA"
+                          title="Copy build SHA"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm p-2 text-xs">
                         <div className="space-y-1">
                           <div className="font-medium">Copy full build SHA</div>
                           <code className="block break-all rounded bg-muted px-2 py-1 text-[11px] text-foreground">{sha}</code>
                         </div>
-                      ) : (
-                        "No build SHA available"
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              ) : (
+                <div className="rounded-md border border-dashed border-muted-foreground/30 p-2">
+                  <div className="text-xs font-medium text-foreground">No deployments yet</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    This instance did not report a build SHA. After your first deploy, set a build SHA env var (e.g.{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">NEXT_PUBLIC_BUILD_SHA</code>) so the dashboard can show version info.
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button asChild size="sm" variant="outline">
+                      <a
+                        href="https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/blob/main/deploy/README.md"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Deploy guide
+                      </a>
+                    </Button>
+                  </div>
                 </div>
-              </TooltipProvider>
+              )}
               <div className="text-xs text-muted-foreground">Server: {fmtTime(deployResp.serverTime)}</div>
             </>
           ) : (
