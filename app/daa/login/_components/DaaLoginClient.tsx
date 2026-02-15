@@ -794,6 +794,21 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               </form>
             </TabsContent>
           </Tabs>
+
+          <div className="mt-6 grid gap-2 text-center text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
+                Terms
+              </Link>
+              <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
+                Privacy
+              </Link>
+              <Link href="/support" className="underline underline-offset-2 hover:text-foreground">
+                Support
+              </Link>
+            </div>
+            <div className="text-[11px]">AI outputs are drafts only; it never executes trades automatically.</div>
+          </div>
         </CardContent>
       </Card>
     </div>
