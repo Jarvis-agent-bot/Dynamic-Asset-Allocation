@@ -930,26 +930,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       "Send sign-in link"
                     )}
                   </Button>
-
-                  {emailLink.kind === "sent" ? (
-                    <div className="text-xs text-muted-foreground">
-                      Didn't receive it?{" "}
-                      {resendRemainingSeconds > 0 ? (
-                        <span>Resend in {formatSeconds(resendRemainingSeconds)}</span>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="link"
-                          size="sm"
-                          className="h-auto p-0 align-baseline"
-                          onClick={() => void requestEmailLink()}
-                          disabled={emailDisabled || !emailLinkFormValid}
-                        >
-                          Resend link
-                        </Button>
-                      )}
-                    </div>
-                  ) : null}
                 </div>
 
                 {emailLink.kind === "sent" ? (
@@ -973,6 +953,24 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                           If you don&apos;t see it, check spam/promotions. You can resend after the cooldown, or use a password instead. For security, don&apos;t forward the email.
                         </li>
                       </ol>
+
+                      <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
+                        <span>Didn&apos;t receive it?</span>
+                        {resendRemainingSeconds > 0 ? (
+                          <span>Resend in {formatSeconds(resendRemainingSeconds)}</span>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0 align-baseline"
+                            onClick={() => void requestEmailLink()}
+                            disabled={emailDisabled || !emailLinkFormValid}
+                          >
+                            Resend link
+                          </Button>
+                        )}
+                      </div>
 
                       {mailboxLinks.length ? (
                         <div className="flex flex-wrap gap-2">
