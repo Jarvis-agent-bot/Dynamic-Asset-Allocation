@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertCircle, Loader2, Mail } from "lucide-react";
+import { AlertCircle, Loader2, Mail, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -200,6 +200,24 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const [emailLink, setEmailLink] = useState<EmailLinkModel>({ kind: "idle" });
   const [emailLinkError, setEmailLinkError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const clearEmail = (focus: "emailLink" | "password") => {
+    setUsername("");
+    setEmailLinkError(null);
+    setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+    setEmailLink((prev) => {
+      if (prev.kind !== "sent") return prev;
+      try {
+        window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
+      } catch {
+        // Ignore storage errors.
+      }
+      return { kind: "idle" };
+    });
+
+    const ref = focus === "emailLink" ? emailLinkEmailRef : passwordEmailRef;
+    setTimeout(() => ref.current?.focus(), 0);
+  };
 
   const passwordClientErrors = useMemo<PasswordFormErrors>(() => {
     const e: PasswordFormErrors = {};
@@ -699,37 +717,54 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   <label htmlFor={emailLinkEmailId} className="text-sm font-medium">
                     Email
                   </label>
-                  <Input
-                    id={emailLinkEmailId}
-                    ref={emailLinkEmailRef}
-                    type="email"
-                    name="email"
-                    inputMode="email"
-                    enterKeyHint="send"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    value={username}
-                    onChange={(e) => {
-                      setUsername(e.target.value);
-                      setEmailLinkError(null);
-                      setEmailLink((prev) => {
-                        if (prev.kind !== "sent") return prev;
-                        try {
-                          window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
-                        } catch {
-                          // Ignore storage errors.
-                        }
-                        return { kind: "idle" };
-                      });
-                    }}
-                    autoComplete="email"
-                    placeholder="you@example.com"
-                    disabled={emailDisabled}
-                    onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
-                    aria-invalid={emailInvalidEmailLink || undefined}
-                    aria-describedby={emailLinkEmailHelpId}
-                  />
+                  <div className="relative">
+                    <Input
+                      id={emailLinkEmailId}
+                      ref={emailLinkEmailRef}
+                      type="email"
+                      name="email"
+                      inputMode="email"
+                      enterKeyHint="send"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={username}
+                      onChange={(e) => {
+                        setUsername(e.target.value);
+                        setEmailLinkError(null);
+                        setEmailLink((prev) => {
+                          if (prev.kind !== "sent") return prev;
+                          try {
+                            window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
+                          } catch {
+                            // Ignore storage errors.
+                          }
+                          return { kind: "idle" };
+                        });
+                      }}
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      disabled={emailDisabled}
+                      onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                      aria-invalid={emailInvalidEmailLink || undefined}
+                      aria-describedby={emailLinkEmailHelpId}
+                      className="pr-10"
+                    />
+                    {username.trim() && !emailDisabled ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => clearEmail("emailLink")}
+                        aria-label="Clear email"
+                        title="Clear"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                  </div>
                   <div
                     id={emailLinkEmailHelpId}
                     className={emailInvalidEmailLink ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
@@ -893,47 +928,64 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   <label htmlFor={passwordEmailId} className="text-sm font-medium">
                     Email
                   </label>
-                  <Input
-                    id={passwordEmailId}
-                    ref={passwordEmailRef}
-                    type="email"
-                    name="username"
-                    inputMode="email"
-                    enterKeyHint="next"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    value={username}
-                    onChange={(e) => {
-                      setUsername(e.target.value);
-                      setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
-                      setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return;
+                  <div className="relative">
+                    <Input
+                      id={passwordEmailId}
+                      ref={passwordEmailRef}
+                      type="email"
+                      name="username"
+                      inputMode="email"
+                      enterKeyHint="next"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={username}
+                      onChange={(e) => {
+                        setUsername(e.target.value);
+                        setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
+                        setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
 
-                      // When password is still empty, Enter on the email field should advance focus to password.
-                      // If the user already typed a password (then came back), let the form submit normally.
-                      if (password.trim()) return;
+                        // When password is still empty, Enter on the email field should advance focus to password.
+                        // If the user already typed a password (then came back), let the form submit normally.
+                        if (password.trim()) return;
 
-                      e.preventDefault();
+                        e.preventDefault();
 
-                      const email = normalizeEmailLoose(e.currentTarget.value);
-                      if (!email) {
-                        setPasswordSubmitAttempted(true);
-                        setTouched((prev) => ({ ...prev, email: true }));
-                        return;
-                      }
+                        const email = normalizeEmailLoose(e.currentTarget.value);
+                        if (!email) {
+                          setPasswordSubmitAttempted(true);
+                          setTouched((prev) => ({ ...prev, email: true }));
+                          return;
+                        }
 
-                      passwordRef.current?.focus();
-                    }}
-                    autoComplete="username"
-                    placeholder="you@example.com"
-                    disabled={passwordDisabled}
-                    onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
-                    aria-invalid={Boolean(mergedPasswordErrors.email) || undefined}
-                    aria-describedby={passwordEmailHelpId}
-                  />
+                        passwordRef.current?.focus();
+                      }}
+                      autoComplete="username"
+                      placeholder="you@example.com"
+                      disabled={passwordDisabled}
+                      onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
+                      aria-invalid={Boolean(mergedPasswordErrors.email) || undefined}
+                      aria-describedby={passwordEmailHelpId}
+                      className="pr-10"
+                    />
+                    {username.trim() && !passwordDisabled ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => clearEmail("password")}
+                        aria-label="Clear email"
+                        title="Clear"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                  </div>
                   <div
                     id={passwordEmailHelpId}
                     className={mergedPasswordErrors.email ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
