@@ -162,7 +162,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
 
-  const [tab, setTab] = useState<"email" | "password">(error === "email-link-invalid" ? "email" : "password");
+  const emailLinkErrorCode =
+    error === "email-link-invalid" || error === "email-link-expired" || error === "email-link-used" ? error : "";
+
+  const [tab, setTab] = useState<"email" | "password">(emailLinkErrorCode ? "email" : "password");
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -460,11 +463,17 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
-      {error === "email-link-invalid" ? (
+      {emailLinkErrorCode ? (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <div className="font-medium">This sign-in link is invalid or has expired.</div>
-          <div className="mt-1 text-xs text-destructive/90">Request a new link to continue.</div>
-          <div className="mt-2">
+          <div className="font-medium">
+            {emailLinkErrorCode === "email-link-used"
+              ? "This sign-in link has already been used."
+              : emailLinkErrorCode === "email-link-expired"
+                ? "This sign-in link has expired."
+                : "This sign-in link is invalid."}
+          </div>
+          <div className="mt-1 text-xs text-destructive/90">Request a new link or sign in with a password to continue.</div>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <Button
               type="button"
               size="sm"
@@ -485,7 +494,20 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 void requestEmailLink();
               }}
             >
-              Send a new sign-in link
+              Resend sign-in link
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setTab("password");
+                setPasswordErrors({});
+                setEmailLinkError(null);
+              }}
+            >
+              Use password instead
             </Button>
           </div>
         </div>
