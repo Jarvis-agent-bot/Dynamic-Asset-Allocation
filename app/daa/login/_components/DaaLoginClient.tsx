@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { formatRateLimitedMessageV0, parseRetryAfterSecondsV0 } from "@/src/daa/auth/uiRateLimitV0";
 
+import { appendNoticeParamV0 } from "@/src/daa/urlV0";
+
 type Props = {
   returnTo: string;
   error?: string;
@@ -155,6 +157,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
     if (n === "session_expired") {
       toast.error("Session expired. Please sign in again.");
+    }
+
+    if (n === "signed_out") {
+      toast.success("Signed out.");
     }
 
     // Avoid repeating the toast on refresh.
@@ -452,7 +458,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       }
 
       // Cookie is set by the server; redirect into the console.
-      window.location.href = safeReturnTo;
+      window.location.href = appendNoticeParamV0(safeReturnTo, "signed_in");
     } catch (e) {
       setPasswordErrors({ form: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -509,6 +515,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         typeof json?.cooldownSeconds === "number" && Number.isFinite(json.cooldownSeconds) ? Math.max(0, Math.floor(json.cooldownSeconds)) : 30;
       const requestedAtMs = Date.now();
       setEmailLink({ kind: "sent", email, requestedAtMs, cooldownSeconds });
+      toast.success("If an account exists for that email, we will send a sign-in link shortly.");
       try {
         window.localStorage.setItem(LS_DAA_EMAIL_LINK_SENT_V0, JSON.stringify({ email, requestedAtMs, cooldownSeconds }));
       } catch {

@@ -123,7 +123,7 @@ export default function DaaUserMenuDialog() {
       });
 
       if (res.ok) {
-        window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}`;
+        window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}&notice=signed_out`;
         return;
       }
 

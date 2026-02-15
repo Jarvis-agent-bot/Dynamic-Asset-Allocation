@@ -32,7 +32,10 @@ export async function GET(req: Request) {
     return NextResponse.redirect(loginUrl, 302);
   }
 
-  const res = NextResponse.redirect(new URL(returnTo, url), 302);
+  const target = new URL(returnTo, url);
+  if (!target.searchParams.get("notice")) target.searchParams.set("notice", "signed_in");
+
+  const res = NextResponse.redirect(target, 302);
   res.cookies.set({
     name: DAA_AUTH_SESSION_COOKIE_V0,
     value: found.sessionToken,
