@@ -301,6 +301,19 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const emailDraftNormalized = useMemo(() => normalizeEmailDraftV0(username), [username]);
   const showEmailDraftNormalizationHint = Boolean(username.trim()) && emailDraftNormalized && username !== emailDraftNormalized;
 
+  const emailDomainSuggestions = useMemo(() => {
+    const local = emailDraftNormalized;
+    if (!local) return [] as string[];
+    if (local.includes("@")) return [] as string[];
+    if (/\s/.test(local)) return [] as string[];
+    if (local.length < 2) return [] as string[];
+    // Only suggest for simple local-parts to avoid surprising rewrites.
+    if (!/^[a-z0-9._+-]+$/.test(local)) return [] as string[];
+
+    const domains = ["gmail.com", "icloud.com", "outlook.com", "qq.com", "163.com"];
+    return domains.map((d) => `${local}@${d}`);
+  }, [emailDraftNormalized]);
+
   const passwordTrimmed = password.trim();
 
   // Password form state
@@ -972,6 +985,32 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       </Button>
                     ) : null}
                   </div>
+
+                  {emailDomainSuggestions.length && !emailDisabled ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div className="text-xs text-muted-foreground">Suggestions:</div>
+                      {emailDomainSuggestions.map((s) => (
+                        <Button
+                          key={s}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setUsername(s);
+                            setEmailLinkError(null);
+                            setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
+                            emailLinkEmailRef.current?.focus();
+                          }}
+                          aria-label={`Use suggested email ${s}`}
+                        >
+                          {s}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
+
                   <div
                     id={emailLinkEmailHelpId}
                     className={emailInvalidEmailLink ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
@@ -1261,6 +1300,32 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       </Button>
                     ) : null}
                   </div>
+
+                  {emailDomainSuggestions.length && !passwordDisabled ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <div className="text-xs text-muted-foreground">Suggestions:</div>
+                      {emailDomainSuggestions.map((s) => (
+                        <Button
+                          key={s}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setUsername(s);
+                            setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+                            setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
+                            passwordEmailRef.current?.focus();
+                          }}
+                          aria-label={`Use suggested email ${s}`}
+                        >
+                          {s}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
+
                   <div
                     id={passwordEmailHelpId}
                     className={mergedPasswordErrors.email ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
