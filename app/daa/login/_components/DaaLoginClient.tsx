@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AlertCircle, CircleHelp, Loader2, Mail, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { ClipboardEvent } from "react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -14,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import { formatRateLimitedMessageV0, parseRetryAfterSecondsV0 } from "@/src/daa/auth/uiRateLimitV0";
 
+import { applyEmailPasteNormalizationV0 } from "@/src/daa/emailPasteV0";
 import { appendNoticeParamV0, normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
 type Props = {
@@ -250,6 +252,47 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+
+  const handleEmailPaste = (e: ClipboardEvent<HTMLInputElement>, kind: "emailLink" | "password") => {
+    const pasted = e.clipboardData?.getData("text") ?? "";
+    // Always prevent default so whitespace-only pastes don't insert garbage.
+    e.preventDefault();
+
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? username.length;
+    const end = el.selectionEnd ?? start;
+
+    const r = applyEmailPasteNormalizationV0({ value: username, selectionStart: start, selectionEnd: end, pastedText: pasted });
+
+    setUsername(r.nextValue);
+
+    if (kind === "emailLink") {
+      setEmailLinkError(null);
+      setEmailLink((prev) => {
+        if (prev.kind !== "sent") return prev;
+        try {
+          window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
+        } catch {
+          // Ignore storage errors.
+        }
+        return { kind: "idle" };
+      });
+    } else {
+      setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
+      setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+    }
+
+    const nextCaret = r.nextCaret;
+    requestAnimationFrame(() => {
+      const node = kind === "emailLink" ? emailLinkEmailRef.current : passwordEmailRef.current;
+      if (!node) return;
+      try {
+        node.setSelectionRange(nextCaret, nextCaret);
+      } catch {
+        // Ignore selection errors (some mobile browsers).
+      }
+    });
+  };
 
   const normalizedEmail = useMemo(() => normalizeEmailLoose(username), [username]);
   const emailDraftNormalized = useMemo(() => normalizeEmailDraftV0(username), [username]);
@@ -900,6 +943,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                           return { kind: "idle" };
                         });
                       }}
+                      onPaste={(e) => handleEmailPaste(e, "emailLink")}
                       autoComplete="email"
                       placeholder="you@example.com"
                       disabled={emailDisabled || offline}
@@ -1169,6 +1213,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                         setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
                         setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
                       }}
+                      onPaste={(e) => handleEmailPaste(e, "password")}
                       onKeyDown={(e) => {
                         if (e.key !== "Enter") return;
 
