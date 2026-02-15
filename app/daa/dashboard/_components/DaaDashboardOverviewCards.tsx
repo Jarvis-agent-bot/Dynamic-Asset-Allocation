@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { copyTextToClipboard } from "../../copyToClipboard";
 
@@ -170,7 +172,7 @@ export default function DaaDashboardOverviewCards() {
 
     try {
       await copyTextToClipboard(sha);
-      toast.success("Copied build SHA.");
+      toast.success(`Copied build SHA: ${shaShort || sha.slice(0, 10)}`);
     } catch (e) {
       toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -249,13 +251,43 @@ export default function DaaDashboardOverviewCards() {
               </div>
               <div className="text-xs text-muted-foreground">Node: {nodeEnv || "-"}</div>
               <div className="text-xs text-muted-foreground">Platform: {platform || "-"}</div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>Build:</span>
-                <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">{shaShort || "-"}</code>
-                <Button type="button" size="sm" variant="outline" disabled={!sha} onClick={() => void copyBuildSha()}>
-                  Copy SHA
-                </Button>
-              </div>
+              <TooltipProvider>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Build:</span>
+                  <code
+                    className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground"
+                    title={sha || ""}
+                  >
+                    {shaShort || "-"}
+                  </code>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7"
+                        disabled={!sha}
+                        onClick={() => void copyBuildSha()}
+                        aria-label="Copy build SHA"
+                        title="Copy build SHA"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm p-2 text-xs">
+                      {sha ? (
+                        <div className="space-y-1">
+                          <div className="font-medium">Copy full build SHA</div>
+                          <code className="block break-all rounded bg-muted px-2 py-1 text-[11px] text-foreground">{sha}</code>
+                        </div>
+                      ) : (
+                        "No build SHA available"
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
               <div className="text-xs text-muted-foreground">Server: {fmtTime(deployResp.serverTime)}</div>
             </>
           ) : (

@@ -13,7 +13,7 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   }
 
   if (typeof document === "undefined") {
-    throw new Error("Clipboard is not available (no document). ");
+    throw new Error("Clipboard is not available (no document).");
   }
 
   const ta = document.createElement("textarea");
