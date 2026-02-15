@@ -33,6 +33,15 @@ type RunListRow = {
 
 type RunsResp = { ok: boolean; runs?: RunListRow[]; error?: string };
 
+type DeployStatusOk = {
+  ok: true;
+  env: { nodeEnv: string; deployEnv: string; platform: string };
+  build: { sha: string; shaShort: string };
+  serverTime: string;
+};
+
+type DeployStatusResp = { ok: false; error?: string } | DeployStatusOk;
+
 function fmtCurrencyCny(n: number): string {
   if (!Number.isFinite(n)) return "-";
   try {
@@ -57,6 +66,7 @@ function fmtTime(iso: unknown) {
 export default function DaaDashboardOverviewCards() {
   const [auth, setAuth] = useState<AuthMeResp | null>(null);
   const [runsResp, setRunsResp] = useState<RunsResp | null>(null);
+  const [deployResp, setDeployResp] = useState<DeployStatusResp | null>(null);
 
   const portfolio = useMemo(() => {
     try {
@@ -81,12 +91,14 @@ export default function DaaDashboardOverviewCards() {
         // Re-trigger skeletons while refreshing.
         setAuth(null);
         setRunsResp(null);
+        setDeployResp(null);
       }
 
       // Fetch in parallel; all endpoints are cookie-auth friendly.
-      const [authRes, runsRes] = await Promise.allSettled([
+      const [authRes, runsRes, deployRes] = await Promise.allSettled([
         fetch("/api/daa/auth/me", { method: "GET", headers: { accept: "application/json" } }),
         fetch("/api/daa/store/v0/runs?limit=1", { method: "GET", headers: { accept: "application/json" } }),
+        fetch("/api/daa/deploy-status", { method: "GET", headers: { accept: "application/json" } }),
       ]);
 
       if (!cancelled) {
@@ -110,6 +122,16 @@ export default function DaaDashboardOverviewCards() {
           setRunsResp({ ok: false, error: String(runsRes.reason ?? "fetch_failed") });
         }
 
+        if (deployRes.status === "fulfilled") {
+          try {
+            setDeployResp((await deployRes.value.json()) as DeployStatusResp);
+          } catch {
+            setDeployResp({ ok: false, error: "invalid_json" });
+          }
+        } else {
+          setDeployResp({ ok: false, error: String(deployRes.reason ?? "fetch_failed") });
+        }
+
         window.dispatchEvent(new CustomEvent(EVT_DATA_UPDATED, { detail: { ts: Date.now() } }));
       }
     }
@@ -130,8 +152,13 @@ export default function DaaDashboardOverviewCards() {
   const who = auth && auth.ok ? auth.account.username : "(not signed in)";
   const roles = auth && auth.ok ? (auth.account.roles || []).join(", ") || "-" : "-";
 
+  const deployEnv = deployResp && deployResp.ok ? deployResp.env.deployEnv : "";
+  const nodeEnv = deployResp && deployResp.ok ? deployResp.env.nodeEnv : "";
+  const platform = deployResp && deployResp.ok ? deployResp.env.platform : "";
+  const shaShort = deployResp && deployResp.ok ? deployResp.build.shaShort : "";
+
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">Balance</CardTitle>
@@ -182,6 +209,32 @@ export default function DaaDashboardOverviewCards() {
             </>
           ) : (
             <div className="text-xs text-muted-foreground">No runs yet</div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Deploy</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {deployResp === null ? (
+            <>
+              <Skeleton className="h-4 w-[220px]" />
+              <Skeleton className="h-4 w-[180px]" />
+            </>
+          ) : deployResp.ok ? (
+            <>
+              <div className="text-sm">
+                <span className="font-medium">Env:</span> {deployEnv || "-"}
+              </div>
+              <div className="text-xs text-muted-foreground">Node: {nodeEnv || "-"}</div>
+              <div className="text-xs text-muted-foreground">Platform: {platform || "-"}</div>
+              <div className="text-xs text-muted-foreground">Build: {shaShort || "-"}</div>
+              <div className="text-xs text-muted-foreground">Server: {fmtTime(deployResp.serverTime)}</div>
+            </>
+          ) : (
+            <div className="text-xs text-muted-foreground">Deploy: {String(deployResp.error ?? "error")}</div>
           )}
         </CardContent>
       </Card>
