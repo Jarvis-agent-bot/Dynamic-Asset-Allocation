@@ -255,6 +255,28 @@ export default function DaaDashboardOverviewCards() {
     ];
   }, [deployEnv, hasAnyAccounts, runsResp, sha, storeOk]);
 
+  const deployBootstrapEnvVarsText = useMemo(() => {
+    // Keep the snippet copy/paste friendly for Vercel/Render/Fly/etc.
+    const envLabel = deployEnv || "prod";
+    return [
+      "# Required (server)",
+      "DAA_SQLITE_PATH=/var/lib/daa/daa.sqlite",
+      "DAA_AUTH_BOOTSTRAP_TOKEN=...",
+      "",
+      "# Recommended (env label + build visibility)",
+      `DAA_ENV=${envLabel}`,
+      "NEXT_PUBLIC_BUILD_SHA=...",
+      "",
+      "# Optional (Python engine behind nginx; needed for some Step4/5 routes)",
+      "DAA_ENGINE_BASE_URL=https://YOUR_DOMAIN",
+      "",
+      "# Optional (email login)",
+      "# RESEND_API_KEY=...",
+      "# DAA_AUTH_EMAIL_FROM=admin@YOUR_DOMAIN",
+      "# DAA_PUBLIC_ORIGIN=https://YOUR_DOMAIN",
+    ].join("\n");
+  }, [deployEnv]);
+
   async function copyBuildSha() {
     if (!sha) {
       toast.error("No build SHA available.");
@@ -264,6 +286,15 @@ export default function DaaDashboardOverviewCards() {
     try {
       await copyTextToClipboard(sha);
       toast.success(`Copied build SHA: ${shaShort || sha.slice(0, 10)}`);
+    } catch (e) {
+      toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function copyDeployBootstrapEnvVars() {
+    try {
+      await copyTextToClipboard(deployBootstrapEnvVarsText);
+      toast.success("Copied env vars template.");
     } catch (e) {
       toast.error(`Copy failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -380,6 +411,26 @@ export default function DaaDashboardOverviewCards() {
                       <ChecklistRow key={it.id} ok={it.ok} label={it.label} detail={it.detail} />
                     ))}
                   </div>
+
+                  <div className="mt-3 rounded-md border bg-muted/20 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-medium text-foreground">Env vars template</div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7"
+                        onClick={() => void copyDeployBootstrapEnvVars()}
+                        aria-label="Copy env vars template"
+                        title="Copy env vars template"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{deployBootstrapEnvVarsText}</pre>
+                    <div className="mt-1 text-xs text-muted-foreground">Replace <code>...</code> and <code>YOUR_DOMAIN</code> before using.</div>
+                  </div>
+
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button asChild size="sm" variant="outline">
                       <a
