@@ -426,6 +426,49 @@ export default function DaaDashboardOverviewCards() {
     window.dispatchEvent(new Event(EVT_REFRESH));
   }
 
+  const deployChecklistSecrets = useMemo(() => {
+    if (!Array.isArray(deployBootstrapChecks)) return null;
+    const groups: Record<DeployBootstrapCheck["group"], DeployBootstrapCheck[]> = {
+      required: [],
+      bootstrap: [],
+      recommended: [],
+      optional: [],
+    };
+
+    for (const c of deployBootstrapChecks) {
+      if (!c) continue;
+      groups[c.group].push(c);
+    }
+
+    return groups;
+  }, [deployBootstrapChecks]);
+
+  const deployChecklistPermissions: ChecklistItem[] = useMemo(() => {
+    return [
+      {
+        id: "sqlite_writable",
+        ok: runsResp === null ? null : storeOk,
+        label: "App can read/write the SQLite DB",
+        detail: (
+          <>
+            Confirm the directory for <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_SQLITE_PATH</code> exists and is writable by the app process.
+          </>
+        ),
+      },
+      {
+        id: "admin_exists",
+        ok: hasAnyAccounts,
+        label: "An admin account exists",
+        detail: (
+          <>
+            On a fresh deploy, set <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_AUTH_BOOTSTRAP_TOKEN</code> and create the first admin via the dashboard setup or
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/api/daa/auth/bootstrap</code>.
+          </>
+        ),
+      },
+    ];
+  }, [hasAnyAccounts, runsResp, storeOk]);
+
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
       <Card>
@@ -658,6 +701,109 @@ export default function DaaDashboardOverviewCards() {
               {deployLastOkServerTime ? (
                 <div className="text-xs text-muted-foreground">Last updated: {fmtTime(deployLastOkServerTime)}</div>
               ) : null}
+              <Button type="button" size="sm" variant="outline" onClick={() => requestRefresh()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-4">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm">Deploy checklist</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => void copyDeployBootstrapAll()}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy bundle
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => void copyDeployBootstrapEnvVars()}>
+              Copy env vars
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => void copyDeployBootstrapEnvExports()}>
+              Copy exports
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {deployResp === null ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-[280px]" />
+              <Skeleton className="h-4 w-[220px]" />
+            </div>
+          ) : deployResp.ok ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-foreground">Secrets &amp; env</div>
+                {deployChecklistSecrets ? (
+                  <div className="space-y-3">
+                    {(
+                      [
+                        ["required", "Required"],
+                        ["bootstrap", "Bootstrap (fresh deploy)"],
+                        ["recommended", "Recommended"],
+                        ["optional", "Optional"],
+                      ] as const
+                    ).map(([group, title]) => {
+                      const items = deployChecklistSecrets[group];
+                      if (!items.length) return null;
+                      return (
+                        <div key={group} className="space-y-2">
+                          <div className="text-xs font-medium text-muted-foreground">{title}</div>
+                          <div className="space-y-2">
+                            {items.map((c) => (
+                              <ChecklistRow
+                                key={c.id}
+                                ok={c.ok}
+                                label={c.label}
+                                detail={
+                                  <>
+                                    <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">{c.id}</code>
+                                    {c.note ? <span className="ml-1">{c.note}</span> : null}
+                                    {Array.isArray(c.candidates) && c.candidates.length ? (
+                                      <span className="ml-1">
+                                        Candidates:{" "}
+                                        {c.candidates.map((n) => (
+                                          <code key={n} className="ml-1 rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">
+                                            {n}
+                                          </code>
+                                        ))}
+                                      </span>
+                                    ) : null}
+                                  </>
+                                }
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">Deploy status did not include bootstrap checks.</div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-foreground">Permissions &amp; runtime</div>
+                <div className="space-y-2">
+                  {deployChecklistPermissions.map((it) => (
+                    <ChecklistRow key={it.id} ok={it.ok} label={it.label} detail={it.detail} />
+                  ))}
+                </div>
+
+                <details className="rounded-md border bg-muted/20 p-2">
+                  <summary className="cursor-pointer text-xs font-medium text-foreground">Notes</summary>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    The checklist is for bootstrap safety. It does not grant permissions; you still need to configure your hosting platform and server.
+                  </div>
+                </details>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Deploy status unavailable: {String(deployResp.error ?? "error")}</div>
               <Button type="button" size="sm" variant="outline" onClick={() => requestRefresh()}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Retry
