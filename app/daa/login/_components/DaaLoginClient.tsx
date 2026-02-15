@@ -405,6 +405,16 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (!email || !pwd.trim()) {
       // Clear generic form errors so field-level validation has priority.
       setPasswordErrors((prev) => ({ ...prev, form: undefined }));
+
+      // Keep keyboard flow predictable: focus the first missing/invalid field.
+      if (!email) {
+        setTouched((prev) => ({ ...prev, email: true }));
+        passwordEmailRef.current?.focus();
+        return;
+      }
+
+      setTouched((prev) => ({ ...prev, password: true }));
+      passwordRef.current?.focus();
       return;
     }
 
@@ -474,6 +484,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     const email = normalizeEmailLoose(username);
     if (!email) {
       setTouched((prev) => ({ ...prev, email: true }));
+      emailLinkEmailRef.current?.focus();
       return;
     }
 
@@ -868,6 +879,24 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                       setUsername(e.target.value);
                       setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
                       setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+
+                      // When password is still empty, Enter on the email field should advance focus to password.
+                      // If the user already typed a password (then came back), let the form submit normally.
+                      if (password.trim()) return;
+
+                      e.preventDefault();
+
+                      const email = normalizeEmailLoose(e.currentTarget.value);
+                      if (!email) {
+                        setPasswordSubmitAttempted(true);
+                        setTouched((prev) => ({ ...prev, email: true }));
+                        return;
+                      }
+
+                      passwordRef.current?.focus();
                     }}
                     autoComplete="username"
                     placeholder="you@example.com"
