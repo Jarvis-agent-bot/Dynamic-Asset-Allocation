@@ -145,6 +145,21 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Security</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              Passwordless sign-in: <code className="rounded bg-muted px-1 py-0.5">/daa/login</code> can email you a single-use "magic link" that expires in about 15 minutes (check spam/promotions).
+            </li>
+            <li>Sessions are stored in this browser. If you're on a shared device, sign out when you're done.</li>
+            <li>If a link doesn&apos;t arrive, you can resend after the cooldown or use the Password tab.</li>
+          </ul>
+        </CardContent>
+      </Card>
+
       <Card className="border-muted-foreground/20">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Safety</CardTitle>
