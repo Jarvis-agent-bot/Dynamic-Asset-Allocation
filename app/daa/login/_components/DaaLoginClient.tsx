@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Loader2, Mail } from "lucide-react";
+import { AlertCircle, Loader2, Mail } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -575,59 +576,68 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   return (
     <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
       {emailLinkErrorCode ? (
-        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <div className="font-medium">
-            {emailLinkErrorCode === "email-link-used"
-              ? "This sign-in link has already been used."
-              : emailLinkErrorCode === "email-link-expired"
-                ? "This sign-in link has expired."
-                : "This sign-in link is invalid."}
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <div>
+            <AlertTitle>
+              {emailLinkErrorCode === "email-link-used"
+                ? "This sign-in link has already been used."
+                : emailLinkErrorCode === "email-link-expired"
+                  ? "This sign-in link has expired."
+                  : "This sign-in link is invalid."}
+            </AlertTitle>
+            <AlertDescription>
+              <div className="text-xs text-destructive/90">Request a new link or sign in with a password to continue.</div>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={emailDisabled}
+                  onClick={() => {
+                    setTab("email");
+                    setEmailLinkError(null);
+                    setEmailLink({ kind: "idle" });
+
+                    const normalized = normalizeEmailLoose(username);
+                    if (!normalized) {
+                      setTouched((prev) => ({ ...prev, email: true }));
+                      emailLinkEmailRef.current?.focus();
+                      return;
+                    }
+
+                    void requestEmailLink();
+                  }}
+                >
+                  Resend sign-in link
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setTab("password");
+                    setPasswordErrors({});
+                    setEmailLinkError(null);
+                  }}
+                >
+                  Use password instead
+                </Button>
+              </div>
+            </AlertDescription>
           </div>
-          <div className="mt-1 text-xs text-destructive/90">Request a new link or sign in with a password to continue.</div>
-          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={emailDisabled}
-              onClick={() => {
-                setTab("email");
-                setEmailLinkError(null);
-                setEmailLink({ kind: "idle" });
-
-                const normalized = normalizeEmailLoose(username);
-                if (!normalized) {
-                  setTouched((prev) => ({ ...prev, email: true }));
-                  emailLinkEmailRef.current?.focus();
-                  return;
-                }
-
-                void requestEmailLink();
-              }}
-            >
-              Resend sign-in link
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setTab("password");
-                setPasswordErrors({});
-                setEmailLinkError(null);
-              }}
-            >
-              Use password instead
-            </Button>
-          </div>
-        </div>
+        </Alert>
       ) : null}
 
       {session.kind === "error" ? (
-        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          Couldn't verify your session. You can still try signing in. ({session.message})
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <div>
+            <AlertTitle>Couldn't verify your session.</AlertTitle>
+            <AlertDescription>You can still try signing in. ({session.message})</AlertDescription>
+          </div>
+        </Alert>
       ) : null}
 
       <Card>
@@ -827,9 +837,13 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 ) : null}
 
                 {emailLinkError ? (
-                  <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                    Couldn't send a sign-in link: {emailLinkError}
-                  </div>
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <div>
+                      <AlertTitle>Couldn't send a sign-in link.</AlertTitle>
+                      <AlertDescription>{emailLinkError}</AlertDescription>
+                    </div>
+                  </Alert>
                 ) : null}
 
                 <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
@@ -979,14 +993,18 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 </details>
 
                 {mergedPasswordErrors.form ? (
-                  <div
-                    id={formErrorId}
-                    role="alert"
-                    className="grid gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-                  >
-                    <div>Couldn't sign you in: {mergedPasswordErrors.form}</div>
-                    <div className="text-xs text-muted-foreground">Double-check your email/password or ask an admin to resend/reset your credentials.</div>
-                  </div>
+                  <Alert id={formErrorId} variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <div>
+                      <AlertTitle>Couldn't sign you in.</AlertTitle>
+                      <AlertDescription>
+                        <div>{mergedPasswordErrors.form}</div>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Double-check your email/password or ask an admin to resend/reset your credentials.
+                        </div>
+                      </AlertDescription>
+                    </div>
+                  </Alert>
                 ) : null}
               </form>
             </TabsContent>
