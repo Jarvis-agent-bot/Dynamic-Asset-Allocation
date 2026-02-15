@@ -44,6 +44,8 @@ type EmailLinkModel =
   | { kind: "sent"; email: string; requestedAtMs: number; cooldownSeconds: number };
 
 const LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0 = "daa.emailLogin.lastEmail.v0";
+const LS_DAA_EMAIL_LOGIN_TAB_V0 = "daa.emailLogin.tab.v0";
+const LS_DAA_EMAIL_LINK_SENT_V0 = "daa.emailLogin.sent.v0";
 
 function normalizeEmailLoose(raw: string): string {
   const v = raw.trim().toLowerCase();
@@ -227,15 +229,61 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   }, [emailLink]);
 
   useEffect(() => {
-    // When a magic link is expired/invalid, we often bounce back to /daa/login.
-    // Prefill the last email so retrying is 1-click.
-    if (username.trim()) return;
+    // Restore last typed email + selected tab, and keep the "link sent" panel stable across refresh.
+    // This avoids the common annoyance where users refresh after requesting a link and lose context.
     try {
-      const last = window.localStorage.getItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0) || "";
-      const normalized = normalizeEmailLoose(last);
-      if (normalized) setUsername(normalized);
+      const lastEmail = (window.localStorage.getItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0) || "").trim();
+      if (lastEmail) {
+        setUsername((prev) => (prev.trim() ? prev : lastEmail.slice(0, 254)));
+      }
     } catch {
-      // Ignore storage errors (private mode / blocked storage).
+      // Ignore storage errors.
+    }
+
+    if (!emailLinkErrorCode) {
+      try {
+        const lastTab = (window.localStorage.getItem(LS_DAA_EMAIL_LOGIN_TAB_V0) || "").trim();
+        if (lastTab === "email" || lastTab === "password") setTab(lastTab);
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+
+    try {
+      const raw = window.localStorage.getItem(LS_DAA_EMAIL_LINK_SENT_V0) || "";
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      const email = normalizeEmailLoose(String(parsed?.email || ""));
+      const requestedAtMs = typeof parsed?.requestedAtMs === "number" ? parsed.requestedAtMs : NaN;
+      const cooldownSeconds = typeof parsed?.cooldownSeconds === "number" ? parsed.cooldownSeconds : NaN;
+
+      const ageMs = Date.now() - requestedAtMs;
+      const maxAgeMs = 15 * 60 * 1000;
+
+      if (email && Number.isFinite(requestedAtMs) && Number.isFinite(cooldownSeconds) && ageMs >= 0 && ageMs < maxAgeMs) {
+        setUsername((prev) => (prev.trim() ? prev : email));
+        setEmailLink({
+          kind: "sent",
+          email,
+          requestedAtMs,
+          cooldownSeconds: Math.max(0, Math.floor(cooldownSeconds)),
+        });
+      } else {
+        window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
+      }
+    } catch {
+      // Ignore storage / parse errors.
+    }
+  }, [emailLinkErrorCode]);
+
+  useEffect(() => {
+    const draft = username.trim();
+    if (!draft) return;
+    try {
+      window.localStorage.setItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0, draft.slice(0, 254));
+    } catch {
+      // Ignore storage errors.
     }
   }, [username]);
 
@@ -423,8 +471,15 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         return;
       }
 
-      const cooldownSeconds = typeof json?.cooldownSeconds === "number" && Number.isFinite(json.cooldownSeconds) ? Math.max(0, Math.floor(json.cooldownSeconds)) : 30;
-      setEmailLink({ kind: "sent", email, requestedAtMs: Date.now(), cooldownSeconds });
+      const cooldownSeconds =
+        typeof json?.cooldownSeconds === "number" && Number.isFinite(json.cooldownSeconds) ? Math.max(0, Math.floor(json.cooldownSeconds)) : 30;
+      const requestedAtMs = Date.now();
+      setEmailLink({ kind: "sent", email, requestedAtMs, cooldownSeconds });
+      try {
+        window.localStorage.setItem(LS_DAA_EMAIL_LINK_SENT_V0, JSON.stringify({ email, requestedAtMs, cooldownSeconds }));
+      } catch {
+        // Ignore storage errors.
+      }
     } catch (e) {
       setEmailLinkError(e instanceof Error ? e.message : String(e));
       setEmailLink({ kind: "idle" });
@@ -533,6 +588,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             onValueChange={(v) => {
               const vv = v === "email" ? "email" : "password";
               setTab(vv);
+              try {
+                window.localStorage.setItem(LS_DAA_EMAIL_LOGIN_TAB_V0, vv);
+              } catch {
+                // Ignore storage errors.
+              }
               setPasswordErrors({});
               setEmailLinkError(null);
             }}
@@ -574,7 +634,15 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                     onChange={(e) => {
                       setUsername(e.target.value);
                       setEmailLinkError(null);
-                      setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
+                      setEmailLink((prev) => {
+                        if (prev.kind !== "sent") return prev;
+                        try {
+                          window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
+                        } catch {
+                          // Ignore storage errors.
+                        }
+                        return { kind: "idle" };
+                      });
                     }}
                     autoComplete="email"
                     placeholder="you@example.com"
