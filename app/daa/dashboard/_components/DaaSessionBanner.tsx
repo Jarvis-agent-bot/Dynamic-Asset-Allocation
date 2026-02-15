@@ -126,7 +126,7 @@ export default function DaaSessionBanner() {
     model.kind === "signedIn"
       ? `Signed in as ${model.me.account.username}`
       : model.kind === "signedOut"
-        ? "Not signed in"
+        ? "Signed out"
         : model.kind === "error"
           ? "Session status"
           : "Loading session";
@@ -135,7 +135,7 @@ export default function DaaSessionBanner() {
     model.kind === "signedIn"
       ? `roles: ${formatRoles(model.me.account.roles)} · expires: ${model.me.session.expiresAt}`
       : model.kind === "signedOut"
-        ? "You need a session to use the dashboard."
+        ? "Sign in to use the dashboard."
         : model.kind === "error"
           ? `Error: ${model.message}`
           : "";
@@ -150,7 +150,7 @@ export default function DaaSessionBanner() {
 
         <div className="flex items-center gap-2">
           {model.kind === "signedOut" ? (
-            <Button asChild size="sm" variant="secondary">
+            <Button asChild size="sm">
               <Link href={`/daa/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in</Link>
             </Button>
           ) : null}

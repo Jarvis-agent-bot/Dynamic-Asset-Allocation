@@ -178,7 +178,7 @@ function SignedOutState({ returnTo }: { returnTo: string }) {
         <CardTitle className="text-base">Sign in required</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="text-sm text-muted-foreground">This dashboard requires an active session. Sign in to continue.</div>
+        <div className="text-sm text-muted-foreground">You are signed out (or your session expired). Sign in to continue.</div>
         <div className="flex flex-wrap gap-2">
           <Button asChild>
             <Link href={`/daa/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in</Link>
@@ -188,7 +188,7 @@ function SignedOutState({ returnTo }: { returnTo: string }) {
           </Button>
         </div>
         <div className="text-xs text-muted-foreground">
-          Tip: <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> is the canonical DAA entry point.
+          Tip: <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> is the canonical DAA entry point; legacy <code className="rounded bg-muted px-1 py-0.5">/daa*</code> routes redirect here.
         </div>
       </CardContent>
     </Card>
