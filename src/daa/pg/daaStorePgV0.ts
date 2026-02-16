@@ -95,8 +95,14 @@ export async function ensureDaaStoreSchemaPgV0(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_daa_runs_created_at
           ON daa_runs(created_at);
 
+        CREATE INDEX IF NOT EXISTS idx_daa_runs_created_at_desc
+          ON daa_runs(created_at DESC, run_id DESC);
+
         CREATE INDEX IF NOT EXISTS idx_daa_runs_actor_created_at
           ON daa_runs(actor, created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_daa_runs_actor_created_at_desc
+          ON daa_runs(actor, created_at DESC, run_id DESC);
 
         CREATE TABLE IF NOT EXISTS daa_run_portfolio (
           run_id TEXT PRIMARY KEY REFERENCES daa_runs(run_id) ON DELETE CASCADE,
@@ -128,8 +134,14 @@ export async function ensureDaaStoreSchemaPgV0(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_run_created_at
           ON daa_run_audit_events(run_id, created_at);
 
+        CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_created_event_desc
+          ON daa_run_audit_events(created_at DESC, event_id DESC);
+
         CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_at
           ON daa_run_audit_events(actor_user_id, created_at, event_id);
+
+        CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_event_desc
+          ON daa_run_audit_events(actor_user_id, created_at DESC, event_id DESC);
 
         CREATE TABLE IF NOT EXISTS daa_admin_user_status (
           user_id TEXT PRIMARY KEY,
