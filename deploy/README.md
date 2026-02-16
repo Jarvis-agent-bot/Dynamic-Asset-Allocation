@@ -24,12 +24,15 @@ It will pull latest `main`, build the image, and restart the service.
 - No qlib / AI secrets are required for the v0 framework.
 
 ## DAA API Auth (FastAPI)
-The Python engine exposes a passwordless (email magic-link) auth flow for dashboard-adjacent admin APIs.
+The Python engine includes a legacy passwordless (email magic-link) auth flow.
+In the current epoch, public `/api/daa/*` is owned by Next.js and FastAPI public
+`/api/daa/*` handlers are disabled by default (`DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=0`).
 
-Env vars (recommended for production):
+Env vars (legacy/optional):
 - `DAA_ADMIN_EDITOR_EMAILS`: comma-separated allowlist (editor role)
 - `DAA_ADMIN_VIEWER_EMAILS`: comma-separated allowlist (viewer role)
 - `RESEND_API_KEY`: Resend API key
 - `DAA_AUTH_EMAIL_FROM`: sender (e.g. `DAA <no-reply@your-domain>`)
 - `DAA_AUTH_PUBLIC_BASE_URL`: public base URL for the engine, e.g. `https://exwxyzi.cn/daa-api`
 - Optional: `DAA_AUTH_COOKIE_NAME` (default: `daa_api_session`)
+- Optional (legacy override): `DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=1`
