@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Literal, Optional
 
 from fastapi import FastAPI, Query
@@ -10,11 +11,11 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(title="DAA Python Engine", version="0.1.0")
 
-# Auth API (v0): passwordless email magic-link + cookie session.
-app.include_router(auth_v0_router)
-
-# Store API (v0): runs + audit events + bundles.
-app.include_router(store_v0_router)
+# Epoch guardrail: public /api/daa belongs to Next.js routes. Keep legacy FastAPI
+# /api/daa/* handlers off by default to avoid serving that surface from this app.
+if os.environ.get("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES", "0") == "1":
+    app.include_router(auth_v0_router)
+    app.include_router(store_v0_router)
 
 
 class HealthResponse(BaseModel):
