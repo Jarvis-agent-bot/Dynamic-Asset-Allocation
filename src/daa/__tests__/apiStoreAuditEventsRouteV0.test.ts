@@ -56,7 +56,7 @@ describe("/api/daa/store/v0/audit-events route v0", () => {
       createdAt: "2026-02-16T04:00:02.000Z",
     });
 
-    const mod = await import("../../../../app/api/daa/store/v0/audit-events/route");
+    const mod = await import("../../../app/api/daa/store/v0/audit-events/route");
     const req = new Request("https://example.com/api/daa/store/v0/audit-events?source=all&limit=10", {
       method: "GET",
       headers: {

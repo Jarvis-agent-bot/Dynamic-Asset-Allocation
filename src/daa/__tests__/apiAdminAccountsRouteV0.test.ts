@@ -23,7 +23,7 @@ describe("/api/daa/admin/accounts route v0", () => {
   it("denies unauthenticated GET", async () => {
     resetPgMem();
 
-    const mod = await import("../../../../app/api/daa/admin/accounts/route");
+    const mod = await import("../../../app/api/daa/admin/accounts/route");
     const req = new Request("https://example.com/api/daa/admin/accounts", { method: "GET" });
 
     const res: Response = await (mod as any).GET(req);
@@ -36,7 +36,7 @@ describe("/api/daa/admin/accounts route v0", () => {
     const admin = await createDaaAuthAccountV0({ username: "admin@example.com", password: "pw-1", roles: ["editor"] });
     const { token } = await createDaaAuthSessionV0({ accountId: admin.accountId, ttlDays: 7, userAgent: "ua", ip: "1.2.3.4" });
 
-    const mod = await import("../../../../app/api/daa/admin/accounts/route");
+    const mod = await import("../../../app/api/daa/admin/accounts/route");
     const req = new Request("https://example.com/api/daa/admin/accounts", {
       method: "GET",
       headers: {

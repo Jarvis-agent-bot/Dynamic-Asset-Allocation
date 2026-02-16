@@ -79,3 +79,4 @@ fabric.properties
 
 /node_modules/
 /.next/
+*.tsbuildinfo
