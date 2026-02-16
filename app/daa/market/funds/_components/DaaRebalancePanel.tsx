@@ -58,6 +58,7 @@ import DaaDashboardRunChecklist from '../../../dashboard/_components/DaaDashboar
 
 import Step1BacktestPage from '../../../step/_pages/Step1BacktestPage';
 import Step2MarketEventsPage from '../../../step/_pages/Step2MarketEventsPage';
+import Step3MoneyManagementPage from '../../../step/_pages/Step3MoneyManagementPage';
 import Step4BaselineRecommendationPage from '../../../step/_pages/Step4BaselineRecommendationPage';
 import Step6HumanFactorPage from '../../../step/_pages/Step6HumanFactorPage';
 import Step7TagsPage from '../../../step/_pages/Step7TagsPage';
@@ -5099,6 +5100,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
           <div id="step2" style={{ scrollMarginTop: 12 }}>
             <Step2MarketEventsPage />
+          </div>
+
+          <div id="step3" style={{ scrollMarginTop: 12 }}>
+            <Step3MoneyManagementPage />
           </div>
 
           <div id="step4" style={{ scrollMarginTop: 12 }}>
