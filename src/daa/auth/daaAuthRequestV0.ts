@@ -47,7 +47,12 @@ export function getUserAgentFromRequestV0(req: Request): string {
   return normalizeHeaderValue(req.headers.get("user-agent"));
 }
 
-export async function getDaaAuthContextFromRequestV0(req: Request): Promise<
+export async function getDaaAuthContextFromRequestV0(
+  req: Request,
+  opts: {
+    touch?: boolean;
+  } = {},
+): Promise<
   | {
       token: string;
       account: DaaAuthAccountV0;
@@ -58,7 +63,7 @@ export async function getDaaAuthContextFromRequestV0(req: Request): Promise<
   const token = getDaaAuthSessionTokenFromRequestV0(req);
   if (!token) return null;
 
-  const found = await getDaaAuthAccountBySessionTokenV0({ token, touch: true });
+  const found = await getDaaAuthAccountBySessionTokenV0({ token, touch: opts.touch !== false });
   if (!found) return null;
 
   return { token, account: found.account, session: found.session };

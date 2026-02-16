@@ -1,22 +1,25 @@
 import { NextResponse } from "next/server";
 
+import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { getDaaAuthContextFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
-import { hasAnyDaaAuthAccountsV0 } from "@/src/daa/auth/daaAuthStoreV0";
+import { hasAnyDaaAuthAccountsV0, refreshDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const ctx = await getDaaAuthContextFromRequestV0(req);
+  const ctx = await getDaaAuthContextFromRequestV0(req, { touch: false });
   if (!ctx) {
     const anyAccounts = await hasAnyDaaAuthAccountsV0();
     const error = anyAccounts ? "not_authenticated" : "bootstrap_required";
     return NextResponse.json({ ok: false, error }, { status: 401 });
   }
 
-  const { account, session } = ctx;
+  const { account, session, token } = ctx;
+  const refreshed = await refreshDaaAuthSessionV0({ sessionId: session.sessionId });
+  const responseSession = refreshed ?? session;
 
   // Intentionally exclude the raw session token.
-  return NextResponse.json({
+  const res = NextResponse.json({
     ok: true,
     account: {
       accountId: account.accountId,
@@ -25,11 +28,25 @@ export async function GET(req: Request) {
       status: account.status,
     },
     session: {
-      sessionId: session.sessionId,
-      createdAt: session.createdAt,
-      expiresAt: session.expiresAt,
-      revokedAt: session.revokedAt,
-      lastSeenAt: session.lastSeenAt,
+      sessionId: responseSession.sessionId,
+      createdAt: responseSession.createdAt,
+      expiresAt: responseSession.expiresAt,
+      revokedAt: responseSession.revokedAt,
+      lastSeenAt: responseSession.lastSeenAt,
     },
   });
+
+  if (refreshed) {
+    res.cookies.set({
+      name: DAA_AUTH_SESSION_COOKIE_V0,
+      value: token,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
+      expires: new Date(refreshed.expiresAt),
+    });
+  }
+
+  return res;
 }
