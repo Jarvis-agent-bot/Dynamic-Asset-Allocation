@@ -20,6 +20,9 @@ function resetPgMem() {
   delete (globalThis as any)[STORE_PG_GLOBAL_KEY];
   delete process.env.DAA_DB_URL;
   delete process.env.DATABASE_URL;
+  delete process.env.DAA_STORE_AUDIT_RETENTION_DAYS;
+  delete process.env.DAA_STORE_AUDIT_RETENTION_DELETE_BATCH;
+  delete process.env.DAA_STORE_AUDIT_RETENTION_CLEANUP_INTERVAL_MS;
 }
 
 describe("daa/store v0 (pg)", () => {
@@ -168,5 +171,45 @@ describe("daa/store v0 (pg)", () => {
 
     const bundle = await getDaaRunBundleV0(a.runId);
     expect(bundle.audit.some((e) => e.actorUserId === "editor-token")).toBe(true);
+  });
+
+  it("retention cleanup prunes stale audit rows but keeps one row per run", async () => {
+    resetPgMem();
+    process.env.DAA_STORE_AUDIT_RETENTION_DAYS = "1";
+    process.env.DAA_STORE_AUDIT_RETENTION_DELETE_BATCH = "50";
+    process.env.DAA_STORE_AUDIT_RETENTION_CLEANUP_INTERVAL_MS = "0";
+
+    const oldRun = await createDaaRunV0({
+      kind: "rebalance",
+      payload: { source: "/daa/dashboard" },
+      createdAt: "2024-01-01T00:00:00.000Z",
+      actorUserId: "editor-token",
+    });
+
+    await appendDaaRunAuditEventV0({
+      runId: oldRun.runId,
+      kind: "note",
+      payload: { text: "old note" },
+      createdAt: "2024-01-01T00:00:01.000Z",
+      actorUserId: "editor-token",
+    });
+
+    await createDaaRunV0({
+      kind: "rebalance",
+      payload: { source: "/daa/dashboard" },
+      createdAt: "2026-03-01T00:00:00.000Z",
+      actorUserId: "editor-token",
+    });
+
+    const oldBundle = await getDaaRunBundleV0(oldRun.runId);
+    expect(oldBundle.audit.length).toBe(1);
+    expect(oldBundle.audit[0]?.kind).toBe("note");
+
+    const oldEvents = await listDaaRunAuditEventsV0({
+      limit: 50,
+      fromCreatedAt: "2024-01-01T00:00:00.000Z",
+      toCreatedAt: "2024-01-01T00:00:01.000Z",
+    });
+    expect(oldEvents.filter((e) => e.runId === oldRun.runId).length).toBe(1);
   });
 });
