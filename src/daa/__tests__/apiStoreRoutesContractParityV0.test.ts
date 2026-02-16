@@ -34,7 +34,7 @@ describe("/api/daa/store/v0/run/{runId} route contract parity", () => {
   it("enforces viewer auth and preserves missing/not-found status codes", async () => {
     resetPgMem();
 
-    const getRunMod = await import("../../../../app/api/daa/store/v0/run/[runId]/route");
+    const getRunMod = await import("../../../app/api/daa/store/v0/run/[runId]/route");
 
     const unauthorizedReq = new Request("https://example.com/api/daa/store/v0/run/run_missing", { method: "GET" });
     const unauthorizedRes: Response = await (getRunMod as any).GET(unauthorizedReq, { params: { runId: "run_missing" } });
@@ -83,10 +83,10 @@ describe("/api/daa/store/v0/run/{runId} route contract parity", () => {
     const editorCookie = await createSessionCookie(["editor"]);
     const postBody = JSON.stringify({ payload: { source: "/daa/dashboard", actor: "editor" }, kind: "note" });
 
-    const confirmMod = await import("../../../../app/api/daa/store/v0/run/[runId]/confirm/route");
-    const executedMod = await import("../../../../app/api/daa/store/v0/run/[runId]/executed/route");
-    const portfolioMod = await import("../../../../app/api/daa/store/v0/run/[runId]/portfolio/route");
-    const auditMod = await import("../../../../app/api/daa/store/v0/run/[runId]/audit/route");
+    const confirmMod = await import("../../../app/api/daa/store/v0/run/[runId]/confirm/route");
+    const executedMod = await import("../../../app/api/daa/store/v0/run/[runId]/executed/route");
+    const portfolioMod = await import("../../../app/api/daa/store/v0/run/[runId]/portfolio/route");
+    const auditMod = await import("../../../app/api/daa/store/v0/run/[runId]/audit/route");
 
     const endpoints = [
       { name: "confirm", mod: confirmMod, runId: "" },

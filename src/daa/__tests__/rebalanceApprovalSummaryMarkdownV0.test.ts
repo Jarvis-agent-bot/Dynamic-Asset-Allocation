@@ -27,10 +27,22 @@ describe("rebalance approval summary markdown (v0)", () => {
       slippageTotal: 0.5,
       costTotal: 0.7,
 
+      feeBuyTotal: 0.1,
+      feeSellTotal: 0.1,
+      slippageBuyTotal: 0.25,
+      slippageSellTotal: 0.25,
+      costBuyTotal: 0.35,
+      costSellTotal: 0.35,
+
+      buyCashOutflow: 100,
+      sellProceedsGross: 100,
+      sellProceedsNet: 99.65,
+      cashDelta: -0.35,
+
       totalBefore: 1000,
       totalAfter: 999.3,
       cashBefore: 100,
-      cashAfter: 99.3,
+      cashAfter: 99.65,
       warnings: [],
       rows: [],
     };

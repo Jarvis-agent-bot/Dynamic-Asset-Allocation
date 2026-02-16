@@ -19,12 +19,14 @@ describe("market/marketDataClient", () => {
     await client.yfinance.priceSeries({ symbol: "SPY", start: "2026-01-01", end: "2026-02-01" });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+
+    const calls = fetchMock.mock.calls as unknown as [string | URL, RequestInit?][];
+    expect(calls[0]?.[0]).toBe(
       "https://example.com/api/daa/market/yfinance/price-series?symbol=SPY&start=2026-01-01&end=2026-02-01",
     );
 
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect(init.method).toBe("GET");
+    const init = calls[0]?.[1];
+    expect(init?.method).toBe("GET");
   });
 
   it("yahoo.rss() throws a useful error on non-2xx responses", async () => {
