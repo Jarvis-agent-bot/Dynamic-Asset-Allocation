@@ -1,0 +1,28 @@
+name: DAA Production Smoke
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard-engine-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Smoke /daa/dashboard and /api/daa/engine-health
+        env:
+          DAA_SMOKE_BASE_URL: ${{ vars.DAA_SMOKE_BASE_URL }}
+          DAA_SMOKE_TIMEOUT_MS: "12000"
+        run: node deploy/smoke_prod_dashboard_engine.mjs
