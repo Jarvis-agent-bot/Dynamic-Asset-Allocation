@@ -149,6 +149,9 @@ export async function ensureDaaAuthSchemaPgV0(): Promise<void> {
 
         CREATE INDEX IF NOT EXISTS idx_daa_auth_audit_events_actor
           ON daa_auth_audit_events(actor_user_id, created_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_daa_auth_audit_events_actor_created_event
+          ON daa_auth_audit_events(actor_user_id, created_at DESC, event_id DESC);
       `);
 
       await query("COMMIT");
