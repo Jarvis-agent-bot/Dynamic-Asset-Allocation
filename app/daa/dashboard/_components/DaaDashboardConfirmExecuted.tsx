@@ -231,7 +231,7 @@ export default function DaaDashboardConfirmExecuted() {
         },
       };
 
-      const r = await apiPost("/api/daa/store/v0/run", payload);
+      const r = await apiPost("/api/daa/runs", payload);
       const rid = String(r?.runId ?? "").trim();
       if (!rid) throw new Error("missing runId in response");
 

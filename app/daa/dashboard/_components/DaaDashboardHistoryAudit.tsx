@@ -215,7 +215,7 @@ export default function DaaDashboardHistoryAudit() {
     }
 
     try {
-      const res = await fetch(`/api/daa/store/v0/runs?${qs.toString()}`, { method: "GET", headers: { accept: "application/json" } });
+      const res = await fetch(`/api/daa/runs?${qs.toString()}`, { method: "GET", headers: { accept: "application/json" } });
       const payload = (await res.json()) as RunsResp;
       if (!res.ok || !payload?.ok) throw new Error(String(payload?.error ?? `HTTP ${res.status}`));
 
