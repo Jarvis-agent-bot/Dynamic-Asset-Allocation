@@ -3227,10 +3227,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               {missingTargets ? (
                 <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
                   - Target weights missing. Dynamic rebalance can’t run until you configure targets.
-                  <span style={{ marginLeft: 8 }}>
+                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
                     <button type="button" className="button secondary" onClick={() => jumpTo('target-weights')} style={{ padding: '4px 8px' }}>
                       Set target weights
                     </button>
+                    <Link href="/daa/dashboard?tab=wizard&step=4" className="muted" style={{ fontSize: 11 }}>
+                      Open Step4 recommendation
+                    </Link>
                   </span>
                 </div>
               ) : null}
@@ -3238,10 +3241,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               {hasPriceWarnings ? (
                 <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
                   - Price data warnings: missing={priceDataWarningsV0.missing.length}; lastCloseFallback={priceDataWarningsV0.lastClose.length}.
-                  <span style={{ marginLeft: 8 }}>
+                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
                     <button type="button" className="button secondary" onClick={() => jumpTo('prices')} style={{ padding: '4px 8px' }}>
                       Update prices
                     </button>
+                    <Link href="/daa/dashboard?tab=wizard&step=2" className="muted" style={{ fontSize: 11 }}>
+                      Open Step2 market events
+                    </Link>
                   </span>
                 </div>
               ) : null}
@@ -3265,10 +3271,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   - Constraints/validation BLOCKERS: {blockers.length}.{' '}
                   <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{blockers.slice(0, 2).map((x) => x.title).join('; ')}</span>
                   {blockers.length > 2 ? ' …' : ''}
-                  <span style={{ marginLeft: 8 }}>
+                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
                     <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
                       Review blockers
                     </button>
+                    <Link href="/daa/dashboard?tab=wizard&step=3" className="muted" style={{ fontSize: 11 }}>
+                      Open Step3 money plan
+                    </Link>
                   </span>
                 </div>
               ) : null}
@@ -3278,10 +3287,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   - Constraints/validation warnings: {warnings.length}.{' '}
                   <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{warnings.slice(0, 2).map((x) => x.title).join('; ')}</span>
                   {warnings.length > 2 ? ' …' : ''}
-                  <span style={{ marginLeft: 8 }}>
+                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
                     <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
                       Review warnings
                     </button>
+                    <Link href="/daa/dashboard?tab=wizard&step=3" className="muted" style={{ fontSize: 11 }}>
+                      Open Step3 money plan
+                    </Link>
                   </span>
                 </div>
               ) : null}
