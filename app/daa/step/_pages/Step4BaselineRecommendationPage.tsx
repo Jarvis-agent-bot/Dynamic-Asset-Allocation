@@ -1,6 +1,11 @@
 "use client";
 
-import { LS_REBALANCE_CORE_REQUEST, LS_REBALANCE_CORE_RESPONSE } from "../../wizardStorage";
+import {
+  DAA_FUNDS_HUB_RUN_RECOMMENDATION_DONE_EVENT,
+  DAA_FUNDS_HUB_RUN_RECOMMENDATION_EVENT,
+  LS_REBALANCE_CORE_REQUEST,
+  LS_REBALANCE_CORE_RESPONSE,
+} from "../../wizardStorage";
 
 import { RebalanceSimulatePanel } from "../_components/RebalanceSimulatePanel";
 
@@ -27,6 +32,8 @@ export default function Step4BaselineRecommendationPage() {
           title="Generate v0 baseline recommendation"
           fixtureEndpoint="/api/daa/fixtures/rebalance-simulate-request-v0"
           includeMarketContext
+          runTriggerEvent={DAA_FUNDS_HUB_RUN_RECOMMENDATION_EVENT}
+          runTriggerDoneEvent={DAA_FUNDS_HUB_RUN_RECOMMENDATION_DONE_EVENT}
         />
       </div>
 

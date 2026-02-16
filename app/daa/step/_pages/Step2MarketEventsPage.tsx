@@ -10,7 +10,15 @@ import {
   normalizeYahooFinanceNewsInput,
 } from "../../../../src/market/normalize";
 
-import { LS_MARKET_EVENTS, pretty, readJsonFromLs, saveJsonToLs, WIZARD_DATA_EVENT } from "../../wizardStorage";
+import {
+  DAA_FUNDS_HUB_REFRESH_MARKET_DONE_EVENT,
+  DAA_FUNDS_HUB_REFRESH_MARKET_EVENT,
+  LS_MARKET_EVENTS,
+  pretty,
+  readJsonFromLs,
+  saveJsonToLs,
+  WIZARD_DATA_EVENT,
+} from "../../wizardStorage";
 import { getAllowedValueKeySetForAppliesTo, loadTagTaxonomy } from "../../tagTaxonomy";
 import { useMarketDataClient } from "../../useMarketDataClient";
 
@@ -694,6 +702,27 @@ export default function Step2MarketEventsPage() {
       window.setTimeout(() => setFetchState(""), 2000);
     }
   }
+
+  async function refreshMarketSourcesForFundsHubRunV0() {
+    await fetchTwitterList();
+    await fetchYahooRss();
+    await fetchXueqiuQuote();
+  }
+
+  useEffect(() => {
+    const onRun = async () => {
+      let detail: { ok: boolean; error?: string } = { ok: true };
+      try {
+        await refreshMarketSourcesForFundsHubRunV0();
+      } catch (e) {
+        detail = { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+      window.dispatchEvent(new CustomEvent(DAA_FUNDS_HUB_REFRESH_MARKET_DONE_EVENT, { detail }));
+    };
+
+    window.addEventListener(DAA_FUNDS_HUB_REFRESH_MARKET_EVENT, onRun as EventListener);
+    return () => window.removeEventListener(DAA_FUNDS_HUB_REFRESH_MARKET_EVENT, onRun as EventListener);
+  }, [fetchTwitterList, fetchYahooRss, fetchXueqiuQuote]);
 
   return (
     <main>

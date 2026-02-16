@@ -14,7 +14,8 @@ import {
   LS_REBALANCE_RESPONSE,
   WIZARD_DATA_EVENT,
   readJsonFromLs,
-  saveJsonToLs} from "../../wizardStorage";
+  saveJsonToLs,
+} from "../../wizardStorage";
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from "../../portfolioStateStore";
 import { OrdersReviewV0 } from "../../_components/OrdersReviewV0";
 
@@ -39,6 +40,9 @@ type Props = {
     responseJson: unknown;
     ok: boolean;
   }) => void;
+  // Optional: start this panel run from a cross-component orchestration event.
+  runTriggerEvent?: string;
+  runTriggerDoneEvent?: string;
 };
 
 function pretty(x: unknown) {
@@ -95,7 +99,10 @@ export function RebalanceSimulatePanel({
   storageKeyRequest,
   storageKeyResponse,
   includeMarketContext,
-  onResult}: Props) {
+  onResult,
+  runTriggerEvent,
+  runTriggerDoneEvent,
+}: Props) {
   const requestKey = storageKeyRequest ?? LS_REBALANCE_REQUEST;
   const responseKey = storageKeyResponse ?? LS_REBALANCE_RESPONSE;
 
@@ -247,7 +254,7 @@ export function RebalanceSimulatePanel({
     }
   }
 
-  async function run() {
+  async function run(): Promise<{ ok: boolean; error?: string }> {
     setLastAttemptAt(new Date().toISOString());
 
     setLoading(true);
@@ -264,7 +271,7 @@ export function RebalanceSimulatePanel({
       abortRef.current = null;
       setLoading(false);
       setError(parsed.error);
-      return;
+      return { ok: false, error: parsed.error };
     }
 
     try {
@@ -379,17 +386,36 @@ export function RebalanceSimulatePanel({
         ok: res.ok});
 
       if (!res.ok) {
-        setError(`HTTP ${res.status}`);
+        const msg = `HTTP ${res.status}`;
+        setError(msg);
+        return { ok: false, error: msg };
       }
+
+      return { ok: true };
     } catch (e) {
       const isAbort = typeof e === "object" && e !== null && "name" in e && (e as any).name === "AbortError";
-      if (isAbort) setError("Canceled");
-      else setError(e instanceof Error ? e.message : String(e));
+      const msg = isAbort ? "Canceled" : e instanceof Error ? e.message : String(e);
+      setError(msg);
+      return { ok: false, error: msg };
     } finally {
       abortRef.current = null;
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!runTriggerEvent) return;
+
+    const onTrigger = async () => {
+      const detail = await run();
+      if (runTriggerDoneEvent) {
+        window.dispatchEvent(new CustomEvent(runTriggerDoneEvent, { detail }));
+      }
+    };
+
+    window.addEventListener(runTriggerEvent, onTrigger as EventListener);
+    return () => window.removeEventListener(runTriggerEvent, onTrigger as EventListener);
+  }, [run, runTriggerDoneEvent, runTriggerEvent]);
 
   const okStatus = httpStatus !== null && httpStatus >= 200 && httpStatus < 300;
   const canRecordPaperExec = okStatus && orders.length > 0 && !loading;

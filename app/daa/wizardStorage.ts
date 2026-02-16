@@ -17,6 +17,12 @@ export const LS_HUMAN_PROFILE = "daa.step6.humanProfile";
 
 export const WIZARD_DATA_EVENT = "daa:wizard:data";
 
+// Funds hub one-click "Run DAA" orchestration events (Step2 refresh + Step4 recommendation).
+export const DAA_FUNDS_HUB_REFRESH_MARKET_EVENT = "daa:funds-hub:refresh-market";
+export const DAA_FUNDS_HUB_REFRESH_MARKET_DONE_EVENT = "daa:funds-hub:refresh-market:done";
+export const DAA_FUNDS_HUB_RUN_RECOMMENDATION_EVENT = "daa:funds-hub:run-recommendation";
+export const DAA_FUNDS_HUB_RUN_RECOMMENDATION_DONE_EVENT = "daa:funds-hub:run-recommendation:done";
+
 export function pretty(x: unknown) {
   return JSON.stringify(x, null, 2);
 }

@@ -43,13 +43,18 @@ import { estimateTaxLotsImpactV0 } from '@/src/daa/taxLotsImpactV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
+  DAA_FUNDS_HUB_REFRESH_MARKET_DONE_EVENT,
+  DAA_FUNDS_HUB_REFRESH_MARKET_EVENT,
+  DAA_FUNDS_HUB_RUN_RECOMMENDATION_DONE_EVENT,
+  DAA_FUNDS_HUB_RUN_RECOMMENDATION_EVENT,
   LS_MONEY_PLAN,
   LS_REBALANCE_REQUEST,
   LS_REBALANCE_RESPONSE,
   WIZARD_DATA_EVENT,
   pretty,
   readJsonFromLs,
-  saveJsonToLs} from '../../../wizardStorage';
+  saveJsonToLs,
+} from '../../../wizardStorage';
 
 import DaaDashboardAiExplain from '../../../dashboard/_components/DaaDashboardAiExplain';
 import DaaDashboardExport from '../../../dashboard/_components/DaaDashboardExport';
@@ -435,6 +440,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [copyWeightsStatus, setCopyWeightsStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyApprovalSummaryStatus, setCopyApprovalSummaryStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [sampleStatus, setSampleStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [runDaaStatus, setRunDaaStatus] = useState<'idle' | 'running' | 'ok' | 'error'>('idle');
+  const [runDaaStatusText, setRunDaaStatusText] = useState<string>('');
 
   const [autoPlanScenario, setAutoPlanScenario] = useState<AutoPlanScenarioKeyV0>(() => {
     const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
@@ -705,6 +712,63 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     // Ensure the panel is open before scrolling.
     setOpen(true);
     window.setTimeout(() => scrollToId(targetId), 50);
+  }
+
+  function waitForRunDaaStepV0(eventName: string, timeoutMs: number) {
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      let finished = false;
+
+      const onDone = (ev: Event) => {
+        if (finished) return;
+        finished = true;
+        window.clearTimeout(timer);
+        window.removeEventListener(eventName, onDone as EventListener);
+        const detail = (ev as CustomEvent<{ ok: boolean; error?: string }>).detail;
+        resolve(detail && typeof detail === 'object' ? detail : { ok: true });
+      };
+
+      const timer = window.setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        window.removeEventListener(eventName, onDone as EventListener);
+        resolve({ ok: false, error: 'timeout' });
+      }, timeoutMs);
+
+      window.addEventListener(eventName, onDone as EventListener);
+    });
+  }
+
+  async function runDaaRefreshAndRecommendationV0() {
+    if (runDaaStatus === 'running') return;
+
+    setOpen(true);
+    setRunDaaStatus('running');
+    setRunDaaStatusText('Refreshing Step2 market sources...');
+
+    window.dispatchEvent(new CustomEvent(DAA_FUNDS_HUB_REFRESH_MARKET_EVENT));
+    const refreshResult = await waitForRunDaaStepV0(DAA_FUNDS_HUB_REFRESH_MARKET_DONE_EVENT, 45_000);
+    if (!refreshResult.ok) {
+      setRunDaaStatus('error');
+      setRunDaaStatusText(`Step2 refresh failed: ${refreshResult.error ?? 'unknown error'}`);
+      return;
+    }
+
+    setRunDaaStatusText('Generating Step4 recommendation...');
+    window.dispatchEvent(new CustomEvent(DAA_FUNDS_HUB_RUN_RECOMMENDATION_EVENT));
+    const runResult = await waitForRunDaaStepV0(DAA_FUNDS_HUB_RUN_RECOMMENDATION_DONE_EVENT, 45_000);
+    if (!runResult.ok) {
+      setRunDaaStatus('error');
+      setRunDaaStatusText(`Step4 recommendation failed: ${runResult.error ?? 'unknown error'}`);
+      return;
+    }
+
+    setRunDaaStatus('ok');
+    setRunDaaStatusText('Run DAA completed: Step2 refreshed and Step4 recommendation updated.');
+    jumpTo('step4');
+    window.setTimeout(() => {
+      setRunDaaStatus('idle');
+      setRunDaaStatusText('');
+    }, 3000);
   }
 
   const headline = useMemo(() => {
@@ -3130,6 +3194,17 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
           <button
             type="button"
+            className="button"
+            onClick={() => runDaaRefreshAndRecommendationV0()}
+            style={{ padding: '6px 10px' }}
+            disabled={runDaaStatus === 'running'}
+            title="One-click Run DAA: refresh Step2 market sources, then generate Step4 recommendation."
+          >
+            {runDaaStatus === 'running' ? 'Run DAA...' : 'Run DAA (refresh + recommendation)'}
+          </button>
+
+          <button
+            type="button"
             className="button secondary"
             onClick={() => openPreflightForRun()}
             style={{ padding: '6px 10px' }}
@@ -3319,6 +3394,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
+        {runDaaStatusText ? (
+          <div style={{ marginTop: 4, color: runDaaStatus === 'error' ? 'var(--danger)' : runDaaStatus === 'ok' ? '#16a34a' : 'inherit' }}>
+            Run DAA: {runDaaStatusText}
+          </div>
+        ) : null}
       </div>
 
       {open ? (
