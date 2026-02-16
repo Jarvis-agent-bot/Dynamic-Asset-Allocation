@@ -13,6 +13,7 @@ import { loadRebalanceScheduleStateV1 } from "./rebalanceScheduleStore";
 import {
   LS_HUMAN_PROFILE,
   LS_MARKET_EVENTS,
+  LS_MONEY_PLAN,
   LS_REBALANCE_REQUEST,
   LS_REBALANCE_RESPONSE,
   WIZARD_DATA_EVENT,
@@ -26,6 +27,7 @@ export type DaaWorkflowExportBundleV1 = {
 
   // Core path: Step2 -> Step4 -> Step5 -> Step6 -> Step7
   market_events: unknown;
+  money_plan: unknown;
   rebalance_request: unknown;
   recommendation: unknown;
   ai_explain: unknown;
@@ -42,6 +44,7 @@ export type DaaWorkflowExportBundleV1 = {
 
   meta: {
     tagTaxonomyConfigured: boolean;
+    hasMoneyPlan: boolean;
   };
 };
 
@@ -59,6 +62,7 @@ export function useDaaWorkflowExportBundleV1() {
   }, []);
 
   const marketEvents = useMemo(() => readJsonFromLs(LS_MARKET_EVENTS), [rev]);
+  const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
   const rebalanceReq = useMemo(() => readJsonFromLs(LS_REBALANCE_REQUEST), [rev]);
   const rebalanceResp = useMemo(() => readJsonFromLs(LS_REBALANCE_RESPONSE), [rev]);
   const humanProfile = useMemo(() => readJsonFromLs(LS_HUMAN_PROFILE), [rev]);
@@ -90,6 +94,7 @@ export function useDaaWorkflowExportBundleV1() {
       generatedAt: new Date().toISOString(),
 
       market_events: marketEvents,
+      money_plan: moneyPlan,
       rebalance_request: rebalanceReq,
       recommendation: rebalanceResp,
       ai_explain: aiExplain,
@@ -103,12 +108,14 @@ export function useDaaWorkflowExportBundleV1() {
 
       meta: {
         tagTaxonomyConfigured: !!tagTaxonomyRaw,
+        hasMoneyPlan: !!moneyPlan,
       },
     }),
     [
       aiExplain,
       humanProfile,
       marketEvents,
+      moneyPlan,
       paperExecutionLog,
       rebalanceSchedule,
       portfolioState,
@@ -124,6 +131,7 @@ export function useDaaWorkflowExportBundleV1() {
   const hasRecommendation = !!rebalanceResp;
   const hasAiExplain = !!aiExplain;
   const hasHuman = !!humanProfile;
+  const hasMoneyPlan = !!moneyPlan;
   const hasTagsConfigured = !!tagTaxonomyRaw;
 
   return {
@@ -132,6 +140,7 @@ export function useDaaWorkflowExportBundleV1() {
     hasRecommendation,
     hasAiExplain,
     hasHuman,
+    hasMoneyPlan,
     hasTagsConfigured,
   };
 }
