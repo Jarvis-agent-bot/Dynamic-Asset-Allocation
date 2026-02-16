@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+import { requireDaaAdminViewerAuth } from "../../../../../../../src/daa/adminAuth";
 
-import { getDaaRunBundleV0 } from "@/src/daa/storeV0";
+import { getDaaRunBundleV0 } from "../../../../../../../src/daa/storeV0";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request, ctx: { params: { runId: string } }) {
+  const denied = await requireDaaAdminViewerAuth(req);
+  if (denied) return denied;
+
   const runId = String(ctx?.params?.runId ?? "").trim();
   if (!runId) return NextResponse.json({ ok: false, error: "missing runId" }, { status: 400 });
 
