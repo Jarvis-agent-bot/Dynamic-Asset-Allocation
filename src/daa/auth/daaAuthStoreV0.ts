@@ -491,3 +491,97 @@ export async function revokeDaaAuthSessionV0(args: { sessionId: string; revokedA
 
   return { ok: true };
 }
+
+function rowToAccountV0(row: any): DaaAuthAccountV0 {
+  const roles = uniqRoles(parseJsonArrayOrEmpty(row?.roles_json));
+  return {
+    accountId: String(row?.account_id ?? ""),
+    username: String(row?.username ?? ""),
+    roles,
+    status: normalizeStatus(row?.status),
+    createdAt: String(row?.created_at ?? ""),
+    updatedAt: String(row?.updated_at ?? ""),
+  };
+}
+
+export async function listDaaAuthAccountsV0(): Promise<DaaAuthAccountV0[]> {
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const rows = await withDaaPgClientV0(async ({ query }) => {
+      const r = await query(
+        "SELECT account_id, username, roles_json, status, created_at, updated_at FROM daa_auth_accounts ORDER BY username ASC",
+      );
+      return r.rows ?? [];
+    });
+
+    return rows.map(rowToAccountV0);
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+}
+
+export async function updateDaaAuthAccountV0(args: {
+  accountId: string;
+  roles?: DaaAuthRoleV0[];
+  status?: DaaAuthAccountStatusV0;
+  updatedAt?: string;
+}): Promise<{ ok: true; account: DaaAuthAccountV0 } | { ok: false; error: string }> {
+  const accountId = String(args.accountId ?? "").trim();
+  if (!accountId) return { ok: false, error: "missing accountId" };
+
+  const updatedAt = ensureIsoOrNow(args.updatedAt);
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const out = await withDaaPgClientV0(async ({ query }) => {
+      const r0 = await query(
+        "SELECT account_id, username, roles_json, status, created_at, updated_at FROM daa_auth_accounts WHERE account_id = $1",
+        [accountId],
+      );
+      const row0 = (r0.rows && r0.rows[0]) || null;
+      if (!row0) return null;
+
+      const nextRoles = args.roles === undefined ? uniqRoles(parseJsonArrayOrEmpty((row0 as any).roles_json)) : uniqRoles(args.roles);
+      const nextStatus = args.status === undefined ? normalizeStatus((row0 as any).status) : normalizeStatus(args.status);
+
+      await query("UPDATE daa_auth_accounts SET roles_json = $1, status = $2, updated_at = $3 WHERE account_id = $4", [
+        JSON.stringify(nextRoles),
+        nextStatus,
+        updatedAt,
+        accountId,
+      ]);
+
+      const r1 = await query(
+        "SELECT account_id, username, roles_json, status, created_at, updated_at FROM daa_auth_accounts WHERE account_id = $1",
+        [accountId],
+      );
+      return (r1.rows && r1.rows[0]) || null;
+    });
+
+    if (!out) return { ok: false, error: "not_found" };
+    return { ok: true, account: rowToAccountV0(out) };
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+}
+
+export async function deleteDaaAuthAccountV0(args: { accountId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const accountId = String(args.accountId ?? "").trim();
+  if (!accountId) return { ok: false, error: "missing accountId" };
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const n = await withDaaPgClientV0(async ({ query }) => {
+      const r = await query("DELETE FROM daa_auth_accounts WHERE account_id = $1", [accountId]);
+      return r.rowCount || 0;
+    });
+
+    if (n <= 0) return { ok: false, error: "not_found" };
+    return { ok: true };
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+}
