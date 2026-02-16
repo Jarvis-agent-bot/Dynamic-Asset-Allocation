@@ -4,6 +4,7 @@ import {
   createDaaAuthAccountV0,
   deleteDaaAuthAccountV0,
   listDaaAuthAccountsV0,
+  type DaaAuthRoleV0,
   updateDaaAuthAccountV0,
 } from "../../../../../src/daa/auth/daaAuthStoreV0";
 import { getDaaAuthContextFromRequestV0 } from "../../../../../src/daa/auth/daaAuthRequestV0";
@@ -21,9 +22,14 @@ async function parseBody(req: Request): Promise<JsonObject> {
   }
 }
 
-function parseRoles(raw: unknown): string[] | undefined {
+function parseRoles(raw: unknown): DaaAuthRoleV0[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  return raw.filter((x) => typeof x === "string") as string[];
+  const out: DaaAuthRoleV0[] = [];
+  for (const v of raw) {
+    if (v !== "viewer" && v !== "editor") continue;
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
 }
 
 function parseStatus(raw: unknown): "active" | "inactive" | undefined {
