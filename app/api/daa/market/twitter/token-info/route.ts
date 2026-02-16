@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 
-function mustGetEnv(name: string): string {
-  const v = process.env[name];
-  if (!v || !v.trim()) throw new Error(`missing env: ${name}`);
-  return v.trim();
-}
+import { fetchTextWithTimeoutV0, mustGetEnvV0 } from "../../_lib/providerAdaptersV0";
 
 function json(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -14,20 +10,18 @@ function json(data: unknown, init?: ResponseInit) {
 // Token MUST stay server-side (env) to avoid leaking to the browser.
 export async function GET() {
   try {
-    const token = mustGetEnv("TWITTERDATA_TOKEN");
+    const token = mustGetEnvV0("TWITTERDATA_TOKEN");
     const upstream = new URL("https://pro.twitterdata.com/tokenInfo");
     upstream.searchParams.set("token", token);
 
-    const r = await fetch(upstream, {
+    const r = await fetchTextWithTimeoutV0(upstream, {
       method: "GET",
       headers: {
         accept: "application/json",
       },
-      cache: "no-store",
     });
 
     if (!r.ok) {
-      // Avoid returning upstream bodies: they may contain the token (query param) in error text.
       return json(
         {
           error: "twitterdata upstream error",
@@ -48,7 +42,7 @@ export async function GET() {
 
     // Ensure we never return the actual token to the browser.
     if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-      const copy: Record<string, unknown> = { ...(payload as any) };
+      const copy: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
       if (typeof copy.token === "string") copy.token = "REDACTED";
       payload = copy;
     }

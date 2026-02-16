@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 
-function mustGetEnv(name: string): string {
-  const v = process.env[name];
-  if (!v || !v.trim()) throw new Error(`missing env: ${name}`);
-  return v.trim();
-}
+import { fetchTextWithTimeoutV0, getProviderErrorStatusV0, mustGetEnvV0 } from "../../_lib/providerAdaptersV0";
 
 function json(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -21,21 +17,19 @@ export async function GET(req: Request) {
       return json({ error: "missing screenName" }, { status: 400 });
     }
 
-    const token = mustGetEnv("TWITTERDATA_TOKEN");
+    const token = mustGetEnvV0("TWITTERDATA_TOKEN");
     const upstream = new URL("https://pro.twitterdata.com/UserByScreenName");
     upstream.searchParams.set("screenName", screenName);
     upstream.searchParams.set("token", token);
 
-    const r = await fetch(upstream, {
+    const r = await fetchTextWithTimeoutV0(upstream, {
       method: "GET",
       headers: {
         accept: "application/json",
       },
-      cache: "no-store",
     });
 
     if (!r.ok) {
-      // Avoid returning upstream bodies: they may contain the token (query param) in error text.
       return json(
         {
           error: "twitterdata upstream error",
@@ -61,7 +55,7 @@ export async function GET(req: Request) {
         error: "twitter user resolve failed",
         message: e instanceof Error ? e.message : String(e),
       },
-      { status: 500 },
+      { status: getProviderErrorStatusV0(e) },
     );
   }
 }
