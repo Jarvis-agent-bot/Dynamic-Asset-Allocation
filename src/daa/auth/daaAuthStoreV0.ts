@@ -609,6 +609,51 @@ export async function getDaaAuthAccountBySessionTokenV0(args: {
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
+export async function refreshDaaAuthSessionV0(args: {
+  sessionId: string;
+  now?: string;
+  ttlDays?: number;
+}): Promise<DaaAuthSessionV0 | null> {
+  const sessionId = String(args.sessionId ?? "").trim();
+  if (!sessionId) return null;
+
+  const now = ensureIsoOrNow(args.now);
+  const ttlDays = Number.isFinite(args.ttlDays) ? Math.max(1, Math.floor(args.ttlDays!)) : 30;
+  const expiresAt = addDaysIso(now, ttlDays);
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const row = await withDaaPgClientV0(async ({ query }) => {
+      const r = await query(
+        "UPDATE daa_auth_sessions SET expires_at = $1, last_seen_at = $2 WHERE session_id = $3 AND revoked_at IS NULL AND expires_at > $2 RETURNING session_id, account_id, created_at, expires_at, revoked_at, user_agent, ip, last_seen_at",
+        [expiresAt, now, sessionId],
+      );
+      return (r.rows && r.rows[0]) || null;
+    });
+
+    if (!row) return null;
+
+    return {
+      sessionId: String((row as any).session_id ?? ""),
+      accountId: String((row as any).account_id ?? ""),
+      createdAt: String((row as any).created_at ?? ""),
+      expiresAt: String((row as any).expires_at ?? ""),
+      revokedAt:
+        typeof (row as any).revoked_at === "string" && (row as any).revoked_at.trim() ? String((row as any).revoked_at) : null,
+      lastSeenAt:
+        typeof (row as any).last_seen_at === "string" && (row as any).last_seen_at.trim()
+          ? String((row as any).last_seen_at)
+          : null,
+      userAgent:
+        typeof (row as any).user_agent === "string" && (row as any).user_agent.trim() ? String((row as any).user_agent) : null,
+      ip: typeof (row as any).ip === "string" && (row as any).ip.trim() ? String((row as any).ip) : null,
+    };
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+}
+
 export async function revokeDaaAuthSessionV0(args: { sessionId: string; revokedAt?: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   const sessionId = String(args.sessionId ?? "").trim();
   if (!sessionId) return { ok: false, error: "missing sessionId" };

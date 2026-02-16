@@ -12,6 +12,7 @@ import {
   hashPasswordV0,
   listDaaAuthAuditEventsV0,
   revokeDaaAuthSessionV0,
+  refreshDaaAuthSessionV0,
   verifyPasswordV0,
 } from "../daaAuthStoreV0";
 
@@ -112,6 +113,31 @@ describe("daa/auth store v0", () => {
 
     const expired = await getDaaAuthAccountBySessionTokenV0({ token, now: "2026-01-02T00:00:00.000Z" });
     expect(expired).toBe(null);
+  });
+
+  it("refreshes session expiry and last seen via postgres", async () => {
+    resetPgMem();
+
+    const a1 = await createDaaAuthAccountV0({ username: "user3@example.com", password: "pw-5", roles: ["viewer"] });
+
+    const { session, token } = await createDaaAuthSessionV0({
+      accountId: a1.accountId,
+      ttlDays: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const refreshed = await refreshDaaAuthSessionV0({
+      sessionId: session.sessionId,
+      now: "2026-01-01T12:00:00.000Z",
+      ttlDays: 7,
+    });
+
+    expect(refreshed).not.toBe(null);
+    expect(refreshed?.lastSeenAt).toBe("2026-01-01T12:00:00.000Z");
+    expect(refreshed?.expiresAt).toBe("2026-01-08T12:00:00.000Z");
+
+    const stillValid = await getDaaAuthAccountBySessionTokenV0({ token, now: "2026-01-05T00:00:00.000Z", touch: false });
+    expect(stillValid).not.toBe(null);
   });
 
   it("appends and lists auth audit events", async () => {
