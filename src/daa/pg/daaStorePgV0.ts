@@ -91,6 +91,11 @@ function parsePositiveIntEnvV0(name: string, fallback: number): number {
   return t > 0 ? t : 0;
 }
 
+
+function isDaaPgMemRuntimeV0(): boolean {
+  return String(process.env.DAA_PG_MEM ?? "").trim() === "1";
+}
+
 function retentionCutoffIsoV0(retentionDays: number): string {
   const now = Date.now();
   const cutoffMs = now - retentionDays * 24 * 60 * 60 * 1000;
@@ -170,88 +175,107 @@ async function maybeCleanupAuditRetentionPgV0(): Promise<void> {
 
 export async function ensureDaaStoreSchemaPgV0(): Promise<void> {
   const st = getStateV0();
-  st.schemaInit ||= withDaaPgClientV0(async ({ query }) => {
-    await query("BEGIN");
-    try {
-      await query(`
-        CREATE TABLE IF NOT EXISTS daa_runs (
-          run_id TEXT PRIMARY KEY,
-          created_at TEXT NOT NULL,
-          kind TEXT NOT NULL,
-          status TEXT NOT NULL,
-          payload JSONB NOT NULL,
-          actor TEXT NOT NULL DEFAULT 'unknown',
-          source TEXT NOT NULL DEFAULT ''
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_daa_runs_created_at
-          ON daa_runs(created_at);
-
-        CREATE INDEX IF NOT EXISTS idx_daa_runs_created_at_desc
-          ON daa_runs(created_at DESC, run_id DESC);
-
-        CREATE INDEX IF NOT EXISTS idx_daa_runs_actor_created_at
-          ON daa_runs(actor, created_at);
-
-        CREATE INDEX IF NOT EXISTS idx_daa_runs_actor_created_at_desc
-          ON daa_runs(actor, created_at DESC, run_id DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_run_portfolio (
-          run_id TEXT PRIMARY KEY REFERENCES daa_runs(run_id) ON DELETE CASCADE,
-          created_at TEXT NOT NULL,
-          payload JSONB NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS daa_run_confirm (
-          run_id TEXT PRIMARY KEY REFERENCES daa_runs(run_id) ON DELETE CASCADE,
-          created_at TEXT NOT NULL,
-          payload JSONB NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS daa_run_executed (
-          run_id TEXT PRIMARY KEY REFERENCES daa_runs(run_id) ON DELETE CASCADE,
-          created_at TEXT NOT NULL,
-          payload JSONB NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS daa_run_audit_events (
-          event_id TEXT PRIMARY KEY,
-          run_id TEXT NOT NULL REFERENCES daa_runs(run_id) ON DELETE CASCADE,
-          created_at TEXT NOT NULL,
-          kind TEXT NOT NULL,
-          payload JSONB NOT NULL,
-          actor_user_id TEXT
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_run_created_at
-          ON daa_run_audit_events(run_id, created_at);
-
-        CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_created_event_desc
-          ON daa_run_audit_events(created_at DESC, event_id DESC);
-
-        CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_at
-          ON daa_run_audit_events(actor_user_id, created_at, event_id);
-
-        CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_event_desc
-          ON daa_run_audit_events(actor_user_id, created_at DESC, event_id DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_admin_user_status (
-          user_id TEXT PRIMARY KEY,
-          status TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-      `);
-
-      await query("COMMIT");
-    } catch (e) {
+  if (!st.schemaInit) {
+    st.schemaInit = withDaaPgClientV0(async ({ query }) => {
+      await query("BEGIN");
       try {
-        await query("ROLLBACK");
-      } catch {
-        // ignore
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_runs (
+            run_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            status TEXT NOT NULL,
+            payload JSONB NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'unknown',
+            source TEXT NOT NULL DEFAULT ''
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_runs_created_at
+            ON daa_runs(created_at);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_runs_created_at_desc
+            ON daa_runs(created_at DESC, run_id DESC);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_runs_actor_created_at
+            ON daa_runs(actor, created_at);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_runs_actor_created_at_desc
+            ON daa_runs(actor, created_at DESC, run_id DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_run_portfolio (
+            run_id TEXT PRIMARY KEY REFERENCES daa_runs(run_id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            payload JSONB NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_run_confirm (
+            run_id TEXT PRIMARY KEY REFERENCES daa_runs(run_id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            payload JSONB NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_run_executed (
+            run_id TEXT PRIMARY KEY REFERENCES daa_runs(run_id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            payload JSONB NOT NULL
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_run_audit_events (
+            event_id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL REFERENCES daa_runs(run_id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            payload JSONB NOT NULL,
+            actor_user_id TEXT
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_run_created_at
+            ON daa_run_audit_events(run_id, created_at);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_created_event_desc
+            ON daa_run_audit_events(created_at DESC, event_id DESC);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_at
+            ON daa_run_audit_events(actor_user_id, created_at, event_id);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_event_desc
+            ON daa_run_audit_events(actor_user_id, created_at DESC, event_id DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_admin_user_status (
+            user_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+        `);
+
+        if (!isDaaPgMemRuntimeV0()) {
+          // Keep compatibility with pre-hardening schemas in production Postgres.
+          await query("ALTER TABLE daa_runs ADD COLUMN IF NOT EXISTS actor TEXT");
+          await query("ALTER TABLE daa_runs ADD COLUMN IF NOT EXISTS source TEXT");
+          await query("ALTER TABLE daa_run_audit_events ADD COLUMN IF NOT EXISTS actor_user_id TEXT");
+          await query("UPDATE daa_runs SET actor = 'unknown' WHERE actor IS NULL OR actor = ''");
+          await query("UPDATE daa_runs SET source = '' WHERE source IS NULL");
+          await query("ALTER TABLE daa_runs ALTER COLUMN actor SET DEFAULT 'unknown'");
+          await query("ALTER TABLE daa_runs ALTER COLUMN source SET DEFAULT ''");
+          await query("ALTER TABLE daa_runs ALTER COLUMN actor SET NOT NULL");
+          await query("ALTER TABLE daa_runs ALTER COLUMN source SET NOT NULL");
+        }
+
+        await query("COMMIT");
+      } catch (e) {
+        try {
+          await query("ROLLBACK");
+        } catch {
+          // ignore
+        }
+        throw e;
       }
+    }).catch((e) => {
+      // Allow future calls to retry after transient DB/network failures.
+      st.schemaInit = null;
       throw e;
-    }
-  });
+    });
+  }
 
   return st.schemaInit;
 }
