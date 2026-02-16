@@ -17,6 +17,9 @@ function resetPgMem() {
   delete (globalThis as any)[STORE_PG_GLOBAL_KEY];
   delete process.env.DAA_DB_URL;
   delete process.env.DATABASE_URL;
+  delete process.env.DAA_STORE_AUDIT_RETENTION_DAYS;
+  delete process.env.DAA_STORE_AUDIT_RETENTION_DELETE_BATCH;
+  delete process.env.DAA_STORE_AUDIT_RETENTION_CLEANUP_INTERVAL_MS;
 }
 
 function makeCookieHeader(token: string): string {

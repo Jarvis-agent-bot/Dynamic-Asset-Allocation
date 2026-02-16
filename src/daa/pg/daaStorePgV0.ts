@@ -10,6 +10,8 @@ import { withDaaPgClientV0 } from "./daaPgV0";
 
 type StorePgStateV0 = {
   schemaInit: Promise<void> | null;
+  lastAuditCleanupAtMs: number;
+  auditCleanupPromise: Promise<void> | null;
 };
 
 const GLOBAL_KEY = "__daa_store_pg_state_v0__";
@@ -17,7 +19,11 @@ const GLOBAL_KEY = "__daa_store_pg_state_v0__";
 function getStateV0(): StorePgStateV0 {
   const g: any = globalThis as any;
   if (!g[GLOBAL_KEY]) {
-    g[GLOBAL_KEY] = { schemaInit: null } satisfies StorePgStateV0;
+    g[GLOBAL_KEY] = {
+      schemaInit: null,
+      lastAuditCleanupAtMs: 0,
+      auditCleanupPromise: null,
+    } satisfies StorePgStateV0;
   }
   return g[GLOBAL_KEY] as StorePgStateV0;
 }
@@ -74,6 +80,92 @@ function deriveRunActorSourceV0(args: { kind: string; payload: unknown }): { act
   }
 
   return { actor, source };
+}
+
+function parsePositiveIntEnvV0(name: string, fallback: number): number {
+  const raw = String(process.env[name] ?? "").trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  const t = Math.trunc(n);
+  return t > 0 ? t : 0;
+}
+
+function retentionCutoffIsoV0(retentionDays: number): string {
+  const now = Date.now();
+  const cutoffMs = now - retentionDays * 24 * 60 * 60 * 1000;
+  return new Date(cutoffMs).toISOString();
+}
+
+async function runAuditRetentionCleanupPgV0(): Promise<void> {
+  const retentionDays = parsePositiveIntEnvV0("DAA_STORE_AUDIT_RETENTION_DAYS", 0);
+  if (retentionDays <= 0) return;
+
+  const batchSize = parsePositiveIntEnvV0("DAA_STORE_AUDIT_RETENTION_DELETE_BATCH", 500);
+  const cutoffIso = retentionCutoffIsoV0(retentionDays);
+  const deleteLimit = Math.max(1, batchSize);
+
+  await withDaaPgClientV0(async ({ query }) => {
+    const rowsRes = await query(
+      `
+      SELECT run_id, event_id, created_at
+      FROM daa_run_audit_events
+      WHERE created_at < $1
+      ORDER BY run_id ASC, created_at DESC, event_id DESC
+      `,
+      [cutoffIso],
+    );
+
+    const doomedEventIds: string[] = [];
+    const seenRunIds = new Set<string>();
+
+    for (const row of rowsRes.rows || []) {
+      const runId = String((row as any).run_id ?? "").trim();
+      const eventId = String((row as any).event_id ?? "").trim();
+      if (!runId || !eventId) continue;
+
+      if (!seenRunIds.has(runId)) {
+        seenRunIds.add(runId);
+        continue;
+      }
+
+      doomedEventIds.push(eventId);
+      if (doomedEventIds.length >= deleteLimit) break;
+    }
+
+    for (const eventId of doomedEventIds) {
+      await query("DELETE FROM daa_run_audit_events WHERE event_id = $1", [eventId]);
+    }
+  });
+}
+
+async function maybeCleanupAuditRetentionPgV0(): Promise<void> {
+  const retentionDays = parsePositiveIntEnvV0("DAA_STORE_AUDIT_RETENTION_DAYS", 0);
+  if (retentionDays <= 0) return;
+
+  const state = getStateV0();
+  const intervalMs = parsePositiveIntEnvV0("DAA_STORE_AUDIT_RETENTION_CLEANUP_INTERVAL_MS", 5 * 60 * 1000);
+  const now = Date.now();
+
+  if (state.auditCleanupPromise) {
+    await state.auditCleanupPromise;
+    return;
+  }
+
+  if (intervalMs > 0 && now - state.lastAuditCleanupAtMs < intervalMs) {
+    return;
+  }
+
+  state.lastAuditCleanupAtMs = now;
+  state.auditCleanupPromise = runAuditRetentionCleanupPgV0();
+
+  try {
+    await state.auditCleanupPromise;
+  } catch {
+    // Cleanup is best-effort and must never block store writes.
+  } finally {
+    state.auditCleanupPromise = null;
+  }
 }
 
 export async function ensureDaaStoreSchemaPgV0(): Promise<void> {
@@ -208,6 +300,8 @@ export async function createDaaRunV0(args: {
     }
   });
 
+  await maybeCleanupAuditRetentionPgV0();
+
   return { runId, createdAt };
 }
 
@@ -260,6 +354,8 @@ async function upsertRunAttachment(args: {
       throw e;
     }
   });
+
+  await maybeCleanupAuditRetentionPgV0();
 }
 
 export async function setDaaRunPortfolioV0(args: { runId: string; payload: unknown; createdAt?: string; actorUserId?: string }) {
@@ -298,6 +394,8 @@ export async function appendDaaRunAuditEventV0(args: {
       [eventId, runId, createdAt, kind, payloadJson, args.actorUserId || null],
     );
   });
+
+  await maybeCleanupAuditRetentionPgV0();
 
   return { eventId, createdAt };
 }
