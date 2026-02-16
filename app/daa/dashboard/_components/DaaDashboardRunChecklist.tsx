@@ -12,6 +12,15 @@ type Props = {
 
 type BadgeTone = "ok" | "warn" | "missing";
 
+type ChecklistRow = {
+  stepId: number;
+  title: string;
+  desc: string;
+  jumpId: string;
+  badge: { tone: BadgeTone; text: string };
+  missingHint: string | null;
+};
+
 function Badge({ tone, text }: { tone: BadgeTone; text: string }) {
   const bg = tone === "ok" ? "#f0fdf4" : tone === "warn" ? "#fff7e6" : "#fff1f0";
   const fg = tone === "ok" ? "#237804" : tone === "warn" ? "#ad4e00" : "#a8071a";
@@ -54,10 +63,21 @@ function JumpButton({ onClick, children }: { onClick: () => void; children: Reac
   );
 }
 
+function statusToBadgeTone(status: "done" | "wip" | "todo" | "later"): BadgeTone {
+  if (status === "done") return "ok";
+  if (status === "wip" || status === "later") return "warn";
+  return "missing";
+}
+
+function statusToBadgeText(status: "done" | "wip" | "todo" | "later"): string {
+  if (status === "done") return "done";
+  if (status === "wip") return "wip";
+  if (status === "later") return "later";
+  return "missing";
+}
+
 export default function DaaDashboardRunChecklist({ onJump }: Props) {
   const rt = useDaaRuntime();
-
-  const nextAction = rt.nextActionText;
 
   const step5Blocked = !rt.hasRecommendation;
   const step5Done = rt.stepStatusById[5] === "done";
@@ -69,13 +89,104 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
         ? { tone: "missing" as const, text: "invalid" }
         : { tone: "warn" as const, text: "default" };
 
+  const rows: ChecklistRow[] = [
+    {
+      stepId: 1,
+      title: "Step1 — Backtest",
+      desc: "运行一次回测，产出策略与指标摘要。",
+      jumpId: "step1",
+      badge: {
+        tone: statusToBadgeTone(rt.stepStatusById[1]),
+        text: statusToBadgeText(rt.stepStatusById[1]),
+      },
+      missingHint: rt.hasBacktest ? null : "缺少回测结果（symbol/date/metrics）。",
+    },
+    {
+      stepId: 2,
+      title: "Step2 — Market events",
+      desc: "影响 Step5 explain 的可追溯引用。",
+      jumpId: "step2",
+      badge: {
+        tone: rt.marketEventCount > 0 ? "ok" : "missing",
+        text: rt.marketEventCount > 0 ? `events ${rt.marketEventCount}` : "missing",
+      },
+      missingHint: rt.marketEventCount > 0 ? null : "缺少 market events（至少 1 条）。",
+    },
+    {
+      stepId: 3,
+      title: "Step3 — Money plan",
+      desc: "提供 account/allocations/constraints 给后续步骤。",
+      jumpId: "step3",
+      badge: {
+        tone: statusToBadgeTone(rt.stepStatusById[3]),
+        text: statusToBadgeText(rt.stepStatusById[3]),
+      },
+      missingHint: rt.hasMoneyPlan ? null : "缺少 money plan（allocations 或 constraints）。",
+    },
+    {
+      stepId: 4,
+      title: "Step4 — Recommendation",
+      desc: "生成 baseline recommendation（写入 localStorage）。",
+      jumpId: "step4",
+      badge: {
+        tone: rt.hasRecommendation ? "ok" : "missing",
+        text: rt.hasRecommendation ? "done" : "missing",
+      },
+      missingHint: rt.hasRecommendation ? null : "缺少 recommendation 输出。",
+    },
+    {
+      stepId: 5,
+      title: "Step5 — Explain",
+      desc: "基于 Step4 + Step2 自动生成解释（不下单）。",
+      jumpId: "step5",
+      badge: {
+        tone: step5Blocked ? "missing" : step5Done ? "ok" : "warn",
+        text: step5Blocked ? "blocked" : step5Done ? `citations ${rt.citationsCount}` : "wip",
+      },
+      missingHint: step5Blocked
+        ? "缺少 Step4 recommendation，无法生成 explain。"
+        : step5Done
+          ? null
+          : "explain 缺少 citations（检查 Step2 events/symbol 匹配）。",
+    },
+    {
+      stepId: 6,
+      title: "Step6 — Human profile",
+      desc: "用于人因权重（风险偏好/评分等）。",
+      jumpId: "step6",
+      badge: {
+        tone: rt.hasHumanProfile ? "ok" : "missing",
+        text: rt.hasHumanProfile ? "done" : "missing",
+      },
+      missingHint: rt.hasHumanProfile ? null : "缺少 human profile。",
+    },
+    {
+      stepId: 7,
+      title: "Step7 — Tag taxonomy",
+      desc: "用于 Step2/Step6 输入校验与归一化。",
+      jumpId: "step7",
+      badge: step7Badge,
+      missingHint:
+        rt.tagTaxonomyStatus === "configured"
+          ? null
+          : rt.tagTaxonomyStatus === "invalid"
+            ? "taxonomy 配置无效，请修复字段。"
+            : "当前使用默认 taxonomy（建议配置自定义版本）。",
+    },
+  ];
+
+  const missingSummary = rows.filter((r) => r.badge.tone !== "ok").map((r) => `S${r.stepId}`);
+
   return (
     <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontWeight: 800, fontSize: 14 }}>Run status（最短可执行路径）</div>
+          <div style={{ fontWeight: 800, fontSize: 14 }}>Run status（Step1-7 completion）</div>
           <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
-            Next: <b>{nextAction}</b>
+            Next: <b>{rt.nextActionText}</b>
+          </div>
+          <div style={{ marginTop: 4, fontSize: 12, color: missingSummary.length ? "#a8071a" : "#237804" }}>
+            {missingSummary.length ? `Missing data highlights: ${missingSummary.join(", ")}` : "All core steps are complete."}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12 }}>
@@ -86,78 +197,27 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
       </div>
 
       <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Step2 — Market events</div>
-            <div style={{ fontSize: 12, color: "#666" }}>影响 Step5 explain 的可追溯引用。</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={rt.marketEventCount ? "ok" : "missing"} text={rt.marketEventCount ? `OK: ${rt.marketEventCount}` : "missing"} />
-            <JumpButton onClick={() => onJump("step2")}>Go</JumpButton>
-            <Link href="/daa/dashboard?tab=wizard&step=2" style={{ color: "#111", fontSize: 12 }}>
-              Open
-            </Link>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Step4 — Recommendation</div>
-            <div style={{ fontSize: 12, color: "#666" }}>生成 baseline recommendation（写入 localStorage）。</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={rt.hasRecommendation ? "ok" : "missing"} text={rt.hasRecommendation ? "OK" : "missing"} />
-            <JumpButton onClick={() => onJump("step4")}>Go</JumpButton>
-            <Link href="/daa/dashboard?tab=wizard&step=4" style={{ color: "#111", fontSize: 12 }}>
-              Open
-            </Link>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Step5 — Explain</div>
-            <div style={{ fontSize: 12, color: "#666" }}>基于 Step4 + Step2 自动生成解释（不下单）。</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge
-              tone={step5Blocked ? "missing" : step5Done ? "ok" : "warn"}
-              text={step5Blocked ? "blocked" : step5Done ? `OK: citations ${rt.citationsCount}` : "waiting"}
-            />
-            <JumpButton onClick={() => onJump("step5")}>Go</JumpButton>
-            <Link href="/daa/dashboard?tab=wizard&step=5" style={{ color: "#111", fontSize: 12 }}>
-              Open
-            </Link>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Step6 — Human profile</div>
-            <div style={{ fontSize: 12, color: "#666" }}>用于人因权重（风险偏好/评分等）。</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={rt.hasHumanProfile ? "ok" : "missing"} text={rt.hasHumanProfile ? "OK" : "missing"} />
-            <JumpButton onClick={() => onJump("step6")}>Go</JumpButton>
-            <Link href="/daa/dashboard?tab=wizard&step=6" style={{ color: "#111", fontSize: 12 }}>
-              Open
-            </Link>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13 }}>Step7 — Tag taxonomy</div>
-            <div style={{ fontSize: 12, color: "#666" }}>用于 Step2/Step6 输入校验与归一化。</div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <Badge tone={step7Badge.tone} text={step7Badge.text} />
-            <JumpButton onClick={() => onJump("step7")}>Go</JumpButton>
-            <Link href="/daa/dashboard?tab=wizard&step=7" style={{ color: "#111", fontSize: 12 }}>
-              Open
-            </Link>
-          </div>
-        </div>
+        {rows.map((row) => {
+          const openHref = `/daa/dashboard?tab=wizard&step=${row.stepId}`;
+          return (
+            <div key={row.stepId} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{row.title}</div>
+                <div style={{ fontSize: 12, color: "#666" }}>{row.desc}</div>
+                {row.missingHint ? (
+                  <div style={{ marginTop: 4, fontSize: 12, color: row.badge.tone === "warn" ? "#ad4e00" : "#a8071a" }}>{row.missingHint}</div>
+                ) : null}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <Badge tone={row.badge.tone} text={row.badge.text} />
+                <JumpButton onClick={() => onJump(row.jumpId)}>Go</JumpButton>
+                <Link href={openHref} style={{ color: "#111", fontSize: 12 }}>
+                  Open
+                </Link>
+              </div>
+            </div>
+          );
+        })}
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div>
