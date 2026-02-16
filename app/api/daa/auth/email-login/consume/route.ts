@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { isProbablyInAppBrowserUserAgentV0 } from "@/src/daa/auth/daaAuthInAppBrowserV0";
 import { consumeDaaAuthEmailLoginTokenWithReasonV0 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
+import { appendDaaAuthAuditEventV0 } from "@/src/daa/auth/daaAuthStoreV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
 import { normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
@@ -106,12 +107,36 @@ export async function GET(req: Request) {
 
   const found = await consumeDaaAuthEmailLoginTokenWithReasonV0({ token, userAgent: ua, ip });
   if (!found.ok) {
+    await appendDaaAuthAuditEventV0({
+      kind: "auth.email_login.consume_failed",
+      actorUserId: "anonymous",
+      payload: {
+        reason: found.error,
+        returnTo,
+        ip,
+        userAgent: ua,
+      },
+    }).catch(() => null);
+
     const loginUrl = new URL("/daa/login", url);
     const err = found.error === "used" ? "email-link-used" : found.error === "expired" ? "email-link-expired" : "email-link-invalid";
     loginUrl.searchParams.set("error", err);
     loginUrl.searchParams.set("returnTo", returnTo);
     return NextResponse.redirect(loginUrl, 302);
   }
+
+  await appendDaaAuthAuditEventV0({
+    kind: "auth.email_login.consume_success",
+    actorUserId: found.account.accountId,
+    accountId: found.account.accountId,
+    sessionId: found.session.sessionId,
+    payload: {
+      returnTo,
+      ip,
+      userAgent: ua,
+      inAppBrowser: isProbablyInAppBrowserUserAgentV0(ua),
+    },
+  }).catch(() => null);
 
   const target = new URL(returnTo, url);
   if (!target.searchParams.get("notice")) target.searchParams.set("notice", "signed_in");

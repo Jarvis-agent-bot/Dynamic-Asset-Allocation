@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 
+import { listDaaAuthAuditEventsV0 } from "@/src/daa/auth/daaAuthStoreV0";
 import { listDaaRunAuditEventsV0 } from "@/src/daa/storeV0";
 
 export const runtime = "nodejs";
@@ -26,7 +27,37 @@ export async function GET(req: Request) {
   // Expected values: viewer-token | editor-token | legacy-token.
   const actorUserId = String(url.searchParams.get("actorUserId") ?? "").trim() || undefined;
 
+  const sourceRaw = String(url.searchParams.get("source") ?? "").trim().toLowerCase();
+  const source = sourceRaw === "auth" || sourceRaw === "run" ? sourceRaw : "run";
+
   try {
+    if (source === "auth") {
+      const events = await listDaaAuthAuditEventsV0({
+        limit,
+        beforeCreatedAt,
+        beforeEventId,
+        fromCreatedAt,
+        toCreatedAt,
+        actorUserId,
+      });
+      return NextResponse.json({
+        ok: true,
+        events: events.map((e) => ({
+          eventId: e.eventId,
+          runId: `auth:${e.accountId ?? "unknown"}`,
+          createdAt: e.createdAt,
+          kind: e.kind,
+          actorUserId: e.actorUserId,
+          payload: {
+            ...(typeof e.payload === "object" && e.payload ? (e.payload as Record<string, unknown>) : {}),
+            scope: "auth",
+            accountId: e.accountId,
+            sessionId: e.sessionId,
+          },
+        })),
+      });
+    }
+
     const events = await listDaaRunAuditEventsV0({
       limit,
       beforeCreatedAt,

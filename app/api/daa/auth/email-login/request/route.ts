@@ -5,7 +5,7 @@ import {
   findLastDaaAuthEmailLoginTokenCreatedAtV0,
 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
-import { getDaaAuthAccountByUsernameV0 } from "@/src/daa/auth/daaAuthStoreV0";
+import { appendDaaAuthAuditEventV0, getDaaAuthAccountByUsernameV0 } from "@/src/daa/auth/daaAuthStoreV0";
 import { sendEmailV0 } from "@/src/daa/email/sendEmailV0";
 import { normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
@@ -79,6 +79,18 @@ export async function POST(req: Request) {
 
   const ttlMinutes = 15;
   const { token } = await createDaaAuthEmailLoginTokenV0({ accountId: account.accountId, ttlMinutes, userAgent: ua, ip });
+
+  await appendDaaAuthAuditEventV0({
+    kind: "auth.email_login.requested",
+    actorUserId: account.accountId,
+    accountId: account.accountId,
+    payload: {
+      ttlMinutes,
+      returnTo,
+      ip,
+      userAgent: ua,
+    },
+  }).catch(() => null);
 
   const origin = getOriginFromRequestV0(req) || process.env.DAA_PUBLIC_ORIGIN || null;
   const loginUrl = origin

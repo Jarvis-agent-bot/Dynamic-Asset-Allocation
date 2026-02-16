@@ -2,13 +2,21 @@ import { NextResponse } from "next/server";
 
 import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { getDaaAuthContextFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
-import { revokeDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
+import { appendDaaAuthAuditEventV0, revokeDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   const ctx = await getDaaAuthContextFromRequestV0(req);
   if (ctx) {
+    await appendDaaAuthAuditEventV0({
+      kind: "auth.logout",
+      actorUserId: ctx.account.accountId,
+      accountId: ctx.account.accountId,
+      sessionId: ctx.session.sessionId,
+      payload: {},
+    }).catch(() => null);
+
     await revokeDaaAuthSessionV0({ sessionId: ctx.session.sessionId });
   }
 
