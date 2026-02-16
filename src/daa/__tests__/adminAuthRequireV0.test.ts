@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { requireDaaAdminViewerAuth } from "../adminAuth";
-import { setDaaAdminUserActiveV0 } from "../adminUserStatusStoreV0";
+import { DAA_AUTH_SESSION_COOKIE_V0 } from "../auth/daaAuthConstantsV0";
+import {
+  createDaaAuthAccountV0,
+  createDaaAuthSessionV0,
+} from "../auth/daaAuthStoreV0";
 
 const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
 const STORE_PG_GLOBAL_KEY = "__daa_store_pg_state_v0__";
@@ -15,33 +19,42 @@ function resetPgMem() {
   delete process.env.DATABASE_URL;
 }
 
+function makeCookieHeader(token: string): string {
+  return `${DAA_AUTH_SESSION_COOKIE_V0}=${encodeURIComponent(token)}`;
+}
+
 describe("daa/adminAuth require* v0", () => {
-  it("denies disabled tokens", async () => {
+  it("denies bearer-only auth without a session cookie", async () => {
     resetPgMem();
 
-    const prev = {
-      legacy: process.env.DAA_ADMIN_TOKEN,
-      viewer: process.env.DAA_ADMIN_VIEWER_TOKEN,
-      editor: process.env.DAA_ADMIN_EDITOR_TOKEN,
-    };
+    const req = new Request("http://localhost/api/daa/admin/users", {
+      headers: { authorization: "Bearer viewer-1" },
+    });
+    const denied = await requireDaaAdminViewerAuth(req);
 
-    try {
-      process.env.DAA_ADMIN_TOKEN = "";
-      process.env.DAA_ADMIN_VIEWER_TOKEN = "viewer-1";
-      process.env.DAA_ADMIN_EDITOR_TOKEN = "";
+    expect(denied).not.toBe(null);
+    expect(denied!.status).toBe(401);
+  });
 
-      const okReq = new Request("http://localhost/api/daa/admin/users", { headers: { authorization: "Bearer viewer-1" } });
-      expect(await requireDaaAdminViewerAuth(okReq)).toBe(null);
+  it("allows viewer role via cookie-backed session", async () => {
+    resetPgMem();
 
-      await setDaaAdminUserActiveV0({ userId: "viewer-token", active: false, updatedAt: "2026-01-01T00:00:00.000Z" });
+    const account = await createDaaAuthAccountV0({
+      username: "viewer@example.com",
+      password: "pw-1",
+      roles: ["viewer"],
+    });
+    const { token } = await createDaaAuthSessionV0({
+      accountId: account.accountId,
+      ttlDays: 7,
+      userAgent: "ua",
+      ip: "1.2.3.4",
+    });
 
-      const denied = await requireDaaAdminViewerAuth(okReq);
-      expect(denied).not.toBe(null);
-      expect(denied!.status).toBe(401);
-    } finally {
-      process.env.DAA_ADMIN_TOKEN = prev.legacy;
-      process.env.DAA_ADMIN_VIEWER_TOKEN = prev.viewer;
-      process.env.DAA_ADMIN_EDITOR_TOKEN = prev.editor;
-    }
+    const req = new Request("http://localhost/api/daa/admin/users", {
+      headers: { cookie: makeCookieHeader(token) },
+    });
+
+    expect(await requireDaaAdminViewerAuth(req)).toBe(null);
   });
 });

@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   const anyAccounts = await hasAnyDaaAuthAccountsV0();
 
   if (anyAccounts) {
-    // Admin-only: use legacy bearer tokens or an existing session.
+    // Admin-only: require an existing cookie-backed session.
     const denied = await requireDaaAdminEditorAuth(req);
     if (denied) return denied;
 
