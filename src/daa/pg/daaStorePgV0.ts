@@ -379,6 +379,8 @@ export async function listDaaRunsV0(args?: {
   fromCreatedAt?: string;
   toCreatedAt?: string;
   actor?: string;
+  status?: string;
+  source?: string;
 }): Promise<DaaRunListRowV0[]> {
   await ensureDaaStoreSchemaPgV0();
 
@@ -393,6 +395,12 @@ export async function listDaaRunsV0(args?: {
 
   const actorRaw = typeof args?.actor === "string" ? args?.actor.trim() : "";
   const actorFilter = actorRaw && actorRaw !== "all" ? actorRaw : "";
+
+  const statusRaw = typeof args?.status === "string" ? args?.status.trim() : "";
+  const statusFilter = statusRaw && statusRaw !== "all" ? statusRaw : "";
+
+  const sourceRaw = typeof args?.source === "string" ? args?.source.trim() : "";
+  const sourceFilter = sourceRaw && sourceRaw !== "all" ? sourceRaw : "";
 
   return withDaaPgClientV0(async ({ query }) => {
     let sql = `
@@ -426,6 +434,8 @@ export async function listDaaRunsV0(args?: {
     if (fromCreatedAt) pushWhere(`created_at >= $${bind.length + 1}`, fromCreatedAt);
     if (toCreatedAt) pushWhere(`created_at <= $${bind.length + 1}`, toCreatedAt);
     if (actorFilter) pushWhere(`actor = $${bind.length + 1}`, actorFilter);
+    if (statusFilter) pushWhere(`status = $${bind.length + 1}`, statusFilter);
+    if (sourceFilter) pushWhere(`source = $${bind.length + 1}`, sourceFilter);
 
     if (beforeCreatedAt && beforeRunId) {
       const a = `$${bind.length + 1}`;
