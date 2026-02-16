@@ -18,10 +18,11 @@ type IconType = ComponentType<{ className?: string }>;
 type NavItem = { key: Tab; href: string; label: string; Icon: IconType };
 
 function normalizeTab(raw: string | null): Tab {
+  if (raw === "dashboard") return "dashboard";
   if (raw === "wizard") return "wizard";
   if (raw === "market-funds") return "market-funds";
   if (raw === "settings") return "settings";
-  return "dashboard";
+  return "market-funds";
 }
 
 function useActiveTab(): Tab | null {
@@ -39,7 +40,7 @@ function useActiveTab(): Tab | null {
 function useNavItems(): NavItem[] {
   return useMemo(
     () => [
-      { key: "dashboard", href: "/daa/dashboard", label: "Dashboard", Icon: LayoutDashboard },
+      { key: "dashboard", href: "/daa/dashboard?tab=dashboard", label: "Dashboard", Icon: LayoutDashboard },
       { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard", Icon: Wand2 },
       { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds", Icon: BarChart3 },
       { key: "settings", href: "/daa/dashboard/settings", label: "Settings", Icon: Settings },
