@@ -47,10 +47,12 @@ import DaaSettingsTab from "../_tabs/DaaSettingsTab";
 type Tab = "dashboard" | "wizard" | "market-funds" | "settings";
 
 function normalizeTab(raw: string | null): Tab {
+  if (raw === "dashboard") return "dashboard";
   if (raw === "wizard") return "wizard";
   if (raw === "market-funds") return "market-funds";
   if (raw === "settings") return "settings";
-  return "dashboard";
+  // Keep /daa/dashboard canonical while making market/funds the default hub surface.
+  return "market-funds";
 }
 
 function parseInitialStepId(raw: string | null): number | undefined {
@@ -113,8 +115,8 @@ function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
       </>
     ) : tab === "market-funds" ? (
       <>
-        Legacy market/funds tools, now hosted under <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> to avoid fragmented
-        deep-links.
+        Default hub surface for DAA. Canonical URL remains <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>; jump to wizard when
+        you are ready to run.
       </>
     ) : tab === "settings" ? (
       <>
@@ -163,7 +165,7 @@ function DaaDashboardHeader({ tab, stepId }: { tab: Tab; stepId?: number }) {
           <>
             {tab !== "dashboard" ? (
               <Button asChild variant="outline" size="sm">
-                <Link href="/daa/dashboard">Dashboard</Link>
+                <Link href="/daa/dashboard?tab=dashboard">Dashboard</Link>
               </Button>
             ) : null}
             {tab !== "wizard" ? (
