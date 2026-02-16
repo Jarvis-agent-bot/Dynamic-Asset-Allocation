@@ -7,7 +7,7 @@ import { useDaaWorkflowExportBundleV1 } from "../../useDaaWorkflowExportBundleV1
 import { pretty } from "../../wizardStorage";
 
 export default function DaaDashboardExport() {
-  const { exportBundle, marketEventCount, hasRecommendation, hasAiExplain, hasHuman, hasTagsConfigured } = useDaaWorkflowExportBundleV1();
+  const { exportBundle, marketEventCount, hasRecommendation, hasAiExplain, hasHuman, hasMoneyPlan, hasTagsConfigured } = useDaaWorkflowExportBundleV1();
 
   const [copyStatus, setCopyStatus] = useState<"idle" | "ok" | "error">("idle");
 
@@ -57,6 +57,9 @@ export default function DaaDashboardExport() {
       <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
         <span style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #eee", background: marketEventCount ? "#f0fdf4" : "#fafafa" }}>
           Step2 events: <b>{marketEventCount}</b>
+        </span>
+        <span style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #eee", background: hasMoneyPlan ? "#f0fdf4" : "#fafafa" }}>
+          Step3 money plan: <b>{hasMoneyPlan ? "OK" : "missing"}</b>
         </span>
         <span style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #eee", background: hasRecommendationBool ? "#f0fdf4" : "#fafafa" }}>
           Step4/rec: <b>{hasRecommendationBool ? "OK" : "missing"}</b>

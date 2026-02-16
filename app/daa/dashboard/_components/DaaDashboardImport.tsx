@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import {
   LS_HUMAN_PROFILE,
   LS_MARKET_EVENTS,
+  LS_MONEY_PLAN,
   LS_REBALANCE_REQUEST,
   LS_REBALANCE_RESPONSE,
   pretty,
@@ -20,6 +21,7 @@ type DashboardBundleV1 = {
   schemaVersion: 1;
   generatedAt?: string;
   market_events: unknown;
+  money_plan?: unknown;
   rebalance_request: unknown;
   recommendation: unknown;
   human_profile: unknown;
@@ -81,6 +83,11 @@ function parseBundle(raw: string): { ok: true; bundle: DashboardBundleV1; warnin
 
   const warnings: string[] = [];
   if (parsed.market_events == null) warnings.push("market_events is null (Step2 events may stay empty)");
+  if (!hasOwn(parsed, "money_plan")) {
+    warnings.push("money_plan missing (legacy bundle: existing Step3 plan will be kept)");
+  } else if (parsed.money_plan == null) {
+    warnings.push("money_plan is null (Step3 money plan will stay empty)");
+  }
   if (parsed.rebalance_request == null) warnings.push("rebalance_request is null (Step4 inputs may be missing)");
   if (parsed.recommendation == null) warnings.push("recommendation is null (Step4 output may be missing)");
   if (parsed.human_profile == null) warnings.push("human_profile is null (Step6 human factors may be missing)");
@@ -107,6 +114,9 @@ export default function DaaDashboardImport() {
 
     // No external calls; this is purely localStorage state restore.
     saveJsonToLs(LS_MARKET_EVENTS, res.bundle.market_events);
+    if (hasOwn(res.bundle, "money_plan")) {
+      saveJsonToLs(LS_MONEY_PLAN, res.bundle.money_plan ?? null);
+    }
     saveJsonToLs(LS_REBALANCE_REQUEST, res.bundle.rebalance_request);
     saveJsonToLs(LS_REBALANCE_RESPONSE, res.bundle.recommendation);
     saveJsonToLs(LS_HUMAN_PROFILE, res.bundle.human_profile);
@@ -138,7 +148,7 @@ export default function DaaDashboardImport() {
 
     setStatus({
       kind: "success",
-      message: "Import OK. localStorage restored (Step2/4/5/6/7 + portfolio + logs when present).",
+      message: "Import OK. localStorage restored (Step2/3/4/5/6/7 + portfolio + logs when present).",
       warnings: res.warnings,
     });
   }
@@ -149,7 +159,7 @@ export default function DaaDashboardImport() {
         <div>
           <div style={{ fontWeight: 800, fontSize: 14 }}>导入（Import bundle）</div>
           <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
-            粘贴从 Dashboard 导出的 JSON，一键恢复 Step2/4/5/6/7 + portfolio state + logs 的 localStorage 状态（不会触发任何外部 API 调用）。
+            粘贴从 Dashboard 导出的 JSON，一键恢复 Step2/3/4/5/6/7 + portfolio state + logs 的 localStorage 状态（不会触发任何外部 API 调用）。
           </div>
         </div>
 
