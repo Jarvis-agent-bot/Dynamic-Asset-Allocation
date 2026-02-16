@@ -21,6 +21,10 @@ export function getDaaPgUrlV0(): string | null {
   const v = (raw || "").trim();
   if (!v) return null;
 
+  if (/^(sqlite:|file:)/i.test(v)) {
+    throw new Error("Postgres-only runtime: non-Postgres database configuration is not allowed");
+  }
+
   // Allow sharing env with the Python service (sqlalchemy uses postgresql+psycopg://).
   return v.replace(/^postgresql\+psycopg:\/\//i, "postgresql://");
 }
