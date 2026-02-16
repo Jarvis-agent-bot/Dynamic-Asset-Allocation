@@ -673,7 +673,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     setEmailLink({ kind: "sending" });
 
     try {
-      const res = await fetch("/api/daa/auth/email-login/request", {
+      const endpoint = emailLink.kind === "sent" ? "/api/daa/auth/email-login/resend" : "/api/daa/auth/email-login/request";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({ email, returnTo: safeReturnTo }),
