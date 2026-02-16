@@ -101,6 +101,9 @@ def _send_email_resend(*, to_email: str, subject: str, html: str) -> None:
         # Avoid leaking provider response bodies (may contain sensitive info).
         raise HTTPException(status_code=502, detail=f"email provider error: http {getattr(e, 'code', 'unknown')}")
     except Exception as e:
+        # Avoid leaking details (tokens/urls/provider internals) in production.
+        if is_production():
+            raise HTTPException(status_code=502, detail="email send failed")
         raise HTTPException(status_code=502, detail=f"email send failed: {e}")
 
 
@@ -191,6 +194,10 @@ def request_link(
     token = _make_login_token(db, email=email)
 
     base = _public_base_url()
+    if is_production() and not base:
+        # In prod we must send an absolute link; a relative one will be unusable.
+        raise HTTPException(status_code=500, detail="server misconfigured: missing DAA_AUTH_PUBLIC_BASE_URL")
+
     if base:
         verify_url = f"{base}/api/daa/auth/v0/verify?token={token}"
         if redirect_path:
