@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getDaaAdminActorUserIdFromRequestV1, requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { setDaaRunPortfolioV0 } from "@/src/daa/storeV0";
+import { getDaaAdminActorUserIdFromRequestV1, requireDaaAdminEditorAuth } from "../../../../../../../../src/daa/adminAuth";
+import { setDaaRunPortfolioV0 } from "../../../../../../../../src/daa/storeV0";
 
 export const runtime = "nodejs";
 

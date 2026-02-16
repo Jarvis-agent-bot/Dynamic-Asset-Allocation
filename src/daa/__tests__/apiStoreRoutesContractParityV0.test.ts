@@ -76,4 +76,51 @@ describe("/api/daa/store/v0/run/{runId} route contract parity", () => {
     expect(okJson.bundle?.run?.status).toBe("created");
     expect(okJson.bundle?.run?.payload).toMatchObject({ source: "/daa/dashboard", actor: "dashboard" });
   });
+
+  it("locks editor write-route error status/body contract for missing/not-found runs", async () => {
+    resetPgMem();
+
+    const editorCookie = await createSessionCookie(["editor"]);
+    const postBody = JSON.stringify({ payload: { source: "/daa/dashboard", actor: "editor" }, kind: "note" });
+
+    const confirmMod = await import("../../../../app/api/daa/store/v0/run/[runId]/confirm/route");
+    const executedMod = await import("../../../../app/api/daa/store/v0/run/[runId]/executed/route");
+    const portfolioMod = await import("../../../../app/api/daa/store/v0/run/[runId]/portfolio/route");
+    const auditMod = await import("../../../../app/api/daa/store/v0/run/[runId]/audit/route");
+
+    const endpoints = [
+      { name: "confirm", mod: confirmMod, runId: "" },
+      { name: "executed", mod: executedMod, runId: "" },
+      { name: "portfolio", mod: portfolioMod, runId: "" },
+      { name: "audit", mod: auditMod, runId: "" },
+    ];
+
+    for (const ep of endpoints) {
+      const req = new Request("https://example.com/api/daa/store/v0/run//x", {
+        method: "POST",
+        headers: { cookie: editorCookie, "content-type": "application/json" },
+        body: postBody,
+      });
+      const res: Response = await (ep.mod as any).POST(req, { params: { runId: ep.runId } });
+      expect(res.status, ep.name).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({ ok: false, error: "missing runId" });
+    }
+
+    const missingRunEndpoints = [
+      { name: "confirm", mod: confirmMod },
+      { name: "executed", mod: executedMod },
+      { name: "portfolio", mod: portfolioMod },
+      { name: "audit", mod: auditMod },
+    ];
+    for (const ep of missingRunEndpoints) {
+      const req = new Request("https://example.com/api/daa/store/v0/run/run_missing/x", {
+        method: "POST",
+        headers: { cookie: editorCookie, "content-type": "application/json" },
+        body: postBody,
+      });
+      const res: Response = await (ep.mod as any).POST(req, { params: { runId: "run_missing" } });
+      expect(res.status, ep.name).toBe(404);
+      await expect(res.json()).resolves.toMatchObject({ ok: false, error: "run not found" });
+    }
+  });
 });
