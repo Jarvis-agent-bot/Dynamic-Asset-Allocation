@@ -221,6 +221,20 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>Import bundle</div>
+            <div style={{ fontSize: 12, color: "#666" }}>从 JSON 恢复 Step2/3/4/5/6/7 与 funds hub 运行态。</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Badge tone="ok" text="ready" />
+            <JumpButton onClick={() => onJump("import")}>Go</JumpButton>
+            <Link href="/daa/dashboard#import" style={{ color: "#111", fontSize: 12 }}>
+              Open
+            </Link>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div>
             <div style={{ fontWeight: 700, fontSize: 13 }}>Export bundle</div>
             <div style={{ fontSize: 12, color: "#666" }}>统一从这里一键导出全量 JSON。</div>
           </div>
