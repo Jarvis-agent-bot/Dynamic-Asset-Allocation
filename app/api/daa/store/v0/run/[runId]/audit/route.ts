@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { getDaaAdminActorUserIdFromRequestV1, requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { appendDaaRunAuditEventV0 } from "@/src/daa/storeV0";
+import { getDaaAdminActorUserIdFromRequestV1, requireDaaAdminEditorAuth } from "../../../../../../../../src/daa/adminAuth";
+import { appendDaaRunAuditEventV0 } from "../../../../../../../../src/daa/storeV0";
 
 export const runtime = "nodejs";
 
@@ -33,6 +33,7 @@ export async function POST(req: Request, ctx: { params: { runId: string } }) {
     return NextResponse.json({ ok: true, eventId, createdAt });
   } catch (e: any) {
     const msg = String(e?.message ?? e ?? "error");
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    const status = msg === "run not found" ? 404 : 500;
+    return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }

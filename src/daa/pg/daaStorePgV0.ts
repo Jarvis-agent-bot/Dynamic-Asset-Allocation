@@ -389,6 +389,9 @@ export async function appendDaaRunAuditEventV0(args: {
   const payloadJson = safeJsonStringify(args.payload);
 
   await withDaaPgClientV0(async ({ query }) => {
+    const exists = await query("SELECT 1 FROM daa_runs WHERE run_id = $1", [runId]);
+    if (!exists.rowCount) throw new Error("run not found");
+
     await query(
       "INSERT INTO daa_run_audit_events (event_id, run_id, created_at, kind, payload, actor_user_id) VALUES ($1, $2, $3, $4, $5::jsonb, $6)",
       [eventId, runId, createdAt, kind, payloadJson, args.actorUserId || null],
