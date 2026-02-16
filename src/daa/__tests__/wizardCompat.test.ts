@@ -42,6 +42,20 @@ describe("getDaaDashboardCompatRedirect", () => {
     expect(getDaaDashboardCompatRedirect("/daa/step/4/", "?foo=bar")).toBe("/daa/dashboard?foo=bar&tab=wizard&step=4");
   });
 
+  it("keeps step deep-links for the full wizard range", () => {
+    for (let step = 1; step <= 7; step += 1) {
+      expect(getDaaDashboardCompatRedirect(`/daa/step/${step}`, "")).toBe(`/daa/dashboard?tab=wizard&step=${step}`);
+      expect(getDaaDashboardCompatRedirect(`/daa/wizard/step/${step}`, "?from=hub")).toBe(
+        `/daa/dashboard?from=hub&tab=wizard&step=${step}`
+      );
+    }
+  });
+
+  it("falls back to step=1 for invalid legacy wizard step IDs", () => {
+    expect(getDaaDashboardCompatRedirect("/daa/wizard/step/0", "")).toBe("/daa/dashboard?tab=wizard&step=1");
+    expect(getDaaDashboardCompatRedirect("/daa/wizard", "?step=-7")).toBe("/daa/dashboard?step=1&tab=wizard");
+  });
+
   it("redirects /daa/market/funds to market-funds tab", () => {
     expect(getDaaDashboardCompatRedirect("/daa/market/funds", "")).toBe("/daa/dashboard?tab=market-funds");
   });
