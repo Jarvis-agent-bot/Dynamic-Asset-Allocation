@@ -146,7 +146,7 @@ export default function DaaDashboardOverviewCards() {
       // Fetch in parallel; all endpoints are cookie-auth friendly.
       const [authRes, runsRes, deployRes] = await Promise.allSettled([
         fetch("/api/daa/auth/me", { method: "GET", headers: { accept: "application/json" } }),
-        fetch("/api/daa/store/v0/runs?limit=1", { method: "GET", headers: { accept: "application/json" } }),
+        fetch("/api/daa/runs?limit=1", { method: "GET", headers: { accept: "application/json" } }),
         fetch("/api/daa/deploy-status", { method: "GET", headers: { accept: "application/json" } }),
       ]);
 
