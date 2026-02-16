@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
+import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { isProbablyInAppBrowserUserAgentV0 } from "@/src/daa/auth/daaAuthInAppBrowserV0";
 import { consumeDaaAuthEmailLoginTokenWithReasonV0 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
@@ -134,7 +134,7 @@ export async function GET(req: Request) {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      path: "/",
+      path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
       expires: new Date(found.session.expiresAt),
     });
 
@@ -149,7 +149,7 @@ export async function GET(req: Request) {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    path: "/",
+    path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
     expires: new Date(found.session.expiresAt),
   });
 

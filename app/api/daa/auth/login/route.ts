@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
+import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
 import { authenticateDaaAuthAccountV0, createDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
 
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    path: "/",
+    path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
     expires: new Date(session.expiresAt),
   });
 
