@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.deps import get_db
 from app.models import DaaAuthLoginToken
-from app.session import create_session, revoke_session, session_cookie_name
+from app.session import check_session, create_session, revoke_session, rotate_session_cookie, session_cookie_name
 from app.util import (
     get_admin_emails,
     infer_role_from_email,
@@ -292,13 +292,32 @@ def verify(
 
 @router.get("/me")
 def me(request: Request, db: Session = Depends(get_db)):
-    from app.session import require_session
+    result = check_session("viewer", request, db, touch_last_seen=True)
+    if not result.context:
+        resp = JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+        # Clear stale/invalid cookies so the browser stops sending dead session state.
+        if request.cookies.get(session_cookie_name()):
+            resp.delete_cookie(key=session_cookie_name(), path="/")
+        return resp
 
-    ctx = require_session("viewer", request, db)
-    if not ctx:
-        raise HTTPException(status_code=401, detail="unauthorized")
+    ctx = result.context
+    resp = JSONResponse({"ok": True, "role": ctx.role, "actorUserId": ctx.actor_user_id})
 
-    return {"ok": True, "role": ctx.role, "actorUserId": ctx.actor_user_id}
+    if result.should_rotate and result.session_id:
+        rotated = rotate_session_cookie(db, result.session_id)
+        if rotated:
+            cookie_val, max_age = rotated
+            resp.set_cookie(
+                key=session_cookie_name(),
+                value=cookie_val,
+                httponly=True,
+                secure=is_production(),
+                samesite="lax",
+                max_age=max_age,
+                path="/",
+            )
+
+    return resp
 
 
 @router.post("/logout")
