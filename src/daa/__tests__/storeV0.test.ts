@@ -114,6 +114,42 @@ describe("daa/store v0 (pg)", () => {
     expect(janRange.some((r) => r.runId === r3.runId)).toBe(false);
   });
 
+  it("lists runs with status + source filters", async () => {
+    resetPgMem();
+
+    const draftDashboard = await createDaaRunV0({
+      kind: "rebalance",
+      status: "draft",
+      payload: { source: "/daa/dashboard" },
+      createdAt: "2026-01-01T00:00:01.000Z",
+    });
+    const draftFunds = await createDaaRunV0({
+      kind: "rebalance",
+      status: "draft",
+      payload: { source: "/daa/market/funds" },
+      createdAt: "2026-01-02T00:00:01.000Z",
+    });
+    const confirmedDashboard = await createDaaRunV0({
+      kind: "rebalance",
+      status: "confirmed",
+      payload: { source: "/daa/dashboard" },
+      createdAt: "2026-01-03T00:00:01.000Z",
+    });
+
+    const draftOnly = await listDaaRunsV0({ limit: 50, status: "draft" });
+    expect(draftOnly.map((r) => r.runId)).toEqual([draftFunds.runId, draftDashboard.runId]);
+
+    const dashboardOnly = await listDaaRunsV0({ limit: 50, source: "/daa/dashboard" });
+    expect(dashboardOnly.map((r) => r.runId)).toEqual([confirmedDashboard.runId, draftDashboard.runId]);
+
+    const draftDashboardOnly = await listDaaRunsV0({
+      limit: 50,
+      status: "draft",
+      source: "/daa/dashboard",
+    });
+    expect(draftDashboardOnly.map((r) => r.runId)).toEqual([draftDashboard.runId]);
+  });
+
   it("lists audit events with actorUserId filter", async () => {
     resetPgMem();
 
