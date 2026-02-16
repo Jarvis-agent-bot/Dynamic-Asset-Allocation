@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.deps import get_db
@@ -34,6 +35,29 @@ def _now_utc() -> datetime:
 
 def _iso_from_dt(dt: datetime) -> str:
     return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _parse_iso_utc(v: str | None) -> datetime | None:
+    s = (v or "").strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return None
+    return dt.astimezone(timezone.utc)
+
+
+def _cleanup_login_tokens(db: Session) -> None:
+    now = now_iso()
+    (
+        db.query(DaaAuthLoginToken)
+        .filter(or_(DaaAuthLoginToken.used_at.isnot(None), DaaAuthLoginToken.expires_at <= now))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
 
 
 def _safe_redirect_path(v: str | None) -> str:
@@ -137,7 +161,7 @@ def _consume_login_token(db: Session, token: str) -> tuple[str, str]:
     token_id, secret = raw.split(".", 1)
     token_id = token_id.strip()
     secret = secret.strip()
-    if not token_id or not secret:
+    if not token_id or not secret or len(token_id) > 128 or len(secret) > 256:
         raise HTTPException(status_code=400, detail="invalid token")
 
     row = db.get(DaaAuthLoginToken, token_id)
@@ -147,17 +171,22 @@ def _consume_login_token(db: Session, token: str) -> tuple[str, str]:
     if row.used_at:
         raise HTTPException(status_code=400, detail="token already used")
 
-    if (row.expires_at or "") <= now_iso():
+    now_dt = _now_utc()
+    expires_dt = _parse_iso_utc(row.expires_at)
+    if not expires_dt or expires_dt <= now_dt:
         raise HTTPException(status_code=400, detail="token expired")
 
     if not secure_eq(row.secret_hash, sha256_hex(secret)):
         raise HTTPException(status_code=400, detail="invalid token")
 
     # Mark as used before issuing a session.
-    row.used_at = now_iso()
+    row.used_at = _iso_from_dt(now_dt)
     db.commit()
 
     email = normalize_email(row.email)
+    if not is_reasonable_email(email):
+        raise HTTPException(status_code=400, detail="invalid token")
+
     role = infer_role_from_email(email)
     if not role:
         if is_production():
@@ -190,6 +219,9 @@ def request_link(
         if not infer_role_from_email(email):
             # Avoid leaking which emails are allowed.
             raise HTTPException(status_code=403, detail="forbidden")
+
+    # Opportunistically prune consumed/expired rows so token tables do not grow unbounded.
+    _cleanup_login_tokens(db)
 
     token = _make_login_token(db, email=email)
 
@@ -231,6 +263,7 @@ def verify(
     redirect: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
+    _cleanup_login_tokens(db)
     email, role = _consume_login_token(db, token)
 
     sid, secret, max_age = create_session(db, email=email, role=role)
