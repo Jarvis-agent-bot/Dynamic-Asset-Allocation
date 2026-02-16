@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 
-function mustGetEnv(name: string): string {
-  const v = process.env[name];
-  if (!v || !v.trim()) throw new Error(`missing env: ${name}`);
-  return v.trim();
-}
+import { fetchTextWithTimeoutV0, getProviderErrorStatusV0, mustGetEnvV0, parseXueqiuCookieV0 } from "../../_lib/providerAdaptersV0";
 
 function json(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -21,13 +17,13 @@ export async function GET(req: Request) {
     }
 
     // Expected format: "xq_a_token=...;u=..." (pysnowball-compatible)
-    const cookie = mustGetEnv("XUEQIU_TOKEN");
+    const cookie = parseXueqiuCookieV0(mustGetEnvV0("XUEQIU_TOKEN"));
 
     const upstream = new URL("https://stock.xueqiu.com/v5/stock/realtime/quotec.json");
     upstream.searchParams.set("symbol", symbol);
     upstream.searchParams.set("_", String(Date.now()));
 
-    const r = await fetch(upstream, {
+    const r = await fetchTextWithTimeoutV0(upstream, {
       method: "GET",
       headers: {
         accept: "application/json, text/plain, */*",
@@ -36,7 +32,6 @@ export async function GET(req: Request) {
         referer: `https://xueqiu.com/S/${symbol}`,
         "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
       },
-      cache: "no-store",
     });
 
     const text = await r.text();
@@ -45,7 +40,6 @@ export async function GET(req: Request) {
         {
           error: "xueqiu upstream error",
           status: r.status,
-          body: text.slice(0, 2000),
         },
         { status: 502 },
       );
@@ -65,7 +59,7 @@ export async function GET(req: Request) {
         error: "xueqiu quotec fetch failed",
         message: e instanceof Error ? e.message : String(e),
       },
-      { status: 500 },
+      { status: getProviderErrorStatusV0(e) },
     );
   }
 }
