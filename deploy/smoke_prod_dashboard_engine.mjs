@@ -11,10 +11,18 @@ function normBase(input) {
   return u.toString().replace(/\/$/, '');
 }
 
-function checkStatus(ok, message) {
+function fail(fingerprint, detail) {
+  throw new Error('fingerprint=' + fingerprint + ' ' + detail);
+}
+
+function checkStatus(ok, fingerprint, detail) {
   if (!ok) {
-    throw new Error(message);
+    fail(fingerprint, detail);
   }
+}
+
+function snippet(text, limit = 240) {
+  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
 async function getText(url) {
@@ -67,14 +75,38 @@ async function main() {
   const root = normBase(base);
 
   const dashboard = await getText(root + '/daa/dashboard');
-  checkStatus(dashboard.resp.status < 400, '/daa/dashboard status=' + dashboard.resp.status);
-  checkStatus(dashboard.text.toLowerCase().includes('daa') || dashboard.text.toLowerCase().includes('dashboard'), '/daa/dashboard returned unexpected html body');
+  checkStatus(
+    dashboard.resp.status < 400,
+    'DAA_SMOKE_DASHBOARD_STATUS',
+    '/daa/dashboard status=' + dashboard.resp.status
+  );
+  checkStatus(
+    dashboard.text.toLowerCase().includes('daa') || dashboard.text.toLowerCase().includes('dashboard'),
+    'DAA_SMOKE_DASHBOARD_BODY_UNEXPECTED',
+    '/daa/dashboard returned unexpected html body=' + snippet(dashboard.text)
+  );
 
   const health = await getJson(root + '/api/daa/engine-health');
-  checkStatus(health.resp.status === 200, '/api/daa/engine-health status=' + health.resp.status + ' body=' + health.text.slice(0, 240));
-  checkStatus(health.json && typeof health.json === 'object', '/api/daa/engine-health returned non-json payload');
-  checkStatus(typeof health.json.ok === 'boolean', '/api/daa/engine-health missing boolean ok field');
-  checkStatus(health.json.ok === true, '/api/daa/engine-health ok=false body=' + health.text.slice(0, 240));
+  checkStatus(
+    health.resp.status === 200,
+    'DAA_SMOKE_ENGINE_HEALTH_STATUS',
+    '/api/daa/engine-health status=' + health.resp.status + ' body=' + snippet(health.text)
+  );
+  checkStatus(
+    health.json && typeof health.json === 'object',
+    'DAA_SMOKE_ENGINE_HEALTH_NON_JSON',
+    '/api/daa/engine-health returned non-json payload body=' + snippet(health.text)
+  );
+  checkStatus(
+    typeof health.json.ok === 'boolean',
+    'DAA_SMOKE_ENGINE_HEALTH_MISSING_OK',
+    '/api/daa/engine-health missing boolean ok field body=' + snippet(health.text)
+  );
+  checkStatus(
+    health.json.ok === true,
+    'DAA_SMOKE_ENGINE_HEALTH_OK_FALSE',
+    '/api/daa/engine-health ok=false body=' + snippet(health.text)
+  );
 
   console.log('[DAA][SMOKE] PASS dashboard+engine-health base=' + root);
 }
