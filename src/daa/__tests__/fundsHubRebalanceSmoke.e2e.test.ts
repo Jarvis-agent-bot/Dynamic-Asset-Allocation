@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { rebalanceCore } from "../../core/rebalanceCore";
 
 import { getDefaultExecutionAdapterV0 } from "../executionAdapterV0";
+import { buildRebalanceApprovalSummaryMarkdownV0 } from "../rebalanceApprovalSummaryMarkdownV0";
 import { appendRebalanceLog } from "../rebalanceLogStore";
 import { buildLatestRebalanceRunReportV1 } from "../rebalanceReportExport";
 import { decodeRebalanceRunReportFromShareToken, encodeRebalanceRunReportToShareToken } from "../rebalanceRunShareCodec";
@@ -60,6 +61,25 @@ describe("funds hub rebalance e2e smoke", () => {
       expect(String((o as any).reason || "").trim().length).toBeGreaterThan(0);
     }
 
+    const recommendationMarkdown = buildRebalanceApprovalSummaryMarkdownV0({
+      atIso: "2026-02-12T12:00:00.000Z",
+      action: "dynamic-rebalance",
+      baseCcy: "USD",
+      scheduleEnabled: false,
+      executionMode: "dry-run",
+      orders: resp.orders.map((o) => ({
+        symbol: o.symbol,
+        side: o.side,
+        notional: o.notional,
+        reason: o.reason,
+      })),
+      whatIf: null,
+      violations: [],
+    });
+    expect(recommendationMarkdown).toContain("## Orders");
+    expect(recommendationMarkdown).toContain("| AAA | SELL | 100.00 |");
+    expect(recommendationMarkdown).toContain("| BBB | BUY | 100.00 |");
+
     // Keep wizard storage in sync (export fallback path)
     storage.setItem("daa.wizard.rebalanceRequest", JSON.stringify(req));
     storage.setItem("daa.wizard.rebalanceResponse", JSON.stringify(resp));
@@ -108,6 +128,12 @@ describe("funds hub rebalance e2e smoke", () => {
 
     const decoded = decodeRebalanceRunReportFromShareToken(token);
     expect(decoded).toEqual(report);
+
+    // Export smoke: report is JSON-safe and keeps the recommendation payload.
+    const exported = JSON.parse(JSON.stringify(report));
+    expect(exported.run.request).toEqual(req);
+    expect(exported.run.response).toEqual(resp);
+    expect(exported.run.paperExecutionLogEntry?.orders?.length).toBe(resp.orders.length);
   });
 
   it("supports assetBlacklist by excluding holdings + targets", () => {
