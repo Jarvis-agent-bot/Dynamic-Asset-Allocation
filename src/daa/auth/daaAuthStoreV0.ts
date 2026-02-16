@@ -25,6 +25,16 @@ export type DaaAuthSessionV0 = {
   ip: string | null;
 };
 
+export type DaaAuthAuditEventListRowV0 = {
+  eventId: string;
+  createdAt: string;
+  kind: string;
+  actorUserId: string;
+  accountId: string | null;
+  sessionId: string | null;
+  payload: unknown;
+};
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -171,6 +181,133 @@ function isPgUniqueViolationV0(e: any): boolean {
 async function ensureAuthSchemaIfPgV0(): Promise<void> {
   if (!isDaaPgEnabledV0()) throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   await ensureDaaAuthSchemaPgV0();
+}
+
+function rowToAuthAuditEventV0(row: any): DaaAuthAuditEventListRowV0 {
+  let payload: unknown = {};
+  if (row?.payload_json && typeof row.payload_json === "string") {
+    try {
+      payload = JSON.parse(row.payload_json);
+    } catch {
+      payload = {};
+    }
+  }
+
+  return {
+    eventId: String(row?.event_id ?? ""),
+    createdAt: String(row?.created_at ?? ""),
+    kind: String(row?.kind ?? ""),
+    actorUserId: String(row?.actor_user_id ?? ""),
+    accountId: typeof row?.account_id === "string" && row.account_id ? row.account_id : null,
+    sessionId: typeof row?.session_id === "string" && row.session_id ? row.session_id : null,
+    payload,
+  };
+}
+
+export async function appendDaaAuthAuditEventV0(args: {
+  kind: string;
+  actorUserId: string;
+  payload: unknown;
+  accountId?: string | null;
+  sessionId?: string | null;
+  createdAt?: string;
+}): Promise<DaaAuthAuditEventListRowV0> {
+  const kind = String(args.kind ?? "").trim();
+  const actorUserId = String(args.actorUserId ?? "").trim();
+  if (!kind) throw new Error("missing kind");
+  if (!actorUserId) throw new Error("missing actorUserId");
+
+  const createdAt = ensureIsoOrNow(args.createdAt);
+  const eventId = randomUUID();
+  const accountId = typeof args.accountId === "string" && args.accountId.trim() ? args.accountId.trim() : null;
+  const sessionId = typeof args.sessionId === "string" && args.sessionId.trim() ? args.sessionId.trim() : null;
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const row = await withDaaPgClientV0(async ({ query }) => {
+      const r = await query(
+        "INSERT INTO daa_auth_audit_events (event_id, created_at, kind, actor_user_id, account_id, session_id, payload_json) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING event_id, created_at, kind, actor_user_id, account_id, session_id, payload_json",
+        [eventId, createdAt, kind, actorUserId, accountId, sessionId, JSON.stringify(args.payload ?? {})],
+      );
+      return (r.rows && r.rows[0]) || null;
+    });
+
+    if (!row) throw new Error("failed to append auth audit event");
+    return rowToAuthAuditEventV0(row);
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+}
+
+export async function listDaaAuthAuditEventsV0(args: {
+  limit?: number;
+  beforeCreatedAt?: string;
+  beforeEventId?: string;
+  fromCreatedAt?: string;
+  toCreatedAt?: string;
+  actorUserId?: string;
+} = {}): Promise<DaaAuthAuditEventListRowV0[]> {
+  const limitNum = Number(args.limit);
+  const limit = Number.isFinite(limitNum) ? Math.max(1, Math.min(500, Math.trunc(limitNum))) : 50;
+
+  const beforeCreatedAt = String(args.beforeCreatedAt ?? "").trim() || null;
+  const beforeEventId = String(args.beforeEventId ?? "").trim() || null;
+  const fromCreatedAt = String(args.fromCreatedAt ?? "").trim() || null;
+  const toCreatedAt = String(args.toCreatedAt ?? "").trim() || null;
+  const actorUserId = String(args.actorUserId ?? "").trim() || null;
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    const rows = await withDaaPgClientV0(async ({ query }) => {
+      const values: any[] = [];
+      const where: string[] = [];
+      let i = 1;
+
+      if (beforeCreatedAt && beforeEventId) {
+        where.push(`(created_at < $${i} OR (created_at = $${i} AND event_id < $${i + 1}))`);
+        values.push(beforeCreatedAt, beforeEventId);
+        i += 2;
+      }
+
+      if (fromCreatedAt) {
+        where.push(`created_at >= $${i}`);
+        values.push(fromCreatedAt);
+        i += 1;
+      }
+
+      if (toCreatedAt) {
+        where.push(`created_at <= $${i}`);
+        values.push(toCreatedAt);
+        i += 1;
+      }
+
+      if (actorUserId) {
+        where.push(`actor_user_id = $${i}`);
+        values.push(actorUserId);
+        i += 1;
+      }
+
+      const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+      values.push(limit);
+
+      const sql = `
+        SELECT event_id, created_at, kind, actor_user_id, account_id, session_id, payload_json
+        FROM daa_auth_audit_events
+        ${whereSql}
+        ORDER BY created_at DESC, event_id DESC
+        LIMIT $${i}
+      `;
+
+      const r = await query(sql, values);
+      return r.rows ?? [];
+    });
+
+    return rows.map(rowToAuthAuditEventV0);
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
 export async function createDaaAuthAccountV0(args: {

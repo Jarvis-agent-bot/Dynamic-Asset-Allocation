@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appendDaaAuthAuditEventV0,
   authenticateDaaAuthAccountV0,
   bootstrapCreateFirstDaaAuthAccountV0,
   createDaaAuthAccountV0,
@@ -9,6 +10,7 @@ import {
   getDaaAuthAccountByUsernameV0,
   hasAnyDaaAuthAccountsV0,
   hashPasswordV0,
+  listDaaAuthAuditEventsV0,
   revokeDaaAuthSessionV0,
   verifyPasswordV0,
 } from "../daaAuthStoreV0";
@@ -110,5 +112,45 @@ describe("daa/auth store v0", () => {
 
     const expired = await getDaaAuthAccountBySessionTokenV0({ token, now: "2026-01-02T00:00:00.000Z" });
     expect(expired).toBe(null);
+  });
+
+  it("appends and lists auth audit events", async () => {
+    resetPgMem();
+
+    const a1 = await createDaaAuthAccountV0({ username: "audit@example.com", password: "pw-4", roles: ["editor"] });
+    const { session } = await createDaaAuthSessionV0({ accountId: a1.accountId, ttlDays: 7 });
+
+    await appendDaaAuthAuditEventV0({
+      kind: "auth.login.success",
+      actorUserId: a1.accountId,
+      accountId: a1.accountId,
+      sessionId: session.sessionId,
+      payload: { ip: "1.1.1.1" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    await appendDaaAuthAuditEventV0({
+      kind: "auth.logout",
+      actorUserId: a1.accountId,
+      accountId: a1.accountId,
+      sessionId: session.sessionId,
+      payload: { reason: "manual" },
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    const rows = await listDaaAuthAuditEventsV0({ actorUserId: a1.accountId, limit: 10 });
+    expect(rows.length).toBe(2);
+    expect(rows[0]?.kind).toBe("auth.logout");
+    expect(rows[0]?.accountId).toBe(a1.accountId);
+    expect(rows[0]?.sessionId).toBe(session.sessionId);
+
+    const olderOnly = await listDaaAuthAuditEventsV0({
+      beforeCreatedAt: rows[0]?.createdAt,
+      beforeEventId: rows[0]?.eventId,
+      actorUserId: a1.accountId,
+      limit: 10,
+    });
+    expect(olderOnly.length).toBe(1);
+    expect(olderOnly[0]?.kind).toBe("auth.login.success");
   });
 });

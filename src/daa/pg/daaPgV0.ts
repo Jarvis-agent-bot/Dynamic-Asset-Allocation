@@ -129,6 +129,22 @@ export async function ensureDaaAuthSchemaPgV0(): Promise<void> {
 
         CREATE INDEX IF NOT EXISTS idx_daa_auth_email_login_tokens_used_at
           ON daa_auth_email_login_tokens(used_at);
+
+        CREATE TABLE IF NOT EXISTS daa_auth_audit_events (
+          event_id TEXT PRIMARY KEY,
+          created_at TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          actor_user_id TEXT NOT NULL,
+          account_id TEXT REFERENCES daa_auth_accounts(account_id) ON DELETE SET NULL,
+          session_id TEXT REFERENCES daa_auth_sessions(session_id) ON DELETE SET NULL,
+          payload_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_daa_auth_audit_events_created
+          ON daa_auth_audit_events(created_at DESC, event_id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_daa_auth_audit_events_actor
+          ON daa_auth_audit_events(actor_user_id, created_at DESC);
       `);
 
       await query("COMMIT");
