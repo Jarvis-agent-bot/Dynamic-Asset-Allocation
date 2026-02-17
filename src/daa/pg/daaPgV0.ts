@@ -25,6 +25,11 @@ export function getDaaPgUrlV0(): string | null {
     throw new Error("Postgres-only runtime: non-Postgres database configuration is not allowed");
   }
 
+  const scheme = v.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase();
+  if (scheme && !/^(postgres|postgresql|postgresql\+psycopg)$/.test(scheme)) {
+    throw new Error("Postgres-only runtime: unsupported database URL scheme");
+  }
+
   // Allow sharing env with the Python service (sqlalchemy uses postgresql+psycopg://).
   return v.replace(/^postgresql\+psycopg:\/\//i, "postgresql://");
 }
