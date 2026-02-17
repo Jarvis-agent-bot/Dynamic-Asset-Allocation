@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Circle, Copy, RefreshCw } from "lucide-react";
+import { CheckCircle2, Circle, Copy, Loader2, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -116,6 +116,7 @@ export default function DaaDashboardOverviewCards() {
   const [runsResp, setRunsResp] = useState<RunsResp | null>(null);
   const [deployResp, setDeployResp] = useState<DeployStatusResp | null>(null);
   const [deployLastOkServerTime, setDeployLastOkServerTime] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const portfolio = useMemo(() => {
     try {
@@ -134,23 +135,22 @@ export default function DaaDashboardOverviewCards() {
   useEffect(() => {
     let cancelled = false;
 
-    async function load(opts?: { reset?: boolean }) {
-      const reset = !!opts?.reset;
-      if (reset) {
-        // Re-trigger skeletons while refreshing.
-        setAuth(null);
-        setRunsResp(null);
-        setDeployResp(null);
+    async function load(opts?: { refresh?: boolean }) {
+      const refresh = !!opts?.refresh;
+      if (refresh && !cancelled) {
+        setIsRefreshing(true);
       }
 
-      // Fetch in parallel; all endpoints are cookie-auth friendly.
-      const [authRes, runsRes, deployRes] = await Promise.allSettled([
-        fetch("/api/daa/auth/me", { method: "GET", headers: { accept: "application/json" } }),
-        fetch("/api/daa/runs?limit=1", { method: "GET", headers: { accept: "application/json" } }),
-        fetch("/api/daa/deploy-status", { method: "GET", headers: { accept: "application/json" } }),
-      ]);
+      try {
+        // Fetch in parallel; all endpoints are cookie-auth friendly.
+        const [authRes, runsRes, deployRes] = await Promise.allSettled([
+          fetch("/api/daa/auth/me", { method: "GET", headers: { accept: "application/json" } }),
+          fetch("/api/daa/runs?limit=1", { method: "GET", headers: { accept: "application/json" } }),
+          fetch("/api/daa/deploy-status", { method: "GET", headers: { accept: "application/json" } }),
+        ]);
 
-      if (!cancelled) {
+        if (cancelled) return;
+
         if (authRes.status === "fulfilled") {
           try {
             setAuth((await authRes.value.json()) as AuthMeResp);
@@ -186,11 +186,15 @@ export default function DaaDashboardOverviewCards() {
         }
 
         window.dispatchEvent(new CustomEvent(EVT_DATA_UPDATED, { detail: { ts: Date.now() } }));
+      } finally {
+        if (!cancelled) {
+          setIsRefreshing(false);
+        }
       }
     }
 
     const onRefresh = () => {
-      void load({ reset: true });
+      void load({ refresh: true });
     };
 
     window.addEventListener(EVT_REFRESH, onRefresh);
@@ -494,6 +498,7 @@ export default function DaaDashboardOverviewCards() {
             </div>
           )}
           {auth && auth.ok ? <div className="text-xs text-muted-foreground">Roles: {roles}</div> : null}
+          {isRefreshing ? <div className="text-xs text-muted-foreground">Refreshing data...</div> : null}
           {runsResp === null ? (
             <Skeleton className="h-4 w-[220px]" />
           ) : storeOk ? (
@@ -546,10 +551,11 @@ export default function DaaDashboardOverviewCards() {
             variant="outline"
             className="h-7 w-7"
             onClick={() => requestRefresh()}
+            disabled={isRefreshing}
             aria-label="Retry deploy status"
             title="Retry deploy status"
           >
-            <RefreshCw className="h-4 w-4" />
+            {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
         </CardHeader>
         <CardContent className="space-y-1">
