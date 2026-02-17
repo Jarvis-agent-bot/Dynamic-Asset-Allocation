@@ -34,6 +34,10 @@ import {
 } from "@/components/ui/table";
 
 import { copyTextToClipboard } from "../../copyToClipboard";
+import {
+  DASHBOARD_MUTED_FIELD_LABEL_CLASS,
+  DASHBOARD_NATIVE_SELECT_CLASS,
+} from "./dashboardShadcnTokensV0";
 
 type AdminUserV0 = {
   id: "viewer-token" | "editor-token" | "legacy-token";
@@ -455,14 +459,14 @@ export default function DaaDashboardAdminUsers() {
               </Button>
             ) : null}
 
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <label className={DASHBOARD_MUTED_FIELD_LABEL_CLASS}>
               Status
               <select
                 value={statusFilter}
                 onChange={(e) =>
                   updateStatusFilter(normalizeStatusFilter(e.target.value))
                 }
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={DASHBOARD_NATIVE_SELECT_CLASS}
               >
                 <option value="all">All</option>
                 <option value="active">Active</option>
