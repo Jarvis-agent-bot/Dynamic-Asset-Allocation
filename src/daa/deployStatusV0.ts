@@ -40,6 +40,10 @@ function envAnySet(env: Record<string, string | undefined>, names: string[]): bo
   return false;
 }
 
+function isFastApiPublicDaaRoutesDisabledV0(env: Record<string, string | undefined>): boolean {
+  return String(env.DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES ?? "0").trim() !== "1";
+}
+
 export function pickBuildShaV0(env: Record<string, string | undefined>): string {
   const candidates = [
     env.NEXT_PUBLIC_BUILD_SHA,
@@ -130,6 +134,15 @@ export function buildDeployBootstrapChecksV0(env: Record<string, string | undefi
       "CF_PAGES_COMMIT_SHA",
     ],
     note: "Helps confirm what code is deployed; does not expose secrets.",
+  });
+
+  // Keep Next.js as the only public /api/daa owner.
+  checks.push({
+    id: "DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES",
+    label: "FastAPI public /api/daa routes disabled",
+    group: "recommended",
+    ok: isFastApiPublicDaaRoutesDisabledV0(env),
+    note: "Must stay 0 (or unset) so public /api/daa stays on Next.js.",
   });
 
   // Optional extras (not all deployments need these).
