@@ -5,6 +5,7 @@ import { postEmailLoginLinkV0 } from "../../../../app/api/daa/auth/email-login/_
 const mocks = vi.hoisted(() => ({
   createToken: vi.fn(),
   findLastCreatedAt: vi.fn(),
+  revokeToken: vi.fn(),
   getIp: vi.fn(),
   getUa: vi.fn(),
   appendAudit: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/src/daa/auth/daaAuthEmailLoginStoreV0", () => ({
   createDaaAuthEmailLoginTokenV0: mocks.createToken,
   findLastDaaAuthEmailLoginTokenCreatedAtV0: mocks.findLastCreatedAt,
+  revokeDaaAuthEmailLoginTokenV0: mocks.revokeToken,
 }));
 
 vi.mock("@/src/daa/auth/daaAuthRequestV0", () => ({
@@ -48,7 +50,19 @@ describe("postEmailLoginLinkV0", () => {
       username: "trader@example.com",
       status: "active",
     });
-    mocks.createToken.mockResolvedValue({ token: "123456" });
+    mocks.createToken.mockResolvedValue({
+      token: "123456",
+      row: {
+        tokenId: "tok_1",
+        accountId: "acc_1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        expiresAt: "2026-01-01T00:15:00.000Z",
+        usedAt: null,
+        userAgent: "vitest",
+        ip: "127.0.0.1",
+      },
+    });
+    mocks.revokeToken.mockResolvedValue({ ok: true });
     mocks.sendEmail.mockResolvedValue({ ok: true });
     mocks.appendAudit.mockResolvedValue({ ok: true });
   });
@@ -70,6 +84,7 @@ describe("postEmailLoginLinkV0", () => {
     expect(body.ok).toBe(true);
     expect(body.cooldownSeconds).toBe(30);
     expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
+    expect(mocks.revokeToken).not.toHaveBeenCalled();
     expect(mocks.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "trader@example.com",
@@ -98,6 +113,27 @@ describe("postEmailLoginLinkV0", () => {
 
     expect(body).toEqual({ ok: true, cooldownSeconds: 30 });
     expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("revokes the newly created token when email delivery fails", async () => {
+    mocks.sendEmail.mockResolvedValueOnce({ ok: false, skipped: true, error: "missing RESEND_API_KEY" });
+
+    const req = new Request("http://localhost/api/daa/auth/email-login/request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "trader@example.com", returnTo: "/daa/dashboard" }),
+    });
+
+    const res = await postEmailLoginLinkV0(req, { mode: "request" });
+    const body = await res.json();
+
+    expect(body.ok).toBe(true);
+    expect(mocks.revokeToken).toHaveBeenCalledWith({ tokenId: "tok_1" });
+    expect(mocks.appendAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ tokenRevokedOnDeliveryFailure: true }),
+      })
+    );
   });
 
   it("includes delivery status in debug mode when Resend call is skipped", async () => {
