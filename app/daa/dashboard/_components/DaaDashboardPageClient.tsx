@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Copy } from "lucide-react";
 
@@ -67,6 +67,12 @@ function scrollToId(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  const focusTarget = el.querySelector<HTMLElement>("[data-dashboard-section-heading='true']") ?? (el as HTMLElement);
+  if (focusTarget && typeof focusTarget.focus === "function") {
+    // Keep keyboard users anchored to the section they just jumped to.
+    focusTarget.focus({ preventScroll: true });
+  }
 }
 
 type QuickNavItem = { id: string; label: string };
@@ -410,8 +416,9 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
 
 function LoadingState() {
   return (
-    <Card className="border-muted-foreground/20">
+    <Card className="border-muted-foreground/20" role="status" aria-live="polite" aria-busy="true">
       <CardContent className="space-y-3 py-6">
+        <span className="sr-only">Loading DAA dashboard session</span>
         <Skeleton className="h-5 w-[220px]" />
         <Skeleton className="h-4 w-[420px]" />
         <div className="flex gap-2">
@@ -425,7 +432,7 @@ function LoadingState() {
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <Card className="border-destructive/20">
+    <Card className="border-destructive/20" role="alert" aria-live="assertive">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Session unavailable</CardTitle>
       </CardHeader>
@@ -439,14 +446,52 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
+function DashboardSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-6" aria-labelledby={`${id}-title`}>
+      <h2 id={`${id}-title`} className="sr-only" tabIndex={-1} data-dashboard-section-heading="true">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function DashboardSkipLinks({ tab }: { tab: Tab }) {
+  if (tab !== "dashboard") return null;
+
+  return (
+    <nav aria-label="Skip links" className="flex flex-wrap gap-2">
+      <a
+        href="#run-checklist"
+        className="sr-only rounded-sm border bg-background px-2 py-1 text-xs text-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        Skip to run checklist
+      </a>
+      <a
+        href="#step2"
+        className="sr-only rounded-sm border bg-background px-2 py-1 text-xs text-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        Skip to Step2 events
+      </a>
+      <a
+        href="#history-audit"
+        className="sr-only rounded-sm border bg-background px-2 py-1 text-xs text-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        Skip to history and audit
+      </a>
+    </nav>
+  );
+}
+
 function DashboardMain() {
   return (
     <div className="space-y-4">
       <DaaDashboardOverviewCards />
 
-      <section id="run-checklist" className="scroll-mt-6">
+      <DashboardSection id="run-checklist" title="Run checklist">
         <DaaDashboardRunChecklist onJump={scrollToId} />
-      </section>
+      </DashboardSection>
 
       <Card>
         <CardHeader className="pb-2">
@@ -464,6 +509,7 @@ function DashboardMain() {
                     variant="secondary"
                     size="sm"
                     onClick={() => scrollToId(it.id)}
+                    aria-controls={it.id}
                     className="justify-start"
                   >
                     {it.label}
@@ -475,49 +521,49 @@ function DashboardMain() {
         </CardContent>
       </Card>
 
-      <section id="import" className="scroll-mt-6">
+      <DashboardSection id="import" title="Import bundle">
         <DaaDashboardImport />
-      </section>
+      </DashboardSection>
 
-      <section id="export" className="scroll-mt-6">
+      <DashboardSection id="export" title="Export bundle">
         <DaaDashboardExport />
-      </section>
+      </DashboardSection>
 
-      <section id="confirm-executed" className="scroll-mt-6">
+      <DashboardSection id="confirm-executed" title="Confirm and executed logs">
         <DaaDashboardConfirmExecuted />
-      </section>
+      </DashboardSection>
 
-      <section id="history-audit" className="scroll-mt-6">
+      <DashboardSection id="history-audit" title="History and audit">
         <DaaDashboardHistoryAudit />
-      </section>
+      </DashboardSection>
 
-      <section id="admin-users" className="scroll-mt-6">
+      <DashboardSection id="admin-users" title="Admin users">
         <DaaDashboardAdminUsers />
-      </section>
+      </DashboardSection>
 
-      <section id="backtest" className="scroll-mt-6">
+      <DashboardSection id="backtest" title="Backtest and drift rebalance">
         <DaaDashboardBacktestDriftRebalance />
-      </section>
+      </DashboardSection>
 
-      <section id="step2" className="scroll-mt-6">
+      <DashboardSection id="step2" title="Step2 events">
         <Step2MarketEventsPage />
-      </section>
+      </DashboardSection>
 
-      <section id="step4" className="scroll-mt-6">
+      <DashboardSection id="step4" title="Step4 recommendation">
         <Step4BaselineRecommendationPage />
-      </section>
+      </DashboardSection>
 
-      <section id="step5" className="scroll-mt-6">
+      <DashboardSection id="step5" title="Step5 explain">
         <DaaDashboardAiExplain />
-      </section>
+      </DashboardSection>
 
-      <section id="step6" className="scroll-mt-6">
+      <DashboardSection id="step6" title="Step6 human profile">
         <Step6HumanFactorPage />
-      </section>
+      </DashboardSection>
 
-      <section id="step7" className="scroll-mt-6">
+      <DashboardSection id="step7" title="Step7 tags">
         <Step7TagsPage />
-      </section>
+      </DashboardSection>
 
       <Card>
         <CardHeader className="pb-2">
@@ -667,6 +713,7 @@ export default function DaaDashboardPageClient() {
     return (
       <div className="space-y-4">
         {header}
+        <DashboardSkipLinks tab={tab} />
         <LoadingState />
       </div>
     );
@@ -676,6 +723,7 @@ export default function DaaDashboardPageClient() {
     return (
       <div className="space-y-4">
         {header}
+        <DashboardSkipLinks tab={tab} />
         <SignedOutState returnTo={returnTo} />
       </div>
     );
@@ -685,6 +733,7 @@ export default function DaaDashboardPageClient() {
     return (
       <div className="space-y-4">
         {header}
+        <DashboardSkipLinks tab={tab} />
         <BootstrapRequiredState returnTo={returnTo} />
       </div>
     );
@@ -694,6 +743,7 @@ export default function DaaDashboardPageClient() {
     return (
       <div className="space-y-4">
         {header}
+        <DashboardSkipLinks tab={tab} />
         <ErrorState message={auth.message} onRetry={() => setAuthRev((x) => x + 1)} />
       </div>
     );
@@ -713,6 +763,7 @@ export default function DaaDashboardPageClient() {
   return (
     <div className="space-y-4">
       {header}
+      <DashboardSkipLinks tab={tab} />
       {content}
     </div>
   );
