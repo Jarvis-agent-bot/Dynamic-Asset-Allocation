@@ -26,7 +26,9 @@ from app.util import (
     sha256_hex,
 )
 
-router = APIRouter(prefix="/api/daa/auth/v0", tags=["daa-auth-v0"])
+# Legacy auth router kept for migration reference only.
+# It must never claim the public /api/daa namespace.
+router = APIRouter(prefix="/v1/auth/v0", tags=["daa-auth-v0"])
 
 
 def _now_utc() -> datetime:
@@ -231,12 +233,12 @@ def request_link(
         raise HTTPException(status_code=500, detail="server misconfigured: missing DAA_AUTH_PUBLIC_BASE_URL")
 
     if base:
-        verify_url = f"{base}/api/daa/auth/v0/verify?token={token}"
+        verify_url = f"{base}/v1/auth/v0/verify?token={token}"
         if redirect_path:
             verify_url += f"&redirect={redirect_path}"
     else:
         # Dev fallback: return a relative verify path.
-        verify_url = f"/api/daa/auth/v0/verify?token={token}"
+        verify_url = f"/v1/auth/v0/verify?token={token}"
         if redirect_path:
             verify_url += f"&redirect={redirect_path}"
 

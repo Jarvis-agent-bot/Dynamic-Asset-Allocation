@@ -43,6 +43,17 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     expect(text).not.toContain("app.include_router(store_v0_router)");
   });
 
+  it("keeps FastAPI source free of public /api/daa router prefixes", () => {
+    const fastApiAppRoot = path.resolve(process.cwd(), "services/daa-py/app");
+    const routeFiles = listRouteFiles(fastApiAppRoot);
+
+    for (const filePath of routeFiles) {
+      const text = readFileSync(filePath, "utf8");
+      expect(text).not.toContain('prefix="/api/daa');
+      expect(text).not.toContain("prefix='/api/daa");
+    }
+  });
+
   it("keeps Nginx routing /api/daa to Next.js instead of FastAPI", () => {
     const nginxSnippetPath = path.resolve(process.cwd(), "deploy/nginx-daa-api-snippet.conf");
     const text = readFileSync(nginxSnippetPath, "utf8");

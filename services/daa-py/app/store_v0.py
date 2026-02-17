@@ -10,7 +10,9 @@ from app.deps import get_db
 from app.models import DaaRun, DaaRunAuditEvent, DaaRunConfirm, DaaRunExecuted, DaaRunPortfolio
 from app.util import derive_actor_source, make_id, now_iso
 
-router = APIRouter(prefix="/api/daa/store/v0", tags=["daa-store-v0"])
+# Legacy storage router kept for migration reference only.
+# It must never claim the public /api/daa namespace.
+router = APIRouter(prefix="/v1/store/v0", tags=["daa-store-v0"])
 
 
 def _clamp_limit(limit_raw: int | None) -> int:
