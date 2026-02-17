@@ -75,9 +75,9 @@ function scrollToId(id: string) {
   }
 }
 
-type QuickNavItem = { id: string; label: string };
+type ActionRailItem = { id: string; label: string };
 
-const QUICK_NAV_SECTIONS: Array<{ title: string; items: QuickNavItem[] }> = [
+const ACTION_RAIL_SECTIONS: Array<{ title: string; items: ActionRailItem[] }> = [
   {
     title: "Core operations",
     items: [
@@ -106,6 +106,12 @@ const QUICK_NAV_SECTIONS: Array<{ title: string; items: QuickNavItem[] }> = [
     ],
   },
 ];
+
+const ACTION_RAIL_SHORTCUTS = [
+  { href: "/daa/dashboard?tab=wizard&step=1", label: "Open Wizard" },
+  { href: "/daa/dashboard?tab=market-funds", label: "Open Market/Funds" },
+  { href: "/daa/dashboard/settings", label: "Open Settings" },
+] as const;
 
 type MeResponse =
   | {
@@ -484,98 +490,124 @@ function DashboardSkipLinks({ tab }: { tab: Tab }) {
   );
 }
 
+function DashboardActionRail({ compact = false }: { compact?: boolean }) {
+  return (
+    <Card className={compact ? undefined : "xl:sticky xl:top-20"}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">Action rail</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {ACTION_RAIL_SECTIONS.map((section) => (
+          <div key={section.title} className="space-y-2">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{section.title}</div>
+            <div className="grid gap-2">
+              {section.items.map((it) => (
+                <Button
+                  key={it.id}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => scrollToId(it.id)}
+                  aria-controls={it.id}
+                  className="justify-start"
+                >
+                  {it.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="space-y-2 border-t pt-3">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cross-tab shortcuts</div>
+          <div className="grid gap-2">
+            {ACTION_RAIL_SHORTCUTS.map((it) => (
+              <Button key={it.href} asChild variant="outline" size="sm" className="justify-start">
+                <Link href={it.href}>{it.label}</Link>
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardMain() {
   return (
     <div className="space-y-4">
       <DaaDashboardOverviewCards />
 
-      <DashboardSection id="run-checklist" title="Run checklist">
-        <DaaDashboardRunChecklist onJump={scrollToId} />
-      </DashboardSection>
+      <div className="xl:hidden">
+        <DashboardActionRail compact />
+      </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Quick nav by intent</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {QUICK_NAV_SECTIONS.map((section) => (
-            <div key={section.title} className="space-y-2">
-              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{section.title}</div>
-              <div className="flex flex-wrap gap-2">
-                {section.items.map((it) => (
-                  <Button
-                    key={it.id}
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => scrollToId(it.id)}
-                    aria-controls={it.id}
-                    className="justify-start"
-                  >
-                    {it.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="hidden xl:block">
+          <DashboardActionRail />
+        </aside>
 
-      <DashboardSection id="import" title="Import bundle">
-        <DaaDashboardImport />
-      </DashboardSection>
+        <div className="space-y-4">
+          <DashboardSection id="run-checklist" title="Run checklist">
+            <DaaDashboardRunChecklist onJump={scrollToId} />
+          </DashboardSection>
 
-      <DashboardSection id="export" title="Export bundle">
-        <DaaDashboardExport />
-      </DashboardSection>
+          <DashboardSection id="import" title="Import bundle">
+            <DaaDashboardImport />
+          </DashboardSection>
 
-      <DashboardSection id="confirm-executed" title="Confirm and executed logs">
-        <DaaDashboardConfirmExecuted />
-      </DashboardSection>
+          <DashboardSection id="export" title="Export bundle">
+            <DaaDashboardExport />
+          </DashboardSection>
 
-      <DashboardSection id="history-audit" title="History and audit">
-        <DaaDashboardHistoryAudit />
-      </DashboardSection>
+          <DashboardSection id="confirm-executed" title="Confirm and executed logs">
+            <DaaDashboardConfirmExecuted />
+          </DashboardSection>
 
-      <DashboardSection id="admin-users" title="Admin users">
-        <DaaDashboardAdminUsers />
-      </DashboardSection>
+          <DashboardSection id="history-audit" title="History and audit">
+            <DaaDashboardHistoryAudit />
+          </DashboardSection>
 
-      <DashboardSection id="backtest" title="Backtest and drift rebalance">
-        <DaaDashboardBacktestDriftRebalance />
-      </DashboardSection>
+          <DashboardSection id="admin-users" title="Admin users">
+            <DaaDashboardAdminUsers />
+          </DashboardSection>
 
-      <DashboardSection id="step2" title="Step2 events">
-        <Step2MarketEventsPage />
-      </DashboardSection>
+          <DashboardSection id="backtest" title="Backtest and drift rebalance">
+            <DaaDashboardBacktestDriftRebalance />
+          </DashboardSection>
 
-      <DashboardSection id="step4" title="Step4 recommendation">
-        <Step4BaselineRecommendationPage />
-      </DashboardSection>
+          <DashboardSection id="step2" title="Step2 events">
+            <Step2MarketEventsPage />
+          </DashboardSection>
 
-      <DashboardSection id="step5" title="Step5 explain">
-        <DaaDashboardAiExplain />
-      </DashboardSection>
+          <DashboardSection id="step4" title="Step4 recommendation">
+            <Step4BaselineRecommendationPage />
+          </DashboardSection>
 
-      <DashboardSection id="step6" title="Step6 human profile">
-        <Step6HumanFactorPage />
-      </DashboardSection>
+          <DashboardSection id="step5" title="Step5 explain">
+            <DaaDashboardAiExplain />
+          </DashboardSection>
 
-      <DashboardSection id="step7" title="Step7 tags">
-        <Step7TagsPage />
-      </DashboardSection>
+          <DashboardSection id="step6" title="Step6 human profile">
+            <Step6HumanFactorPage />
+          </DashboardSection>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Tips</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          <ul className="list-disc space-y-1 pl-5">
-            <li>Step4 recommendations persist to localStorage; Step5 explain and export load them automatically.</li>
-            <li>Multiple tabs attempt to revalidate via the storage event for best-effort sync.</li>
-          </ul>
-        </CardContent>
-      </Card>
+          <DashboardSection id="step7" title="Step7 tags">
+            <Step7TagsPage />
+          </DashboardSection>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Tips</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              <ul className="list-disc space-y-1 pl-5">
+                <li>Step4 recommendations persist to localStorage; Step5 explain and export load them automatically.</li>
+                <li>Multiple tabs attempt to revalidate via the storage event for best-effort sync.</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
