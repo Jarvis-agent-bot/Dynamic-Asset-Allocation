@@ -44,6 +44,8 @@ import DaaDashboardRunChecklist from "../_components/DaaDashboardRunChecklist";
 import DaaMarketFundsTab from "../_tabs/DaaMarketFundsTab";
 import DaaSettingsTab from "../_tabs/DaaSettingsTab";
 import { DASHBOARD_VISUAL_SURFACES_V0 } from "./dashboardVisualSurfacesV0";
+import { scrollToIdAndFocusV0 } from "@/src/daa/focusV0";
+import { DASHBOARD_SKIP_LINK_TARGETS_V0 } from "@/src/daa/keyboardFocusMapV0";
 
 type Tab = "dashboard" | "wizard" | "market-funds" | "settings";
 
@@ -65,15 +67,8 @@ function parseInitialStepId(raw: string | null): number | undefined {
 }
 
 function scrollToId(id: string) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  const focusTarget = el.querySelector<HTMLElement>("[data-dashboard-section-heading='true']") ?? (el as HTMLElement);
-  if (focusTarget && typeof focusTarget.focus === "function") {
-    // Keep keyboard users anchored to the section they just jumped to.
-    focusTarget.focus({ preventScroll: true });
-  }
+  // Keep keyboard users anchored to the section they just jumped to.
+  scrollToIdAndFocusV0(id);
 }
 
 type ActionRailItem = { id: string; label: string };
@@ -478,24 +473,15 @@ function DashboardSkipLinks({ tab }: { tab: Tab }) {
 
   return (
     <nav aria-label="Skip links" className="flex flex-wrap gap-2">
-      <a
-        href="#run-checklist"
-        className="sr-only rounded-sm border bg-background px-2 py-1 text-xs text-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-      >
-        Skip to run checklist
-      </a>
-      <a
-        href="#step2"
-        className="sr-only rounded-sm border bg-background px-2 py-1 text-xs text-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-      >
-        Skip to Step2 events
-      </a>
-      <a
-        href="#history-audit"
-        className="sr-only rounded-sm border bg-background px-2 py-1 text-xs text-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-      >
-        Skip to history and audit
-      </a>
+      {DASHBOARD_SKIP_LINK_TARGETS_V0.map((item) => (
+        <a
+          key={item.targetId}
+          href={`#${item.targetId}`}
+          className="sr-only rounded-sm border bg-background px-2 py-1 text-xs text-foreground focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        >
+          {item.label}
+        </a>
+      ))}
     </nav>
   );
 }
