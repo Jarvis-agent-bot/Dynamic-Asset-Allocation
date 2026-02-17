@@ -35,7 +35,8 @@ async function getText(url) {
         accept: 'text/html',
         'user-agent': 'DAA-Prod-Smoke/1.0',
       },
-      redirect: 'follow',
+      // Canonical endpoint must return 200 directly, not via auth/login redirects.
+      redirect: 'manual',
       signal: ctl.signal,
     });
     const text = await resp.text();
@@ -55,7 +56,8 @@ async function getJson(url) {
         accept: 'application/json',
         'user-agent': 'DAA-Prod-Smoke/1.0',
       },
-      redirect: 'follow',
+      // Canonical endpoint must return 200 directly, not via auth/login redirects.
+      redirect: 'manual',
       signal: ctl.signal,
     });
     const text = await resp.text();
