@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { getDaaPgUrlV0 } from "../pg/daaPgV0";
+import { getDaaPgUrlV0, isDaaPgEnabledV0 } from "../pg/daaPgV0";
 
 const ORIGINAL_DAA_DB_URL = process.env.DAA_DB_URL;
 const ORIGINAL_DATABASE_URL = process.env.DATABASE_URL;
+const ORIGINAL_DAA_PG_MEM = process.env.DAA_PG_MEM;
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 
 afterEach(() => {
   if (ORIGINAL_DAA_DB_URL === undefined) delete process.env.DAA_DB_URL;
@@ -11,6 +13,12 @@ afterEach(() => {
 
   if (ORIGINAL_DATABASE_URL === undefined) delete process.env.DATABASE_URL;
   else process.env.DATABASE_URL = ORIGINAL_DATABASE_URL;
+
+  if (ORIGINAL_DAA_PG_MEM === undefined) delete process.env.DAA_PG_MEM;
+  else process.env.DAA_PG_MEM = ORIGINAL_DAA_PG_MEM;
+
+  if (ORIGINAL_NODE_ENV === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = ORIGINAL_NODE_ENV;
 });
 
 describe("daa pg url guard", () => {
@@ -40,5 +48,23 @@ describe("daa pg url guard", () => {
     delete process.env.DATABASE_URL;
 
     expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
+  });
+
+  it("rejects DAA_PG_MEM outside test runtime", () => {
+    delete process.env.DAA_DB_URL;
+    delete process.env.DATABASE_URL;
+    process.env.DAA_PG_MEM = "1";
+    process.env.NODE_ENV = "production";
+
+    expect(() => isDaaPgEnabledV0()).toThrowError(/test-only/);
+  });
+
+  it("allows DAA_PG_MEM in test runtime", () => {
+    delete process.env.DAA_DB_URL;
+    delete process.env.DATABASE_URL;
+    process.env.DAA_PG_MEM = "1";
+    process.env.NODE_ENV = "test";
+
+    expect(isDaaPgEnabledV0()).toBe(true);
   });
 });

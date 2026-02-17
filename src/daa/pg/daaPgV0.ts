@@ -38,7 +38,15 @@ function isDaaPgMemEnabledV0(): boolean {
   return typeof process.env.DAA_PG_MEM === "string" && process.env.DAA_PG_MEM.trim() === "1";
 }
 
+function assertPgMemAllowedV0(): void {
+  if (!isDaaPgMemEnabledV0()) return;
+  if ((process.env.NODE_ENV || "").toLowerCase() === "test") return;
+
+  throw new Error("DAA_PG_MEM is test-only and must not be enabled outside test runtime");
+}
+
 export function isDaaPgEnabledV0(): boolean {
+  assertPgMemAllowedV0();
   return Boolean(getDaaPgUrlV0() || isDaaPgMemEnabledV0());
 }
 
@@ -46,6 +54,7 @@ export function daaPgPoolV0(): Pool {
   const st = getStateV0();
   if (st.pool) return st.pool;
 
+  assertPgMemAllowedV0();
   const url = getDaaPgUrlV0();
   if (url) {
     const pool = new Pool({ connectionString: url });
