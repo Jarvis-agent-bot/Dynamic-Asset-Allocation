@@ -238,8 +238,8 @@ function SignedOutState({ returnTo }: { returnTo: string }) {
 
 function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [bootstrapToken, setBootstrapToken] = useState("");
+  // OTP-only bootstrap flow no longer asks for a password.
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -255,7 +255,7 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
   const bootstrapCurl = useMemo(() => {
     const base = baseUrl || "https://YOUR_DOMAIN";
     const u = (email || "admin@example.com").trim() || "admin@example.com";
-    const payload = JSON.stringify({ username: u, password: "YOUR_PASSWORD" });
+    const payload = JSON.stringify({ username: u });
 
     return [
       `curl -sS -X POST "${base}/api/daa/auth/bootstrap" \\`,
@@ -290,7 +290,7 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
           "content-type": "application/json",
           "x-daa-bootstrap-token": bootstrapToken,
         },
-        body: JSON.stringify({ username: email, password }),
+        body: JSON.stringify({ username: email }),
       });
 
       const text = await res.text();
@@ -348,16 +348,7 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
             />
           </div>
 
-          <div className="grid gap-1">
-            <Label htmlFor="daa-bootstrap-password">Admin password</Label>
-            <Input
-              id="daa-bootstrap-password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+          <div className="text-xs text-muted-foreground">Password sign-in is disabled; this account will use email OTP only.</div>
 
           <div className="grid gap-1">
             <Label htmlFor="daa-bootstrap-token">Bootstrap token</Label>
@@ -413,7 +404,7 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
           </div>
           <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[11px] text-foreground">{bootstrapCurl}</pre>
           <div className="mt-2 text-xs text-muted-foreground">
-            Replace <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and <code className="rounded bg-muted px-1 py-0.5">YOUR_PASSWORD</code> before running.
+            Replace <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> before running.
           </div>
         </div>
 

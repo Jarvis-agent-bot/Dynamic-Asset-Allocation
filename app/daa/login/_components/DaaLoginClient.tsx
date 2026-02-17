@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertCircle, CircleHelp, Loader2, Mail, X } from "lucide-react";
+import { AlertCircle, Loader2, Mail, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ClipboardEvent } from "react";
 import { toast } from "sonner";
@@ -11,11 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { formatRateLimitedMessageV0, parseRetryAfterSecondsV0 } from "@/src/daa/auth/uiRateLimitV0";
-
 import { applyEmailPasteNormalizationV0 } from "@/src/daa/emailPasteV0";
 import { appendNoticeParamV0, normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
@@ -23,12 +20,6 @@ type Props = {
   returnTo: string;
   error?: string;
   notice?: string;
-};
-
-type PasswordFormErrors = {
-  email?: string;
-  password?: string;
-  form?: string;
 };
 
 type MeResponse =
@@ -45,14 +36,13 @@ type SessionModel =
   | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> }
   | { kind: "error"; message: string };
 
-type EmailLinkModel =
+type OtpModel =
   | { kind: "idle" }
   | { kind: "sending" }
   | { kind: "sent"; email: string; requestedAtMs: number; cooldownSeconds: number };
 
 const LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0 = "daa.emailLogin.lastEmail.v0";
-const LS_DAA_EMAIL_LOGIN_TAB_V0 = "daa.emailLogin.tab.v0";
-const LS_DAA_EMAIL_LINK_SENT_V0 = "daa.emailLogin.sent.v0";
+const LS_DAA_EMAIL_OTP_SENT_V0 = "daa.emailOtp.sent.v0";
 
 function normalizeEmailLoose(raw: string): string {
   const v = raw.trim().toLowerCase();
@@ -73,11 +63,8 @@ function normalizeEmailLoose(raw: string): string {
 function normalizeEmailDraftV0(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
-  // Keep it predictable: lowercase + trim (no complex canonicalization beyond that).
   return trimmed.slice(0, 254).toLowerCase();
 }
-
-// returnTo normalization is shared via src/daa/urlV0.ts
 
 function parseApiError(json: any, fallback: string): string {
   const msg = typeof json?.error === "string" ? json.error.trim() : "";
@@ -86,7 +73,6 @@ function parseApiError(json: any, fallback: string): string {
 }
 
 function formatSeconds(s: number): string {
-  // Cooldown timer display: mm:ss (e.g. 0:30)
   if (!Number.isFinite(s)) return "0:00";
   const ss = Math.max(0, Math.floor(s));
   const m = Math.floor(ss / 60);
@@ -94,21 +80,14 @@ function formatSeconds(s: number): string {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
-
 function isBrowserOnline(): boolean {
-  // navigator.onLine is imperfect, but it is a useful hint for UX.
   if (typeof navigator === "undefined") return true;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const n: any = navigator;
   return typeof n.onLine === "boolean" ? Boolean(n.onLine) : true;
 }
 
 function isLikelyFetchNetworkFailure(message: string): boolean {
   const m = (message || "").toLowerCase();
-  // Cross-browser fetch failures:
-  // - Chrome: "Failed to fetch"
-  // - Safari: "Load failed"
-  // - Firefox: "NetworkError when attempting to fetch resource."
   if (m.includes("failed to fetch")) return true;
   if (m.includes("networkerror")) return true;
   if (m.includes("load failed")) return true;
@@ -129,7 +108,6 @@ function formatNetworkFailureMessage(e: unknown, action: string): string {
   return msg || `Something went wrong. Please try again to ${action}.`;
 }
 
-
 type MailboxLink = { label: string; href: string };
 
 function buildMailboxLinks(email: string): MailboxLink[] {
@@ -147,50 +125,26 @@ function buildMailboxLinks(email: string): MailboxLink[] {
   const gmail = "https://mail.google.com/mail/u/0/#inbox";
   const outlook = "https://outlook.live.com/mail/0/inbox";
   const icloud = "https://www.icloud.com/mail/";
-  const yahoo = "https://mail.yahoo.com/d/folders/1";
-  const proton = "https://mail.proton.me/u/0/inbox";
   const qq = "https://mail.qq.com/";
-  const netease163 = "https://mail.163.com/";
-  const netease126 = "https://mail.126.com/";
-  const neteaseYeah = "https://mail.yeah.net/";
 
   if (domain === "gmail.com" || domain === "googlemail.com") push("Gmail", gmail);
   if (domain === "outlook.com" || domain === "hotmail.com" || domain === "live.com") push("Outlook", outlook);
   if (domain === "icloud.com" || domain === "me.com" || domain === "mac.com") push("iCloud", icloud);
-  if (domain === "yahoo.com" || domain === "ymail.com") push("Yahoo", yahoo);
-  if (domain === "proton.me" || domain === "protonmail.com") push("Proton", proton);
   if (domain === "qq.com" || domain === "foxmail.com") push("QQ Mail", qq);
-  if (domain === "163.com") push("163 Mail", netease163);
-  if (domain === "126.com") push("126 Mail", netease126);
-  if (domain === "yeah.net") push("yeah.net Mail", neteaseYeah);
 
-  // Common fallbacks (still deduped by href)
   push("Gmail", gmail);
   push("Outlook", outlook);
   push("iCloud", icloud);
-
   return links;
 }
 
 export default function DaaLoginClient({ returnTo, error, notice }: Props) {
-  const emailLinkEmailId = useId();
-  const passwordEmailId = useId();
-  const passwordId = useId();
+  const emailId = useId();
+  const codeId = useId();
+  const emailHelpId = useId();
 
-  const emailLinkEmailHelpId = useId();
-  const emailLinkResendHelpId = useId();
-  const passwordEmailHelpId = useId();
-  const passwordHelpId = useId();
-  const formErrorId = useId();
-
-  const emailLinkEmailRef = useRef<HTMLInputElement | null>(null);
-  const passwordEmailRef = useRef<HTMLInputElement | null>(null);
-
-  const emailLinkRequestInFlightRef = useRef(false);
-
-  // Focus the first relevant input after the session check completes and when switching tabs.
-  // (React's autoFocus only runs on mount, so this keeps keyboard flow predictable.)
-  const passwordRef = useRef<HTMLInputElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  const codeRef = useRef<HTMLInputElement | null>(null);
 
   const safeReturnTo = useMemo(() => normalizeDaaReturnToV0(returnTo), [returnTo]);
 
@@ -198,300 +152,59 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     const n = String(notice || "").trim();
     if (!n) return;
 
-    if (n === "session_expired") {
-      let redirectToastRecent = false;
-      try {
-        const at = Number(sessionStorage.getItem("daa_notice_session_expired_at_v0") || "0");
-        if (at && Date.now() - at < 5000) redirectToastRecent = true;
-        sessionStorage.removeItem("daa_notice_session_expired_at_v0");
-      } catch {
-        // Ignore storage errors (private mode / quota).
-      }
-
-      if (!redirectToastRecent) {
-        toast.error("Session expired. Please sign in again.");
-      }
-    }
-
-    if (n === "signed_out") {
-      toast.success("Signed out.");
-    }
-
-    if (n === "bootstrapped") {
-      toast.success("First admin created. Please sign in.");
-    }
-
-    // Avoid repeating the toast on refresh.
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("notice");
-      window.history.replaceState({}, "", url.toString());
-    } catch {
-      // Ignore URL parsing / history errors.
-    }
+    if (n === "session_expired") toast.error("Session expired. Please sign in again.");
+    if (n === "signed_out") toast.success("Signed out.");
+    if (n === "bootstrapped") toast.success("Bootstrap complete. Sign in with your email verification code.");
+    if (n === "signed_in") toast.success("Signed in.");
   }, [notice]);
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
+  const [username, setUsername] = useState("");
+  const [code, setCode] = useState("");
+  const [otp, setOtp] = useState<OtpModel>({ kind: "idle" });
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [online, setOnline] = useState(true);
 
-  const [online, setOnline] = useState(() => isBrowserOnline());
+  const normalizedEmail = normalizeEmailLoose(username);
+  const codeTrimmed = code.trim();
+  const checkingSession = session.kind === "checking";
+  const offline = !online;
+
+  const cooldownRemainingSeconds = useMemo(() => {
+    if (otp.kind !== "sent") return 0;
+    const elapsed = Math.floor((Date.now() - otp.requestedAtMs) / 1000);
+    return Math.max(0, otp.cooldownSeconds - elapsed);
+  }, [otp]);
+
+  const canResend = otp.kind === "sent" && cooldownRemainingSeconds <= 0;
+  const otpBusy = otp.kind === "sending";
 
   useEffect(() => {
-    const on = () => setOnline(isBrowserOnline());
-    window.addEventListener("online", on);
-    window.addEventListener("offline", on);
+    setOnline(isBrowserOnline());
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", on);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
     };
   }, []);
-
-
-  const emailLinkErrorCode =
-    error === "email-link-invalid" || error === "email-link-expired" || error === "email-link-used" ? error : "";
-
-  const [tab, setTab] = useState<"email" | "password">(emailLinkErrorCode ? "email" : "password");
-
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-
-  const handleEmailPaste = (e: ClipboardEvent<HTMLInputElement>, kind: "emailLink" | "password") => {
-    const pasted = e.clipboardData?.getData("text") ?? "";
-    // Always prevent default so whitespace-only pastes don't insert garbage.
-    e.preventDefault();
-
-    const el = e.currentTarget;
-    // Prefer the live input value (more robust than state if React is mid-batch).
-    const baseValue = el.value ?? username;
-    const start = el.selectionStart ?? baseValue.length;
-    const end = el.selectionEnd ?? start;
-
-    const r = applyEmailPasteNormalizationV0({ value: baseValue, selectionStart: start, selectionEnd: end, pastedText: pasted });
-
-    setUsername(r.nextValue);
-
-    if (kind === "emailLink") {
-      setEmailLinkError(null);
-      setEmailLink((prev) => {
-        if (prev.kind !== "sent") return prev;
-        try {
-          window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
-        } catch {
-          // Ignore storage errors.
-        }
-        return { kind: "idle" };
-      });
-    } else {
-      setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
-      setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
-    }
-
-    const nextCaret = r.nextCaret;
-    requestAnimationFrame(() => {
-      const node = kind === "emailLink" ? emailLinkEmailRef.current : passwordEmailRef.current;
-      if (!node) return;
-      try {
-        node.setSelectionRange(nextCaret, nextCaret);
-      } catch {
-        // Ignore selection errors (some mobile browsers).
-      }
-    });
-  };
-
-  const normalizedEmail = useMemo(() => normalizeEmailLoose(username), [username]);
-  const emailDraftNormalized = useMemo(() => normalizeEmailDraftV0(username), [username]);
-  const showEmailDraftNormalizationHint = Boolean(username.trim()) && emailDraftNormalized && username !== emailDraftNormalized;
-
-  const emailDomainSuggestions = useMemo(() => {
-    const local = emailDraftNormalized;
-    if (!local) return [] as string[];
-    if (local.includes("@")) return [] as string[];
-    if (/\s/.test(local)) return [] as string[];
-    if (local.length < 2) return [] as string[];
-    // Only suggest for simple local-parts to avoid surprising rewrites.
-    if (!/^[a-z0-9._+-]+$/.test(local)) return [] as string[];
-
-    const domains = ["gmail.com", "icloud.com", "outlook.com", "qq.com", "163.com"];
-    return domains.map((d) => `${local}@${d}`);
-  }, [emailDraftNormalized]);
-
-  const passwordTrimmed = password.trim();
-
-  // Password form state
-  const [passwordBusy, setPasswordBusy] = useState(false);
-  const [passwordErrors, setPasswordErrors] = useState<PasswordFormErrors>({});
-  const [passwordSubmitAttempted, setPasswordSubmitAttempted] = useState(false);
-  const [touched, setTouched] = useState({ email: false, password: false });
-
-  // Email-link form state
-  const [emailLink, setEmailLink] = useState<EmailLinkModel>({ kind: "idle" });
-  const [emailLinkError, setEmailLinkError] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  const clearEmail = (focus: "emailLink" | "password") => {
-    setUsername("");
-    setEmailLinkError(null);
-    setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
-    setEmailLink((prev) => {
-      if (prev.kind !== "sent") return prev;
-      try {
-        window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
-      } catch {
-        // Ignore storage errors.
-      }
-      return { kind: "idle" };
-    });
-
-    const ref = focus === "emailLink" ? emailLinkEmailRef : passwordEmailRef;
-    setTimeout(() => ref.current?.focus(), 0);
-  };
-
-  const passwordClientErrors = useMemo<PasswordFormErrors>(() => {
-    const e: PasswordFormErrors = {};
-    const showEmail = passwordSubmitAttempted || touched.email;
-    const showPassword = passwordSubmitAttempted || touched.password;
-
-    if (showEmail && !normalizedEmail) {
-      e.email = username.trim()
-        ? "Enter a valid email address (for example, you@example.com)."
-        : "Enter your email address (for example, you@example.com).";
-    }
-    if (showPassword && !passwordTrimmed) e.password = "Enter your password.";
-
-    return e;
-  }, [normalizedEmail, passwordTrimmed, passwordSubmitAttempted, touched.email, touched.password, username]);
-
-  const mergedPasswordErrors = useMemo<PasswordFormErrors>(
-    () => ({ ...passwordErrors, ...passwordClientErrors }),
-    [passwordErrors, passwordClientErrors]
-  );
-
-  const passwordFormValid = Boolean(normalizedEmail) && Boolean(passwordTrimmed);
-  const emailLinkFormValid = Boolean(normalizedEmail);
-
-  const [logoutBusy, setLogoutBusy] = useState(false);
-
-  const checkingSession = session.kind === "checking";
-  const passwordDisabled = passwordBusy || checkingSession;
-  const emailDisabled = emailLink.kind === "sending" || checkingSession;
-
-  const passwordSubmitDisabled = passwordDisabled || !passwordFormValid;
-
-  useEffect(() => {
-    if (checkingSession) return;
-
-    // Don't steal focus if the user is already interacting with a control.
-    const ae = typeof document === "undefined" ? null : document.activeElement;
-    if (
-      ae &&
-      ae !== document.body &&
-      (ae instanceof HTMLInputElement || ae instanceof HTMLTextAreaElement || ae instanceof HTMLButtonElement || ae instanceof HTMLSelectElement)
-    ) {
-      return;
-    }
-
-    const target =
-      tab === "email"
-        ? emailLinkEmailRef.current
-        : normalizedEmail
-          ? passwordRef.current || passwordEmailRef.current
-          : passwordEmailRef.current;
-    if (!target) return;
-
-    target.focus();
-    try {
-      if (target.value) target.setSelectionRange(0, target.value.length);
-    } catch {
-      // Ignore selection errors (e.g. unsupported input types).
-    }
-  }, [checkingSession, normalizedEmail, tab]);
-
-  const resendRemainingSeconds = useMemo(() => {
-    if (emailLink.kind !== "sent") return 0;
-    const elapsed = Math.floor((nowMs - emailLink.requestedAtMs) / 1000);
-    return Math.max(0, emailLink.cooldownSeconds - elapsed);
-  }, [emailLink, nowMs]);
-
-  const emailLinkResendCooldownActive = emailLink.kind === "sent" && resendRemainingSeconds > 0;
-
-  const mailboxLinks = useMemo(() => {
-    if (emailLink.kind !== "sent") return [];
-    return buildMailboxLinks(emailLink.email);
-  }, [emailLink]);
-
-  useEffect(() => {
-    // Restore last typed email + selected tab, and keep the "link sent" panel stable across refresh.
-    // This avoids the common annoyance where users refresh after requesting a link and lose context.
-    try {
-      const lastEmail = (window.localStorage.getItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0) || "").trim();
-      if (lastEmail) {
-        setUsername((prev) => (prev.trim() ? prev : lastEmail.slice(0, 254)));
-      }
-    } catch {
-      // Ignore storage errors.
-    }
-
-    if (!emailLinkErrorCode) {
-      try {
-        const lastTab = (window.localStorage.getItem(LS_DAA_EMAIL_LOGIN_TAB_V0) || "").trim();
-        if (lastTab === "email" || lastTab === "password") setTab(lastTab);
-      } catch {
-        // Ignore storage errors.
-      }
-    }
-
-    try {
-      const raw = window.localStorage.getItem(LS_DAA_EMAIL_LINK_SENT_V0) || "";
-      if (!raw) return;
-
-      const parsed = JSON.parse(raw);
-      const email = normalizeEmailLoose(String(parsed?.email || ""));
-      const requestedAtMs = typeof parsed?.requestedAtMs === "number" ? parsed.requestedAtMs : NaN;
-      const cooldownSeconds = typeof parsed?.cooldownSeconds === "number" ? parsed.cooldownSeconds : NaN;
-
-      const ageMs = Date.now() - requestedAtMs;
-      const maxAgeMs = 15 * 60 * 1000;
-
-      if (email && Number.isFinite(requestedAtMs) && Number.isFinite(cooldownSeconds) && ageMs >= 0 && ageMs < maxAgeMs) {
-        setUsername((prev) => (prev.trim() ? prev : email));
-        setEmailLink({
-          kind: "sent",
-          email,
-          requestedAtMs,
-          cooldownSeconds: Math.max(0, Math.floor(cooldownSeconds)),
-        });
-      } else {
-        window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
-      }
-    } catch {
-      // Ignore storage / parse errors.
-    }
-  }, [emailLinkErrorCode]);
-
-  useEffect(() => {
-    const draft = normalizeEmailDraftV0(username);
-    if (!draft) return;
-    try {
-      window.localStorage.setItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0, draft);
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [username]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function check() {
+    async function run() {
       try {
-        if (!isBrowserOnline()) {
-          setSession({ kind: "error", message: "You appear to be offline. Connect to the internet, then reload to verify your session." });
-          return;
+        const res = await fetch("/api/daa/auth/me", { method: "GET", headers: { accept: "application/json" } });
+        const text = await res.text();
+        let json: any = null;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          json = null;
         }
-
-        const res = await fetch("/api/daa/auth/me", {
-          method: "GET",
-          headers: { accept: "application/json" },
-          cache: "no-store",
-        });
 
         if (cancelled) return;
 
@@ -500,180 +213,104 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             setSession({ kind: "signedOut" });
             return;
           }
-          const text = await res.text().catch(() => "");
-          let json: any = null;
-          try {
-            json = JSON.parse(text);
-          } catch {
-            json = null;
-          }
           setSession({ kind: "error", message: parseApiError(json, `HTTP ${res.status}`) });
           return;
         }
 
-        const payload = (await res.json()) as MeResponse;
-        if (!payload?.ok) {
+        if (json?.ok) {
+          setSession({ kind: "signedIn", me: json });
+        } else {
           setSession({ kind: "signedOut" });
-          return;
         }
-
-        setSession({ kind: "signedIn", me: payload });
       } catch (e) {
         if (cancelled) return;
-        setSession({ kind: "error", message: formatNetworkFailureMessage(e, "check your session") });
+        setSession({ kind: "error", message: e instanceof Error ? e.message : String(e) });
       }
     }
 
-    void check();
-
+    void run();
     return () => {
       cancelled = true;
     };
   }, []);
 
   useEffect(() => {
-    if (emailLink.kind !== "sent") return;
-    const t = window.setInterval(() => setNowMs(Date.now()), 500);
-    return () => window.clearInterval(t);
-  }, [emailLink.kind]);
-
-  async function logout() {
-    setLogoutBusy(true);
     try {
-      await fetch("/api/daa/auth/logout", { method: "POST", headers: { accept: "application/json" } });
-    } finally {
-      setLogoutBusy(false);
-      // Ensure middleware re-evaluates session state.
-      window.location.reload();
-    }
-  }
+      const saved = window.localStorage.getItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0);
+      if (saved && !username) setUsername(normalizeEmailDraftV0(saved));
 
-  async function submitPassword() {
-    if (passwordDisabled) return;
-
-    setPasswordSubmitAttempted(true);
-
-    const email = normalizeEmailLoose(username);
-    const pwd = password;
-
-    // Gate network requests behind a valid form (also covers pressing Enter).
-    if (!email || !pwd.trim()) {
-      // Clear generic form errors so field-level validation has priority.
-      setPasswordErrors((prev) => ({ ...prev, form: undefined }));
-
-      // Keep keyboard flow predictable: focus the first missing/invalid field.
-      if (!email) {
-        setTouched((prev) => ({ ...prev, email: true }));
-        passwordEmailRef.current?.focus();
-        return;
+      const sentRaw = window.localStorage.getItem(LS_DAA_EMAIL_OTP_SENT_V0);
+      if (sentRaw) {
+        const sent = JSON.parse(sentRaw || "{}");
+        const email = typeof sent?.email === "string" ? normalizeEmailDraftV0(sent.email) : "";
+        const requestedAtMs = Number(sent?.requestedAtMs);
+        const cooldownSeconds = Number(sent?.cooldownSeconds);
+        if (email && Number.isFinite(requestedAtMs) && Number.isFinite(cooldownSeconds)) {
+          setOtp({ kind: "sent", email, requestedAtMs, cooldownSeconds: Math.max(0, Math.floor(cooldownSeconds)) });
+        }
       }
+    } catch {
+      // Ignore storage errors.
+    }
+  }, []);
 
-      setTouched((prev) => ({ ...prev, password: true }));
-      passwordRef.current?.focus();
+  useEffect(() => {
+    if (session.kind !== "signedOut") return;
+    if (otp.kind === "sent") {
+      if (!codeTrimmed) emailRef.current?.focus();
+      else codeRef.current?.focus();
       return;
     }
+    emailRef.current?.focus();
+  }, [session.kind, otp.kind, codeTrimmed]);
 
-    if (!isBrowserOnline()) {
-      setPasswordErrors({ form: "You appear to be offline. Connect to the internet, then try signing in again." });
-      return;
-    }
+  const handleEmailPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    const out = applyEmailPasteNormalizationV0({
+      inputValue: input.value,
+      selectionStart: input.selectionStart,
+      selectionEnd: input.selectionEnd,
+      clipboardText: e.clipboardData?.getData("text") ?? "",
+    });
 
-    setPasswordBusy(true);
-    setPasswordErrors({});
+    if (!out || !out.changed) return;
+    e.preventDefault();
+    setUsername(out.nextValue);
+    queueMicrotask(() => {
+      const node = emailRef.current;
+      if (!node) return;
+      const start = Number.isFinite(out.nextSelectionStart) ? out.nextSelectionStart : out.nextValue.length;
+      const end = Number.isFinite(out.nextSelectionEnd) ? out.nextSelectionEnd : start;
+      node.setSelectionRange(start, end);
+    });
+  };
 
-    try {
-      const res = await fetch("/api/daa/auth/login", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ username: email, password: pwd }),
-      });
+  async function requestOtp() {
+    if (otpBusy || verifyBusy || checkingSession) return;
 
-      const text = await res.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
-      }
-
-      if (!json || typeof json.ok !== "boolean") {
-        setPasswordErrors({ form: "Unexpected response from the server. Please try again." });
-        return;
-      }
-
-      if (!res.ok || !json.ok) {
-        const msg = parseApiError(json, `HTTP ${res.status}`);
-
-        // Invalid credentials is the most common case; keep it inline.
-        if (res.status === 401) {
-          setPasswordErrors({ password: "Email or password is incorrect." });
-          setPassword("");
-          passwordRef.current?.focus();
-          return;
-        }
-
-        if (res.status === 429) {
-          const retryAfterSeconds = parseRetryAfterSecondsV0(res.headers.get("retry-after"));
-          setPasswordErrors({ form: formatRateLimitedMessageV0({ action: "sign in", retryAfterSeconds }) });
-          return;
-        }
-
-        // Avoid overly technical errors for the common cases.
-        if (res.status >= 500) {
-          setPasswordErrors({ form: "We couldn't sign you in right now. Please try again." });
-          return;
-        }
-
-        setPasswordErrors({ form: msg });
-        return;
-      }
-
-      // Cookie is set by the server; redirect into the console.
-      window.location.href = appendNoticeParamV0(safeReturnTo, "signed_in");
-    } catch (e) {
-      setPasswordErrors({ form: formatNetworkFailureMessage(e, "sign in") });
-    } finally {
-      setPasswordBusy(false);
-    }
-  }
-
-  async function requestEmailLink() {
-    if (emailDisabled) return;
-    if (emailLinkRequestInFlightRef.current) return;
-
-    // Prevent Enter-to-submit from bypassing the resend cooldown (the button is disabled, but form submit can still fire).
-    if (emailLink.kind === "sent") {
-      const elapsed = Math.floor((Date.now() - emailLink.requestedAtMs) / 1000);
-      const remaining = Math.max(0, emailLink.cooldownSeconds - elapsed);
-      if (remaining > 0) return;
-    }
-
-    setEmailLinkError(null);
-
-    const email = normalizeEmailLoose(username);
+    const email = normalizedEmail;
     if (!email) {
-      setTouched((prev) => ({ ...prev, email: true }));
-      emailLinkEmailRef.current?.focus();
+      setOtpError("Enter a valid email address.");
+      emailRef.current?.focus();
       return;
     }
 
     try {
       window.localStorage.setItem(LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0, email);
     } catch {
-      // Ignore storage errors.
+      // ignore
     }
 
     if (!isBrowserOnline()) {
-      setEmailLinkError("You appear to be offline. Connect to the internet, then try again.");
-      setEmailLink({ kind: "idle" });
+      setOtpError("You appear to be offline. Connect to the internet, then try again.");
       return;
     }
 
-    emailLinkRequestInFlightRef.current = true;
-    setEmailLink({ kind: "sending" });
+    setOtpError(null);
+    setOtp({ kind: "sending" });
 
     try {
-      const endpoint = emailLink.kind === "sent" ? "/api/daa/auth/email-login/resend" : "/api/daa/auth/email-login/request";
+      const endpoint = otp.kind === "sent" ? "/api/daa/auth/email-login/resend" : "/api/daa/auth/email-login/request";
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
@@ -691,56 +328,121 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       if (!res.ok) {
         if (res.status === 429) {
           const retryAfterSeconds = parseRetryAfterSecondsV0(res.headers.get("retry-after"));
-          setEmailLinkError(formatRateLimitedMessageV0({ action: "send a sign-in link", retryAfterSeconds }));
+          setOtpError(formatRateLimitedMessageV0({ action: "send a verification code", retryAfterSeconds }));
         } else {
-          setEmailLinkError(parseApiError(json, `HTTP ${res.status}`));
+          setOtpError(parseApiError(json, `HTTP ${res.status}`));
         }
-        setEmailLink({ kind: "idle" });
+        setOtp({ kind: "idle" });
         return;
       }
 
       const cooldownSeconds =
         typeof json?.cooldownSeconds === "number" && Number.isFinite(json.cooldownSeconds) ? Math.max(0, Math.floor(json.cooldownSeconds)) : 30;
       const requestedAtMs = Date.now();
-      setEmailLink({ kind: "sent", email, requestedAtMs, cooldownSeconds });
-      toast.success("If an account exists for that email, we will send a sign-in link shortly.");
+      const next = { kind: "sent", email, requestedAtMs, cooldownSeconds } as const;
+      setOtp(next);
+      setCode("");
+      toast.success("If an account exists for that email, we sent a verification code.");
       try {
-        window.localStorage.setItem(LS_DAA_EMAIL_LINK_SENT_V0, JSON.stringify({ email, requestedAtMs, cooldownSeconds }));
+        window.localStorage.setItem(LS_DAA_EMAIL_OTP_SENT_V0, JSON.stringify(next));
       } catch {
-        // Ignore storage errors.
+        // ignore
       }
+      codeRef.current?.focus();
     } catch (e) {
-      setEmailLinkError(formatNetworkFailureMessage(e, "send a sign-in link"));
-      setEmailLink({ kind: "idle" });
-    } finally {
-      emailLinkRequestInFlightRef.current = false;
+      setOtpError(formatNetworkFailureMessage(e, "send a verification code"));
+      setOtp({ kind: "idle" });
     }
   }
 
-  const offline = !online;
+  async function verifyOtp() {
+    if (verifyBusy || otpBusy || checkingSession) return;
+
+    const email = normalizedEmail;
+    if (!email) {
+      setOtpError("Enter a valid email address.");
+      emailRef.current?.focus();
+      return;
+    }
+    if (!codeTrimmed) {
+      setOtpError("Enter the verification code from your email.");
+      codeRef.current?.focus();
+      return;
+    }
+
+    setVerifyBusy(true);
+    setOtpError(null);
+    try {
+      const res = await fetch("/api/daa/auth/email-login/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ email, code: codeTrimmed, returnTo: safeReturnTo }),
+      });
+
+      const text = await res.text().catch(() => "");
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+
+      if (!res.ok || !json?.ok) {
+        if (res.status === 429) {
+          const retryAfterSeconds = parseRetryAfterSecondsV0(res.headers.get("retry-after"));
+          setOtpError(formatRateLimitedMessageV0({ action: "verify your code", retryAfterSeconds }));
+        } else {
+          setOtpError(parseApiError(json, "Invalid or expired verification code."));
+        }
+        return;
+      }
+
+      const redirectTo = normalizeDaaReturnToV0(typeof json?.redirectTo === "string" ? json.redirectTo : appendNoticeParamV0(safeReturnTo, "signed_in"));
+      window.location.href = redirectTo;
+    } catch (e) {
+      setOtpError(formatNetworkFailureMessage(e, "verify your code"));
+    } finally {
+      setVerifyBusy(false);
+    }
+  }
+
+  async function logout() {
+    try {
+      const res = await fetch("/api/daa/auth/logout", { method: "POST", headers: { accept: "application/json" } });
+      const text = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+      if (!res.ok || !json?.ok) throw new Error(parseApiError(json, `HTTP ${res.status}`));
+      window.location.href = appendNoticeParamV0("/daa/login", "signed_out");
+    } catch (e) {
+      toast.error(`Sign-out failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  useEffect(() => {
+    const err = String(error || "").trim();
+    if (!err) return;
+    const map: Record<string, string> = {
+      "email-link-invalid": "Verification code is invalid.",
+      "email-link-expired": "Verification code expired. Request a new one.",
+      "email-link-used": "Verification code already used. Request a new one.",
+      "otp-invalid": "Verification code is invalid.",
+      "otp-expired": "Verification code expired. Request a new one.",
+      "otp-used": "Verification code already used. Request a new one.",
+    };
+    setOtpError(map[err] || err);
+  }, [error]);
+
+  const mailboxLinks = useMemo(() => (otp.kind === "sent" ? buildMailboxLinks(otp.email) : []), [otp]);
 
   if (session.kind === "signedIn") {
     const roles = session.me.account.roles?.filter(Boolean).join(", ") || "(no roles)";
-
     return (
       <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
-      {offline ? (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <div>
-            <AlertTitle>You are offline.</AlertTitle>
-            <AlertDescription>
-              <div>Connect to the internet, then retry. Sign-in requests are disabled while offline.</div>
-              <div className="mt-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}>
-                  Reload
-                </Button>
-              </div>
-            </AlertDescription>
-          </div>
-        </Alert>
-      ) : null}
-
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">You are already signed in</CardTitle>
@@ -752,20 +454,14 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             <Button asChild className="w-full sm:w-auto">
               <Link href={safeReturnTo}>Continue to dashboard</Link>
             </Button>
-            <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void logout()} disabled={logoutBusy}>
-              {logoutBusy ? "Signing out..." : "Sign out"}
+            <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void logout()}>
+              Sign out
             </Button>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       </div>
     );
   }
-
-  const emailInvalidEmailLink = touched.email && !normalizedEmail;
-  const emailHelpText = username.trim()
-    ? "Enter a valid email address (for example, you@example.com)."
-    : "Enter your email address (for example, you@example.com).";
-
 
   return (
     <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
@@ -774,75 +470,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           <AlertCircle className="h-4 w-4" />
           <div>
             <AlertTitle>You are offline.</AlertTitle>
-            <AlertDescription>
-              <div>Connect to the internet, then retry. Sign-in requests are disabled while offline.</div>
-              <div className="mt-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => window.location.reload()}>
-                  Reload
-                </Button>
-              </div>
-            </AlertDescription>
-          </div>
-        </Alert>
-      ) : null}
-
-      {emailLinkErrorCode ? (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <div>
-            <AlertTitle>
-              {emailLinkErrorCode === "email-link-used"
-                ? "This sign-in link has already been used."
-                : emailLinkErrorCode === "email-link-expired"
-                  ? "This sign-in link has expired."
-                  : "This sign-in link is no longer valid."}
-            </AlertTitle>
-            <AlertDescription>
-              <div className="text-xs text-muted-foreground">
-                {emailLinkErrorCode === "email-link-used"
-                  ? "Sign-in links can only be used once. Request a new link to sign in."
-                  : emailLinkErrorCode === "email-link-expired"
-                    ? "Sign-in links expire after about 15 minutes. Request a new link to sign in."
-                    : "The link may be malformed or already used. Request a new link to sign in."}
-              </div>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={emailDisabled || offline}
-                  onClick={() => {
-                    setTab("email");
-                    setEmailLinkError(null);
-                    setEmailLink({ kind: "idle" });
-
-                    const normalized = normalizeEmailLoose(username);
-                    if (!normalized) {
-                      setTouched((prev) => ({ ...prev, email: true }));
-                      emailLinkEmailRef.current?.focus();
-                      return;
-                    }
-
-                    void requestEmailLink();
-                  }}
-                >
-                  Request new sign-in link
-                </Button>
-
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setTab("password");
-                    setPasswordErrors({});
-                    setEmailLinkError(null);
-                  }}
-                >
-                  Use password instead
-                </Button>
-              </div>
-            </AlertDescription>
+            <AlertDescription>Connect to the internet, then retry. Sign-in requests are disabled while offline.</AlertDescription>
           </div>
         </Alert>
       ) : null}
@@ -851,7 +479,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <div>
-            <AlertTitle>Couldn't verify your session.</AlertTitle>
+            <AlertTitle>Couldn&apos;t verify your session.</AlertTitle>
             <AlertDescription>You can still try signing in. ({session.message})</AlertDescription>
           </div>
         </Alert>
@@ -859,588 +487,165 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Sign in</CardTitle>
+          <CardTitle className="text-xl">Sign in with email code</CardTitle>
           <CardDescription>
-            Choose a sign-in method to access <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>.
+            We&apos;ll send a one-time verification code to your email, then sign you in to <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>.
           </CardDescription>
         </CardHeader>
 
-        <CardContent>
-          <TooltipProvider>
-            <Tabs
-              value={tab}
-              onValueChange={(v) => {
-                const vv = v === "email" ? "email" : "password";
-                setTab(vv);
-                try {
-                  window.localStorage.setItem(LS_DAA_EMAIL_LOGIN_TAB_V0, vv);
-                } catch {
-                  // Ignore storage errors.
-                }
-                setPasswordErrors({});
-                setEmailLinkError(null);
-              }}
-            >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="email">Email link</TabsTrigger>
-              <TabsTrigger value="password">Password</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="email" className="mt-4">
-              <form
-                className="grid gap-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void requestEmailLink();
-                }}
-                aria-busy={emailDisabled}
-              >
-                {checkingSession ? (
-                  <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Checking session...
-                  </div>
-                ) : null}
-
-                {emailLink.kind !== "sent" ? (
-                  <>
-                    <div className="grid gap-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={emailLinkEmailId}>Email</Label>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          aria-label="What is a magic link?"
-                          title="Magic link help"
-                        >
-                          <CircleHelp className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs p-3 text-xs leading-relaxed">
-                        <div className="font-medium">Magic link sign-in</div>
-                        <div className="mt-1 text-muted-foreground">
-                          We&apos;ll email you a single-use sign-in link. It expires in about 15 minutes.
-                        </div>
-                        <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
-                          <li>Check spam/promotions if you don&apos;t see it within a minute.</li>
-                          <li>Don&apos;t forward the email or share the link.</li>
-                          <li>You can resend after the cooldown, or use a password instead.</li>
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id={emailLinkEmailId}
-                      ref={emailLinkEmailRef}
-                      type="email"
-                      name="email"
-                      inputMode="email"
-                      enterKeyHint="send"
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      value={username}
-                      onChange={(e) => {
-                        setUsername(e.target.value);
-                        setEmailLinkError(null);
-                        setEmailLink((prev) => {
-                          if (prev.kind !== "sent") return prev;
-                          try {
-                            window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
-                          } catch {
-                            // Ignore storage errors.
-                          }
-                          return { kind: "idle" };
-                        });
-                      }}
-                      onPaste={(e) => handleEmailPaste(e, "emailLink")}
-                      autoComplete="email"
-                      placeholder="you@example.com"
-                      disabled={emailDisabled || offline}
-                      onBlur={() => {
-                        setTouched((prev) => ({ ...prev, email: true }));
-                        const next = normalizeEmailDraftV0(username);
-                        if (next && next !== username) setUsername(next);
-                      }}
-                      aria-invalid={emailInvalidEmailLink || undefined}
-                      aria-describedby={emailLinkEmailHelpId}
-                      className={`pr-10 ${emailInvalidEmailLink ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                    />
-                    {username.trim() && !emailDisabled ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => clearEmail("emailLink")}
-                        aria-label="Clear email"
-                        title="Clear"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  {emailDomainSuggestions.length && !emailDisabled ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <div className="text-xs text-muted-foreground">Suggestions:</div>
-                      {emailDomainSuggestions.map((s) => (
-                        <Button
-                          key={s}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setUsername(s);
-                            setEmailLinkError(null);
-                            setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
-                            emailLinkEmailRef.current?.focus();
-                          }}
-                          aria-label={`Use suggested email ${s}`}
-                        >
-                          {s}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div
-                    id={emailLinkEmailHelpId}
-                    className={emailInvalidEmailLink ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
-                    role={emailInvalidEmailLink ? "alert" : undefined}
-                  >
-                    {emailInvalidEmailLink ? (
-                      <span className="inline-flex items-start gap-1.5">
-                        <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
-                        <span>{emailHelpText}</span>
-                      </span>
-                    ) : (
-                      <>
-                        <div>
-                          We&apos;ll email you a single-use sign-in link ("magic link") within about a minute. It expires in about 15 minutes —
-                          don&apos;t share it.
-                        </div>
-                        {showEmailDraftNormalizationHint ? (
-                          <div className="mt-1">
-                            We&apos;ll normalize to lowercase: <span className="font-medium">{emailDraftNormalized}</span>
-                          </div>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                  <div className="flex w-full flex-col gap-1 sm:w-auto">
-                    <Button
-                      type="submit"
-                      className="w-full sm:w-auto"
-                      disabled={emailDisabled || !emailLinkFormValid || emailLinkResendCooldownActive}
-                      aria-describedby={emailLinkResendCooldownActive ? emailLinkResendHelpId : undefined}
-                    >
-                      {emailLink.kind === "sending" ? (
-                        <span className="inline-flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Sending...
-                        </span>
-                      ) : (
-                        "Send sign-in link"
-                      )}
-                    </Button>
-
-                    {emailLinkResendCooldownActive ? (
-                      <div id={emailLinkResendHelpId} className="text-xs text-muted-foreground" role="status" aria-live="polite">
-                        Resend is temporarily disabled to prevent abuse. Try again in {formatSeconds(resendRemainingSeconds)}.
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                  </>
-                ) : null}
-
-                {emailLink.kind === "sent" ? (
-                  <Card className="border-muted/60 bg-muted/10">
-                    <CardHeader className="space-y-1">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Mail className="h-4 w-4" />
-                        Sign-in link sent
-                      </CardTitle>
-                      <CardDescription>
-                        We just sent a single-use sign-in link to <span className="font-medium">{emailLink.email}</span> (if it&apos;s registered). It expires in about 15 minutes.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                      <div className="grid gap-2">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              // Best-effort: open the default mail app (may open a compose draft).
-                              try {
-                                window.location.href = "mailto:";
-                              } catch {
-                                // Ignore navigation errors.
-                              }
-                            }}
-                          >
-                            Open Mail app
-                          </Button>
-
-                          {mailboxLinks.length ? (
-                            <div className="flex flex-wrap gap-2">
-                              {mailboxLinks.map((l) => (
-                                <Button
-                                  key={l.href}
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => window.open(l.href, "_blank", "noopener,noreferrer")}
-                                >
-                                  Open {l.label}
-                                </Button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="text-xs text-muted-foreground">
-                          If you use Gmail/Outlook/iCloud in a browser, use the webmail buttons. Otherwise, open your mail app and look for{" "}
-                          <span className="font-medium">Your DAA sign-in link</span>.
-                        </div>
-                      </div>
-
-                      <ol className="ml-4 list-decimal space-y-1 text-sm text-muted-foreground">
-                        <li>
-                          Open the email titled <span className="font-medium">Your DAA sign-in link</span>.
-                        </li>
-                        <li>Click the sign-in button/link. This browser will refresh and you will be signed in automatically.</li>
-                        <li>If you don&apos;t see it, check spam/promotions.</li>
-                        <li>For security, don&apos;t forward the email or share the link.</li>
-                      </ol>
-
-                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void requestEmailLink()}
-                          disabled={emailDisabled || !emailLinkFormValid || resendRemainingSeconds > 0}
-                        >
-                          {resendRemainingSeconds > 0 ? `Resend in ${formatSeconds(resendRemainingSeconds)}` : "Resend link"}
-                        </Button>
-
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            setTab("password");
-                            setPasswordErrors({});
-                            setEmailLinkError(null);
-                          }}
-                        >
-                          Use password instead
-                        </Button>
-
-                        <Button
-                          type="button"
-                          variant="link"
-                          size="sm"
-                          className="h-auto p-0 text-xs"
-                          onClick={() => {
-                            setEmailLinkError(null);
-                            setEmailLink({ kind: "idle" });
-                            try {
-                              window.localStorage.removeItem(LS_DAA_EMAIL_LINK_SENT_V0);
-                            } catch {
-                              // Ignore storage errors.
-                            }
-
-                            const el = emailLinkEmailRef.current;
-                            if (!el) return;
-
-                            // Return to the email input so the user can edit the address after requesting a link.
-                            try {
-                              el.scrollIntoView({ block: "center" });
-                            } catch {
-                              // Ignore scrolling errors.
-                            }
-                            el.focus();
-                            try {
-                              if (el.value) el.setSelectionRange(0, el.value.length);
-                            } catch {
-                              // Ignore selection errors.
-                            }
-                          }}
-                        >
-                          Change email
-                        </Button>
-                      </div>
-
-                      {resendRemainingSeconds > 0 ? (
-                        <div className="text-xs text-muted-foreground" role="status" aria-live="polite">
-                          Resend is temporarily disabled to prevent abuse. Try again in {formatSeconds(resendRemainingSeconds)}.
-                        </div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                ) : null}
-
-                {emailLinkError ? (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <div>
-                      <AlertTitle>Couldn't send a sign-in link.</AlertTitle>
-                      <AlertDescription>{emailLinkError}</AlertDescription>
-                    </div>
-                  </Alert>
-                ) : null}
-
-                <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
-                  <summary className="cursor-pointer select-none font-medium">Need access?</summary>
-                  <div className="mt-2 grid gap-1 text-muted-foreground">
-                    <div>• Ask an admin to grant you an account.</div>
-                    <div>
-                      • Fresh deployment: bootstrap the first admin via{" "}
-                      <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires server env{" "}
-                      <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and sending{" "}
-                      <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
-                    </div>
-                  </div>
-                </details>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="password" className="mt-4">
-              <form
-                className="grid gap-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void submitPassword();
-                }}
-                aria-busy={passwordBusy || checkingSession}
-                aria-describedby={mergedPasswordErrors.form ? formErrorId : undefined}
-              >
-                {checkingSession ? (
-                  <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Checking session...
-                  </div>
-                ) : null}
-
-                <div className="grid gap-2">
-                  <Label htmlFor={passwordEmailId}>Email</Label>
-                  <div className="relative">
-                    <Input
-                      id={passwordEmailId}
-                      ref={passwordEmailRef}
-                      type="email"
-                      name="username"
-                      inputMode="email"
-                      enterKeyHint="next"
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      value={username}
-                      onChange={(e) => {
-                        setUsername(e.target.value);
-                        setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
-                        setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
-                      }}
-                      onPaste={(e) => handleEmailPaste(e, "password")}
-                      onKeyDown={(e) => {
-                        if (e.key !== "Enter") return;
-
-                        // When password is still empty, Enter on the email field should advance focus to password.
-                        // If the user already typed a password (then came back), let the form submit normally.
-                        if (password.trim()) return;
-
-                        e.preventDefault();
-
-                        const email = normalizeEmailLoose(e.currentTarget.value);
-                        if (!email) {
-                          setPasswordSubmitAttempted(true);
-                          setTouched((prev) => ({ ...prev, email: true }));
-                          return;
-                        }
-
-                        passwordRef.current?.focus();
-                      }}
-                      autoComplete="username"
-                      placeholder="you@example.com"
-                      disabled={passwordDisabled}
-                      onBlur={() => {
-                        setTouched((prev) => ({ ...prev, email: true }));
-                        const next = normalizeEmailDraftV0(username);
-                        if (next && next !== username) setUsername(next);
-                      }}
-                      aria-invalid={Boolean(mergedPasswordErrors.email) || undefined}
-                      aria-describedby={passwordEmailHelpId}
-                      className={`pr-10 ${mergedPasswordErrors.email ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                    />
-                    {username.trim() && !passwordDisabled ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => clearEmail("password")}
-                        aria-label="Clear email"
-                        title="Clear"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  {emailDomainSuggestions.length && !passwordDisabled ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <div className="text-xs text-muted-foreground">Suggestions:</div>
-                      {emailDomainSuggestions.map((s) => (
-                        <Button
-                          key={s}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setUsername(s);
-                            setPasswordErrors((prev) => ({ ...prev, email: undefined, form: undefined }));
-                            setEmailLink((prev) => (prev.kind === "sent" ? { kind: "idle" } : prev));
-                            passwordEmailRef.current?.focus();
-                          }}
-                          aria-label={`Use suggested email ${s}`}
-                        >
-                          {s}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div
-                    id={passwordEmailHelpId}
-                    className={mergedPasswordErrors.email ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
-                    role={mergedPasswordErrors.email ? "alert" : undefined}
-                  >
-                    {mergedPasswordErrors.email ? (
-                      <span className="inline-flex items-start gap-1.5">
-                        <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
-                        <span>{mergedPasswordErrors.email}</span>
-                      </span>
-                    ) : (
-                      <>
-                        <div>Your username is your email address.</div>
-                        {showEmailDraftNormalizationHint ? (
-                          <div className="mt-1">
-                            We&apos;ll normalize to lowercase: <span className="font-medium">{emailDraftNormalized}</span>
-                          </div>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor={passwordId}>Password</Label>
-                  <Input
-                    id={passwordId}
-                    ref={passwordRef}
-                    type="password"
-                    name="password"
-                    enterKeyHint="go"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setPasswordErrors((prev) => ({ ...prev, password: undefined, form: undefined }));
-                    }}
-                    autoComplete="current-password"
-                    placeholder="••••••••"
-                    disabled={passwordDisabled}
-                    onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
-                    aria-invalid={Boolean(mergedPasswordErrors.password) || undefined}
-                    aria-describedby={passwordHelpId}
-                  />
-                  <div
-                    id={passwordHelpId}
-                    className={mergedPasswordErrors.password ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
-                    role={mergedPasswordErrors.password ? "alert" : undefined}
-                  >
-                    {mergedPasswordErrors.password ? mergedPasswordErrors.password : "Passwords are case-sensitive."}
-                  </div>
-                </div>
-
-                <Button type="submit" className="w-full" disabled={passwordSubmitDisabled || offline}>
-                  {checkingSession ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Checking session...
-                    </span>
-                  ) : passwordBusy ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Signing in...
-                    </span>
-                  ) : (
-                    "Sign in"
-                  )}
-                </Button>
-
-                <details className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
-                  <summary className="cursor-pointer select-none font-medium">Need access?</summary>
-                  <div className="mt-2 grid gap-1 text-muted-foreground">
-                    <div>• Ask an admin to (re)send your credentials (no self-service reset yet).</div>
-                    <div>
-                      • Fresh deployment: bootstrap the first admin via{" "}
-                      <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires server env{" "}
-                      <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and sending{" "}
-                      <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
-                    </div>
-                  </div>
-                </details>
-
-                {mergedPasswordErrors.form ? (
-                  <Alert id={formErrorId} variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <div>
-                      <AlertTitle>Couldn't sign you in.</AlertTitle>
-                      <AlertDescription>
-                        <div>{mergedPasswordErrors.form}</div>
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Double-check your email/password or ask an admin to resend/reset your credentials.
-                        </div>
-                      </AlertDescription>
-                    </div>
-                  </Alert>
-                ) : null}
-              </form>
-            </TabsContent>
-          </Tabs>
-
-          <div className="mt-6 grid gap-2 text-center text-xs text-muted-foreground">
-            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-              <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
-                Terms
-              </Link>
-              <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
-                Privacy
-              </Link>
-              <Link href="/support" className="underline underline-offset-2 hover:text-foreground">
-                Support
-              </Link>
+        <CardContent className="space-y-4">
+          {checkingSession ? (
+            <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking session...
             </div>
-            <div className="text-[11px]">AI outputs are drafts only; it never executes trades automatically.</div>
+          ) : null}
+
+          <div className="grid gap-2">
+            <Label htmlFor={emailId}>Email</Label>
+            <div className="relative">
+              <Input
+                id={emailId}
+                ref={emailRef}
+                type="email"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setOtpError(null);
+                }}
+                onPaste={handleEmailPaste}
+                onBlur={() => {
+                  const next = normalizeEmailDraftV0(username);
+                  if (next && next !== username) setUsername(next);
+                }}
+                autoComplete="email"
+                inputMode="email"
+                placeholder="you@example.com"
+                disabled={otpBusy || verifyBusy || offline}
+                aria-describedby={emailHelpId}
+                className="pr-10"
+              />
+              {username.trim() ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setUsername("");
+                    setCode("");
+                    setOtp({ kind: "idle" });
+                    setOtpError(null);
+                    try {
+                      window.localStorage.removeItem(LS_DAA_EMAIL_OTP_SENT_V0);
+                    } catch {
+                      // ignore
+                    }
+                    emailRef.current?.focus();
+                  }}
+                  aria-label="Clear email"
+                  title="Clear email"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              ) : null}
+            </div>
+            <div id={emailHelpId} className="text-xs text-muted-foreground">
+              Use your admin email. We only send codes for active accounts.
+            </div>
           </div>
-          </TooltipProvider>
+
+          <div className="grid gap-2">
+            <Label htmlFor={codeId}>Verification code</Label>
+            <Input
+              id={codeId}
+              ref={codeRef}
+              type="text"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.trimStart());
+                setOtpError(null);
+              }}
+              placeholder="Enter code from email"
+              autoComplete="one-time-code"
+              disabled={verifyBusy || otpBusy || offline}
+            />
+            <div className="text-xs text-muted-foreground">Code expires in about 15 minutes and can be used once.</div>
+          </div>
+
+          {otpError ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{otpError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button type="button" variant="outline" onClick={() => void requestOtp()} disabled={offline || checkingSession || verifyBusy || (otp.kind === "sent" && !canResend)}>
+              {otpBusy ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : otp.kind === "sent" ? (
+                canResend ? "Resend code" : `Resend in ${formatSeconds(cooldownRemainingSeconds)}`
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Send code
+                </>
+              )}
+            </Button>
+
+            <Button type="button" onClick={() => void verifyOtp()} disabled={offline || checkingSession || verifyBusy || otpBusy || !normalizedEmail || !codeTrimmed}>
+              {verifyBusy ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                "Verify and sign in"
+              )}
+            </Button>
+          </div>
+
+          {otp.kind === "sent" ? (
+            <div className="rounded-md border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">Check your inbox</div>
+              <div className="mt-1">We sent a code to <span className="font-medium text-foreground">{otp.email}</span>.</div>
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                <li>Check spam/promotions if it doesn&apos;t arrive in 1 minute.</li>
+                <li>Do not forward or share the verification code.</li>
+              </ul>
+              {mailboxLinks.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {mailboxLinks.map((x) => (
+                    <a
+                      key={x.href}
+                      href={x.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center rounded border px-2 py-0.5 text-[11px] text-foreground hover:bg-muted"
+                    >
+                      Open {x.label}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="rounded-md border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground">
+            <div className="font-medium text-foreground">Fresh deployment?</div>
+            <div className="mt-1">
+              Bootstrap the first admin via <code className="rounded bg-muted px-1 py-0.5">/api/daa/auth/bootstrap</code> (requires env <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> and header <code className="rounded bg-muted px-1 py-0.5">x-daa-bootstrap-token</code>).
+            </div>
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            Need help? <Link className="underline underline-offset-2" href="/support">Support</Link>
+          </div>
         </CardContent>
       </Card>
     </div>

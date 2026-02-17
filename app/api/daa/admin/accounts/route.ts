@@ -70,7 +70,7 @@ export async function POST(req: Request) {
 
   const body = await parseBody(req);
   const username = typeof body.username === "string" ? body.username : "";
-  const password = typeof body.password === "string" ? body.password : "";
+  const password = typeof body.password === "string" ? body.password : undefined;
   const roles = parseRoles(body.roles);
 
   try {

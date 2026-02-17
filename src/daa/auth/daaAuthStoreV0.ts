@@ -310,15 +310,22 @@ export async function listDaaAuthAuditEventsV0(args: {
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
+function resolvePasswordForStorageV0(passwordRaw: unknown): string {
+  const password = typeof passwordRaw === "string" ? passwordRaw : "";
+  if (password.trim()) return password;
+  // OTP-only mode still needs a non-empty password hash because of schema constraints.
+  return `${randomUUID()}-${randomUUID()}`;
+}
+
 export async function createDaaAuthAccountV0(args: {
   username: string;
-  password: string;
+  password?: string;
   roles?: DaaAuthRoleV0[];
   createdAt?: string;
 }): Promise<DaaAuthAccountV0> {
   const username = normalizeEmailStrict(args.username);
 
-  const passwordHash = hashPasswordV0(args.password);
+  const passwordHash = hashPasswordV0(resolvePasswordForStorageV0(args.password));
   const roles = uniqRoles(args.roles);
 
   const createdAt = ensureIsoOrNow(args.createdAt);
@@ -362,12 +369,12 @@ export async function hasAnyDaaAuthAccountsV0(): Promise<boolean> {
 
 export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
   username: string;
-  password: string;
+  password?: string;
   roles?: DaaAuthRoleV0[];
   createdAt?: string;
 }): Promise<DaaAuthAccountV0> {
   const username = normalizeEmailStrict(args.username);
-  const passwordHash = hashPasswordV0(args.password);
+  const passwordHash = hashPasswordV0(resolvePasswordForStorageV0(args.password));
 
   // First admin should always be able to administer the dashboard.
   const roles = uniqRoles(args.roles);
