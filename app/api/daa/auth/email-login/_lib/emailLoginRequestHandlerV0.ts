@@ -25,13 +25,6 @@ function normalizeEmailLoose(raw: unknown): string {
   return v;
 }
 
-function getOriginFromRequestV0(req: Request): string | null {
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
-  const proto = req.headers.get("x-forwarded-proto") || "https";
-  if (!host) return null;
-  return `${proto}://${host}`;
-}
-
 export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request" | "resend" }) {
   let body: any = null;
   try {
@@ -74,10 +67,10 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
   const ip = getClientIpFromRequestV0(req) || null;
 
   const ttlMinutes = 15;
-  const { token } = await createDaaAuthEmailLoginTokenV0({ accountId: account.accountId, ttlMinutes, userAgent: ua, ip });
+  const { token: code } = await createDaaAuthEmailLoginTokenV0({ accountId: account.accountId, ttlMinutes, userAgent: ua, ip });
 
   await appendDaaAuthAuditEventV0({
-    kind: opts.mode === "resend" ? "auth.email_login.resend_requested" : "auth.email_login.requested",
+    kind: opts.mode === "resend" ? "auth.email_otp.resend_requested" : "auth.email_otp.requested",
     actorUserId: account.accountId,
     accountId: account.accountId,
     payload: {
@@ -88,23 +81,19 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
     },
   }).catch(() => null);
 
-  const origin = getOriginFromRequestV0(req) || process.env.DAA_PUBLIC_ORIGIN || null;
-  const loginUrl = origin
-    ? new URL(`/api/daa/auth/email-login/consume?token=${encodeURIComponent(token)}&returnTo=${encodeURIComponent(returnTo)}`, origin).toString()
-    : null;
-
-  if (loginUrl) {
-    // Best-effort email delivery; failure should not block UI.
-    await sendEmailV0({
-      to: account.username,
-      subject: "Your DAA sign-in link",
-      text: `Use this link to sign in to DAA (expires in ${ttlMinutes} minutes):\n\n${loginUrl}\n\nIf you did not request this, you can ignore this email.`,
-    }).catch(() => null);
-  }
+  // Best-effort email delivery; failure should not block UI.
+  await sendEmailV0({
+    to: account.username,
+    subject: "Your DAA verification code",
+    text:
+      `Your one-time DAA verification code is:\n\n${code}\n\n` +
+      `This code expires in ${ttlMinutes} minutes and can only be used once.\n\n` +
+      `If you did not request this, you can ignore this email.`,
+  }).catch(() => null);
 
   const debug = process.env.DAA_EMAIL_LOGIN_DEBUG === "1";
-  if (debug && loginUrl) {
-    return NextResponse.json({ ok: true, cooldownSeconds, debugLoginUrl: loginUrl });
+  if (debug) {
+    return NextResponse.json({ ok: true, cooldownSeconds, debugCode: code });
   }
 
   return NextResponse.json({ ok: true, cooldownSeconds });

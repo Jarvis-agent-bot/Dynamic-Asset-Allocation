@@ -54,6 +54,16 @@ describe("daa/auth store v0", () => {
     await expect(createDaaAuthAccountV0({ username: "not-an-email", password: "pw-x", roles: ["viewer"] })).rejects.toThrow(/invalid email/i);
   });
 
+  it("allows creating an account without providing a password (OTP-only mode)", async () => {
+    resetPgMem();
+
+    const a1 = await createDaaAuthAccountV0({ username: "otp-only@example.com", roles: ["viewer"] });
+    expect(a1.username).toBe("otp-only@example.com");
+
+    const auth = await authenticateDaaAuthAccountV0({ username: "otp-only@example.com", password: "any-value" });
+    expect(auth).toBe(null);
+  });
+
   it("bootstraps the first admin only when there are no accounts", async () => {
     resetPgMem();
 

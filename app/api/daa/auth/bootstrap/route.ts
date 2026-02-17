@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   }
 
   const username = typeof body?.username === "string" ? body.username : "";
-  const password = typeof body?.password === "string" ? body.password : "";
+  const password = typeof body?.password === "string" ? body.password : undefined;
   const roles = Array.isArray(body?.roles) ? body.roles : undefined;
 
   const anyAccounts = await hasAnyDaaAuthAccountsV0();

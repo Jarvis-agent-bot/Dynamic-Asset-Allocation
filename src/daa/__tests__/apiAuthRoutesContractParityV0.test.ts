@@ -41,9 +41,8 @@ describe("/api/daa/auth regression pack (Postgres-backed contracts)", () => {
     expect(bootstrapRoute).toContain('error: "unauthorized"');
     expect(bootstrapRoute).toContain('"www-authenticate": "DaaBootstrap"');
 
-    expect(loginRoute).toContain('error: "invalid credentials"');
-    expect(loginRoute).toContain('status: 401');
-    expect(loginRoute).toContain("name: DAA_AUTH_SESSION_COOKIE_V0");
+    expect(loginRoute).toContain('error: "password login disabled"');
+    expect(loginRoute).toContain('status: 410');
 
     expect(meRoute).toContain('error = anyAccounts ? "not_authenticated" : "bootstrap_required"');
     expect(meRoute).toContain('status: 401');
