@@ -81,19 +81,33 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
     },
   }).catch(() => null);
 
-  // Best-effort email delivery; failure should not block UI.
-  await sendEmailV0({
+  // Best-effort email delivery via Resend; failure should not block UI.
+  const delivery = await sendEmailV0({
     to: account.username,
     subject: "Your DAA verification code",
     text:
       `Your one-time DAA verification code is:\n\n${code}\n\n` +
       `This code expires in ${ttlMinutes} minutes and can only be used once.\n\n` +
       `If you did not request this, you can ignore this email.`,
+  }).catch((error) => ({ ok: false as const, skipped: false, error: String(error) }));
+
+  await appendDaaAuthAuditEventV0({
+    kind: opts.mode === "resend" ? "auth.email_otp.resend_sent" : "auth.email_otp.sent",
+    actorUserId: account.accountId,
+    accountId: account.accountId,
+    payload: {
+      provider: "resend",
+      deliveryOk: delivery.ok,
+      skipped: delivery.ok ? undefined : Boolean(delivery.skipped),
+      error: delivery.ok ? undefined : delivery.error,
+      ip,
+      userAgent: ua,
+    },
   }).catch(() => null);
 
   const debug = process.env.DAA_EMAIL_LOGIN_DEBUG === "1";
   if (debug) {
-    return NextResponse.json({ ok: true, cooldownSeconds, debugCode: code });
+    return NextResponse.json({ ok: true, cooldownSeconds, debugCode: code, delivery });
   }
 
   return NextResponse.json({ ok: true, cooldownSeconds });
