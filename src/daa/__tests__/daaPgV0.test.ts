@@ -21,6 +21,20 @@ describe("daa pg url guard", () => {
     expect(() => getDaaPgUrlV0()).toThrowError(/Postgres-only runtime/);
   });
 
+  it("rejects non-Postgres url schemes", () => {
+    process.env.DAA_DB_URL = "mysql://user:pass@localhost:3306/daa";
+    delete process.env.DATABASE_URL;
+
+    expect(() => getDaaPgUrlV0()).toThrowError(/unsupported database URL scheme/);
+  });
+
+  it("allows libpq style connection strings without a url scheme", () => {
+    process.env.DAA_DB_URL = "host=127.0.0.1 port=5432 user=daa password=pass dbname=daa";
+    delete process.env.DATABASE_URL;
+
+    expect(getDaaPgUrlV0()).toBe("host=127.0.0.1 port=5432 user=daa password=pass dbname=daa");
+  });
+
   it("normalizes sqlalchemy postgresql+psycopg urls", () => {
     process.env.DAA_DB_URL = "postgresql+psycopg://daa:pass@localhost:5432/daa";
     delete process.env.DATABASE_URL;
