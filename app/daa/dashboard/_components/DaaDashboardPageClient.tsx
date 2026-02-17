@@ -236,6 +236,18 @@ function SignedOutState({ returnTo }: { returnTo: string }) {
             <Link href="/daa/login">Open login</Link>
           </Button>
         </div>
+
+        <div className="rounded-md border border-dashed border-muted-foreground/30 p-3">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next actions</div>
+          <ol className="mt-2 list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+            <li>Sign in with your DAA admin account.</li>
+            <li>
+              Open <code className="rounded bg-muted px-1 py-0.5">Wizard</code> and complete Step1 to Step7.
+            </li>
+            <li>Return to Dashboard to confirm and export the latest run.</li>
+          </ol>
+        </div>
+
         <div className="text-xs text-muted-foreground">
           Tip: <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> is the canonical DAA entry point; legacy <code className="rounded bg-muted px-1 py-0.5">/daa*</code> routes redirect here.
         </div>
@@ -389,6 +401,19 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
           <Button asChild type="button" variant="outline" disabled={busy}>
             <Link href="/daa/login">Open login</Link>
           </Button>
+        </div>
+
+        <div className="rounded-md border border-dashed border-muted-foreground/30 p-3">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">First-run checklist</div>
+          <ol className="mt-2 list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+            <li>
+              Confirm <code className="rounded bg-muted px-1 py-0.5">DAA_AUTH_BOOTSTRAP_TOKEN</code> is set on the server.
+            </li>
+            <li>Create the first admin account with the form above.</li>
+            <li>
+              Sign in and continue from <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard?tab=wizard&amp;step=1</code>.
+            </li>
+          </ol>
         </div>
 
         <div className="rounded-md border border-dashed border-muted-foreground/30 p-3">
