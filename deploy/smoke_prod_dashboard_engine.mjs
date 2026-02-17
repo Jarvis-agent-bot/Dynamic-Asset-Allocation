@@ -76,7 +76,7 @@ async function main() {
 
   const dashboard = await getText(root + '/daa/dashboard');
   checkStatus(
-    dashboard.resp.status < 400,
+    dashboard.resp.status === 200,
     'DAA_SMOKE_DASHBOARD_STATUS',
     '/daa/dashboard status=' + dashboard.resp.status
   );
