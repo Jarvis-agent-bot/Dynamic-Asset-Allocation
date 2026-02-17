@@ -39,6 +39,8 @@ describe("/api/daa/auth/email-login/verify route v0", () => {
 
     const setCookie = res.headers.get("set-cookie") || "";
     expect(setCookie).toContain(`${DAA_AUTH_SESSION_COOKIE_V0}=`);
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toMatch(/SameSite=Lax/i);
   });
 
   it("rejects a code/email mismatch", async () => {
