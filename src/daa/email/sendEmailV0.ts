@@ -4,6 +4,18 @@ type SendEmailArgsV0 = {
   text: string;
 };
 
+function looksLikeEmailV0(value: string): boolean {
+  if (!value || /\s/.test(value)) return false;
+  const at = value.indexOf("@");
+  if (at <= 0 || at !== value.lastIndexOf("@")) return false;
+  const domain = value.slice(at + 1);
+  return Boolean(domain && domain.includes(".") && !domain.startsWith(".") && !domain.endsWith("."));
+}
+
+function hasHeaderBreakV0(value: string): boolean {
+  return value.includes("\n") || value.includes("\r");
+}
+
 export async function sendEmailV0(args: SendEmailArgsV0): Promise<{ ok: true } | { ok: false; skipped: boolean; error: string }> {
   const key = typeof process.env.RESEND_API_KEY === "string" ? process.env.RESEND_API_KEY.trim() : "";
   const from = typeof process.env.DAA_AUTH_EMAIL_FROM === "string" ? process.env.DAA_AUTH_EMAIL_FROM.trim() : "";
@@ -23,6 +35,11 @@ export async function sendEmailV0(args: SendEmailArgsV0): Promise<{ ok: true } |
   if (!to) return { ok: false, skipped: true, error: "missing to" };
   if (!subject) return { ok: false, skipped: true, error: "missing subject" };
   if (!text) return { ok: false, skipped: true, error: "missing text" };
+  if (!looksLikeEmailV0(from)) return { ok: false, skipped: true, error: "invalid DAA_AUTH_EMAIL_FROM" };
+  if (!looksLikeEmailV0(to)) return { ok: false, skipped: true, error: "invalid to" };
+  if (hasHeaderBreakV0(from) || hasHeaderBreakV0(to) || hasHeaderBreakV0(subject)) {
+    return { ok: false, skipped: true, error: "invalid header characters" };
+  }
 
   const timeoutMsRaw = Number(process.env.DAA_RESEND_TIMEOUT_MS ?? "8000");
   const timeoutMs = Number.isFinite(timeoutMsRaw) ? Math.max(10, Math.floor(timeoutMsRaw)) : 8000;

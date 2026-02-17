@@ -44,6 +44,35 @@ describe("daa/email sendEmailV0", () => {
     await expect(sendEmailV0({ to: "a@b.com", subject: "s", text: "" })).resolves.toEqual({ ok: false, skipped: true, error: "missing text" });
   });
 
+  it("rejects invalid sender/recipient email values", async () => {
+    process.env.RESEND_API_KEY = "rk_x";
+    process.env.DAA_AUTH_EMAIL_FROM = "invalid";
+
+    await expect(sendEmailV0({ to: "a@b.com", subject: "s", text: "t" })).resolves.toEqual({
+      ok: false,
+      skipped: true,
+      error: "invalid DAA_AUTH_EMAIL_FROM",
+    });
+
+    process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
+    await expect(sendEmailV0({ to: "invalid", subject: "s", text: "t" })).resolves.toEqual({
+      ok: false,
+      skipped: true,
+      error: "invalid to",
+    });
+  });
+
+  it("rejects header-break characters in mail headers", async () => {
+    process.env.RESEND_API_KEY = "rk_x";
+    process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
+
+    await expect(sendEmailV0({ to: "a@b.com", subject: "hello\nworld", text: "t" })).resolves.toEqual({
+      ok: false,
+      skipped: true,
+      error: "invalid header characters",
+    });
+  });
+
   it("returns sanitized HTTP error when Resend returns non-2xx", async () => {
     process.env.RESEND_API_KEY = "rk_x";
     process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
