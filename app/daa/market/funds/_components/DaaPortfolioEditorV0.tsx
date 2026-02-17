@@ -18,6 +18,15 @@ function toFiniteNumber(x: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeDecimalText(input: string): string {
+  const trimmed = String(input ?? '').trim();
+  if (!trimmed) return '';
+  const n = toFiniteNumber(trimmed);
+  if (n === null) return trimmed;
+  const rounded = Number(n.toFixed(8));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 function rowsFromState(st: PortfolioStateV1): Row[] {
   const rows: Row[] = Object.entries(st.positions ?? {})
     .map(([symbol, p]) => ({
@@ -117,6 +126,7 @@ export default function DaaPortfolioEditorV0() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [issues, setIssues] = useState<string[]>([]);
+  const [inlineHint, setInlineHint] = useState<string>('');
 
   const [baseState, setBaseState] = useState<PortfolioStateV1>(() => loadPortfolioStateV1());
   const [cashText, setCashText] = useState(() => String(loadPortfolioStateV1().cash ?? 0));
@@ -128,6 +138,7 @@ export default function DaaPortfolioEditorV0() {
     setCashText(String(st.cash ?? 0));
     setRows(rowsFromState(st));
     setIssues([]);
+    setInlineHint('');
     setSaveStatus('idle');
   }, []);
 
@@ -151,7 +162,7 @@ export default function DaaPortfolioEditorV0() {
   }
 
   function addRow() {
-    setRows((x) => [...x, { symbol: '', qty: '', cost: '', lots: '' }]);
+    setRows((x) => [...x, { symbol: '', qty: '0', cost: '', lots: '' }]);
   }
 
   function removeRow(idx: number) {
@@ -162,12 +173,41 @@ export default function DaaPortfolioEditorV0() {
   }
 
   function updateRow(idx: number, patch: Partial<Row>) {
-    setRows((x) => x.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+    setRows((x) =>
+      x.map((r, i) => {
+        if (i !== idx) return r;
+        const next = { ...r, ...patch };
+        if (patch.symbol !== undefined) {
+          const rawSymbol = String(patch.symbol ?? '');
+          const normalizedSymbol = rawSymbol.toUpperCase();
+          next.symbol = normalizedSymbol;
+          if (rawSymbol && rawSymbol !== normalizedSymbol) {
+            setInlineHint(`Symbol normalized to ${normalizedSymbol}`);
+            window.setTimeout(() => setInlineHint(''), 1500);
+          }
+        }
+        return next;
+      })
+    );
+  }
+
+  function normalizeCashOnBlur() {
+    setCashText((v) => normalizeDecimalText(v));
+  }
+
+  function normalizeRowNumberOnBlur(idx: number, field: 'qty' | 'cost') {
+    setRows((x) =>
+      x.map((r, i) => {
+        if (i !== idx) return r;
+        return { ...r, [field]: normalizeDecimalText(r[field]) };
+      })
+    );
   }
 
   function doSave() {
     const { state, issues: iss } = computed;
     setIssues(iss);
+    setInlineHint('');
 
     if (iss.length) {
       setSaveStatus('error');
@@ -220,6 +260,7 @@ export default function DaaPortfolioEditorV0() {
               <input
                 value={cashText}
                 onChange={(e) => setCashText(e.target.value)}
+                onBlur={normalizeCashOnBlur}
                 inputMode="decimal"
                 style={{ width: 160 }}
               />
@@ -236,6 +277,10 @@ export default function DaaPortfolioEditorV0() {
             <button type="button" className="button secondary" onClick={addRow} style={{ padding: '6px 10px' }}>
               + Position
             </button>
+
+            {inlineHint ? (
+              <span className="muted" style={{ fontSize: 12 }}>{inlineHint}</span>
+            ) : null}
           </div>
 
           {issues.length ? (
@@ -272,6 +317,7 @@ export default function DaaPortfolioEditorV0() {
                       <input
                         value={r.qty}
                         onChange={(e) => updateRow(idx, { qty: e.target.value })}
+                        onBlur={() => normalizeRowNumberOnBlur(idx, 'qty')}
                         inputMode="decimal"
                         placeholder="0"
                         style={{ width: 120, textAlign: 'right' as const }}
@@ -281,6 +327,7 @@ export default function DaaPortfolioEditorV0() {
                       <input
                         value={r.cost}
                         onChange={(e) => updateRow(idx, { cost: e.target.value })}
+                        onBlur={() => normalizeRowNumberOnBlur(idx, 'cost')}
                         inputMode="decimal"
                         placeholder=""
                         style={{ width: 140, textAlign: 'right' as const }}
@@ -307,7 +354,7 @@ export default function DaaPortfolioEditorV0() {
           </div>
 
           <div className="muted" style={{ fontSize: 11 }}>
-            Stored at localStorage key <code>daa.portfolio.state</code> (schemaVersion=1). Empty/invalid rows are ignored.
+            Stored at localStorage key <code>daa.portfolio.state</code> (schemaVersion=1). Numeric values normalize on blur; invalid rows are only blocked on Save.
           </div>
         </div>
       ) : null}

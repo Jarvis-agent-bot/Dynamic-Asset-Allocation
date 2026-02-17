@@ -37,6 +37,11 @@ function normalizeTargetPctText(text: string): { value: number | null; normalize
   return { value: n };
 }
 
+function formatTargetPctValue(value: number): string {
+  const rounded = Number(value.toFixed(4));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 function rowsFromState(st: TargetWeightsStateV1): Row[] {
   const rows: Row[] = (st.targetWeights ?? [])
     .filter(Boolean)
@@ -93,6 +98,7 @@ export default function DaaTargetWeightsEditorV0() {
 
   const [issues, setIssues] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [inlineHint, setInlineHint] = useState<string>('');
 
   const [rows, setRows] = useState<Row[]>(() => rowsFromState(loadTargetWeightsStateV1()));
   const [pasteText, setPasteText] = useState('');
@@ -102,6 +108,7 @@ export default function DaaTargetWeightsEditorV0() {
     setRows(rowsFromState(st));
     setIssues([]);
     setWarnings([]);
+    setInlineHint('');
     setSaveStatus('idle');
   }, []);
 
@@ -124,7 +131,7 @@ export default function DaaTargetWeightsEditorV0() {
   }
 
   function addRow() {
-    setRows((x) => [...x, { id: '', label: '', targetPct: '' }]);
+    setRows((x) => [...x, { id: '', label: '', targetPct: '0' }]);
   }
 
   function removeRow(idx: number) {
@@ -135,13 +142,39 @@ export default function DaaTargetWeightsEditorV0() {
   }
 
   function updateRow(idx: number, patch: Partial<Row>) {
-    setRows((x) => x.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+    setRows((x) =>
+      x.map((r, i) => {
+        if (i !== idx) return r;
+        const next = { ...r, ...patch };
+        if (patch.id !== undefined && !String(r.label ?? '').trim()) {
+          next.label = String(patch.id ?? '').trim();
+        }
+        return next;
+      })
+    );
+  }
+
+  function normalizeRowTargetPct(idx: number) {
+    setRows((x) =>
+      x.map((r, i) => {
+        if (i !== idx) return r;
+        const parsed = normalizeTargetPctText(r.targetPct);
+        if (parsed.value === null || !Number.isFinite(parsed.value)) return r;
+        const normalizedText = formatTargetPctValue(parsed.value);
+        if (parsed.normalizedHint) {
+          setInlineHint(`${String(r.id || 'row').trim() || 'row'}: interpreted as ${normalizedText}`);
+          window.setTimeout(() => setInlineHint(''), 1800);
+        }
+        return { ...r, targetPct: normalizedText };
+      })
+    );
   }
 
   function doSave() {
     const { items, issues: iss, warnings: warn } = computed;
     setIssues(iss);
     setWarnings(warn);
+    setInlineHint('');
 
     if (iss.length) {
       setSaveStatus('error');
@@ -259,8 +292,11 @@ export default function DaaTargetWeightsEditorV0() {
             </button>
 
             <span className="muted" style={{ fontSize: 12 }}>
-              targetPct supports 0..1 (e.g. 0.6) or 0..100 (e.g. 60).
+              targetPct supports 0..1 (e.g. 0.6) or 0..100 (e.g. 60); values normalize on blur.
             </span>
+            {inlineHint ? (
+              <span className="muted" style={{ fontSize: 12 }}>{inlineHint}</span>
+            ) : null}
           </div>
 
           {issues.length ? (
@@ -312,6 +348,7 @@ export default function DaaTargetWeightsEditorV0() {
                       <input
                         value={r.targetPct}
                         onChange={(e) => updateRow(idx, { targetPct: e.target.value })}
+                        onBlur={() => normalizeRowTargetPct(idx)}
                         inputMode="decimal"
                         placeholder="0.0"
                         style={{ width: 140, textAlign: 'right' as const }}
