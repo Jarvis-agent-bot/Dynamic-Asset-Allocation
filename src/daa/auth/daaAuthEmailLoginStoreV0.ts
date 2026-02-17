@@ -137,6 +137,24 @@ export async function findLastDaaAuthEmailLoginTokenCreatedAtV0(args: { accountI
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
+export async function revokeDaaAuthEmailLoginTokenV0(args: { tokenId: string; revokedAt?: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const tokenId = String(args.tokenId ?? "").trim();
+  if (!tokenId) return { ok: false, error: "missing tokenId" };
+
+  const revokedAt = typeof args.revokedAt === "string" && args.revokedAt.trim() ? args.revokedAt.trim() : nowIso();
+
+  await ensureAuthSchemaIfPgV0();
+
+  if (isDaaPgEnabledV0()) {
+    await withDaaPgClientV0(async ({ query }) => {
+      await query("UPDATE daa_auth_email_login_tokens SET used_at = $1 WHERE token_id = $2 AND used_at IS NULL", [revokedAt, tokenId]);
+    });
+    return { ok: true };
+  }
+
+  return { ok: false, error: "DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)" };
+}
+
 export type DaaAuthEmailLoginConsumeErrorV0 = "invalid" | "missing" | "used" | "expired" | "inactive";
 
 export type DaaAuthEmailLoginConsumeResultV0 =

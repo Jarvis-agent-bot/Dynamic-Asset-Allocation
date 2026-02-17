@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createDaaAuthEmailLoginTokenV0,
   findLastDaaAuthEmailLoginTokenCreatedAtV0,
+  revokeDaaAuthEmailLoginTokenV0,
 } from "@/src/daa/auth/daaAuthEmailLoginStoreV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
 import { appendDaaAuthAuditEventV0, getDaaAuthAccountByUsernameV0 } from "@/src/daa/auth/daaAuthStoreV0";
@@ -67,7 +68,7 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
   const ip = getClientIpFromRequestV0(req) || null;
 
   const ttlMinutes = 15;
-  const { token: code } = await createDaaAuthEmailLoginTokenV0({ accountId: account.accountId, ttlMinutes, userAgent: ua, ip });
+  const { token: code, row: tokenRow } = await createDaaAuthEmailLoginTokenV0({ accountId: account.accountId, ttlMinutes, userAgent: ua, ip });
 
   await appendDaaAuthAuditEventV0({
     kind: opts.mode === "resend" ? "auth.email_otp.resend_requested" : "auth.email_otp.requested",
@@ -91,6 +92,11 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
       `If you did not request this, you can ignore this email.`,
   }).catch((error) => ({ ok: false as const, skipped: false, error: String(error) }));
 
+  // Invalidate token on send failure so a user cannot consume a code that never reached their inbox.
+  const tokenRevokedOnDeliveryFailure = delivery.ok
+    ? false
+    : (await revokeDaaAuthEmailLoginTokenV0({ tokenId: tokenRow.tokenId }).catch(() => ({ ok: false as const }))).ok;
+
   await appendDaaAuthAuditEventV0({
     kind: opts.mode === "resend" ? "auth.email_otp.resend_sent" : "auth.email_otp.sent",
     actorUserId: account.accountId,
@@ -100,6 +106,7 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
       deliveryOk: delivery.ok,
       skipped: delivery.ok ? undefined : Boolean(delivery.skipped),
       error: delivery.ok ? undefined : delivery.error,
+      tokenRevokedOnDeliveryFailure: delivery.ok ? undefined : tokenRevokedOnDeliveryFailure,
       ip,
       userAgent: ua,
     },
