@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,6 +24,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 import { copyTextToClipboard } from "../../copyToClipboard";
 
@@ -471,58 +480,60 @@ export default function DaaDashboardAdminUsers() {
         </div>
 
         {mutateError ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            <b>Update failed</b>: {mutateError}
-          </div>
+          <Alert variant="destructive">
+            <AlertTitle>Update failed</AlertTitle>
+            <AlertDescription>{mutateError}</AlertDescription>
+          </Alert>
         ) : null}
 
         {status === "error" ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            <b>Failed to load</b>: {error || "unknown error"}
-          </div>
+          <Alert variant="destructive">
+            <AlertTitle>Failed to load</AlertTitle>
+            <AlertDescription>{error || "unknown error"}</AlertDescription>
+          </Alert>
         ) : null}
 
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr className="text-left">
-                <th className="w-[220px] px-3 py-2">
+          <Table>
+            <TableHeader className="bg-muted/40">
+              <TableRow className="text-left hover:bg-transparent">
+                <TableHead className="w-[220px] px-3 py-2">
                   <SortHeaderButton
                     label="ID"
                     active={sortKey === "id"}
                     dir={sortDir}
                     onClick={() => toggleSort("id")}
                   />
-                </th>
-                <th className="w-[120px] px-3 py-2">
+                </TableHead>
+                <TableHead className="w-[120px] px-3 py-2">
                   <SortHeaderButton
                     label="Role"
                     active={sortKey === "role"}
                     dir={sortDir}
                     onClick={() => toggleSort("role")}
                   />
-                </th>
-                <th className="w-[140px] px-3 py-2">
+                </TableHead>
+                <TableHead className="w-[140px] px-3 py-2">
                   <SortHeaderButton
                     label="Status"
                     active={sortKey === "status"}
                     dir={sortDir}
                     onClick={() => toggleSort("status")}
                   />
-                </th>
-                <th className="w-[80px] px-3 py-2">
+                </TableHead>
+                <TableHead className="w-[80px] px-3 py-2">
                   <SortHeaderButton
                     label="Me"
                     active={sortKey === "me"}
                     dir={sortDir}
                     onClick={() => toggleSort("me")}
                   />
-                </th>
-                <th className="px-3 py-2 text-right">Actions</th>
-              </tr>
-            </thead>
+                </TableHead>
+                <TableHead className="px-3 py-2 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
 
-            <tbody>
+            <TableBody>
               {filteredSortedUsers.map((u) => {
                 const isMe = tokenKindForUserId(u.id) === meTokenKind;
                 const statusLabel = fmtStatus(u);
@@ -531,13 +542,13 @@ export default function DaaDashboardAdminUsers() {
                 const isBusy = mutating === u.id;
 
                 return (
-                  <tr key={u.id} className="border-t">
-                    <td className="px-3 py-2 font-mono">{u.id}</td>
-                    <td className="px-3 py-2">{u.role}</td>
-                    <td className="px-3 py-2">
+                  <TableRow key={u.id}>
+                    <TableCell className="px-3 py-2 font-mono">{u.id}</TableCell>
+                    <TableCell className="px-3 py-2">{u.role}</TableCell>
+                    <TableCell className="px-3 py-2">
                       <StatusPill status={statusLabel} />
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       {isMe ? (
                         <span className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs">
                           me
@@ -545,8 +556,8 @@ export default function DaaDashboardAdminUsers() {
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         {canToggle ? (
                           <Button
@@ -582,8 +593,8 @@ export default function DaaDashboardAdminUsers() {
                           Details
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
 
@@ -591,38 +602,38 @@ export default function DaaDashboardAdminUsers() {
                 status === "loading" ? (
                   <>
                     {Array.from({ length: 3 }).map((_, i) => (
-                      <tr key={`sk_${i}`} className="border-t">
-                        <td className="px-3 py-2">
+                      <TableRow key={`sk_${i}`}>
+                        <TableCell className="px-3 py-2">
                           <Skeleton className="h-4 w-[180px]" />
-                        </td>
-                        <td className="px-3 py-2">
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
                           <Skeleton className="h-4 w-[80px]" />
-                        </td>
-                        <td className="px-3 py-2">
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
                           <Skeleton className="h-4 w-[90px]" />
-                        </td>
-                        <td className="px-3 py-2">
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
                           <Skeleton className="h-4 w-[40px]" />
-                        </td>
-                        <td className="px-3 py-2">
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
                           <div className="flex justify-end gap-2">
                             <Skeleton className="h-8 w-[96px]" />
                             <Skeleton className="h-8 w-[80px]" />
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
                   </>
                 ) : (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-3 text-sm text-muted-foreground">
+                  <TableRow>
+                    <TableCell colSpan={5} className="px-3 py-3 text-sm text-muted-foreground">
                       No users match the current filters.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               ) : null}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         <div className="text-sm text-muted-foreground">
@@ -631,15 +642,16 @@ export default function DaaDashboardAdminUsers() {
         </div>
 
         {toast ? (
-          <div
+          <Alert
             role="status"
             aria-live="polite"
-            className={`fixed bottom-4 right-4 z-[1100] max-w-[min(520px,92vw)] cursor-pointer rounded-md border px-3 py-2 text-sm shadow-lg ${toast.variant === "success" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300" : "border-destructive/30 bg-destructive/5 text-destructive"}`}
+            variant={toast.variant === "error" ? "destructive" : "default"}
+            className="cursor-pointer"
             onClick={() => setToast(null)}
             title="Click to dismiss"
           >
-            {toast.message}
-          </div>
+            <AlertDescription>{toast.message}</AlertDescription>
+          </Alert>
         ) : null}
 
         <Dialog
