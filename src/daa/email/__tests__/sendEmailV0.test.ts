@@ -13,7 +13,7 @@ describe("daa/email sendEmailV0", () => {
     delete process.env.DAA_AUTH_EMAIL_FROM;
 
     // Default stub; tests override as needed.
-    globalThis.fetch = vi.fn(async () => ({ ok: true } as any)) as any;
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ id: "em_default" }) } as any)) as any;
   });
 
   afterEach(() => {
@@ -62,6 +62,16 @@ describe("daa/email sendEmailV0", () => {
     }
   });
 
+  it("returns provider-response error when id is missing", async () => {
+    process.env.RESEND_API_KEY = "rk_x";
+    process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
+
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) } as any)) as any;
+
+    const r = await sendEmailV0({ to: "a@b.com", subject: "s", text: "t" });
+    expect(r).toEqual({ ok: false, skipped: false, error: "invalid provider response" });
+  });
+
   it("returns timeout error when request exceeds timeout", async () => {
     process.env.RESEND_API_KEY = "rk_x";
     process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
@@ -71,7 +81,7 @@ describe("daa/email sendEmailV0", () => {
       init?.signal?.throwIfAborted?.();
       await new Promise((resolve) => setTimeout(resolve, 200));
       init?.signal?.throwIfAborted?.();
-      return { ok: true } as any;
+      return { ok: true, json: async () => ({ id: "em_timeout" }) } as any;
     }) as any;
 
     const r = await sendEmailV0({ to: "a@b.com", subject: "s", text: "t" });
@@ -86,7 +96,7 @@ describe("daa/email sendEmailV0", () => {
     process.env.RESEND_API_KEY = "rk_x";
     process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
 
-    const fetchMock = vi.fn(async () => ({ ok: true } as any));
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: "em_ok" }) } as any));
     globalThis.fetch = fetchMock as any;
 
     const r = await sendEmailV0({ to: "a@b.com", subject: "s", text: "t" });
