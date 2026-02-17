@@ -126,6 +126,15 @@ const LS_AUTO_PLAN_RESULT = 'daa.market.funds.autoPlan.result.v0';
 const LS_AUTO_PLAN_RESULT_A = 'daa.market.funds.autoPlan.result.A.v0';
 const LS_AUTO_PLAN_RESULT_B = 'daa.market.funds.autoPlan.result.B.v0';
 
+const MOBILE_QUICK_JUMPS_V0: Array<{ targetId: string; label: string }> = [
+  { targetId: 'portfolio', label: 'Portfolio' },
+  { targetId: 'prices', label: 'Prices' },
+  { targetId: 'target-weights', label: 'Targets' },
+  { targetId: 'rebalance', label: 'Rebalance' },
+  { targetId: 'dynamic-rebalance-run-history', label: 'History' },
+  { targetId: 'import', label: 'Import/Export' },
+];
+
 function scrollToId(id: string) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -3246,6 +3255,43 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           </button>
         </div>
       </div>
+
+      <div className="daa-mobile-actions-v0" aria-label="Funds hub quick actions">
+        <div className="daa-mobile-actions-row-v0">
+          <button
+            type="button"
+            className="button"
+            onClick={() => runDaaRefreshAndRecommendationV0()}
+            disabled={runDaaStatus === 'running'}
+            title="One-click Run DAA: refresh Step2 market sources, then generate Step4 recommendation."
+          >
+            {runDaaStatus === 'running' ? 'Run DAA...' : 'Run DAA'}
+          </button>
+          <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')}>
+            Rebalance
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => openPreflightForRun()}
+            disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
+            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Manual trigger: open preflight and run a paper rebalance now.'}
+          >
+            {paperRunLoading ? 'Running...' : 'Manual run'}
+          </button>
+          <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)}>
+            {nextJump.buttonText}
+          </button>
+        </div>
+        <div className="daa-mobile-jumps-v0">
+          {MOBILE_QUICK_JUMPS_V0.map((item) => (
+            <button key={item.targetId} type="button" className="button secondary" onClick={() => jumpTo(item.targetId)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="daa-mobile-actions-spacer-v0" aria-hidden="true" />
 
       <DaaDynamicRebalanceNotificationWatcherV0 rev={rev} />
       <DaaDynamicRebalancePausedReasonBannerV0 rev={rev} />
