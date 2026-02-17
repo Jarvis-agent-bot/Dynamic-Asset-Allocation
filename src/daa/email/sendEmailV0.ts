@@ -46,6 +46,12 @@ export async function sendEmailV0(args: SendEmailArgsV0): Promise<{ ok: true } |
       return { ok: false, skipped: false, error: `HTTP ${res.status}` };
     }
 
+    const payload = await res.json().catch(() => null);
+    const providerMessageId = typeof payload?.id === "string" ? payload.id.trim() : "";
+    if (!providerMessageId) {
+      return { ok: false, skipped: false, error: "invalid provider response" };
+    }
+
     return { ok: true };
   } catch (error: any) {
     if (error?.name === "AbortError") {
