@@ -44,7 +44,7 @@ describe("daa/email sendEmailV0", () => {
     await expect(sendEmailV0({ to: "a@b.com", subject: "s", text: "" })).resolves.toEqual({ ok: false, skipped: true, error: "missing text" });
   });
 
-  it("returns HTTP error details when Resend returns non-2xx", async () => {
+  it("returns sanitized HTTP error when Resend returns non-2xx", async () => {
     process.env.RESEND_API_KEY = "rk_x";
     process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
 
@@ -58,8 +58,27 @@ describe("daa/email sendEmailV0", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.skipped).toBe(false);
-      expect(r.error).toContain("HTTP 400");
-      expect(r.error).toContain("bad request");
+      expect(r.error).toBe("HTTP 400");
+    }
+  });
+
+  it("returns timeout error when request exceeds timeout", async () => {
+    process.env.RESEND_API_KEY = "rk_x";
+    process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
+    process.env.DAA_RESEND_TIMEOUT_MS = "1";
+
+    globalThis.fetch = vi.fn(async (_url: any, init: any) => {
+      init?.signal?.throwIfAborted?.();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      init?.signal?.throwIfAborted?.();
+      return { ok: true } as any;
+    }) as any;
+
+    const r = await sendEmailV0({ to: "a@b.com", subject: "s", text: "t" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.skipped).toBe(false);
+      expect(r.error).toContain("timeout after");
     }
   });
 
