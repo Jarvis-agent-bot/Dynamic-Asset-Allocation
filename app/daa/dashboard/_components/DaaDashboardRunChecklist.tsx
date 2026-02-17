@@ -283,9 +283,11 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <Badge tone={row.badge.tone} text={row.badge.text} />
-                <JumpButton onClick={() => onJump(row.jumpId)}>{row.priority === "now" ? "Start" : "Go"}</JumpButton>
+                <JumpButton onClick={() => onJump(row.jumpId)}>
+                  {row.priority === "now" ? `Start Step ${row.stepId}` : `Go to Step ${row.stepId}`}
+                </JumpButton>
                 <Link href={openHref} style={{ color: "#111", fontSize: 12 }}>
-                  Open
+                  Open Step {row.stepId}
                 </Link>
               </div>
             </div>
@@ -299,9 +301,9 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
             <Badge tone="ok" text="ready" />
-            <JumpButton onClick={() => onJump("import")}>Go</JumpButton>
+            <JumpButton onClick={() => onJump("import")}>Import JSON</JumpButton>
             <Link href="/daa/dashboard#import" style={{ color: "#111", fontSize: 12 }}>
-              Open
+              Open importer
             </Link>
           </div>
         </div>
@@ -316,9 +318,9 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
               tone={rt.marketEventCount && rt.hasRecommendation && rt.hasHumanProfile ? "ok" : "warn"}
               text={rt.marketEventCount && rt.hasRecommendation && rt.hasHumanProfile ? "ready" : "partial"}
             />
-            <JumpButton onClick={() => onJump("export")}>Go</JumpButton>
+            <JumpButton onClick={() => onJump("export")}>Export JSON</JumpButton>
             <Link href="/daa/dashboard#export" style={{ color: "#111", fontSize: 12 }}>
-              Open
+              Open exporter
             </Link>
           </div>
         </div>

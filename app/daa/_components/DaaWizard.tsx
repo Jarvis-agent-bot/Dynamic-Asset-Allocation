@@ -120,7 +120,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
       <section style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 10, padding: 12, background: "#fff" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Next action</div>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Recommended next action</div>
             <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>
               <b>{runtime.nextActionText}</b>
             </div>
@@ -141,7 +141,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
                   fontSize: 12,
                 }}
               >
-                Go Step {runtime.nextStepId} →
+                Continue to Step {runtime.nextStepId} →
               </button>
             ) : (
               <Link
@@ -161,7 +161,7 @@ export function DaaWizard({ initialStepId }: { initialStepId?: number }) {
             )}
 
             <Link href="/daa/dashboard" style={{ color: "#111", fontSize: 12 }}>
-              Open dashboard
+              Back to dashboard
             </Link>
           </div>
         </div>
