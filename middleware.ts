@@ -29,8 +29,11 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL(`${normalized}${search}`, req.url));
   }
 
-  // Auth gate: DAA console pages require a session cookie; redirect to /daa/login.
-  if (pathname === "/daa/login" || pathname.startsWith("/daa/login/")) {
+  // Keep the canonical dashboard entry public so unauthenticated users can land on it.
+  const isPublicDashboardEntry = pathname === "/daa/dashboard" || pathname === "/daa/dashboard/";
+
+  // Auth gate: non-public DAA console pages require a session cookie; redirect to /daa/login.
+  if (pathname === "/daa/login" || pathname.startsWith("/daa/login/") || isPublicDashboardEntry) {
     return NextResponse.next();
   }
 
