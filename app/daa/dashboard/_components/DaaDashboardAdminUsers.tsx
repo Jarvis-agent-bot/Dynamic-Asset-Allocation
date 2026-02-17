@@ -488,7 +488,12 @@ export default function DaaDashboardAdminUsers() {
 
         {status === "error" ? (
           <Alert variant="destructive">
-            <AlertTitle>Failed to load</AlertTitle>
+            <AlertTitle className="flex items-center justify-between gap-2">
+              <span>Failed to load</span>
+              <Button type="button" size="sm" variant="outline" onClick={() => void load()}>
+                Retry
+              </Button>
+            </AlertTitle>
             <AlertDescription>{error || "unknown error"}</AlertDescription>
           </Alert>
         ) : null}

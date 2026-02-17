@@ -499,8 +499,21 @@ export default function DaaDashboardOverviewCards() {
           ) : storeOk ? (
             <div className="text-xs text-muted-foreground">Store: OK</div>
           ) : (
-            <div className="text-xs text-muted-foreground">Store: {String(runsResp?.error ?? "error")}</div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Store: {String(runsResp?.error ?? "error")}</span>
+              <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => requestRefresh()}>
+                Retry
+              </Button>
+            </div>
           )}
+          {auth && !auth.ok ? (
+            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Auth: {String(auth.error ?? "error")}</span>
+              <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => requestRefresh()}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
