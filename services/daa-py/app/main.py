@@ -5,17 +5,14 @@ from typing import Literal, Optional
 
 from fastapi import FastAPI, Query
 
-from app.auth_magiclink_v0 import router as auth_v0_router
-from app.store_v0 import router as store_v0_router
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="DAA Python Engine", version="0.1.0")
 
-# Epoch guardrail: public /api/daa belongs to Next.js routes. Keep legacy FastAPI
-# /api/daa/* handlers off by default to avoid serving that surface from this app.
+# Hard guardrail: this service is engine-only. Public /api/daa routes are owned
+# by Next.js and must never be mounted from FastAPI.
 if os.environ.get("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES", "0") == "1":
-    app.include_router(auth_v0_router)
-    app.include_router(store_v0_router)
+    raise RuntimeError("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=1 is no longer supported; public /api/daa is Next.js-only")
 
 
 class HealthResponse(BaseModel):

@@ -33,20 +33,14 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     expect(routeFiles.length).toBeGreaterThan(0);
   });
 
-  it("keeps legacy FastAPI public /api/daa handlers disabled by default", () => {
+  it("keeps FastAPI engine-only and refuses legacy public /api/daa enable flag", () => {
     const fastApiMainPath = path.resolve(process.cwd(), "services/daa-py/app/main.py");
     const text = readFileSync(fastApiMainPath, "utf8");
 
-    const guard = 'os.environ.get("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES", "0") == "1"';
-    expect(text.includes(guard)).toBe(true);
-
-    const guardIndex = text.indexOf(guard);
-    const includeAuthIndex = text.indexOf("app.include_router(auth_v0_router)");
-    const includeStoreIndex = text.indexOf("app.include_router(store_v0_router)");
-
-    expect(guardIndex).toBeGreaterThanOrEqual(0);
-    expect(includeAuthIndex).toBeGreaterThan(guardIndex);
-    expect(includeStoreIndex).toBeGreaterThan(guardIndex);
+    expect(text).toContain('os.environ.get("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES", "0") == "1"');
+    expect(text).toContain("raise RuntimeError");
+    expect(text).not.toContain("app.include_router(auth_v0_router)");
+    expect(text).not.toContain("app.include_router(store_v0_router)");
   });
 
   it("keeps Nginx routing /api/daa to Next.js instead of FastAPI", () => {
