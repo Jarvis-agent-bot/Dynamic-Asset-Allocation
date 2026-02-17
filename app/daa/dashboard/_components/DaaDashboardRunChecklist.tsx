@@ -12,6 +12,8 @@ type Props = {
 
 type BadgeTone = "ok" | "warn" | "missing";
 
+type RowPriority = "now" | "soon" | "later";
+
 type ChecklistRow = {
   stepId: number;
   title: string;
@@ -19,6 +21,7 @@ type ChecklistRow = {
   jumpId: string;
   badge: { tone: BadgeTone; text: string };
   missingHint: string | null;
+  priority: RowPriority;
 };
 
 function Badge({ tone, text }: { tone: BadgeTone; text: string }) {
@@ -76,6 +79,44 @@ function statusToBadgeText(status: "done" | "wip" | "todo" | "later"): string {
   return "missing";
 }
 
+function getRowPriority(stepId: number, nextStepId: number | null, tone: BadgeTone): RowPriority {
+  if (nextStepId != null && stepId === nextStepId) return "now";
+  if (tone !== "ok") return "soon";
+  return "later";
+}
+
+function rowCardStyle(priority: RowPriority, tone: BadgeTone) {
+  if (priority === "now") {
+    return {
+      border: "1px solid #111",
+      background: "#f8fafc",
+      boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+    };
+  }
+
+  if (tone === "missing") {
+    return {
+      border: "1px solid #ffd6d9",
+      background: "#fff8f8",
+      boxShadow: "none",
+    };
+  }
+
+  if (tone === "warn") {
+    return {
+      border: "1px solid #ffe3bf",
+      background: "#fffaf3",
+      boxShadow: "none",
+    };
+  }
+
+  return {
+    border: "1px solid #f0f0f0",
+    background: "#fff",
+    boxShadow: "none",
+  };
+}
+
 export default function DaaDashboardRunChecklist({ onJump }: Props) {
   const rt = useDaaRuntime();
 
@@ -89,7 +130,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
         ? { tone: "missing" as const, text: "invalid" }
         : { tone: "warn" as const, text: "default" };
 
-  const rows: ChecklistRow[] = [
+  const rawRows: Array<Omit<ChecklistRow, "priority">> = [
     {
       stepId: 1,
       title: "Step1 — Backtest",
@@ -175,7 +216,19 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
     },
   ];
 
+  const rows: ChecklistRow[] = rawRows.map((row) => ({
+    ...row,
+    priority: getRowPriority(row.stepId, rt.nextStepId, row.badge.tone),
+  }));
+
   const missingSummary = rows.filter((r) => r.badge.tone !== "ok").map((r) => `S${r.stepId}`);
+
+  const priorityRank: Record<RowPriority, number> = { now: 0, soon: 1, later: 2 };
+  const prioritizedRows = [...rows].sort((a, b) => {
+    const rankDelta = priorityRank[a.priority] - priorityRank[b.priority];
+    if (rankDelta !== 0) return rankDelta;
+    return a.stepId - b.stepId;
+  });
 
   return (
     <section style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
@@ -197,12 +250,32 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
       </div>
 
       <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-        {rows.map((row) => {
+        {prioritizedRows.map((row) => {
           const openHref = `/daa/dashboard?tab=wizard&step=${row.stepId}`;
+          const cardStyle = rowCardStyle(row.priority, row.badge.tone);
+          const priorityText = row.priority === "now" ? "Do now" : row.priority === "soon" ? "Up next" : "Review";
+
           return (
-            <div key={row.stepId} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div
+              key={row.stepId}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+                borderRadius: 12,
+                padding: "10px 12px",
+                border: cardStyle.border,
+                background: cardStyle.background,
+                boxShadow: cardStyle.boxShadow,
+              }}
+            >
               <div>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>{row.title}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{row.title}</div>
+                  <span style={{ fontSize: 11, color: row.priority === "now" ? "#111" : "#666" }}>{priorityText}</span>
+                </div>
                 <div style={{ fontSize: 12, color: "#666" }}>{row.desc}</div>
                 {row.missingHint ? (
                   <div style={{ marginTop: 4, fontSize: 12, color: row.badge.tone === "warn" ? "#ad4e00" : "#a8071a" }}>{row.missingHint}</div>
@@ -210,7 +283,7 @@ export default function DaaDashboardRunChecklist({ onJump }: Props) {
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <Badge tone={row.badge.tone} text={row.badge.text} />
-                <JumpButton onClick={() => onJump(row.jumpId)}>Go</JumpButton>
+                <JumpButton onClick={() => onJump(row.jumpId)}>{row.priority === "now" ? "Start" : "Go"}</JumpButton>
                 <Link href={openHref} style={{ color: "#111", fontSize: 12 }}>
                   Open
                 </Link>
