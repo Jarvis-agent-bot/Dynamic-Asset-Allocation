@@ -28,6 +28,21 @@ describe("daa/deployStatusV0", () => {
     expect(payload.bootstrap.missingRecommended).toEqual([]);
   });
 
+  it("treats FastAPI public /api/daa as disabled when the env flag is unset", () => {
+    const payload = buildDeployStatusPayloadV0({}, "2026-02-16T00:00:00.000Z");
+
+    expect(payload.bootstrap.missingRecommended).not.toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES");
+  });
+
+  it("flags FastAPI public /api/daa when the legacy env flag is enabled", () => {
+    const payload = buildDeployStatusPayloadV0(
+      { DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES: "1" },
+      "2026-02-16T00:00:00.000Z"
+    );
+
+    expect(payload.bootstrap.missingRecommended).toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES");
+  });
+
   it("treats any of the SHA candidates as satisfying build SHA", () => {
     const payload = buildDeployStatusPayloadV0({ BUILD_SHA: "deadbeef" }, "2026-02-16T00:00:00.000Z");
     expect(payload.build.sha).toBe("deadbeef");
