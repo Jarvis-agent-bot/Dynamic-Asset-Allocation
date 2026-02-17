@@ -3275,7 +3275,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           </button>
         </div>
         <div className="daa-mobile-jumps-v0">
-          {MOBILE_QUICK_JUMPS_V0.map((item) => (
+          {MARKET_FUNDS_QUICK_JUMPS_V0.map((item) => (
             <button key={item.targetId} type="button" className="button secondary" onClick={() => jumpTo(item.targetId)}>
               {item.label}
             </button>

@@ -267,21 +267,20 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const handleEmailPaste = (e: ClipboardEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
     const out = applyEmailPasteNormalizationV0({
-      inputValue: input.value,
-      selectionStart: input.selectionStart,
-      selectionEnd: input.selectionEnd,
-      clipboardText: e.clipboardData?.getData("text") ?? "",
+      value: input.value,
+      selectionStart: input.selectionStart ?? input.value.length,
+      selectionEnd: input.selectionEnd ?? input.value.length,
+      pastedText: e.clipboardData?.getData("text") ?? "",
     });
 
-    if (!out || !out.changed) return;
+    if (!out || out.nextValue === input.value) return;
     e.preventDefault();
     setUsername(out.nextValue);
     queueMicrotask(() => {
       const node = emailRef.current;
       if (!node) return;
-      const start = Number.isFinite(out.nextSelectionStart) ? out.nextSelectionStart : out.nextValue.length;
-      const end = Number.isFinite(out.nextSelectionEnd) ? out.nextSelectionEnd : start;
-      node.setSelectionRange(start, end);
+      const caret = Number.isFinite(out.nextCaret) ? out.nextCaret : out.nextValue.length;
+      node.setSelectionRange(caret, caret);
     });
   };
 
