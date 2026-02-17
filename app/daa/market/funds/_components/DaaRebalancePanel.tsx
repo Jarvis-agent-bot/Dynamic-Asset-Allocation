@@ -3402,7 +3402,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       </div>
 
       {open ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+        <div
+          style={{
+            display: 'grid',
+            // Two-column density on wide screens to reduce vertical scroll in the funds hub.
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            alignItems: 'start',
+            gap: 10}}
+        >
           <div id="portfolio" style={{ scrollMarginTop: 12 }}>
             <DaaPortfolioEditorV0 />
           </div>
@@ -3431,7 +3438,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             <DaaOkxSandboxBalancesV0 />
           </div>
 
-          <div id="rebalance" style={{ scrollMarginTop: 12, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }}>
+          <div
+            id="rebalance"
+            style={{
+              scrollMarginTop: 12,
+              gridColumn: '1 / -1',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 12,
+              padding: 12}}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' as const }}>
               <div style={{ fontWeight: 800 }}>Rebalance v0</div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
