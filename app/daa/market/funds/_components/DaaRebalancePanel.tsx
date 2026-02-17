@@ -40,6 +40,8 @@ import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '
 import { buildRebalancePlanCsvV0 } from '@/src/daa/rebalancePlanCsvV0';
 import { summarizeTradesForConfirmationV0 } from '@/src/daa/tradesSummaryV0';
 import { estimateTaxLotsImpactV0 } from '@/src/daa/taxLotsImpactV0';
+import { scrollToIdAndFocusV0 } from '@/src/daa/focusV0';
+import { MARKET_FUNDS_QUICK_JUMPS_V0 } from '@/src/daa/keyboardFocusMapV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -126,19 +128,8 @@ const LS_AUTO_PLAN_RESULT = 'daa.market.funds.autoPlan.result.v0';
 const LS_AUTO_PLAN_RESULT_A = 'daa.market.funds.autoPlan.result.A.v0';
 const LS_AUTO_PLAN_RESULT_B = 'daa.market.funds.autoPlan.result.B.v0';
 
-const MOBILE_QUICK_JUMPS_V0: Array<{ targetId: string; label: string }> = [
-  { targetId: 'portfolio', label: 'Portfolio' },
-  { targetId: 'prices', label: 'Prices' },
-  { targetId: 'target-weights', label: 'Targets' },
-  { targetId: 'rebalance', label: 'Rebalance' },
-  { targetId: 'dynamic-rebalance-run-history', label: 'History' },
-  { targetId: 'import', label: 'Import/Export' },
-];
-
 function scrollToId(id: string) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  scrollToIdAndFocusV0(id);
 }
 
 function downloadTextAsFile(args: { filename: string; text: string; mime: string }) {
