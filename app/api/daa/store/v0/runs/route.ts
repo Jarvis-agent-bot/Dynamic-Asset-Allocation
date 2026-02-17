@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+import { requireDaaAdminViewerAuth } from "../../../../../../src/daa/adminAuth";
 
-import { listDaaRunsV0 } from "@/src/daa/storeV0";
+import { listDaaRunsV0 } from "../../../../../../src/daa/storeV0";
 
 export const runtime = "nodejs";
 
