@@ -43,6 +43,7 @@ import DaaDashboardRunChecklist from "../_components/DaaDashboardRunChecklist";
 
 import DaaMarketFundsTab from "../_tabs/DaaMarketFundsTab";
 import DaaSettingsTab from "../_tabs/DaaSettingsTab";
+import { DASHBOARD_VISUAL_SURFACES_V0 } from "./dashboardVisualSurfacesV0";
 
 type Tab = "dashboard" | "wizard" | "market-funds" | "settings";
 
@@ -77,35 +78,19 @@ function scrollToId(id: string) {
 
 type ActionRailItem = { id: string; label: string };
 
-const ACTION_RAIL_SECTIONS: Array<{ title: string; items: ActionRailItem[] }> = [
-  {
-    title: "Core operations",
-    items: [
-      { id: "run-checklist", label: "Run Checklist" },
-      { id: "confirm-executed", label: "Confirm/Executed" },
-      { id: "history-audit", label: "History/Audit" },
-      { id: "export", label: "Export" },
-    ],
-  },
-  {
-    title: "Inputs and control",
-    items: [
-      { id: "import", label: "Import" },
-      { id: "admin-users", label: "Admin Users" },
-      { id: "backtest", label: "Backtest" },
-    ],
-  },
-  {
-    title: "Analysis surfaces",
-    items: [
-      { id: "step2", label: "Step2 — Events" },
-      { id: "step4", label: "Step4 — Recommendation" },
-      { id: "step5", label: "Step5 — Explain" },
-      { id: "step6", label: "Step6 — Human" },
-      { id: "step7", label: "Step7 — Tags" },
-    ],
-  },
+const ACTION_RAIL_GROUPS: Array<{ title: string; group: "core" | "inputs" | "analysis" }> = [
+  { title: "Core operations", group: "core" },
+  { title: "Inputs and control", group: "inputs" },
+  { title: "Analysis surfaces", group: "analysis" },
 ];
+
+const ACTION_RAIL_SECTIONS: Array<{ title: string; items: ActionRailItem[] }> = ACTION_RAIL_GROUPS.map(({ title, group }) => ({
+  title,
+  items: DASHBOARD_VISUAL_SURFACES_V0.filter((surface) => surface.group === group).map((surface) => ({
+    id: surface.id,
+    label: surface.title,
+  })),
+}));
 
 const ACTION_RAIL_SHORTCUTS = [
   { href: "/daa/dashboard?tab=wizard&step=1", label: "Open Wizard" },
@@ -479,7 +464,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 
 function DashboardSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-6" aria-labelledby={`${id}-title`}>
+    <section id={id} className="scroll-mt-6" aria-labelledby={`${id}-title`} data-visual-surface={id}>
       <h2 id={`${id}-title`} className="sr-only" tabIndex={-1} data-dashboard-section-heading="true">
         {title}
       </h2>
