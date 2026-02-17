@@ -69,18 +69,36 @@ function scrollToId(id: string) {
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-const QUICK_NAV: Array<{ id: string; label: string }> = [
-  { id: "import", label: "Import" },
-  { id: "export", label: "Export" },
-  { id: "confirm-executed", label: "Confirm/Executed" },
-  { id: "history-audit", label: "History/Audit" },
-  { id: "admin-users", label: "Admin Users" },
-  { id: "backtest", label: "Backtest" },
-  { id: "step2", label: "Step2 — Events" },
-  { id: "step4", label: "Step4 — Recommendation" },
-  { id: "step5", label: "Step5 — Explain" },
-  { id: "step6", label: "Step6 — Human" },
-  { id: "step7", label: "Step7 — Tags" },
+type QuickNavItem = { id: string; label: string };
+
+const QUICK_NAV_SECTIONS: Array<{ title: string; items: QuickNavItem[] }> = [
+  {
+    title: "Core operations",
+    items: [
+      { id: "run-checklist", label: "Run Checklist" },
+      { id: "confirm-executed", label: "Confirm/Executed" },
+      { id: "history-audit", label: "History/Audit" },
+      { id: "export", label: "Export" },
+    ],
+  },
+  {
+    title: "Inputs and control",
+    items: [
+      { id: "import", label: "Import" },
+      { id: "admin-users", label: "Admin Users" },
+      { id: "backtest", label: "Backtest" },
+    ],
+  },
+  {
+    title: "Analysis surfaces",
+    items: [
+      { id: "step2", label: "Step2 — Events" },
+      { id: "step4", label: "Step4 — Recommendation" },
+      { id: "step5", label: "Step5 — Explain" },
+      { id: "step6", label: "Step6 — Human" },
+      { id: "step7", label: "Step7 — Tags" },
+    ],
+  },
 ];
 
 type MeResponse =
@@ -426,27 +444,36 @@ function DashboardMain() {
     <div className="space-y-4">
       <DaaDashboardOverviewCards />
 
+      <section id="run-checklist" className="scroll-mt-6">
+        <DaaDashboardRunChecklist onJump={scrollToId} />
+      </section>
+
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Quick nav</CardTitle>
+          <CardTitle className="text-sm">Quick nav by intent</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {QUICK_NAV.map((it) => (
-            <Button
-              key={it.id}
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => scrollToId(it.id)}
-              className="justify-start"
-            >
-              {it.label}
-            </Button>
+        <CardContent className="space-y-3">
+          {QUICK_NAV_SECTIONS.map((section) => (
+            <div key={section.title} className="space-y-2">
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{section.title}</div>
+              <div className="flex flex-wrap gap-2">
+                {section.items.map((it) => (
+                  <Button
+                    key={it.id}
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => scrollToId(it.id)}
+                    className="justify-start"
+                  >
+                    {it.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           ))}
         </CardContent>
       </Card>
-
-      <DaaDashboardRunChecklist onJump={scrollToId} />
 
       <section id="import" className="scroll-mt-6">
         <DaaDashboardImport />
