@@ -45,6 +45,31 @@ describe("/api/daa/auth/email-login/consume route v0", () => {
     expect(setCookie).toContain(`${DAA_AUTH_SESSION_COOKIE_V0}=`);
     expect(setCookie).toContain("HttpOnly");
     expect(setCookie).toMatch(/SameSite=Lax/i);
+    expect((res.headers.get("cache-control") || "").toLowerCase()).toContain("no-store");
+  });
+
+  it("preserves explicit notice in returnTo and does not overwrite it", async () => {
+    resetPgMem();
+
+    const account = await createDaaAuthAccountV0({ username: "consume-notice@example.com", password: "pw-1", roles: ["viewer"] });
+    const { token } = await createDaaAuthEmailLoginTokenV0({ accountId: account.accountId, ttlMinutes: 15, userAgent: "ua", ip: "1.2.3.4" });
+
+    const mod = await import("../../../app/api/daa/auth/email-login/consume/route");
+    const req = new Request(
+      "https://example.com/api/daa/auth/email-login/consume?token=" +
+        encodeURIComponent(token) +
+        "&returnTo=" +
+        encodeURIComponent("/daa/dashboard?notice=already_signed_in"),
+      { method: "GET" }
+    );
+
+    const res: Response = await (mod as any).GET(req);
+    expect(res.status).toBe(302);
+
+    const location = res.headers.get("location") || "";
+    expect(location).toContain("/daa/dashboard");
+    expect(location).toContain("notice=already_signed_in");
+    expect(location).not.toContain("notice=signed_in");
   });
 
   it("redirects invalid token back to /daa/login with an error", async () => {
