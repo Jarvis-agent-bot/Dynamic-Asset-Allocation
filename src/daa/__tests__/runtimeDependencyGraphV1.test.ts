@@ -56,7 +56,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
     ];
     for (const block of blocks) {
       const keys = Object.keys(block || {});
-      expect(keys.some((k) => /^(sql\.js|sqljs|better-sqlite3|sqlite3|sqlite|@sqlite\.org\/sqlite-wasm)$/i.test(k))).toBe(false);
+      expect(keys.some((k) => /^(sql\.js|sqljs|better-sqlite3|sqlite3|sqlite|@sqlite\.org\/sqlite-wasm|wa-sqlite)$/i.test(k))).toBe(false);
     }
   });
 
@@ -71,11 +71,12 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
     expect(lockText).not.toMatch(/\/sqlite3@/i);
     expect(lockText).not.toMatch(/\/sqlite@/i);
     expect(lockText).not.toMatch(/\/@sqlite\.org\/sqlite-wasm@/i);
+    expect(lockText).not.toMatch(/\/wa-sqlite@/i);
   });
 
   it("does not import sql.js/sqlite runtime packages in Next DAA server paths", () => {
     const roots = [path.resolve(process.cwd(), "src/daa"), path.resolve(process.cwd(), "app/api/daa")];
-    const forbidden = /\b(sql\.js|sqljs|better-sqlite3|sqlite3|@sqlite\.org\/sqlite-wasm|initSqlJs)\b/i;
+    const forbidden = /\b(sql\.js|sqljs|better-sqlite3|sqlite3|@sqlite\.org\/sqlite-wasm|wa-sqlite|initSqlJs)\b/i;
 
     const offenders: string[] = [];
     for (const root of roots) {
