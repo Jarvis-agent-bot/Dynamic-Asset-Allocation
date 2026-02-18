@@ -23,8 +23,14 @@ function isAbortError(e: unknown): boolean {
   );
 }
 
+function getEngineBaseUrl(): string | null {
+  const raw = process.env.DAA_ENGINE_BASE_URL;
+  const base = typeof raw === "string" ? raw.trim() : "";
+  return base ? base : null;
+}
+
 export async function proxyToEngine(opts: ProxyToEngineOptions): Promise<Response> {
-  const baseRaw = process.env.DAA_ENGINE_BASE_URL;
+  const baseRaw = getEngineBaseUrl();
   if (!baseRaw) {
     // Avoid trying to fetch a relative URL (e.g. "/daa-api/..."), which fails in Node.
     return NextResponse.json(
@@ -92,7 +98,7 @@ export type ProxyToEngineJsonOptions<T> = ProxyToEngineOptions & {
 };
 
 export async function proxyToEngineJson<T>(opts: ProxyToEngineJsonOptions<T>): Promise<Response> {
-  const baseRaw = process.env.DAA_ENGINE_BASE_URL;
+  const baseRaw = getEngineBaseUrl();
   if (!baseRaw) {
     return NextResponse.json(
       {

@@ -40,6 +40,26 @@ describe("daa/proxyToEngine", () => {
     });
   });
 
+  it("treats blank DAA_ENGINE_BASE_URL as missing config", async () => {
+    process.env.DAA_ENGINE_BASE_URL = "   ";
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 123,
+      fallbackContentType: "application/json",
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(resp.status).toBe(500);
+    await expect(resp.json()).resolves.toMatchObject({
+      error: "missing DAA_ENGINE_BASE_URL",
+      upstreamPath: "/daa-api/health",
+    });
+  });
+
   it("maps AbortError to a 504 upstream timeout JSON", async () => {
     globalThis.fetch = vi.fn(async () => {
       throw { name: "AbortError" };
