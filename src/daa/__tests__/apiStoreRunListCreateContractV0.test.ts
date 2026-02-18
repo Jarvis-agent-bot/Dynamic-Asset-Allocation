@@ -187,6 +187,17 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(Array.isArray(negativeLimitJson.runs)).toBe(true);
     expect(negativeLimitJson.runs.length).toBe(1);
 
+    const negativeZeroLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=-0&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const negativeZeroLimitRes: Response = await (listMod as any).GET(negativeZeroLimitReq);
+    expect(negativeZeroLimitRes.status).toBe(200);
+    const negativeZeroLimitJson = await negativeZeroLimitRes.json();
+    expect(negativeZeroLimitJson.ok).toBe(true);
+    expect(Array.isArray(negativeZeroLimitJson.runs)).toBe(true);
+    expect(negativeZeroLimitJson.runs.length).toBe(1);
+
     const fractionalLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=2.9&source=%2Fdaa%2Fdashboard", {
       method: "GET",
       headers: { cookie: viewerCookie, accept: "application/json" },
