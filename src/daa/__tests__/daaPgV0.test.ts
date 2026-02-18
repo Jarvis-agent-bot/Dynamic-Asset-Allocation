@@ -71,6 +71,13 @@ describe("daa pg url guard", () => {
     expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
   });
 
+  it("prefers DAA_DB_URL over DATABASE_URL when both are present", () => {
+    process.env.DAA_DB_URL = "postgresql://daa:pass@primary-host:5432/daa";
+    process.env.DATABASE_URL = "postgresql://daa:pass@fallback-host:5432/daa";
+
+    expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@primary-host:5432/daa");
+  });
+
   it("rejects DAA_PG_MEM outside test runtime", () => {
     delete process.env.DAA_DB_URL;
     delete process.env.DATABASE_URL;
