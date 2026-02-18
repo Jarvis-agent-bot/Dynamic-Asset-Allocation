@@ -85,6 +85,12 @@ describe("keyboardFocusMapV0", () => {
     expect(labels).toEqual(["Portfolio", "Prices", "Targets", "Rebalance", "History", "Import/Export"]);
   });
 
+  it("keeps dashboard skip-link labels aligned with operator scan wording", () => {
+    const labels = DASHBOARD_SKIP_LINK_TARGETS_V0.map((item) => item.label);
+
+    expect(labels).toEqual(["Skip to run checklist", "Skip to Step2 events", "Skip to history and audit"]);
+  });
+
   it("renders each target id in the dashboard and market/funds components", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPath = join(here, "../../../app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
