@@ -60,7 +60,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
 
   it("does not import sql.js/sqlite runtime packages in Next DAA server paths", () => {
     const roots = [path.resolve(process.cwd(), "src/daa"), path.resolve(process.cwd(), "app/api/daa")];
-    const forbidden = /\b(sql\.js|sqljs|better-sqlite3|sqlite3|initSqlJs)\b/i;
+    const forbidden = /\b(sql\.js|sqljs|better-sqlite3|sqlite3|@sqlite\.org\/sqlite-wasm|initSqlJs)\b/i;
 
     const offenders: string[] = [];
     for (const root of roots) {
