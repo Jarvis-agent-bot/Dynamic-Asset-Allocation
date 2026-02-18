@@ -36,9 +36,10 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
       optionalDependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
+      pnpm?: { overrides?: Record<string, string> };
     };
 
-    const blocks = [pkg.dependencies, pkg.optionalDependencies, pkg.devDependencies, pkg.peerDependencies];
+    const blocks = [pkg.dependencies, pkg.optionalDependencies, pkg.devDependencies, pkg.peerDependencies, pkg.pnpm?.overrides];
     for (const block of blocks) {
       const keys = Object.keys(block || {});
       expect(keys.some((k) => /^(sql\.js|sqljs|better-sqlite3|sqlite3|sqlite|@sqlite\.org\/sqlite-wasm)$/i.test(k))).toBe(false);
