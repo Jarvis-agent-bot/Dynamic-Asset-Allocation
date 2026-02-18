@@ -8,20 +8,24 @@ function readRepoFile(relPath: string): string {
 }
 
 describe("mainline DOD prod smoke contract", () => {
-  it("keeps /api/daa/engine-health route wired to health proxy contract", () => {
+  it("keeps /api/daa/engine-health route wired for a successful health pass-through", () => {
     const route = readRepoFile("app/api/daa/engine-health/route.ts");
 
+    expect(route).toContain("export async function GET()");
     expect(route).toContain('upstreamPath: "/daa-api/health"');
     expect(route).toContain('method: "GET"');
     expect(route).toContain("isDaaEngineHealthResponse");
     expect(route).toContain("proxyToEngineJson");
+    expect(route).toContain('fallbackContentType: "application/json"');
   });
 
-  it("keeps /daa/dashboard page entrypoint stable", () => {
+  it("keeps /daa/dashboard page entrypoint renderable (not redirect/notFound)", () => {
     const page = readRepoFile("app/daa/dashboard/page.tsx");
 
     expect(page).toContain("export default function DaaDashboardPage()");
     expect(page).toContain("<Suspense");
     expect(page).toContain("DaaDashboardPageClient");
+    expect(page).not.toContain("redirect(");
+    expect(page).not.toContain("notFound(");
   });
 });
