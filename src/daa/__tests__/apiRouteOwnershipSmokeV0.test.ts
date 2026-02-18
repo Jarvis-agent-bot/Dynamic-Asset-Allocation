@@ -70,6 +70,7 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     const deployReadmeText = readFileSync(deployReadmePath, "utf8");
 
     expect(composeText).not.toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=1");
+    expect(composeText).not.toMatch(/daa-web:[\s\S]*?depends_on:[\s\S]*?-\s+daa-api/);
     expect(deployReadmeText).toContain("/api/daa/*");
     expect(deployReadmeText).toContain("owned by Next.js");
     expect(deployReadmeText).toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=0");

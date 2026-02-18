@@ -11,8 +11,6 @@ services:
       - DAA_PY_BASE_URL=http://daa-api:8000
     ports:
       - "127.0.0.1:3000:3000"
-    depends_on:
-      - daa-api
     restart: unless-stopped
 
   # Canonical dev/prod name for the Python engine (served behind /daa-api/).
