@@ -80,3 +80,8 @@ fabric.properties
 /node_modules/
 /.next/
 *.tsbuildinfo
+
+# Local automation artifacts
+.prbody*.md
+**/__pycache__/
+*.py[cod]
