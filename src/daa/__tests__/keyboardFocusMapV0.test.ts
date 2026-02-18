@@ -79,6 +79,12 @@ describe("keyboardFocusMapV0", () => {
     expect(ids).toEqual(["run-checklist", "step2", "history-audit"]);
   });
 
+  it("keeps market/funds quick-jump labels aligned with action-priority wording", () => {
+    const labels = MARKET_FUNDS_QUICK_JUMPS_V0.map((item) => item.label);
+
+    expect(labels).toEqual(["Portfolio", "Prices", "Targets", "Rebalance", "History", "Import/Export"]);
+  });
+
   it("renders each target id in the dashboard and market/funds components", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPath = join(here, "../../../app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
