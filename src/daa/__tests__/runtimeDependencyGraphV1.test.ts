@@ -51,6 +51,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
     const lockText = readFileSync(lockPath, "utf8");
 
     expect(lockText).not.toMatch(/\/sql\.js@/i);
+    expect(lockText).not.toMatch(/\/sqljs@/i);
     expect(lockText).not.toMatch(/\/better-sqlite3@/i);
     expect(lockText).not.toMatch(/\/sqlite3@/i);
     expect(lockText).not.toMatch(/\/sqlite@/i);
