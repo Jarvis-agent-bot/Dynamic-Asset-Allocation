@@ -252,5 +252,16 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(leadingZeroLimitJson.ok).toBe(true);
     expect(Array.isArray(leadingZeroLimitJson.runs)).toBe(true);
     expect(leadingZeroLimitJson.runs.length).toBe(2);
+
+    const scientificLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=1e2&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const scientificLimitRes: Response = await (listMod as any).GET(scientificLimitReq);
+    expect(scientificLimitRes.status).toBe(200);
+    const scientificLimitJson = await scientificLimitRes.json();
+    expect(scientificLimitJson.ok).toBe(true);
+    expect(Array.isArray(scientificLimitJson.runs)).toBe(true);
+    expect(scientificLimitJson.runs.length).toBe(3);
   });
 });
