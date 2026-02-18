@@ -33,6 +33,7 @@ describe("mainline DOD prod smoke contract", () => {
     expect(page).toContain("export default function DaaDashboardPage()");
     expect(page).toContain('import { Suspense } from "react"');
     expect(page).toContain("<Suspense");
+    expect(page).toContain('import DaaDashboardPageClient from "./_components/DaaDashboardPageClient"');
     expect(page).toContain("DaaDashboardPageClient");
     expect(page).toContain("DaaDashboardSkeleton");
     expect(page).toContain("<DaaDashboardPageClient />");
