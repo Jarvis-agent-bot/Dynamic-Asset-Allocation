@@ -16,6 +16,7 @@ describe("mainline DOD prod smoke contract", () => {
     expect(route).toContain('method: "GET"');
     expect(route).toContain("isDaaEngineHealthResponse");
     expect(route).toContain("proxyToEngineJson");
+    expect(route).toContain('parsePositiveIntEnv("DAA_ENGINE_TIMEOUT_MS", 10_000)');
     expect(route).toContain('fallbackContentType: "application/json"');
   });
 
@@ -25,6 +26,8 @@ describe("mainline DOD prod smoke contract", () => {
     expect(page).toContain("export default function DaaDashboardPage()");
     expect(page).toContain("<Suspense");
     expect(page).toContain("DaaDashboardPageClient");
+    expect(page).toContain("DaaDashboardSkeleton");
+    expect(page).toContain("fallback={<DaaDashboardSkeleton />}");
     expect(page).not.toContain("redirect(");
     expect(page).not.toContain("notFound(");
   });
