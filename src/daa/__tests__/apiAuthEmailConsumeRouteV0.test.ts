@@ -115,5 +115,6 @@ describe("/api/daa/auth/email-login/consume route v0", () => {
     const secondLocation = secondRes.headers.get("location") || "";
     expect(secondLocation).toContain("/daa/login");
     expect(secondLocation).toContain("error=email-link-used");
+    expect(secondLocation).toContain("returnTo=%2Fdaa%2Fdashboard");
   });
 });
