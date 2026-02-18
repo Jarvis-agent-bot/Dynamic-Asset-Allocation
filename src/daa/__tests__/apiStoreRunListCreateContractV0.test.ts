@@ -95,6 +95,25 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(unauthorizedListRes.status).toBe(401);
     await expect(unauthorizedListRes.json()).resolves.toMatchObject({ ok: false, error: "unauthorized" });
 
+    const invalidFromReq = new Request("https://example.com/api/daa/store/v0/runs?fromCreatedAt=not-a-date", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const invalidFromRes: Response = await (listMod as any).GET(invalidFromReq);
+    expect(invalidFromRes.status).toBe(400);
+    await expect(invalidFromRes.json()).resolves.toMatchObject({ ok: false, error: "invalid fromCreatedAt" });
+
+    const invalidRangeReq = new Request(
+      "https://example.com/api/daa/store/v0/runs?fromCreatedAt=2026-02-01T00:00:00.000Z&toCreatedAt=2026-01-01T00:00:00.000Z",
+      {
+        method: "GET",
+        headers: { cookie: viewerCookie, accept: "application/json" },
+      }
+    );
+    const invalidRangeRes: Response = await (listMod as any).GET(invalidRangeReq);
+    expect(invalidRangeRes.status).toBe(400);
+    await expect(invalidRangeRes.json()).resolves.toMatchObject({ ok: false, error: "fromCreatedAt must be <= toCreatedAt" });
+
     const listReq = new Request("https://example.com/api/daa/store/v0/runs?limit=999&source=%2Fdaa%2Fdashboard&status=created", {
       method: "GET",
       headers: { cookie: viewerCookie, accept: "application/json" },
