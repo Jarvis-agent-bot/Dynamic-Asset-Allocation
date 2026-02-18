@@ -88,7 +88,21 @@ describe("daa/email sendEmailV0", () => {
     if (!r.ok) {
       expect(r.skipped).toBe(false);
       expect(r.error).toBe("HTTP 400");
+      expect(r.error).not.toContain("bad request");
     }
+  });
+
+  it("preserves provider HTTP status in sanitized errors", async () => {
+    process.env.RESEND_API_KEY = "rk_x";
+    process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
+
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 503 } as any)) as any;
+
+    await expect(sendEmailV0({ to: "a@b.com", subject: "s", text: "t" })).resolves.toEqual({
+      ok: false,
+      skipped: false,
+      error: "HTTP 503",
+    });
   });
 
   it("returns provider-response error when id is missing", async () => {
