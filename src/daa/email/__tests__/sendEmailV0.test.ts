@@ -101,6 +101,24 @@ describe("daa/email sendEmailV0", () => {
     expect(r).toEqual({ ok: false, skipped: false, error: "invalid provider response" });
   });
 
+  it("trims provider id and rejects blank-only ids", async () => {
+    process.env.RESEND_API_KEY = "rk_x";
+    process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
+
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ id: "   " }) } as any)) as any;
+    await expect(sendEmailV0({ to: "a@b.com", subject: "s", text: "t" })).resolves.toEqual({
+      ok: false,
+      skipped: false,
+      error: "invalid provider response",
+    });
+
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ id: "  em_trim  " }) } as any)) as any;
+    await expect(sendEmailV0({ to: "a@b.com", subject: "s", text: "t" })).resolves.toEqual({
+      ok: true,
+      providerMessageId: "em_trim",
+    });
+  });
+
   it("returns timeout error when request exceeds timeout", async () => {
     process.env.RESEND_API_KEY = "rk_x";
     process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
