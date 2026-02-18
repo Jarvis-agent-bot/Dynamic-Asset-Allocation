@@ -62,4 +62,16 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     expect(text).toMatch(/location\s+\^~\s+\/api\/daa\/[\s\S]*?proxy_pass\s+http:\/\/127\.0\.0\.1:3000/);
     expect(text).toMatch(/location\s+\^~\s+\/daa-api\/[\s\S]*?proxy_pass\s+http:\/\/127\.0\.0\.1:18000/);
   });
+
+  it("keeps compose/docs aligned with engine-only Python service", () => {
+    const composePath = path.resolve(process.cwd(), "docker-compose.yml");
+    const composeText = readFileSync(composePath, "utf8");
+    const deployReadmePath = path.resolve(process.cwd(), "deploy/README.md");
+    const deployReadmeText = readFileSync(deployReadmePath, "utf8");
+
+    expect(composeText).not.toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=1");
+    expect(deployReadmeText).toContain("/api/daa/*");
+    expect(deployReadmeText).toContain("owned by Next.js");
+    expect(deployReadmeText).toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=0");
+  });
 });
