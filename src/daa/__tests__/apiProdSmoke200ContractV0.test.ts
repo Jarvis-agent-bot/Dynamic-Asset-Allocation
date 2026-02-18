@@ -33,6 +33,7 @@ describe("mainline DOD prod smoke contract", () => {
     expect(page).toContain("DaaDashboardPageClient");
     expect(page).toContain("DaaDashboardSkeleton");
     expect(page).toContain("<DaaDashboardPageClient />");
+    expect(page).toContain("`useSearchParams()` to be behind a Suspense boundary.");
     expect(page).toContain("fallback={<DaaDashboardSkeleton />}");
     expect(page).not.toContain("redirect(");
     expect(page).not.toContain("notFound(");
