@@ -79,6 +79,18 @@ describe("dashboardVisualSurfacesV0", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("keeps operator scan flow grouped in core -> inputs -> analysis order", () => {
+    const groups = DASHBOARD_VISUAL_SURFACES_V0.map((item) => item.group);
+    const firstInputs = groups.indexOf("inputs");
+    const firstAnalysis = groups.indexOf("analysis");
+
+    expect(firstInputs).toBeGreaterThan(0);
+    expect(firstAnalysis).toBeGreaterThan(firstInputs);
+    expect(groups.slice(0, firstInputs).every((g) => g === "core")).toBe(true);
+    expect(groups.slice(firstInputs, firstAnalysis).every((g) => g === "inputs")).toBe(true);
+    expect(groups.slice(firstAnalysis).every((g) => g === "analysis")).toBe(true);
+  });
+
   it("renders each critical surface section in the dashboard page", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPageClientPath = join(
