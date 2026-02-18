@@ -43,6 +43,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
         overrides?: Record<string, string>;
         patchedDependencies?: Record<string, string>;
         packageExtensions?: Record<string, unknown>;
+        peerDependencyRules?: { allowedVersions?: Record<string, string> };
       };
     };
 
@@ -55,6 +56,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
       pkg.pnpm?.overrides,
       pkg.pnpm?.patchedDependencies,
       (pkg.pnpm?.packageExtensions as Record<string, string> | undefined),
+      pkg.pnpm?.peerDependencyRules?.allowedVersions,
     ];
     for (const block of blocks) {
       const keys = Object.keys(block || {});
