@@ -6,6 +6,12 @@ import { listDaaRunsV0 } from "../../../../../../src/daa/storeV0";
 
 export const runtime = "nodejs";
 
+function isIsoDateTimeV0(value: string): boolean {
+  if (!value) return false;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms);
+}
+
 export async function GET(req: Request) {
   const denied = await requireDaaAdminViewerAuth(req);
   if (denied) return denied;
@@ -25,6 +31,16 @@ export async function GET(req: Request) {
   const actor = String(url.searchParams.get("actor") ?? "").trim() || undefined;
   const status = String(url.searchParams.get("status") ?? "").trim() || undefined;
   const source = String(url.searchParams.get("source") ?? "").trim() || undefined;
+
+  if (fromCreatedAt && !isIsoDateTimeV0(fromCreatedAt)) {
+    return NextResponse.json({ ok: false, error: "invalid fromCreatedAt" }, { status: 400 });
+  }
+  if (toCreatedAt && !isIsoDateTimeV0(toCreatedAt)) {
+    return NextResponse.json({ ok: false, error: "invalid toCreatedAt" }, { status: 400 });
+  }
+  if (fromCreatedAt && toCreatedAt && Date.parse(fromCreatedAt) > Date.parse(toCreatedAt)) {
+    return NextResponse.json({ ok: false, error: "fromCreatedAt must be <= toCreatedAt" }, { status: 400 });
+  }
 
   try {
     const runs = await listDaaRunsV0({ limit, beforeCreatedAt, beforeRunId, fromCreatedAt, toCreatedAt, actor, status, source });
