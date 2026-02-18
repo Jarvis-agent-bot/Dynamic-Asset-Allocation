@@ -103,6 +103,14 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(invalidFromRes.status).toBe(400);
     await expect(invalidFromRes.json()).resolves.toMatchObject({ ok: false, error: "invalid fromCreatedAt" });
 
+    const invalidToReq = new Request("https://example.com/api/daa/store/v0/runs?toCreatedAt=not-a-date", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const invalidToRes: Response = await (listMod as any).GET(invalidToReq);
+    expect(invalidToRes.status).toBe(400);
+    await expect(invalidToRes.json()).resolves.toMatchObject({ ok: false, error: "invalid toCreatedAt" });
+
     const invalidRangeReq = new Request(
       "https://example.com/api/daa/store/v0/runs?fromCreatedAt=2026-02-01T00:00:00.000Z&toCreatedAt=2026-01-01T00:00:00.000Z",
       {
