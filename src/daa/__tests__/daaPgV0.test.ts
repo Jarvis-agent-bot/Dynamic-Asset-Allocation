@@ -64,6 +64,13 @@ describe("daa pg url guard", () => {
     expect(() => getDaaPgUrlV0()).toThrowError(/unsupported database URL scheme/);
   });
 
+  it("normalizes sqlalchemy DATABASE_URL fallback when DAA_DB_URL is blank", () => {
+    process.env.DAA_DB_URL = "   ";
+    process.env.DATABASE_URL = "postgresql+psycopg://daa:pass@localhost:5432/daa";
+
+    expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
+  });
+
   it("rejects DAA_PG_MEM outside test runtime", () => {
     delete process.env.DAA_DB_URL;
     delete process.env.DATABASE_URL;
