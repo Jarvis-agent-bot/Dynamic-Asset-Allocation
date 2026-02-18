@@ -188,4 +188,20 @@ describe("daa/email sendEmailV0", () => {
     const body = JSON.parse(init.body);
     expect(body).toEqual({ from: "admin@example.com", to: "a@b.com", subject: "s", text: "t" });
   });
+
+  it("trims env and arg fields before sending to Resend", async () => {
+    process.env.RESEND_API_KEY = "  rk_trim  ";
+    process.env.DAA_AUTH_EMAIL_FROM = "  admin@example.com  ";
+
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: "em_trimmed" }) } as any));
+    globalThis.fetch = fetchMock as any;
+
+    const r = await sendEmailV0({ to: "  a@b.com  ", subject: "  s  ", text: "  t  " });
+    expect(r).toEqual({ ok: true, providerMessageId: "em_trimmed" });
+
+    const [_url, init] = fetchMock.mock.calls[0] as any;
+    expect(init?.headers?.authorization).toBe("Bearer rk_trim");
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({ from: "admin@example.com", to: "a@b.com", subject: "s", text: "t" });
+  });
 });
