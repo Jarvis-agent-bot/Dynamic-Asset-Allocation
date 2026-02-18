@@ -91,6 +91,12 @@ describe("dashboardVisualSurfacesV0", () => {
     expect(groups.slice(firstAnalysis).every((g) => g === "analysis")).toBe(true);
   });
 
+  it("keeps core section priority order stable for operator triage", () => {
+    const coreIds = DASHBOARD_VISUAL_SURFACES_V0.filter((item) => item.group === "core").map((item) => item.id);
+
+    expect(coreIds).toEqual(["run-checklist", "confirm-executed", "history-audit", "export"]);
+  });
+
   it("renders each critical surface section in the dashboard page", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPageClientPath = join(
