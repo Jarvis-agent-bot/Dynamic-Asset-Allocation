@@ -41,7 +41,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
     const blocks = [pkg.dependencies, pkg.optionalDependencies, pkg.devDependencies, pkg.peerDependencies];
     for (const block of blocks) {
       const keys = Object.keys(block || {});
-      expect(keys.some((k) => /^(sql\.js|sqljs|better-sqlite3|sqlite3|sqlite)$/i.test(k))).toBe(false);
+      expect(keys.some((k) => /^(sql\.js|sqljs|better-sqlite3|sqlite3|sqlite|@sqlite\.org\/sqlite-wasm)$/i.test(k))).toBe(false);
     }
   });
 
@@ -55,6 +55,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
     expect(lockText).not.toMatch(/\/better-sqlite3@/i);
     expect(lockText).not.toMatch(/\/sqlite3@/i);
     expect(lockText).not.toMatch(/\/sqlite@/i);
+    expect(lockText).not.toMatch(/\/@sqlite\.org\/sqlite-wasm@/i);
   });
 
   it("does not import sql.js/sqlite runtime packages in Next DAA server paths", () => {
