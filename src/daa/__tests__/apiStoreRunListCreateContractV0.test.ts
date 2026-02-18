@@ -102,6 +102,18 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     const createResTwo: Response = await (createMod as any).POST(createReqTwo);
     expect(createResTwo.status).toBe(200);
 
+    const createReqThree = new Request("https://example.com/api/daa/store/v0/run", {
+      method: "POST",
+      headers: { cookie: editorCookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "rebalance.preview",
+        status: "created",
+        payload: { source: "/daa/dashboard", actor: "contract-test", tag: "v0-three" },
+      }),
+    });
+    const createResThree: Response = await (createMod as any).POST(createReqThree);
+    expect(createResThree.status).toBe(200);
+
     const unauthorizedListReq = new Request("https://example.com/api/daa/store/v0/runs?limit=5", { method: "GET" });
     const unauthorizedListRes: Response = await (listMod as any).GET(unauthorizedListReq);
     expect(unauthorizedListRes.status).toBe(401);
@@ -174,5 +186,16 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(fractionalLimitJson.ok).toBe(true);
     expect(Array.isArray(fractionalLimitJson.runs)).toBe(true);
     expect(fractionalLimitJson.runs.length).toBe(2);
+
+    const invalidLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=NaN&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const invalidLimitRes: Response = await (listMod as any).GET(invalidLimitReq);
+    expect(invalidLimitRes.status).toBe(200);
+    const invalidLimitJson = await invalidLimitRes.json();
+    expect(invalidLimitJson.ok).toBe(true);
+    expect(Array.isArray(invalidLimitJson.runs)).toBe(true);
+    expect(invalidLimitJson.runs.length).toBe(3);
   });
 });
