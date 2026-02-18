@@ -140,5 +140,16 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(createdRun.status).toBe("created");
     expect(createdRun.source).toBe("/daa/dashboard");
     expect(createdRun.actor).toBe("contract-test");
+
+    const minLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=0&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const minLimitRes: Response = await (listMod as any).GET(minLimitReq);
+    expect(minLimitRes.status).toBe(200);
+    const minLimitJson = await minLimitRes.json();
+    expect(minLimitJson.ok).toBe(true);
+    expect(Array.isArray(minLimitJson.runs)).toBe(true);
+    expect(minLimitJson.runs.length).toBe(1);
   });
 });
