@@ -103,6 +103,18 @@ describe("dashboardVisualSurfacesV0", () => {
     expect(analysisIds).toEqual(["step2", "step4", "step5", "step6", "step7"]);
   });
 
+  it("keeps analysis labels aligned with expected step wording", () => {
+    const analysisTitles = DASHBOARD_VISUAL_SURFACES_V0.filter((item) => item.group === "analysis").map((item) => item.title);
+
+    expect(analysisTitles).toEqual([
+      "Step2 — Events",
+      "Step4 — Recommendation",
+      "Step5 — Explain",
+      "Step6 — Human",
+      "Step7 — Tags",
+    ]);
+  });
+
   it("renders each critical surface section in the dashboard page", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPageClientPath = join(
