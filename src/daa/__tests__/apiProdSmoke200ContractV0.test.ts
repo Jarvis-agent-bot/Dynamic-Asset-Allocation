@@ -25,6 +25,7 @@ describe("mainline DOD prod smoke contract", () => {
     expect(route).toContain("Health proxy for the Python engine behind nginx (/daa-api/...).");
     expect(route).toContain("Enforces the v0 contract to catch accidental drift early.");
     expect(route).toContain('validate: isDaaEngineHealthResponse');
+    expect(route).toContain("timeoutMs,");
     expect(route).toContain('fallbackContentType: "application/json"');
   });
 
