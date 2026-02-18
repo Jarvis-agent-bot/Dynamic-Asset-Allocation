@@ -90,6 +90,18 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(typeof createJson.runId).toBe("string");
     expect(createJson.runId.length).toBeGreaterThan(0);
 
+    const createReqTwo = new Request("https://example.com/api/daa/store/v0/run", {
+      method: "POST",
+      headers: { cookie: editorCookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "rebalance.preview",
+        status: "created",
+        payload: { source: "/daa/dashboard", actor: "contract-test", tag: "v0-two" },
+      }),
+    });
+    const createResTwo: Response = await (createMod as any).POST(createReqTwo);
+    expect(createResTwo.status).toBe(200);
+
     const unauthorizedListReq = new Request("https://example.com/api/daa/store/v0/runs?limit=5", { method: "GET" });
     const unauthorizedListRes: Response = await (listMod as any).GET(unauthorizedListReq);
     expect(unauthorizedListRes.status).toBe(401);
@@ -151,5 +163,16 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(minLimitJson.ok).toBe(true);
     expect(Array.isArray(minLimitJson.runs)).toBe(true);
     expect(minLimitJson.runs.length).toBe(1);
+
+    const fractionalLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=2.9&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const fractionalLimitRes: Response = await (listMod as any).GET(fractionalLimitReq);
+    expect(fractionalLimitRes.status).toBe(200);
+    const fractionalLimitJson = await fractionalLimitRes.json();
+    expect(fractionalLimitJson.ok).toBe(true);
+    expect(Array.isArray(fractionalLimitJson.runs)).toBe(true);
+    expect(fractionalLimitJson.runs.length).toBe(2);
   });
 });
