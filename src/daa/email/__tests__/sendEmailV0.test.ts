@@ -139,6 +139,22 @@ describe("daa/email sendEmailV0", () => {
     }
   });
 
+  it("clamps timeout to minimum 10ms when env is too small", async () => {
+    process.env.RESEND_API_KEY = "rk_x";
+    process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
+    process.env.DAA_RESEND_TIMEOUT_MS = "0";
+
+    globalThis.fetch = vi.fn(async (_url: any, init: any) => {
+      init?.signal?.throwIfAborted?.();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      init?.signal?.throwIfAborted?.();
+      return { ok: true, json: async () => ({ id: "em_timeout_min" }) } as any;
+    }) as any;
+
+    const r = await sendEmailV0({ to: "a@b.com", subject: "s", text: "t" });
+    expect(r).toEqual({ ok: false, skipped: false, error: "timeout after 10ms" });
+  });
+
   it("posts to Resend with expected payload", async () => {
     process.env.RESEND_API_KEY = "rk_x";
     process.env.DAA_AUTH_EMAIL_FROM = "admin@example.com";
