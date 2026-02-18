@@ -97,6 +97,12 @@ describe("dashboardVisualSurfacesV0", () => {
     expect(coreIds).toEqual(["run-checklist", "confirm-executed", "history-audit", "export"]);
   });
 
+  it("keeps analysis section progression stable for operator scan flow", () => {
+    const analysisIds = DASHBOARD_VISUAL_SURFACES_V0.filter((item) => item.group === "analysis").map((item) => item.id);
+
+    expect(analysisIds).toEqual(["step2", "step4", "step5", "step6", "step7"]);
+  });
+
   it("renders each critical surface section in the dashboard page", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPageClientPath = join(
