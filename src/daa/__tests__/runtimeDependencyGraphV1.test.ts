@@ -69,4 +69,18 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("keeps pg-mem wiring isolated to daaPgV0 test shim", () => {
+    const root = path.resolve(process.cwd(), "src/daa");
+    const offenders: string[] = [];
+
+    for (const file of listRuntimeCodeFiles(root)) {
+      const rel = path.relative(process.cwd(), file);
+      if (rel === "src/daa/pg/daaPgV0.ts") continue;
+      const text = readFileSync(file, "utf8");
+      if (/\bpg-mem\b/i.test(text)) offenders.push(rel);
+    }
+
+    expect(offenders).toEqual([]);
+  });
 });
