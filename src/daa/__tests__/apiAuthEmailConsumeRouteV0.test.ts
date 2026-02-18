@@ -96,4 +96,24 @@ describe("/api/daa/auth/email-login/consume route v0", () => {
     expect(setCookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
     expect(setCookie).toMatch(/Path=\/api\/daa(?:;|\/)/i);
   });
+
+  it("redirects already-used token with email-link-used error", async () => {
+    resetPgMem();
+
+    const account = await createDaaAuthAccountV0({ username: "consume-used@example.com", password: "pw-1", roles: ["viewer"] });
+    const { token } = await createDaaAuthEmailLoginTokenV0({ accountId: account.accountId, ttlMinutes: 15, userAgent: "ua", ip: "1.2.3.4" });
+
+    const mod = await import("../../../app/api/daa/auth/email-login/consume/route");
+    const consumeUrl =
+      "https://example.com/api/daa/auth/email-login/consume?token=" + encodeURIComponent(token) + "&returnTo=" + encodeURIComponent("/daa/dashboard");
+
+    const firstRes: Response = await (mod as any).GET(new Request(consumeUrl, { method: "GET" }));
+    expect(firstRes.status).toBe(302);
+
+    const secondRes: Response = await (mod as any).GET(new Request(consumeUrl, { method: "GET" }));
+    expect(secondRes.status).toBe(302);
+    const secondLocation = secondRes.headers.get("location") || "";
+    expect(secondLocation).toContain("/daa/login");
+    expect(secondLocation).toContain("error=email-link-used");
+  });
 });
