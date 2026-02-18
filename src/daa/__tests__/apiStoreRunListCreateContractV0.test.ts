@@ -307,5 +307,16 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(infinityLimitJson.ok).toBe(true);
     expect(Array.isArray(infinityLimitJson.runs)).toBe(true);
     expect(infinityLimitJson.runs.length).toBe(3);
+
+    const negativeInfinityLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=-Infinity&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const negativeInfinityLimitRes: Response = await (listMod as any).GET(negativeInfinityLimitReq);
+    expect(negativeInfinityLimitRes.status).toBe(200);
+    const negativeInfinityLimitJson = await negativeInfinityLimitRes.json();
+    expect(negativeInfinityLimitJson.ok).toBe(true);
+    expect(Array.isArray(negativeInfinityLimitJson.runs)).toBe(true);
+    expect(negativeInfinityLimitJson.runs.length).toBe(3);
   });
 });
