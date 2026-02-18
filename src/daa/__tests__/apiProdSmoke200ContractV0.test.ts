@@ -32,6 +32,7 @@ describe("mainline DOD prod smoke contract", () => {
     expect(page).toContain("<Suspense");
     expect(page).toContain("DaaDashboardPageClient");
     expect(page).toContain("DaaDashboardSkeleton");
+    expect(page).toContain("<DaaDashboardPageClient />");
     expect(page).toContain("fallback={<DaaDashboardSkeleton />}");
     expect(page).not.toContain("redirect(");
     expect(page).not.toContain("notFound(");
