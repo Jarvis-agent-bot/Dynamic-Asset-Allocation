@@ -143,6 +143,25 @@ describe("daa/proxyToEngine", () => {
     await expect(resp.text()).resolves.toBe("OK");
   });
 
+  it("preserves implicit text/plain content-type when upstream omits content-type", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response("OK", {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngine({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+    });
+
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get("content-type")).toContain("text/plain");
+    await expect(resp.text()).resolves.toBe("OK");
+  });
+
   it("proxyToEngineJson parses JSON and preserves upstream status", async () => {
     globalThis.fetch = vi.fn(async () => {
       return new Response(JSON.stringify({ ok: true }), {
