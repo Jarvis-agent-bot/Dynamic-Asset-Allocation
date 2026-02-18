@@ -17,8 +17,9 @@ function getStateV0(): PgStateV0 {
 }
 
 export function getDaaPgUrlV0(): string | null {
-  const raw = typeof process.env.DAA_DB_URL === "string" ? process.env.DAA_DB_URL : typeof process.env.DATABASE_URL === "string" ? process.env.DATABASE_URL : "";
-  const v = (raw || "").trim();
+  const daaDbUrl = typeof process.env.DAA_DB_URL === "string" ? process.env.DAA_DB_URL.trim() : "";
+  const databaseUrl = typeof process.env.DATABASE_URL === "string" ? process.env.DATABASE_URL.trim() : "";
+  const v = daaDbUrl || databaseUrl;
   if (!v) return null;
 
   if (/^(sqlite:|file:)/i.test(v)) {
