@@ -74,6 +74,7 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     expect(composeText).toContain("DAA_PY_BASE_URL=http://daa-api:8000");
     expect(composeText).not.toMatch(/daa-web:[\s\S]*?depends_on:[\s\S]*?-\s+daa-api/);
     expect(deployReadmeText).toContain("/api/daa/*");
+    expect(deployReadmeText).toContain("/daa-api/");
     expect(deployReadmeText).toContain("owned by Next.js");
     expect(deployReadmeText).toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=0");
   });
