@@ -60,6 +60,29 @@ describe("daa/proxyToEngine", () => {
     });
   });
 
+  it("normalizes trailing slash in DAA_ENGINE_BASE_URL before proxy fetch", async () => {
+    process.env.DAA_ENGINE_BASE_URL = "https://engine.test/";
+
+    const fetchSpy = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 123,
+      fallbackContentType: "application/json",
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect((fetchSpy as any).mock.calls[0]?.[0]).toBe("https://engine.test/daa-api/health");
+    expect(resp.status).toBe(200);
+  });
+
   it("maps AbortError to a 504 upstream timeout JSON", async () => {
     globalThis.fetch = vi.fn(async () => {
       throw { name: "AbortError" };
