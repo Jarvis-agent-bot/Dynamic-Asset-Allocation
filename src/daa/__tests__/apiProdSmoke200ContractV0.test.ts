@@ -31,6 +31,7 @@ describe("mainline DOD prod smoke contract", () => {
     const page = readRepoFile("app/daa/dashboard/page.tsx");
 
     expect(page).toContain("export default function DaaDashboardPage()");
+    expect(page).toContain('import { Suspense } from "react"');
     expect(page).toContain("<Suspense");
     expect(page).toContain("DaaDashboardPageClient");
     expect(page).toContain("DaaDashboardSkeleton");
