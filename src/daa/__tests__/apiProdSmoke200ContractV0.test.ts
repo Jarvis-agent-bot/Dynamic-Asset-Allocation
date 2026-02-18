@@ -12,6 +12,7 @@ describe("mainline DOD prod smoke contract", () => {
     const route = readRepoFile("app/api/daa/engine-health/route.ts");
 
     expect(route).toContain("export async function GET()");
+    expect(route).not.toContain('export const runtime = "edge"');
     expect(route).toContain('upstreamPath: "/daa-api/health"');
     expect(route).toContain('method: "GET"');
     expect(route).toContain("isDaaEngineHealthResponse");
