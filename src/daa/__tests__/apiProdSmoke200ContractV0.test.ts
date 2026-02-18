@@ -17,6 +17,7 @@ describe("mainline DOD prod smoke contract", () => {
     expect(route).toContain('method: "GET"');
     expect(route).toContain('import { parsePositiveIntEnv } from "@/src/daa/env"');
     expect(route).toContain('import { proxyToEngineJson } from "@/src/daa/proxyToEngine"');
+    expect(route).toContain('import { isDaaEngineHealthResponse } from "@/src/core/contracts/daaEngine"');
     expect(route).toContain("isDaaEngineHealthResponse");
     expect(route).toContain("proxyToEngineJson");
     expect(route).toContain('parsePositiveIntEnv("DAA_ENGINE_TIMEOUT_MS", 10_000)');
