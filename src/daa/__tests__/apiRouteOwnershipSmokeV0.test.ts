@@ -77,5 +77,6 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     expect(deployReadmeText).toContain("/daa-api/");
     expect(deployReadmeText).toContain("owned by Next.js");
     expect(deployReadmeText).toContain("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=0");
+    expect(deployReadmeText).toContain("Optional (legacy override): `DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=1`");
   });
 });
