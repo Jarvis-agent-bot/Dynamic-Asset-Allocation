@@ -62,6 +62,17 @@ describe("keyboardFocusMapV0", () => {
     expect(new Set(marketFundsIds).size).toBe(marketFundsIds.length);
   });
 
+  it("keeps market/funds quick jumps ordered by operator step-card priority", () => {
+    const ids = MARKET_FUNDS_QUICK_JUMPS_V0.map((item) => item.targetId);
+
+    expect(ids.indexOf("portfolio")).toBe(0);
+    expect(ids.indexOf("prices")).toBe(1);
+    expect(ids.indexOf("target-weights")).toBe(2);
+    expect(ids.indexOf("rebalance")).toBe(3);
+    expect(ids.indexOf("dynamic-rebalance-run-history")).toBeGreaterThan(ids.indexOf("rebalance"));
+    expect(ids.indexOf("import")).toBe(ids.length - 1);
+  });
+
   it("renders each target id in the dashboard and market/funds components", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPath = join(here, "../../../app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
