@@ -37,6 +37,8 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
       devDependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
       resolutions?: Record<string, string>;
+      bundleDependencies?: string[];
+      bundledDependencies?: string[];
       pnpm?: {
         overrides?: Record<string, string>;
         patchedDependencies?: Record<string, string>;
@@ -58,6 +60,9 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
       const keys = Object.keys(block || {});
       expect(keys.some((k) => /^(sql\.js|sqljs|better-sqlite3|sqlite3|sqlite|@sqlite\.org\/sqlite-wasm|wa-sqlite)$/i.test(k))).toBe(false);
     }
+
+    const bundledNames = [...(pkg.bundleDependencies || []), ...(pkg.bundledDependencies || [])];
+    expect(bundledNames.some((name) => /^(sql\.js|sqljs|better-sqlite3|sqlite3|sqlite|@sqlite\.org\/sqlite-wasm|wa-sqlite)$/i.test(name))).toBe(false);
   });
 
   it("does not lock sqlite/sql.js packages in pnpm lockfile", () => {
