@@ -57,6 +57,13 @@ describe("daa pg url guard", () => {
     expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
   });
 
+  it("still rejects non-Postgres DATABASE_URL fallback schemes", () => {
+    process.env.DAA_DB_URL = "   ";
+    process.env.DATABASE_URL = "mysql://user:pass@localhost:3306/daa";
+
+    expect(() => getDaaPgUrlV0()).toThrowError(/unsupported database URL scheme/);
+  });
+
   it("rejects DAA_PG_MEM outside test runtime", () => {
     delete process.env.DAA_DB_URL;
     delete process.env.DATABASE_URL;
