@@ -63,7 +63,7 @@ describe("postEmailLoginLinkV0", () => {
       },
     });
     mocks.revokeToken.mockResolvedValue({ ok: true });
-    mocks.sendEmail.mockResolvedValue({ ok: true });
+    mocks.sendEmail.mockResolvedValue({ ok: true, providerMessageId: "em_123" });
     mocks.appendAudit.mockResolvedValue({ ok: true });
   });
 
@@ -94,7 +94,7 @@ describe("postEmailLoginLinkV0", () => {
     expect(mocks.appendAudit).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "auth.email_otp.sent",
-        payload: expect.objectContaining({ provider: "resend", deliveryOk: true }),
+        payload: expect.objectContaining({ provider: "resend", deliveryOk: true, providerMessageId: "em_123" }),
       })
     );
   });

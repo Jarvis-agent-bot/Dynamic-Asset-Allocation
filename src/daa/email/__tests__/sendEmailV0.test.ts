@@ -129,7 +129,7 @@ describe("daa/email sendEmailV0", () => {
     globalThis.fetch = fetchMock as any;
 
     const r = await sendEmailV0({ to: "a@b.com", subject: "s", text: "t" });
-    expect(r).toEqual({ ok: true });
+    expect(r).toEqual({ ok: true, providerMessageId: "em_ok" });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as any;

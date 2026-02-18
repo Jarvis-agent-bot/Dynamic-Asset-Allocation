@@ -104,6 +104,7 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
     payload: {
       provider: "resend",
       deliveryOk: delivery.ok,
+      providerMessageId: delivery.ok ? delivery.providerMessageId : undefined,
       skipped: delivery.ok ? undefined : Boolean(delivery.skipped),
       error: delivery.ok ? undefined : delivery.error,
       tokenRevokedOnDeliveryFailure: delivery.ok ? undefined : tokenRevokedOnDeliveryFailure,

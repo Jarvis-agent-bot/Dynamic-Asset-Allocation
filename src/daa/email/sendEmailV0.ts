@@ -4,6 +4,17 @@ type SendEmailArgsV0 = {
   text: string;
 };
 
+type SendEmailOkV0 = {
+  ok: true;
+  providerMessageId: string;
+};
+
+type SendEmailErrV0 = {
+  ok: false;
+  skipped: boolean;
+  error: string;
+};
+
 function looksLikeEmailV0(value: string): boolean {
   if (!value || /\s/.test(value)) return false;
   const at = value.indexOf("@");
@@ -16,7 +27,7 @@ function hasHeaderBreakV0(value: string): boolean {
   return value.includes("\n") || value.includes("\r");
 }
 
-export async function sendEmailV0(args: SendEmailArgsV0): Promise<{ ok: true } | { ok: false; skipped: boolean; error: string }> {
+export async function sendEmailV0(args: SendEmailArgsV0): Promise<SendEmailOkV0 | SendEmailErrV0> {
   const key = typeof process.env.RESEND_API_KEY === "string" ? process.env.RESEND_API_KEY.trim() : "";
   const from = typeof process.env.DAA_AUTH_EMAIL_FROM === "string" ? process.env.DAA_AUTH_EMAIL_FROM.trim() : "";
 
@@ -69,7 +80,7 @@ export async function sendEmailV0(args: SendEmailArgsV0): Promise<{ ok: true } |
       return { ok: false, skipped: false, error: "invalid provider response" };
     }
 
-    return { ok: true };
+    return { ok: true, providerMessageId };
   } catch (error: any) {
     if (error?.name === "AbortError") {
       return { ok: false, skipped: false, error: `timeout after ${timeoutMs}ms` };
