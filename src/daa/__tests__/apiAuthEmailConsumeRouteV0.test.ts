@@ -116,5 +116,10 @@ describe("/api/daa/auth/email-login/consume route v0", () => {
     expect(secondLocation).toContain("/daa/login");
     expect(secondLocation).toContain("error=email-link-used");
     expect(secondLocation).toContain("returnTo=%2Fdaa%2Fdashboard");
+    expect((secondRes.headers.get("cache-control") || "").toLowerCase()).toContain("no-store");
+
+    const secondSetCookie = secondRes.headers.get("set-cookie") || "";
+    expect(secondSetCookie).toContain(`${DAA_AUTH_SESSION_COOKIE_V0}=`);
+    expect(secondSetCookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
   });
 });
