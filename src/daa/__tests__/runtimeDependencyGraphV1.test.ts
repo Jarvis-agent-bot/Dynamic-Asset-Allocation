@@ -36,6 +36,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
       optionalDependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
+      resolutions?: Record<string, string>;
       pnpm?: { overrides?: Record<string, string>; patchedDependencies?: Record<string, string> };
     };
 
@@ -44,6 +45,7 @@ describe("DAA runtime dependency guard (sql.js removal)", () => {
       pkg.optionalDependencies,
       pkg.devDependencies,
       pkg.peerDependencies,
+      pkg.resolutions,
       pkg.pnpm?.overrides,
       pkg.pnpm?.patchedDependencies,
     ];
