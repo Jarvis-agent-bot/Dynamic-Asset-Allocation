@@ -62,6 +62,7 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     expect(text).toMatch(/location\s+\^~\s+\/api\/daa\/[\s\S]*?proxy_pass\s+http:\/\/127\.0\.0\.1:3000/);
     expect(text).toMatch(/location\s+\^~\s+\/daa-api\/[\s\S]*?proxy_pass\s+http:\/\/127\.0\.0\.1:18000/);
     expect(text).toContain("IMPORTANT: without this, /api/* may be routed elsewhere on the VPS and the v0 UI will 404.");
+    expect(text).toContain("Step4/5 UI can call POST /api/daa/rebalance/simulate");
   });
 
   it("keeps compose/docs aligned with engine-only Python service", () => {
