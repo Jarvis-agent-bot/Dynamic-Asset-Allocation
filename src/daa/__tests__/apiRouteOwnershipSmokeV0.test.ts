@@ -67,6 +67,7 @@ describe("DAA public API route ownership smoke (Next.js-only)", () => {
     expect(text).toContain("/daa-api/* -> Python engine");
     expect(text).toContain("/daa handled elsewhere (Next.js app router pages).");
     expect(text).toContain("This snippet wires:");
+    expect(text).toContain("without this, /api/* may be routed elsewhere on the VPS");
   });
 
   it("keeps compose/docs aligned with engine-only Python service", () => {
