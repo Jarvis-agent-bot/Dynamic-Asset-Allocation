@@ -73,6 +73,12 @@ describe("keyboardFocusMapV0", () => {
     expect(ids.indexOf("import")).toBe(ids.length - 1);
   });
 
+  it("keeps dashboard skip links in top-to-bottom operator scan order", () => {
+    const ids = DASHBOARD_SKIP_LINK_TARGETS_V0.map((item) => item.targetId);
+
+    expect(ids).toEqual(["run-checklist", "step2", "history-audit"]);
+  });
+
   it("renders each target id in the dashboard and market/funds components", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPath = join(here, "../../../app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
