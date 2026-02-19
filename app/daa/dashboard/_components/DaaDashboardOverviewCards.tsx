@@ -130,6 +130,7 @@ export default function DaaDashboardOverviewCards() {
   const positionsCount = portfolio?.positions ? Object.keys(portfolio.positions).length : 0;
 
   const latestRun = Array.isArray(runsResp?.runs) && runsResp?.runs?.length ? runsResp?.runs[0] : null;
+  const recentRuns = Array.isArray(runsResp?.runs) ? runsResp.runs.slice(0, 3) : [];
   const storeOk = !!(runsResp && runsResp.ok);
 
   useEffect(() => {
@@ -547,6 +548,20 @@ export default function DaaDashboardOverviewCards() {
                 <span className="font-medium">{latestRun.kind}</span> · {latestRun.status}
               </div>
               <div className="text-xs text-muted-foreground">{fmtTime(latestRun.createdAt)}</div>
+              {recentRuns.length ? (
+                <div className="pt-1">
+                  <div className="text-[11px] text-muted-foreground">Recent runs</div>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {recentRuns.map((run) => (
+                      <Button key={run.runId} type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
+                        <a href={`/daa/dashboard?tab=dashboard#history-audit`} title={`${run.kind} · ${run.status} · ${fmtTime(run.createdAt)}`}>
+                          {run.status}
+                        </a>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="space-y-2">
