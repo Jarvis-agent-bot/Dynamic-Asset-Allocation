@@ -479,7 +479,10 @@ function DashboardSkipLinks({ tab }: { tab: Tab }) {
 
 function DashboardActionRail({ compact = false }: { compact?: boolean }) {
   const [query, setQuery] = useState("");
+  const [commandPaletteOpenV0, setCommandPaletteOpenV0] = useState(false);
+  const [commandPaletteQueryV0, setCommandPaletteQueryV0] = useState("");
   const quickFilterInputRef = useRef<HTMLInputElement | null>(null);
+  const commandPaletteInputRefV0 = useRef<HTMLInputElement | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
   useEffect(() => {
@@ -488,11 +491,21 @@ function DashboardActionRail({ compact = false }: { compact?: boolean }) {
       const tag = String(target?.tagName ?? "").toLowerCase();
       const isTyping = tag === "input" || tag === "textarea" || tag === "select" || !!target?.isContentEditable;
 
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "k") {
+        ev.preventDefault();
+        setCommandPaletteOpenV0((prev) => !prev);
+        return;
+      }
+
       if (!ev.altKey) {
         if (ev.key === "/" && !isTyping) {
           ev.preventDefault();
           quickFilterInputRef.current?.focus();
           quickFilterInputRef.current?.select();
+        }
+        if (ev.key === "Escape" && commandPaletteOpenV0) {
+          ev.preventDefault();
+          setCommandPaletteOpenV0(false);
         }
         return;
       }
@@ -511,7 +524,13 @@ function DashboardActionRail({ compact = false }: { compact?: boolean }) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [commandPaletteOpenV0]);
+
+  useEffect(() => {
+    if (!commandPaletteOpenV0) return;
+    commandPaletteInputRefV0.current?.focus();
+    commandPaletteInputRefV0.current?.select();
+  }, [commandPaletteOpenV0]);
 
   const filteredSections = ACTION_RAIL_SECTIONS.map((section) => ({
     title: section.title,
@@ -520,6 +539,32 @@ function DashboardActionRail({ compact = false }: { compact?: boolean }) {
       return it.label.toLowerCase().includes(normalizedQuery) || it.id.toLowerCase().includes(normalizedQuery);
     }),
   })).filter((section) => section.items.length > 0);
+
+  const commandPaletteItemsV0 = useMemo(
+    () => [
+      ...ACTION_RAIL_SECTIONS.flatMap((section) =>
+        section.items.map((item) => ({
+          id: `jump-${item.id}`,
+          label: `Jump: ${item.label}`,
+          run: () => scrollToId(item.id),
+        })),
+      ),
+      ...ACTION_RAIL_SHORTCUTS.map((shortcut) => ({
+        id: `open-${shortcut.href}`,
+        label: shortcut.label,
+        run: () => {
+          window.location.href = shortcut.href;
+        },
+      })),
+    ],
+    [],
+  );
+
+  const commandPaletteFilteredV0 = commandPaletteItemsV0.filter((item) => {
+    const q = commandPaletteQueryV0.trim().toLowerCase();
+    if (!q) return true;
+    return item.label.toLowerCase().includes(q) || item.id.toLowerCase().includes(q);
+  });
 
   return (
     <Card className={compact ? undefined : "xl:sticky xl:top-20"}>
@@ -540,7 +585,7 @@ function DashboardActionRail({ compact = false }: { compact?: boolean }) {
             autoComplete="off"
             spellCheck={false}
           />
-          <div className="text-[11px] text-muted-foreground">Shortcuts: <code>/</code> focus filter · <code>Alt+1</code> run checklist · <code>Alt+2</code> history/audit</div>
+          <div className="text-[11px] text-muted-foreground">Shortcuts: <code>/</code> focus filter · <code>Alt+1</code> run checklist · <code>Alt+2</code> history/audit · <code>Cmd/Ctrl+K</code> command palette</div>
         </div>
 
         {filteredSections.map((section) => (
@@ -575,7 +620,41 @@ function DashboardActionRail({ compact = false }: { compact?: boolean }) {
               </Button>
             ))}
           </div>
+          <Button type="button" variant="outline" size="sm" className="justify-start" onClick={() => setCommandPaletteOpenV0(true)}>
+            Open command palette
+          </Button>
         </div>
+
+        {commandPaletteOpenV0 ? (
+          <div className="rounded-md border border-muted-foreground/30 bg-background/95 p-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">DAA command palette</div>
+            <Input
+              ref={commandPaletteInputRefV0}
+              value={commandPaletteQueryV0}
+              onChange={(e) => setCommandPaletteQueryV0(e.target.value)}
+              placeholder="Type a command (jump/open)"
+              className="mt-2"
+            />
+            <div className="mt-2 grid gap-2">
+              {commandPaletteFilteredV0.slice(0, 8).map((item) => (
+                <Button
+                  key={item.id}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => {
+                    item.run();
+                    setCommandPaletteOpenV0(false);
+                  }}
+                >
+                  {item.label}
+                </Button>
+              ))}
+              {!commandPaletteFilteredV0.length ? <div className="text-xs text-muted-foreground">No commands found.</div> : null}
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
