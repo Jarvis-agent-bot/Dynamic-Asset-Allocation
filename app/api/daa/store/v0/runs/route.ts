@@ -17,6 +17,16 @@ function normalizeSortV0(value: string | null): "created_desc" | "created_asc" {
   return s === "created_asc" ? "created_asc" : "created_desc";
 }
 
+function normalizeStatusV0(value: string | null): string | undefined {
+  const s = String(value ?? "").trim().toLowerCase();
+  if (!s) return undefined;
+
+  if (s === "all") return undefined;
+  if (s === "created" || s === "done" || s === "error" || s === "running") return s;
+
+  return s;
+}
+
 export async function GET(req: Request) {
   const denied = await requireDaaAdminViewerAuth(req);
   if (denied) return denied;
@@ -34,7 +44,7 @@ export async function GET(req: Request) {
   const fromCreatedAt = String(url.searchParams.get("fromCreatedAt") ?? "").trim() || undefined;
   const toCreatedAt = String(url.searchParams.get("toCreatedAt") ?? "").trim() || undefined;
   const actor = String(url.searchParams.get("actor") ?? "").trim() || undefined;
-  const status = String(url.searchParams.get("status") ?? "").trim() || undefined;
+  const status = normalizeStatusV0(url.searchParams.get("status"));
   const source = String(url.searchParams.get("source") ?? "").trim() || undefined;
   const q = String(url.searchParams.get("q") ?? "").trim() || undefined;
 

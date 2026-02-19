@@ -205,6 +205,18 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(ascCaseTimes[0]).toBeLessThanOrEqual(ascCaseTimes[1]);
     expect(ascCaseTimes[1]).toBeLessThanOrEqual(ascCaseTimes[2]);
 
+    const upperStatusReq = new Request("https://example.com/api/daa/store/v0/runs?status=CREATED&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const upperStatusRes: Response = await (listMod as any).GET(upperStatusReq);
+    expect(upperStatusRes.status).toBe(200);
+    const upperStatusJson = await upperStatusRes.json();
+    expect(upperStatusJson.ok).toBe(true);
+    expect(Array.isArray(upperStatusJson.runs)).toBe(true);
+    expect(upperStatusJson.runs.length).toBeGreaterThan(0);
+    expect(upperStatusJson.runs.every((r: any) => r?.status === "created")).toBe(true);
+
     const minLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=0&source=%2Fdaa%2Fdashboard", {
       method: "GET",
       headers: { cookie: viewerCookie, accept: "application/json" },
