@@ -239,6 +239,7 @@ export default function DaaDashboardOverviewCards() {
 
   const dbUrlOk = deployBootstrapOk("DAA_DB_URL");
   const bootstrapTokenOk = deployBootstrapOk("DAA_AUTH_BOOTSTRAP_TOKEN");
+  const nextApiOwnerOk = deployBootstrapOk("DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES");
 
   const deployBootstrapMissingRequiredCount = deployResp && deployResp.ok ? deployResp.bootstrap?.missingRequired?.length ?? 0 : 0;
   const deployBootstrapMissingBootstrapCount = deployResp && deployResp.ok ? deployResp.bootstrap?.missingBootstrap?.length ?? 0 : 0;
@@ -281,6 +282,17 @@ export default function DaaDashboardOverviewCards() {
         ),
       },
       {
+        id: "next_api_owner",
+        ok: nextApiOwnerOk,
+        label: "Public /api/daa owned by Next.js",
+        detail: (
+          <>
+            Keep <code className="rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=0</code> so FastAPI never exposes public
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-[11px] text-foreground">/api/daa/*</code> routes.
+          </>
+        ),
+      },
+      {
         id: "accounts",
         ok: hasAnyAccounts,
         label: "First admin account exists",
@@ -317,7 +329,7 @@ export default function DaaDashboardOverviewCards() {
         ),
       },
     ];
-  }, [bootstrapTokenOk, dbUrlOk, deployEnv, hasAnyAccounts, runsResp, sha, storeOk]);
+  }, [bootstrapTokenOk, dbUrlOk, deployEnv, hasAnyAccounts, nextApiOwnerOk, runsResp, sha, storeOk]);
 
   const deployBootstrapEnvVarsText = useMemo(() => {
     // Keep the snippet copy/paste friendly for Vercel/Render/Fly/etc.
