@@ -121,6 +121,12 @@ describe("dashboardVisualSurfacesV0", () => {
     expect(inputTitles).toEqual(["Import", "Admin Users", "Backtest"]);
   });
 
+  it("keeps core section labels stable for top-level operator triage", () => {
+    const coreTitles = DASHBOARD_VISUAL_SURFACES_V0.filter((item) => item.group === "core").map((item) => item.title);
+
+    expect(coreTitles).toEqual(["Run Checklist", "Confirm/Executed", "History/Audit", "Export"]);
+  });
+
   it("renders each critical surface section in the dashboard page", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPageClientPath = join(
