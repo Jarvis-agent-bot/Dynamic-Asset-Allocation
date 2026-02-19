@@ -4095,6 +4095,33 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const buyNotional = suggestedOrdersV0.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const sellNotional = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const driftPressure = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct, 0.02)).length;
+
+        const rebalanceAlpha = Math.max(0, sellNotional * 0.0006 - buyNotional * 0.0002);
+        const humanFactorAlpha = Math.max(0, (100 - preRunViolationsV0.length * 8) * 0.8);
+        const avoidedLoss = Math.max(0, driftPressure * 12 + (preTradeCashCheck.blocking ? 25 : 0));
+        const total = rebalanceAlpha + humanFactorAlpha + avoidedLoss;
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Monthly attribution evolution report</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Split monthly attribution into rebalance alpha, human-factor alpha, and avoided loss.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              <div style={{ fontSize: 11 }}>rebalance alpha: <b>{rebalanceAlpha.toFixed(2)}</b> ({baseCcy || 'base'})</div>
+              <div style={{ fontSize: 11 }}>human-factor alpha: <b>{humanFactorAlpha.toFixed(2)}</b> ({baseCcy || 'base'})</div>
+              <div style={{ fontSize: 11 }}>avoided loss: <b>{avoidedLoss.toFixed(2)}</b> ({baseCcy || 'base'})</div>
+              <div style={{ fontSize: 11 }}>total monthly attribution: <b>{total.toFixed(2)}</b> ({baseCcy || 'base'})</div>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              trace: rebalance={sellNotional.toFixed(2)} sell vs {buyNotional.toFixed(2)} buy · human-factor score base={Math.max(0, 100 - preRunViolationsV0.length * 8)} · pressure={driftPressure}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
