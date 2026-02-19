@@ -580,6 +580,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [preflightAckConstraints, setPreflightAckConstraints] = useState(false);
   const [preflightAckCash, setPreflightAckCash] = useState(false);
   const [preflightOverrideBlockers, setPreflightOverrideBlockers] = useState(false);
+  const [detectionReviewStateV0, setDetectionReviewStateV0] = useState<Record<string, 'approved' | 'rejected'>>({});
 
   // Safety-stop confirmation (v0): last-step modal before executing a dynamic rebalance run.
   // Also offers a quick "kill switch" to disable the local dynamic schedule.
@@ -3636,6 +3637,68 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   Open preflight checklist
                 </button>
               ) : null}
+            </div>
+          </div>
+        );
+      })()}
+
+      {(() => {
+        const detections: Array<{ id: string; label: string; detail: string }> = [];
+
+        if (!targetWeights.length) {
+          detections.push({ id: 'missing-targets', label: 'Missing target weights', detail: 'Configure target weights before execution.' });
+        }
+
+        if (preTradeCashCheck.blocking) {
+          detections.push({ id: 'cash-blocked', label: 'Cash/settlement blocker', detail: preTradeCashCheck.message });
+        }
+
+        if (priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0) {
+          detections.push({
+            id: 'price-warnings',
+            label: 'Price data warnings',
+            detail: `missing=${priceDataWarningsV0.missing.length}; lastCloseFallback=${priceDataWarningsV0.lastClose.length}`,
+          });
+        }
+
+        for (const v of preRunViolationsV0.slice(0, 3)) {
+          detections.push({ id: `violation-${v.level}-${v.title}`, label: `${v.level.toUpperCase()}: ${v.title}`, detail: String(v.detail ?? '') });
+        }
+
+        if (!detections.length) return null;
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12 }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Inline detection review workspace</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Quick approve/reject for detected issues before rerun.</div>
+            <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+              {detections.map((d) => {
+                const state = detectionReviewStateV0[d.id] ?? null;
+                return (
+                  <div key={d.id} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>{d.label}</div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{d.detail}</div>
+                    <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                      <button
+                        type="button"
+                        className={state === 'approved' ? 'button' : 'button secondary'}
+                        style={{ padding: '4px 8px' }}
+                        onClick={() => setDetectionReviewStateV0((prev) => ({ ...prev, [d.id]: 'approved' }))}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className={state === 'rejected' ? 'button' : 'button secondary'}
+                        style={{ padding: '4px 8px' }}
+                        onClick={() => setDetectionReviewStateV0((prev) => ({ ...prev, [d.id]: 'rejected' }))}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
