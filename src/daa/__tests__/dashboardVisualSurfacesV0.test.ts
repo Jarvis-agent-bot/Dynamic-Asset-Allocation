@@ -133,6 +133,12 @@ describe("dashboardVisualSurfacesV0", () => {
     expect(titles.every((title) => title.trim().length > 0)).toBe(true);
   });
 
+  it("keeps all dashboard surface ids non-empty for anchor stability", () => {
+    const ids = DASHBOARD_VISUAL_SURFACES_V0.map((item) => item.id);
+
+    expect(ids.every((id) => id.trim().length > 0)).toBe(true);
+  });
+
   it("renders each critical surface section in the dashboard page", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPageClientPath = join(
