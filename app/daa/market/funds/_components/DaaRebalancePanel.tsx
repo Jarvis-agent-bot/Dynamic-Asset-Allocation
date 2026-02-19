@@ -3957,6 +3957,35 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 8);
+        if (!rows.length) return null;
+
+        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => String(x || '').trim()));
+        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => String(x || '').trim()));
+        const qatRows = rows.map((r) => {
+          const id = String(r.id ?? '').trim();
+          const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
+          const quality = Math.max(0.6, 1 - Math.min(0.35, driftAbs * 1.8) - (missingSet.has(id) ? 0.2 : 0) - (staleSet.has(id) ? 0.1 : 0));
+          const wQat = Math.max(0, r.targetPct * quality);
+          return { id, targetPct: r.targetPct, quality, wQat, driftAbs };
+        });
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Operator-visible factor trace for quality-adjusted target weights.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {qatRows.map((r) => (
+                <div key={r.id} style={{ fontSize: 11 }}>
+                  {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) => W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
