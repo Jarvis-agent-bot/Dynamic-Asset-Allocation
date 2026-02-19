@@ -297,6 +297,26 @@ describe("daa/proxyToEngine", () => {
     await expect(resp.json()).resolves.toMatchObject({ ok: false, error: "upstream response contract mismatch" });
   });
 
+  it("proxyToEngineJson includes upstream url in non-Error throw mapping", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw "socket closed";
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+    });
+
+    expect(resp.status).toBe(502);
+    await expect(resp.json()).resolves.toMatchObject({
+      ok: false,
+      error: "upstream fetch failed",
+      upstream: "https://engine.test/daa-api/health",
+    });
+  });
+
   it("forwards abortSignal to the upstream fetch", async () => {
     globalThis.fetch = vi.fn(((_url: any, init: any) => {
       return new Promise((_resolve, reject) => {
