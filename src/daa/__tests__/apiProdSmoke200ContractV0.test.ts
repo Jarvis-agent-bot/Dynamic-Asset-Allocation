@@ -28,6 +28,7 @@ describe("mainline DOD prod smoke contract", () => {
     expect(route).toContain('validate: isDaaEngineHealthResponse');
     expect(route).toContain("timeoutMs,");
     expect(route).toContain('fallbackContentType: "application/json"');
+    expect(route).toContain('upstreamPath: "/daa-api/health",');
   });
 
   it("keeps /daa/dashboard page entrypoint renderable (not redirect/notFound)", () => {
