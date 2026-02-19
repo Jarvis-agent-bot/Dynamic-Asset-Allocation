@@ -3323,6 +3323,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)} style={{ padding: '6px 10px' }}>
             {nextJump.buttonText}
           </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => window.open('/daa/dashboard?tab=dashboard#history-audit', '_self')}
+            style={{ padding: '6px 10px' }}
+            title="Jump to dashboard history/audit for recent run inspection."
+          >
+            Open dashboard history
+          </button>
           <button type="button" className="button secondary" onClick={applySampleScenarioV0} style={{ padding: '6px 10px' }}>
             {sampleStatus === 'ok' ? 'Loaded' : sampleStatus === 'error' ? 'Load failed' : 'Load sample scenario'}
           </button>
@@ -3378,6 +3387,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           </button>
           <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)}>
             {nextJump.buttonText}
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => window.open('/daa/dashboard?tab=dashboard#history-audit', '_self')}
+            title="Jump to dashboard history/audit for recent run inspection."
+          >
+            History
           </button>
         </div>
         <div className="daa-mobile-jumps-v0">

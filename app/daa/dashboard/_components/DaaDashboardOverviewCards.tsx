@@ -550,7 +550,12 @@ export default function DaaDashboardOverviewCards() {
               <div className="text-xs text-muted-foreground">{fmtTime(latestRun.createdAt)}</div>
               {recentRuns.length ? (
                 <div className="pt-1">
-                  <div className="text-[11px] text-muted-foreground">Recent runs</div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[11px] text-muted-foreground">Recent runs</div>
+                    <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
+                      <a href="/daa/dashboard?tab=market-funds">Open Market/Funds</a>
+                    </Button>
+                  </div>
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {recentRuns.map((run) => (
                       <Button key={run.runId} type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
