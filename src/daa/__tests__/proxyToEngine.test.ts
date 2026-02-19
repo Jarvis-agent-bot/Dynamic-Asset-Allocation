@@ -238,6 +238,26 @@ describe("daa/proxyToEngine", () => {
     await expect(resp.json()).resolves.toMatchObject({ ok: false, error: "upstream fetch failed" });
   });
 
+  it("proxyToEngineJson returns 502 with unknown message for non-Error throws", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw "socket closed";
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+    });
+
+    expect(resp.status).toBe(502);
+    await expect(resp.json()).resolves.toMatchObject({
+      ok: false,
+      error: "upstream fetch failed",
+      message: "unknown fetch error",
+    });
+  });
+
   it("proxyToEngineJson returns 502 when upstream JSON is invalid", async () => {
     globalThis.fetch = vi.fn(async () => {
       return new Response("not-json", {
