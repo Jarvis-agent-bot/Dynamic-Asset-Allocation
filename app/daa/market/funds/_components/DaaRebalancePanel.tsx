@@ -4305,6 +4305,68 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{paperRunSummary}</div>
             ) : null}
 
+            <details style={{ marginTop: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(0,0,0,0.1)' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Run debugger</summary>
+              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  One-click diagnostics + guided recovery actions for the current run state.
+                </div>
+                <div style={{ fontSize: 11 }}>
+                  <b>Status</b>: {paperRunLoading ? 'running' : paperRunError ? 'error' : paperRunRecordedAt ? 'recorded' : 'idle'}
+                  {' '}· <b>Targets</b>: {targetWeights.length ? 'ready' : 'missing'}
+                  {' '}· <b>Cash</b>: {preTradeCashCheck.blocking ? 'blocked' : 'ok'}
+                  {' '}· <b>Blockers</b>: {preRunViolationsV0.filter((v) => v.level === 'blocker').length}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => jumpTo('target-weights')}
+                  >
+                    Fix targets
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => jumpTo('prices')}
+                  >
+                    Refresh prices
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})}
+                    disabled={paperRunLoading}
+                  >
+                    Open guided recovery
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    style={{ padding: '4px 8px' }}
+                    onClick={() => {
+                      const debug = {
+                        at: new Date().toISOString(),
+                        paperRunLoading,
+                        paperRunError,
+                        paperRunFailureDetails,
+                        preTradeCashCheck,
+                        blockers: preRunViolationsV0.filter((v) => v.level === 'blocker').map((v) => v.title),
+                      };
+                      void copyTextToClipboard(pretty(debug)).catch(() => {
+                        // ignore
+                      });
+                    }}
+                  >
+                    Copy diagnostics
+                  </button>
+                </div>
+              </div>
+            </details>
+
             {paperRunDriftAlert ? (
               <div
                 style={{
