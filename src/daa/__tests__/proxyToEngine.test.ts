@@ -123,6 +123,26 @@ describe("daa/proxyToEngine", () => {
     });
   });
 
+  it("maps non-Error fetch throws to the unknown fetch error message", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw "socket closed";
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngine({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 123,
+      fallbackContentType: "text/plain; charset=utf-8",
+    });
+
+    expect(resp.status).toBe(502);
+    await expect(resp.json()).resolves.toMatchObject({
+      error: "upstream fetch failed",
+      upstream: expect.any(String),
+      message: "unknown fetch error",
+    });
+  });
+
   it("passes through upstream response body + status + content-type", async () => {
     globalThis.fetch = vi.fn(async () => {
       return new Response("OK", {
