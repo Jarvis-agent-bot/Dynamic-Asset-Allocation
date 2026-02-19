@@ -127,6 +127,17 @@ const LS_AUTO_PLAN_INPUT = 'daa.market.funds.autoPlan.input.v0';
 const LS_AUTO_PLAN_RESULT = 'daa.market.funds.autoPlan.result.v0';
 const LS_AUTO_PLAN_RESULT_A = 'daa.market.funds.autoPlan.result.A.v0';
 const LS_AUTO_PLAN_RESULT_B = 'daa.market.funds.autoPlan.result.B.v0';
+const LS_AUTO_PLAN_SCENARIO_PRESETS_V0 = 'daa.market.funds.autoPlan.presets.v0';
+
+type AutoPlanScenarioPresetV0 = {
+  id: string;
+  name: string;
+  updatedAt: string;
+  inputA: string;
+  inputB: string;
+  thresholdPctOverrideA: number | null;
+  thresholdPctOverrideB: number | null;
+};
 
 function scrollToId(id: string) {
   scrollToIdAndFocusV0(id);
@@ -496,6 +507,35 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [autoPlanErrorA, setAutoPlanErrorA] = useState<string | null>(null);
   const [autoPlanErrorB, setAutoPlanErrorB] = useState<string | null>(null);
   const [autoPlanCopyStatus, setAutoPlanCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [autoPlanPresetsV0, setAutoPlanPresetsV0] = useState<AutoPlanScenarioPresetV0[]>(() => {
+    const saved = readJsonFromLs<any>(LS_AUTO_PLAN_SCENARIO_PRESETS_V0);
+    if (!Array.isArray(saved)) return [];
+
+    return saved
+      .filter((x) => x && typeof x === 'object')
+      .map((x: any) => ({
+        id: String(x.id ?? ''),
+        name: String(x.name ?? ''),
+        updatedAt: String(x.updatedAt ?? ''),
+        inputA: String(x.inputA ?? ''),
+        inputB: String(x.inputB ?? ''),
+        thresholdPctOverrideA:
+          x.thresholdPctOverrideA === null || x.thresholdPctOverrideA === undefined
+            ? null
+            : Number.isFinite(Number(x.thresholdPctOverrideA))
+              ? Number(x.thresholdPctOverrideA)
+              : null,
+        thresholdPctOverrideB:
+          x.thresholdPctOverrideB === null || x.thresholdPctOverrideB === undefined
+            ? null
+            : Number.isFinite(Number(x.thresholdPctOverrideB))
+              ? Number(x.thresholdPctOverrideB)
+              : null,
+      }))
+      .filter((x) => x.id && x.name);
+  });
+  const [autoPlanPresetNameV0, setAutoPlanPresetNameV0] = useState('');
+  const [autoPlanSelectedPresetIdV0, setAutoPlanSelectedPresetIdV0] = useState<string>('');
 
   const [driftFilter, setDriftFilter] = useState<'all' | 'over' | 'under'>('all');
 
@@ -550,6 +590,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA },
       b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB }});
   }, [autoPlanScenario, autoPlanInputTextA, autoPlanInputTextB, autoPlanThresholdOverridePctA, autoPlanThresholdOverridePctB]);
+
+  useEffect(() => {
+    saveJsonToLs(LS_AUTO_PLAN_SCENARIO_PRESETS_V0, autoPlanPresetsV0);
+  }, [autoPlanPresetsV0]);
 
   const moneyPlan = useMemo(() => readJsonFromLs(LS_MONEY_PLAN), [rev]);
   const rebalanceReq = useMemo(() => readJsonFromLs(LS_REBALANCE_REQUEST), [rev]);
@@ -629,6 +673,42 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   function setAutoPlanResultForActive(res: DriftRebalanceBacktestResult | null) {
     if (autoPlanScenario === 'A') setAutoPlanResultA(res);
     else setAutoPlanResultB(res);
+  }
+
+  function saveAutoPlanScenarioPresetV0() {
+    const name = autoPlanPresetNameV0.trim();
+    if (!name) return;
+
+    const id = `${Date.now()}`;
+    const next: AutoPlanScenarioPresetV0 = {
+      id,
+      name,
+      updatedAt: new Date().toISOString(),
+      inputA: autoPlanInputTextA,
+      inputB: autoPlanInputTextB,
+      thresholdPctOverrideA: autoPlanThresholdOverridePctA,
+      thresholdPctOverrideB: autoPlanThresholdOverridePctB,
+    };
+
+    setAutoPlanPresetsV0((prev) => [next, ...prev].slice(0, 20));
+    setAutoPlanSelectedPresetIdV0(id);
+    setAutoPlanPresetNameV0('');
+  }
+
+  function loadAutoPlanScenarioPresetV0(id: string) {
+    const preset = autoPlanPresetsV0.find((x) => x.id === id);
+    if (!preset) return;
+
+    setAutoPlanInputTextA(preset.inputA);
+    setAutoPlanInputTextB(preset.inputB);
+    setAutoPlanThresholdOverridePctA(preset.thresholdPctOverrideA);
+    setAutoPlanThresholdOverridePctB(preset.thresholdPctOverrideB);
+    setAutoPlanScenario('A');
+  }
+
+  function deleteAutoPlanScenarioPresetV0(id: string) {
+    setAutoPlanPresetsV0((prev) => prev.filter((x) => x.id !== id));
+    if (autoPlanSelectedPresetIdV0 === id) setAutoPlanSelectedPresetIdV0('');
   }
 
   const baseCcy = useMemo(() => {
@@ -4931,6 +5011,68 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     title="Scenario B"
                   >
                     B
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" as const }}>
+                  <input
+                    value={autoPlanPresetNameV0}
+                    onChange={(e) => setAutoPlanPresetNameV0(e.target.value)}
+                    placeholder="Preset name"
+                    style={{
+                      width: 140,
+                      fontSize: 12,
+                      padding: "6px 8px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(127,127,127,0.35)",
+                      background: "rgba(0,0,0,0.12)"}}
+                  />
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={saveAutoPlanScenarioPresetV0}
+                    style={{ padding: "6px 10px" }}
+                    disabled={!autoPlanPresetNameV0.trim()}
+                    title="Save current A/B scenario input as a reusable preset"
+                  >
+                    Save preset
+                  </button>
+                  <select
+                    value={autoPlanSelectedPresetIdV0}
+                    onChange={(e) => setAutoPlanSelectedPresetIdV0(e.target.value)}
+                    style={{
+                      maxWidth: 180,
+                      fontSize: 12,
+                      padding: "6px 8px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(127,127,127,0.35)",
+                      background: "rgba(0,0,0,0.12)"}}
+                    aria-label="Saved scenario presets"
+                  >
+                    <option value="">Saved presets</option>
+                    {autoPlanPresetsV0.map((preset) => (
+                      <option key={preset.id} value={preset.id}>{preset.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => loadAutoPlanScenarioPresetV0(autoPlanSelectedPresetIdV0)}
+                    style={{ padding: "6px 10px" }}
+                    disabled={!autoPlanSelectedPresetIdV0}
+                    title="Load selected preset into Scenario A/B"
+                  >
+                    Load preset
+                  </button>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => deleteAutoPlanScenarioPresetV0(autoPlanSelectedPresetIdV0)}
+                    style={{ padding: "6px 10px" }}
+                    disabled={!autoPlanSelectedPresetIdV0}
+                    title="Delete selected preset"
+                  >
+                    Delete
                   </button>
                 </div>
 
