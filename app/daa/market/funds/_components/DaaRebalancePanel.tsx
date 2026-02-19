@@ -4405,6 +4405,23 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
                 <div style={{ fontSize: 12, marginTop: 6, color: 'var(--danger)' }}>{paperRunError}</div>
 
+                <details style={{ marginTop: 8, border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '8px 10px', background: 'rgba(0,0,0,0.1)' }} open>
+                  <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Incident playbook (failed run)</summary>
+                  <div style={{ marginTop: 6, display: 'grid', gap: 6, fontSize: 11 }}>
+                    <div><b>1) Capture state:</b> copy diagnostics, then annotate run with incident tag/notes.</div>
+                    <div><b>2) Contain risk:</b> review blockers + cash routing before any retry.</div>
+                    <div><b>3) Recover:</b> open guided recovery, re-run preflight, then retry once constraints are clear.</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                      <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('history-audit')}>
+                        Open history/audit
+                      </button>
+                      <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})}>
+                        Run guided recovery
+                      </button>
+                    </div>
+                  </div>
+                </details>
+
                 {paperRunFailureDetails ? (
                   <details className="muted" style={{ marginTop: 8, fontSize: 11 }}>
                     <summary style={{ cursor: 'pointer' }}>Failure details</summary>
