@@ -3986,6 +3986,41 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 20);
+        if (!rows.length) return null;
+
+        const highDriftThreshold = Math.max(driftThresholdPct * 1.5, 0.03);
+        const highDriftCount = rows.filter((r) => Math.abs(r.deltaPct) >= highDriftThreshold).length;
+        const deepNegativeCount = rows.filter((r) => r.deltaPct <= -highDriftThreshold).length;
+        const stressScore = highDriftCount * 5 + priceDataWarningsV0.missing.length * 8 + priceDataWarningsV0.lastClose.length * 3;
+
+        const scenario = stressScore >= 35 || deepNegativeCount >= 3 ? 'B' : 'A';
+        const gateLabel = scenario === 'A' ? 'strong-hold gate' : 'value-trap gate';
+        const routeLabel = scenario === 'A' ? 'route to normal rebalance execution' : 'route to defensive rebalance (trim/hedge first)';
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${scenario === 'A' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: scenario === 'A' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Rebalance scenario A/B gates</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Route execution by strong-hold vs value-trap decision gate.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              scenario <b>{scenario}</b> · gate <b>{gateLabel}</b> · decision <b>{routeLabel}</b>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              stress score = high drift {highDriftCount}×5 + missing prices {priceDataWarningsV0.missing.length}×8 + stale closes {priceDataWarningsV0.lastClose.length}×3 = {stressScore}
+            </div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                Open scenario weight routing
+              </button>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                Apply gate in rebalance orders
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
