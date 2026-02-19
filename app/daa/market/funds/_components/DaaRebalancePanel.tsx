@@ -3400,6 +3400,31 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           ? 'Schedule is enabled. Fix these before the next run.'
           : 'Fix these before running a rebalance.';
 
+        const nextAction = missingTargets
+          ? {
+              label: 'Next action: Set target weights',
+              button: 'Open target weights',
+              onClick: () => jumpTo('target-weights')}
+          : hasPriceWarnings
+            ? {
+                label: 'Next action: Resolve price warnings',
+                button: 'Open prices',
+                onClick: () => jumpTo('prices')}
+            : cashBlocked
+              ? {
+                  label: 'Next action: Resolve cash blocker',
+                  button: 'Review cash routing',
+                  onClick: () => jumpTo('rebalance')}
+              : blockers.length
+                ? {
+                    label: 'Next action: Resolve checklist blockers',
+                    button: 'Review blockers',
+                    onClick: () => jumpTo('rebalance')}
+                : {
+                    label: 'Next action: Review warnings then run preflight',
+                    button: 'Open preflight checklist',
+                    onClick: () => openPreflightForRun()};
+
         return (
           <div
             role="alert"
@@ -3414,6 +3439,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           >
             <div style={{ fontWeight: 800, color: ui.title }}>{title}{hasBlockingIssues ? ' (action required)' : ' (review)'}</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{subtitle}</div>
+
+            <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, border: `1px solid ${ui.border}`, background: 'rgba(0,0,0,0.08)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700 }}>{nextAction.label}</div>
+              <div style={{ marginTop: 6 }}>
+                <button type="button" className="button" onClick={nextAction.onClick} style={{ padding: '4px 8px' }}>
+                  {nextAction.button}
+                </button>
+              </div>
+            </div>
 
             <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
               {missingTargets ? (
