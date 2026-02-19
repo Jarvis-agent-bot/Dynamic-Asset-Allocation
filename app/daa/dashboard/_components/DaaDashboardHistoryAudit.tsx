@@ -179,6 +179,7 @@ export default function DaaDashboardHistoryAudit() {
   const [annotationError, setAnnotationError] = useState<string | null>(null);
 
   const [actorFilter, setActorFilter] = useState<string>("");
+  const [runStatusFilter, setRunStatusFilter] = useState<string>("");
   const [runSearchText, setRunSearchText] = useState<string>("");
   const [runSort, setRunSort] = useState<"created_desc" | "created_asc">("created_desc");
   const [fromLocal, setFromLocal] = useState<string>("");
@@ -213,6 +214,7 @@ export default function DaaDashboardHistoryAudit() {
     qs.set("limit", String(runLimit));
 
     if (actorFilter) qs.set("actor", actorFilter);
+    if (runStatusFilter) qs.set("status", runStatusFilter);
     if (runSearchText.trim()) qs.set("q", runSearchText.trim());
     qs.set("sort", runSort);
     if (fromIso) qs.set("fromCreatedAt", fromIso);
@@ -268,7 +270,7 @@ export default function DaaDashboardHistoryAudit() {
 
   useEffect(() => {
     void loadRuns("reset");
-  }, [actorFilter, runSearchText, runSort, fromIso, toIso, runsPageSize]);
+  }, [actorFilter, runStatusFilter, runSearchText, runSort, fromIso, toIso, runsPageSize]);
 
   const derived = useMemo(() => {
     if (!bundle) return null;
@@ -423,6 +425,20 @@ export default function DaaDashboardHistoryAudit() {
             </select>
           </label>
 
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Status
+            <select
+              value={runStatusFilter}
+              onChange={(e) => setRunStatusFilter(String(e.target.value ?? ""))}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">All</option>
+              <option value="created">created</option>
+              <option value="done">done</option>
+              <option value="error">error</option>
+            </select>
+          </label>
+
           <Input
             value={runSearchText}
             onChange={(e) => setRunSearchText(String(e.target.value ?? ""))}
@@ -475,12 +491,22 @@ export default function DaaDashboardHistoryAudit() {
             className="h-9 w-[min(240px,92vw)]"
           />
 
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setRunStatusFilter("error")}>
+              Errors only
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setActorFilter("dashboard")}>
+              Dashboard only
+            </Button>
+          </div>
+
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => {
               setActorFilter("");
+              setRunStatusFilter("");
               setRunSearchText("");
               setRunSort("created_desc");
               setFromLocal("");
