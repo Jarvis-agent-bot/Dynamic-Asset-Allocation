@@ -165,6 +165,32 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(createdRun.source).toBe("/daa/dashboard");
     expect(createdRun.actor).toBe("contract-test");
 
+    const searchReq = new Request("https://example.com/api/daa/store/v0/runs?limit=20&q=contract-test", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const searchRes: Response = await (listMod as any).GET(searchReq);
+    expect(searchRes.status).toBe(200);
+    const searchJson = await searchRes.json();
+    expect(searchJson.ok).toBe(true);
+    expect(Array.isArray(searchJson.runs)).toBe(true);
+    expect(searchJson.runs.length).toBeGreaterThan(0);
+    expect(searchJson.runs.every((r: any) => String(r?.actor ?? "").includes("contract-test"))).toBe(true);
+
+    const ascReq = new Request("https://example.com/api/daa/store/v0/runs?limit=3&sort=created_asc&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const ascRes: Response = await (listMod as any).GET(ascReq);
+    expect(ascRes.status).toBe(200);
+    const ascJson = await ascRes.json();
+    expect(ascJson.ok).toBe(true);
+    expect(Array.isArray(ascJson.runs)).toBe(true);
+    expect(ascJson.runs.length).toBe(3);
+    const ascTimes = ascJson.runs.map((r: any) => Date.parse(String(r.createdAt ?? "")));
+    expect(ascTimes[0]).toBeLessThanOrEqual(ascTimes[1]);
+    expect(ascTimes[1]).toBeLessThanOrEqual(ascTimes[2]);
+
     const minLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=0&source=%2Fdaa%2Fdashboard", {
       method: "GET",
       headers: { cookie: viewerCookie, accept: "application/json" },
