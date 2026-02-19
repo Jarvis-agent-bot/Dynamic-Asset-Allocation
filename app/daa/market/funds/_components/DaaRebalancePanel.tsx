@@ -3286,6 +3286,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           <button
             type="button"
             className="button secondary"
+            onClick={() => {
+              runDaaRefreshAndRecommendationV0();
+              openPreflightForRun();
+            }}
+            style={{ padding: '6px 10px' }}
+            disabled={runDaaStatus === 'running' || paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
+            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Fast path: run DAA refresh/recommendation, then open preflight checklist.'}
+          >
+            {runDaaStatus === 'running' ? 'Preparing...' : 'Run + preflight'}
+          </button>
+
+          <button
+            type="button"
+            className="button secondary"
             onClick={() => openPreflightForRun()}
             style={{ padding: '6px 10px' }}
             disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
@@ -3349,6 +3363,18 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Manual trigger: open preflight and run a paper rebalance now.'}
           >
             {paperRunLoading ? 'Running...' : 'Manual run'}
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              runDaaRefreshAndRecommendationV0();
+              openPreflightForRun();
+            }}
+            disabled={runDaaStatus === 'running' || paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
+            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Fast path: run DAA refresh/recommendation, then open preflight checklist.'}
+          >
+            {runDaaStatus === 'running' ? 'Preparing...' : 'Run+checklist'}
           </button>
           <button type="button" className="button secondary" onClick={() => jumpTo(nextJump.targetId)}>
             {nextJump.buttonText}
