@@ -139,6 +139,14 @@ type AutoPlanScenarioPresetV0 = {
   thresholdPctOverrideB: number | null;
 };
 
+type LiveTimelineEntryV0 = {
+  id: string;
+  at: string;
+  stage: string;
+  detail: string;
+  level: 'info' | 'ok' | 'error';
+};
+
 function scrollToId(id: string) {
   scrollToIdAndFocusV0(id);
 }
@@ -559,6 +567,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [paperRunLastConfirmedOpts, setPaperRunLastConfirmedOpts] = useState<{ cashSweep?: boolean } | null>(null);
   const [paperRunFailureDetails, setPaperRunFailureDetails] = useState<string | null>(null);
 
+  const [liveTimelineV0, setLiveTimelineV0] = useState<LiveTimelineEntryV0[]>([]);
+  const lastRunDaaStatusRef = useRef<typeof runDaaStatus>('idle');
+  const lastPaperRunLoadingRef = useRef(false);
+  const lastPaperRunRecordedAtRef = useRef<string | null>(null);
+  const lastPaperRunErrorRef = useRef<string | null>(null);
+
   // Preflight checklist (v0): confirm key safety/inputs before running a paper rebalance.
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [preflightPendingOpts, setPreflightPendingOpts] = useState<{ cashSweep?: boolean } | null>(null);
@@ -581,6 +595,48 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       window.removeEventListener('storage', onData);
     };
   }, []);
+
+  function pushLiveTimelineV0(entry: Omit<LiveTimelineEntryV0, 'id' | 'at'>) {
+    setLiveTimelineV0((prev) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+        at: new Date().toISOString(),
+        ...entry,
+      },
+      ...prev,
+    ].slice(0, 20));
+  }
+
+  useEffect(() => {
+    if (runDaaStatus !== lastRunDaaStatusRef.current) {
+      lastRunDaaStatusRef.current = runDaaStatus;
+      if (runDaaStatus === 'running') pushLiveTimelineV0({ stage: 'Run DAA', detail: 'Step2 refresh + Step4 recommendation started.', level: 'info' });
+      if (runDaaStatus === 'ok') pushLiveTimelineV0({ stage: 'Run DAA', detail: runDaaStatusText || 'Run DAA completed.', level: 'ok' });
+      if (runDaaStatus === 'error') pushLiveTimelineV0({ stage: 'Run DAA', detail: runDaaStatusText || 'Run DAA failed.', level: 'error' });
+    }
+  }, [runDaaStatus, runDaaStatusText]);
+
+  useEffect(() => {
+    if (paperRunLoading !== lastPaperRunLoadingRef.current) {
+      lastPaperRunLoadingRef.current = paperRunLoading;
+      if (paperRunLoading) pushLiveTimelineV0({ stage: 'Preflight execution', detail: 'Paper run started.', level: 'info' });
+      if (!paperRunLoading && !paperRunError && paperRunRecordedAt) pushLiveTimelineV0({ stage: 'Preflight execution', detail: 'Paper run finished and recorded.', level: 'ok' });
+    }
+  }, [paperRunLoading, paperRunError, paperRunRecordedAt]);
+
+  useEffect(() => {
+    if (paperRunRecordedAt && paperRunRecordedAt !== lastPaperRunRecordedAtRef.current) {
+      lastPaperRunRecordedAtRef.current = paperRunRecordedAt;
+      pushLiveTimelineV0({ stage: 'Execution log', detail: `Recorded at ${paperRunRecordedAt}.`, level: 'ok' });
+    }
+  }, [paperRunRecordedAt]);
+
+  useEffect(() => {
+    if (paperRunError && paperRunError !== lastPaperRunErrorRef.current) {
+      lastPaperRunErrorRef.current = paperRunError;
+      pushLiveTimelineV0({ stage: 'Preflight execution', detail: paperRunError, level: 'error' });
+    }
+  }, [paperRunError]);
 
   useEffect(() => {
     // Persist the latest drift input(s) so users can refresh and keep the plan editor state.
@@ -3592,6 +3648,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           <div style={{ marginTop: 4, color: runDaaStatus === 'error' ? 'var(--danger)' : runDaaStatus === 'ok' ? '#16a34a' : 'inherit' }}>
             Run DAA: {runDaaStatusText}
           </div>
+        ) : null}
+
+        {liveTimelineV0.length ? (
+          <details style={{ marginTop: 8 }} open>
+            <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Live execution timeline</summary>
+            <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
+              {liveTimelineV0.map((e) => (
+                <div key={e.id} style={{ fontSize: 11, borderLeft: `2px solid ${e.level === 'error' ? 'var(--danger)' : e.level === 'ok' ? '#16a34a' : 'rgba(127,127,127,0.6)'}`, paddingLeft: 8 }}>
+                  <span className="muted" style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{e.at}</span>
+                  {' '}· <b>{e.stage}</b> · <span style={{ color: e.level === 'error' ? 'var(--danger)' : 'inherit' }}>{e.detail}</span>
+                </div>
+              ))}
+            </div>
+          </details>
         ) : null}
       </div>
 
