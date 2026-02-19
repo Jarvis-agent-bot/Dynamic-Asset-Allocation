@@ -4514,6 +4514,25 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>No symbols exceed the drift threshold.</div>
                 )}
 
+                {paperRunDriftAlert.breached ? (
+                  <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                    <span className="muted" style={{ fontSize: 11 }}>Threshold-based action suggestions:</span>
+                    <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun()}>
+                      Open preflight checklist
+                    </button>
+                    <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                      Review target weights
+                    </button>
+                    <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('policy')}>
+                      Tighten/relax threshold
+                    </button>
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
+                    Drift is within threshold. Suggested action: keep monitoring or lower threshold for tighter control.
+                  </div>
+                )}
+
                 {paperRunDriftAlert.reasons?.length ? (
                   <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                     Trigger: {paperRunDriftAlert.reasons.slice(0, 3).join('; ')}
