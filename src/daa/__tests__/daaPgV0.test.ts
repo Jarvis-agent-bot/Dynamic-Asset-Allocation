@@ -78,6 +78,13 @@ describe("daa pg url guard", () => {
     expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
   });
 
+  it("normalizes uppercase sqlalchemy DATABASE_URL fallback when DAA_DB_URL is blank", () => {
+    process.env.DAA_DB_URL = "   ";
+    process.env.DATABASE_URL = "POSTGRESQL+PSYCOPG://daa:pass@localhost:5432/daa";
+
+    expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
+  });
+
   it("prefers DAA_DB_URL over DATABASE_URL when both are present", () => {
     process.env.DAA_DB_URL = "postgresql://daa:pass@primary-host:5432/daa";
     process.env.DATABASE_URL = "postgresql://daa:pass@fallback-host:5432/daa";
