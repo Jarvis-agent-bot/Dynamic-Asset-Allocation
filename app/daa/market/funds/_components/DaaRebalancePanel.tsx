@@ -3652,6 +3652,34 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
+        const checks = [
+          { label: 'Target weights configured', ok: targetWeights.length > 0 },
+          { label: 'Price inputs usable', ok: priceDataWarningsV0.missing.length === 0 },
+          { label: 'Cash/settlement clear', ok: !preTradeCashCheck.blocking },
+          { label: 'No checklist blockers', ok: preRunViolationsV0.filter((v) => v.level === 'blocker').length === 0 },
+        ];
+        const readyCount = checks.filter((c) => c.ok).length;
+        const scorePct = Math.round((readyCount / checks.length) * 100);
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Step readiness scorecard</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Shows blockers before execution.</div>
+            <div style={{ marginTop: 6, fontSize: 12 }}>
+              readiness score: <b style={{ color: scorePct >= 75 ? '#16a34a' : scorePct >= 50 ? '#f59e0b' : 'var(--danger)' }}>{scorePct}%</b> ({readyCount}/{checks.length})
+            </div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {checks.map((c) => (
+                <div key={c.label} style={{ fontSize: 11 }}>
+                  {c.ok ? 'OK' : 'BLOCKED'} · {c.label}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {(() => {
         const detections: Array<{ id: string; label: string; detail: string }> = [];
 
         if (!targetWeights.length) {
