@@ -3875,6 +3875,48 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const blockerCount = preRunViolationsV0.filter((v) => v.level === 'blocker').length;
+        const warningCount = preRunViolationsV0.filter((v) => v.level === 'warning').length;
+        const missingPriceCount = priceDataWarningsV0.missing.length;
+        const stalePriceCount = priceDataWarningsV0.lastClose.length;
+        const driftHotCount = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.5, 0.03)).length;
+
+        const analystPenalty = missingPriceCount * 8 + stalePriceCount * 5 + Math.min(20, driftHotCount * 2);
+        const managerPenalty = blockerCount * 18 + warningCount * 5 + (preTradeCashCheck.blocking ? 12 : 0) + (paperRunError ? 15 : 0);
+        const analystScore = Math.max(0, 100 - analystPenalty);
+        const managerScore = Math.max(0, 100 - managerPenalty);
+
+        const tierOf = (score: number) => (score >= 80 ? 'elite' : score >= 50 ? 'neutral' : 'incompetent');
+        const tierColor = (tier: 'elite' | 'neutral' | 'incompetent') => (tier === 'elite' ? '#16a34a' : tier === 'neutral' ? '#f59e0b' : 'var(--danger)');
+
+        const analystTier = tierOf(analystScore);
+        const managerTier = tierOf(managerScore);
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Human-factor scoreboard</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Analyst/manager grades with transparent score breakdown.</div>
+            <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+              <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>Analyst</div>
+                <div style={{ fontSize: 12, marginTop: 4 }}>score <b>{analystScore}</b> · tier <b style={{ color: tierColor(analystTier) }}>{analystTier}</b></div>
+                <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                  100 - ({missingPriceCount} missing×8 + {stalePriceCount} stale×5 + hot drift cap {Math.min(20, driftHotCount * 2)})
+                </div>
+              </div>
+              <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>Manager</div>
+                <div style={{ fontSize: 12, marginTop: 4 }}>score <b>{managerScore}</b> · tier <b style={{ color: tierColor(managerTier) }}>{managerTier}</b></div>
+                <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                  100 - ({blockerCount} blockers×18 + {warningCount} warnings×5 + cash block {preTradeCashCheck.blocking ? 12 : 0} + run error {paperRunError ? 15 : 0})
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
