@@ -4192,6 +4192,39 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
+        const blockerCount = preRunViolationsV0.filter((v) => v.level === 'blocker').length;
+        const warningCount = preRunViolationsV0.filter((v) => v.level === 'warning').length;
+        const logicDivergence = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.5, 0.03)).length;
+
+        const humanFactorScore = Math.max(0, 100 - blockerCount * 18 - warningCount * 5);
+        const logicConsistencyScore = Math.max(0, 100 - logicDivergence * 7 - priceDataWarningsV0.missing.length * 10);
+        const loopStatus = humanFactorScore >= 70 && logicConsistencyScore >= 70 ? 'stable loop' : 'needs intervention';
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${loopStatus === 'stable loop' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: loopStatus === 'stable loop' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Human-factor + logic-consistency loop</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Evaluate analyst behavior and logic consistency in one closed feedback loop.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              human-factor=<b>{humanFactorScore}</b> · logic-consistency=<b>{logicConsistencyScore}</b> · loop=<b style={{ color: loopStatus === 'stable loop' ? '#16a34a' : 'var(--danger)' }}>{loopStatus}</b>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              trace: blockers {blockerCount}×18 + warnings {warningCount}×5 · divergence {logicDivergence}×7 + missing prices {priceDataWarningsV0.missing.length}×10
+            </div>
+            {loopStatus !== 'stable loop' ? (
+              <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                  Resolve thesis consistency
+                </button>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun()}>
+                  Re-run human-factor preflight
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
+      {(() => {
         const eliteSignals = [
           { name: 'Desk-A', defensive: preTradeCashCheck.blocking || priceDataWarningsV0.missing.length > 0 },
           { name: 'Desk-B', defensive: rebalanceTableRows.filter((r) => r.deltaPct <= -Math.max(driftThresholdPct, 0.02)).length >= 3 },
