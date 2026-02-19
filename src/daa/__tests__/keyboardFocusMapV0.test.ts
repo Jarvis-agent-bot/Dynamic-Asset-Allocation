@@ -98,6 +98,12 @@ describe("keyboardFocusMapV0", () => {
     expect(labels.slice(4)).toEqual(["History", "Import/Export"]);
   });
 
+  it("keeps dashboard skip-link copy prefixed with 'Skip to'", () => {
+    const labels = DASHBOARD_SKIP_LINK_TARGETS_V0.map((item) => item.label);
+
+    expect(labels.every((label) => label.startsWith("Skip to "))).toBe(true);
+  });
+
   it("renders each target id in the dashboard and market/funds components", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPath = join(here, "../../../app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
