@@ -4984,6 +4984,43 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           padding: '10px 12px',
                           background: 'rgba(0,0,0,0.12)'}}
                       >
+                        <div style={{ fontWeight: 700, fontSize: 12 }}>What-if lab (side-by-side scenarios)</div>
+                        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                          Compare baseline vs stress assumptions before confirm.
+                        </div>
+                        {(() => {
+                          const turnover = Number.isFinite(whatIf.turnoverPctOfTotalBefore) ? whatIf.turnoverPctOfTotalBefore * 100 : 0;
+                          const maxAbs = whatIfRows.reduce((m, r) => Math.max(m, Math.abs(Number(r.driftPct ?? 0))), 0) * 100;
+                          const baselineCostBps = (Number.isFinite(whatIfFeeBps) ? whatIfFeeBps : 0) + (Number.isFinite(whatIfSlippageBpsUsed) ? whatIfSlippageBpsUsed : 0);
+                          const stressCostBps = baselineCostBps * 1.5;
+
+                          return (
+                            <div style={{ marginTop: 8, display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                              <div style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '8px 10px' }}>
+                                <div style={{ fontSize: 12, fontWeight: 700 }}>Scenario A · baseline</div>
+                                <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
+                                  turnover≈<b>{turnover.toFixed(2)}%</b> · max|drift|≈<b>{maxAbs.toFixed(2)}%</b> · cost≈<b>{baselineCostBps.toFixed(1)} bps</b>
+                                </div>
+                              </div>
+                              <div style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '8px 10px' }}>
+                                <div style={{ fontSize: 12, fontWeight: 700 }}>Scenario B · stress</div>
+                                <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
+                                  turnover≈<b>{(turnover * 1.2).toFixed(2)}%</b> · max|drift|≈<b>{(maxAbs * 1.15).toFixed(2)}%</b> · cost≈<b>{stressCostBps.toFixed(1)} bps</b>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 8,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                          background: 'rgba(0,0,0,0.12)'}}
+                      >
                         <div style={{ fontWeight: 700, fontSize: 12 }}>Cash impact breakdown (preview)</div>
                         <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.5 }}>
                           BUY spends full notional cash (cost reduces acquired value). SELL receives proceeds net of fee+slippage.
