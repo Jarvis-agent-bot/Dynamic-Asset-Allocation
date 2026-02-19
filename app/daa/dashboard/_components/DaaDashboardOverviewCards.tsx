@@ -537,7 +537,21 @@ export default function DaaDashboardOverviewCards() {
               <div className="text-xs text-muted-foreground">{fmtTime(latestRun.createdAt)}</div>
             </>
           ) : (
-            <div className="text-xs text-muted-foreground">No runs yet</div>
+            <div className="space-y-2">
+              <div className="text-xs font-medium">Guided first run</div>
+              <div className="text-xs text-muted-foreground">No runs yet. Start from Wizard, then run Market/Funds, then review History/Audit.</div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" asChild>
+                  <a href="/daa/dashboard?tab=wizard&step=1">1) Open Wizard</a>
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" asChild>
+                  <a href="/daa/dashboard?tab=market-funds">2) Run Market/Funds</a>
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[11px]" asChild>
+                  <a href="/daa/dashboard?tab=dashboard#history-audit">3) Review History/Audit</a>
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
