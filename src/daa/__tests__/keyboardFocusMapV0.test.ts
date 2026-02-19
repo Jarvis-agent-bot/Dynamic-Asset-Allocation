@@ -104,6 +104,12 @@ describe("keyboardFocusMapV0", () => {
     expect(labels.every((label) => label.startsWith("Skip to "))).toBe(true);
   });
 
+  it("keeps all funds-hub quick-jump labels non-empty", () => {
+    const labels = MARKET_FUNDS_QUICK_JUMPS_V0.map((item) => item.label);
+
+    expect(labels.every((label) => label.trim().length > 0)).toBe(true);
+  });
+
   it("renders each target id in the dashboard and market/funds components", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPath = join(here, "../../../app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
