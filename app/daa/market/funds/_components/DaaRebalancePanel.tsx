@@ -3917,6 +3917,46 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 40);
+        if (!rows.length) return null;
+
+        const netDeltaNotional = rows.reduce((sum, r) => {
+          const vRaw = Number((r as any).deltaValue ?? Number.NaN);
+          const v = Number.isFinite(vRaw) ? vRaw : 0;
+          return sum + v;
+        }, 0);
+        const highDriftCount = rows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.5, 0.03)).length;
+        const envStressScore = highDriftCount * 6 + priceDataWarningsV0.missing.length * 10 + priceDataWarningsV0.lastClose.length * 4;
+
+        const analystThesis = netDeltaNotional >= 0 ? 'risk-on' : 'risk-off';
+        const regime = envStressScore >= 40 ? 'risk-off' : 'risk-on';
+        const diverged = analystThesis !== regime;
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${diverged ? 'var(--danger)' : 'rgba(255,255,255,0.12)'}`, borderRadius: 12, background: diverged ? 'rgba(220,38,38,0.08)' : 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Analyst logic-consistency alerts</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Flag divergence between analyst thesis and environment regime.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              thesis=<b>{analystThesis}</b> · regime=<b>{regime}</b> · status=<b style={{ color: diverged ? 'var(--danger)' : '#16a34a' }}>{diverged ? 'diverged' : 'aligned'}</b>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              regime score = high drift {highDriftCount}×6 + missing prices {priceDataWarningsV0.missing.length}×10 + stale closes {priceDataWarningsV0.lastClose.length}×4 = {envStressScore}
+            </div>
+            {diverged ? (
+              <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('prices')}>
+                  Recheck market regime inputs
+                </button>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                  Rebalance thesis vs target weights
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
