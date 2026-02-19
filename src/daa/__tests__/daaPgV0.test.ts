@@ -57,6 +57,13 @@ describe("daa pg url guard", () => {
     expect(getDaaPgUrlV0()).toBe("POSTGRESQL://daa:pass@localhost:5432/daa");
   });
 
+  it("normalizes uppercase sqlalchemy DAA_DB_URL scheme", () => {
+    process.env.DAA_DB_URL = "POSTGRESQL+PSYCOPG://daa:pass@localhost:5432/daa";
+    delete process.env.DATABASE_URL;
+
+    expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
+  });
+
   it("falls back to DATABASE_URL and trims whitespace", () => {
     delete process.env.DAA_DB_URL;
     process.env.DATABASE_URL = "  postgresql://daa:pass@localhost:5432/daa  ";
