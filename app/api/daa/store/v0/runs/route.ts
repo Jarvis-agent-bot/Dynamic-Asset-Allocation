@@ -12,6 +12,11 @@ function isIsoDateTimeV0(value: string): boolean {
   return Number.isFinite(ms);
 }
 
+function normalizeSortV0(value: string | null): "created_desc" | "created_asc" {
+  const s = String(value ?? "").trim().toLowerCase();
+  return s === "created_asc" ? "created_asc" : "created_desc";
+}
+
 export async function GET(req: Request) {
   const denied = await requireDaaAdminViewerAuth(req);
   if (denied) return denied;
@@ -33,8 +38,7 @@ export async function GET(req: Request) {
   const source = String(url.searchParams.get("source") ?? "").trim() || undefined;
   const q = String(url.searchParams.get("q") ?? "").trim() || undefined;
 
-  const sortRaw = String(url.searchParams.get("sort") ?? "").trim();
-  const sort = sortRaw === "created_asc" ? "created_asc" : "created_desc";
+  const sort = normalizeSortV0(url.searchParams.get("sort"));
 
   if (fromCreatedAt && !isIsoDateTimeV0(fromCreatedAt)) {
     return NextResponse.json({ ok: false, error: "invalid fromCreatedAt" }, { status: 400 });
