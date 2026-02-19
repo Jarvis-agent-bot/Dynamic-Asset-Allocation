@@ -478,13 +478,38 @@ function DashboardSkipLinks({ tab }: { tab: Tab }) {
 }
 
 function DashboardActionRail({ compact = false }: { compact?: boolean }) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filteredSections = ACTION_RAIL_SECTIONS.map((section) => ({
+    title: section.title,
+    items: section.items.filter((it) => {
+      if (!normalizedQuery) return true;
+      return it.label.toLowerCase().includes(normalizedQuery) || it.id.toLowerCase().includes(normalizedQuery);
+    }),
+  })).filter((section) => section.items.length > 0);
+
   return (
     <Card className={compact ? undefined : "xl:sticky xl:top-20"}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Action rail</CardTitle>
+        <CardTitle className="text-sm">Quick actions</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {ACTION_RAIL_SECTIONS.map((section) => (
+        <div className="space-y-1">
+          <Label htmlFor="dashboard-quick-action-filter" className="text-xs text-muted-foreground">
+            Find an action
+          </Label>
+          <Input
+            id="dashboard-quick-action-filter"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Type to filter actions"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+
+        {filteredSections.map((section) => (
           <div key={section.title} className="space-y-2">
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{section.title}</div>
             <div className="grid gap-2">
@@ -504,6 +529,9 @@ function DashboardActionRail({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
         ))}
+
+        {filteredSections.length === 0 ? <div className="text-xs text-muted-foreground">No quick actions match your filter.</div> : null}
+
         <div className="space-y-2 border-t pt-3">
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cross-tab shortcuts</div>
           <div className="grid gap-2">
