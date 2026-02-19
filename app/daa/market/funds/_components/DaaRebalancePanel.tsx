@@ -3752,6 +3752,44 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         )}
       </div>
 
+      {(() => {
+        const urgent = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.5, 0.03)).slice(0, 5);
+        const medium = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= driftThresholdPct && Math.abs(r.deltaPct) < Math.max(driftThresholdPct * 1.5, 0.03)).slice(0, 5);
+        const warningSymbols = Array.from(new Set([...(priceDataWarningsV0.missing ?? []), ...(priceDataWarningsV0.lastClose ?? [])])).slice(0, 6);
+
+        if (!urgent.length && !medium.length && !warningSymbols.length) return null;
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Watchlist signal inbox</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Grouped market signals by urgency and symbol.</div>
+            {urgent.length ? (
+              <div style={{ marginTop: 6, fontSize: 11 }}>
+                <b style={{ color: 'var(--danger)' }}>Urgent</b>: {urgent.map((r) => `${r.id} ${(r.deltaPct * 100).toFixed(1)}%`).join(' · ')}
+              </div>
+            ) : null}
+            {medium.length ? (
+              <div style={{ marginTop: 4, fontSize: 11 }}>
+                <b style={{ color: '#f59e0b' }}>Medium</b>: {medium.map((r) => `${r.id} ${(r.deltaPct * 100).toFixed(1)}%`).join(' · ')}
+              </div>
+            ) : null}
+            {warningSymbols.length ? (
+              <div style={{ marginTop: 4, fontSize: 11 }}>
+                <b className="muted">Price warnings</b>: {warningSymbols.join(', ')}
+              </div>
+            ) : null}
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('prices')}>
+                Review price inputs
+              </button>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                Review symbol targets
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
