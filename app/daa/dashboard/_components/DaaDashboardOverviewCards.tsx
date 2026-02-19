@@ -567,6 +567,18 @@ export default function DaaDashboardOverviewCards() {
                   </div>
                 </div>
               ) : null}
+
+              <div className="pt-1">
+                <div className="text-[11px] text-muted-foreground">Smoke check shortcuts</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
+                    <a href="/api/daa/engine-health" target="_blank" rel="noreferrer">Engine health</a>
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
+                    <a href="/daa/dashboard" target="_blank" rel="noreferrer">Dashboard 200</a>
+                  </Button>
+                </div>
+              </div>
             </>
           ) : (
             <div className="space-y-2">
