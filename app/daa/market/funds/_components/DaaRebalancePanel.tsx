@@ -4122,6 +4122,39 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const eliteSignals = [
+          { name: 'Desk-A', defensive: preTradeCashCheck.blocking || priceDataWarningsV0.missing.length > 0 },
+          { name: 'Desk-B', defensive: rebalanceTableRows.filter((r) => r.deltaPct <= -Math.max(driftThresholdPct, 0.02)).length >= 3 },
+          { name: 'Desk-C', defensive: preRunViolationsV0.filter((v) => v.level === 'blocker').length > 0 || Boolean(paperRunError) },
+        ];
+        const defenseVotes = eliteSignals.filter((s) => s.defensive).length;
+        const consensusDefense = defenseVotes >= 2;
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${consensusDefense ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.12)'}`, borderRadius: 12, background: consensusDefense ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Black-swan consensus warning</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Warn when elite cohort consensus shifts from offense to defense.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              defense votes <b>{defenseVotes}/3</b> · consensus <b style={{ color: consensusDefense ? 'var(--danger)' : '#16a34a' }}>{consensusDefense ? 'defense shift detected' : 'stable risk posture'}</b>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              cohort: {eliteSignals.map((s) => `${s.name}:${s.defensive ? 'defense' : 'offense'}`).join(' · ')}
+            </div>
+            {consensusDefense ? (
+              <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                  Switch to defensive routing
+                </button>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('history-audit')}>
+                  Review prior black-swan episodes
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
