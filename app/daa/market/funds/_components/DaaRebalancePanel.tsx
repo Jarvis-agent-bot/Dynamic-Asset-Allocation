@@ -4059,6 +4059,42 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 20);
+        if (!rows.length) return null;
+
+        const estimatedBuys = suggestedOrdersV0.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const estimatedSells = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const availableCash = Number(cashOnHandV0 || 0);
+        const liquidityCoverage = availableCash + estimatedSells;
+        const cashGap = Math.max(0, estimatedBuys - liquidityCoverage);
+
+        const settlementLagDays = Number.isFinite(Number(settlementLagDaysV0)) ? Math.max(0, Number(settlementLagDaysV0)) : 2;
+        const settlementReady = settlementLagDays <= 2 && !preTradeCashCheck.blocking;
+        const gate = cashGap > 0 || !settlementReady ? 'blocked' : 'pass';
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Pre-trade liquidity and T+N settlement check with cash-gap forecast.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              gate=<b style={{ color: gate === 'pass' ? '#16a34a' : 'var(--danger)' }}>{gate}</b> · T+N=<b>{settlementLagDays}</b> · cash gap forecast=<b>{cashGap.toFixed(2)} {baseCcy || ''}</b>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              buy={estimatedBuys.toFixed(2)} · sell={estimatedSells.toFixed(2)} · cash={availableCash.toFixed(2)} · liquidity coverage={(liquidityCoverage).toFixed(2)}
+            </div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                Open liquidity-sensitive orders
+              </button>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun()}>
+                Re-run T+N preflight
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
