@@ -250,6 +250,34 @@ export default function DaaDashboardOverviewCards() {
     !!(deployResp && deployResp.ok) &&
     (!sha || deployBootstrapMissingRequiredCount + deployBootstrapMissingBootstrapCount + deployBootstrapMissingRecommendedCount > 0);
 
+  const opsAlertGroupsV0 = useMemo(() => {
+    const groups: Array<{ title: string; items: Array<{ label: string; action: string; href: string }> }> = [];
+
+    const authItems: Array<{ label: string; action: string; href: string }> = [];
+    if (auth && !auth.ok && String(auth.error ?? "") === "not_authenticated") {
+      authItems.push({ label: "Session expired or signed out", action: "Sign in", href: "/daa/login?returnTo=%2Fdaa%2Fdashboard" });
+    }
+    if (authItems.length) groups.push({ title: "Access", items: authItems });
+
+    const runItems: Array<{ label: string; action: string; href: string }> = [];
+    if (!latestRun) {
+      runItems.push({ label: "No runs in history", action: "Open wizard", href: "/daa/dashboard?tab=wizard&step=1" });
+    } else if (String(latestRun.status).toLowerCase() === "failed") {
+      runItems.push({ label: "Latest run failed", action: "Review history", href: "/daa/dashboard?tab=dashboard#history-audit" });
+      runItems.push({ label: "Retry flow via Market/Funds", action: "Open Market/Funds", href: "/daa/dashboard?tab=market-funds" });
+    }
+    if (runItems.length) groups.push({ title: "Runs", items: runItems });
+
+    const deployItems: Array<{ label: string; action: string; href: string }> = [];
+    if (!sha) deployItems.push({ label: "Build SHA missing", action: "Open settings", href: "/daa/dashboard/settings" });
+    if (deployBootstrapMissingRequiredCount > 0) {
+      deployItems.push({ label: `Missing required deploy env: ${deployBootstrapMissingRequiredCount}`, action: "Fix deploy", href: "/daa/dashboard/settings" });
+    }
+    if (deployItems.length) groups.push({ title: "Deploy", items: deployItems });
+
+    return groups;
+  }, [auth, deployBootstrapMissingRequiredCount, latestRun, sha]);
+
   const deployPrereqs: ChecklistItem[] = useMemo(() => {
     return [
       {
@@ -596,6 +624,33 @@ export default function DaaDashboardOverviewCards() {
                 </Button>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Ops alert center</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {opsAlertGroupsV0.length ? (
+            opsAlertGroupsV0.map((group) => (
+              <Alert key={group.title} className="p-3">
+                <AlertTitle className="text-xs">{group.title}</AlertTitle>
+                <AlertDescription className="mt-2 space-y-2">
+                  {group.items.map((item) => (
+                    <div key={`${group.title}-${item.label}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span>{item.label}</span>
+                      <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
+                        <a href={item.href}>{item.action}</a>
+                      </Button>
+                    </div>
+                  ))}
+                </AlertDescription>
+              </Alert>
+            ))
+          ) : (
+            <div className="text-xs text-muted-foreground">No active alerts. System looks healthy for operator flow.</div>
           )}
         </CardContent>
       </Card>
