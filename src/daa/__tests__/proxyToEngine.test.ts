@@ -200,6 +200,24 @@ describe("daa/proxyToEngine", () => {
     await expect(resp.json()).resolves.toMatchObject({ ok: false, error: "engine unavailable" });
   });
 
+  it("proxyToEngineJson maps empty 204 body path to upstream fetch failed", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      return new Response("", {
+        status: 204,
+      });
+    }) as unknown as typeof fetch;
+
+    const resp = await proxyToEngineJson({
+      upstreamPath: "/daa-api/health",
+      method: "GET",
+      timeoutMs: 10_000,
+      fallbackContentType: "application/json",
+    });
+
+    expect(resp.status).toBe(502);
+    await expect(resp.json()).resolves.toMatchObject({ ok: false, error: "upstream fetch failed" });
+  });
+
   it("proxyToEngineJson returns 502 when upstream JSON is invalid", async () => {
     globalThis.fetch = vi.fn(async () => {
       return new Response("not-json", {
