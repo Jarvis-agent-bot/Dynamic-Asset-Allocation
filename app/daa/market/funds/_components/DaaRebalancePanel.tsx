@@ -3913,6 +3913,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 </div>
               </div>
             </div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {[{ role: 'Analyst', tier: analystTier, score: analystScore }, { role: 'Manager', tier: managerTier, score: managerScore }].map((r) => (
+                <div key={r.role} style={{ fontSize: 11 }}>
+                  {r.role} tier-ladder: elite >= 80, neutral 50-79, incompetent < 50 · current=<b style={{ color: tierColor(r.tier) }}>{r.tier}</b> ({r.score})
+                </div>
+              ))}
+            </div>
           </div>
         );
       })()}
