@@ -16,5 +16,9 @@ describe("dashboard run list search/sort v0", () => {
     expect(source).toContain("qs.set(\"sort\", runSort)");
     expect(source).toContain("Newest first");
     expect(source).toContain("Oldest first");
+    expect(source).toContain("Status");
+    expect(source).toContain("Errors only");
+    expect(source).toContain("Dashboard only");
+    expect(source).toContain("qs.set(\"status\", runStatusFilter)");
   });
 });
