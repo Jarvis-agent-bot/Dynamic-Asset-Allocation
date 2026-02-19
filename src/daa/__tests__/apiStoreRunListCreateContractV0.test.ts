@@ -264,6 +264,17 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(Array.isArray(newlineLimitJson.runs)).toBe(true);
     expect(newlineLimitJson.runs.length).toBe(1);
 
+    const carriageReturnLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=%0D&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const carriageReturnLimitRes: Response = await (listMod as any).GET(carriageReturnLimitReq);
+    expect(carriageReturnLimitRes.status).toBe(200);
+    const carriageReturnLimitJson = await carriageReturnLimitRes.json();
+    expect(carriageReturnLimitJson.ok).toBe(true);
+    expect(Array.isArray(carriageReturnLimitJson.runs)).toBe(true);
+    expect(carriageReturnLimitJson.runs.length).toBe(1);
+
     const plusLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=%2B2&source=%2Fdaa%2Fdashboard", {
       method: "GET",
       headers: { cookie: viewerCookie, accept: "application/json" },
