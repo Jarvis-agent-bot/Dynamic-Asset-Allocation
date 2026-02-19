@@ -4104,29 +4104,30 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         const trace = rows.map((r) => {
           const id = String(r.id ?? '').trim();
           const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
-          const quality = Math.max(0.6, 1 - Math.min(0.35, driftAbs * 1.8) - (missingSet.has(id) ? 0.2 : 0) - (staleSet.has(id) ? 0.1 : 0));
-          const wQat = Math.max(0, r.targetPct * quality);
+          const hMultiplier = Math.max(0.75, 1 - Math.min(0.2, driftAbs * 1.2));
+          const aiBias = missingSet.has(id) ? 0.85 : staleSet.has(id) ? 0.92 : 1.05;
+          const wQat = Math.max(0, r.targetPct * hMultiplier * aiBias);
           const action = wQat >= r.targetPct * 0.9 ? 'keep' : wQat >= r.targetPct * 0.75 ? 'trim' : 'defer';
-          return { id, targetPct: r.targetPct, quality, wQat, action };
+          return { id, targetPct: r.targetPct, hMultiplier, aiBias, wQat, action };
         });
 
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Usable W_qat decision flow</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Actionable step-by-step flow from W_target to W_qat to routing decision.</div>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Mainline W_qat formula task</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>W_qat = W_base * H_multiplier * AI_bias with visible per-symbol trace.</div>
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {trace.map((r) => (
                 <div key={r.id} style={{ fontSize: 11 }}>
-                  {r.id}: target={(r.targetPct * 100).toFixed(2)}% -> Q={r.quality.toFixed(2)} -> W_qat={(r.wQat * 100).toFixed(2)}% -> action=<b>{r.action}</b>
+                  {r.id}: W_base={(r.targetPct * 100).toFixed(2)}% * H_multiplier={r.hMultiplier.toFixed(2)} * AI_bias={r.aiBias.toFixed(2)} => W_qat={(r.wQat * 100).toFixed(2)}% -> action=<b>{r.action}</b>
                 </div>
               ))}
             </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
-                Apply W_qat to target weights
+                Apply W_qat formula targets
               </button>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
-                Open W_qat order routing
+                Open formula-based routing
               </button>
             </div>
           </div>
