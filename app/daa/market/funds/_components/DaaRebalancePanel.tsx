@@ -773,6 +773,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : null;
   }, [moneyPlan]);
 
+  const smartDefaultsHintsV0 = useMemo(() => {
+    const hints: string[] = [];
+    if (!baseCcy) hints.push('Money plan base currency is missing (wizard Step3).');
+    if (!targetWeights.length) hints.push('Target weights are empty (wizard Step4).');
+    if (priceDataWarningsV0.missing.length > 0) hints.push(`Missing prices for ${priceDataWarningsV0.missing.length} symbol(s).`);
+    if (priceDataWarningsV0.lastClose.length > 0) hints.push(`Using last-close fallback for ${priceDataWarningsV0.lastClose.length} symbol(s).`);
+    return hints;
+  }, [baseCcy, priceDataWarningsV0.lastClose.length, priceDataWarningsV0.missing.length, targetWeights.length]);
+
   async function doCopyBundle() {
     try {
       await copyTextToClipboard(pretty(exportBundle));
@@ -3703,6 +3712,45 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           </div>
         );
       })()}
+
+      <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+        <div style={{ fontWeight: 800, fontSize: 13 }}>Funds hub smart defaults</div>
+        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Apply operator-friendly defaults and see inline hints for missing inputs.</div>
+        <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+          <button
+            type="button"
+            className="button secondary"
+            style={{ padding: '4px 8px' }}
+            onClick={() => {
+              persistExecutionModeV0('paper');
+              persistSellProceedsRoutingV0('CASH');
+              persistMaxTurnoverPct01V0(0.35);
+              persistCashBucketTargetPct01V0(0.02);
+              setWhatIfDriftThresholdPctV0(null);
+              setRev((x) => x + 1);
+            }}
+          >
+            Apply smart defaults
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            style={{ padding: '4px 8px' }}
+            onClick={() => jumpTo('rebalance')}
+          >
+            Open ready-to-run section
+          </button>
+        </div>
+        {smartDefaultsHintsV0.length ? (
+          <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+            {smartDefaultsHintsV0.map((hint) => (
+              <div key={hint} className="muted" style={{ fontSize: 11 }}>- {hint}</div>
+            ))}
+          </div>
+        ) : (
+          <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>All key inputs look complete. You can run preflight now.</div>
+        )}
+      </div>
 
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
