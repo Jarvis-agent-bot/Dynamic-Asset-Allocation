@@ -60,6 +60,74 @@ function computeCounts(run: RebalanceOrderStatusRunV0): { total: number; filled:
   return { total: orders.length, filled, failed };
 }
 
+type CompareMetrics = {
+  totalOrders: number;
+  filledOrders: number;
+  failedOrders: number;
+  totalNotional: number;
+  durationSec: number | null;
+};
+
+function buildCompareMetrics(run: RebalanceOrderStatusRunV0): CompareMetrics {
+  const counts = computeCounts(run);
+  const orders = Array.isArray(run.orders) ? run.orders : [];
+  const totalNotional = orders.reduce((sum, o) => sum + (safeNum(o?.notional) ?? 0), 0);
+
+  const createdMs = Date.parse(String(run.createdAt ?? ''));
+  const updatedMs = Date.parse(String(run.updatedAt ?? ''));
+  const durationSec = Number.isFinite(createdMs) && Number.isFinite(updatedMs) ? Math.max(0, (updatedMs - createdMs) / 1000) : null;
+
+  return {
+    totalOrders: counts.total,
+    filledOrders: counts.filled,
+    failedOrders: counts.failed,
+    totalNotional,
+    durationSec,
+  };
+}
+
+type OrderDeltaRow = {
+  key: string;
+  symbol: string;
+  side: string;
+  baseNotional: number;
+  compareNotional: number;
+  deltaNotional: number;
+};
+
+function buildOrderDeltaRows(baseRun: RebalanceOrderStatusRunV0, compareRun: RebalanceOrderStatusRunV0): OrderDeltaRow[] {
+  const sums = new Map<string, { symbol: string; side: string; baseNotional: number; compareNotional: number }>();
+
+  const add = (run: RebalanceOrderStatusRunV0, field: 'baseNotional' | 'compareNotional') => {
+    const orders = Array.isArray(run.orders) ? run.orders : [];
+    for (const o of orders) {
+      const symbol = String(o?.symbol ?? '').trim().toUpperCase();
+      const side = String(o?.side ?? '').trim().toUpperCase();
+      if (!symbol || !side) continue;
+
+      const key = `${symbol}:${side}`;
+      const prev = sums.get(key) ?? { key, symbol, side, baseNotional: 0, compareNotional: 0 };
+      prev[field] += safeNum(o?.notional) ?? 0;
+      sums.set(key, prev);
+    }
+  };
+
+  add(baseRun, 'baseNotional');
+  add(compareRun, 'compareNotional');
+
+  return [...sums.values()]
+    .map((x) => ({
+      key: `${x.symbol}:${x.side}`,
+      symbol: x.symbol,
+      side: x.side,
+      baseNotional: x.baseNotional,
+      compareNotional: x.compareNotional,
+      deltaNotional: x.compareNotional - x.baseNotional,
+    }))
+    .filter((x) => Math.abs(x.baseNotional) > 1e-9 || Math.abs(x.compareNotional) > 1e-9)
+    .sort((a, b) => Math.abs(b.deltaNotional) - Math.abs(a.deltaNotional) || a.key.localeCompare(b.key));
+}
+
 function safeNum(x: unknown): number | null {
   const n = typeof x === 'number' ? x : Number(x);
   return Number.isFinite(n) ? n : null;
@@ -131,6 +199,8 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const [copyStatus, setCopyStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [compareBaseRunId, setCompareBaseRunId] = useState('');
+  const [compareTargetRunId, setCompareTargetRunId] = useState('');
 
   useEffect(() => {
     const onData = () => setLocalRev((x) => x + 1);
@@ -236,6 +306,41 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
     return filtered.slice(0, lim);
   }, [filtered, limit]);
 
+  const visibleRunOptions = useMemo(
+    () => visible.map(({ run }) => ({ id: run.runId, label: `${run.state} · ${String(run.updatedAt ?? run.createdAt ?? '').slice(0, 16)} · ${run.runId.slice(0, 8)}` })),
+    [visible],
+  );
+
+  const compareBaseRun = useMemo(
+    () => visible.find(({ run }) => run.runId === compareBaseRunId)?.run ?? null,
+    [visible, compareBaseRunId],
+  );
+  const compareTargetRun = useMemo(
+    () => visible.find(({ run }) => run.runId === compareTargetRunId)?.run ?? null,
+    [visible, compareTargetRunId],
+  );
+
+  const compareMetrics = useMemo(() => {
+    if (!compareBaseRun || !compareTargetRun || compareBaseRun.runId === compareTargetRun.runId) return null;
+
+    const base = buildCompareMetrics(compareBaseRun);
+    const target = buildCompareMetrics(compareTargetRun);
+    const orderDeltas = buildOrderDeltaRows(compareBaseRun, compareTargetRun).slice(0, 8);
+
+    return {
+      base,
+      target,
+      orderDeltas,
+      metricRows: [
+        { key: 'orders', label: 'Orders', base: base.totalOrders, target: target.totalOrders },
+        { key: 'filled', label: 'Filled', base: base.filledOrders, target: target.filledOrders },
+        { key: 'failed', label: 'Failed', base: base.failedOrders, target: target.failedOrders },
+        { key: 'notional', label: 'Total notional', base: base.totalNotional, target: target.totalNotional },
+        { key: 'duration', label: 'Duration (sec)', base: base.durationSec ?? 0, target: target.durationSec ?? 0 },
+      ],
+    };
+  }, [compareBaseRun, compareTargetRun]);
+
   async function copyVisible() {
     try {
       await copyTextToClipboard(pretty(visible.map((x) => x.run)));
@@ -311,6 +416,117 @@ export default function DaaDynamicRebalanceRunHistoryV0(props: { rev?: number })
 
       <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
         Total stored: <b>{all.length}</b> · Filtered: <b>{filtered.length}</b> · Showing: <b>{visible.length}</b>
+      </div>
+
+      <div style={{ marginTop: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 10 }}>
+        <div style={{ fontWeight: 700, fontSize: 12 }}>Compare two runs (v0)</div>
+        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+          Pick a base run and a compare run to highlight metric and trade deltas.
+        </div>
+
+        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
+          <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+            Base
+            <select
+              value={compareBaseRunId}
+              onChange={(e) => setCompareBaseRunId(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 6px', borderRadius: 8 }}
+            >
+              <option value="">Select run</option>
+              {visibleRunOptions.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+            Compare
+            <select
+              value={compareTargetRunId}
+              onChange={(e) => setCompareTargetRunId(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 6px', borderRadius: 8 }}
+            >
+              <option value="">Select run</option>
+              {visibleRunOptions.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {compareMetrics ? (
+          <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+            <div style={{ overflowX: 'auto' as const }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Metric</th>
+                    <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Base</th>
+                    <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Compare</th>
+                    <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Delta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {compareMetrics.metricRows.map((row) => {
+                    const delta = row.target - row.base;
+                    const deltaColor = Math.abs(delta) < 1e-9 ? 'var(--text)' : delta > 0 ? 'var(--primary)' : 'var(--danger)';
+                    return (
+                      <tr key={row.key} style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                        <td style={{ padding: '6px 0' }}>{row.label}</td>
+                        <td style={{ padding: '6px 0', textAlign: 'right' }}>{row.base.toFixed(2)}</td>
+                        <td style={{ padding: '6px 0', textAlign: 'right' }}>{row.target.toFixed(2)}</td>
+                        <td style={{ padding: '6px 0', textAlign: 'right', color: deltaColor }}>{delta >= 0 ? '+' : ''}{delta.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Trade deltas (compare - base)</div>
+              {compareMetrics.orderDeltas.length ? (
+                <div style={{ overflowX: 'auto' as const }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Symbol</th>
+                        <th style={{ textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Side</th>
+                        <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Base</th>
+                        <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Compare</th>
+                        <th style={{ textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.12)', paddingBottom: 6 }}>Delta</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {compareMetrics.orderDeltas.map((row) => {
+                        const color = Math.abs(row.deltaNotional) < 1e-9 ? 'var(--text)' : row.deltaNotional > 0 ? 'var(--primary)' : 'var(--danger)';
+                        return (
+                          <tr key={row.key} style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                            <td style={{ padding: '6px 0' }}>{row.symbol}</td>
+                            <td style={{ padding: '6px 0' }}>{row.side}</td>
+                            <td style={{ padding: '6px 0', textAlign: 'right' }}>{row.baseNotional.toFixed(2)}</td>
+                            <td style={{ padding: '6px 0', textAlign: 'right' }}>{row.compareNotional.toFixed(2)}</td>
+                            <td style={{ padding: '6px 0', textAlign: 'right', color }}>{row.deltaNotional >= 0 ? '+' : ''}{row.deltaNotional.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="muted" style={{ fontSize: 11 }}>No order deltas found between the selected runs.</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+            Select two different runs in the current view to compare.
+          </div>
+        )}
       </div>
 
       {visible.length ? (
