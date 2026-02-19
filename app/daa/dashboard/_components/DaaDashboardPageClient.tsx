@@ -479,7 +479,39 @@ function DashboardSkipLinks({ tab }: { tab: Tab }) {
 
 function DashboardActionRail({ compact = false }: { compact?: boolean }) {
   const [query, setQuery] = useState("");
+  const quickFilterInputRef = useRef<HTMLInputElement | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
+
+  useEffect(() => {
+    function onKeyDown(ev: KeyboardEvent) {
+      const target = ev.target as HTMLElement | null;
+      const tag = String(target?.tagName ?? "").toLowerCase();
+      const isTyping = tag === "input" || tag === "textarea" || tag === "select" || !!target?.isContentEditable;
+
+      if (!ev.altKey) {
+        if (ev.key === "/" && !isTyping) {
+          ev.preventDefault();
+          quickFilterInputRef.current?.focus();
+          quickFilterInputRef.current?.select();
+        }
+        return;
+      }
+
+      if (ev.key === "1") {
+        ev.preventDefault();
+        scrollToId("run-checklist");
+        return;
+      }
+
+      if (ev.key === "2") {
+        ev.preventDefault();
+        scrollToId("history-audit");
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const filteredSections = ACTION_RAIL_SECTIONS.map((section) => ({
     title: section.title,
@@ -501,12 +533,14 @@ function DashboardActionRail({ compact = false }: { compact?: boolean }) {
           </Label>
           <Input
             id="dashboard-quick-action-filter"
+            ref={quickFilterInputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type to filter actions"
             autoComplete="off"
             spellCheck={false}
           />
+          <div className="text-[11px] text-muted-foreground">Shortcuts: <code>/</code> focus filter · <code>Alt+1</code> run checklist · <code>Alt+2</code> history/audit</div>
         </div>
 
         {filteredSections.map((section) => (
