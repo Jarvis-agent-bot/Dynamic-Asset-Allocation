@@ -5067,6 +5067,32 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                           padding: '10px 12px',
                           background: 'rgba(0,0,0,0.12)'}}
                       >
+                        <div style={{ fontWeight: 700, fontSize: 12 }}>Execution cost preview</div>
+                        {(() => {
+                          const ccy = baseCcy ? ` ${baseCcy}` : '';
+                          const baseCost = Number.isFinite(whatIf.costTotal) ? whatIf.costTotal : 0;
+                          const low = baseCost * 0.8;
+                          const high = baseCost * 1.25;
+                          const feeBase = Number.isFinite(whatIf.feeTotal) ? whatIf.feeTotal : 0;
+                          const slipBase = Number.isFinite(whatIf.slippageTotal) ? whatIf.slippageTotal : 0;
+                          return (
+                            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                              Estimated fee range≈<b>{(feeBase * 0.85).toFixed(2)}</b>~<b>{(feeBase * 1.15).toFixed(2)}</b>{ccy}
+                              {' '}· slippage range≈<b>{(slipBase * 0.75).toFixed(2)}</b>~<b>{(slipBase * 1.35).toFixed(2)}</b>{ccy}
+                              {' '}· total execution cost≈<b>{low.toFixed(2)}</b>~<b>{high.toFixed(2)}</b>{ccy}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 8,
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                          background: 'rgba(0,0,0,0.12)'}}
+                      >
                         <div style={{ fontWeight: 700, fontSize: 12 }}>What-if lab (side-by-side scenarios)</div>
                         <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
                           Compare baseline vs stress assumptions before confirm.
