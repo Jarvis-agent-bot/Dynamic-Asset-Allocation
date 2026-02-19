@@ -150,5 +150,10 @@ describe("dashboardVisualSurfacesV0", () => {
     for (const surface of DASHBOARD_VISUAL_SURFACES_V0) {
       expect(source).toContain(`<DashboardSection id=\"${surface.id}\"`);
     }
+
+    expect(source).toContain("Quick actions");
+    expect(source).toContain("Find an action");
+    expect(source).toContain("Type to filter actions");
+    expect(source).toContain("No quick actions match your filter.");
   });
 });
