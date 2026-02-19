@@ -3965,6 +3965,50 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
+        const rows = rebalanceTableRows.slice(0, 12);
+        if (!rows.length) return null;
+
+        const highDriftThreshold = Math.max(driftThresholdPct * 1.5, 0.03);
+        const drifted = rows.filter((r) => Math.abs(r.deltaPct) >= highDriftThreshold);
+        const downWeightFactor = 0.85;
+
+        if (!drifted.length) {
+          return (
+            <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(34,197,94,0.45)', borderRadius: 12, background: 'rgba(22,163,74,0.08)' }}>
+              <div style={{ fontWeight: 800, fontSize: 13 }}>Thesis-regime drift control</div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>No drift alert triggered; controlled down-weighting not required.</div>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(239,68,68,0.45)', borderRadius: 12, background: 'rgba(220,38,38,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Thesis-regime drift alerts + controlled down-weighting</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Alert drifted symbols and apply a controlled down-weight factor.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {drifted.map((r) => {
+                const base = Number.isFinite(r.targetPct) ? r.targetPct : 0;
+                const adjusted = Math.max(0, base * downWeightFactor);
+                return (
+                  <div key={String(r.id ?? '')} style={{ fontSize: 11 }}>
+                    {String(r.id ?? '')}: drift={(r.deltaPct * 100).toFixed(1)}% · W_base={(base * 100).toFixed(2)}% -> W_controlled={(adjusted * 100).toFixed(2)}% (factor {downWeightFactor.toFixed(2)})
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                Apply controlled down-weighting
+              </button>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                Re-route drifted recommendations
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {(() => {
         const rows = rebalanceTableRows.slice(0, 8);
         if (!rows.length) return null;
 
