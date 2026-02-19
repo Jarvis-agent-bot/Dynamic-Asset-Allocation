@@ -115,6 +115,12 @@ describe("dashboardVisualSurfacesV0", () => {
     ]);
   });
 
+  it("keeps input section labels stable for operator prep flow", () => {
+    const inputTitles = DASHBOARD_VISUAL_SURFACES_V0.filter((item) => item.group === "inputs").map((item) => item.title);
+
+    expect(inputTitles).toEqual(["Import", "Admin Users", "Backtest"]);
+  });
+
   it("renders each critical surface section in the dashboard page", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const dashboardPageClientPath = join(
