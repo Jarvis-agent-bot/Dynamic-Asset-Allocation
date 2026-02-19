@@ -4021,6 +4021,44 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 24);
+        if (!rows.length) return null;
+
+        const isolatedRows = rows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.6, 0.04)).slice(0, 6);
+        const lockedIds = new Set(isolatedRows.map((r) => String(r.id ?? '').trim()));
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Risk-tag MaxIn lock center</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Tag isolated assets and enforce physical MaxIn lock before increasing exposure.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {(isolatedRows.length ? isolatedRows : rows.slice(0, 3)).map((r) => {
+                const id = String(r.id ?? '').trim();
+                const lock = lockedIds.has(id) ? 'LOCKED_MAX_IN' : 'OPEN';
+                const lockColor = lock === 'LOCKED_MAX_IN' ? 'var(--danger)' : '#16a34a';
+                return (
+                  <div key={id} style={{ fontSize: 11 }}>
+                    {id}: tag=<b>{lockedIds.has(id) ? 'isolated' : 'normal'}</b> · maxInLock=<b style={{ color: lockColor }}>{lock}</b> · drift={(r.deltaPct * 100).toFixed(1)}%
+                  </div>
+                );
+              })}
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              rule: when tag=isolated and lock=LOCKED_MAX_IN, route buys to hold-only until operator unlocks physical limit.
+            </div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                Review isolated tags
+              </button>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                Apply MaxIn lock routing
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
