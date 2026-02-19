@@ -3839,6 +3839,42 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         </div>
       </div>
 
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 40);
+        if (!rows.length) return null;
+
+        const bucket = {
+          A: { value: 0, drift: 0 },
+          H: { value: 0, drift: 0 },
+          US: { value: 0, drift: 0 },
+          Other: { value: 0, drift: 0 },
+        };
+
+        for (const r of rows) {
+          const id = String(r.id ?? '').trim();
+          const vRaw = Number((r as any).currentValue ?? Number.NaN);
+          const v = Number.isFinite(vRaw) ? vRaw : 0;
+          const d = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
+          const key = /^\d{6}$/.test(id) ? 'A' : /^HK/i.test(id) || /^0\d{4}$/.test(id) ? 'H' : /^[A-Z]{1,5}$/.test(id) ? 'US' : 'Other';
+          bucket[key as 'A' | 'H' | 'US' | 'Other'].value += v;
+          bucket[key as 'A' | 'H' | 'US' | 'Other'].drift = Math.max(bucket[key as 'A' | 'H' | 'US' | 'Other'].drift, d);
+        }
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Cross-market ledger risk view</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Unified base-ccy exposure for A/H/US books.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {(['A', 'H', 'US', 'Other'] as const).map((k) => (
+                <div key={k} style={{ fontSize: 11 }}>
+                  {k}: exposure≈<b>{bucket[k].value.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''} · max|drift|≈<b>{(bucket[k].drift * 100).toFixed(2)}%</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
