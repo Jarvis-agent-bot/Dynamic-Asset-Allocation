@@ -275,6 +275,17 @@ describe("/api/daa/store/v0 run create/list contract parity", () => {
     expect(Array.isArray(carriageReturnLimitJson.runs)).toBe(true);
     expect(carriageReturnLimitJson.runs.length).toBe(1);
 
+    const formFeedLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=%0C&source=%2Fdaa%2Fdashboard", {
+      method: "GET",
+      headers: { cookie: viewerCookie, accept: "application/json" },
+    });
+    const formFeedLimitRes: Response = await (listMod as any).GET(formFeedLimitReq);
+    expect(formFeedLimitRes.status).toBe(200);
+    const formFeedLimitJson = await formFeedLimitRes.json();
+    expect(formFeedLimitJson.ok).toBe(true);
+    expect(Array.isArray(formFeedLimitJson.runs)).toBe(true);
+    expect(formFeedLimitJson.runs.length).toBe(1);
+
     const plusLimitReq = new Request("https://example.com/api/daa/store/v0/runs?limit=%2B2&source=%2Fdaa%2Fdashboard", {
       method: "GET",
       headers: { cookie: viewerCookie, accept: "application/json" },
