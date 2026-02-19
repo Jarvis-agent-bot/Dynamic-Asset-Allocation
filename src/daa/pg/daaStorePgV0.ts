@@ -506,6 +506,8 @@ export async function listDaaRunsV0(args?: {
   actor?: string;
   status?: string;
   source?: string;
+  q?: string;
+  sort?: "created_desc" | "created_asc";
 }): Promise<DaaRunListRowV0[]> {
   await ensureDaaStoreSchemaPgV0();
 
@@ -526,6 +528,12 @@ export async function listDaaRunsV0(args?: {
 
   const sourceRaw = typeof args?.source === "string" ? args?.source.trim() : "";
   const sourceFilter = sourceRaw && sourceRaw !== "all" ? sourceRaw : "";
+
+  const qRaw = typeof args?.q === "string" ? args?.q.trim() : "";
+  const q = qRaw.slice(0, 120);
+
+  const sortRaw = typeof args?.sort === "string" ? args?.sort.trim() : "";
+  const sort = sortRaw === "created_asc" ? "created_asc" : "created_desc";
 
   return withDaaPgClientV0(async ({ query }) => {
     let sql = `
@@ -561,6 +569,10 @@ export async function listDaaRunsV0(args?: {
     if (actorFilter) pushWhere(`actor = $${bind.length + 1}`, actorFilter);
     if (statusFilter) pushWhere(`status = $${bind.length + 1}`, statusFilter);
     if (sourceFilter) pushWhere(`source = $${bind.length + 1}`, sourceFilter);
+    if (q) {
+      const p = `$${bind.length + 1}`;
+      pushWhere(`(run_id ILIKE ${p} OR kind ILIKE ${p} OR status ILIKE ${p} OR actor ILIKE ${p} OR source ILIKE ${p})`, `%${q}%`);
+    }
 
     if (beforeCreatedAt && beforeRunId) {
       const a = `$${bind.length + 1}`;
@@ -573,7 +585,11 @@ export async function listDaaRunsV0(args?: {
     if (where.length) sql += ` WHERE ${where.join(" AND ")}`;
 
     bind.push(limit);
-    sql += ` ORDER BY created_at DESC, run_id DESC LIMIT $${bind.length}`;
+    if (sort === "created_asc") {
+      sql += ` ORDER BY created_at ASC, run_id ASC LIMIT $${bind.length}`;
+    } else {
+      sql += ` ORDER BY created_at DESC, run_id DESC LIMIT $${bind.length}`;
+    }
 
     const res = await query(sql, bind);
 

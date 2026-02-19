@@ -179,6 +179,8 @@ export default function DaaDashboardHistoryAudit() {
   const [annotationError, setAnnotationError] = useState<string | null>(null);
 
   const [actorFilter, setActorFilter] = useState<string>("");
+  const [runSearchText, setRunSearchText] = useState<string>("");
+  const [runSort, setRunSort] = useState<"created_desc" | "created_asc">("created_desc");
   const [fromLocal, setFromLocal] = useState<string>("");
   const [toLocal, setToLocal] = useState<string>("");
 
@@ -211,10 +213,12 @@ export default function DaaDashboardHistoryAudit() {
     qs.set("limit", String(runLimit));
 
     if (actorFilter) qs.set("actor", actorFilter);
+    if (runSearchText.trim()) qs.set("q", runSearchText.trim());
+    qs.set("sort", runSort);
     if (fromIso) qs.set("fromCreatedAt", fromIso);
     if (toIso) qs.set("toCreatedAt", toIso);
 
-    if (mode === "more" && cursor) {
+    if (mode === "more" && cursor && runSort === "created_desc") {
       qs.set("beforeCreatedAt", cursor.beforeCreatedAt);
       qs.set("beforeRunId", cursor.beforeRunId);
     }
@@ -264,7 +268,7 @@ export default function DaaDashboardHistoryAudit() {
 
   useEffect(() => {
     void loadRuns("reset");
-  }, [actorFilter, fromIso, toIso, runsPageSize]);
+  }, [actorFilter, runSearchText, runSort, fromIso, toIso, runsPageSize]);
 
   const derived = useMemo(() => {
     if (!bundle) return null;
@@ -419,6 +423,25 @@ export default function DaaDashboardHistoryAudit() {
             </select>
           </label>
 
+          <Input
+            value={runSearchText}
+            onChange={(e) => setRunSearchText(String(e.target.value ?? ""))}
+            placeholder="Search runId / kind / status / actor / source"
+            className="h-9 w-[min(320px,94vw)]"
+          />
+
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Sort
+            <select
+              value={runSort}
+              onChange={(e) => setRunSort((String(e.target.value ?? "") === "created_asc" ? "created_asc" : "created_desc"))}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="created_desc">Newest first</option>
+              <option value="created_asc">Oldest first</option>
+            </select>
+          </label>
+
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             Runs page size
             <select
@@ -458,6 +481,8 @@ export default function DaaDashboardHistoryAudit() {
             size="sm"
             onClick={() => {
               setActorFilter("");
+              setRunSearchText("");
+              setRunSort("created_desc");
               setFromLocal("");
               setToLocal("");
             }}
@@ -507,7 +532,7 @@ export default function DaaDashboardHistoryAudit() {
             Export CSV
           </Button>
 
-          <Button type="button" variant="outline" size="sm" onClick={() => loadRuns("more")} disabled={runsStatus === "loading" || !cursor}>
+          <Button type="button" variant="outline" size="sm" onClick={() => loadRuns("more")} disabled={runsStatus === "loading" || !cursor || runSort !== "created_desc"}>
             Load more
           </Button>
         </div>
