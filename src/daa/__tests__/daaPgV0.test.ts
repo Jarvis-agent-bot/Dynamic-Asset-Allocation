@@ -64,6 +64,13 @@ describe("daa pg url guard", () => {
     expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@localhost:5432/daa");
   });
 
+  it("accepts uppercase postgres DATABASE_URL fallback when DAA_DB_URL is blank", () => {
+    process.env.DAA_DB_URL = "   ";
+    process.env.DATABASE_URL = "POSTGRES://daa:pass@localhost:5432/daa";
+
+    expect(getDaaPgUrlV0()).toBe("POSTGRES://daa:pass@localhost:5432/daa");
+  });
+
   it("still rejects non-Postgres DATABASE_URL fallback schemes", () => {
     process.env.DAA_DB_URL = "   ";
     process.env.DATABASE_URL = "mysql://user:pass@localhost:3306/daa";
