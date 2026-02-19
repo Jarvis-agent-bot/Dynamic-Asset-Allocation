@@ -173,6 +173,11 @@ export default function DaaDashboardHistoryAudit() {
   const [auditPageSize, setAuditPageSize] = useState<number>(25);
   const [auditPage, setAuditPage] = useState<number>(1);
 
+  const [annotationNotes, setAnnotationNotes] = useState<string>("");
+  const [annotationTagsText, setAnnotationTagsText] = useState<string>("");
+  const [annotationStatus, setAnnotationStatus] = useState<"idle" | "saving" | "ok" | "error">("idle");
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
+
   const [actorFilter, setActorFilter] = useState<string>("");
   const [fromLocal, setFromLocal] = useState<string>("");
   const [toLocal, setToLocal] = useState<string>("");
@@ -316,6 +321,69 @@ export default function DaaDashboardHistoryAudit() {
     if (!id) return null;
     return auditEvents.find((e) => String((e as any)?.eventId ?? "").trim() === id) ?? null;
   }, [auditEvents, selectedAuditEventId]);
+
+  const latestRunAnnotation = useMemo(() => {
+    const hit = auditEvents.find((e: any) => String(e?.kind ?? "") === "run_annotation_v0");
+    if (!hit) return null;
+
+    const payload = (hit as any)?.payload;
+    const notes = String(payload?.notes ?? "").trim();
+    const tags = Array.isArray(payload?.tags)
+      ? payload.tags.map((x: any) => String(x ?? "").trim()).filter(Boolean)
+      : [];
+
+    return {
+      eventId: String((hit as any)?.eventId ?? ""),
+      createdAt: String((hit as any)?.createdAt ?? ""),
+      actorUserId: String((hit as any)?.actorUserId ?? ""),
+      notes,
+      tags,
+    };
+  }, [auditEvents]);
+
+  useEffect(() => {
+    setAnnotationNotes(latestRunAnnotation?.notes ?? "");
+    setAnnotationTagsText((latestRunAnnotation?.tags ?? []).join(", "));
+    setAnnotationStatus("idle");
+    setAnnotationError(null);
+  }, [selectedRunId, latestRunAnnotation?.eventId]);
+
+  async function saveRunAnnotation() {
+    const runId = String(selectedRunId ?? "").trim();
+    if (!runId) return;
+
+    const notes = annotationNotes.trim();
+    const tags = annotationTagsText
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+    if (!notes && tags.length === 0) {
+      setAnnotationStatus("error");
+      setAnnotationError("Please enter notes or at least one tag.");
+      return;
+    }
+
+    setAnnotationStatus("saving");
+    setAnnotationError(null);
+
+    try {
+      const res = await fetch(`/api/daa/store/v0/run/${encodeURIComponent(runId)}/annotation`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ notes, tags }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload?.ok) throw new Error(String(payload?.error ?? `HTTP ${res.status}`));
+
+      await loadBundle(runId);
+      setAnnotationStatus("ok");
+      window.setTimeout(() => setAnnotationStatus("idle"), 1500);
+    } catch (e) {
+      setAnnotationStatus("error");
+      setAnnotationError(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   async function doCopyAudit(text: string) {
     try {
@@ -542,6 +610,67 @@ export default function DaaDashboardHistoryAudit() {
                               <pre className="mt-2 whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs">{pretty({ orders_normalize_issues: derived.normalizedOrders.issues, applied: derived.applied })}</pre>
                             </div>
                           ) : null}
+
+                          <div className="space-y-2 rounded-md border p-3">
+                            <div className="text-sm font-semibold">Run tags & notes</div>
+                            <div className="text-xs text-muted-foreground">Operator annotations are stored as audit events (kind=run_annotation_v0).</div>
+
+                            {latestRunAnnotation ? (
+                              <div className="text-xs text-muted-foreground">
+                                Last saved: {fmtTime(latestRunAnnotation.createdAt)} by {latestRunAnnotation.actorUserId || "unknown"}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-muted-foreground">No annotations yet for this run.</div>
+                            )}
+
+                            <div className="space-y-2">
+                              <label className="block text-xs text-muted-foreground">Notes</label>
+                              <textarea
+                                value={annotationNotes}
+                                onChange={(e) => setAnnotationNotes(String(e.target.value ?? ""))}
+                                rows={3}
+                                placeholder="Why this run exists, approvals, caveats..."
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="block text-xs text-muted-foreground">Tags (comma-separated)</label>
+                              <Input
+                                value={annotationTagsText}
+                                onChange={(e) => setAnnotationTagsText(String(e.target.value ?? ""))}
+                                placeholder="incident, postmortem, dry-run"
+                                className="h-9"
+                              />
+                            </div>
+
+                            {annotationError ? <div className="text-xs text-destructive">{annotationError}</div> : null}
+
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" size="sm" onClick={saveRunAnnotation} disabled={annotationStatus === "saving"}>
+                                {annotationStatus === "saving"
+                                  ? "Saving..."
+                                  : annotationStatus === "ok"
+                                    ? "Saved"
+                                    : annotationStatus === "error"
+                                      ? "Retry save"
+                                      : "Save tags/notes"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setAnnotationNotes(latestRunAnnotation?.notes ?? "");
+                                  setAnnotationTagsText((latestRunAnnotation?.tags ?? []).join(", "));
+                                  setAnnotationStatus("idle");
+                                  setAnnotationError(null);
+                                }}
+                              >
+                                Reset
+                              </Button>
+                            </div>
+                          </div>
 
                           <div>
                             <div className="text-sm font-semibold">Audit events</div>
