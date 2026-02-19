@@ -4642,6 +4642,30 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   })()}
                 </div>
 
+                {(() => {
+                  const rows = rebalanceTableRows;
+                  const overCount = rows.filter((r) => r.deltaPct >= driftThresholdPct).length;
+                  const underCount = rows.filter((r) => r.deltaPct <= -driftThresholdPct).length;
+                  const maxAbsDriftPct = rows.length ? Math.max(...rows.map((r) => Math.abs(r.deltaPct))) * 100 : 0;
+                  const turnoverPct = whatIf && Number.isFinite(whatIf.turnoverPct01) ? whatIf.turnoverPct01 * 100 : null;
+                  const feeBps = Number.isFinite(whatIfFeeBps) ? whatIfFeeBps : 0;
+                  const slippageBps = Number.isFinite(whatIfSlippageBpsUsed) ? whatIfSlippageBpsUsed : 0;
+                  const riskLevel = maxAbsDriftPct >= 5 || (turnoverPct !== null && turnoverPct >= 35) ? 'High' : maxAbsDriftPct >= 2 || (turnoverPct !== null && turnoverPct >= 15) ? 'Medium' : 'Low';
+
+                  return (
+                    <div style={{ marginBottom: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(0,0,0,0.1)' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12 }}>Policy impact simulator</div>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>Preview allocation + risk posture before confirm (drift threshold / fees / slippage).</div>
+                      <div style={{ marginTop: 5, fontSize: 11 }}>
+                        drift over=<b>{overCount}</b>, under=<b>{underCount}</b>, maxAbs≈<b>{maxAbsDriftPct.toFixed(2)}%</b>
+                        {' '}· turnover≈<b>{turnoverPct !== null ? `${turnoverPct.toFixed(2)}%` : 'n/a'}</b>
+                        {' '}· fee/slippage=<b>{feeBps.toFixed(1)} / {slippageBps.toFixed(1)} bps</b>
+                        {' '}· risk=<b style={{ color: riskLevel === 'High' ? 'var(--danger)' : riskLevel === 'Medium' ? '#f59e0b' : '#16a34a' }}>{riskLevel}</b>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {filteredRebalanceTableRows.length ? (
                   <div style={{ overflowX: 'auto' as const }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
