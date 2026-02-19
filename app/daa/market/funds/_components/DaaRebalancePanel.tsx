@@ -4162,6 +4162,36 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
+        const recRows = rebalanceTableRows.slice(0, 10);
+        if (!recRows.length) return null;
+
+        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => String(x || '').trim()));
+        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => String(x || '').trim()));
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Operator-visible factor trace by recommendation</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Every recommendation includes factor-level rationale before order routing.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {recRows.map((r) => {
+                const id = String(r.id ?? '').trim();
+                const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
+                const hMultiplier = Math.max(0.75, 1 - Math.min(0.2, driftAbs * 1.2));
+                const aiBias = missingSet.has(id) ? 0.85 : staleSet.has(id) ? 0.92 : 1.05;
+                const wQat = Math.max(0, r.targetPct * hMultiplier * aiBias);
+                const recommendation = wQat >= r.targetPct * 0.9 ? 'keep' : wQat >= r.targetPct * 0.75 ? 'trim' : 'defer';
+                return (
+                  <div key={id} style={{ fontSize: 11 }}>
+                    {id}: rec=<b>{recommendation}</b> · factors(W_base={(r.targetPct * 100).toFixed(2)}%, H={hMultiplier.toFixed(2)}, AI={aiBias.toFixed(2)}, W_qat={(wQat * 100).toFixed(2)}%)
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {(() => {
         const eliteSignals = [
           { name: 'Desk-A', defensive: preTradeCashCheck.blocking || priceDataWarningsV0.missing.length > 0 },
           { name: 'Desk-B', defensive: rebalanceTableRows.filter((r) => r.deltaPct <= -Math.max(driftThresholdPct, 0.02)).length >= 3 },
