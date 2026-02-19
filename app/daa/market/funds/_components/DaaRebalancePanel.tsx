@@ -4155,6 +4155,44 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 30);
+        if (!rows.length) return null;
+
+        const bucketKey = (id: string) => (/^\d{6}$/.test(id) ? 'CN-A' : /^HK/i.test(id) || /^0\d{4}$/.test(id) ? 'HK' : /^[A-Z]{1,5}$/.test(id) ? 'US' : 'OTHER');
+        const bucketCounts = new Map<string, number>();
+        for (const r of rows) {
+          const key = bucketKey(String(r.id ?? '').trim());
+          bucketCounts.set(key, (bucketCounts.get(key) || 0) + 1);
+        }
+
+        const topShare = Math.max(...Array.from(bucketCounts.values(), (v) => v / rows.length));
+        const concentrationRisk = topShare >= 0.55 || bucketCounts.size <= 2;
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${concentrationRisk ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.12)'}`, borderRadius: 12, background: concentrationRisk ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Analyst correlation-diversity check</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Prevent hidden concentration by checking cross-bucket style diversity.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              buckets=<b>{bucketCounts.size}</b> · top correlation bucket share=<b>{(topShare * 100).toFixed(1)}%</b> · status=<b style={{ color: concentrationRisk ? 'var(--danger)' : '#16a34a' }}>{concentrationRisk ? 'hidden concentration risk' : 'diversity acceptable'}</b>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              trace: {Array.from(bucketCounts.entries()).map(([k, v]) => `${k}:${v}`).join(' · ')}
+            </div>
+            {concentrationRisk ? (
+              <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                  Rebalance concentration buckets
+                </button>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                  Stage de-correlation orders
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
