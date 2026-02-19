@@ -40,6 +40,8 @@ type RunListRow = {
 
 type RunsResp = { ok: boolean; runs?: RunListRow[]; error?: string };
 
+type RunAnomalyHintV0 = { level: "high" | "medium"; label: string; cause: string };
+
 type BundleResp = { ok: boolean; bundle?: any; error?: string };
 
 function pretty(x: unknown) {
@@ -52,6 +54,26 @@ function fmtTime(iso: unknown) {
   const t = Date.parse(s);
   if (!Number.isFinite(t)) return s;
   return new Date(t).toLocaleString();
+}
+
+function buildRunAnomalyHintsV0(run: RunListRow, prev: RunListRow | null): RunAnomalyHintV0[] {
+  const out: RunAnomalyHintV0[] = [];
+  if (String(run.status).toLowerCase() === "failed") {
+    out.push({ level: "high", label: "Failed run", cause: "Likely root cause: constraint breach, payload mismatch, or execution adapter error." });
+  }
+  if (run.hasConfirm && !run.hasExecuted) {
+    out.push({ level: "medium", label: "Confirm-only run", cause: "Likely root cause: operator stopped before execute or settlement/cash gate blocked." });
+  }
+  if (run.auditCount >= 12) {
+    out.push({ level: "medium", label: "High audit churn", cause: "Likely root cause: repeated retries/edits under unstable inputs." });
+  }
+  if (prev) {
+    const deltaMs = Date.parse(run.createdAt) - Date.parse(prev.createdAt);
+    if (Number.isFinite(deltaMs) && deltaMs >= 0 && deltaMs < 2 * 60 * 1000) {
+      out.push({ level: "medium", label: "Burst run", cause: "Likely root cause: rapid reruns after anomaly triage." });
+    }
+  }
+  return out.slice(0, 2);
 }
 
 function csvEscapeCell(x: unknown): string {
@@ -584,8 +606,9 @@ export default function DaaDashboardHistoryAudit() {
 
         <div className="space-y-2">
           {runs.length ? (
-            runs.map((r) => {
+            runs.map((r, idx) => {
               const selected = selectedRunId === r.runId;
+              const anomalyHintsV0 = buildRunAnomalyHintsV0(r, idx < runs.length - 1 ? runs[idx + 1] : null);
               return (
                 <div key={r.runId} className={selected ? "rounded-md border bg-muted/20 p-3" : "rounded-md border p-3"}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -603,6 +626,22 @@ export default function DaaDashboardHistoryAudit() {
                       <div className="mt-1 text-xs text-muted-foreground">
                         actor:{String(r.actor ?? "")} <span className="text-muted-foreground">·</span> source:{String(r.source ?? "") || "-"}
                       </div>
+                      {anomalyHintsV0.length ? (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex flex-wrap gap-2">
+                            {anomalyHintsV0.map((hint) => (
+                              <span
+                                key={`${r.runId}-${hint.label}`}
+                                className={hint.level === "high" ? "rounded-full border border-destructive/50 bg-destructive/10 px-2 py-1 text-[11px] text-destructive" : "rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-300"}
+                                title={hint.cause}
+                              >
+                                anomaly: {hint.label}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">Likely root-cause: {anomalyHintsV0.map((x) => x.cause).join(" | ")}</div>
+                        </div>
+                      ) : null}
                     </div>
 
                     <Button type="button" variant="outline" size="sm" onClick={() => loadBundle(r.runId)} disabled={bundleStatus === "loading" && selected}>
