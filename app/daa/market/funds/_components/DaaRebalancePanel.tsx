@@ -3818,6 +3818,27 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
+      <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+        <div style={{ fontWeight: 800, fontSize: 13 }}>Operator shift handover</div>
+        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Summary for next shift continuity.</div>
+        <div style={{ marginTop: 6, fontSize: 11 }}>
+          last run={paperRunRecordedAt ? paperRunRecordedAt : 'none'} · runStatus={paperRunError ? 'failed' : paperRunLoading ? 'running' : 'idle'}
+          {' '}· blockers={preRunViolationsV0.filter((v) => v.level === 'blocker').length}
+          {' '}· warnings={preRunViolationsV0.filter((v) => v.level === 'warning').length}
+        </div>
+        <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+          next shift focus: {paperRunError ? 'use incident playbook and recover run' : preTradeCashCheck.blocking ? 'resolve cash/settlement blocker' : 'review preflight and run dry rebalance'}
+        </div>
+        <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+          <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('history-audit')}>
+            Open history/audit
+          </button>
+          <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun()}>
+            Open preflight checklist
+          </button>
+        </div>
+      </div>
+
       <div className="muted" style={{ fontSize: 12, marginBottom: open ? 12 : 0 }}>
         <div>{headline}</div>
         <div style={{ marginTop: 4 }}>{step1SummaryText}</div>
