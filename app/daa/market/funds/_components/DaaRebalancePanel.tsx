@@ -4147,6 +4147,44 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
+        const buyOrders = suggestedOrdersV0.filter((o) => o.side === 'BUY');
+        if (!buyOrders.length) return null;
+
+        const availableCash = Number(cashOnHandV0 || 0);
+        const estimatedSells = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const liquidityCoverage = availableCash + estimatedSells;
+        const liquidityCapPct = 0.3;
+        const perOrderLiquidityCap = Math.max(0, liquidityCoverage * liquidityCapPct);
+        const cappedOrders = buyOrders
+          .map((o) => {
+            const rawNotional = Math.max(0, Number(o.notional || 0));
+            const cappedNotional = Math.min(rawNotional, perOrderLiquidityCap);
+            return { ...o, rawNotional, cappedNotional, capped: cappedNotional < rawNotional };
+          })
+          .filter((o) => o.capped)
+          .slice(0, 5);
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${cappedOrders.length ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 12, background: cappedOrders.length ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity caps</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Clamp buy notionals to a fixed share of available liquidity before execution routing.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              liquidity cap per order=<b>{perOrderLiquidityCap.toFixed(2)} {baseCcy || ''}</b> ({(liquidityCapPct * 100).toFixed(0)}% of coverage) · capped orders=<b>{cappedOrders.length}</b>
+            </div>
+            {cappedOrders.length ? (
+              <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                {cappedOrders.map((o) => (
+                  <div key={`${String(o.id)}-${String(o.side)}`} style={{ fontSize: 11 }}>
+                    {String(o.id)}: BUY {o.rawNotional.toFixed(2)} -> <b>{o.cappedNotional.toFixed(2)}</b> {baseCcy || ''}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
+      {(() => {
         const rows = rebalanceTableRows.slice(0, 8);
         if (!rows.length) return null;
 
