@@ -4212,6 +4212,43 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
+        const rows = rebalanceTableRows.slice(0, 10);
+        if (!rows.length) return null;
+
+        const maxInPct = 0.04;
+        const maxOutPct = 0.05;
+        const breaches = rows
+          .map((r) => {
+            const drift = Number.isFinite(r.deltaPct) ? r.deltaPct : 0;
+            const side = drift < 0 ? 'in' : 'out';
+            const limit = side === 'in' ? maxInPct : maxOutPct;
+            const breach = Math.abs(drift) > limit;
+            return { id: String(r.id ?? ''), drift, side, limit, breach };
+          })
+          .filter((x) => x.breach)
+          .slice(0, 6);
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${breaches.length ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 12, background: breaches.length ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>MaxIn / MaxOut limits</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Clamp per-symbol move sizes before routing execution.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              MaxIn=<b>{(maxInPct * 100).toFixed(1)}%</b> · MaxOut=<b>{(maxOutPct * 100).toFixed(1)}%</b> · breaches=<b>{breaches.length}</b>
+            </div>
+            {breaches.length ? (
+              <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                {breaches.map((x) => (
+                  <div key={x.id} style={{ fontSize: 11 }}>
+                    {x.id}: drift={(x.drift * 100).toFixed(1)}% exceeds {x.side === 'in' ? 'MaxIn' : 'MaxOut'} {(x.limit * 100).toFixed(1)}%
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
+      {(() => {
         const buyNotional = suggestedOrdersV0.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
         const sellNotional = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
         const driftPressure = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct, 0.02)).length;
