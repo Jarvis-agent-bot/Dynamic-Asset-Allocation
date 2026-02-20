@@ -23,9 +23,24 @@ export async function GET(req: Request) {
   const actor = String(url.searchParams.get("actor") ?? "").trim() || undefined;
   const status = String(url.searchParams.get("status") ?? "").trim() || undefined;
   const source = String(url.searchParams.get("source") ?? "").trim() || undefined;
+  const q = String(url.searchParams.get("q") ?? "").trim() || undefined;
+
+  const sortRaw = String(url.searchParams.get("sort") ?? "").trim().toLowerCase();
+  const sort = sortRaw === "created_asc" || sortRaw === "created_desc" ? sortRaw : undefined;
 
   try {
-    const runs = await listDaaRunsV0({ limit, beforeCreatedAt, beforeRunId, fromCreatedAt, toCreatedAt, actor, status, source });
+    const runs = await listDaaRunsV0({
+      limit,
+      beforeCreatedAt,
+      beforeRunId,
+      fromCreatedAt,
+      toCreatedAt,
+      actor,
+      status,
+      source,
+      q,
+      sort,
+    });
     return NextResponse.json({ ok: true, runs });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message ?? e ?? "error") }, { status: 500 });
