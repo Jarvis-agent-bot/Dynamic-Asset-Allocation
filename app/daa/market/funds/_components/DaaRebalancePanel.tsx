@@ -4186,6 +4186,32 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
+        const guardrailBlockers = preRunViolationsV0.filter((v) => v.level === 'blocker');
+        const guardrailWarnings = preRunViolationsV0.filter((v) => v.level === 'warning');
+        const canExecute = guardrailBlockers.length === 0 && !preTradeCashCheck.blocking;
+
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${canExecute ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: canExecute ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Guardrail-first execution gate</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Execution is permitted only after guardrails pass; otherwise route to remediation first.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              status=<b style={{ color: canExecute ? '#16a34a' : 'var(--danger)' }}>{canExecute ? 'ready-to-execute' : 'blocked-by-guardrails'}</b> · blockers=<b>{guardrailBlockers.length}</b> · warnings=<b>{guardrailWarnings.length}</b>
+            </div>
+            {!canExecute ? (
+              <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun()}>
+                  Resolve guardrails in preflight
+                </button>
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                  Hold execution and review orders
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })()}
+
+      {(() => {
         const buyNotional = suggestedOrdersV0.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
         const sellNotional = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
         const driftPressure = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct, 0.02)).length;
