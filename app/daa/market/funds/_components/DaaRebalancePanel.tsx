@@ -550,6 +550,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
 
   const [rev, setRev] = useState(0);
   const executionMode: ExecutionModeV0 = useMemo(() => loadExecutionModeV0(), [rev]);
+  const executionModeNormalized: ExecutionModeV0 = executionMode === 'live' ? 'paper' : executionMode;
   const sellProceedsRoutingV0: SellProceedsRoutingV0 = useMemo(() => loadSellProceedsRoutingV0(), [rev]);
   const cashBucketTargetPct01 = useMemo(() => loadCashBucketTargetPct01V0(), [rev]);
   const maxTurnoverPct01V0 = useMemo(() => loadMaxTurnoverPct01V0(), [rev]);
@@ -582,6 +583,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [preflightAckCash, setPreflightAckCash] = useState(false);
   const [preflightOverrideBlockers, setPreflightOverrideBlockers] = useState(false);
   const [detectionReviewStateV0, setDetectionReviewStateV0] = useState<Record<string, 'approved' | 'rejected'>>({});
+
+  useEffect(() => {
+    if (executionMode !== 'live') return;
+    persistExecutionModeV0('paper');
+    setRev((x) => x + 1);
+  }, [executionMode]);
 
   // Safety-stop confirmation (v0): last-step modal before executing a dynamic rebalance run.
   // Also offers a quick "kill switch" to disable the local dynamic schedule.
@@ -2233,7 +2240,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       }
     }
 
-    const mode: ExecutionModeV0 = executionMode;
+    const mode: ExecutionModeV0 = executionModeNormalized;
     setPaperRunExecutionMode(mode);
 
     // Funds hub v0 safety: "live" execution is intentionally disabled until a broker adapter exists.
@@ -3018,7 +3025,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               </div>
 
               <div className="muted" style={{ fontSize: 12 }}>
-                Execution mode: <b>{executionMode === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b>. Dry run records orders to local execution log only.
+                Execution mode: <b>{executionModeNormalized === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b>. Dry run records orders to local execution log only.
               </div>
             </div>
 
@@ -3201,7 +3208,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       Dynamic schedule: <b>{scheduleEnabled ? 'enabled' : 'disabled'}</b>
                     </div>
                     <div>
-                      Execution: <b>{executionMode === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b> — records to local execution log only.
+                      Execution: <b>{executionModeNormalized === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b> — records to local execution log only.
                     </div>
                   </div>
                 );
@@ -4568,7 +4575,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     Mode:
                   </span>
                   <select
-                    value={executionMode}
+                    value={executionModeNormalized}
                     onChange={(e) => persistExecutionModeV0(e.target.value)}
                     style={{ padding: '6px 10px', borderRadius: 10 }}
                     aria-label="Rebalance execution mode"
@@ -4579,7 +4586,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     </option>
                   </select>
                   <span className="muted" style={{ fontSize: 11 }}>
-                    Dry run only records the orders to the local execution log.
+                    AI recommender-only: no auto trade execution. Dry run only records orders to local execution log.
                   </span>
                 </div>
                 <button
@@ -4590,7 +4597,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   disabled={paperRunLoading || !targetWeights.length || !!executionBlockReason}
                   title={executionBlockReason}
                 >
-                  {paperRunLoading ? 'Running...' : executionMode === 'live' ? 'Run rebalance (live)' : 'Run rebalance (dry run)'}
+                  {paperRunLoading ? 'Running...' : 'Run rebalance (dry run)'}
                 </button>
                 <button
                   type="button"
