@@ -9,9 +9,9 @@ describe('feature-liquidity-settlement-pretrade-gate-v0', () => {
 
     expect(source).toContain('Liquidity + settlement pre-trade gate');
     expect(source).toContain('Pre-trade liquidity and T+N settlement check with cash-gap forecast.');
-    expect(source).toContain("const cashGap = Math.max(0, estimatedBuys - liquidityCoverage);");
-    expect(source).toContain("const gate = cashGap > 0 || !settlementReady ? 'blocked' : 'pass';");
-    expect(source).toContain("cash gap forecast=<b>{cashGap.toFixed(2)} {baseCcy || ''}</b>");
+    expect(source).toContain('getLiquiditySettlementGateV0');
+    expect(source).toContain("const gate = liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking ? 'blocked' : 'pass';");
+    expect(source).toContain("cash gap forecast=<b>{liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''}</b>");
     expect(source).toContain('Re-run T+N preflight');
   });
 });

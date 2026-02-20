@@ -27,6 +27,7 @@ import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
 import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
+import { getLiquiditySettlementGateV0 } from '@/src/daa/liquiditySettlementGateV0';
 import { appendRebalanceLog } from '@/src/daa/rebalanceLogStore';
 import { buildRebalanceViolationsV0 } from '@/src/daa/rebalanceViolationsV0';
 import { buildRebalanceApprovalSummaryMarkdownV0 } from '@/src/daa/rebalanceApprovalSummaryMarkdownV0';
@@ -1604,6 +1605,26 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       baseCcy});
   }, [baseCcy, effectiveOrders, portfolioCash, sellProceedsRoutingV0, whatIfFeeBps, whatIfSlippageBpsUsed]);
 
+  const liquiditySettlementGateV0 = useMemo(() => {
+    const estimatedBuys = effectiveOrders.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+    const estimatedSells = effectiveOrders.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+    const settlementLagDays = sellProceedsRoutingV0 === 'CASH' ? 0 : 2;
+
+    return getLiquiditySettlementGateV0({
+      settlementLagDays,
+      estimatedBuys,
+      estimatedSells,
+      availableCash: portfolioCash,
+      baseCcy,
+    });
+  }, [baseCcy, effectiveOrders, portfolioCash, sellProceedsRoutingV0]);
+
+  const executionBlockReason = preTradeCashCheck.blocking
+    ? preTradeCashCheck.message
+    : liquiditySettlementGateV0.blocked
+      ? liquiditySettlementGateV0.message
+      : undefined;
+
   const preRunViolationsV0 = useMemo(() => {
     const respAny: any = ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' ? (rebalanceResp as any) : (corePreview?.resp as any);
 
@@ -2227,6 +2248,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     if (preTradeCashCheck.blocking) {
       // Conservative UX: treat insufficient settled cash as a pre-trade blocker.
       setPaperRunError(preTradeCashCheck.message);
+      return;
+    }
+
+    if (liquiditySettlementGateV0.blocked) {
+      setPaperRunError(liquiditySettlementGateV0.message);
       return;
     }
 
@@ -3047,10 +3073,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 className="button"
                 onClick={() => proceedFromPreflight()}
                 style={{ padding: '6px 10px' }}
-                disabled={!preflightCanProceed || paperRunLoading || preTradeCashCheck.blocking || !targetWeights.length}
+                disabled={!preflightCanProceed || paperRunLoading || !!executionBlockReason || !targetWeights.length}
                 title={
-                  preTradeCashCheck.blocking
-                    ? preTradeCashCheck.message
+                  executionBlockReason
+                    ? executionBlockReason
                     : !preflightCanProceed
                       ? 'Please acknowledge the checklist first.'
                       : undefined
@@ -3269,8 +3295,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 className="button"
                 onClick={() => proceedFromSafetyStop()}
                 style={{ padding: '6px 10px' }}
-                disabled={paperRunLoading || preTradeCashCheck.blocking || !targetWeights.length}
-                title={preTradeCashCheck.blocking ? preTradeCashCheck.message : undefined}
+                disabled={paperRunLoading || !!executionBlockReason || !targetWeights.length}
+                title={executionBlockReason}
               >
                 {safetyStopPendingOpts?.cashSweep ? 'Execute cash sweep (dry run)' : 'Execute rebalance (dry run)'}
               </button>
@@ -3358,8 +3384,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               openPreflightForRun();
             }}
             style={{ padding: '6px 10px' }}
-            disabled={runDaaStatus === 'running' || paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
-            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Fast path: run DAA refresh/recommendation, then open preflight checklist.'}
+            disabled={runDaaStatus === 'running' || paperRunLoading || !targetWeights.length || !!executionBlockReason}
+            title={executionBlockReason ?? 'Fast path: run DAA refresh/recommendation, then open preflight checklist.'}
           >
             {runDaaStatus === 'running' ? 'Preparing...' : 'Run + preflight'}
           </button>
@@ -3369,8 +3395,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             className="button secondary"
             onClick={() => openPreflightForRun()}
             style={{ padding: '6px 10px' }}
-            disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
-            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Manual trigger: open preflight and run a paper rebalance now.'}
+            disabled={paperRunLoading || !targetWeights.length || !!executionBlockReason}
+            title={executionBlockReason ?? 'Manual trigger: open preflight and run a paper rebalance now.'}
           >
             {paperRunLoading ? 'Running...' : 'Manual run now'}
           </button>
@@ -3435,8 +3461,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             type="button"
             className="button secondary"
             onClick={() => openPreflightForRun()}
-            disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
-            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Manual trigger: open preflight and run a paper rebalance now.'}
+            disabled={paperRunLoading || !targetWeights.length || !!executionBlockReason}
+            title={executionBlockReason ?? 'Manual trigger: open preflight and run a paper rebalance now.'}
           >
             {paperRunLoading ? 'Running...' : 'Manual run'}
           </button>
@@ -3447,8 +3473,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               runDaaRefreshAndRecommendationV0();
               openPreflightForRun();
             }}
-            disabled={runDaaStatus === 'running' || paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
-            title={preTradeCashCheck.blocking ? preTradeCashCheck.message : 'Fast path: run DAA refresh/recommendation, then open preflight checklist.'}
+            disabled={runDaaStatus === 'running' || paperRunLoading || !targetWeights.length || !!executionBlockReason}
+            title={executionBlockReason ?? 'Fast path: run DAA refresh/recommendation, then open preflight checklist.'}
           >
             {runDaaStatus === 'running' ? 'Preparing...' : 'Run+checklist'}
           </button>
@@ -4119,25 +4145,17 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         const rows = rebalanceTableRows.slice(0, 20);
         if (!rows.length) return null;
 
-        const estimatedBuys = effectiveOrders.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
-        const estimatedSells = effectiveOrders.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
-        const availableCash = Number(portfolioCash || 0);
-        const liquidityCoverage = availableCash + estimatedSells;
-        const cashGap = Math.max(0, estimatedBuys - liquidityCoverage);
-
-        const settlementLagDays = sellProceedsRoutingV0 === 'CASH' ? 0 : 2;
-        const settlementReady = settlementLagDays <= 2 && !preTradeCashCheck.blocking;
-        const gate = cashGap > 0 || !settlementReady ? 'blocked' : 'pass';
+        const gate = liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking ? 'blocked' : 'pass';
 
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Pre-trade liquidity and T+N settlement check with cash-gap forecast.</div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
-              gate=<b style={{ color: gate === 'pass' ? '#16a34a' : 'var(--danger)' }}>{gate}</b> · T+N=<b>{settlementLagDays}</b> · cash gap forecast=<b>{cashGap.toFixed(2)} {baseCcy || ''}</b>
+              gate=<b style={{ color: gate === 'pass' ? '#16a34a' : 'var(--danger)' }}>{gate}</b> · T+N=<b>{liquiditySettlementGateV0.settlementLagDays}</b> · cash gap forecast=<b>{liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''}</b>
             </div>
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-              buy={estimatedBuys.toFixed(2)} · sell={estimatedSells.toFixed(2)} · cash={availableCash.toFixed(2)} · liquidity coverage={(liquidityCoverage).toFixed(2)}
+              buy={liquiditySettlementGateV0.estimatedBuys.toFixed(2)} · sell={liquiditySettlementGateV0.estimatedSells.toFixed(2)} · cash={liquiditySettlementGateV0.availableCash.toFixed(2)} · settled coverage={liquiditySettlementGateV0.settledLiquidityCoverage.toFixed(2)}
             </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
@@ -4569,8 +4587,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   className="button secondary"
                   onClick={() => openPreflightForRun()}
                   style={{ padding: '6px 10px' }}
-                  disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
-                  title={preTradeCashCheck.blocking ? preTradeCashCheck.message : undefined}
+                  disabled={paperRunLoading || !targetWeights.length || !!executionBlockReason}
+                  title={executionBlockReason}
                 >
                   {paperRunLoading ? 'Running...' : executionMode === 'live' ? 'Run rebalance (live)' : 'Run rebalance (dry run)'}
                 </button>
@@ -4579,7 +4597,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   className="button secondary"
                   onClick={() => openPreflightForRun({ cashSweep: true })}
                   style={{ padding: '6px 10px' }}
-                  disabled={paperRunLoading || !targetWeights.length || preTradeCashCheck.blocking}
+                  disabled={paperRunLoading || !targetWeights.length || !!executionBlockReason}
                   title="Sweep excess cash down toward the implicit cash buffer target (ignores drift threshold; dry run only)."
                 >
                   Cash sweep (to buffer)
