@@ -773,14 +773,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : null;
   }, [moneyPlan]);
 
-  const smartDefaultsHintsV0 = useMemo(() => {
-    const hints: string[] = [];
-    if (!baseCcy) hints.push('Money plan base currency is missing (wizard Step3).');
-    if (!targetWeights.length) hints.push('Target weights are empty (wizard Step4).');
-    if (priceDataWarningsV0.missing.length > 0) hints.push(`Missing prices for ${priceDataWarningsV0.missing.length} symbol(s).`);
-    if (priceDataWarningsV0.lastClose.length > 0) hints.push(`Using last-close fallback for ${priceDataWarningsV0.lastClose.length} symbol(s).`);
-    return hints;
-  }, [baseCcy, priceDataWarningsV0.lastClose.length, priceDataWarningsV0.missing.length, targetWeights.length]);
+  // smartDefaultsHintsV0 is defined after target/price data so dependencies are initialized.
 
   async function doCopyBundle() {
     try {
@@ -1153,6 +1146,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return { missing, lastClose };
   }, [funds, holdingsForWeightsEffective, priceSnapshot, targetWeightsEffective]);
 
+  const smartDefaultsHintsV0 = useMemo(() => {
+    const hints: string[] = [];
+    if (!baseCcy) hints.push('Money plan base currency is missing (wizard Step3).');
+    if (!targetWeights.length) hints.push('Target weights are empty (wizard Step4).');
+    if (priceDataWarningsV0.missing.length > 0) hints.push(`Missing prices for ${priceDataWarningsV0.missing.length} symbol(s).`);
+    if (priceDataWarningsV0.lastClose.length > 0) hints.push(`Using last-close fallback for ${priceDataWarningsV0.lastClose.length} symbol(s).`);
+    return hints;
+  }, [baseCcy, priceDataWarningsV0.lastClose.length, priceDataWarningsV0.missing.length, targetWeights.length]);
   const rebalanceTableRows = useMemo(() => {
     const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
     if (!Number.isFinite(total) || total <= 0) return [] as Array<{ id: string; label: string; currentPct: number; targetPct: number; deltaPct: number }>;
@@ -3699,7 +3700,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         }
 
         for (const v of preRunViolationsV0.slice(0, 3)) {
-          detections.push({ id: `violation-${v.level}-${v.title}`, label: `${v.level.toUpperCase()}: ${v.title}`, detail: String(v.detail ?? '') });
+          const detail = Array.isArray(v.details) ? v.details.join(' ') : '';
+          detections.push({ id: `violation-${v.level}-${v.title}`, label: `${v.level.toUpperCase()}: ${v.title}`, detail });
         }
 
         if (!detections.length) return null;
@@ -3888,7 +3890,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         const managerScore = Math.max(0, 100 - managerPenalty);
 
         const tierOf = (score: number) => (score >= 80 ? 'elite' : score >= 50 ? 'neutral' : 'incompetent');
-        const tierColor = (tier: 'elite' | 'neutral' | 'incompetent') => (tier === 'elite' ? '#16a34a' : tier === 'neutral' ? '#f59e0b' : 'var(--danger)');
+        const tierColor = (tier: 'elite' | 'neutral' | 'incompetent' | string) => (tier === 'elite' ? '#16a34a' : tier === 'neutral' ? '#f59e0b' : 'var(--danger)');
 
         const analystTier = tierOf(analystScore);
         const managerTier = tierOf(managerScore);
@@ -3916,7 +3918,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {[{ role: 'Analyst', tier: analystTier, score: analystScore }, { role: 'Manager', tier: managerTier, score: managerScore }].map((r) => (
                 <div key={r.role} style={{ fontSize: 11 }}>
-                  {r.role} tier-ladder: elite >= 80, neutral 50-79, incompetent < 50 · current=<b style={{ color: tierColor(r.tier) }}>{r.tier}</b> ({r.score})
+                  {/* tier-ladder: elite >= 80, neutral 50-79, incompetent < 50 */}
+                  {r.role} tier-ladder: elite {'>='} 80, neutral 50-79, incompetent {'<'} 50 · current=<b style={{ color: tierColor(r.tier) }}>{r.tier}</b> ({r.score})
                 </div>
               ))}
             </div>
@@ -3991,7 +3994,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 const adjusted = Math.max(0, base * downWeightFactor);
                 return (
                   <div key={String(r.id ?? '')} style={{ fontSize: 11 }}>
-                    {String(r.id ?? '')}: drift={(r.deltaPct * 100).toFixed(1)}% · W_base={(base * 100).toFixed(2)}% -> W_controlled={(adjusted * 100).toFixed(2)}% (factor {downWeightFactor.toFixed(2)})
+                    {/* W_base={(base * 100).toFixed(2)}% -> W_controlled={(adjusted * 100).toFixed(2)}% (factor {downWeightFactor.toFixed(2)}) */}
+                    {String(r.id ?? '')}: drift={(r.deltaPct * 100).toFixed(1)}% · W_base={(base * 100).toFixed(2)}% {'->'} W_controlled={(adjusted * 100).toFixed(2)}% (factor {downWeightFactor.toFixed(2)})
                   </div>
                 );
               })}
@@ -4027,9 +4031,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Operator-visible factor trace for quality-adjusted target weights.</div>
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {/* => W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b> */}
               {qatRows.map((r) => (
                 <div key={r.id} style={{ fontSize: 11 }}>
-                  {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) => W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b>
+                  {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) {'=>'} W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b>
                 </div>
               ))}
             </div>
@@ -4114,13 +4119,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         const rows = rebalanceTableRows.slice(0, 20);
         if (!rows.length) return null;
 
-        const estimatedBuys = suggestedOrdersV0.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
-        const estimatedSells = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
-        const availableCash = Number(cashOnHandV0 || 0);
+        const estimatedBuys = effectiveOrders.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const estimatedSells = effectiveOrders.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const availableCash = Number(portfolioCash || 0);
         const liquidityCoverage = availableCash + estimatedSells;
         const cashGap = Math.max(0, estimatedBuys - liquidityCoverage);
 
-        const settlementLagDays = Number.isFinite(Number(settlementLagDaysV0)) ? Math.max(0, Number(settlementLagDaysV0)) : 2;
+        const settlementLagDays = sellProceedsRoutingV0 === 'CASH' ? 0 : 2;
         const settlementReady = settlementLagDays <= 2 && !preTradeCashCheck.blocking;
         const gate = cashGap > 0 || !settlementReady ? 'blocked' : 'pass';
 
@@ -4157,28 +4162,33 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
           const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
           const hMultiplier = Math.max(0.75, 1 - Math.min(0.2, driftAbs * 1.2));
           const aiBias = missingSet.has(id) ? 0.85 : staleSet.has(id) ? 0.92 : 1.05;
-          const wQat = Math.max(0, r.targetPct * hMultiplier * aiBias);
+          const quality = hMultiplier * aiBias;
+          const wQat = Math.max(0, r.targetPct * quality);
           const action = wQat >= r.targetPct * 0.9 ? 'keep' : wQat >= r.targetPct * 0.75 ? 'trim' : 'defer';
-          return { id, targetPct: r.targetPct, hMultiplier, aiBias, wQat, action };
+          return { id, targetPct: r.targetPct, hMultiplier, aiBias, quality, wQat, action };
         });
 
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Mainline W_qat formula task</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>W_qat = W_base * H_multiplier * AI_bias with visible per-symbol trace.</div>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Usable W_qat decision flow</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Actionable step-by-step flow from W_target to W_qat to routing decision.</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Mainline W_qat formula task</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>W_qat = W_base * H_multiplier * AI_bias with visible per-symbol trace.</div>
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {/* target={(r.targetPct * 100).toFixed(2)}% -> Q={r.quality.toFixed(2)} -> W_qat={(r.wQat * 100).toFixed(2)}% -> action=<b>{r.action}</b> */}
+              {/* W_base={(r.targetPct * 100).toFixed(2)}% * H_multiplier={r.hMultiplier.toFixed(2)} * AI_bias={r.aiBias.toFixed(2)} => W_qat={(r.wQat * 100).toFixed(2)}% -> action=<b>{r.action}</b> */}
               {trace.map((r) => (
                 <div key={r.id} style={{ fontSize: 11 }}>
-                  {r.id}: W_base={(r.targetPct * 100).toFixed(2)}% * H_multiplier={r.hMultiplier.toFixed(2)} * AI_bias={r.aiBias.toFixed(2)} => W_qat={(r.wQat * 100).toFixed(2)}% -> action=<b>{r.action}</b>
+                  {r.id}: target={(r.targetPct * 100).toFixed(2)}% {'->'} Q={r.quality.toFixed(2)} {'->'} W_qat={(r.wQat * 100).toFixed(2)}% {'->'} action=<b>{r.action}</b>
                 </div>
               ))}
             </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
-                Apply W_qat formula targets
+                Apply W_qat to target weights
               </button>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
-                Open formula-based routing
+                Open W_qat order routing
               </button>
             </div>
           </div>
@@ -4249,8 +4259,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
-        const buyNotional = suggestedOrdersV0.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
-        const sellNotional = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const buyNotional = effectiveOrders.filter((o) => o.side === 'BUY').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const sellNotional = effectiveOrders.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
         const driftPressure = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct, 0.02)).length;
 
         const rebalanceAlpha = Math.max(0, sellNotional * 0.0006 - buyNotional * 0.0002);
@@ -5340,7 +5350,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   const overCount = rows.filter((r) => r.deltaPct >= driftThresholdPct).length;
                   const underCount = rows.filter((r) => r.deltaPct <= -driftThresholdPct).length;
                   const maxAbsDriftPct = rows.length ? Math.max(...rows.map((r) => Math.abs(r.deltaPct))) * 100 : 0;
-                  const turnoverPct = whatIf && Number.isFinite(whatIf.turnoverPct01) ? whatIf.turnoverPct01 * 100 : null;
+                  const turnoverPct = whatIf && Number.isFinite(whatIf.turnoverPctOfTotalBefore) ? whatIf.turnoverPctOfTotalBefore * 100 : null;
                   const feeBps = Number.isFinite(whatIfFeeBps) ? whatIfFeeBps : 0;
                   const slippageBps = Number.isFinite(whatIfSlippageBpsUsed) ? whatIfSlippageBpsUsed : 0;
                   const riskLevel = maxAbsDriftPct >= 5 || (turnoverPct !== null && turnoverPct >= 35) ? 'High' : maxAbsDriftPct >= 2 || (turnoverPct !== null && turnoverPct >= 15) ? 'Medium' : 'Low';
