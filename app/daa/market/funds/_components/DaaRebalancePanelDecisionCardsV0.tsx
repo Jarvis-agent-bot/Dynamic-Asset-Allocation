@@ -1,3 +1,4 @@
+import { buildPriceWarningSymbolSetV0 } from '@/src/daa/priceWarningSymbolsV0';
 import { deriveScenarioRoutingV0 } from '@/src/daa/scenarioRoutingV0';
 
 type RebalanceRowV0 = {
@@ -42,8 +43,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
       {(() => {
         const rows = rebalanceTableRows.slice(0, 8);
         if (!rows.length) return null;
-        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => String(x || '').trim()));
-        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => String(x || '').trim()));
+        const missingSet = buildPriceWarningSymbolSetV0(priceDataWarningsV0.missing);
+        const staleSet = buildPriceWarningSymbolSetV0(priceDataWarningsV0.lastClose);
         const qatRows = rows.map((r) => {
           const id = String(r.id ?? '').trim();
           const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
