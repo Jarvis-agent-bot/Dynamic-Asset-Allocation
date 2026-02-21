@@ -2029,27 +2029,19 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             alignItems: 'start',
             gap: 10}}
         >
-          <div id="portfolio" style={{ scrollMarginTop: 12 }}>
-            <DaaPortfolioEditorV0 />
-          </div>
-          <div id="prices" style={{ scrollMarginTop: 12 }}>
-            <DaaPriceSnapshotInputV0 />
-          </div>
-          <div id="target-weights" style={{ scrollMarginTop: 12 }}>
-            <DaaTargetWeightsEditorV0 />
-          </div>
-          <div id="policy" style={{ scrollMarginTop: 12 }}>
-            <DaaRebalancePolicyEditorV0 />
-          </div>
-          <div id="schedule" style={{ scrollMarginTop: 12 }}>
-            <DaaRebalanceScheduleV0 />
-          </div>
-          <div id="notifications" style={{ scrollMarginTop: 12 }}>
-            <DaaDynamicRebalanceNotificationsV0 />
-          </div>
-          <div id="okx-sandbox" style={{ scrollMarginTop: 12 }}>
-            <DaaOkxSandboxBalancesV0 />
-          </div>
+          {[
+            { id: 'portfolio', node: <DaaPortfolioEditorV0 /> },
+            { id: 'prices', node: <DaaPriceSnapshotInputV0 /> },
+            { id: 'target-weights', node: <DaaTargetWeightsEditorV0 /> },
+            { id: 'policy', node: <DaaRebalancePolicyEditorV0 /> },
+            { id: 'schedule', node: <DaaRebalanceScheduleV0 /> },
+            { id: 'notifications', node: <DaaDynamicRebalanceNotificationsV0 /> },
+            { id: 'okx-sandbox', node: <DaaOkxSandboxBalancesV0 /> },
+          ].map((section) => (
+            <div key={section.id} id={section.id} style={{ scrollMarginTop: 12 }}>
+              {section.node}
+            </div>
+          ))}
           <div
             id="rebalance"
             style={{
@@ -2668,27 +2660,33 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   </details>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginTop: 8 }}>
                     <span className="muted" style={{ fontSize: 11 }}>Preview orders:</span>
-                    <button
-                      type="button"
-                      className={ordersPreviewSourceV0 === 'RECOMPUTE' ? 'button' : 'button secondary'}
-                      onClick={() => setOrdersPreviewSourceV0('RECOMPUTE')}
-                      style={{ padding: '4px 8px' }}
-                      aria-pressed={ordersPreviewSourceV0 === 'RECOMPUTE'}
-                      title="Recompute orders via the core engine using current inputs + threshold"
-                    >
-                      Recompute
-                    </button>
-                    <button
-                      type="button"
-                      className={ordersPreviewSourceV0 === 'ENGINE_LAST_RUN' ? 'button' : 'button secondary'}
-                      onClick={() => setOrdersPreviewSourceV0('ENGINE_LAST_RUN')}
-                      style={{ padding: '4px 8px' }}
-                      aria-pressed={ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'}
-                      disabled={!engineOrders.length}
-                      title="Use orders from the last core run (saved in localStorage)"
-                    >
-                      Last run (core)
-                    </button>
+                    {[
+                      {
+                        key: 'RECOMPUTE' as const,
+                        label: 'Recompute',
+                        title: 'Recompute orders via the core engine using current inputs + threshold',
+                        disabled: false,
+                      },
+                      {
+                        key: 'ENGINE_LAST_RUN' as const,
+                        label: 'Last run (core)',
+                        title: 'Use orders from the last core run (saved in localStorage)',
+                        disabled: !engineOrders.length,
+                      },
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        className={ordersPreviewSourceV0 === option.key ? 'button' : 'button secondary'}
+                        onClick={() => setOrdersPreviewSourceV0(option.key)}
+                        style={{ padding: '4px 8px' }}
+                        aria-pressed={ordersPreviewSourceV0 === option.key}
+                        disabled={option.disabled}
+                        title={option.title}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                     <span className="muted" style={{ fontSize: 11 }}>
                       {ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'
                         ? 'Using saved engine orders; adjust threshold then re-run core to refresh.'
