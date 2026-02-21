@@ -65,6 +65,7 @@ import DaaRebalanceRiskControlsSectionV0 from './DaaRebalanceRiskControlsSection
 import { applySampleScenarioV0 as applySampleScenarioWorkflowV0, jumpToV0, runDaaRefreshAndRecommendationV0 as runDaaRefreshAndRecommendationWorkflowV0 } from './DaaRebalancePanel.workflowHelpersV0';
 import { getDriftBadgeV0, readAutoPlanBootstrapV0, readAutoPlanPresetsV0 } from './DaaRebalancePanel.autoPlanUtilsV0';
 import { buildAutoPlanHoldingsMapV0, buildPricesMapV0, buildRunConstraintsV0, buildRunHoldingsMapV0, runAutoPlanV0 as runAutoPlanActionV0, seedAutoPlanFromCurrentSnapshotV0 as seedAutoPlanActionV0 } from './DaaRebalancePanel.planActionsV0';
+import { useDaaRebalancePanelExecutionKernelV0 } from './DaaRebalancePanel.executionKernelV0';
 type FundLike = { code: string; name?: string; dwjz?: string | number; gsz?: string | number; estPricedCoverage?: number; estGsz?: number };
 type HoldingsLike = Record<string, { share: number; cost?: number }>;
 type Props = { funds?: FundLike[]; holdings?: HoldingsLike };
@@ -166,42 +167,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const sellProceedsRoutingV0: SellProceedsRoutingV0 = useMemo(() => loadSellProceedsRoutingV0(), [rev]);
   const cashBucketTargetPct01 = useMemo(() => loadCashBucketTargetPct01V0(), [rev]);
   const maxTurnoverPct01V0 = useMemo(() => loadMaxTurnoverPct01V0(), [rev]);
-  const [paperRunLoading, setPaperRunLoading] = useState(false);
-  const [paperRunError, setPaperRunError] = useState<string | null>(null);
-  const [paperRunRecordedAt, setPaperRunRecordedAt] = useState<string | null>(null);
-  const [paperRunSummary, setPaperRunSummary] = useState<string | null>(null);
-  const [paperRunPostSummary, setPaperRunPostSummary] = useState<RebalancePostRunSummaryV0 | null>(null);
-  const [paperRunHealthcheck, setPaperRunHealthcheck] = useState<PaperRunHealthcheckV0 | null>(null);
-  const [paperRunDriftAlert, setPaperRunDriftAlert] = useState<DriftAlertV0 | null>(null);
-  const [paperRunExecutionMode, setPaperRunExecutionMode] = useState<ExecutionModeV0>("paper");
-  const paperRunAbortRef = useRef<AbortController | null>(null);
-  // When a run fails, keep enough context to show a useful error + allow one-click retry.
-  const [paperRunLastConfirmedOpts, setPaperRunLastConfirmedOpts] = useState<{ cashSweep?: boolean } | null>(null);
-  const [paperRunFailureDetails, setPaperRunFailureDetails] = useState<string | null>(null);
-  const liveTimelineV0 = useLiveTimelineV0({
-    runDaaStatus,
-    runDaaStatusText,
-    paperRunLoading,
-    paperRunError,
-    paperRunRecordedAt,
-  });
-  // Preflight checklist (v0): confirm key safety/inputs before running a paper rebalance.
-  const [preflightOpen, setPreflightOpen] = useState(false);
-  const [preflightPendingOpts, setPreflightPendingOpts] = useState<{ cashSweep?: boolean } | null>(null);
-  const [preflightAckPrices, setPreflightAckPrices] = useState(false);
-  const [preflightAckConstraints, setPreflightAckConstraints] = useState(false);
-  const [preflightAckCash, setPreflightAckCash] = useState(false);
-  const [preflightOverrideBlockers, setPreflightOverrideBlockers] = useState(false);
   const [detectionReviewStateV0, setDetectionReviewStateV0] = useState<Record<string, 'approved' | 'rejected'>>({});
   useEffect(() => {
     if (executionMode !== 'live') return;
     persistExecutionModeV0('paper');
     setRev((x) => x + 1);
   }, [executionMode]);
-  // Safety-stop confirmation (v0): last-step modal before executing a dynamic rebalance run.
-  // Also offers a quick "kill switch" to disable the local dynamic schedule.
-  const [safetyStopOpen, setSafetyStopOpen] = useState(false);
-  const [safetyStopPendingOpts, setSafetyStopPendingOpts] = useState<{ cashSweep?: boolean } | null>(null);
   useEffect(() => {
     const onData = () => setRev((x) => x + 1);
     window.addEventListener(WIZARD_DATA_EVENT, onData as EventListener);
@@ -1153,519 +1124,77 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     targetWeights,
     targetWeightsEffective,
   ]);
-  function openPreflightForRun(opts?: { cashSweep?: boolean }) {
-    const hasPriceWarnings = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0;
-    const hasConstraintAlerts = preRunHasBlockingV0 || preRunHasWarningsV0;
-    setPreflightPendingOpts(opts ?? {});
-    // Reduce friction when there is nothing actionable to review.
-    setPreflightAckPrices(!hasPriceWarnings);
-    setPreflightAckConstraints(!hasConstraintAlerts);
-    // Force an explicit acknowledgment for settlement/cash assumptions.
-    setPreflightAckCash(false);
-    setPreflightOverrideBlockers(false);
-    setPreflightOpen(true);
-  }
-  function closePreflight() {
-    setPreflightOpen(false);
-    setPreflightPendingOpts(null);
-  }
-  function closePreflightAndJump(id: string) {
-    setPreflightOpen(false);
-    setTimeout(() => scrollToId(id), 0);
-  }
-  function closeSafetyStop() {
-    setSafetyStopOpen(false);
-    setSafetyStopPendingOpts(null);
-  }
-  function safetyStopDisableDynamicScheduleV0() {
-    // "Kill switch" for accidental one-click runs: disable the local dynamic schedule.
-    try {
-      const st = loadRebalanceScheduleStateV1();
-      if (st.schedule.enabled) persistRebalanceScheduleV1({ ...st.schedule, enabled: false });
-    } catch {
-      // ignore
-    }
-    closeSafetyStop();
-  }
-  async function proceedFromPreflight() {
-    const pending = preflightPendingOpts;
-    closePreflight();
-    if (!pending) return;
-    setSafetyStopPendingOpts(pending);
-    setSafetyStopOpen(true);
-  }
-  async function proceedFromSafetyStop() {
-    const pending = safetyStopPendingOpts;
-    closeSafetyStop();
-    // Used for the "Retry" UX when a run fails mid-flight.
-    setPaperRunLastConfirmedOpts(pending ?? {});
-    if (pending && pending.cashSweep) return runPaperRebalanceCore({ cashSweep: true });
-    return runPaperRebalanceCore();
-  }
-  async function runPaperRebalanceCore(opts?: { cashSweep?: boolean }) {
-    setPaperRunError(null);
-    setPaperRunRecordedAt(null);
-    setPaperRunSummary(null);
-    setPaperRunPostSummary(null);
-    setPaperRunHealthcheck(null);
-    setPaperRunDriftAlert(null);
-    setPaperRunFailureDetails(null);
-    if (typeof window === 'undefined') return;
-    let statusRunId: string | null = null;
-    function makeAbortError(): any {
-      try {
-        return new DOMException('Aborted', 'AbortError');
-      } catch {
-        const e: any = new Error('aborted');
-        e.name = 'AbortError';
-        return e;
-      }
-    }
-    function abortableSleep(ms: number, signal: AbortSignal | null | undefined): Promise<void> {
-      return new Promise((resolve, reject) => {
-        if (signal?.aborted) {
-          reject(makeAbortError());
-          return;
-        }
-        let onAbort: (() => void) | null = null;
-        const id = window.setTimeout(() => {
-          if (onAbort) signal?.removeEventListener('abort', onAbort);
-          resolve();
-        }, ms);
-        onAbort = () => {
-          window.clearTimeout(id);
-          reject(makeAbortError());
-        };
-        if (signal) signal.addEventListener('abort', onAbort, { once: true });
-      });
-    }
-    async function simulatePaperBrokerFillProgressV0(args: {
-      storage: Storage;
-      runId: string;
-      orders: Array<{ notional: number }>;
-      signal: AbortSignal | null | undefined;
-    }) {
-      const steps = 4;
-      const totalTargetMs = 2500;
-      const perStepMs = Math.max(60, Math.min(250, Math.floor(totalTargetMs / Math.max(1, args.orders.length * steps))));
-      for (let i = 0; i < args.orders.length; i++) {
-        const orderId = String(i + 1);
-        const notional = Number(args.orders[i]?.notional ?? NaN);
-        for (let s = 1; s <= steps; s++) {
-          await abortableSleep(perStepMs, args.signal);
-          const pct = s / steps;
-          const filledNotional = Number.isFinite(notional) ? notional * pct : undefined;
-          updateRebalanceOrderStatusV0({
-            storage: args.storage,
-            runId: args.runId,
-            orderId,
-            status: s === steps ? 'filled' : 'submitted',
-            filledNotional,
-            fillPct01: pct,
-            detail: s === steps ? 'filled' : `partial fill: ${Math.round(pct * 100)}%`,
-            phase: 'executing'});
-        }
-      }
-    }
-    const mode: ExecutionModeV0 = executionModeNormalized;
-    setPaperRunExecutionMode(mode);
-    // Funds hub v0 safety: "live" execution is intentionally disabled until a broker adapter exists.
-    // If a user has stale localStorage pointing to "live", force them back to dry run.
-    if (mode === 'live') {
-      setPaperRunError('Live execution is not configured yet. Please switch to Dry run.');
-      persistExecutionModeV0('paper');
-      setPaperRunExecutionMode('paper');
-      return;
-    }
-    if (preTradeCashCheck.blocking) {
-      // Conservative UX: treat insufficient settled cash as a pre-trade blocker.
-      setPaperRunError(preTradeCashCheck.message);
-      return;
-    }
-    if (liquiditySettlementGateV0.blocked) {
-      setPaperRunError(liquiditySettlementGateV0.message);
-      return;
-    }
-    // v0: best-effort local snapshot so the UI can show per-order status while a run is in flight.
-    const startedStatus = startRebalanceOrderStatusRunV0({
-      storage: window.localStorage,
-      message: opts?.cashSweep ? `Funds hub cash sweep (${mode})` : `Funds hub rebalance (${mode})`});
-    if (startedStatus.ok) statusRunId = startedStatus.run.runId;
-    setPaperRunLoading(true);
-    paperRunAbortRef.current?.abort();
-    const controller = new AbortController();
-    paperRunAbortRef.current = controller;
-    // Pre-compute drift breaches so the UI shows an immediate "live" alert even if the core route is slow.
-    setPaperRunDriftAlert(
-      computeDriftAlertFromTableRows({ at: new Date().toISOString(), rows: rebalanceTableRows, thresholdPct: opts?.cashSweep ? 0 : driftThresholdPct })
-    );
-    try {
-      const st = loadPortfolioStateV1();
-      const mp: any = moneyPlan as any;
-      const baseCcy = typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : '';
-      const constraints = buildRunConstraintsV0(mp, assetBlacklistV0);
-      const holdingsMap = buildRunHoldingsMapV0(st.positions, assetBlacklistSetV0);
-      const pricesMap = buildPricesMapV0({ funds, priceSnapshot, holdingsMap, targetWeightsInput: targetWeightsEffective });
-      const valuesBySymbol: Record<string, number> = {};
-      for (const [sym, qty] of Object.entries(holdingsMap)) {
-        const px = toFiniteNumber((pricesMap as any)[sym]);
-        if (px === null || px <= 0) continue;
-        valuesBySymbol[sym] = qty * px;
-      }
-      const thresholdPctForRun = opts?.cashSweep ? 0 : driftThresholdPct;
-      const basePolicy = loadRebalancePolicyV1();
-      const policy = {
-        ...basePolicy,
-        // What-if: allow users to override drift threshold without persisting it to the policy store.
-        thresholdPct: thresholdPctForRun,
-        lastRebalanceAt: st.lastRebalance?.at,
-        now: new Date().toISOString(),
-        ...(opts?.cashSweep ? { cashSweepToTarget: true } : {})};
-      const account: any = { cash: st.cash };
-      if (baseCcy) account.baseCcy = baseCcy;
-      const req = {
-        account,
-        constraints,
-        policy,
-        holdings: holdingsMap,
-        prices: pricesMap,
-        targetWeights: targetWeightsEffective};
-      const expectedOrdersForRun = opts?.cashSweep
-        ? (() => {
-            try {
-              return normalizeOrders(rebalanceCore(req).orders);
-            } catch {
-              return effectiveOrders;
-            }
-          })()
-        : effectiveOrders;
-      // "Expected" is used for the post-run healthcheck; it should match the request we're about to execute.
-      const expectedSummary: RebalancePostRunSummaryV0 | null = (() => {
-        try {
-          return buildRebalancePostRunSummaryV0({
-            cashStart: toFiniteNumber((st as any)?.cash) ?? 0,
-            valuesBySymbol,
-            targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
-            orders: expectedOrdersForRun,
-            feeBps: whatIfFeeBps,
-            slippageBps: whatIfSlippageBpsUsed,
-            labelsBySymbol: whatIfLabelsBySymbol,
-            pricesBySymbol: pricesMap});
-        } catch {
-          return null;
-        }
-      })();
-      saveJsonToLs(LS_REBALANCE_REQUEST, req);
-      // Core is deterministic and runs in-process (Next.js route), so this stays fast.
-      const res = await fetch('/api/daa/rebalance/core', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json'},
-        body: JSON.stringify(req),
-        signal: controller.signal});
-      const text = await res.text();
-      const parsed = safeJsonParse(text);
-      const respValue = parsed.ok ? parsed.value : { raw: text };
-      saveJsonToLs(LS_REBALANCE_RESPONSE, respValue);
-      if (!res.ok) {
-        // Core errors are usually { error, expected? }. Surface them instead of a bare HTTP status.
-        const v: any = parsed.ok ? (respValue as any) : null;
-        const serverErr = v && typeof v === 'object' ? (typeof v.error === 'string' ? String(v.error) : null) : null;
-        const expected = v && typeof v === 'object' ? (typeof v.expected === 'string' ? String(v.expected) : null) : null;
-        const msgBase = serverErr ? `Core error: ${serverErr}` : 'Core request failed';
-        const msg = `${msgBase} (HTTP ${res.status})${expected ? `; expected: ${expected}` : ''}`;
-        setPaperRunError(msg);
-        setPaperRunFailureDetails((parsed.ok ? pretty(v) : text).slice(0, 8000));
-        if (statusRunId) {
-          failRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            error: msg,
-            message: 'core request failed'});
-        }
-        return;
-      }
-      if (!parsed.ok) {
-        const snippet = text ? text.slice(0, 240) : '';
-        const msg = `Core response JSON parse failed (HTTP ${res.status})${snippet ? `; body: ${snippet}` : ''}`;
-        setPaperRunError(msg);
-        setPaperRunFailureDetails(text.slice(0, 8000));
-        if (statusRunId) {
-          failRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            error: msg,
-            message: 'core response parse failed'});
-        }
-        return;
-      }
-      const resp: any = respValue as any;
-      // Surface core-level drift/trigger info as a compact alert for fast feedback during runs.
-      setPaperRunDriftAlert(computeDriftAlertFromCoreResponse({ at: new Date().toISOString(), resp, fallbackThresholdPct: thresholdPctForRun }));
-      const shouldRebalance = !!resp?.trigger?.shouldRebalance;
-      // Only execute/record a paper run when the trigger policy says "rebalance".
-      // When shouldRebalance=false, still surface expected allocations (orders=0) so the user
-      // can see a deterministic "no-op" outcome.
-      const orders = shouldRebalance ? normalizeOrders(resp?.orders) : [];
-      const runNote = opts?.cashSweep ? 'ui:market/funds:cash-sweep' : 'ui:market/funds:dry-run';
-      if (!shouldRebalance) {
-        setPaperRunSummary('触发策略: shouldRebalance=false（no-op；orders=0，展示预期 allocations）。');
-        setPaperRunRecordedAt(new Date().toISOString());
-        if (statusRunId) {
-          finishRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            phase: 'done',
-            message: 'shouldRebalance=false (no-op)'});
-        }
-        // Keep a traceable snapshot even for no-op runs (so the run history can show allocations).
-        try {
-          appendRebalanceLog({
-            storage: window.localStorage,
-            source: 'core',
-            runId: statusRunId ?? undefined,
-            request: req,
-            response: respValue,
-            note: runNote});
-          window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
-        } catch {
-          // ignore
-        }
-      }
-      if (shouldRebalance) {
-        const coreCashCheck = getPreTradeCashCheckV0({
-          sellProceedsRoutingV0,
-          cashStart: st.cash,
-          orders,
-          feeBps: whatIfFeeBps,
-          slippageBps: whatIfSlippageBpsUsed,
-          baseCcy: baseCcy || null});
-      if (coreCashCheck.blocking) {
-        setPaperRunError(coreCashCheck.message);
-        if (statusRunId) {
-          failRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            error: coreCashCheck.message,
-            message: 'pre-trade cash check blocked'});
-        }
-        return;
-      }
-      if (statusRunId) {
-        attachOrdersToRebalanceRunV0({
-          storage: window.localStorage,
-          runId: statusRunId,
-          orders,
-          message: `executing ${orders.length} orders (paper)`});
-        // v0: simulate broker-side partial fills so the UI can live-refresh progress during the run (E2E-friendly; no real broker).
-        for (let i = 0; i < orders.length; i++) {
-          const orderId = String(i + 1);
-          updateRebalanceOrderStatusV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            orderId,
-            status: 'submitted',
-            filledNotional: 0,
-            fillPct01: 0,
-            detail: 'submitted (paper broker)',
-            phase: 'executing'});
-        }
-      }
-      const exec = getExecutionAdapterV0('paper');
-      const r = exec.executeOrders({
-        storage: window.localStorage,
-        source: 'rebalance-core',
-        runId: statusRunId ?? undefined,
-        orders,
-        note: runNote});
-      if (!r.ok) {
-        setPaperRunError(r.error);
-        if (statusRunId) {
-          failRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            error: r.error,
-            message: 'paper execution log failed'});
-        }
-        return;
-      }
-      if (statusRunId) {
-        await simulatePaperBrokerFillProgressV0({
-          storage: window.localStorage,
-          runId: statusRunId,
-          orders: orders as any,
-          signal: controller.signal});
-        finishRebalanceOrderStatusRunV0({
-          storage: window.localStorage,
-          runId: statusRunId,
-          phase: 'recorded',
-          message: `recorded ${orders.length} paper orders (simulated broker fills)`});
-      }
-      setPaperRunRecordedAt(r.entry.at);
-      setPaperRunSummary(`已记录 Dry run（不发送真实订单）：${orders.length} 条 orders。`);
-      try {
-        pushDynamicRebalanceNotificationV0({
-          storage: window.localStorage,
-          atIso: r.entry.at,
-          kind: 'run-recorded',
-          title: 'Dynamic rebalance recorded',
-          body: `Recorded ${orders.length} paper orders (${opts?.cashSweep ? 'cash sweep' : 'dry run'}).`});
-      } catch {
-        // ignore
-      }
-      }
-      const actualSummary: RebalancePostRunSummaryV0 | null = (() => {
-        try {
-          const targetWeightsBySymbol: Record<string, number> = {};
-          // Start with preview labels so tables stay readable even when core omits labels.
-          const labelsBySymbol: Record<string, string> = { ...(whatIfLabelsBySymbol ?? {}) };
-          const twArr = Array.isArray(resp?.targetWeights) ? (resp.targetWeights as any[]) : [];
-          if (twArr.length) {
-            for (const t of twArr) {
-              const id = String((t as any)?.id ?? '').trim();
-              if (!id) continue;
-              const w = toFiniteNumber((t as any)?.targetPct);
-              if (w === null) continue;
-              targetWeightsBySymbol[id] = w;
-              const label = String((t as any)?.label ?? id).trim();
-              if (label) labelsBySymbol[id] = label;
-            }
-          } else {
-            // Fallback (shouldn't happen for core): use the request targetWeights.
-            for (const t of targetWeightsEffective) {
-              const id = String((t as any)?.id ?? '').trim();
-              if (!id) continue;
-              const w = toFiniteNumber((t as any)?.targetPct);
-              if (w === null) continue;
-              targetWeightsBySymbol[id] = w;
-              labelsBySymbol[id] = String((t as any)?.label ?? id);
-            }
-          }
-          for (const f of funds ?? []) {
-            const code = String((f as any)?.code ?? '').trim();
-            const name = String((f as any)?.name ?? '').trim();
-            if (code && name) labelsBySymbol[code] = name;
-          }
-          return buildRebalancePostRunSummaryV0({
-            cashStart: toFiniteNumber((st as any)?.cash) ?? 0,
-            valuesBySymbol,
-            targetWeightsBySymbol,
-            orders,
-            feeBps: whatIfFeeBps,
-            slippageBps: whatIfSlippageBpsUsed,
-            labelsBySymbol,
-            pricesBySymbol: pricesMap});
-        } catch {
-          return null;
-        }
-      })();
-      if (actualSummary) setPaperRunPostSummary(actualSummary);
-      // Compare the preview (expected) vs core run (actual) to make mismatches obvious.
-      const notes: string[] = [];
-      let pass: boolean | null = null;
-      if (!expectedSummary) notes.push('missing expected (preview) metrics');
-      if (!actualSummary) notes.push('missing actual (core) metrics');
-      if (expectedSummary && actualSummary) {
-        const turnoverDiff = Math.abs(actualSummary.turnoverNotional - expectedSummary.turnoverNotional);
-        const turnoverTol = Math.max(1, Math.abs(expectedSummary.turnoverNotional) * 0.01); // 1% or 1 base unit
-        const driftExp = expectedSummary.maxAbsDriftAfterPct01;
-        const driftAct = actualSummary.maxAbsDriftAfterPct01;
-        const driftDiff = driftExp !== null && driftAct !== null ? Math.abs(driftAct - driftExp) : Number.POSITIVE_INFINITY;
-        const driftTol = 0.001; // 10 bps
-        pass = turnoverDiff <= turnoverTol && driftDiff <= driftTol;
-        if (turnoverDiff > turnoverTol) {
-          notes.push(`turnover mismatch: diff=${turnoverDiff.toFixed(2)} > tol=${turnoverTol.toFixed(2)}`);
-        }
-        if (driftDiff > driftTol) {
-          notes.push(`post-drift mismatch: diff=${fmtPct01(driftDiff)} > tol=${fmtPct01(driftTol)}`);
-        }
-        if (expectedSummary.ordersCount !== actualSummary.ordersCount) {
-          notes.push(`ordersCount mismatch: expected=${expectedSummary.ordersCount} vs actual=${actualSummary.ordersCount}`);
-        }
-      }
-      setPaperRunHealthcheck({ expected: expectedSummary, actual: actualSummary, pass, notes });
-      // Record the latest run in the portfolio store so cooldown debouncing can work.
-      // Keep behavior consistent with the historical path: only record when we actually have orders to execute.
-      if (shouldRebalance && orders.length) {
-        recordPortfolioLastRebalance({ kind: 'core', runId: statusRunId ?? undefined, request: req, response: respValue, logNote: runNote });
-      }
-    } catch (e) {
-      const isAbort =
-        typeof e === 'object' &&
-        e !== null &&
-        'name' in e &&
-        (e as any).name === 'AbortError';
-      if (isAbort) {
-        setPaperRunSummary('已取消（abort）。');
-        if (statusRunId) {
-          failRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            error: 'aborted',
-            message: 'user aborted run'});
-        }
-      } else {
-        const msg = e instanceof Error ? e.message : String(e);
-        setPaperRunError(msg);
-        if (statusRunId) {
-          failRebalanceOrderStatusRunV0({
-            storage: window.localStorage,
-            runId: statusRunId,
-            error: msg,
-            message: 'run failed'});
-        }
-      }
-    } finally {
-      paperRunAbortRef.current = null;
-      setPaperRunLoading(false);
-    }
-  }
-  const preRunHasBlockingV0 = preRunViolationsV0.some((v) => v.level === 'blocker');
-  const preRunHasWarningsV0 = preRunViolationsV0.some((v) => v.level === 'warning');
-  const preflightHasPriceWarnings = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0;
-  const preflightCanProceed =
-    preflightAckPrices &&
-    preflightAckConstraints &&
-    preflightAckCash &&
-    (!preRunHasBlockingV0 || preflightOverrideBlockers);
-  const previewOrdersForOpts = useCallback((pendingCashSweep: boolean) => {
-    // Preview should mirror the actual execution request; cash-sweep forces threshold=0.
-    if (!pendingCashSweep) return effectiveOrders;
-    try {
-      if (!corePreview?.req) return effectiveOrders;
-      const reqSweep: RebalanceCoreRequest = {
-        ...corePreview.req,
-        policy: {
-          ...((corePreview.req as any).policy ?? {}),
-          thresholdPct: 0,
-          cashSweepToTarget: true}};
-      return normalizeOrders(rebalanceCore(reqSweep).orders);
-    } catch {
-      return effectiveOrders;
-    }
-  }, [corePreview?.req, effectiveOrders]);
-  const buildPreviewWhatIf = useCallback((orders: typeof effectiveOrders) => {
-    if (!orders.length) return null;
-    return simulateRebalanceWhatIfV0({
-      cashStart: toFiniteNumber(portfolioCash) ?? 0,
-      valuesBySymbol: whatIfValuesBySymbol,
-      targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
-      orders: orders
-        .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
-        .map((o) => ({ symbol: o.symbol, side: o.side as 'BUY' | 'SELL', notional: o.notional })),
-      feeBps: whatIfFeeBps,
-      slippageBps: whatIfSlippageBpsUsed,
-      labelsBySymbol: whatIfLabelsBySymbol});
-  }, [
-    portfolioCash,
-    whatIfFeeBps,
-    whatIfLabelsBySymbol,
-    whatIfSlippageBpsUsed,
+  const {
+    paperRunLoading,
+    paperRunError,
+    paperRunRecordedAt,
+    paperRunSummary,
+    paperRunPostSummary,
+    paperRunHealthcheck,
+    paperRunDriftAlert,
+    paperRunExecutionMode,
+    paperRunLastConfirmedOpts,
+    paperRunFailureDetails,
+    preflightOpen,
+    preflightPendingOpts,
+    preflightAckPrices,
+    preflightAckConstraints,
+    preflightAckCash,
+    preflightOverrideBlockers,
+    preflightHasPriceWarnings,
+    preflightCanProceed,
+    safetyStopOpen,
+    safetyStopPendingOpts,
+    preRunHasBlockingV0,
+    preRunHasWarningsV0,
+    preflightPreviewOrders,
+    preflightPreviewWhatIf,
+    safetyStopPreviewOrders,
+    safetyStopPreviewWhatIf,
+    setPreflightAckPrices,
+    setPreflightAckConstraints,
+    setPreflightAckCash,
+    setPreflightOverrideBlockers,
+    openPreflightForRun,
+    closePreflight,
+    closePreflightAndJump,
+    closeSafetyStop,
+    safetyStopDisableDynamicScheduleV0,
+    proceedFromPreflight,
+    proceedFromSafetyStop,
+    runPaperRebalanceCore,
+    cancelRun,
+  } = useDaaRebalancePanelExecutionKernelV0({
+    executionModeNormalized,
+    preTradeCashCheck,
+    liquiditySettlementGateV0,
+    rebalanceTableRows,
+    driftThresholdPct,
+    moneyPlan,
+    assetBlacklistV0,
+    assetBlacklistSetV0,
+    funds,
+    priceSnapshot,
+    targetWeightsEffective,
+    effectiveOrders,
     whatIfTargetWeightsPostBySymbol,
-    whatIfValuesBySymbol]);
-  const preflightPreviewOrders = useMemo(() => previewOrdersForOpts(!!preflightPendingOpts?.cashSweep), [previewOrdersForOpts, preflightPendingOpts?.cashSweep]);
-  const preflightPreviewWhatIf = useMemo(() => buildPreviewWhatIf(preflightPreviewOrders), [buildPreviewWhatIf, preflightPreviewOrders]);
-  const safetyStopPreviewOrders = useMemo(() => previewOrdersForOpts(!!safetyStopPendingOpts?.cashSweep), [previewOrdersForOpts, safetyStopPendingOpts?.cashSweep]);
-  const safetyStopPreviewWhatIf = useMemo(() => buildPreviewWhatIf(safetyStopPreviewOrders), [buildPreviewWhatIf, safetyStopPreviewOrders]);
+    whatIfFeeBps,
+    whatIfSlippageBpsUsed,
+    whatIfLabelsBySymbol,
+    sellProceedsRoutingV0,
+    corePreviewReq: corePreview?.req ?? null,
+    portfolioCash,
+    whatIfValuesBySymbol,
+    preRunViolationsV0,
+    priceDataWarningsV0,
+  });
+  const liveTimelineV0 = useLiveTimelineV0({
+    runDaaStatus,
+    runDaaStatusText,
+    paperRunLoading,
+    paperRunError,
+    paperRunRecordedAt,
+  });
   const riskControlsSectionProps = { targetWeightsSource, priceDataWarningsV0, assetBlacklistTextV0, setAssetBlacklistTextV0, cashBucketTargetPct01, persistCashBucketTargetPct01V0, maxTurnoverPct01V0, persistMaxTurnoverPct01V0, baseCcy, rebalancePolicyMinTradeNotional: rebalancePolicy.minTradeNotional, whatIfTurnoverPctOfTotalBefore: whatIf ? whatIf.turnoverPctOfTotalBefore : null, investablePct01, moneyPlanInvestablePct01, assetBlacklistV0, portfolioLastRebalanceAt };
   const autoPlanSectionProps = { autoPlanScenario, setAutoPlanScenario, autoPlanPresetNameV0, setAutoPlanPresetNameV0, saveAutoPlanScenarioPresetV0, autoPlanSelectedPresetIdV0, setAutoPlanSelectedPresetIdV0, autoPlanPresetsV0, loadAutoPlanScenarioPresetV0, deleteAutoPlanScenarioPresetV0, seedAutoPlanFromCurrentSnapshotV0, runAutoPlanV0, doCopyAutoPlanV0, autoPlanResult, autoPlanCopyStatus, autoPlanThresholdOverridePct, driftThresholdPct, setAutoPlanThresholdOverridePctForActive, autoPlanThresholdPctUsed, autoPlanInputText, setAutoPlanInputTextForActive, autoPlanError, autoPlanResultA, autoPlanResultB, baseCcy, formatWeightsDiffLines, rebalanceMinTradeNotional: rebalancePolicy.minTradeNotional, whatIfFeeBps };
   return (
@@ -1689,7 +1218,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         copyStatus={copyStatus}
         open={open}
         setOpen={setOpen}
-        onCancelRun={() => paperRunAbortRef.current?.abort()}
+        onCancelRun={cancelRun}
       />
       <DaaDynamicRebalanceNotificationWatcherV0 rev={rev} />
       <DaaDynamicRebalancePausedReasonBannerV0 rev={rev} />
@@ -1870,7 +1399,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   <button
                     type="button"
                     className="button secondary"
-                    onClick={() => paperRunAbortRef.current?.abort()}
+                    onClick={cancelRun}
                     style={{ padding: '6px 10px' }}
                   >
                     Cancel
