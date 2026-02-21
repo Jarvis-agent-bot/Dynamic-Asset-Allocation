@@ -121,16 +121,8 @@ function useLiveTimelineV0(params: {
 // moved to DaaRebalancePanel.autoPlanUtilsV0
 
 const PREVIEW_ORDER_OPTIONS_V0: Array<{ key: OrdersPreviewSourceV0; label: string; title: string }> = [
-  {
-    key: 'RECOMPUTE',
-    label: 'Recompute',
-    title: 'Recompute orders via the core engine using current inputs + threshold',
-  },
-  {
-    key: 'ENGINE_LAST_RUN',
-    label: 'Last run (core)',
-    title: 'Use orders from the last core run (saved in localStorage)',
-  },
+  { key: 'RECOMPUTE', label: 'Recompute', title: 'Recompute orders via the core engine using current inputs + threshold' },
+  { key: 'ENGINE_LAST_RUN', label: 'Last run (core)', title: 'Use orders from the last core run (saved in localStorage)' },
 ];
 
 export function DaaRebalancePanel({ funds, holdings }: Props) {
@@ -276,25 +268,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     const name = autoPlanPresetNameV0.trim();
     if (!name) return;
     const id = `${Date.now()}`;
-    setAutoPlanPresetsV0((prev) => [
-      {
-        id,
-        name,
-        updatedAt: new Date().toISOString(),
-        inputA: autoPlanInputTextA,
-        inputB: autoPlanInputTextB,
-        thresholdPctOverrideA: autoPlanThresholdOverridePctA,
-        thresholdPctOverrideB: autoPlanThresholdOverridePctB,
-      },
-      ...prev,
-    ].slice(0, 20));
+    setAutoPlanPresetsV0((prev) => [{ id, name, updatedAt: new Date().toISOString(), inputA: autoPlanInputTextA, inputB: autoPlanInputTextB, thresholdPctOverrideA: autoPlanThresholdOverridePctA, thresholdPctOverrideB: autoPlanThresholdOverridePctB }, ...prev].slice(0, 20));
     setAutoPlanSelectedPresetIdV0(id);
     setAutoPlanPresetNameV0('');
   }
   function loadAutoPlanScenarioPresetV0(id: string) {
     const preset = autoPlanPresetsV0.find((x) => x.id === id);
-    if (!preset) return;
-    applyAutoPlanPresetV0(preset);
+    if (preset) applyAutoPlanPresetV0(preset);
   }
   function deleteAutoPlanScenarioPresetV0(id: string) {
     setAutoPlanPresetsV0((prev) => prev.filter((x) => x.id !== id));
@@ -315,11 +295,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       window.setTimeout(() => setter('idle'), 2000);
     }
   }
-  async function doCopyBundle() {
-    await withCopyStatus(setCopyStatus, async () => {
-      await copyTextToClipboard(pretty(exportBundle));
-    });
-  }
+  async function doCopyBundle() { await withCopyStatus(setCopyStatus, async () => copyTextToClipboard(pretty(exportBundle))); }
   async function applySampleScenarioV0Handler() {
     await applySampleScenarioWorkflowV0({ setSampleStatus, setOpen });
   }
@@ -611,14 +587,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }, [driftFilter, rebalanceTableRows, driftThresholdPct]);
   const whatIfThresholdPct100 = Math.max(0, driftThresholdPct * 100);
   const policyThresholdPct100 = Math.max(0, policyDriftThresholdPct * 100);
-  const thresholdPresetsV0 = useMemo(
-    () => [
-      { id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' },
-      { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' },
-      { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' },
-    ] as const,
-    [],
-  );
+  const thresholdPresetsV0 = useMemo(() => [
+    { id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' },
+    { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' },
+    { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' },
+  ] as const, []);
   const activeThresholdPresetIdV0 = thresholdPresetsV0.find((preset) => Math.abs(whatIfThresholdPct100 - preset.pct100) < 1e-6)?.id ?? null;
   const setWhatIfThresholdPct100V0 = useCallback(
     (pct100: number | null) => {
