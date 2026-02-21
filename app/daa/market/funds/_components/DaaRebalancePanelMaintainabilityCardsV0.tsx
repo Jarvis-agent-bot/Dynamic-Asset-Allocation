@@ -1,5 +1,6 @@
 import { buildPriceWarningSymbolSetV0 } from '@/src/daa/priceWarningSymbolsV0';
 import { deriveScenarioRoutingV0 } from '@/src/daa/scenarioRoutingV0';
+import { getBuyRecommendationGateV0 } from '@/src/daa/buyRecommendationGateV0';
 
 type RebalanceRowLike = {
   id?: string;
@@ -355,6 +356,27 @@ export default function DaaRebalancePanelMaintainabilityCardsV0({
       {(() => {
         const buyOrders = effectiveOrders.filter((o) => o.side === 'BUY');
         if (!buyOrders.length) return null;
+
+        const rows = rebalanceTableRows.slice(0, 24);
+        const isolatedRows = rows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.6, 0.04)).slice(0, 6);
+        const hasLockedMaxIn = isolatedRows.length > 0;
+        const blockerCount = preRunViolationsV0.filter((v) => v.level === 'blocker').length;
+        const warningCount = preRunViolationsV0.filter((v) => v.level === 'warning').length;
+        const missingPriceCount = priceDataWarningsV0.missing.length;
+        const stalePriceCount = priceDataWarningsV0.lastClose.length;
+        const driftHotCount = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.5, 0.03)).length;
+        const analystPenalty = missingPriceCount * 8 + stalePriceCount * 5 + Math.min(20, driftHotCount * 2);
+        const managerPenalty = blockerCount * 18 + warningCount * 5 + (preTradeCashCheck.blocking ? 12 : 0) + (paperRunError ? 15 : 0);
+        const analystScore = Math.max(0, 100 - analystPenalty);
+        const managerScore = Math.max(0, 100 - managerPenalty);
+        const tierOf = (score: number) => (score >= 80 ? 'elite' : score >= 50 ? 'neutral' : 'incompetent');
+        const buyRecommendationGate = getBuyRecommendationGateV0({
+          analystTier: tierOf(analystScore),
+          managerTier: tierOf(managerScore),
+          hasLockedMaxIn,
+          liquiditySettlementBlocked: liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking,
+        });
+
         const availableCash = Number(portfolioCash || 0);
         const estimatedSells = effectiveOrders.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
         const liquidityCoverage = availableCash + estimatedSells;
@@ -368,10 +390,19 @@ export default function DaaRebalancePanelMaintainabilityCardsV0({
           })
           .filter((o) => o.capped)
           .slice(0, 5);
+
         return (
-          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${cappedOrders.length ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 12, background: cappedOrders.length ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)' }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity caps</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Clamp buy notionals to a fixed share of available liquidity before execution routing.</div>
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${buyRecommendationGate.pass && !cappedOrders.length ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: buyRecommendationGate.pass && !cappedOrders.length ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Buy recommendation gate + liquidity caps</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Buy recommendations must pass non-incompetent tag, MaxIn unlock, and liquidity/T+N gate before routing.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              gate=<b style={{ color: buyRecommendationGate.pass ? '#16a34a' : 'var(--danger)' }}>{buyRecommendationGate.pass ? 'pass' : 'blocked'}</b> · non-incompetent=<b>{buyRecommendationGate.nonIncompetentTagPass ? 'pass' : 'blocked'}</b> · maxIn unlocked=<b>{buyRecommendationGate.maxInNotLockedPass ? 'pass' : 'blocked'}</b> · liquidity/T+N=<b>{buyRecommendationGate.liquiditySettlementPass ? 'pass' : 'blocked'}</b>
+            </div>
+            {!buyRecommendationGate.pass ? (
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                blocked reasons: {buyRecommendationGate.blockers.join(', ')}
+              </div>
+            ) : null}
             <div style={{ marginTop: 6, fontSize: 11 }}>
               liquidity cap per order=<b>{perOrderLiquidityCap.toFixed(2)} {baseCcy || ''}</b> ({(liquidityCapPct * 100).toFixed(0)}% of coverage) · capped orders=<b>{cappedOrders.length}</b>
             </div>
