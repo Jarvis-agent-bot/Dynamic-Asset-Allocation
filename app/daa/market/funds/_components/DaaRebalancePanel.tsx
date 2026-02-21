@@ -120,6 +120,19 @@ function useLiveTimelineV0(params: {
 
 // moved to DaaRebalancePanel.autoPlanUtilsV0
 
+const PREVIEW_ORDER_OPTIONS_V0: Array<{ key: OrdersPreviewSourceV0; label: string; title: string }> = [
+  {
+    key: 'RECOMPUTE',
+    label: 'Recompute',
+    title: 'Recompute orders via the core engine using current inputs + threshold',
+  },
+  {
+    key: 'ENGINE_LAST_RUN',
+    label: 'Last run (core)',
+    title: 'Use orders from the last core run (saved in localStorage)',
+  },
+];
+
 export function DaaRebalancePanel({ funds, holdings }: Props) {
   const rt = useDaaRuntime();
   const { exportBundle } = useDaaWorkflowExportBundleV1();
@@ -2361,20 +2374,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   </details>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginTop: 8 }}>
                     <span className="muted" style={{ fontSize: 11 }}>Preview orders:</span>
-                    {[
-                      {
-                        key: 'RECOMPUTE' as const,
-                        label: 'Recompute',
-                        title: 'Recompute orders via the core engine using current inputs + threshold',
-                        disabled: false,
-                      },
-                      {
-                        key: 'ENGINE_LAST_RUN' as const,
-                        label: 'Last run (core)',
-                        title: 'Use orders from the last core run (saved in localStorage)',
-                        disabled: !engineOrders.length,
-                      },
-                    ].map((option) => (
+                    {PREVIEW_ORDER_OPTIONS_V0.map((option) => (
                       <button
                         key={option.key}
                         type="button"
@@ -2382,7 +2382,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                         onClick={() => setOrdersPreviewSourceV0(option.key)}
                         style={{ padding: '4px 8px' }}
                         aria-pressed={ordersPreviewSourceV0 === option.key}
-                        disabled={option.disabled}
+                        disabled={option.key === 'ENGINE_LAST_RUN' && !engineOrders.length}
                         title={option.title}
                       >
                         {option.label}
