@@ -91,8 +91,8 @@ export default function DaaRebalancePanelExtraInsightsV0({
       {(() => {
         const rows = rebalanceTableRows.slice(0, 8);
         if (!rows.length) return null;
-        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => String(x || '').trim()));
-        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => String(x || '').trim()));
+        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => warningSymV0(x)));
+        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => warningSymV0(x)));
         const trace = rows.map((r) => {
           const id = String(r.id ?? '').trim();
           const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
@@ -212,8 +212,8 @@ export default function DaaRebalancePanelExtraInsightsV0({
       {(() => {
         const recRows = rebalanceTableRows.slice(0, 10);
         if (!recRows.length) return null;
-        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => String(x || '').trim()));
-        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => String(x || '').trim()));
+        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => warningSymV0(x)));
+        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => warningSymV0(x)));
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Operator-visible factor trace by recommendation</div>
