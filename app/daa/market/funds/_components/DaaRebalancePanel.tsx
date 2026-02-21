@@ -262,35 +262,40 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const setAutoPlanThresholdOverridePctForActive = autoPlanActiveState.setThresholdOverridePct;
   const setAutoPlanErrorForActive = autoPlanActiveState.setError;
   const setAutoPlanResultForActive = autoPlanActiveState.setResult;
+  const applyAutoPlanPresetV0 = useCallback((preset: AutoPlanScenarioPresetV0) => {
+    setAutoPlanInputTextA(preset.inputA);
+    setAutoPlanInputTextB(preset.inputB);
+    setAutoPlanThresholdOverridePctA(preset.thresholdPctOverrideA);
+    setAutoPlanThresholdOverridePctB(preset.thresholdPctOverrideB);
+    setAutoPlanScenario('A');
+  }, []);
   function saveAutoPlanScenarioPresetV0() {
     const name = autoPlanPresetNameV0.trim();
     if (!name) return;
     const id = `${Date.now()}`;
-    const next: AutoPlanScenarioPresetV0 = {
-      id,
-      name,
-      updatedAt: new Date().toISOString(),
-      inputA: autoPlanInputTextA,
-      inputB: autoPlanInputTextB,
-      thresholdPctOverrideA: autoPlanThresholdOverridePctA,
-      thresholdPctOverrideB: autoPlanThresholdOverridePctB,
-    };
-    setAutoPlanPresetsV0((prev) => [next, ...prev].slice(0, 20));
+    setAutoPlanPresetsV0((prev) => [
+      {
+        id,
+        name,
+        updatedAt: new Date().toISOString(),
+        inputA: autoPlanInputTextA,
+        inputB: autoPlanInputTextB,
+        thresholdPctOverrideA: autoPlanThresholdOverridePctA,
+        thresholdPctOverrideB: autoPlanThresholdOverridePctB,
+      },
+      ...prev,
+    ].slice(0, 20));
     setAutoPlanSelectedPresetIdV0(id);
     setAutoPlanPresetNameV0('');
   }
   function loadAutoPlanScenarioPresetV0(id: string) {
     const preset = autoPlanPresetsV0.find((x) => x.id === id);
     if (!preset) return;
-    setAutoPlanInputTextA(preset.inputA);
-    setAutoPlanInputTextB(preset.inputB);
-    setAutoPlanThresholdOverridePctA(preset.thresholdPctOverrideA);
-    setAutoPlanThresholdOverridePctB(preset.thresholdPctOverrideB);
-    setAutoPlanScenario('A');
+    applyAutoPlanPresetV0(preset);
   }
   function deleteAutoPlanScenarioPresetV0(id: string) {
     setAutoPlanPresetsV0((prev) => prev.filter((x) => x.id !== id));
-    if (autoPlanSelectedPresetIdV0 === id) setAutoPlanSelectedPresetIdV0('');
+    setAutoPlanSelectedPresetIdV0((prev) => (prev === id ? '' : prev));
   }
   const baseCcy = useMemo(() => {
     const mp: any = moneyPlan as any;
