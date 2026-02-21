@@ -1137,6 +1137,32 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       positionsBySymbol,
       costBps});
   }, [effectiveOrders, estimateTaxLotsImpactV0, funds, priceSnapshot, whatIf, whatIfFeeBps, whatIfSlippageBpsUsed]);
+  const ccySuffix = baseCcy ? ` ${baseCcy}` : '';
+  const suppressedExamplesText = useMemo(() => {
+    if (!naiveOrdersDiagnostics) return '';
+    return (naiveOrdersDiagnostics.suppressedTop || [])
+      .map((x) => `${x.side} ${x.id}: raw=${x.rawNotional.toFixed(2)}${ccySuffix} -> rounded=${x.roundedNotional.toFixed(2)}${ccySuffix}`)
+      .join('; ');
+  }, [ccySuffix, naiveOrdersDiagnostics]);
+  const noOrdersHint = useMemo(() => {
+    const diag = ordersPreviewSourceV0 === 'RECOMPUTE' && !corePreview?.resp ? naiveOrdersDiagnostics : null;
+    if (diag && diag.candidateCount > 0 && diag.producedCount === 0) {
+      return {
+        kind: 'blocked' as const,
+        text: `Blocked by min trade/precision: ${diag.candidateCount} candidate trade(s), but all are below minNotional=${diag.minNotional.toFixed(2)}${ccySuffix}${diag.lotStep > 0 ? ` (lotStep=${diag.lotStep.toFixed(2)}${ccySuffix})` : ''}.`,
+      };
+    }
+    if (diag && diag.candidateCount === 0) {
+      return {
+        kind: 'empty' as const,
+        text: `No orders: all drifts are within threshold (${(driftThresholdPct * 100).toFixed(2)}%). Lower the threshold if you expect more rebalances.`,
+      };
+    }
+    return {
+      kind: 'pending' as const,
+      text: `暂无 orders：请先跑一次 Step4，或确保 current vs target 数据齐全。（minTradeNotional=${rebalancePolicy.minTradeNotional.toFixed(2)}）`,
+    };
+  }, [ccySuffix, corePreview?.resp, driftThresholdPct, naiveOrdersDiagnostics, ordersPreviewSourceV0, rebalancePolicy.minTradeNotional]);
   async function doCopyOrders() {
     await withCopyStatus(setCopyOrdersStatus, async () => {
       const payload = {
@@ -2697,19 +2723,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   </div>
                   {ordersPreviewSourceV0 === 'RECOMPUTE' && !corePreview?.resp && naiveOrdersDiagnostics && naiveOrdersDiagnostics.suppressedCount ? (
                     <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
-                      {(() => {
-                        const ccy = baseCcy ? ` ${baseCcy}` : '';
-                        const top = (naiveOrdersDiagnostics.suppressedTop || [])
-                          .map((x) => `${x.side} ${x.id}: raw=${x.rawNotional.toFixed(2)}${ccy} → rounded=${x.roundedNotional.toFixed(2)}${ccy}`)
-                          .join('; ');
-                        return (
-                          <>
-                            Min trade/precision: suppressed {naiveOrdersDiagnostics.suppressedCount} candidate trade(s) below minNotional={naiveOrdersDiagnostics.minNotional.toFixed(2)}{ccy}
-                            {naiveOrdersDiagnostics.lotStep > 0 ? ` (lotStep=${naiveOrdersDiagnostics.lotStep.toFixed(2)}${ccy})` : ''}.
-                            {top ? ` Examples: ${top}.` : ''}
-                          </>
-                        );
-                      })()}
+                      Min trade/precision: suppressed {naiveOrdersDiagnostics.suppressedCount} candidate trade(s) below minNotional={naiveOrdersDiagnostics.minNotional.toFixed(2)}{ccySuffix}
+                      {naiveOrdersDiagnostics.lotStep > 0 ? ` (lotStep=${naiveOrdersDiagnostics.lotStep.toFixed(2)}${ccySuffix})` : ''}.
+                      {suppressedExamplesText ? ` Examples: ${suppressedExamplesText}.` : ''}
                     </div>
                   ) : null}
                   {whatIf ? (
@@ -2733,44 +2749,19 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 </div>
               ) : (
                 <div style={{ fontSize: 12 }}>
-                  {(() => {
-                    const ccy = baseCcy ? ` ${baseCcy}` : '';
-                    const diag = ordersPreviewSourceV0 === 'RECOMPUTE' && !corePreview?.resp ? naiveOrdersDiagnostics : null;
-                    // If we expected orders (drift exceeds threshold) but none were produced, surface a blocker.
-                    if (diag && diag.candidateCount > 0 && diag.producedCount === 0) {
-                      const examples = (diag.suppressedTop || [])
-                        .map((x) => `${x.side} ${x.id}: raw=${x.rawNotional.toFixed(2)}${ccy} → rounded=${x.roundedNotional.toFixed(2)}${ccy}`)
-                        .join('; ');
-                      return (
-                        <div>
-                          <div style={{ color: 'var(--danger, #b00020)' }}>
-                            Blocked by min trade/precision: {diag.candidateCount} candidate trade(s), but all are below minNotional={diag.minNotional.toFixed(2)}{ccy}
-                            {diag.lotStep > 0 ? ` (lotStep=${diag.lotStep.toFixed(2)}${ccy})` : ''}.
-                          </div>
-                          <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                            Suggestion: lower policy.minTradeNotional, or increase position size/equity so the implied notional deltas exceed the minimum.
-                          </div>
-                          {examples ? (
-                            <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                              Examples: {examples}.
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    }
-                    if (diag && diag.candidateCount === 0) {
-                      return (
-                        <div className="muted">
-                          No orders: all drifts are within threshold ({(driftThresholdPct * 100).toFixed(2)}%). Lower the threshold if you expect more rebalances.
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="muted">
-                        暂无 orders：请先跑一次 Step4，或确保 current vs target 数据齐全。（minTradeNotional={rebalancePolicy.minTradeNotional.toFixed(2)}）
+                  <div style={noOrdersHint.kind === 'blocked' ? { color: 'var(--danger, #b00020)' } : undefined}>{noOrdersHint.text}</div>
+                  {noOrdersHint.kind === 'blocked' ? (
+                    <>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                        Suggestion: lower policy.minTradeNotional, or increase position size/equity so the implied notional deltas exceed the minimum.
                       </div>
-                    );
-                  })()}
+                      {suppressedExamplesText ? (
+                        <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                          Examples: {suppressedExamplesText}.
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
               )}
             </div>
