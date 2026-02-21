@@ -1,27 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  LS_AUTO_PLAN_INPUT,
-  LS_AUTO_PLAN_RESULT,
-  LS_AUTO_PLAN_RESULT_A,
-  LS_AUTO_PLAN_RESULT_B,
-  LS_AUTO_PLAN_SCENARIO_PRESETS_V0,
-  LS_REBALANCE_ASSET_BLACKLIST_V0,
-  LS_WHATIF_DRIFT_THRESHOLD_PCT_V0,
-  LS_WHATIF_FEE_BPS,
-  LS_WHATIF_ORDERS_PREVIEW_SOURCE_V0,
-  LS_WHATIF_SLIPPAGE_BPS,
-  LS_WHATIF_SLIPPAGE_SENSITIVITY_V0,
-  SLIPPAGE_SENSITIVITY_MULTIPLIER_V0,
-  type AutoPlanScenarioKeyV0,
-  type AutoPlanScenarioPresetV0,
-  type OrdersPreviewSourceV0,
-  type SlippageSensitivityV0,
-  useLocalStorageFiniteNumberV0,
-  useLocalStorageOptionalNumberV0,
-  useLocalStorageStringV0,
-} from './DaaRebalancePanel.storageV0';
+import { LS_AUTO_PLAN_INPUT, LS_AUTO_PLAN_RESULT, LS_AUTO_PLAN_RESULT_A, LS_AUTO_PLAN_RESULT_B, LS_AUTO_PLAN_SCENARIO_PRESETS_V0, LS_REBALANCE_ASSET_BLACKLIST_V0, LS_WHATIF_DRIFT_THRESHOLD_PCT_V0, LS_WHATIF_FEE_BPS, LS_WHATIF_ORDERS_PREVIEW_SOURCE_V0, LS_WHATIF_SLIPPAGE_BPS, LS_WHATIF_SLIPPAGE_SENSITIVITY_V0, SLIPPAGE_SENSITIVITY_MULTIPLIER_V0, type AutoPlanScenarioKeyV0, type AutoPlanScenarioPresetV0, type OrdersPreviewSourceV0, type SlippageSensitivityV0, useLocalStorageFiniteNumberV0, useLocalStorageOptionalNumberV0, useLocalStorageStringV0 } from './DaaRebalancePanel.storageV0';
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { pushDynamicRebalanceNotificationV0 } from '../../../dynamicRebalanceNotificationsClientV0';
 import { loadPortfolioStateV1, recordPortfolioLastRebalance } from '../../../portfolioStateStore';
@@ -46,38 +26,11 @@ import { getLiquiditySettlementGateV0 } from '@/src/daa/liquiditySettlementGateV
 import { appendRebalanceLog } from '@/src/daa/rebalanceLogStore';
 import { buildRebalanceViolationsV0 } from '@/src/daa/rebalanceViolationsV0';
 import { buildRebalanceApprovalSummaryMarkdownV0 } from '@/src/daa/rebalanceApprovalSummaryMarkdownV0';
-import {
-  attachOrdersToRebalanceRunV0,
-  failRebalanceOrderStatusRunV0,
-  finishRebalanceOrderStatusRunV0,
-  startRebalanceOrderStatusRunV0,
-  updateRebalanceOrderStatusV0} from '@/src/daa/rebalanceOrderStatusRunStoreV0';
+import { attachOrdersToRebalanceRunV0, failRebalanceOrderStatusRunV0, finishRebalanceOrderStatusRunV0, startRebalanceOrderStatusRunV0, updateRebalanceOrderStatusV0 } from '@/src/daa/rebalanceOrderStatusRunStoreV0';
 import { buildRebalancePostRunSummaryV0, type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { buildRebalancePlanCsvV0 } from '@/src/daa/rebalancePlanCsvV0';
 import { estimateTaxLotsImpactV0 } from '@/src/daa/taxLotsImpactV0';
-import {
-  computeDriftAlertFromCoreResponse,
-  computeDriftAlertFromTableRows,
-  downloadTextAsFile,
-  fmtPct01,
-  formatOrdersMarkdown,
-  formatWeightsDiffLines,
-  formatWeightsMarkdown,
-  normalizeOrders,
-  normalizePlanSymbol,
-  normalizeTargetWeights,
-  normalizeTargetWeightsAny,
-  pickFundNav,
-  resolveFundPriceV0,
-  safeJsonParse,
-  scrollToId,
-  toFiniteNumber,
-  tryBuildSeriesBySymbolForPlan,
-  type DriftAlertV0,
-  type PaperRunHealthcheckV0,
-  type SuggestedOrder,
-  type TargetWeight,
-} from './DaaRebalancePanel.helpersV0';
+import { computeDriftAlertFromCoreResponse, computeDriftAlertFromTableRows, downloadTextAsFile, fmtPct01, formatOrdersMarkdown, formatWeightsDiffLines, formatWeightsMarkdown, normalizeOrders, normalizePlanSymbol, normalizeTargetWeights, normalizeTargetWeightsAny, pickFundNav, resolveFundPriceV0, safeJsonParse, scrollToId, toFiniteNumber, tryBuildSeriesBySymbolForPlan, type DriftAlertV0, type PaperRunHealthcheckV0, type SuggestedOrder, type TargetWeight } from './DaaRebalancePanel.helpersV0';
 import { buildTargetedDecisionTransparencyV0 } from '@/src/daa/targetedDecisionTransparencyV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
@@ -1885,58 +1838,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const safetyStopPreviewWhatIf = useMemo(() => buildPreviewWhatIf(safetyStopPreviewOrders), [buildPreviewWhatIf, safetyStopPreviewOrders]);
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
-      <DaaRebalancePreflightModalV0
-        open={preflightOpen}
-        pendingOpts={preflightPendingOpts}
-        baseCcy={baseCcy}
-        previewOrders={preflightPreviewOrders}
-        previewWhatIf={preflightPreviewWhatIf}
-        hasPriceWarnings={preflightHasPriceWarnings}
-        priceWarnings={priceDataWarningsV0}
-        hasBlocking={preRunHasBlockingV0}
-        hasWarnings={preRunHasWarningsV0}
-        violations={preRunViolationsV0}
-        preTradeCashCheck={preTradeCashCheck}
-        ackPrices={preflightAckPrices}
-        ackConstraints={preflightAckConstraints}
-        ackCash={preflightAckCash}
-        overrideBlockers={preflightOverrideBlockers}
-        canProceed={preflightCanProceed}
-        loading={paperRunLoading}
-        executionBlockReason={executionBlockReason}
-        targetWeightsCount={targetWeights.length}
-        onClose={closePreflight}
-        onJump={closePreflightAndJump}
-        onSetAckPrices={setPreflightAckPrices}
-        onSetAckConstraints={setPreflightAckConstraints}
-        onSetAckCash={setPreflightAckCash}
-        onSetOverrideBlockers={setPreflightOverrideBlockers}
-        onProceed={proceedFromPreflight}
-      />
-      <DaaSafetyStopModalV0
-        open={safetyStopOpen}
-        pendingCashSweep={!!safetyStopPendingOpts?.cashSweep}
-        copyApprovalSummaryStatus={copyApprovalSummaryStatus}
-        previewOrders={safetyStopPreviewOrders}
-        previewWhatIf={safetyStopPreviewWhatIf}
-        baseCcy={baseCcy}
-        whatIfFeeBps={whatIfFeeBps}
-        whatIfSlippageBps={whatIfSlippageBps}
-        whatIfSlippageBpsUsed={whatIfSlippageBpsUsed}
-        whatIfSlippageSensitivity={whatIfSlippageSensitivityV0}
-        preRunViolations={preRunViolationsV0}
-        preTradeCashBlocking={preTradeCashCheck.blocking}
-        preflightOverrideBlockers={preflightOverrideBlockers}
-        portfolioCash={toFiniteNumber(portfolioCash) ?? 0}
-        minTradeNotional={rebalancePolicy.minTradeNotional}
-        paperRunLoading={paperRunLoading}
-        executionBlockReason={executionBlockReason}
-        targetWeightsCount={targetWeights.length}
-        onCopyApprovalSummary={doCopyApprovalSummaryV0}
-        onClose={closeSafetyStop}
-        onSafetyStopDisableSchedule={safetyStopDisableDynamicScheduleV0}
-        onProceed={proceedFromSafetyStop}
-      />
+      <DaaRebalancePreflightModalV0 open={preflightOpen} pendingOpts={preflightPendingOpts} baseCcy={baseCcy} previewOrders={preflightPreviewOrders} previewWhatIf={preflightPreviewWhatIf} hasPriceWarnings={preflightHasPriceWarnings} priceWarnings={priceDataWarningsV0} hasBlocking={preRunHasBlockingV0} hasWarnings={preRunHasWarningsV0} violations={preRunViolationsV0} preTradeCashCheck={preTradeCashCheck} ackPrices={preflightAckPrices} ackConstraints={preflightAckConstraints} ackCash={preflightAckCash} overrideBlockers={preflightOverrideBlockers} canProceed={preflightCanProceed} loading={paperRunLoading} executionBlockReason={executionBlockReason} targetWeightsCount={targetWeights.length} onClose={closePreflight} onJump={closePreflightAndJump} onSetAckPrices={setPreflightAckPrices} onSetAckConstraints={setPreflightAckConstraints} onSetAckCash={setPreflightAckCash} onSetOverrideBlockers={setPreflightOverrideBlockers} onProceed={proceedFromPreflight} />
+      <DaaSafetyStopModalV0 open={safetyStopOpen} pendingCashSweep={!!safetyStopPendingOpts?.cashSweep} copyApprovalSummaryStatus={copyApprovalSummaryStatus} previewOrders={safetyStopPreviewOrders} previewWhatIf={safetyStopPreviewWhatIf} baseCcy={baseCcy} whatIfFeeBps={whatIfFeeBps} whatIfSlippageBps={whatIfSlippageBps} whatIfSlippageBpsUsed={whatIfSlippageBpsUsed} whatIfSlippageSensitivity={whatIfSlippageSensitivityV0} preRunViolations={preRunViolationsV0} preTradeCashBlocking={preTradeCashCheck.blocking} preflightOverrideBlockers={preflightOverrideBlockers} portfolioCash={toFiniteNumber(portfolioCash) ?? 0} minTradeNotional={rebalancePolicy.minTradeNotional} paperRunLoading={paperRunLoading} executionBlockReason={executionBlockReason} targetWeightsCount={targetWeights.length} onCopyApprovalSummary={doCopyApprovalSummaryV0} onClose={closeSafetyStop} onSafetyStopDisableSchedule={safetyStopDisableDynamicScheduleV0} onProceed={proceedFromSafetyStop} />
       <DaaRebalancePanelHeaderActionsV0
         driftOverviewV0={driftOverviewV0}
         rev={rev}
@@ -2278,25 +2181,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 )}
               </div>
             ) : null}
-            <DaaRebalanceRunOutcomePanelV0
-              baseCcy={baseCcy}
-              paperRunRecordedAt={paperRunRecordedAt}
-              paperRunExecutionMode={paperRunExecutionMode}
-              paperRunPostSummary={paperRunPostSummary}
-              paperRunSummary={paperRunSummary}
-              paperRunHealthcheck={paperRunHealthcheck}
-              paperRunError={paperRunError}
-              paperRunLoading={paperRunLoading}
-              paperRunLastConfirmedOpts={paperRunLastConfirmedOpts}
-              paperRunFailureDetails={paperRunFailureDetails}
-              onRetry={() => {
-                if (!paperRunLastConfirmedOpts) return;
-                void runPaperRebalanceCore(paperRunLastConfirmedOpts);
-              }}
-              onReviewRetry={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})}
-              onRunGuidedRecovery={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})}
-              onJumpHistory={() => jumpTo('history-audit')}
-            />
+            <DaaRebalanceRunOutcomePanelV0 baseCcy={baseCcy} paperRunRecordedAt={paperRunRecordedAt} paperRunExecutionMode={paperRunExecutionMode} paperRunPostSummary={paperRunPostSummary} paperRunSummary={paperRunSummary} paperRunHealthcheck={paperRunHealthcheck} paperRunError={paperRunError} paperRunLoading={paperRunLoading} paperRunLastConfirmedOpts={paperRunLastConfirmedOpts} paperRunFailureDetails={paperRunFailureDetails} onRetry={() => { if (!paperRunLastConfirmedOpts) return; void runPaperRebalanceCore(paperRunLastConfirmedOpts); }} onReviewRetry={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})} onRunGuidedRecovery={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})} onJumpHistory={() => jumpTo('history-audit')} />
             <details style={{ marginTop: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(0,0,0,0.1)' }}>
               <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Run debugger</summary>
               <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
