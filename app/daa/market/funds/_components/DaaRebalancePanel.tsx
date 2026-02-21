@@ -18,7 +18,7 @@ import { deriveInvestablePct01V0, scaleTargetWeightsByInvestablePct01V0 } from '
 import { OrdersReviewV0 } from '../../../_components/OrdersReviewV0';
 import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
 import { rebalanceCore, type RebalanceCoreRequest, type RebalanceCoreResponse } from '@/src/core/rebalanceCore';
-import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from '@/src/core/backtestDriftRebalance';
+import { type DriftRebalanceBacktestResult } from '@/src/core/backtestDriftRebalance';
 import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
@@ -64,6 +64,7 @@ import DaaRebalancePanelExtraInsightsV0 from './DaaRebalancePanelExtraInsightsV0
 import DaaRebalanceRiskControlsSectionV0 from './DaaRebalanceRiskControlsSectionV0';
 import { applySampleScenarioV0 as applySampleScenarioWorkflowV0, jumpToV0, runDaaRefreshAndRecommendationV0 as runDaaRefreshAndRecommendationWorkflowV0 } from './DaaRebalancePanel.workflowHelpersV0';
 import { getDriftBadgeV0, readAutoPlanBootstrapV0, readAutoPlanPresetsV0 } from './DaaRebalancePanel.autoPlanUtilsV0';
+import { buildAutoPlanHoldingsMapV0, buildPricesMapV0, buildRunConstraintsV0, buildRunHoldingsMapV0, runAutoPlanV0 as runAutoPlanActionV0, seedAutoPlanFromCurrentSnapshotV0 as seedAutoPlanActionV0 } from './DaaRebalancePanel.planActionsV0';
 type FundLike = { code: string; name?: string; dwjz?: string | number; gsz?: string | number; estPricedCoverage?: number; estGsz?: number };
 type HoldingsLike = Record<string, { share: number; cost?: number }>;
 type Props = { funds?: FundLike[]; holdings?: HoldingsLike };
@@ -709,9 +710,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     try {
       const st = loadPortfolioStateV1();
       const mp: any = moneyPlan as any;
-      const constraints = buildRunConstraintsV0(mp);
-      const holdingsMap = buildRunHoldingsMapV0(st.positions);
-      const pricesMap = buildPricesMapV0(holdingsMap, targetWeightsEffective);
+      const constraints = buildRunConstraintsV0(mp, assetBlacklistV0);
+      const holdingsMap = buildRunHoldingsMapV0(st.positions, assetBlacklistSetV0);
+      const pricesMap = buildPricesMapV0({ funds, priceSnapshot, holdingsMap, targetWeightsInput: targetWeightsEffective });
       const basePolicy = loadRebalancePolicyV1();
       const policy = {
         ...basePolicy,
@@ -1121,52 +1122,6 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       mime: 'text/csv;charset=utf-8'});
   }
 
-  function buildRunConstraintsV0(mpLike: any) {
-    const mpConstraints: any = mpLike?.constraints ?? {};
-    const constraints: any = { minNotional: 0.01 };
-    const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
-    const maxIn = toFiniteNumber(mpConstraints?.maxIn);
-    const maxOut = toFiniteNumber(mpConstraints?.maxOut);
-    if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
-    if (maxIn !== null) constraints.maxIn = maxIn;
-    if (maxOut !== null) constraints.maxOut = maxOut;
-    if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
-    return constraints;
-  }
-  function buildAutoPlanHoldingsMapV0(positions: any) {
-    const holdingsMap: Record<string, number> = {};
-    for (const [symRaw, p] of Object.entries(positions ?? {})) {
-      const sym = normalizePlanSymbol(symRaw);
-      const qty = toFiniteNumber((p as any)?.qty);
-      if (sym && !assetBlacklistSetV0.has(sym) && qty && qty > 0) holdingsMap[sym] = qty;
-    }
-    return holdingsMap;
-  }
-  function buildRunHoldingsMapV0(positions: any) {
-    const holdingsMap: Record<string, number> = {};
-    for (const [symRaw, p] of Object.entries(positions ?? {})) {
-      const sym = String(symRaw ?? '').trim();
-      const qty = toFiniteNumber((p as any)?.qty);
-      if (sym && !assetBlacklistSetV0.has(normalizePlanSymbol(sym)) && qty && qty > 0) holdingsMap[sym] = qty;
-    }
-    return holdingsMap;
-  }
-  function buildPricesMapV0(holdingsMap: Record<string, number>, targetWeightsInput: TargetWeight[]) {
-    const byCode = new Map<string, FundLike>();
-    for (const f of funds ?? []) {
-      const code = String(f?.code ?? '').trim();
-      if (code) byCode.set(code, f);
-    }
-    const pricesMap: Record<string, number> = {};
-    const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsInput.map((t) => t.id)]);
-    for (const sym of symbols) {
-      const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
-      const nav = pick.price;
-      if (nav && nav > 0) pricesMap[sym] = nav;
-    }
-    return pricesMap;
-  }
-
   // buildAutoPlanMarkdownV0 lives in src/core/autoPlanMarkdownV0 so it can be unit-tested.
   async function doCopyAutoPlanV0() {
     if (!autoPlanResult) return;
@@ -1175,100 +1130,43 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       await copyTextToClipboard(md);
     });
   }
-  function seedAutoPlanFromCurrentSnapshotV0() {
-    try {
-      const st = loadPortfolioStateV1();
-      const holdingsMap = buildAutoPlanHoldingsMapV0(st.positions);
-      const pricesMap = buildPricesMapV0(holdingsMap, targetWeightsEffective);
-      const syms = Object.keys(pricesMap).sort();
-      if (!syms.length) {
-        setAutoPlanErrorForActive("No prices found to seed snapshots. Please fill in the Price Snapshot first.");
-        return;
-      }
-      const d0 = new Date();
-      const d1 = new Date(d0.getTime() + 86400000);
-      const d2 = new Date(d0.getTime() + 2 * 86400000);
-      const fmt = (d: Date) => d.toISOString().slice(0, 10);
-      const snap0: any = { date: fmt(d0), prices: {} as any };
-      const snap1: any = { date: fmt(d1), prices: {} as any };
-      const snap2: any = { date: fmt(d2), prices: {} as any };
-      for (const sym of syms) {
-        const px = Number((pricesMap as any)[sym]);
-        if (!Number.isFinite(px) || px <= 0) continue;
-        // Tiny drift seed: +1% then -1%. Replace with real scenarios/history.
-        (snap0.prices as any)[sym] = px;
-        (snap1.prices as any)[sym] = Number((px * 1.01).toFixed(6));
-        (snap2.prices as any)[sym] = Number((px * 0.99).toFixed(6));
-      }
-      setAutoPlanErrorForActive(null);
-      setAutoPlanInputTextForActive(pretty({ snapshots: [snap0, snap1, snap2] }));
-    } catch (e) {
-      setAutoPlanErrorForActive(e instanceof Error ? e.message : String(e));
-    }
-  }
-  function runAutoPlanV0() {
-    setAutoPlanErrorForActive(null);
-    if (typeof window === "undefined") return;
-    if (!targetWeights.length) {
-      setAutoPlanErrorForActive("Missing targetWeights. Please configure target weights first.");
-      return;
-    }
-    const raw = String(autoPlanInputText ?? "").trim();
-    if (!raw) {
-      setAutoPlanErrorForActive("Provide drift input (seriesBySymbol or snapshots). Tip: click Seed from current snapshot.");
-      return;
-    }
-    const parsed = safeJsonParse(raw);
-    if (!parsed.ok) {
-      setAutoPlanErrorForActive(parsed.error);
-      return;
-    }
-    const seriesRes = tryBuildSeriesBySymbolForPlan(parsed.value);
-    if (!seriesRes.ok) {
-      setAutoPlanErrorForActive(seriesRes.error);
-      return;
-    }
-    const st = loadPortfolioStateV1();
-    const holdingsMap = buildAutoPlanHoldingsMapV0(st.positions);
-    const targetWeightsMap: Record<string, number> = {};
-    for (const t of targetWeightsEffective) {
-      const id = normalizePlanSymbol((t as any)?.id);
-      const w = toFiniteNumber((t as any)?.targetPct);
-      if (!id) continue;
-      if (w === null || w < 0) continue;
-      targetWeightsMap[id] = w;
-    }
-    const required = new Set<string>([...Object.keys(holdingsMap), ...Object.keys(targetWeightsMap)]);
-    const missing = Array.from(required).filter((sym) => !(sym in seriesRes.seriesBySymbol));
-    if (missing.length) {
-      setAutoPlanErrorForActive(
-        `Missing symbols in series: ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? " ..." : ""}`);
-      return;
-    }
-    const mp: any = moneyPlan as any;
-    const constraints = buildRunConstraintsV0(mp);
-    const cash0 = toFiniteNumber((st as any)?.cash) ?? 0;
-    try {
-      const res = backtestDriftRebalance({
-        seriesBySymbol: seriesRes.seriesBySymbol as any,
-        targetWeights: targetWeightsMap,
-        initialHoldings: holdingsMap,
-        initialCash: cash0,
-        constraints,
-        policy: { ...rebalancePolicy, thresholdPct: autoPlanThresholdPctUsed },
-        bootstrapToTarget: false,
-        includeEventStates: true});
-      setAutoPlanResultForActive(res);
-      if (autoPlanScenario === 'A') {
-        saveJsonToLs(LS_AUTO_PLAN_RESULT_A, res);
-        saveJsonToLs(LS_AUTO_PLAN_RESULT, res); // legacy
-      } else {
-        saveJsonToLs(LS_AUTO_PLAN_RESULT_B, res);
-      }
-    } catch (e) {
-      setAutoPlanErrorForActive(e instanceof Error ? e.message : String(e));
-    }
-  }
+  const seedAutoPlanFromCurrentSnapshotV0 = useCallback(() => {
+    seedAutoPlanActionV0({
+      funds,
+      priceSnapshot,
+      targetWeightsEffective,
+      assetBlacklistSetV0,
+      setAutoPlanErrorForActive,
+      setAutoPlanInputTextForActive,
+    });
+  }, [assetBlacklistSetV0, funds, priceSnapshot, setAutoPlanErrorForActive, setAutoPlanInputTextForActive, targetWeightsEffective]);
+  const runAutoPlanV0 = useCallback(() => {
+    runAutoPlanActionV0({
+      autoPlanScenario,
+      autoPlanInputText,
+      autoPlanThresholdPctUsed,
+      rebalancePolicy,
+      targetWeights,
+      targetWeightsEffective,
+      moneyPlan,
+      assetBlacklistV0,
+      assetBlacklistSetV0,
+      setAutoPlanErrorForActive,
+      setAutoPlanResultForActive,
+    });
+  }, [
+    assetBlacklistSetV0,
+    assetBlacklistV0,
+    autoPlanInputText,
+    autoPlanScenario,
+    autoPlanThresholdPctUsed,
+    moneyPlan,
+    rebalancePolicy,
+    setAutoPlanErrorForActive,
+    setAutoPlanResultForActive,
+    targetWeights,
+    targetWeightsEffective,
+  ]);
   function openPreflightForRun(opts?: { cashSweep?: boolean }) {
     const hasPriceWarnings = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0;
     const hasConstraintAlerts = preRunHasBlockingV0 || preRunHasWarningsV0;
@@ -1419,9 +1317,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const st = loadPortfolioStateV1();
       const mp: any = moneyPlan as any;
       const baseCcy = typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : '';
-      const constraints = buildRunConstraintsV0(mp);
-      const holdingsMap = buildRunHoldingsMapV0(st.positions);
-      const pricesMap = buildPricesMapV0(holdingsMap, targetWeightsEffective);
+      const constraints = buildRunConstraintsV0(mp, assetBlacklistV0);
+      const holdingsMap = buildRunHoldingsMapV0(st.positions, assetBlacklistSetV0);
+      const pricesMap = buildPricesMapV0({ funds, priceSnapshot, holdingsMap, targetWeightsInput: targetWeightsEffective });
       const valuesBySymbol: Record<string, number> = {};
       for (const [sym, qty] of Object.entries(holdingsMap)) {
         const px = toFiniteNumber((pricesMap as any)[sym]);
