@@ -690,6 +690,30 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     if (driftFilter === 'under') return rebalanceTableRows.filter((r) => r.deltaPct <= -driftThresholdPct);
     return rebalanceTableRows;
   }, [driftFilter, rebalanceTableRows, driftThresholdPct]);
+  const whatIfThresholdPct100 = Math.max(0, driftThresholdPct * 100);
+  const policyThresholdPct100 = Math.max(0, policyDriftThresholdPct * 100);
+  const thresholdPresetsV0 = useMemo(
+    () => [
+      { id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' },
+      { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' },
+      { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' },
+    ] as const,
+    [],
+  );
+  const activeThresholdPresetIdV0 = thresholdPresetsV0.find((preset) => Math.abs(whatIfThresholdPct100 - preset.pct100) < 1e-6)?.id ?? null;
+  const setWhatIfThresholdPct100V0 = useCallback(
+    (pct100: number | null) => {
+      if (pct100 === null) {
+        setWhatIfDriftThresholdPctV0(null);
+        return;
+      }
+      const value = Number(pct100);
+      if (!Number.isFinite(value) || value < 0) return;
+      setWhatIfDriftThresholdPctV0(value / 100);
+    },
+    [setWhatIfDriftThresholdPctV0],
+  );
+  // policyImpactSimulatorV0 declared after whatIf is available.
   const naiveOrders = useMemo(() => {
     if (!rebalanceTableRows.length) return [] as SuggestedOrder[];
     const total = currentWeights.reduce((acc, r) => acc + r.value, 0) + Math.max(0, toFiniteNumber(portfolioCash) ?? 0);
@@ -961,6 +985,21 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       slippageBps: whatIfSlippageBpsUsed,
       labelsBySymbol: whatIfLabelsBySymbol});
   }, [effectiveOrders, portfolioCash, whatIfFeeBps, whatIfLabelsBySymbol, whatIfSlippageBpsUsed, whatIfTargetWeightsPostBySymbol, whatIfValuesBySymbol]);
+  const policyImpactSimulatorV0 = useMemo(() => {
+    const overCount = rebalanceTableRows.filter((r) => r.deltaPct >= driftThresholdPct).length;
+    const underCount = rebalanceTableRows.filter((r) => r.deltaPct <= -driftThresholdPct).length;
+    const maxAbsDriftPct = rebalanceTableRows.length ? Math.max(...rebalanceTableRows.map((r) => Math.abs(r.deltaPct))) * 100 : 0;
+    const turnoverPct = whatIf && Number.isFinite(whatIf.turnoverPctOfTotalBefore) ? whatIf.turnoverPctOfTotalBefore * 100 : null;
+    const feeBps = Number.isFinite(whatIfFeeBps) ? whatIfFeeBps : 0;
+    const slippageBps = Number.isFinite(whatIfSlippageBpsUsed) ? whatIfSlippageBpsUsed : 0;
+    const riskLevel =
+      maxAbsDriftPct >= 5 || (turnoverPct !== null && turnoverPct >= 35)
+        ? 'High'
+        : maxAbsDriftPct >= 2 || (turnoverPct !== null && turnoverPct >= 15)
+          ? 'Medium'
+          : 'Low';
+    return { overCount, underCount, maxAbsDriftPct, turnoverPct, feeBps, slippageBps, riskLevel };
+  }, [driftThresholdPct, rebalanceTableRows, whatIf, whatIfFeeBps, whatIfSlippageBpsUsed]);
   const preTradeCashCheck = useMemo(() => {
     return getPreTradeCashCheckV0({
       sellProceedsRoutingV0,
@@ -2399,106 +2438,69 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       {item.label} <span className="muted">({item.count})</span>
                     </button>
                   ))}
-                  {(() => {
-                    const pct = Math.max(0, driftThresholdPct * 100);
-                    const policyPct = Math.max(0, policyDriftThresholdPct * 100);
-                    const overrideActive = whatIfDriftThresholdPctV0 !== null;
-                    const setPct = (pct100: number | null) => {
-                      if (pct100 === null) {
-                        setWhatIfDriftThresholdPctV0(null);
-                        return;
-                      }
-                      const v = Number(pct100);
-                      if (!Number.isFinite(v) || v < 0) return;
-                      setWhatIfDriftThresholdPctV0(v / 100);
-                    };
-                    const presets = [{ id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' }, { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' }, { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' }] as const;
-                    const activePresetId = presets.find((p) => Math.abs(pct - p.pct100) < 1e-6)?.id ?? null;
-                    return (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginLeft: 4 }}>
-                        <span className="muted" style={{ fontSize: 12 }}>threshold</span>
-                        <span className="muted" style={{ fontSize: 12 }}>presets</span>
-                        {presets.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className={activePresetId === p.id ? 'button' : 'button secondary'}
-                            onClick={() => setPct(p.pct100)}
-                            style={{ padding: '4px 8px' }}
-                            title={p.title}
-                            aria-pressed={activePresetId === p.id}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                        <input
-                          type="range"
-                          min={0}
-                          max={10}
-                          step={0.1}
-                          value={pct}
-                          onChange={(e) => {
-                            const v = toFiniteNumber((e.target as HTMLInputElement).value);
-                            if (v === null) return;
-                            setPct(v);
-                          }}
-                          style={{ width: 160 }}
-                          aria-label="What-if drift threshold percent"
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          max={50}
-                          step={0.1}
-                          value={pct.toFixed(2)}
-                          onChange={(e) => {
-                            const v = toFiniteNumber((e.target as HTMLInputElement).value);
-                            if (v === null) return;
-                            setPct(v);
-                          }}
-                          style={{ width: 84, padding: '4px 6px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'inherit' }}
-                        />
-                        <span className="muted" style={{ fontSize: 12 }}>%</span>
-                        {overrideActive ? (
-                          <button
-                            type="button"
-                            className="button secondary"
-                            onClick={() => setPct(null)}
-                            style={{ padding: '4px 8px' }}
-                          >
-                            Reset
-                          </button>
-                        ) : (
-                          <span className="muted" style={{ fontSize: 12 }}>
-                            policy={policyPct.toFixed(2)}%
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginLeft: 4 }}>
+                    <span className="muted" style={{ fontSize: 12 }}>threshold</span>
+                    <span className="muted" style={{ fontSize: 12 }}>presets</span>
+                    {thresholdPresetsV0.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={activeThresholdPresetIdV0 === preset.id ? 'button' : 'button secondary'}
+                        onClick={() => setWhatIfThresholdPct100V0(preset.pct100)}
+                        style={{ padding: '4px 8px' }}
+                        title={preset.title}
+                        aria-pressed={activeThresholdPresetIdV0 === preset.id}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                    <input
+                      type="range"
+                      min={0}
+                      max={10}
+                      step={0.1}
+                      value={whatIfThresholdPct100}
+                      onChange={(e) => {
+                        const value = toFiniteNumber((e.target as HTMLInputElement).value);
+                        if (value === null) return;
+                        setWhatIfThresholdPct100V0(value);
+                      }}
+                      style={{ width: 160 }}
+                      aria-label="What-if drift threshold percent"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      step={0.1}
+                      value={whatIfThresholdPct100.toFixed(2)}
+                      onChange={(e) => {
+                        const value = toFiniteNumber((e.target as HTMLInputElement).value);
+                        if (value === null) return;
+                        setWhatIfThresholdPct100V0(value);
+                      }}
+                      style={{ width: 84, padding: '4px 6px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: 'inherit' }}
+                    />
+                    <span className="muted" style={{ fontSize: 12 }}>%</span>
+                    {whatIfDriftThresholdPctV0 !== null ? (
+                      <button type="button" className="button secondary" onClick={() => setWhatIfThresholdPct100V0(null)} style={{ padding: '4px 8px' }}>
+                        Reset
+                      </button>
+                    ) : (
+                      <span className="muted" style={{ fontSize: 12 }}>policy={policyThresholdPct100.toFixed(2)}%</span>
+                    )}
+                  </div>
                 </div>
-                {(() => {
-                  const rows = rebalanceTableRows;
-                  const overCount = rows.filter((r) => r.deltaPct >= driftThresholdPct).length;
-                  const underCount = rows.filter((r) => r.deltaPct <= -driftThresholdPct).length;
-                  const maxAbsDriftPct = rows.length ? Math.max(...rows.map((r) => Math.abs(r.deltaPct))) * 100 : 0;
-                  const turnoverPct = whatIf && Number.isFinite(whatIf.turnoverPctOfTotalBefore) ? whatIf.turnoverPctOfTotalBefore * 100 : null;
-                  const feeBps = Number.isFinite(whatIfFeeBps) ? whatIfFeeBps : 0;
-                  const slippageBps = Number.isFinite(whatIfSlippageBpsUsed) ? whatIfSlippageBpsUsed : 0;
-                  const riskLevel = maxAbsDriftPct >= 5 || (turnoverPct !== null && turnoverPct >= 35) ? 'High' : maxAbsDriftPct >= 2 || (turnoverPct !== null && turnoverPct >= 15) ? 'Medium' : 'Low';
-                  return (
-                    <div style={{ marginBottom: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(0,0,0,0.1)' }}>
-                      <div style={{ fontWeight: 700, fontSize: 12 }}>Policy impact simulator</div>
-                      <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>Preview allocation + risk posture before confirm (drift threshold / fees / slippage).</div>
-                      <div style={{ marginTop: 5, fontSize: 11 }}>
-                        drift over=<b>{overCount}</b>, under=<b>{underCount}</b>, maxAbs≈<b>{maxAbsDriftPct.toFixed(2)}%</b>
-                        {' '}· turnover≈<b>{turnoverPct !== null ? `${turnoverPct.toFixed(2)}%` : 'n/a'}</b>
-                        {' '}· fee/slippage=<b>{feeBps.toFixed(1)} / {slippageBps.toFixed(1)} bps</b>
-                        {' '}· risk=<b style={{ color: riskLevel === 'High' ? 'var(--danger)' : riskLevel === 'Medium' ? '#f59e0b' : '#16a34a' }}>{riskLevel}</b>
-                      </div>
-                    </div>
-                  );
-                })()}
+                <div style={{ marginBottom: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(0,0,0,0.1)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 12 }}>Policy impact simulator</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>Preview allocation + risk posture before confirm (drift threshold / fees / slippage).</div>
+                  <div style={{ marginTop: 5, fontSize: 11 }}>
+                    drift over=<b>{policyImpactSimulatorV0.overCount}</b>, under=<b>{policyImpactSimulatorV0.underCount}</b>, maxAbs≈<b>{policyImpactSimulatorV0.maxAbsDriftPct.toFixed(2)}%</b>
+                    {' '}· turnover≈<b>{policyImpactSimulatorV0.turnoverPct !== null ? `${policyImpactSimulatorV0.turnoverPct.toFixed(2)}%` : 'n/a'}</b>
+                    {' '}· fee/slippage=<b>{policyImpactSimulatorV0.feeBps.toFixed(1)} / {policyImpactSimulatorV0.slippageBps.toFixed(1)} bps</b>
+                    {' '}· risk=<b style={{ color: policyImpactSimulatorV0.riskLevel === 'High' ? 'var(--danger)' : policyImpactSimulatorV0.riskLevel === 'Medium' ? '#f59e0b' : '#16a34a' }}>{policyImpactSimulatorV0.riskLevel}</b>
+                  </div>
+                </div>
                 {filteredRebalanceTableRows.length ? (
                   <div style={{ overflowX: 'auto' as const }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
