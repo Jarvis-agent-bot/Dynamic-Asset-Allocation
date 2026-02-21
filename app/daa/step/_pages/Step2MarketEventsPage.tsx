@@ -123,6 +123,23 @@ export default function Step2MarketEventsPage() {
     return out;
   }, [selected, allowedEventTagSet]);
 
+  function ingestTwitterPayload(rawPayload: unknown, options?: { resetText?: boolean }) {
+    const normalized = extractTwitterdataTweets(rawPayload);
+    const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
+    if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+    setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
+    setTagIssues([]);
+    setTwitterText((prev) => {
+      const prevArr = safeParseJsonArray(prev);
+      const merged = mergeLooseTweetItems(options?.resetText ? [] : prevArr, normalized);
+      return pretty(merged);
+    });
+    return {
+      normalizedCount: normalized.length,
+      ingestedCount: ingestR.events.length,
+    };
+  }
+
   function ingestFromTexts(next: { twitterText: string; yfinanceText: string; xueqiuText: string }) {
     const issues: string[] = [];
     const added: MarketEvent[] = [];
@@ -165,22 +182,8 @@ export default function Step2MarketEventsPage() {
     try {
       const j = (await marketData.twitter.list({ listId: twitterListId, limit: twitterListLimit })) as any;
 
-      // Convert twitterdata's nested timeline payload into a stable JSON array.
-      const payload = j?.payload;
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(prevArr, normalized);
-        return pretty(merged);
-      });
-
-      setFetchState(`twitter list fetched: ${normalized.length} -> ${ingestR.events.length} events (auto-ingested)`);
+      const counts = ingestTwitterPayload(j?.payload);
+      setFetchState(`twitter list fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events (auto-ingested)`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter list fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -209,20 +212,8 @@ export default function Step2MarketEventsPage() {
       const nextCursor = extractCursor(payload);
       if (nextCursor) setTwitterCommunityCursor(nextCursor);
 
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
-        return pretty(merged);
-      });
-
-      setFetchState(`twitter community fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`);
+      const counts = ingestTwitterPayload(payload, { resetText: reset });
+      setFetchState(`twitter community fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events${nextCursor ? " (cursor updated)" : ""}`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter community fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -275,20 +266,9 @@ export default function Step2MarketEventsPage() {
       const nextCursor = extractCursor(payload);
       if (nextCursor) setTwitterUserCursor(nextCursor);
 
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
-        return pretty(merged);
-      });
-
+      const counts = ingestTwitterPayload(payload, { resetText: reset });
       setFetchState(
-        `twitter user ${includeReplies ? "tweets+replies" : "tweets"} fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`,
+        `twitter user ${includeReplies ? "tweets+replies" : "tweets"} fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events${nextCursor ? " (cursor updated)" : ""}`,
       );
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
@@ -318,19 +298,8 @@ export default function Step2MarketEventsPage() {
       const nextCursor = extractCursor(payload);
       if (nextCursor) setTwitterSearchCursor(nextCursor);
 
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
-        return pretty(merged);
-      });
-
-      setFetchState(`twitter search fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`);
+      const counts = ingestTwitterPayload(payload, { resetText: reset });
+      setFetchState(`twitter search fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events${nextCursor ? " (cursor updated)" : ""}`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter search failed: ${e instanceof Error ? e.message : String(e)}`);
