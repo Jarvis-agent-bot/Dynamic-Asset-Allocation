@@ -20,7 +20,6 @@ import { simulateRebalanceWhatIfV0 } from '@/src/core/rebalanceWhatIf';
 import { rebalanceCore, type RebalanceCoreRequest, type RebalanceCoreResponse } from '@/src/core/rebalanceCore';
 import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from '@/src/core/backtestDriftRebalance';
 import { buildAutoPlanMarkdownV0 } from '@/src/core/autoPlanMarkdownV0';
-import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 import { getExecutionAdapterV0 } from '@/src/daa/executionAdapterV0';
 import { getPreTradeCashCheckV0 } from '@/src/daa/preTradeCashCheckV0';
 import { getLiquiditySettlementGateV0 } from '@/src/daa/liquiditySettlementGateV0';
@@ -44,14 +43,18 @@ import {
   downloadTextAsFile,
   fmtPct01,
   formatOrdersMarkdown,
+  formatWeightsDiffLines,
   formatWeightsMarkdown,
   normalizeOrders,
+  normalizePlanSymbol,
   normalizeTargetWeights,
   normalizeTargetWeightsAny,
   pickFundNav,
   resolveFundPriceV0,
+  safeJsonParse,
   scrollToId,
   toFiniteNumber,
+  tryBuildSeriesBySymbolForPlan,
   type DriftAlertV0,
   type PaperRunHealthcheckV0,
   type SuggestedOrder,
@@ -1324,62 +1327,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       text: csv,
       mime: 'text/csv;charset=utf-8'});
   }
-  function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
-    try {
-      return { ok: true, value: JSON.parse(text) as unknown };
-    } catch {
-      return { ok: false, error: 'JSON parse failed' };
-    }
-  }
-  function normalizePlanSymbol(sym: unknown): string {
-    return String(sym ?? "").trim().toUpperCase();
-  }
-  function tryBuildSeriesBySymbolForPlan(
-    input: unknown): { ok: true; seriesBySymbol: Record<string, any[]>; symbols: string[] } | { ok: false; error: string } {
-    // 1) Accept direct series map or {seriesBySymbol: ...}
-    const coerced = coerceSeriesBySymbolInput(input) as any;
-    const symbolsFromSeries = Object.keys(coerced || {}).filter(Boolean).sort();
-    if (symbolsFromSeries.length) return { ok: true, seriesBySymbol: coerced, symbols: symbolsFromSeries };
-    // 2) Accept snapshots: [{date, prices}] or {snapshots:[...]} or {"YYYY-MM-DD": {SYM: px}}
-    try {
-      const s = (() => {
-        if (Array.isArray(input)) return input;
-        if (input && typeof input === "object" && !Array.isArray(input)) {
-          const r: any = input as any;
-          if (Array.isArray(r.snapshots)) return r.snapshots;
-          const entries = Object.entries(r as Record<string, unknown>);
-          const looksLikeDateMap = entries.some(([k]) => /^\d{4}-\d{2}-\d{2}/.test(String(k)));
-          if (looksLikeDateMap) return entries.map(([date, prices]) => ({ date, prices }));
-        }
-        return null;
-      })();
-      if (!s) return { ok: false, error: "Input is neither seriesBySymbol nor snapshots" };
-      const { seriesBySymbol, symbols } = snapshotsToSeriesBySymbol(s as any);
-      return { ok: true, seriesBySymbol: seriesBySymbol as any, symbols };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
-    }
-  }
-  function formatWeightsDiffLines(args: {
-    before?: { cashPct01: number; weightsBySymbolPct01: Record<string, number> };
-    after?: { cashPct01: number; weightsBySymbolPct01: Record<string, number> };
-  }): string[] {
-    const before = args.before;
-    const after = args.after;
-    if (!before || !after) return ["(missing before/after snapshots)"];
-    const syms = new Set<string>();
-    for (const k of Object.keys(before.weightsBySymbolPct01 || {})) syms.add(k);
-    for (const k of Object.keys(after.weightsBySymbolPct01 || {})) syms.add(k);
-    const list = Array.from(syms).sort();
-    const rows: string[] = [];
-    rows.push(`cash: ${fmtPct01(before.cashPct01)} → ${fmtPct01(after.cashPct01)} (Δ ${fmtPct01(after.cashPct01 - before.cashPct01)})`);
-    for (const sym of list) {
-      const b = Number((before.weightsBySymbolPct01 as any)[sym] ?? 0);
-      const a = Number((after.weightsBySymbolPct01 as any)[sym] ?? 0);
-      rows.push(`${sym}: ${fmtPct01(b)} → ${fmtPct01(a)} (Δ ${fmtPct01(a - b)})`);
-    }
-    return rows;
-  }
+
+
+
+
   // buildAutoPlanMarkdownV0 lives in src/core/autoPlanMarkdownV0 so it can be unit-tested.
   async function doCopyAutoPlanV0() {
     if (!autoPlanResult) return;

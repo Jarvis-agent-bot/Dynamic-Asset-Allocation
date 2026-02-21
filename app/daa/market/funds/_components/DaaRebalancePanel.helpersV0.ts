@@ -1,6 +1,7 @@
 import { getSnapshotPrice } from '../../../priceSnapshotStore';
 import { type RebalancePostRunSummaryV0 } from '@/src/daa/rebalancePostRunSummary';
 import { scrollToIdAndFocusV0 } from '@/src/daa/focusV0';
+import { coerceSeriesBySymbolInput, snapshotsToSeriesBySymbol } from '@/src/core/priceSnapshotsToSeries';
 
 export type QuotePriceSourceV0 = 'estGsz' | 'gsz' | 'dwjz' | 'missing';
 export type EffectivePriceSourceV0 = 'manual' | QuotePriceSourceV0;
@@ -278,4 +279,64 @@ export function computeDriftAlertFromCoreResponse(args: { at: string; resp: any;
     eligibleOrderCount: toFiniteNumber(stats?.eligibleOrderCount) ?? undefined,
     reasons,
   };
+}
+
+
+export function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
+  try {
+    return { ok: true, value: JSON.parse(text) as unknown };
+  } catch {
+    return { ok: false, error: 'JSON parse failed' };
+  }
+}
+
+export function normalizePlanSymbol(sym: unknown): string {
+  return String(sym ?? '').trim().toUpperCase();
+}
+
+export function tryBuildSeriesBySymbolForPlan(
+  input: unknown,
+): { ok: true; seriesBySymbol: Record<string, any[]>; symbols: string[] } | { ok: false; error: string } {
+  const coerced = coerceSeriesBySymbolInput(input) as any;
+  const symbolsFromSeries = Object.keys(coerced || {}).filter(Boolean).sort();
+  if (symbolsFromSeries.length) return { ok: true, seriesBySymbol: coerced, symbols: symbolsFromSeries };
+  try {
+    const snapshots = (() => {
+      if (Array.isArray(input)) return input;
+      if (input && typeof input === 'object' && !Array.isArray(input)) {
+        const obj: any = input as any;
+        if (Array.isArray(obj.snapshots)) return obj.snapshots;
+        const entries = Object.entries(obj as Record<string, unknown>);
+        const looksLikeDateMap = entries.some(([k]) => /^\d{4}-\d{2}-\d{2}/.test(String(k)));
+        if (looksLikeDateMap) return entries.map(([date, prices]) => ({ date, prices }));
+      }
+      return null;
+    })();
+    if (!snapshots) return { ok: false, error: 'Input is neither seriesBySymbol nor snapshots' };
+    const { seriesBySymbol, symbols } = snapshotsToSeriesBySymbol(snapshots as any);
+    return { ok: true, seriesBySymbol: seriesBySymbol as any, symbols };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export function formatWeightsDiffLines(args: {
+  before?: { cashPct01: number; weightsBySymbolPct01: Record<string, number> };
+  after?: { cashPct01: number; weightsBySymbolPct01: Record<string, number> };
+}): string[] {
+  const before = args.before;
+  const after = args.after;
+  if (!before || !after) return ['(missing before/after snapshots)'];
+  const syms = new Set<string>();
+  for (const k of Object.keys(before.weightsBySymbolPct01 || {})) syms.add(k);
+  for (const k of Object.keys(after.weightsBySymbolPct01 || {})) syms.add(k);
+  const list = Array.from(syms).sort();
+  const rows: string[] = [];
+  rows.push(`cash: ${fmtPct01(before.cashPct01)} → ${fmtPct01(after.cashPct01)} (Δ ${fmtPct01(after.cashPct01 - before.cashPct01)})`);
+  for (const sym of list) {
+    const b = Number((before.weightsBySymbolPct01 as any)[sym] ?? 0);
+    const a = Number((after.weightsBySymbolPct01 as any)[sym] ?? 0);
+    rows.push(`${sym}: ${fmtPct01(b)} → ${fmtPct01(a)} (Δ ${fmtPct01(a - b)})`);
+  }
+  return rows;
 }
