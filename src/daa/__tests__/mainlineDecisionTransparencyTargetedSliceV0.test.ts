@@ -13,6 +13,7 @@ describe("mainline decision transparency targeted slice v0", () => {
 
     expect(panelSource).toContain("DaaTargetedDecisionTransparencyCardV0");
     expect(panelSource).toContain("targetedDecisionTransparencyV0");
+    expect(panelSource).not.toContain("suggestedOrdersV0");
 
     expect(cardSource).toContain("Decision transparency · targeted slice");
     expect(cardSource).toContain("inputs: current");

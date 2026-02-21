@@ -4196,11 +4196,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       })()}
 
       {(() => {
-        const buyOrders = suggestedOrdersV0.filter((o) => o.side === 'BUY');
+        const buyOrders = effectiveOrders.filter((o) => o.side === 'BUY');
         if (!buyOrders.length) return null;
 
-        const availableCash = Number(cashOnHandV0 || 0);
-        const estimatedSells = suggestedOrdersV0.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
+        const availableCash = Number(portfolioCash || 0);
+        const estimatedSells = effectiveOrders.filter((o) => o.side === 'SELL').reduce((sum, o) => sum + Math.max(0, Number(o.notional || 0)), 0);
         const liquidityCoverage = availableCash + estimatedSells;
         const liquidityCapPct = 0.3;
         const perOrderLiquidityCap = Math.max(0, liquidityCoverage * liquidityCapPct);
@@ -4223,8 +4223,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             {cappedOrders.length ? (
               <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
                 {cappedOrders.map((o) => (
-                  <div key={`${String(o.id)}-${String(o.side)}`} style={{ fontSize: 11 }}>
-                    {String(o.id)}: BUY {o.rawNotional.toFixed(2)} -> <b>{o.cappedNotional.toFixed(2)}</b> {baseCcy || ''}
+                  <div key={`${String(o.symbol)}-${String(o.side)}`} style={{ fontSize: 11 }}>
+                    {String(o.symbol)}: BUY {o.rawNotional.toFixed(2)} {'->'} <b>{o.cappedNotional.toFixed(2)}</b> {baseCcy || ''}
                   </div>
                 ))}
               </div>
