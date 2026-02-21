@@ -143,6 +143,18 @@ type LiveTimelineEntryV0 = {
   level: 'info' | 'ok' | 'error';
 };
 
+function getDriftBadgeV0(deltaPct: number, driftThresholdPct: number) {
+  const kind = deltaPct >= driftThresholdPct ? 'over' : deltaPct <= -driftThresholdPct ? 'under' : 'ok';
+  const driftAbsPct = (Math.abs(deltaPct) * 100).toFixed(1);
+  return {
+    kind,
+    driftAbsPct,
+    text: kind === 'over' ? `OVER +${driftAbsPct}%` : kind === 'under' ? `UNDER -${driftAbsPct}%` : `OK ${driftAbsPct}%`,
+    color: kind === 'over' ? 'var(--danger)' : kind === 'under' ? 'var(--primary)' : 'var(--muted)',
+    valueColor: kind === 'ok' ? 'var(--text)' : kind === 'over' ? 'var(--danger)' : 'var(--primary)',
+  } as const;
+}
+
 function readAutoPlanInputV0() {
   const saved = readJsonFromLs<any>(LS_AUTO_PLAN_INPUT);
   return saved && typeof saved === 'object' ? saved : null;
@@ -1889,7 +1901,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const safetyStopPreviewWhatIf = useMemo(() => buildPreviewWhatIf(safetyStopPreviewOrders), [buildPreviewWhatIf, safetyStopPreviewOrders]);
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
-            <DaaRebalancePreflightModalV0
+      <DaaRebalancePreflightModalV0
         open={preflightOpen}
         pendingOpts={preflightPendingOpts}
         baseCcy={baseCcy}
@@ -1917,7 +1929,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         onSetOverrideBlockers={setPreflightOverrideBlockers}
         onProceed={proceedFromPreflight}
       />
-            <DaaSafetyStopModalV0
+      <DaaSafetyStopModalV0
         open={safetyStopOpen}
         pendingCashSweep={!!safetyStopPendingOpts?.cashSweep}
         copyApprovalSummaryStatus={copyApprovalSummaryStatus}
@@ -2732,11 +2744,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       <tbody>
                         {filteredRebalanceTableRows.map((r) => {
                           const delta = r.deltaPct;
-                          const kind = delta >= driftThresholdPct ? 'over' : delta <= -driftThresholdPct ? 'under' : 'ok';
-                          const driftAbsPct = (Math.abs(delta) * 100).toFixed(1);
-                          const badgeText = kind === 'over' ? `OVER +${driftAbsPct}%` : kind === 'under' ? `UNDER -${driftAbsPct}%` : `OK ${driftAbsPct}%`;
-                          const badgeColor = kind === 'over' ? 'var(--danger)' : kind === 'under' ? 'var(--primary)' : 'var(--muted)';
-                          const color = kind === 'over' ? 'var(--danger)' : kind === 'under' ? 'var(--primary)' : 'var(--text)';
+                          const driftBadge = getDriftBadgeV0(delta, driftThresholdPct);
                           return (
                             <tr key={r.id}>
                               <td style={{ padding: '6px 0' }}>
@@ -2746,16 +2754,16 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                   </span>
                                   <span
                                     className="badge"
-                                    style={{ padding: '2px 8px', fontSize: 11, borderColor: badgeColor, color: badgeColor, background: 'rgba(0,0,0,0.12)' }}
+                                    style={{ padding: '2px 8px', fontSize: 11, borderColor: driftBadge.color, color: driftBadge.color, background: 'rgba(0,0,0,0.12)' }}
                                     title={`drift ${(delta * 100).toFixed(2)}% vs target`}
                                   >
-                                    {badgeText}
+                                    {driftBadge.text}
                                   </span>
                                 </div>
                               </td>
                               <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.currentPct * 100).toFixed(1)}%</td>
                               <td style={{ padding: '6px 0', textAlign: 'right' }}>{(r.targetPct * 100).toFixed(1)}%</td>
-                              <td style={{ padding: '6px 0', textAlign: 'right', color }}>{(delta * 100).toFixed(1)}%</td>
+                              <td style={{ padding: '6px 0', textAlign: 'right', color: driftBadge.valueColor }}>{(delta * 100).toFixed(1)}%</td>
                             </tr>
                           );
                         })}
@@ -2829,19 +2837,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     <div style={{ marginTop: 8, display: 'grid', gap: 10 }}>
                       {tradeRationaleRowsV0.map((r) => {
                         const ccy = baseCcy ? ` ${baseCcy}` : '';
-                        const driftKind =
-                          r.driftPct === null ? null : r.driftPct >= driftThresholdPct ? 'over' : r.driftPct <= -driftThresholdPct ? 'under' : 'ok';
-                        const driftAbsPct = r.driftPct === null ? null : (Math.abs(r.driftPct) * 100).toFixed(1);
-                        const badgeText =
-                          driftKind === null
-                            ? 'NO DRIFT'
-                            : driftKind === 'over'
-                              ? `OVER +${driftAbsPct}%`
-                              : driftKind === 'under'
-                                ? `UNDER -${driftAbsPct}%`
-                                : `OK ${driftAbsPct}%`;
-                        const badgeColor =
-                          driftKind === 'over' ? 'var(--danger)' : driftKind === 'under' ? 'var(--primary)' : 'var(--muted)';
+                        const driftBadge = r.driftPct === null ? null : getDriftBadgeV0(r.driftPct, driftThresholdPct);
                         return (
                           <div
                             key={r.key}
@@ -2862,17 +2858,17 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                                 {Number.isFinite(r.notional) ? r.notional.toFixed(2) : String(r.notional)}{ccy}
                               </span>
                               {r.notionalPct !== null ? (
-                                <span className="badge" style={{ padding: '2px 8px', fontSize: 11, borderColor: badgeColor, color: badgeColor, background: 'rgba(0,0,0,0.12)' }}>
+                                <span className="badge" style={{ padding: '2px 8px', fontSize: 11, borderColor: driftBadge?.color ?? 'var(--muted)', color: driftBadge?.color ?? 'var(--muted)', background: 'rgba(0,0,0,0.12)' }}>
                                   {(r.notionalPct * 100).toFixed(2)}% equity
                                 </span>
                               ) : null}
-                              {r.driftPct !== null ? (
+                              {driftBadge ? (
                                 <span
                                   className="badge"
-                                  style={{ padding: '2px 8px', fontSize: 11, borderColor: badgeColor, color: badgeColor, background: 'rgba(0,0,0,0.12)' }}
+                                  style={{ padding: '2px 8px', fontSize: 11, borderColor: driftBadge.color, color: driftBadge.color, background: 'rgba(0,0,0,0.12)' }}
                                   title="currentPct - targetPct"
                                 >
-                                  {badgeText}
+                                  {driftBadge.text}
                                 </span>
                               ) : null}
                             </div>
