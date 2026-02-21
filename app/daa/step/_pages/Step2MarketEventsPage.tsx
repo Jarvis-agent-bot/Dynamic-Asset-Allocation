@@ -22,11 +22,14 @@ import {
 import { getAllowedValueKeySetForAppliesTo, loadTagTaxonomy } from "../../tagTaxonomy";
 import { useMarketDataClient } from "../../useMarketDataClient";
 
-function fmtTs(ts: string) {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return String(ts || "");
-  return d.toLocaleString("zh-CN", { hour12: false });
-}
+import {
+  extractCursor,
+  extractTwitterdataRestId,
+  extractTwitterdataTweets,
+  fmtTs,
+  mergeLooseTweetItems,
+  safeParseJsonArray,
+} from "./marketEventTwitterUtils";
 
 // Demo samples are served from server-side fixtures (see /api/daa/fixtures).
 
@@ -120,6 +123,23 @@ export default function Step2MarketEventsPage() {
     return out;
   }, [selected, allowedEventTagSet]);
 
+  function ingestTwitterPayload(rawPayload: unknown, options?: { resetText?: boolean }) {
+    const normalized = extractTwitterdataTweets(rawPayload);
+    const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
+    if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
+    setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
+    setTagIssues([]);
+    setTwitterText((prev) => {
+      const prevArr = safeParseJsonArray(prev);
+      const merged = mergeLooseTweetItems(options?.resetText ? [] : prevArr, normalized);
+      return pretty(merged);
+    });
+    return {
+      normalizedCount: normalized.length,
+      ingestedCount: ingestR.events.length,
+    };
+  }
+
   function ingestFromTexts(next: { twitterText: string; yfinanceText: string; xueqiuText: string }) {
     const issues: string[] = [];
     const added: MarketEvent[] = [];
@@ -157,211 +177,13 @@ export default function Step2MarketEventsPage() {
     ingestFromTexts({ twitterText, yfinanceText, xueqiuText });
   }
 
-  function safeParseJsonArray(text: string): any[] {
-    try {
-      const v = JSON.parse(text);
-      return Array.isArray(v) ? v : [];
-    } catch {
-      return [];
-    }
-  }
-
-  function mergeLooseTweetItems(prev: any[], added: any[]): any[] {
-    const out: any[] = [];
-    const seen = new Set<string>();
-
-    const push = (it: any) => {
-      const id = String(it?.id ?? "").trim();
-      const createdAt = String(it?.created_at ?? it?.createdAt ?? "").trim();
-      const text = String(it?.text ?? it?.full_text ?? it?.content ?? "").trim();
-      const key = id || (createdAt && text ? `${createdAt}::${text}` : text);
-      if (!key) return;
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push(it);
-    };
-
-    prev.forEach(push);
-    added.forEach(push);
-    return out;
-  }
-
-  function collectTwitterdataInstructionArrays(payload: any): any[][] {
-    const out: any[][] = [];
-    const seen = new Set<any>();
-
-    const walk = (node: any, depth: number) => {
-      if (!node || depth > 10) return;
-      if (Array.isArray(node)) return;
-      if (typeof node !== "object") return;
-
-      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
-        if (k === "instructions" && Array.isArray(v)) {
-          if (!seen.has(v)) {
-            seen.add(v);
-            out.push(v);
-          }
-          continue;
-        }
-
-        if (v && typeof v === "object" && !Array.isArray(v)) {
-          walk(v, depth + 1);
-        }
-      }
-    };
-
-    walk(payload, 0);
-    return out;
-  }
-
-  function extractCursor(payload: any): string {
-    const c =
-      payload?.nextCursor ??
-      payload?.next_cursor ??
-      payload?.cursor ??
-      payload?.next?.cursor ??
-      payload?.data?.next_cursor ??
-      payload?.data?.cursor;
-    if (typeof c === "string" && c.trim()) return c.trim();
-
-    // twitterdata often encodes cursors as special timeline entries.
-    for (const instArr of collectTwitterdataInstructionArrays(payload)) {
-      for (const inst of instArr) {
-        const entries = inst?.entries;
-        if (!Array.isArray(entries)) continue;
-        for (const e of entries) {
-          const content = e?.content ?? {};
-          const cursorType = content?.cursorType;
-          const value = content?.value;
-          if (cursorType === "Bottom" && typeof value === "string" && value.trim()) return value.trim();
-        }
-      }
-    }
-
-    return "";
-  }
-
-  function extractTwitterdataRestId(payload: any): string {
-    const direct =
-      payload?.data?.user?.result?.rest_id ??
-      payload?.data?.userResults?.result?.rest_id ??
-      payload?.data?.user?.rest_id ??
-      payload?.rest_id;
-
-    if (typeof direct === "string" && /^\d+$/.test(direct.trim())) return direct.trim();
-
-    let found = "";
-
-    const walk = (node: any, depth: number) => {
-      if (found) return;
-      if (!node || depth > 10) return;
-      if (Array.isArray(node)) return;
-      if (typeof node !== "object") return;
-
-      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
-        if (k === "rest_id" && typeof v === "string" && /^\d+$/.test(v.trim())) {
-          found = v.trim();
-          return;
-        }
-        if (v && typeof v === "object" && !Array.isArray(v)) walk(v, depth + 1);
-      }
-    };
-
-    walk(payload, 0);
-    return found;
-  }
-
-  // twitterdata returns GraphQL-ish nested timelines; we extract tweet results into a stable array
-  // that our `normalizeTwitterInput()` can digest.
-  function extractTwitterdataTweets(payload: any): any[] {
-    const out: any[] = [];
-
-    const addTweet = (tweet: any) => {
-      const restId = String(tweet?.rest_id ?? tweet?.id_str ?? tweet?.legacy?.id_str ?? "").trim();
-      const legacy = tweet?.legacy ?? {};
-      const userLegacy = tweet?.core?.user_results?.result?.legacy ?? tweet?.core?.user_results?.result ?? {};
-      const screenName = String(userLegacy?.screen_name ?? "").trim();
-
-      const text = String(legacy?.full_text ?? legacy?.text ?? "").trim();
-      const createdAt = String(legacy?.created_at ?? "").trim();
-
-      const author = screenName ? `@${screenName}` : undefined;
-      const url = screenName && restId ? `https://x.com/${screenName}/status/${restId}` : undefined;
-
-      if (!text) return;
-
-      out.push({
-        id: restId || undefined,
-        created_at: createdAt || undefined,
-        text,
-        author,
-        url,
-      });
-    };
-
-    const addEntry = (entry: any) => {
-      const content = entry?.content ?? entry;
-
-      // Common shape: { itemContent: { tweet_results: { result: Tweet } } }
-      const tweet1 = content?.itemContent?.tweet_results?.result;
-      if (tweet1) addTweet(tweet1);
-
-      // Module shape: { items: [ { item: { itemContent: ... } }, ... ] }
-      const items = content?.items;
-      if (Array.isArray(items)) {
-        for (const it of items) {
-          const tweet2 = it?.item?.itemContent?.tweet_results?.result ?? it?.itemContent?.tweet_results?.result;
-          if (tweet2) addTweet(tweet2);
-        }
-      }
-
-      // Conversation/module shape: { items: [ { item: { itemContent: ... } } ] } nested under content
-      const modItems = content?.content?.items;
-      if (Array.isArray(modItems)) {
-        for (const it of modItems) {
-          const tweet3 = it?.item?.itemContent?.tweet_results?.result ?? it?.itemContent?.tweet_results?.result;
-          if (tweet3) addTweet(tweet3);
-        }
-      }
-    };
-
-    const addInstructions = (instructions: any) => {
-      if (!Array.isArray(instructions)) return;
-      for (const inst of instructions) {
-        const entries = inst?.entries;
-        if (!Array.isArray(entries)) continue;
-        for (const e of entries) addEntry(e);
-      }
-    };
-
-    for (const instArr of collectTwitterdataInstructionArrays(payload)) {
-      addInstructions(instArr);
-    }
-
-    return out;
-  }
-
   async function fetchTwitterList() {
     setFetchState("fetching twitter list...");
     try {
       const j = (await marketData.twitter.list({ listId: twitterListId, limit: twitterListLimit })) as any;
 
-      // Convert twitterdata's nested timeline payload into a stable JSON array.
-      const payload = j?.payload;
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(prevArr, normalized);
-        return pretty(merged);
-      });
-
-      setFetchState(`twitter list fetched: ${normalized.length} -> ${ingestR.events.length} events (auto-ingested)`);
+      const counts = ingestTwitterPayload(j?.payload);
+      setFetchState(`twitter list fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events (auto-ingested)`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter list fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -390,20 +212,8 @@ export default function Step2MarketEventsPage() {
       const nextCursor = extractCursor(payload);
       if (nextCursor) setTwitterCommunityCursor(nextCursor);
 
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
-        return pretty(merged);
-      });
-
-      setFetchState(`twitter community fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`);
+      const counts = ingestTwitterPayload(payload, { resetText: reset });
+      setFetchState(`twitter community fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events${nextCursor ? " (cursor updated)" : ""}`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter community fetch failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -456,20 +266,9 @@ export default function Step2MarketEventsPage() {
       const nextCursor = extractCursor(payload);
       if (nextCursor) setTwitterUserCursor(nextCursor);
 
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
-        return pretty(merged);
-      });
-
+      const counts = ingestTwitterPayload(payload, { resetText: reset });
       setFetchState(
-        `twitter user ${includeReplies ? "tweets+replies" : "tweets"} fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`,
+        `twitter user ${includeReplies ? "tweets+replies" : "tweets"} fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events${nextCursor ? " (cursor updated)" : ""}`,
       );
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
@@ -499,19 +298,8 @@ export default function Step2MarketEventsPage() {
       const nextCursor = extractCursor(payload);
       if (nextCursor) setTwitterSearchCursor(nextCursor);
 
-      const normalized = extractTwitterdataTweets(payload);
-      const ingestR = normalizeTwitterInput(JSON.stringify(normalized), {});
-      if (ingestR.events.length) setEvents((prev) => mergeMarketEvents(prev, ingestR.events));
-      setIngestIssues(ingestR.issues.map((x) => `twitter: ${x}`));
-      setTagIssues([]);
-
-      setTwitterText((prev) => {
-        const prevArr = safeParseJsonArray(prev);
-        const merged = mergeLooseTweetItems(reset ? [] : prevArr, normalized);
-        return pretty(merged);
-      });
-
-      setFetchState(`twitter search fetched: ${normalized.length} -> ${ingestR.events.length} events${nextCursor ? " (cursor updated)" : ""}`);
+      const counts = ingestTwitterPayload(payload, { resetText: reset });
+      setFetchState(`twitter search fetched: ${counts.normalizedCount} -> ${counts.ingestedCount} events${nextCursor ? " (cursor updated)" : ""}`);
       window.setTimeout(() => setFetchState(""), 1200);
     } catch (e) {
       setFetchState(`twitter search failed: ${e instanceof Error ? e.message : String(e)}`);
