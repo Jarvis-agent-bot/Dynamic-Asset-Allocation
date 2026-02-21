@@ -34,15 +34,7 @@ import { computeDriftAlertFromCoreResponse, computeDriftAlertFromTableRows, down
 import { buildTargetedDecisionTransparencyV0 } from '@/src/daa/targetedDecisionTransparencyV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
-import {
-  LS_MONEY_PLAN,
-  LS_REBALANCE_REQUEST,
-  LS_REBALANCE_RESPONSE,
-  WIZARD_DATA_EVENT,
-  pretty,
-  readJsonFromLs,
-  saveJsonToLs,
-} from '../../../wizardStorage';
+import { LS_MONEY_PLAN, LS_REBALANCE_REQUEST, LS_REBALANCE_RESPONSE, WIZARD_DATA_EVENT, pretty, readJsonFromLs, saveJsonToLs } from '../../../wizardStorage';
 import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
 import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
 import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
@@ -70,37 +62,60 @@ import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintain
 import DaaRebalancePanelDecisionCardsV0 from './DaaRebalancePanelDecisionCardsV0';
 import DaaRebalancePanelExtraInsightsV0 from './DaaRebalancePanelExtraInsightsV0';
 import DaaRebalanceRiskControlsSectionV0 from './DaaRebalanceRiskControlsSectionV0';
-import {
-  applySampleScenarioV0 as applySampleScenarioWorkflowV0,
-  jumpToV0,
-  runDaaRefreshAndRecommendationV0 as runDaaRefreshAndRecommendationWorkflowV0,
-} from './DaaRebalancePanel.workflowHelpersV0';
-import {
-  getDriftBadgeV0,
-  readAutoPlanBootstrapV0,
-  readAutoPlanPresetsV0,
-} from './DaaRebalancePanel.autoPlanUtilsV0';
-type FundLike = {
-  code: string;
-  name?: string;
-  dwjz?: string | number;
-  gsz?: string | number;
-  estPricedCoverage?: number;
-  estGsz?: number;
-};
+import { applySampleScenarioV0 as applySampleScenarioWorkflowV0, jumpToV0, runDaaRefreshAndRecommendationV0 as runDaaRefreshAndRecommendationWorkflowV0 } from './DaaRebalancePanel.workflowHelpersV0';
+import { getDriftBadgeV0, readAutoPlanBootstrapV0, readAutoPlanPresetsV0 } from './DaaRebalancePanel.autoPlanUtilsV0';
+type FundLike = { code: string; name?: string; dwjz?: string | number; gsz?: string | number; estPricedCoverage?: number; estGsz?: number };
 type HoldingsLike = Record<string, { share: number; cost?: number }>;
-type Props = {
-  // Optional: inject Market/Funds quotes + holdings so we can compute current weights.
-  funds?: FundLike[];
-  holdings?: HoldingsLike;
-};
-type LiveTimelineEntryV0 = {
-  id: string;
-  at: string;
-  stage: string;
-  detail: string;
-  level: 'info' | 'ok' | 'error';
-};
+type Props = { funds?: FundLike[]; holdings?: HoldingsLike };
+type LiveTimelineEntryV0 = { id: string; at: string; stage: string; detail: string; level: 'info' | 'ok' | 'error' };
+
+function useLiveTimelineV0(params: {
+  runDaaStatus: 'idle' | 'running' | 'ok' | 'error';
+  runDaaStatusText: string;
+  paperRunLoading: boolean;
+  paperRunError: string | null;
+  paperRunRecordedAt: string | null;
+}) {
+  const { runDaaStatus, runDaaStatusText, paperRunLoading, paperRunError, paperRunRecordedAt } = params;
+  const [liveTimelineV0, setLiveTimelineV0] = useState<LiveTimelineEntryV0[]>([]);
+  const lastRunDaaStatusRef = useRef<typeof runDaaStatus>('idle');
+  const lastPaperRunLoadingRef = useRef(false);
+  const lastPaperRunRecordedAtRef = useRef<string | null>(null);
+  const lastPaperRunErrorRef = useRef<string | null>(null);
+
+  const pushLiveTimelineV0 = useCallback((entry: Omit<LiveTimelineEntryV0, 'id' | 'at'>) => {
+    setLiveTimelineV0((prev) => [{ id: `${Date.now()}-${Math.random().toString(16).slice(2, 7)}`, at: new Date().toISOString(), ...entry }, ...prev].slice(0, 20));
+  }, []);
+
+  useEffect(() => {
+    if (runDaaStatus === lastRunDaaStatusRef.current) return;
+    lastRunDaaStatusRef.current = runDaaStatus;
+    if (runDaaStatus === 'running') pushLiveTimelineV0({ stage: 'Run DAA', detail: 'Step2 refresh + Step4 recommendation started.', level: 'info' });
+    if (runDaaStatus === 'ok') pushLiveTimelineV0({ stage: 'Run DAA', detail: runDaaStatusText || 'Run DAA completed.', level: 'ok' });
+    if (runDaaStatus === 'error') pushLiveTimelineV0({ stage: 'Run DAA', detail: runDaaStatusText || 'Run DAA failed.', level: 'error' });
+  }, [runDaaStatus, runDaaStatusText, pushLiveTimelineV0]);
+
+  useEffect(() => {
+    if (paperRunLoading === lastPaperRunLoadingRef.current) return;
+    lastPaperRunLoadingRef.current = paperRunLoading;
+    if (paperRunLoading) pushLiveTimelineV0({ stage: 'Preflight execution', detail: 'Paper run started.', level: 'info' });
+    if (!paperRunLoading && !paperRunError && paperRunRecordedAt) pushLiveTimelineV0({ stage: 'Preflight execution', detail: 'Paper run finished and recorded.', level: 'ok' });
+  }, [paperRunLoading, paperRunError, paperRunRecordedAt, pushLiveTimelineV0]);
+
+  useEffect(() => {
+    if (!paperRunRecordedAt || paperRunRecordedAt === lastPaperRunRecordedAtRef.current) return;
+    lastPaperRunRecordedAtRef.current = paperRunRecordedAt;
+    pushLiveTimelineV0({ stage: 'Execution log', detail: `Recorded at ${paperRunRecordedAt}.`, level: 'ok' });
+  }, [paperRunRecordedAt, pushLiveTimelineV0]);
+
+  useEffect(() => {
+    if (!paperRunError || paperRunError === lastPaperRunErrorRef.current) return;
+    lastPaperRunErrorRef.current = paperRunError;
+    pushLiveTimelineV0({ stage: 'Preflight execution', detail: paperRunError, level: 'error' });
+  }, [paperRunError, pushLiveTimelineV0]);
+
+  return liveTimelineV0;
+}
 
 // moved to DaaRebalancePanel.autoPlanUtilsV0
 
@@ -157,11 +172,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   // When a run fails, keep enough context to show a useful error + allow one-click retry.
   const [paperRunLastConfirmedOpts, setPaperRunLastConfirmedOpts] = useState<{ cashSweep?: boolean } | null>(null);
   const [paperRunFailureDetails, setPaperRunFailureDetails] = useState<string | null>(null);
-  const [liveTimelineV0, setLiveTimelineV0] = useState<LiveTimelineEntryV0[]>([]);
-  const lastRunDaaStatusRef = useRef<typeof runDaaStatus>('idle');
-  const lastPaperRunLoadingRef = useRef(false);
-  const lastPaperRunRecordedAtRef = useRef<string | null>(null);
-  const lastPaperRunErrorRef = useRef<string | null>(null);
+  const liveTimelineV0 = useLiveTimelineV0({
+    runDaaStatus,
+    runDaaStatusText,
+    paperRunLoading,
+    paperRunError,
+    paperRunRecordedAt,
+  });
   // Preflight checklist (v0): confirm key safety/inputs before running a paper rebalance.
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [preflightPendingOpts, setPreflightPendingOpts] = useState<{ cashSweep?: boolean } | null>(null);
@@ -188,36 +205,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       window.removeEventListener('storage', onData);
     };
   }, []);
-  function pushLiveTimelineV0(entry: Omit<LiveTimelineEntryV0, 'id' | 'at'>) {
-    setLiveTimelineV0((prev) => [{ id: `${Date.now()}-${Math.random().toString(16).slice(2, 7)}`, at: new Date().toISOString(), ...entry }, ...prev].slice(0, 20));
-  }
-  useEffect(() => {
-    if (runDaaStatus !== lastRunDaaStatusRef.current) {
-      lastRunDaaStatusRef.current = runDaaStatus;
-      if (runDaaStatus === 'running') pushLiveTimelineV0({ stage: 'Run DAA', detail: 'Step2 refresh + Step4 recommendation started.', level: 'info' });
-      if (runDaaStatus === 'ok') pushLiveTimelineV0({ stage: 'Run DAA', detail: runDaaStatusText || 'Run DAA completed.', level: 'ok' });
-      if (runDaaStatus === 'error') pushLiveTimelineV0({ stage: 'Run DAA', detail: runDaaStatusText || 'Run DAA failed.', level: 'error' });
-    }
-  }, [runDaaStatus, runDaaStatusText]);
-  useEffect(() => {
-    if (paperRunLoading !== lastPaperRunLoadingRef.current) {
-      lastPaperRunLoadingRef.current = paperRunLoading;
-      if (paperRunLoading) pushLiveTimelineV0({ stage: 'Preflight execution', detail: 'Paper run started.', level: 'info' });
-      if (!paperRunLoading && !paperRunError && paperRunRecordedAt) pushLiveTimelineV0({ stage: 'Preflight execution', detail: 'Paper run finished and recorded.', level: 'ok' });
-    }
-  }, [paperRunLoading, paperRunError, paperRunRecordedAt]);
-  useEffect(() => {
-    if (paperRunRecordedAt && paperRunRecordedAt !== lastPaperRunRecordedAtRef.current) {
-      lastPaperRunRecordedAtRef.current = paperRunRecordedAt;
-      pushLiveTimelineV0({ stage: 'Execution log', detail: `Recorded at ${paperRunRecordedAt}.`, level: 'ok' });
-    }
-  }, [paperRunRecordedAt]);
-  useEffect(() => {
-    if (paperRunError && paperRunError !== lastPaperRunErrorRef.current) {
-      lastPaperRunErrorRef.current = paperRunError;
-      pushLiveTimelineV0({ stage: 'Preflight execution', detail: paperRunError, level: 'error' });
-    }
-  }, [paperRunError]);
+  // timeline handlers moved into useLiveTimelineV0
+  // timeline side effects moved into useLiveTimelineV0
   useEffect(() => {
     // Persist the latest drift input(s) so users can refresh and keep the plan editor state.
     saveJsonToLs(LS_AUTO_PLAN_INPUT, { schemaVersion: 2, active: autoPlanScenario, a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA }, b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB } });
