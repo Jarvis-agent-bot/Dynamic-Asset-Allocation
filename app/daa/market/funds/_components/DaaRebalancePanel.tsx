@@ -410,15 +410,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : null;
   }, [moneyPlan]);
   // smartDefaultsHintsV0 is defined after target/price data so dependencies are initialized.
-  async function doCopyBundle() {
+  async function withCopyStatus(setter: (next: 'idle' | 'ok' | 'error') => void, fn: () => Promise<void>) {
     try {
-      await copyTextToClipboard(pretty(exportBundle));
-      setCopyStatus('ok');
-      window.setTimeout(() => setCopyStatus('idle'), 1200);
+      await fn();
+      setter('ok');
+      window.setTimeout(() => setter('idle'), 1200);
     } catch {
-      setCopyStatus('error');
-      window.setTimeout(() => setCopyStatus('idle'), 2000);
+      setter('error');
+      window.setTimeout(() => setter('idle'), 2000);
     }
+  }
+  async function doCopyBundle() {
+    await withCopyStatus(setCopyStatus, async () => {
+      await copyTextToClipboard(pretty(exportBundle));
+    });
   }
   async function applySampleScenarioV0Handler() {
     await applySampleScenarioWorkflowV0({ setSampleStatus, setOpen });
@@ -1118,7 +1123,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       costBps});
   }, [effectiveOrders, estimateTaxLotsImpactV0, funds, priceSnapshot, whatIf, whatIfFeeBps, whatIfSlippageBpsUsed]);
   async function doCopyOrders() {
-    try {
+    await withCopyStatus(setCopyOrdersStatus, async () => {
       const payload = {
         source:
           ordersPreviewSourceV0 === 'ENGINE_LAST_RUN'
@@ -1137,15 +1142,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         JSON.stringify(payload, null, 2),
         '```'].join('\n');
       await copyTextToClipboard(text);
-      setCopyOrdersStatus('ok');
-      window.setTimeout(() => setCopyOrdersStatus('idle'), 1200);
-    } catch {
-      setCopyOrdersStatus('error');
-      window.setTimeout(() => setCopyOrdersStatus('idle'), 2000);
-    }
+    });
   }
   async function doCopyApprovalSummaryV0() {
-    try {
+    await withCopyStatus(setCopyApprovalSummaryStatus, async () => {
       const scheduleEnabled = loadRebalanceScheduleStateV1().schedule.enabled;
       const action = safetyStopPendingOpts?.cashSweep ? 'cash-sweep' : 'dynamic-rebalance';
       const md = buildRebalanceApprovalSummaryMarkdownV0({
@@ -1166,15 +1166,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         whatIf: safetyStopPreviewWhatIf,
         violations: preRunViolationsV0});
       await copyTextToClipboard(md);
-      setCopyApprovalSummaryStatus('ok');
-      window.setTimeout(() => setCopyApprovalSummaryStatus('idle'), 1200);
-    } catch {
-      setCopyApprovalSummaryStatus('error');
-      window.setTimeout(() => setCopyApprovalSummaryStatus('idle'), 2000);
-    }
+    });
   }
   async function doCopyWeights() {
-    try {
+    await withCopyStatus(setCopyWeightsStatus, async () => {
       const text = [
         '# Current vs Target (v0)',
         '',
@@ -1184,12 +1179,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         JSON.stringify({ at: new Date().toISOString(), rows: rebalanceTableRows }, null, 2),
         '```'].join('\n');
       await copyTextToClipboard(text);
-      setCopyWeightsStatus('ok');
-      window.setTimeout(() => setCopyWeightsStatus('idle'), 1200);
-    } catch {
-      setCopyWeightsStatus('error');
-      window.setTimeout(() => setCopyWeightsStatus('idle'), 2000);
-    }
+    });
   }
   function doExportPlanCsvV0() {
     const source =
@@ -1218,15 +1208,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   // buildAutoPlanMarkdownV0 lives in src/core/autoPlanMarkdownV0 so it can be unit-tested.
   async function doCopyAutoPlanV0() {
     if (!autoPlanResult) return;
-    try {
+    await withCopyStatus(setAutoPlanCopyStatus, async () => {
       const md = buildAutoPlanMarkdownV0(autoPlanResult);
       await copyTextToClipboard(md);
-      setAutoPlanCopyStatus("ok");
-      window.setTimeout(() => setAutoPlanCopyStatus("idle"), 1200);
-    } catch {
-      setAutoPlanCopyStatus("error");
-      window.setTimeout(() => setAutoPlanCopyStatus("idle"), 2000);
-    }
+    });
   }
   function seedAutoPlanFromCurrentSnapshotV0() {
     try {
