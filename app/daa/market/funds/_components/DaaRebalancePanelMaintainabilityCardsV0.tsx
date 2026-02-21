@@ -1,3 +1,5 @@
+import { deriveScenarioRoutingV0 } from '@/src/daa/scenarioRoutingV0';
+
 type RebalanceRowLike = {
   id?: string;
   deltaPct: number;
@@ -259,19 +261,24 @@ export default function DaaRebalancePanelMaintainabilityCardsV0({
         const highDriftThreshold = Math.max(driftThresholdPct * 1.5, 0.03);
         const highDriftCount = rows.filter((r) => Math.abs(r.deltaPct) >= highDriftThreshold).length;
         const deepNegativeCount = rows.filter((r) => r.deltaPct <= -highDriftThreshold).length;
-        const stressScore = highDriftCount * 5 + priceDataWarningsV0.missing.length * 8 + priceDataWarningsV0.lastClose.length * 3;
-        const scenario = stressScore >= 35 || deepNegativeCount >= 3 ? 'B' : 'A';
-        const gateLabel = scenario === 'A' ? 'strong-hold gate' : 'value-trap gate';
-        const routeLabel = scenario === 'A' ? 'route to normal rebalance execution' : 'route to defensive rebalance (trim/hedge first)';
+        const routing = deriveScenarioRoutingV0({
+          highDriftCount,
+          deepNegativeCount,
+          missingPriceCount: priceDataWarningsV0.missing.length,
+          staleCloseCount: priceDataWarningsV0.lastClose.length,
+        });
         return (
-          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${scenario === 'A' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: scenario === 'A' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${routing.scenario === 'A' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: routing.scenario === 'A' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Rebalance scenario A/B gates</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Route execution by strong-hold vs value-trap decision gate.</div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
-              scenario <b>{scenario}</b> · gate <b>{gateLabel}</b> · decision <b>{routeLabel}</b>
+              scenario <b>{routing.scenario}</b> · gate <b>{routing.gateLabel}</b> · decision <b>{routing.routeLabel}</b>
             </div>
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-              stress score = high drift {highDriftCount}×5 + missing prices {priceDataWarningsV0.missing.length}×8 + stale closes {priceDataWarningsV0.lastClose.length}×3 = {stressScore}
+              stress score = high drift {highDriftCount}×5 + missing prices {priceDataWarningsV0.missing.length}×8 + stale closes {priceDataWarningsV0.lastClose.length}×3 = {routing.stressScore}
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              trigger reason: {routing.triggerReasons.length ? routing.triggerReasons.join(' + ') : 'none (scenario A)'}
             </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
