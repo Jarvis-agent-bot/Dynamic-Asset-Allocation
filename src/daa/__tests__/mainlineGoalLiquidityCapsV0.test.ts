@@ -12,6 +12,6 @@ describe('mainline-goal-liquidity-caps-v0', () => {
     expect(source).toContain('const liquidityCapPct = 0.3;');
     expect(source).toContain('const perOrderLiquidityCap = Math.max(0, liquidityCoverage * liquidityCapPct);');
     expect(source).toContain('const cappedNotional = Math.min(rawNotional, perOrderLiquidityCap);');
-    expect(source).toContain("BUY {o.rawNotional.toFixed(2)} -> <b>{o.cappedNotional.toFixed(2)}</b> {baseCcy || ''}");
+    expect(source).toContain("BUY {o.rawNotional.toFixed(2)} {'->'} <b>{o.cappedNotional.toFixed(2)}</b> {baseCcy || ''}");
   });
 });
