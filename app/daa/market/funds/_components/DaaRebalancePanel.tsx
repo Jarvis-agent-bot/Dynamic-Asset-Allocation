@@ -87,6 +87,7 @@ import DaaDynamicRebalanceSkipHistoryV0 from './DaaDynamicRebalanceSkipHistoryV0
 import DaaDynamicRebalanceNotificationWatcherV0 from './DaaDynamicRebalanceNotificationWatcherV0';
 import DaaDynamicRebalanceNotificationsV0 from './DaaDynamicRebalanceNotificationsV0';
 import DaaTargetedDecisionTransparencyCardV0 from './DaaTargetedDecisionTransparencyCardV0';
+import DaaRebalanceOpsOverviewCardsV0 from './DaaRebalanceOpsOverviewCardsV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
 import { DaaRebalanceRunProgressV0 } from './DaaRebalanceRunProgressV0';
 import { DaaDynamicRebalanceRunCompletionToastV0 } from './DaaDynamicRebalanceRunCompletionToastV0';
@@ -2471,316 +2472,28 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       <DaaDynamicRebalancePausedReasonBannerV0 rev={rev} />
       <DaaDynamicRebalanceLastOutcomeBannerV0 rev={rev} />
       <DaaDynamicRebalanceSkipHistoryV0 rev={rev} />
-      {(() => {
-        const scheduleEnabled = !!loadRebalanceScheduleStateV1().schedule.enabled;
-        const missingTargets = !targetWeights.length;
-        const hasPriceWarnings = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0;
-        const blockers = preRunViolationsV0.filter((v) => v.level === 'blocker');
-        const warnings = preRunViolationsV0.filter((v) => v.level === 'warning');
-        const cashBlocked = !!preTradeCashCheck.blocking;
-        const hasBlockingIssues = missingTargets || cashBlocked || blockers.length > 0;
-        const hasAnyIssues = hasBlockingIssues || hasPriceWarnings || warnings.length > 0;
-        if (!hasAnyIssues) return null;
-        const ui = hasBlockingIssues
-          ? {
-              border: 'rgba(239, 68, 68, 0.55)',
-              bg: 'rgba(239, 68, 68, 0.08)',
-              title: 'var(--danger)'}
-          : {
-              border: 'rgba(245, 158, 11, 0.55)',
-              bg: 'rgba(245, 158, 11, 0.08)',
-              title: '#f59e0b'};
-        const title = scheduleEnabled ? 'Dynamic rebalance preflight' : 'Preflight checks';
-        const subtitle = scheduleEnabled
-          ? 'Schedule is enabled. Fix these before the next run.'
-          : 'Fix these before running a rebalance.';
-        const nextAction = missingTargets
-          ? {
-              label: 'Next action: Set target weights',
-              button: 'Open target weights',
-              onClick: () => jumpTo('target-weights')}
-          : hasPriceWarnings
-            ? {
-                label: 'Next action: Resolve price warnings',
-                button: 'Open prices',
-                onClick: () => jumpTo('prices')}
-            : cashBlocked
-              ? {
-                  label: 'Next action: Resolve cash blocker',
-                  button: 'Review cash routing',
-                  onClick: () => jumpTo('rebalance')}
-              : blockers.length
-                ? {
-                    label: 'Next action: Resolve checklist blockers',
-                    button: 'Review blockers',
-                    onClick: () => jumpTo('rebalance')}
-                : {
-                    label: 'Next action: Review warnings then run preflight',
-                    button: 'Open preflight checklist',
-                    onClick: () => openPreflightForRun()};
-        return (
-          <div
-            role="alert"
-            aria-label="Preflight issues"
-            style={{
-              marginTop: 8,
-              padding: '10px 12px',
-              borderRadius: 12,
-              border: `1px solid ${ui.border}`,
-              background: ui.bg,
-              fontSize: 12}}
-          >
-            <div style={{ fontWeight: 800, color: ui.title }}>{title}{hasBlockingIssues ? ' (action required)' : ' (review)'}</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>{subtitle}</div>
-            <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, border: `1px solid ${ui.border}`, background: 'rgba(0,0,0,0.08)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700 }}>{nextAction.label}</div>
-              <div style={{ marginTop: 6 }}>
-                <button type="button" className="button" onClick={nextAction.onClick} style={{ padding: '4px 8px' }}>
-                  {nextAction.button}
-                </button>
-              </div>
-            </div>
-            <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-              {missingTargets ? (
-                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  - Target weights missing. Dynamic rebalance can’t run until you configure targets.
-                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    <button type="button" className="button secondary" onClick={() => jumpTo('target-weights')} style={{ padding: '4px 8px' }}>
-                      Set target weights
-                    </button>
-                    <Link href="/daa/dashboard?tab=wizard&step=4" className="muted" style={{ fontSize: 11 }}>
-                      Open Step4 recommendation
-                    </Link>
-                  </span>
-                </div>
-              ) : null}
-              {hasPriceWarnings ? (
-                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  - Price data warnings: missing={priceDataWarningsV0.missing.length}; lastCloseFallback={priceDataWarningsV0.lastClose.length}.
-                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    <button type="button" className="button secondary" onClick={() => jumpTo('prices')} style={{ padding: '4px 8px' }}>
-                      Update prices
-                    </button>
-                    <Link href="/daa/dashboard?tab=wizard&step=2" className="muted" style={{ fontSize: 11 }}>
-                      Open Step2 market events
-                    </Link>
-                  </span>
-                </div>
-              ) : null}
-              {cashBlocked ? (
-                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  - Cash/settlement BLOCKED: <span style={{ color: 'var(--danger)' }}>{preTradeCashCheck.message}</span>
-                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
-                      Review cash routing
-                    </button>
-                    <Link href="/daa/dashboard?tab=wizard&step=3" className="muted" style={{ fontSize: 11 }}>
-                      Edit money plan
-                    </Link>
-                  </span>
-                </div>
-              ) : null}
-              {blockers.length ? (
-                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  - Constraints/validation BLOCKERS: {blockers.length}.{' '}
-                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{blockers.slice(0, 2).map((x) => x.title).join('; ')}</span>
-                  {blockers.length > 2 ? ' …' : ''}
-                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
-                      Review blockers
-                    </button>
-                    <Link href="/daa/dashboard?tab=wizard&step=3" className="muted" style={{ fontSize: 11 }}>
-                      Open Step3 money plan
-                    </Link>
-                  </span>
-                </div>
-              ) : null}
-              {!blockers.length && warnings.length ? (
-                <div className="muted" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  - Constraints/validation warnings: {warnings.length}.{' '}
-                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{warnings.slice(0, 2).map((x) => x.title).join('; ')}</span>
-                  {warnings.length > 2 ? ' …' : ''}
-                  <span style={{ marginLeft: 8, display: 'inline-flex', gap: 8, flexWrap: 'wrap' as const }}>
-                    <button type="button" className="button secondary" onClick={() => jumpTo('rebalance')} style={{ padding: '4px 8px' }}>
-                      Review warnings
-                    </button>
-                    <Link href="/daa/dashboard?tab=wizard&step=3" className="muted" style={{ fontSize: 11 }}>
-                      Open Step3 money plan
-                    </Link>
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' as const, justifyContent: 'flex-end' }}>
-              {scheduleEnabled ? (
-                <button type="button" className="button secondary" onClick={() => jumpTo('schedule')} style={{ padding: '4px 8px' }}>
-                  Review schedule
-                </button>
-              ) : null}
-              {!missingTargets && !cashBlocked ? (
-                <button type="button" className="button secondary" onClick={() => openPreflightForRun()} style={{ padding: '4px 8px' }}>
-                  Open preflight checklist
-                </button>
-              ) : null}
-            </div>
-          </div>
-        );
-      })()}
-      {(() => {
-        const checks = [
-          { label: 'Target weights configured', ok: targetWeights.length > 0 },
-          { label: 'Price inputs usable', ok: priceDataWarningsV0.missing.length === 0 },
-          { label: 'Cash/settlement clear', ok: !preTradeCashCheck.blocking },
-          { label: 'No checklist blockers', ok: preRunViolationsV0.filter((v) => v.level === 'blocker').length === 0 },
-        ];
-        const readyCount = checks.filter((c) => c.ok).length;
-        const scorePct = Math.round((readyCount / checks.length) * 100);
-        return (
-          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Step readiness scorecard</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Shows blockers before execution.</div>
-            <div style={{ marginTop: 6, fontSize: 12 }}>
-              readiness score: <b style={{ color: scorePct >= 75 ? '#16a34a' : scorePct >= 50 ? '#f59e0b' : 'var(--danger)' }}>{scorePct}%</b> ({readyCount}/{checks.length})
-            </div>
-            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-              {checks.map((c) => (
-                <div key={c.label} style={{ fontSize: 11 }}>
-                  {c.ok ? 'OK' : 'BLOCKED'} · {c.label}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-      {(() => {
-        const detections: Array<{ id: string; label: string; detail: string }> = [];
-        if (!targetWeights.length) {
-          detections.push({ id: 'missing-targets', label: 'Missing target weights', detail: 'Configure target weights before execution.' });
-        }
-        if (preTradeCashCheck.blocking) {
-          detections.push({ id: 'cash-blocked', label: 'Cash/settlement blocker', detail: preTradeCashCheck.message });
-        }
-        if (priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0) {
-          detections.push({
-            id: 'price-warnings',
-            label: 'Price data warnings',
-            detail: `missing=${priceDataWarningsV0.missing.length}; lastCloseFallback=${priceDataWarningsV0.lastClose.length}`,
-          });
-        }
-        for (const v of preRunViolationsV0.slice(0, 3)) {
-          const detail = Array.isArray(v.details) ? v.details.join(' ') : '';
-          detections.push({ id: `violation-${v.level}-${v.title}`, label: `${v.level.toUpperCase()}: ${v.title}`, detail });
-        }
-        if (!detections.length) return null;
-        return (
-          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12 }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Inline detection review workspace</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Quick approve/reject for detected issues before rerun.</div>
-            <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-              {detections.map((d) => {
-                const state = detectionReviewStateV0[d.id] ?? null;
-                return (
-                  <div key={d.id} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 10px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700 }}>{d.label}</div>
-                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{d.detail}</div>
-                    <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                      <button
-                        type="button"
-                        className={state === 'approved' ? 'button' : 'button secondary'}
-                        style={{ padding: '4px 8px' }}
-                        onClick={() => setDetectionReviewStateV0((prev) => ({ ...prev, [d.id]: 'approved' }))}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        className={state === 'rejected' ? 'button' : 'button secondary'}
-                        style={{ padding: '4px 8px' }}
-                        onClick={() => setDetectionReviewStateV0((prev) => ({ ...prev, [d.id]: 'rejected' }))}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-      <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
-        <div style={{ fontWeight: 800, fontSize: 13 }}>Funds hub smart defaults</div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Apply operator-friendly defaults and see inline hints for missing inputs.</div>
-        <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-          <button
-            type="button"
-            className="button secondary"
-            style={{ padding: '4px 8px' }}
-            onClick={() => {
-              persistExecutionModeV0('paper');
-              persistSellProceedsRoutingV0('CASH');
-              persistMaxTurnoverPct01V0(0.35);
-              persistCashBucketTargetPct01V0(0.02);
-              setWhatIfDriftThresholdPctV0(null);
-              setRev((x) => x + 1);
-            }}
-          >
-            Apply smart defaults
-          </button>
-          <button
-            type="button"
-            className="button secondary"
-            style={{ padding: '4px 8px' }}
-            onClick={() => jumpTo('rebalance')}
-          >
-            Open ready-to-run section
-          </button>
-        </div>
-        {smartDefaultsHintsV0.length ? (
-          <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-            {smartDefaultsHintsV0.map((hint) => (
-              <div key={hint} className="muted" style={{ fontSize: 11 }}>- {hint}</div>
-            ))}
-          </div>
-        ) : (
-          <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>All key inputs look complete. You can run preflight now.</div>
-        )}
-      </div>
-      {(() => {
-        const urgent = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 1.5, 0.03)).slice(0, 5);
-        const medium = rebalanceTableRows.filter((r) => Math.abs(r.deltaPct) >= driftThresholdPct && Math.abs(r.deltaPct) < Math.max(driftThresholdPct * 1.5, 0.03)).slice(0, 5);
-        const warningSymbols = Array.from(new Set([...(priceDataWarningsV0.missing ?? []), ...(priceDataWarningsV0.lastClose ?? [])])).slice(0, 6);
-        if (!urgent.length && !medium.length && !warningSymbols.length) return null;
-        return (
-          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Watchlist signal inbox</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Grouped market signals by urgency and symbol.</div>
-            {urgent.length ? (
-              <div style={{ marginTop: 6, fontSize: 11 }}>
-                <b style={{ color: 'var(--danger)' }}>Urgent</b>: {urgent.map((r) => `${r.id} ${(r.deltaPct * 100).toFixed(1)}%`).join(' · ')}
-              </div>
-            ) : null}
-            {medium.length ? (
-              <div style={{ marginTop: 4, fontSize: 11 }}>
-                <b style={{ color: '#f59e0b' }}>Medium</b>: {medium.map((r) => `${r.id} ${(r.deltaPct * 100).toFixed(1)}%`).join(' · ')}
-              </div>
-            ) : null}
-            {warningSymbols.length ? (
-              <div style={{ marginTop: 4, fontSize: 11 }}>
-                <b className="muted">Price warnings</b>: {warningSymbols.join(', ')}
-              </div>
-            ) : null}
-            <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('prices')}>
-                Review price inputs
-              </button>
-              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
-                Review symbol targets
-              </button>
-            </div>
-          </div>
-        );
-      })()}
+      <DaaRebalanceOpsOverviewCardsV0
+        driftThresholdPct={driftThresholdPct}
+        scheduleEnabled={!!loadRebalanceScheduleStateV1().schedule.enabled}
+        targetWeightsLength={targetWeights.length}
+        priceDataWarnings={priceDataWarningsV0}
+        preRunViolations={preRunViolationsV0}
+        preTradeCashCheck={preTradeCashCheck}
+        rebalanceTableRows={rebalanceTableRows}
+        smartDefaultsHints={smartDefaultsHintsV0}
+        detectionReviewState={detectionReviewStateV0}
+        setDetectionReviewState={setDetectionReviewStateV0}
+        jumpTo={jumpTo}
+        openPreflightForRun={() => openPreflightForRun()}
+        onApplySmartDefaults={() => {
+          persistExecutionModeV0('paper');
+          persistSellProceedsRoutingV0('CASH');
+          persistMaxTurnoverPct01V0(0.35);
+          persistCashBucketTargetPct01V0(0.02);
+          setWhatIfDriftThresholdPctV0(null);
+          setRev((x) => x + 1);
+        }}
+      />
       <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
         <div style={{ fontWeight: 800, fontSize: 13 }}>Operator shift handover</div>
         <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Summary for next shift continuity.</div>
