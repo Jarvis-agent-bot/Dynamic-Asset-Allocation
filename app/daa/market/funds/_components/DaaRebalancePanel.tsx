@@ -1841,6 +1841,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const preflightPreviewWhatIf = useMemo(() => buildPreviewWhatIf(preflightPreviewOrders), [buildPreviewWhatIf, preflightPreviewOrders]);
   const safetyStopPreviewOrders = useMemo(() => previewOrdersForOpts(!!safetyStopPendingOpts?.cashSweep), [previewOrdersForOpts, safetyStopPendingOpts?.cashSweep]);
   const safetyStopPreviewWhatIf = useMemo(() => buildPreviewWhatIf(safetyStopPreviewOrders), [buildPreviewWhatIf, safetyStopPreviewOrders]);
+  const riskControlsSectionProps = { targetWeightsSource, priceDataWarningsV0, assetBlacklistTextV0, setAssetBlacklistTextV0, cashBucketTargetPct01, persistCashBucketTargetPct01V0, maxTurnoverPct01V0, persistMaxTurnoverPct01V0, baseCcy, rebalancePolicyMinTradeNotional: rebalancePolicy.minTradeNotional, whatIfTurnoverPctOfTotalBefore: whatIf ? whatIf.turnoverPctOfTotalBefore : null, investablePct01, moneyPlanInvestablePct01, assetBlacklistV0, portfolioLastRebalanceAt };
+  const autoPlanSectionProps = { autoPlanScenario, setAutoPlanScenario, autoPlanPresetNameV0, setAutoPlanPresetNameV0, saveAutoPlanScenarioPresetV0, autoPlanSelectedPresetIdV0, setAutoPlanSelectedPresetIdV0, autoPlanPresetsV0, loadAutoPlanScenarioPresetV0, deleteAutoPlanScenarioPresetV0, seedAutoPlanFromCurrentSnapshotV0, runAutoPlanV0, doCopyAutoPlanV0, autoPlanResult, autoPlanCopyStatus, autoPlanThresholdOverridePct, driftThresholdPct, setAutoPlanThresholdOverridePctForActive, autoPlanThresholdPctUsed, autoPlanInputText, setAutoPlanInputTextForActive, autoPlanError, autoPlanResultA, autoPlanResultB, baseCcy, formatWeightsDiffLines, rebalanceMinTradeNotional: rebalancePolicy.minTradeNotional, whatIfFeeBps };
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
       <DaaRebalancePreflightModalV0 open={preflightOpen} pendingOpts={preflightPendingOpts} baseCcy={baseCcy} previewOrders={preflightPreviewOrders} previewWhatIf={preflightPreviewWhatIf} hasPriceWarnings={preflightHasPriceWarnings} priceWarnings={priceDataWarningsV0} hasBlocking={preRunHasBlockingV0} hasWarnings={preRunHasWarningsV0} violations={preRunViolationsV0} preTradeCashCheck={preTradeCashCheck} ackPrices={preflightAckPrices} ackConstraints={preflightAckConstraints} ackCash={preflightAckCash} overrideBlockers={preflightOverrideBlockers} canProceed={preflightCanProceed} loading={paperRunLoading} executionBlockReason={executionBlockReason} targetWeightsCount={targetWeights.length} onClose={closePreflight} onJump={closePreflightAndJump} onSetAckPrices={setPreflightAckPrices} onSetAckConstraints={setPreflightAckConstraints} onSetAckCash={setPreflightAckCash} onSetOverrideBlockers={setPreflightOverrideBlockers} onProceed={proceedFromPreflight} />
@@ -2059,23 +2061,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             </div>
             <DaaRebalanceRunProgressV0 pollMs={paperRunLoading ? 250 : 750} />
             <DaaDynamicRebalanceRunCompletionToastV0 pollMs={paperRunLoading ? 250 : 750} />
-            <DaaRebalanceRiskControlsSectionV0
-              targetWeightsSource={targetWeightsSource}
-              priceDataWarningsV0={priceDataWarningsV0}
-              assetBlacklistTextV0={assetBlacklistTextV0}
-              setAssetBlacklistTextV0={setAssetBlacklistTextV0}
-              cashBucketTargetPct01={cashBucketTargetPct01}
-              persistCashBucketTargetPct01V0={persistCashBucketTargetPct01V0}
-              maxTurnoverPct01V0={maxTurnoverPct01V0}
-              persistMaxTurnoverPct01V0={persistMaxTurnoverPct01V0}
-              baseCcy={baseCcy}
-              rebalancePolicyMinTradeNotional={rebalancePolicy.minTradeNotional}
-              whatIfTurnoverPctOfTotalBefore={whatIf ? whatIf.turnoverPctOfTotalBefore : null}
-              investablePct01={investablePct01}
-              moneyPlanInvestablePct01={moneyPlanInvestablePct01}
-              assetBlacklistV0={assetBlacklistV0}
-              portfolioLastRebalanceAt={portfolioLastRebalanceAt}
-            />
+            <DaaRebalanceRiskControlsSectionV0 {...riskControlsSectionProps} />
             <DaaOrderStatusTrackerV0 pollMs={paperRunLoading ? 500 : 1500} />
             {preRunViolationsV0.length ? (
               <div
@@ -2614,36 +2600,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               )}
             </div>
           </div>
-          <DaaRebalancePanelAutoPlanSectionV0
-            autoPlanScenario={autoPlanScenario}
-            setAutoPlanScenario={setAutoPlanScenario}
-            autoPlanPresetNameV0={autoPlanPresetNameV0}
-            setAutoPlanPresetNameV0={setAutoPlanPresetNameV0}
-            saveAutoPlanScenarioPresetV0={saveAutoPlanScenarioPresetV0}
-            autoPlanSelectedPresetIdV0={autoPlanSelectedPresetIdV0}
-            setAutoPlanSelectedPresetIdV0={setAutoPlanSelectedPresetIdV0}
-            autoPlanPresetsV0={autoPlanPresetsV0}
-            loadAutoPlanScenarioPresetV0={loadAutoPlanScenarioPresetV0}
-            deleteAutoPlanScenarioPresetV0={deleteAutoPlanScenarioPresetV0}
-            seedAutoPlanFromCurrentSnapshotV0={seedAutoPlanFromCurrentSnapshotV0}
-            runAutoPlanV0={runAutoPlanV0}
-            doCopyAutoPlanV0={doCopyAutoPlanV0}
-            autoPlanResult={autoPlanResult}
-            autoPlanCopyStatus={autoPlanCopyStatus}
-            autoPlanThresholdOverridePct={autoPlanThresholdOverridePct}
-            driftThresholdPct={driftThresholdPct}
-            setAutoPlanThresholdOverridePctForActive={setAutoPlanThresholdOverridePctForActive}
-            autoPlanThresholdPctUsed={autoPlanThresholdPctUsed}
-            autoPlanInputText={autoPlanInputText}
-            setAutoPlanInputTextForActive={setAutoPlanInputTextForActive}
-            autoPlanError={autoPlanError}
-            autoPlanResultA={autoPlanResultA}
-            autoPlanResultB={autoPlanResultB}
-            baseCcy={baseCcy}
-            formatWeightsDiffLines={formatWeightsDiffLines}
-            rebalanceMinTradeNotional={rebalancePolicy.minTradeNotional}
-            whatIfFeeBps={whatIfFeeBps}
-          />
+          <DaaRebalancePanelAutoPlanSectionV0 {...autoPlanSectionProps} />
           <DaaRebalancePanelWorkflowSectionsV0
             rev={rev}
             hasRecommendation={rt.hasRecommendation}
