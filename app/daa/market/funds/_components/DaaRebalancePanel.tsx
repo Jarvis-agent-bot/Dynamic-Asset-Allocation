@@ -73,16 +73,6 @@ import {
   readJsonFromLs,
   saveJsonToLs,
 } from '../../../wizardStorage';
-import DaaDashboardAiExplain from '../../../dashboard/_components/DaaDashboardAiExplain';
-import DaaDashboardExport from '../../../dashboard/_components/DaaDashboardExport';
-import DaaDashboardImport from '../../../dashboard/_components/DaaDashboardImport';
-import DaaDashboardRunChecklist from '../../../dashboard/_components/DaaDashboardRunChecklist';
-import Step1BacktestPage from '../../../step/_pages/Step1BacktestPage';
-import Step2MarketEventsPage from '../../../step/_pages/Step2MarketEventsPage';
-import Step3MoneyManagementPage from '../../../step/_pages/Step3MoneyManagementPage';
-import Step4BaselineRecommendationPage from '../../../step/_pages/Step4BaselineRecommendationPage';
-import Step6HumanFactorPage from '../../../step/_pages/Step6HumanFactorPage';
-import Step7TagsPage from '../../../step/_pages/Step7TagsPage';
 import DaaPortfolioEditorV0 from './DaaPortfolioEditorV0';
 import DaaPriceSnapshotInputV0 from './DaaPriceSnapshotInputV0';
 import DaaTargetWeightsEditorV0 from './DaaTargetWeightsEditorV0';
@@ -94,14 +84,13 @@ import DaaDynamicRebalanceLastOutcomeBannerV0 from './DaaDynamicRebalanceLastOut
 import DaaDynamicRebalanceSkipHistoryV0 from './DaaDynamicRebalanceSkipHistoryV0';
 import DaaDynamicRebalanceNotificationWatcherV0 from './DaaDynamicRebalanceNotificationWatcherV0';
 import DaaDynamicRebalanceNotificationsV0 from './DaaDynamicRebalanceNotificationsV0';
-import DaaDynamicRebalanceRunHistoryV0 from './DaaDynamicRebalanceRunHistoryV0';
 import DaaTargetedDecisionTransparencyCardV0 from './DaaTargetedDecisionTransparencyCardV0';
-import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
 import { DaaRebalanceRunProgressV0 } from './DaaRebalanceRunProgressV0';
 import { DaaDynamicRebalanceRunCompletionToastV0 } from './DaaDynamicRebalanceRunCompletionToastV0';
 import { DaaOrderStatusTrackerV0 } from './DaaOrderStatusTrackerV0';
 import DaaRebalancePanelAutoPlanSectionV0 from './DaaRebalancePanelAutoPlanSectionV0';
+import DaaRebalancePanelWorkflowSectionsV0 from './DaaRebalancePanelWorkflowSectionsV0';
 type FundLike = {
   code: string;
   name?: string;
@@ -5248,50 +5237,13 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             rebalanceMinTradeNotional={rebalancePolicy.minTradeNotional}
             whatIfFeeBps={whatIfFeeBps}
           />
-          <div id="dynamic-rebalance-run-history" style={{ scrollMarginTop: 12 }}>
-            <DaaDynamicRebalanceRunHistoryV0 rev={rev} />
-          </div>
-          <div id="rebalance-log" style={{ scrollMarginTop: 12 }}>
-            <DaaRebalanceLogViewV0 />
-          </div>
-          <div id="step1" style={{ scrollMarginTop: 12 }}>
-            <Step1BacktestPage />
-          </div>
-          <DaaDashboardRunChecklist
+          <DaaRebalancePanelWorkflowSectionsV0
+            rev={rev}
+            hasRecommendation={rt.hasRecommendation}
             onJump={(id) => {
               scrollToId(id);
             }}
           />
-          <div id="import" style={{ scrollMarginTop: 12 }}>
-            <DaaDashboardImport />
-          </div>
-          <div id="export" style={{ scrollMarginTop: 12 }}>
-            <DaaDashboardExport />
-          </div>
-          <div id="step2" style={{ scrollMarginTop: 12 }}>
-            <Step2MarketEventsPage />
-          </div>
-          <div id="step3" style={{ scrollMarginTop: 12 }}>
-            <Step3MoneyManagementPage />
-          </div>
-          <div id="step4" style={{ scrollMarginTop: 12 }}>
-            <Step4BaselineRecommendationPage />
-          </div>
-          {rt.hasRecommendation ? (
-            <div id="step5" style={{ scrollMarginTop: 12 }}>
-              <DaaDashboardAiExplain />
-            </div>
-          ) : (
-            <div id="step5" style={{ scrollMarginTop: 12, fontSize: 12 }} className="muted">
-              Step5 Explain：blocked，需先跑一次 Step4 recommendation。
-            </div>
-          )}
-          <div id="step6" style={{ scrollMarginTop: 12 }}>
-            <Step6HumanFactorPage />
-          </div>
-          <div id="step7" style={{ scrollMarginTop: 12 }}>
-            <Step7TagsPage />
-          </div>
         </div>
       ) : null}
     </div>
