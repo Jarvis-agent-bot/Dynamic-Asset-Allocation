@@ -12,14 +12,17 @@ export type ScenarioRoutingDecisionV0 = {
   gateLabel: 'strong-hold gate' | 'value-trap gate';
   routeLabel:
     | 'route to normal rebalance execution'
-    | 'route to defensive rebalance (trim/hedge first)';
+    | 'route to sell-only defensive rebalance (block buys)'
+    | 'route to force-exit defensive rebalance';
   stressScore: number;
   stressScoreThresholdUsed: number;
+  buyPathBlocked: boolean;
   triggerReasons: Array<'stress-score' | 'deep-negative'>;
 };
 
 export const SCENARIO_ROUTING_STRESS_SCORE_THRESHOLD_V0 = 35;
 export const SCENARIO_ROUTING_DEEP_NEGATIVE_THRESHOLD_V0 = 3;
+export const SCENARIO_ROUTING_FORCE_EXIT_DEEP_NEGATIVE_THRESHOLD_V0 = 5;
 
 function clamp01(v: number): number {
   if (!Number.isFinite(v)) return 0;
@@ -54,16 +57,21 @@ export function deriveScenarioRoutingV0(input: ScenarioRoutingInputV0): Scenario
       routeLabel: 'route to normal rebalance execution',
       stressScore,
       stressScoreThresholdUsed,
+      buyPathBlocked: false,
       triggerReasons,
     };
   }
 
+  const forceExit = input.deepNegativeCount >= SCENARIO_ROUTING_FORCE_EXIT_DEEP_NEGATIVE_THRESHOLD_V0;
   return {
     scenario,
     gateLabel: 'value-trap gate',
-    routeLabel: 'route to defensive rebalance (trim/hedge first)',
+    routeLabel: forceExit
+      ? 'route to force-exit defensive rebalance'
+      : 'route to sell-only defensive rebalance (block buys)',
     stressScore,
     stressScoreThresholdUsed,
+    buyPathBlocked: true,
     triggerReasons,
   };
 }
