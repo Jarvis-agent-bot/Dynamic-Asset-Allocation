@@ -173,6 +173,26 @@ function readAutoPlanPresetsV0(): AutoPlanScenarioPresetV0[] {
     .filter((x) => x.id && x.name);
 }
 
+function readAutoPlanBootstrapV0() {
+  const saved = readAutoPlanInputV0();
+  const scenarioA = saved?.a;
+  const scenarioB = saved?.b;
+  const textA =
+    scenarioA && typeof scenarioA === 'object' && typeof (scenarioA as any).text === 'string'
+      ? String((scenarioA as any).text)
+      : typeof (saved as any)?.text === 'string'
+        ? String((saved as any).text)
+        : '';
+  const textB = scenarioB && typeof scenarioB === 'object' && typeof (scenarioB as any).text === 'string' ? String((scenarioB as any).text) : '';
+  return {
+    scenario: String(saved?.active ?? '') === 'B' ? ('B' as const) : ('A' as const),
+    textA,
+    textB,
+    thresholdA: readAutoPlanThresholdOverrideV0(saved?.a?.thresholdPctOverride),
+    thresholdB: readAutoPlanThresholdOverrideV0(saved?.b?.thresholdPctOverride),
+  };
+}
+
 export function DaaRebalancePanel({ funds, holdings }: Props) {
   const rt = useDaaRuntime();
   const { exportBundle } = useDaaWorkflowExportBundleV1();
@@ -185,27 +205,12 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   const [sampleStatus, setSampleStatus] = useState<'idle' | 'ok' | 'error'>('idle');
   const [runDaaStatus, setRunDaaStatus] = useState<'idle' | 'running' | 'ok' | 'error'>('idle');
   const [runDaaStatusText, setRunDaaStatusText] = useState<string>('');
-  const [autoPlanScenario, setAutoPlanScenario] = useState<AutoPlanScenarioKeyV0>(() => {
-    const saved = readAutoPlanInputV0();
-    return String(saved?.active ?? '') === 'B' ? 'B' : 'A';
-  });
-  const [autoPlanInputTextA, setAutoPlanInputTextA] = useState(() => {
-    const saved = readAutoPlanInputV0();
-    if (!saved) return '';
-    const scenarioA = saved.a;
-    if (scenarioA && typeof scenarioA === 'object' && typeof (scenarioA as any).text === 'string') return String((scenarioA as any).text);
-    if (typeof (saved as any).text === 'string') return String((saved as any).text); // legacy
-    return '';
-  });
-  const [autoPlanInputTextB, setAutoPlanInputTextB] = useState(() => {
-    const saved = readAutoPlanInputV0();
-    const scenarioB = saved?.b;
-    return scenarioB && typeof scenarioB === 'object' && typeof (scenarioB as any).text === 'string' ? String((scenarioB as any).text) : '';
-  });
-  const [autoPlanThresholdOverridePctA, setAutoPlanThresholdOverridePctA] = useState<number | null>(() =>
-    readAutoPlanThresholdOverrideV0(readAutoPlanInputV0()?.a?.thresholdPctOverride));
-  const [autoPlanThresholdOverridePctB, setAutoPlanThresholdOverridePctB] = useState<number | null>(() =>
-    readAutoPlanThresholdOverrideV0(readAutoPlanInputV0()?.b?.thresholdPctOverride));
+  const autoPlanBootstrapV0 = useMemo(() => readAutoPlanBootstrapV0(), []);
+  const [autoPlanScenario, setAutoPlanScenario] = useState<AutoPlanScenarioKeyV0>(autoPlanBootstrapV0.scenario);
+  const [autoPlanInputTextA, setAutoPlanInputTextA] = useState(autoPlanBootstrapV0.textA);
+  const [autoPlanInputTextB, setAutoPlanInputTextB] = useState(autoPlanBootstrapV0.textB);
+  const [autoPlanThresholdOverridePctA, setAutoPlanThresholdOverridePctA] = useState<number | null>(autoPlanBootstrapV0.thresholdA);
+  const [autoPlanThresholdOverridePctB, setAutoPlanThresholdOverridePctB] = useState<number | null>(autoPlanBootstrapV0.thresholdB);
   const [autoPlanResultA, setAutoPlanResultA] = useState<DriftRebalanceBacktestResult | null>(() => {
     const savedA = readJsonFromLs<any>(LS_AUTO_PLAN_RESULT_A);
     if (savedA && typeof savedA === 'object' && (savedA as any).schemaVersion === 1) return savedA as DriftRebalanceBacktestResult;
@@ -273,14 +278,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     };
   }, []);
   function pushLiveTimelineV0(entry: Omit<LiveTimelineEntryV0, 'id' | 'at'>) {
-    setLiveTimelineV0((prev) => [
-      {
-        id: `${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
-        at: new Date().toISOString(),
-        ...entry,
-      },
-      ...prev,
-    ].slice(0, 20));
+    setLiveTimelineV0((prev) => [{ id: `${Date.now()}-${Math.random().toString(16).slice(2, 7)}`, at: new Date().toISOString(), ...entry }, ...prev].slice(0, 20));
   }
   useEffect(() => {
     if (runDaaStatus !== lastRunDaaStatusRef.current) {
@@ -311,11 +309,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }, [paperRunError]);
   useEffect(() => {
     // Persist the latest drift input(s) so users can refresh and keep the plan editor state.
-    saveJsonToLs(LS_AUTO_PLAN_INPUT, {
-      schemaVersion: 2,
-      active: autoPlanScenario,
-      a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA },
-      b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB }});
+    saveJsonToLs(LS_AUTO_PLAN_INPUT, { schemaVersion: 2, active: autoPlanScenario, a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA }, b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB } });
   }, [autoPlanScenario, autoPlanInputTextA, autoPlanInputTextB, autoPlanThresholdOverridePctA, autoPlanThresholdOverridePctB]);
   useEffect(() => {
     saveJsonToLs(LS_AUTO_PLAN_SCENARIO_PRESETS_V0, autoPlanPresetsV0);
@@ -345,28 +339,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     return Array.from(new Set(tokens)).sort();
   }, [assetBlacklistTextV0]);
   const assetBlacklistSetV0 = useMemo(() => new Set(assetBlacklistV0), [assetBlacklistV0]);
-  const autoPlanActiveState =
-    autoPlanScenario === 'A'
-      ? {
-          inputText: autoPlanInputTextA,
-          thresholdOverridePct: autoPlanThresholdOverridePctA,
-          result: autoPlanResultA,
-          error: autoPlanErrorA,
-          setInputText: setAutoPlanInputTextA,
-          setThresholdOverridePct: setAutoPlanThresholdOverridePctA,
-          setError: setAutoPlanErrorA,
-          setResult: setAutoPlanResultA,
-        }
-      : {
-          inputText: autoPlanInputTextB,
-          thresholdOverridePct: autoPlanThresholdOverridePctB,
-          result: autoPlanResultB,
-          error: autoPlanErrorB,
-          setInputText: setAutoPlanInputTextB,
-          setThresholdOverridePct: setAutoPlanThresholdOverridePctB,
-          setError: setAutoPlanErrorB,
-          setResult: setAutoPlanResultB,
-        };
+  const autoPlanActiveState = autoPlanScenario === 'A'
+    ? { inputText: autoPlanInputTextA, thresholdOverridePct: autoPlanThresholdOverridePctA, result: autoPlanResultA, error: autoPlanErrorA, setInputText: setAutoPlanInputTextA, setThresholdOverridePct: setAutoPlanThresholdOverridePctA, setError: setAutoPlanErrorA, setResult: setAutoPlanResultA }
+    : { inputText: autoPlanInputTextB, thresholdOverridePct: autoPlanThresholdOverridePctB, result: autoPlanResultB, error: autoPlanErrorB, setInputText: setAutoPlanInputTextB, setThresholdOverridePct: setAutoPlanThresholdOverridePctB, setError: setAutoPlanErrorB, setResult: setAutoPlanResultB };
   const autoPlanInputText = autoPlanActiveState.inputText;
   const autoPlanThresholdOverridePct = autoPlanActiveState.thresholdOverridePct;
   const autoPlanThresholdPctUsed = autoPlanThresholdOverridePct !== null ? autoPlanThresholdOverridePct : driftThresholdPct;
