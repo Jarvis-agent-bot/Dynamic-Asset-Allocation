@@ -18,6 +18,7 @@ describe('mainline-dod-shows-decision-maint-refactor-cb29a7-v0', () => {
     expect(result.scenario).toBe('A');
     expect(result.gateLabel).toBe('strong-hold gate');
     expect(result.routeLabel).toBe('route to normal rebalance execution');
+    expect(result.stressScoreThresholdUsed).toBe(SCENARIO_ROUTING_STRESS_SCORE_THRESHOLD_V0);
     expect(result.triggerReasons).toEqual([]);
   });
 
@@ -43,6 +44,37 @@ describe('mainline-dod-shows-decision-maint-refactor-cb29a7-v0', () => {
     });
 
     expect(result.stressScore).toBeLessThan(SCENARIO_ROUTING_STRESS_SCORE_THRESHOLD_V0);
+    expect(result.scenario).toBe('B');
+    expect(result.triggerReasons).toEqual(['deep-negative']);
+  });
+
+  it('widens strong-hold stress threshold when quality/signal support is strong', () => {
+    const result = deriveScenarioRoutingV0({
+      highDriftCount: 6,
+      deepNegativeCount: 0,
+      missingPriceCount: 1,
+      staleCloseCount: 0,
+      qualitySupportScore: 0.9,
+      signalSupportScore: 0.8,
+    });
+
+    expect(result.stressScore).toBeGreaterThanOrEqual(SCENARIO_ROUTING_STRESS_SCORE_THRESHOLD_V0);
+    expect(result.stressScoreThresholdUsed).toBe(SCENARIO_ROUTING_STRESS_SCORE_THRESHOLD_V0 + 8);
+    expect(result.scenario).toBe('A');
+    expect(result.triggerReasons).toEqual([]);
+  });
+
+  it('keeps deep-negative route on scenario B even when strong-hold threshold widens', () => {
+    const result = deriveScenarioRoutingV0({
+      highDriftCount: 6,
+      deepNegativeCount: SCENARIO_ROUTING_DEEP_NEGATIVE_THRESHOLD_V0,
+      missingPriceCount: 1,
+      staleCloseCount: 0,
+      qualitySupportScore: 1,
+      signalSupportScore: 1,
+    });
+
+    expect(result.stressScoreThresholdUsed).toBe(SCENARIO_ROUTING_STRESS_SCORE_THRESHOLD_V0 + 8);
     expect(result.scenario).toBe('B');
     expect(result.triggerReasons).toEqual(['deep-negative']);
   });
