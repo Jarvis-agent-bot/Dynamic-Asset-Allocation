@@ -709,36 +709,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     try {
       const st = loadPortfolioStateV1();
       const mp: any = moneyPlan as any;
-      const mpConstraints: any = mp?.constraints ?? {};
-      const constraints: any = { minNotional: 0.01 };
-      const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
-      const maxIn = toFiniteNumber(mpConstraints?.maxIn);
-      const maxOut = toFiniteNumber(mpConstraints?.maxOut);
-      if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
-      if (maxIn !== null) constraints.maxIn = maxIn;
-      if (maxOut !== null) constraints.maxOut = maxOut;
-      if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
-      const holdingsMap: Record<string, number> = {};
-      for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
-        const sym = String(symRaw ?? '').trim();
-        if (!sym) continue;
-        if (assetBlacklistSetV0.has(normalizePlanSymbol(sym))) continue;
-        const qty = toFiniteNumber((p as any)?.qty);
-        if (!qty || qty <= 0) continue;
-        holdingsMap[sym] = qty;
-      }
-      const byCode = new Map<string, FundLike>();
-      for (const f of funds ?? []) {
-        const code = String(f?.code ?? '').trim();
-        if (code) byCode.set(code, f);
-      }
-      const pricesMap: Record<string, number> = {};
-      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsEffective.map((t) => t.id)]);
-      for (const sym of symbols) {
-        const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
-        const nav = pick.price;
-        if (nav && nav > 0) pricesMap[sym] = nav;
-      }
+      const constraints = buildRunConstraintsV0(mp);
+      const holdingsMap = buildRunHoldingsMapV0(st.positions);
+      const pricesMap = buildPricesMapV0(holdingsMap, targetWeightsEffective);
       const basePolicy = loadRebalancePolicyV1();
       const policy = {
         ...basePolicy,
@@ -1178,6 +1151,21 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     }
     return holdingsMap;
   }
+  function buildPricesMapV0(holdingsMap: Record<string, number>, targetWeightsInput: TargetWeight[]) {
+    const byCode = new Map<string, FundLike>();
+    for (const f of funds ?? []) {
+      const code = String(f?.code ?? '').trim();
+      if (code) byCode.set(code, f);
+    }
+    const pricesMap: Record<string, number> = {};
+    const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsInput.map((t) => t.id)]);
+    for (const sym of symbols) {
+      const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
+      const nav = pick.price;
+      if (nav && nav > 0) pricesMap[sym] = nav;
+    }
+    return pricesMap;
+  }
 
   // buildAutoPlanMarkdownV0 lives in src/core/autoPlanMarkdownV0 so it can be unit-tested.
   async function doCopyAutoPlanV0() {
@@ -1190,29 +1178,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   function seedAutoPlanFromCurrentSnapshotV0() {
     try {
       const st = loadPortfolioStateV1();
-      const holdingsMap: Record<string, number> = {};
-      for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
-        const sym = normalizePlanSymbol(symRaw);
-        if (!sym) continue;
-        if (assetBlacklistSetV0.has(sym)) continue;
-        const qty = toFiniteNumber((p as any)?.qty);
-        if (!qty || qty <= 0) continue;
-        holdingsMap[sym] = qty;
-      }
-      const byCode = new Map<string, FundLike>();
-      for (const f of funds ?? []) {
-        const code = normalizePlanSymbol((f as any)?.code);
-        if (code) byCode.set(code, f);
-      }
-      const pricesMap: Record<string, number> = {};
-      const symbols = new Set<string>([
-        ...Object.keys(holdingsMap),
-        ...targetWeightsEffective.map((t) => normalizePlanSymbol((t as any)?.id))]);
-      for (const sym of symbols) {
-        const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
-        const nav = pick.price;
-        if (nav && nav > 0) pricesMap[sym] = nav;
-      }
+      const holdingsMap = buildAutoPlanHoldingsMapV0(st.positions);
+      const pricesMap = buildPricesMapV0(holdingsMap, targetWeightsEffective);
       const syms = Object.keys(pricesMap).sort();
       if (!syms.length) {
         setAutoPlanErrorForActive("No prices found to seed snapshots. Please fill in the Price Snapshot first.");
@@ -1454,18 +1421,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const baseCcy = typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : '';
       const constraints = buildRunConstraintsV0(mp);
       const holdingsMap = buildRunHoldingsMapV0(st.positions);
-      const byCode = new Map<string, FundLike>();
-      for (const f of funds ?? []) {
-        const code = String(f?.code ?? '').trim();
-        if (code) byCode.set(code, f);
-      }
-      const pricesMap: Record<string, number> = {};
-      const symbols = new Set<string>([...Object.keys(holdingsMap), ...targetWeightsEffective.map((t) => t.id)]);
-      for (const sym of symbols) {
-        const pick = resolveFundPriceV0({ symbol: sym, snapshot: priceSnapshot, fund: byCode.get(sym) });
-        const nav = pick.price;
-        if (nav && nav > 0) pricesMap[sym] = nav;
-      }
+      const pricesMap = buildPricesMapV0(holdingsMap, targetWeightsEffective);
       const valuesBySymbol: Record<string, number> = {};
       for (const [sym, qty] of Object.entries(holdingsMap)) {
         const px = toFiniteNumber((pricesMap as any)[sym]);
