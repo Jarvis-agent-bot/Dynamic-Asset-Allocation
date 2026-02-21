@@ -91,6 +91,7 @@ import { DaaDynamicRebalanceRunCompletionToastV0 } from './DaaDynamicRebalanceRu
 import { DaaOrderStatusTrackerV0 } from './DaaOrderStatusTrackerV0';
 import DaaRebalancePanelAutoPlanSectionV0 from './DaaRebalancePanelAutoPlanSectionV0';
 import DaaRebalancePanelWorkflowSectionsV0 from './DaaRebalancePanelWorkflowSectionsV0';
+import DaaRebalancePreflightModalV0 from './DaaRebalancePreflightModalV0';
 type FundLike = {
   code: string;
   name?: string;
@@ -2100,288 +2101,34 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     whatIfValuesBySymbol]);
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
-      {preflightOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Preflight checklist"
-          onClick={() => closePreflight()}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            background: 'rgba(0,0,0,0.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20}}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(760px, 100%)',
-              maxHeight: '80vh',
-              overflow: 'auto',
-              padding: 14,
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.10)',
-              background: 'rgba(0,0,0,0.92)'}}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' as const }}>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 14 }}>Preflight checklist</div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  Before <b>{preflightPendingOpts?.cashSweep ? 'cash sweep' : 'running rebalance'}</b> (dry run).
-                </div>
-              </div>
-              <button type="button" className="button secondary" onClick={() => closePreflight()} style={{ padding: '6px 10px' }}>
-                Close
-              </button>
-            </div>
-            <div
-              style={{
-                marginTop: 12,
-                padding: '10px 12px',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 12,
-                background: 'rgba(0,0,0,0.10)'}}
-            >
-              {(() => {
-                const ccy = baseCcy ? ` ${baseCcy}` : '';
-                const s = summarizeTradesForConfirmationV0(preflightPreviewOrders, { topN: 8 });
-                const w = preflightPreviewWhatIf;
-                const bits: string[] = [];
-                bits.push(`orders=${s.orderCount}`);
-                bits.push(`trades=${s.tradeCount} (buy=${s.buyCount}; sell=${s.sellCount})`);
-                if (Number.isFinite(s.buyNotional)) bits.push(`buy≈${s.buyNotional.toFixed(2)}${ccy}`);
-                if (Number.isFinite(s.sellNotional)) bits.push(`sell≈${s.sellNotional.toFixed(2)}${ccy}`);
-                if (Number.isFinite(s.netNotional)) bits.push(`net≈${s.netNotional.toFixed(2)}${ccy}`);
-                if (w && Number.isFinite(w.costTotal)) bits.push(`cost≈${w.costTotal.toFixed(2)}${ccy}`);
-                return (
-                  <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
-                    <div>
-                      Preview: <span style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{bits.join('; ')}</span>
-                    </div>
-                    {s.topTrades.length ? (
-                      <details style={{ marginTop: 8 }}>
-                        <summary style={{ cursor: 'pointer' }}>Trades summary (largest first)</summary>
-                        <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-                          {s.topTrades.map((t, idx) => (
-                            <div key={`${t.symbol}-${idx}`} style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>
-                              {t.side} {t.symbol} {t.notional.toFixed(2)}{ccy}
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    ) : null}
-                  </div>
-                );
-              })()}
-            </div>
-            <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>Prices</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    {preflightHasPriceWarnings
-                      ? `Warnings: missing=${priceDataWarningsV0.missing.length}; lastCloseFallback=${priceDataWarningsV0.lastClose.length}`
-                      : 'OK: all symbols have a usable price'}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.10)',
-                      background: preflightHasPriceWarnings ? 'rgba(245, 158, 11, 0.20)' : 'rgba(34, 197, 94, 0.18)',
-                      color: preflightHasPriceWarnings ? '#f59e0b' : '#22c55e',
-                      fontSize: 12,
-                      whiteSpace: 'nowrap'}}
-                  >
-                    {preflightHasPriceWarnings ? 'WARN' : 'OK'}
-                  </span>
-                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump('prices')} style={{ padding: '6px 10px' }}>
-                    Review
-                  </button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>Constraints / validation</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    {preRunHasBlockingV0
-                      ? `BLOCKERS detected (${preRunViolationsV0.filter((v) => v.level === 'blocker').length})`
-                      : preRunHasWarningsV0
-                        ? `Warnings detected (${preRunViolationsV0.filter((v) => v.level === 'warning').length})`
-                        : 'OK: no blockers/warnings'}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.10)',
-                      background: preRunHasBlockingV0
-                        ? 'rgba(239, 68, 68, 0.18)'
-                        : preRunHasWarningsV0
-                          ? 'rgba(245, 158, 11, 0.20)'
-                          : 'rgba(34, 197, 94, 0.18)',
-                      color: preRunHasBlockingV0 ? '#ef4444' : preRunHasWarningsV0 ? '#f59e0b' : '#22c55e',
-                      fontSize: 12,
-                      whiteSpace: 'nowrap'}}
-                  >
-                    {preRunHasBlockingV0 ? 'BLOCKER' : preRunHasWarningsV0 ? 'WARN' : 'OK'}
-                  </span>
-                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump('rebalance')} style={{ padding: '6px 10px' }}>
-                    Review
-                  </button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' as const }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>Cash / settlement assumptions</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    {preTradeCashCheck.blocking ? `BLOCKED: ${preTradeCashCheck.message}` : 'OK: pre-trade cash check passed'}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span
-                    style={{
-                      padding: '3px 8px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.10)',
-                      background: preTradeCashCheck.blocking ? 'rgba(239, 68, 68, 0.18)' : 'rgba(34, 197, 94, 0.18)',
-                      color: preTradeCashCheck.blocking ? '#ef4444' : '#22c55e',
-                      fontSize: 12,
-                      whiteSpace: 'nowrap'}}
-                  >
-                    {preTradeCashCheck.blocking ? 'BLOCKED' : 'OK'}
-                  </span>
-                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump('rebalance')} style={{ padding: '6px 10px' }}>
-                    Review
-                  </button>
-                </div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" as const }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>{preflightPendingOpts?.cashSweep ? "Cash sweep preview" : "Rebalance preview"}</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    {(() => {
-                      const ccy = baseCcy ? ` ${baseCcy}` : "";
-                      const w = preflightPreviewWhatIf;
-                      const n = preflightPreviewOrders.length;
-                      if (!n) return "No eligible orders under current inputs.";
-                      const bits: string[] = [];
-                      bits.push(`orders=${n}`);
-                      if (w && Number.isFinite(w.turnoverNotional)) bits.push(`turnover≈${w.turnoverNotional.toFixed(2)}${ccy}`);
-                      if (w && Number.isFinite(w.costTotal)) bits.push(`cost≈${w.costTotal.toFixed(2)}${ccy}`);
-                      if (w && Number.isFinite(w.feeTotal) && Number.isFinite(w.slippageTotal))
-                        bits.push(`(fee≈${w.feeTotal.toFixed(2)}${ccy}, slippage≈${w.slippageTotal.toFixed(2)}${ccy})`);
-                      return bits.join("; ");
-                    })()}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {(() => {
-                    const w = preflightPreviewWhatIf;
-                    const n = preflightPreviewOrders.length;
-                    const warn = (w?.warnings?.length ?? 0) > 0;
-                    const status = !n ? "EMPTY" : warn ? "WARN" : "OK";
-                    const bg =
-                      status === "WARN"
-                        ? "rgba(245, 158, 11, 0.20)"
-                        : status === "EMPTY"
-                          ? "rgba(100, 116, 139, 0.12)"
-                          : "rgba(34, 197, 94, 0.18)";
-                    const color = status === "WARN" ? "#f59e0b" : status === "EMPTY" ? "#64748b" : "#22c55e";
-                    return (
-                      <span
-                        style={{
-                          padding: "3px 8px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: bg,
-                          color,
-                          fontSize: 12,
-                          whiteSpace: "nowrap"}}
-                        title={warn ? (w?.warnings ?? []).slice(0, 4).join("; ") : undefined}
-                      >
-                        {status}
-                      </span>
-                    );
-                  })()}
-                  <button type="button" className="button secondary" onClick={() => closePreflightAndJump("rebalance")} style={{ padding: "6px 10px" }}>
-                    Review
-                  </button>
-                </div>
-              </div>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Execution mode: <b>dry run (paper)</b>. Dry run records orders to local execution log only.
-              </div>
-            </div>
-            <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.10)', paddingTop: 12 }}>
-              <div style={{ fontWeight: 800, fontSize: 13 }}>Acknowledge</div>
-              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={preflightAckPrices} onChange={(e) => setPreflightAckPrices(e.target.checked)} />
-                <span className="muted" style={{ fontSize: 12 }}>
-                  I verified target weights + prices. I accept any missing-price exclusions and last-close fallbacks.
-                </span>
-              </label>
-              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={preflightAckConstraints}
-                  onChange={(e) => setPreflightAckConstraints(e.target.checked)}
-                />
-                <span className="muted" style={{ fontSize: 12 }}>
-                  I reviewed constraints/validation (blockers/warnings) and understand the risk.
-                </span>
-              </label>
-              <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={preflightAckCash} onChange={(e) => setPreflightAckCash(e.target.checked)} />
-                <span className="muted" style={{ fontSize: 12 }}>
-                  I reviewed cash/settlement assumptions (sell proceeds routing + cashAfter) before executing.
-                </span>
-              </label>
-              {preRunHasBlockingV0 ? (
-                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={preflightOverrideBlockers}
-                    onChange={(e) => setPreflightOverrideBlockers(e.target.checked)}
-                  />
-                  <span style={{ fontSize: 12, color: 'var(--danger)' }}>
-                    Override blockers and proceed anyway (not recommended).
-                  </span>
-                </label>
-              ) : null}
-            </div>
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' as const }}>
-              <button type="button" className="button secondary" onClick={() => closePreflight()} style={{ padding: '6px 10px' }}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="button"
-                onClick={() => proceedFromPreflight()}
-                style={{ padding: '6px 10px' }}
-                disabled={!preflightCanProceed || paperRunLoading || !!executionBlockReason || !targetWeights.length}
-                title={
-                  executionBlockReason
-                    ? executionBlockReason
-                    : !preflightCanProceed
-                      ? 'Please acknowledge the checklist first.'
-                      : undefined
-                }
-              >
-                {preflightPendingOpts?.cashSweep ? 'Proceed & cash sweep' : 'Proceed & run rebalance'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            <DaaRebalancePreflightModalV0
+        open={preflightOpen}
+        pendingOpts={preflightPendingOpts}
+        baseCcy={baseCcy}
+        previewOrders={preflightPreviewOrders}
+        previewWhatIf={preflightPreviewWhatIf}
+        hasPriceWarnings={preflightHasPriceWarnings}
+        priceWarnings={priceDataWarningsV0}
+        hasBlocking={preRunHasBlockingV0}
+        hasWarnings={preRunHasWarningsV0}
+        violations={preRunViolationsV0}
+        preTradeCashCheck={preTradeCashCheck}
+        ackPrices={preflightAckPrices}
+        ackConstraints={preflightAckConstraints}
+        ackCash={preflightAckCash}
+        overrideBlockers={preflightOverrideBlockers}
+        canProceed={preflightCanProceed}
+        loading={paperRunLoading}
+        executionBlockReason={executionBlockReason}
+        targetWeightsCount={targetWeights.length}
+        onClose={closePreflight}
+        onJump={closePreflightAndJump}
+        onSetAckPrices={setPreflightAckPrices}
+        onSetAckConstraints={setPreflightAckConstraints}
+        onSetAckCash={setPreflightAckCash}
+        onSetOverrideBlockers={setPreflightOverrideBlockers}
+        onProceed={proceedFromPreflight}
+      />
       {safetyStopOpen ? (
         <div
           role="dialog"
