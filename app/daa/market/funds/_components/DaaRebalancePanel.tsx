@@ -1148,8 +1148,36 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       mime: 'text/csv;charset=utf-8'});
   }
 
-
-
+  function buildRunConstraintsV0(mpLike: any) {
+    const mpConstraints: any = mpLike?.constraints ?? {};
+    const constraints: any = { minNotional: 0.01 };
+    const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
+    const maxIn = toFiniteNumber(mpConstraints?.maxIn);
+    const maxOut = toFiniteNumber(mpConstraints?.maxOut);
+    if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
+    if (maxIn !== null) constraints.maxIn = maxIn;
+    if (maxOut !== null) constraints.maxOut = maxOut;
+    if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
+    return constraints;
+  }
+  function buildAutoPlanHoldingsMapV0(positions: any) {
+    const holdingsMap: Record<string, number> = {};
+    for (const [symRaw, p] of Object.entries(positions ?? {})) {
+      const sym = normalizePlanSymbol(symRaw);
+      const qty = toFiniteNumber((p as any)?.qty);
+      if (sym && !assetBlacklistSetV0.has(sym) && qty && qty > 0) holdingsMap[sym] = qty;
+    }
+    return holdingsMap;
+  }
+  function buildRunHoldingsMapV0(positions: any) {
+    const holdingsMap: Record<string, number> = {};
+    for (const [symRaw, p] of Object.entries(positions ?? {})) {
+      const sym = String(symRaw ?? '').trim();
+      const qty = toFiniteNumber((p as any)?.qty);
+      if (sym && !assetBlacklistSetV0.has(normalizePlanSymbol(sym)) && qty && qty > 0) holdingsMap[sym] = qty;
+    }
+    return holdingsMap;
+  }
 
   // buildAutoPlanMarkdownV0 lives in src/core/autoPlanMarkdownV0 so it can be unit-tested.
   async function doCopyAutoPlanV0() {
@@ -1234,15 +1262,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       return;
     }
     const st = loadPortfolioStateV1();
-    const holdingsMap: Record<string, number> = {};
-    for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
-      const sym = normalizePlanSymbol(symRaw);
-      if (!sym) continue;
-      if (assetBlacklistSetV0.has(sym)) continue;
-      const qty = toFiniteNumber((p as any)?.qty);
-      if (!qty || qty <= 0) continue;
-      holdingsMap[sym] = qty;
-    }
+    const holdingsMap = buildAutoPlanHoldingsMapV0(st.positions);
     const targetWeightsMap: Record<string, number> = {};
     for (const t of targetWeightsEffective) {
       const id = normalizePlanSymbol((t as any)?.id);
@@ -1259,15 +1279,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       return;
     }
     const mp: any = moneyPlan as any;
-    const mpConstraints: any = mp?.constraints ?? {};
-    const constraints: any = { minNotional: 0.01 };
-    const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
-    const maxIn = toFiniteNumber(mpConstraints?.maxIn);
-    const maxOut = toFiniteNumber(mpConstraints?.maxOut);
-    if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
-    if (maxIn !== null) constraints.maxIn = maxIn;
-    if (maxOut !== null) constraints.maxOut = maxOut;
-    if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
+    const constraints = buildRunConstraintsV0(mp);
     const cash0 = toFiniteNumber((st as any)?.cash) ?? 0;
     try {
       const res = backtestDriftRebalance({
@@ -1440,24 +1452,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       const st = loadPortfolioStateV1();
       const mp: any = moneyPlan as any;
       const baseCcy = typeof mp?.account?.baseCcy === 'string' ? String(mp.account.baseCcy) : '';
-      const mpConstraints: any = mp?.constraints ?? {};
-      const constraints: any = { minNotional: 0.01 };
-      const maxPositionPct = toFiniteNumber(mpConstraints?.maxPositionPct);
-      const maxIn = toFiniteNumber(mpConstraints?.maxIn);
-      const maxOut = toFiniteNumber(mpConstraints?.maxOut);
-      if (maxPositionPct !== null) constraints.maxPositionPct = maxPositionPct;
-      if (maxIn !== null) constraints.maxIn = maxIn;
-      if (maxOut !== null) constraints.maxOut = maxOut;
-      if (assetBlacklistV0.length) constraints.assetBlacklist = assetBlacklistV0;
-      const holdingsMap: Record<string, number> = {};
-      for (const [symRaw, p] of Object.entries(st.positions ?? {})) {
-        const sym = String(symRaw ?? '').trim();
-        if (!sym) continue;
-        if (assetBlacklistSetV0.has(normalizePlanSymbol(sym))) continue;
-        const qty = toFiniteNumber((p as any)?.qty);
-        if (!qty || qty <= 0) continue;
-        holdingsMap[sym] = qty;
-      }
+      const constraints = buildRunConstraintsV0(mp);
+      const holdingsMap = buildRunHoldingsMapV0(st.positions);
       const byCode = new Map<string, FundLike>();
       for (const f of funds ?? []) {
         const code = String(f?.code ?? '').trim();
