@@ -2320,31 +2320,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   {' '}· <b>Blockers</b>: {preRunViolationsV0.filter((v) => v.level === 'blocker').length}
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    style={{ padding: '4px 8px' }}
-                    onClick={() => jumpTo('target-weights')}
-                  >
-                    Fix targets
-                  </button>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    style={{ padding: '4px 8px' }}
-                    onClick={() => jumpTo('prices')}
-                  >
-                    Refresh prices
-                  </button>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    style={{ padding: '4px 8px' }}
-                    onClick={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})}
-                    disabled={paperRunLoading}
-                  >
-                    Open guided recovery
-                  </button>
+                  {([
+                    { key: 'targets', label: 'Fix targets', onClick: () => jumpTo('target-weights'), disabled: false },
+                    { key: 'prices', label: 'Refresh prices', onClick: () => jumpTo('prices'), disabled: false },
+                    { key: 'recovery', label: 'Open guided recovery', onClick: () => openPreflightForRun(paperRunLastConfirmedOpts ?? {}), disabled: paperRunLoading },
+                  ] as const).map((action) => (
+                    <button key={action.key} type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={action.onClick} disabled={action.disabled}>
+                      {action.label}
+                    </button>
+                  ))}
                   <button
                     type="button"
                     className="button secondary"
@@ -2431,35 +2415,23 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               <div style={{ marginTop: 10 }}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginBottom: 8 }}>
                   <span className="muted" style={{ fontSize: 12 }}>Quick filters:</span>
-                  <button
-                    type="button"
-                    className={driftFilter === 'all' ? 'button' : 'button secondary'}
-                    onClick={() => setDriftFilter('all')}
-                    style={{ padding: '4px 8px' }}
-                    aria-pressed={driftFilter === 'all'}
-                  >
-                    All <span className="muted">({driftCounts.total})</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={driftFilter === 'over' ? 'button' : 'button secondary'}
-                    onClick={() => setDriftFilter('over')}
-                    style={{ padding: '4px 8px' }}
-                    aria-pressed={driftFilter === 'over'}
-                    disabled={!driftCounts.over}
-                  >
-                    Over target <span className="muted">({driftCounts.over})</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={driftFilter === 'under' ? 'button' : 'button secondary'}
-                    onClick={() => setDriftFilter('under')}
-                    style={{ padding: '4px 8px' }}
-                    aria-pressed={driftFilter === 'under'}
-                    disabled={!driftCounts.under}
-                  >
-                    Under target <span className="muted">({driftCounts.under})</span>
-                  </button>
+                  {([
+                    { key: 'all', label: 'All', count: driftCounts.total, disabled: false },
+                    { key: 'over', label: 'Over target', count: driftCounts.over, disabled: !driftCounts.over },
+                    { key: 'under', label: 'Under target', count: driftCounts.under, disabled: !driftCounts.under },
+                  ] as const).map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={driftFilter === item.key ? 'button' : 'button secondary'}
+                      onClick={() => setDriftFilter(item.key)}
+                      style={{ padding: '4px 8px' }}
+                      aria-pressed={driftFilter === item.key}
+                      disabled={item.disabled}
+                    >
+                      {item.label} <span className="muted">({item.count})</span>
+                    </button>
+                  ))}
                   {(() => {
                     const pct = Math.max(0, driftThresholdPct * 100);
                     const policyPct = Math.max(0, policyDriftThresholdPct * 100);
@@ -2473,10 +2445,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       if (!Number.isFinite(v) || v < 0) return;
                       setWhatIfDriftThresholdPctV0(v / 100);
                     };
-                    const presets = [
-                      { id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' },
-                      { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' },
-                      { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' }] as const;
+                    const presets = [{ id: 'conservative', label: 'Conservative', pct100: 2.0, title: '2.00% (fewer rebalances)' }, { id: 'standard', label: 'Standard', pct100: 1.0, title: '1.00% (default-ish)' }, { id: 'aggressive', label: 'Aggressive', pct100: 0.5, title: '0.50% (more rebalances)' }] as const;
                     const activePresetId = presets.find((p) => Math.abs(pct - p.pct100) < 1e-6)?.id ?? null;
                     return (
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginLeft: 4 }}>
