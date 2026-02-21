@@ -43,6 +43,7 @@ import { summarizeTradesForConfirmationV0 } from '@/src/daa/tradesSummaryV0';
 import { estimateTaxLotsImpactV0 } from '@/src/daa/taxLotsImpactV0';
 import { scrollToIdAndFocusV0 } from '@/src/daa/focusV0';
 import { MARKET_FUNDS_QUICK_JUMPS_V0 } from '@/src/daa/keyboardFocusMapV0';
+import { buildTargetedDecisionTransparencyV0 } from '@/src/daa/targetedDecisionTransparencyV0';
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
@@ -83,6 +84,7 @@ import DaaDynamicRebalanceSkipHistoryV0 from './DaaDynamicRebalanceSkipHistoryV0
 import DaaDynamicRebalanceNotificationWatcherV0 from './DaaDynamicRebalanceNotificationWatcherV0';
 import DaaDynamicRebalanceNotificationsV0 from './DaaDynamicRebalanceNotificationsV0';
 import DaaDynamicRebalanceRunHistoryV0 from './DaaDynamicRebalanceRunHistoryV0';
+import DaaTargetedDecisionTransparencyCardV0 from './DaaTargetedDecisionTransparencyCardV0';
 import DaaRebalanceLogViewV0 from './DaaRebalanceLogViewV0';
 import DaaOkxSandboxBalancesV0 from './DaaOkxSandboxBalancesV0';
 import { DaaRebalanceRunProgressV0 } from './DaaRebalanceRunProgressV0';
@@ -1659,45 +1661,20 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
   }, [baseCcy, corePreview, maxTurnoverPct01V0, naiveOrdersDiagnostics, ordersPreviewSourceV0, preTradeCashCheck, rebalanceResp, whatIf]);
 
   const targetedDecisionTransparencyV0 = useMemo(() => {
-    if (!rebalanceTableRows.length) return null;
-
-    const row = rebalanceTableRows[0];
-    if (!row) return null;
-
-    const symbol = String(row.id ?? '').trim();
     const byCode = new Map<string, FundLike>();
     for (const f of funds ?? []) {
       const code = String(f?.code ?? '').trim();
       if (code) byCode.set(code, f);
     }
 
-    const pick = resolveFundPriceV0({ symbol, snapshot: priceSnapshot, fund: byCode.get(symbol) });
-    const driftAbs = Math.abs(Number.isFinite(row.deltaPct) ? row.deltaPct : 0);
-    const driftGateOpen = driftAbs >= driftThresholdPct;
-
-    const hasBlockingViolation = preRunViolationsV0.some((v: any) => String(v?.level ?? '') === 'blocker');
-
-    let rationale = 'Hold: drift is inside threshold.';
-    if (driftGateOpen && row.deltaPct > 0) rationale = 'Trim: current allocation is above target and drift gate is open.';
-    if (driftGateOpen && row.deltaPct < 0) rationale = 'Add: current allocation is below target and drift gate is open.';
-    if (preTradeCashCheck.blocking || liquiditySettlementGateV0.blocked) {
-      rationale += ' Order routing stays blocked until cash/settlement gate clears.';
-    }
-
-    return {
-      symbol,
-      label: String(row.label ?? symbol),
-      currentPct: row.currentPct,
-      targetPct: row.targetPct,
-      driftPct: row.deltaPct,
-      price: pick.price,
-      priceSource: pick.source,
-      policyGate: driftGateOpen,
-      liquidityGate: !liquiditySettlementGateV0.blocked,
-      cashGate: !preTradeCashCheck.blocking,
-      violationsGate: !hasBlockingViolation,
-      rationale,
-    };
+    return buildTargetedDecisionTransparencyV0({
+      rebalanceTableRows,
+      driftThresholdPct,
+      cashBlocked: preTradeCashCheck.blocking,
+      liquidityBlocked: liquiditySettlementGateV0.blocked,
+      hasBlockingViolation: preRunViolationsV0.some((v) => String(v?.level ?? '') === 'blocker'),
+      resolvePrice: (symbol) => resolveFundPriceV0({ symbol, snapshot: priceSnapshot, fund: byCode.get(symbol) }),
+    });
   }, [driftThresholdPct, funds, liquiditySettlementGateV0.blocked, preRunViolationsV0, preTradeCashCheck.blocking, priceSnapshot, rebalanceTableRows]);
 
   const whatIfRows = useMemo(() => {
@@ -3067,7 +3044,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               </div>
 
               <div className="muted" style={{ fontSize: 12 }}>
-                Execution mode: <b>{executionModeNormalized === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b>. Dry run records orders to local execution log only.
+                Execution mode: <b>dry run (paper)</b>. Dry run records orders to local execution log only.
               </div>
             </div>
 
@@ -3250,7 +3227,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       Dynamic schedule: <b>{scheduleEnabled ? 'enabled' : 'disabled'}</b>
                     </div>
                     <div>
-                      Execution: <b>{executionModeNormalized === 'live' ? 'live (not configured)' : 'dry run (paper)'}</b> — records to local execution log only.
+                      Execution: <b>dry run (paper)</b> — records to local execution log only.
                     </div>
                   </div>
                 );
@@ -4390,29 +4367,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         );
       })()}
 
-      {targetedDecisionTransparencyV0 ? (
-        <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
-          <div style={{ fontWeight: 800, fontSize: 13 }}>Decision transparency · targeted slice</div>
-          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Show the top-drift symbol with explicit inputs, gates, and rationale before action.</div>
-          <div style={{ marginTop: 6, fontSize: 11 }}>
-            <b>{targetedDecisionTransparencyV0.label}</b> ({targetedDecisionTransparencyV0.symbol})
-          </div>
-          <div style={{ marginTop: 6, display: 'grid', gap: 4, fontSize: 11 }}>
-            <div>
-              inputs: current <b>{(targetedDecisionTransparencyV0.currentPct * 100).toFixed(2)}%</b> · target <b>{(targetedDecisionTransparencyV0.targetPct * 100).toFixed(2)}%</b> · drift <b>{(targetedDecisionTransparencyV0.driftPct * 100).toFixed(2)}%</b>
-            </div>
-            <div>
-              Price source: <b>{targetedDecisionTransparencyV0.priceSource}</b> · price <b>{targetedDecisionTransparencyV0.price !== null ? targetedDecisionTransparencyV0.price.toFixed(4) : 'n/a'}</b>
-            </div>
-            <div>
-              gates: Policy drift gate <b>{targetedDecisionTransparencyV0.policyGate ? 'open' : 'hold'}</b> · Cash gate <b>{targetedDecisionTransparencyV0.cashGate ? 'pass' : 'blocked'}</b> · Liquidity gate <b>{targetedDecisionTransparencyV0.liquidityGate ? 'pass' : 'blocked'}</b> · Violations gate <b>{targetedDecisionTransparencyV0.violationsGate ? 'pass' : 'blocked'}</b>
-            </div>
-            <div>
-              rationale: {targetedDecisionTransparencyV0.rationale}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <DaaTargetedDecisionTransparencyCardV0 detail={targetedDecisionTransparencyV0} />
 
       {(() => {
         const recRows = rebalanceTableRows.slice(0, 10);

@@ -5,14 +5,19 @@ import { describe, expect, it } from "vitest";
 
 describe("mainline decision transparency targeted slice v0", () => {
   it("shows targeted-slice inputs, gates, and rationale in market/funds", () => {
-    const file = resolve(process.cwd(), "app/daa/market/funds/_components/DaaRebalancePanel.tsx");
-    const source = readFileSync(file, "utf8");
+    const panelFile = resolve(process.cwd(), "app/daa/market/funds/_components/DaaRebalancePanel.tsx");
+    const cardFile = resolve(process.cwd(), "app/daa/market/funds/_components/DaaTargetedDecisionTransparencyCardV0.tsx");
 
-    expect(source).toContain("Decision transparency · targeted slice");
-    expect(source).toContain("inputs: current");
-    expect(source).toContain("Price source:");
-    expect(source).toContain("gates: Policy drift gate");
-    expect(source).toContain("rationale:");
-    expect(source).toContain("targetedDecisionTransparencyV0");
+    const panelSource = readFileSync(panelFile, "utf8");
+    const cardSource = readFileSync(cardFile, "utf8");
+
+    expect(panelSource).toContain("DaaTargetedDecisionTransparencyCardV0");
+    expect(panelSource).toContain("targetedDecisionTransparencyV0");
+
+    expect(cardSource).toContain("Decision transparency · targeted slice");
+    expect(cardSource).toContain("inputs: current");
+    expect(cardSource).toContain("Price source:");
+    expect(cardSource).toContain("gates: Policy drift gate");
+    expect(cardSource).toContain("rationale:");
   });
 });
