@@ -24,9 +24,9 @@ import {
 } from './DaaRebalancePanel.storageV0';
 import { copyTextToClipboard } from '../../../copyToClipboard';
 import { pushDynamicRebalanceNotificationV0 } from '../../../dynamicRebalanceNotificationsClientV0';
-import { LS_LEGACY_HOLDINGS, loadPortfolioStateV1, recordPortfolioLastRebalance, savePortfolioStateV1 } from '../../../portfolioStateStore';
-import { loadPriceSnapshotV1, savePriceSnapshotV1 } from '../../../priceSnapshotStore';
-import { loadTargetWeightsV1, persistTargetWeightsV1 } from '../../../targetWeightsStore';
+import { loadPortfolioStateV1, recordPortfolioLastRebalance } from '../../../portfolioStateStore';
+import { loadPriceSnapshotV1 } from '../../../priceSnapshotStore';
+import { loadTargetWeightsV1 } from '../../../targetWeightsStore';
 import { loadRebalancePolicyV1 } from '../../../rebalancePolicyStore';
 import { loadRebalanceScheduleStateV1, persistRebalanceScheduleV1 } from '../../../rebalanceScheduleStore';
 import { loadExecutionModeV0, persistExecutionModeV0, type ExecutionModeV0 } from '../../../executionModeStore';
@@ -82,10 +82,6 @@ import { buildTargetedDecisionTransparencyV0 } from '@/src/daa/targetedDecisionT
 import { useDaaRuntime } from '../../../useDaaRuntime';
 import { useDaaWorkflowExportBundleV1 } from '../../../useDaaWorkflowExportBundleV1';
 import {
-  DAA_FUNDS_HUB_REFRESH_MARKET_DONE_EVENT,
-  DAA_FUNDS_HUB_REFRESH_MARKET_EVENT,
-  DAA_FUNDS_HUB_RUN_RECOMMENDATION_DONE_EVENT,
-  DAA_FUNDS_HUB_RUN_RECOMMENDATION_EVENT,
   LS_MONEY_PLAN,
   LS_REBALANCE_REQUEST,
   LS_REBALANCE_RESPONSE,
@@ -117,6 +113,11 @@ import DaaRebalanceWhatIfSectionV0 from './DaaRebalanceWhatIfSectionV0';
 import DaaRebalanceRunOutcomePanelV0 from './DaaRebalanceRunOutcomePanelV0';
 import DaaRebalancePanelHeaderActionsV0 from './DaaRebalancePanelHeaderActionsV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
+import {
+  applySampleScenarioV0 as applySampleScenarioWorkflowV0,
+  jumpToV0,
+  runDaaRefreshAndRecommendationV0 as runDaaRefreshAndRecommendationWorkflowV0,
+} from './DaaRebalancePanel.workflowHelpersV0';
 type FundLike = {
   code: string;
   name?: string;
@@ -413,106 +414,24 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       window.setTimeout(() => setCopyStatus('idle'), 2000);
     }
   }
-  async function applySampleScenarioV0() {
-    if (typeof window === 'undefined') return;
-    const ok = window.confirm(
-      'Load sample scenario v0? This will overwrite local demo data (portfolio, price snapshot, targetWeights) and clear last rebalance request/response.'
-    );
-    if (!ok) return;
-    try {
-      const at = new Date().toISOString();
-      const legacyHoldings: HoldingsLike = {
-        '005963': { share: 1000, cost: 1.2 },
-        '007300': { share: 500, cost: 1.0 }};
-      // Keep the legacy `holdings` key in sync so the Market/Funds page and older exports keep working.
-      window.localStorage.setItem(LS_LEGACY_HOLDINGS, JSON.stringify(legacyHoldings));
-      savePortfolioStateV1({
-        schemaVersion: 1,
-        updatedAt: at,
-        cash: 1000,
-        positions: {
-          '005963': { qty: 1000, cost: 1.2 },
-          '007300': { qty: 500, cost: 1.0 }}});
-      savePriceSnapshotV1({
-        schemaVersion: 1,
-        updatedAt: at,
-        prices: {
-          '005963': { price: 1.234 },
-          '007300': { price: 1.052 },
-          '000001': { price: 1.4 }}});
-      persistTargetWeightsV1([
-        { id: '005963', label: '005963', targetPct: 0.4 },
-        { id: '007300', label: '007300', targetPct: 0.3 },
-        { id: '000001', label: '000001', targetPct: 0.3 }]);
-      // Clear stale outputs so the demo reflects the newly loaded scenario.
-      window.localStorage.removeItem(LS_REBALANCE_REQUEST);
-      window.localStorage.removeItem(LS_REBALANCE_RESPONSE);
-      window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
-      setSampleStatus('ok');
-      window.setTimeout(() => setSampleStatus('idle'), 1200);
-      setOpen(true);
-      window.setTimeout(() => scrollToId('rebalance'), 50);
-    } catch {
-      setSampleStatus('error');
-      window.setTimeout(() => setSampleStatus('idle'), 2000);
-    }
+  async function applySampleScenarioV0Handler() {
+    await applySampleScenarioWorkflowV0({ setSampleStatus, setOpen });
   }
   const nextJump = useMemo(() => {
     if (rt.nextStepId === null) return { targetId: 'export', buttonText: '下一步：去导出' };
     return { targetId: `step${rt.nextStepId}`, buttonText: `下一步：去 Step${rt.nextStepId}` };
   }, [rt.nextStepId]);
   function jumpTo(targetId: string) {
-    // Ensure the panel is open before scrolling.
-    setOpen(true);
-    window.setTimeout(() => scrollToId(targetId), 50);
+    jumpToV0(setOpen, targetId);
   }
-  function waitForRunDaaStepV0(eventName: string, timeoutMs: number) {
-    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      let finished = false;
-      const onDone = (ev: Event) => {
-        if (finished) return;
-        finished = true;
-        window.clearTimeout(timer);
-        window.removeEventListener(eventName, onDone as EventListener);
-        const detail = (ev as CustomEvent<{ ok: boolean; error?: string }>).detail;
-        resolve(detail && typeof detail === 'object' ? detail : { ok: true });
-      };
-      const timer = window.setTimeout(() => {
-        if (finished) return;
-        finished = true;
-        window.removeEventListener(eventName, onDone as EventListener);
-        resolve({ ok: false, error: 'timeout' });
-      }, timeoutMs);
-      window.addEventListener(eventName, onDone as EventListener);
+  async function runDaaRefreshAndRecommendationV0Handler() {
+    await runDaaRefreshAndRecommendationWorkflowV0({
+      runDaaStatus,
+      setOpen,
+      setRunDaaStatus,
+      setRunDaaStatusText,
+      jumpTo,
     });
-  }
-  async function runDaaRefreshAndRecommendationV0() {
-    if (runDaaStatus === 'running') return;
-    setOpen(true);
-    setRunDaaStatus('running');
-    setRunDaaStatusText('Refreshing Step2 market sources...');
-    window.dispatchEvent(new CustomEvent(DAA_FUNDS_HUB_REFRESH_MARKET_EVENT));
-    const refreshResult = await waitForRunDaaStepV0(DAA_FUNDS_HUB_REFRESH_MARKET_DONE_EVENT, 45_000);
-    if (!refreshResult.ok) {
-      setRunDaaStatus('error');
-      setRunDaaStatusText(`Step2 refresh failed: ${refreshResult.error ?? 'unknown error'}`);
-      return;
-    }
-    setRunDaaStatusText('Generating Step4 recommendation...');
-    window.dispatchEvent(new CustomEvent(DAA_FUNDS_HUB_RUN_RECOMMENDATION_EVENT));
-    const runResult = await waitForRunDaaStepV0(DAA_FUNDS_HUB_RUN_RECOMMENDATION_DONE_EVENT, 45_000);
-    if (!runResult.ok) {
-      setRunDaaStatus('error');
-      setRunDaaStatusText(`Step4 recommendation failed: ${runResult.error ?? 'unknown error'}`);
-      return;
-    }
-    setRunDaaStatus('ok');
-    setRunDaaStatusText('Run DAA completed: Step2 refreshed and Step4 recommendation updated.');
-    jumpTo('step4');
-    window.setTimeout(() => {
-      setRunDaaStatus('idle');
-      setRunDaaStatusText('');
-    }, 3000);
   }
   const headline = useMemo(() => {
     const readyBits = [rt.marketEventCount ? 'events' : null, rt.hasRecommendation ? 'recommendation' : null, rt.hasHumanProfile ? 'human' : null].filter(Boolean);
@@ -2067,14 +1986,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         driftOverviewV0={driftOverviewV0}
         rev={rev}
         jumpTo={jumpTo}
-        runDaaRefreshAndRecommendationV0={runDaaRefreshAndRecommendationV0}
+        runDaaRefreshAndRecommendationV0={runDaaRefreshAndRecommendationV0Handler}
         runDaaStatus={runDaaStatus}
         openPreflightForRun={openPreflightForRun}
         paperRunLoading={paperRunLoading}
         targetWeightsLength={targetWeights.length}
         executionBlockReason={executionBlockReason}
         nextJump={nextJump}
-        applySampleScenarioV0={applySampleScenarioV0}
+        applySampleScenarioV0={applySampleScenarioV0Handler}
         sampleStatus={sampleStatus}
         doCopyBundle={doCopyBundle}
         copyStatus={copyStatus}
