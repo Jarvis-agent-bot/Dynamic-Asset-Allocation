@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LS_AUTO_PLAN_INPUT,
   LS_AUTO_PLAN_RESULT,
@@ -1848,10 +1848,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     preflightAckConstraints &&
     preflightAckCash &&
     (!preRunHasBlockingV0 || preflightOverrideBlockers);
-  const preflightPreviewOrders = useMemo(() => {
-    // Preflight should preview the *actual* orders we're about to execute.
-    // For cashSweep we recompute with thresholdPct=0 + cashSweepToTarget enabled.
-    if (!preflightPendingOpts?.cashSweep) return effectiveOrders;
+  const previewOrdersForOpts = useCallback((pendingCashSweep: boolean) => {
+    // Preview should mirror the actual execution request; cash-sweep forces threshold=0.
+    if (!pendingCashSweep) return effectiveOrders;
     try {
       if (!corePreview?.req) return effectiveOrders;
       const reqSweep: RebalanceCoreRequest = {
@@ -1864,64 +1863,30 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     } catch {
       return effectiveOrders;
     }
-  }, [corePreview?.req, effectiveOrders, preflightPendingOpts?.cashSweep]);
-  const preflightPreviewWhatIf = useMemo(() => {
-    if (!preflightPreviewOrders.length) return null;
+  }, [corePreview?.req, effectiveOrders]);
+  const buildPreviewWhatIf = useCallback((orders: typeof effectiveOrders) => {
+    if (!orders.length) return null;
     return simulateRebalanceWhatIfV0({
       cashStart: toFiniteNumber(portfolioCash) ?? 0,
       valuesBySymbol: whatIfValuesBySymbol,
       targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
-      orders: preflightPreviewOrders
-        .filter((o) => o && o.symbol && (o.side === "BUY" || o.side === "SELL") && Number.isFinite(o.notional) && o.notional > 0)
-        .map((o) => ({ symbol: o.symbol, side: o.side as "BUY" | "SELL", notional: o.notional })),
+      orders: orders
+        .filter((o) => o && o.symbol && (o.side === 'BUY' || o.side === 'SELL') && Number.isFinite(o.notional) && o.notional > 0)
+        .map((o) => ({ symbol: o.symbol, side: o.side as 'BUY' | 'SELL', notional: o.notional })),
       feeBps: whatIfFeeBps,
       slippageBps: whatIfSlippageBpsUsed,
       labelsBySymbol: whatIfLabelsBySymbol});
   }, [
     portfolioCash,
-    preflightPreviewOrders,
     whatIfFeeBps,
     whatIfLabelsBySymbol,
     whatIfSlippageBpsUsed,
     whatIfTargetWeightsPostBySymbol,
     whatIfValuesBySymbol]);
-  const safetyStopPreviewOrders = useMemo(() => {
-    // Safety-stop should preview the *actual* orders we're about to execute.
-    // For cashSweep we recompute with thresholdPct=0 + cashSweepToTarget enabled.
-    if (!safetyStopPendingOpts?.cashSweep) return effectiveOrders;
-    try {
-      if (!corePreview?.req) return effectiveOrders;
-      const reqSweep: RebalanceCoreRequest = {
-        ...corePreview.req,
-        policy: {
-          ...((corePreview.req as any).policy ?? {}),
-          thresholdPct: 0,
-          cashSweepToTarget: true}};
-      return normalizeOrders(rebalanceCore(reqSweep).orders);
-    } catch {
-      return effectiveOrders;
-    }
-  }, [corePreview?.req, effectiveOrders, safetyStopPendingOpts?.cashSweep]);
-  const safetyStopPreviewWhatIf = useMemo(() => {
-    if (!safetyStopPreviewOrders.length) return null;
-    return simulateRebalanceWhatIfV0({
-      cashStart: toFiniteNumber(portfolioCash) ?? 0,
-      valuesBySymbol: whatIfValuesBySymbol,
-      targetWeightsBySymbol: whatIfTargetWeightsPostBySymbol,
-      orders: safetyStopPreviewOrders
-        .filter((o) => o && o.symbol && (o.side === "BUY" || o.side === "SELL") && Number.isFinite(o.notional) && o.notional > 0)
-        .map((o) => ({ symbol: o.symbol, side: o.side as "BUY" | "SELL", notional: o.notional })),
-      feeBps: whatIfFeeBps,
-      slippageBps: whatIfSlippageBpsUsed,
-      labelsBySymbol: whatIfLabelsBySymbol});
-  }, [
-    portfolioCash,
-    safetyStopPreviewOrders,
-    whatIfFeeBps,
-    whatIfLabelsBySymbol,
-    whatIfSlippageBpsUsed,
-    whatIfTargetWeightsPostBySymbol,
-    whatIfValuesBySymbol]);
+  const preflightPreviewOrders = useMemo(() => previewOrdersForOpts(!!preflightPendingOpts?.cashSweep), [previewOrdersForOpts, preflightPendingOpts?.cashSweep]);
+  const preflightPreviewWhatIf = useMemo(() => buildPreviewWhatIf(preflightPreviewOrders), [buildPreviewWhatIf, preflightPreviewOrders]);
+  const safetyStopPreviewOrders = useMemo(() => previewOrdersForOpts(!!safetyStopPendingOpts?.cashSweep), [previewOrdersForOpts, safetyStopPendingOpts?.cashSweep]);
+  const safetyStopPreviewWhatIf = useMemo(() => buildPreviewWhatIf(safetyStopPreviewOrders), [buildPreviewWhatIf, safetyStopPreviewOrders]);
   return (
     <div id="daa-panel" className="col-12 glass card" role="region" aria-label="DAA Workflow 面板">
             <DaaRebalancePreflightModalV0
