@@ -1,3 +1,5 @@
+import { calibrateQatFeedbackLoopV0 } from '@/src/daa/qatFeedbackCalibrationLoopV0';
+
 type RebalanceRowV0 = {
   id: string;
   targetPct: number;
@@ -123,6 +125,43 @@ export default function DaaRebalancePanelExtraInsightsV0({
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
                 Open W_qat order routing
               </button>
+            </div>
+          </div>
+        );
+      })()}
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 8);
+        if (!rows.length) return null;
+        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => warningSymV0(x)));
+        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => warningSymV0(x)));
+        const qatRows = rows.map((r) => {
+          const id = String(r.id ?? '').trim();
+          const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
+          const hMultiplier = Math.max(0.75, 1 - Math.min(0.2, driftAbs * 1.2));
+          const aiBias = missingSet.has(id) ? 0.85 : staleSet.has(id) ? 0.92 : 1.05;
+          const wQatPct = Math.max(0, r.targetPct * hMultiplier * aiBias);
+          return { id, targetPct: Math.max(0, r.targetPct), wQatPct };
+        });
+        const blockerCount = preRunViolationsV0.filter((v) => v.level === 'blocker').length;
+        const warningCount = preRunViolationsV0.filter((v) => v.level === 'warning').length;
+        const feedbackSignal = Math.max(-1, Math.min(1, (warningCount - blockerCount) / 5));
+        const calibratedRows = calibrateQatFeedbackLoopV0(qatRows, feedbackSignal);
+        const avgImpact = calibratedRows.length
+          ? calibratedRows.reduce((sum, r) => sum + r.impactPct, 0) / calibratedRows.length
+          : 0;
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>W_qat feedback calibration loop</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Operator-facing before/after W_qat impact from closed-loop feedback calibration.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              feedback signal=<b>{feedbackSignal.toFixed(2)}</b> · avg impact=<b>{(avgImpact * 100).toFixed(2)}%</b>
+            </div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {calibratedRows.slice(0, 5).map((r) => (
+                <div key={r.id} style={{ fontSize: 11 }}>
+                  {r.id}: before={(r.beforeWQatPct * 100).toFixed(2)}% {'->'} after=<b>{(r.afterWQatPct * 100).toFixed(2)}%</b> (impact {(r.impactPct * 100).toFixed(2)}%)
+                </div>
+              ))}
             </div>
           </div>
         );
