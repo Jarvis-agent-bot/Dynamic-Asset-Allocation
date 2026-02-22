@@ -14,6 +14,7 @@ export type IntegratedDecisionWorkbenchRowV0 = {
   thresholdStatus: 'inside' | 'breach';
   suggestion: 'buy' | 'sell' | 'hold';
   riskConstraint: 'ok' | 'blocked';
+  constraintReason: string;
 };
 
 export function buildIntegratedDecisionWorkbenchRowV0(input: IntegratedDecisionWorkbenchInputV0): IntegratedDecisionWorkbenchRowV0 {
@@ -38,11 +39,20 @@ export function buildIntegratedDecisionWorkbenchRowV0(input: IntegratedDecisionW
     suggestion = 'hold';
   }
 
+  const constraintReason = input.hasGuardrailBlocker
+    ? 'guardrail blocker'
+    : input.isMissingPrice
+      ? 'missing price'
+      : input.isStalePrice
+        ? 'stale price'
+        : 'clear';
+
   return {
     id: String(input.id || '').trim(),
     humanTag,
     thresholdStatus,
     suggestion,
     riskConstraint,
+    constraintReason,
   };
 }

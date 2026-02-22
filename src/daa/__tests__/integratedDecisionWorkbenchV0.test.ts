@@ -19,6 +19,23 @@ describe('uiux-daa-integrated-decision-workbench-v0', () => {
     expect(result.thresholdStatus).toBe('breach');
     expect(result.suggestion).toBe('buy');
     expect(result.riskConstraint).toBe('ok');
+    expect(result.constraintReason).toBe('clear');
+  });
+
+  it('uses explicit risk constraint reason when blocked', () => {
+    const result = buildIntegratedDecisionWorkbenchRowV0({
+      id: 'BBB',
+      targetPct: 0.15,
+      deltaPct: 0.04,
+      thresholdPct: 0.02,
+      isMissingPrice: true,
+      isStalePrice: false,
+      hasGuardrailBlocker: false,
+    });
+
+    expect(result.riskConstraint).toBe('blocked');
+    expect(result.suggestion).toBe('hold');
+    expect(result.constraintReason).toBe('missing price');
   });
 
   it('shows integrated decision workbench card in extra insights', () => {
@@ -30,6 +47,8 @@ describe('uiux-daa-integrated-decision-workbench-v0', () => {
     expect(source).toContain("import { buildIntegratedDecisionWorkbenchRowV0 } from '@/src/daa/integratedDecisionWorkbenchV0';");
     expect(source).toContain('Integrated DAA decision workbench');
     expect(source).toContain('Human tag, threshold status, buy/sell suggestion, and risk constraint are shown on one screen.');
+    expect(source).toContain('breaches=<b>{breachCount}</b> · blocked=<b>{blockedCount}</b> · ready=<b>{Math.max(0, workbenchRows.length - blockedCount)}</b>');
     expect(source).toContain('tag=<b>{r.humanTag}</b> · threshold=<b>{r.thresholdStatus}</b> · suggestion=<b>{r.suggestion}</b> · risk=<b');
+    expect(source).toContain('({r.constraintReason})');
   });
 });
