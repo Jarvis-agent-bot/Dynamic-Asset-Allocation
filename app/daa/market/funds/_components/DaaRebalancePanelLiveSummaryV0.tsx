@@ -27,6 +27,7 @@ export default function DaaRebalancePanelLiveSummaryV0(props: DaaRebalancePanelL
           <div style={{ marginTop: 4, fontSize: 11 }}>Newest entries appear first.</div>
           <div style={{ marginTop: 2, fontSize: 11 }}>Showing {liveTimelineV0.length} recent events.</div>
           <div style={{ marginTop: 2, fontSize: 11 }}>Each event captures stage, timestamp, and status.</div>
+          <div style={{ marginTop: 2, fontSize: 11 }}>Use this stream to confirm progress before staging orders.</div>
           <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
             {liveTimelineV0.map((e) => (
               <div key={e.id} style={{ fontSize: 11, borderLeft: `2px solid ${e.level === 'error' ? 'var(--danger)' : e.level === 'ok' ? '#16a34a' : 'rgba(127,127,127,0.6)'}`, paddingLeft: 8 }}>
