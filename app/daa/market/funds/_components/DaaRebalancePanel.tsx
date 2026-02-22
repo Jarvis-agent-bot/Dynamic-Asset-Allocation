@@ -182,8 +182,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       window.removeEventListener('storage', onData);
     };
   }, []);
-  // timeline handlers moved into useLiveTimelineV0
-  // timeline side effects moved into useLiveTimelineV0
+  // timeline handlers + side effects moved into useLiveTimelineV0
   useEffect(() => {
     // Persist the latest drift input(s) so users can refresh and keep the plan editor state.
     saveJsonToLs(LS_AUTO_PLAN_INPUT, { schemaVersion: 2, active: autoPlanScenario, a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA }, b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB } });
