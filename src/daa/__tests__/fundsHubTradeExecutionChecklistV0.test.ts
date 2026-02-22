@@ -9,7 +9,7 @@ function readRepoFile(relPath: string): string {
 
 describe("funds hub trade execution checklist v0", () => {
   it("keeps blocker-aware next action guidance in preflight panel", () => {
-    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanel.tsx");
+    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalanceOpsOverviewCardsV0.tsx");
 
     expect(source).toContain("Next action: Set target weights");
     expect(source).toContain("Next action: Resolve price warnings");

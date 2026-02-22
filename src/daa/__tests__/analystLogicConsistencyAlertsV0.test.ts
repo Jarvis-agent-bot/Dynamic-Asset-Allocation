@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 describe('feature-analyst-logic-consistency-alerts-v0', () => {
   it('adds a user-visible divergence alert between analyst thesis and environment regime', () => {
-    const file = resolve(process.cwd(), 'app/daa/market/funds/_components/DaaRebalancePanel.tsx');
+    const file = resolve(process.cwd(), 'app/daa/market/funds/_components/DaaRebalancePanelMaintainabilityCardsV0.tsx');
     const source = readFileSync(file, 'utf8');
 
     expect(source).toContain('Analyst logic-consistency alerts');
