@@ -1,3 +1,5 @@
+import DaaRebalanceRunDebuggerSummaryV0 from './DaaRebalanceRunDebuggerSummaryV0';
+
 type DaaRebalancePanelRunDebuggerV0Props = {
   paperRunLoading: boolean;
   paperRunError: string | null;
@@ -17,7 +19,7 @@ export default function DaaRebalancePanelRunDebuggerV0(props: DaaRebalancePanelR
 
   return (
     <details style={{ marginTop: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(0,0,0,0.1)' }}>
-      <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Run debugger · {runStatus}</summary>
+      <DaaRebalanceRunDebuggerSummaryV0 runStatus={runStatus} blockerCount={blockerCount} />
       <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
         <div className="muted" style={{ fontSize: 11 }}>
           One-click diagnostics + guided recovery actions for the current run state.
