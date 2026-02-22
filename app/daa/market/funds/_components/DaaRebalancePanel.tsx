@@ -84,7 +84,6 @@ function useLiveTimelineV0(params: {
   const lastPaperRunLoadingRef = useRef(false);
   const lastPaperRunRecordedAtRef = useRef<string | null>(null);
   const lastPaperRunErrorRef = useRef<string | null>(null);
-
   const pushLiveTimelineV0 = useCallback((entry: Omit<LiveTimelineEntryV0, 'id' | 'at'>) => {
     setLiveTimelineV0((prev) => [{ id: `${Date.now()}-${Math.random().toString(16).slice(2, 7)}`, at: new Date().toISOString(), ...entry }, ...prev].slice(0, 20));
   }, []);
