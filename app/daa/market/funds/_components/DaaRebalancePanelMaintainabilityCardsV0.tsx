@@ -1,6 +1,7 @@
 import { buildPriceWarningSymbolSetV0 } from '@/src/daa/priceWarningSymbolsV0';
 import { deriveScenarioRoutingV0 } from '@/src/daa/scenarioRoutingV0';
 import { getBuyRecommendationGateV0 } from '@/src/daa/buyRecommendationGateV0';
+import { runFxStressSimulatorV0 } from '@/src/daa/fxStressSimulatorV0';
 
 type RebalanceRowLike = {
   id?: string;
@@ -105,6 +106,49 @@ export default function DaaRebalancePanelMaintainabilityCardsV0({
               {(['A', 'H', 'US', 'Other'] as const).map((k) => (
                 <div key={k} style={{ fontSize: 11 }}>
                   {k}: exposure≈<b>{bucket[k].value.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''} · max|drift|≈<b>{(bucket[k].drift * 100).toFixed(2)}%</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 40);
+        if (!rows.length) return null;
+        const bucket = {
+          A: 0,
+          H: 0,
+          US: 0,
+          Other: 0,
+        };
+        for (const r of rows) {
+          const id = String(r.id ?? '').trim();
+          const vRaw = Number(r.currentValue ?? Number.NaN);
+          const v = Number.isFinite(vRaw) ? vRaw : 0;
+          const key = /^\d{6}$/.test(id) ? 'A' : /^HK/i.test(id) || /^0\d{4}$/.test(id) ? 'H' : /^[A-Z]{1,5}$/.test(id) ? 'US' : 'Other';
+          bucket[key as 'A' | 'H' | 'US' | 'Other'] += v;
+        }
+        const scenario = { cnyShockPct: -0.02, hkdShockPct: -0.01, usdShockPct: 0.015 };
+        const fxStress = runFxStressSimulatorV0(
+          [
+            { book: 'A', exposure: bucket.A },
+            { book: 'H', exposure: bucket.H },
+            { book: 'US', exposure: bucket.US },
+            { book: 'Other', exposure: bucket.Other },
+          ],
+          scenario,
+        );
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Cross-market FX stress simulator</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>A/H/US exposure sensitivity under a shared FX shock scenario.</div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              scenario: CNY {scenario.cnyShockPct >= 0 ? '+' : ''}{(scenario.cnyShockPct * 100).toFixed(1)}% · HKD {scenario.hkdShockPct >= 0 ? '+' : ''}{(scenario.hkdShockPct * 100).toFixed(1)}% · USD {scenario.usdShockPct >= 0 ? '+' : ''}{(scenario.usdShockPct * 100).toFixed(1)}%
+            </div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {fxStress.map((r) => (
+                <div key={r.book} style={{ fontSize: 11 }}>
+                  {r.book}: base=<b>{r.baseExposure.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''} {'->'} stressed=<b>{r.stressedExposure.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''} · impact=<b style={{ color: r.impact >= 0 ? '#16a34a' : 'var(--danger)' }}>{r.impact >= 0 ? '+' : ''}{r.impact.toFixed(2)}</b>
                 </div>
               ))}
             </div>
