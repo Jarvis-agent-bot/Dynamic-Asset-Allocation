@@ -67,6 +67,7 @@ import DaaRebalanceDriftBreachesSummaryV0 from './DaaRebalanceDriftBreachesSumma
 import DaaRebalanceDriftActionSuggestionsV0 from './DaaRebalanceDriftActionSuggestionsV0';
 import DaaRebalanceDriftTriggerSummaryV0 from './DaaRebalanceDriftTriggerSummaryV0';
 import DaaRebalancePreRunNoBlockersV0 from './DaaRebalancePreRunNoBlockersV0';
+import DaaRebalancePreRunViolationItemV0 from './DaaRebalancePreRunViolationItemV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
 import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintainabilityCardsV0';
@@ -1386,24 +1387,15 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 {preRunViolationsV0.some((v) => v.level !== 'info') ? (
                   preRunViolationsV0
                     .filter((v) => v.level !== 'info')
-                    .map((v, idx) => {
-                      const color = v.level === 'blocker' ? 'var(--danger)' : '#f59e0b';
-                      return (
-                        <div key={`${v.kind}-${idx}`} style={{ marginTop: 8 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color }}>
-                            {v.level.toUpperCase()}: {v.title}
-                          </div>
-                          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                            {v.details.join(' ')}
-                          </div>
-                          {v.suggestion ? (
-                            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                              Suggestion: {v.suggestion}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })
+                    .map((v, idx) => (
+                      <DaaRebalancePreRunViolationItemV0
+                        key={`${v.kind}-${idx}`}
+                        level={v.level}
+                        title={v.title}
+                        details={v.details}
+                        suggestion={v.suggestion}
+                      />
+                    ))
                 ) : (
                   <DaaRebalancePreRunNoBlockersV0
                     warningCount={preRunViolationsV0.filter((v) => v.level === 'warning').length}
