@@ -58,6 +58,7 @@ import DaaRebalanceWhatIfSectionV0 from './DaaRebalanceWhatIfSectionV0';
 import DaaRebalanceRunOutcomePanelV0 from './DaaRebalanceRunOutcomePanelV0';
 import DaaRebalancePanelHeaderActionsV0 from './DaaRebalancePanelHeaderActionsV0';
 import DaaRebalancePanelLiveSummaryV0 from './DaaRebalancePanelLiveSummaryV0';
+import DaaRebalancePanelRunDebuggerV0 from './DaaRebalancePanelRunDebuggerV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
 import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintainabilityCardsV0';
@@ -1464,51 +1465,30 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
               </div>
             ) : null}
             <DaaRebalanceRunOutcomePanelV0 baseCcy={baseCcy} paperRunRecordedAt={paperRunRecordedAt} paperRunExecutionMode={paperRunExecutionMode} paperRunPostSummary={paperRunPostSummary} paperRunSummary={paperRunSummary} paperRunHealthcheck={paperRunHealthcheck} paperRunError={paperRunError} paperRunLoading={paperRunLoading} paperRunLastConfirmedOpts={paperRunLastConfirmedOpts} paperRunFailureDetails={paperRunFailureDetails} onRetry={() => { if (!paperRunLastConfirmedOpts) return; void runPaperRebalanceCore(paperRunLastConfirmedOpts); }} onReviewRetry={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})} onRunGuidedRecovery={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})} onJumpHistory={() => jumpTo('history-audit')} />
-            <details style={{ marginTop: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(0,0,0,0.1)' }}>
-              <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Run debugger</summary>
-              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
-                <div className="muted" style={{ fontSize: 11 }}>
-                  One-click diagnostics + guided recovery actions for the current run state.
-                </div>
-                <div style={{ fontSize: 11 }}>
-                  <b>Status</b>: {paperRunLoading ? 'running' : paperRunError ? 'error' : paperRunRecordedAt ? 'recorded' : 'idle'}
-                  {' '}· <b>Targets</b>: {targetWeights.length ? 'ready' : 'missing'}
-                  {' '}· <b>Cash</b>: {preTradeCashCheck.blocking ? 'blocked' : 'ok'}
-                  {' '}· <b>Blockers</b>: {preRunViolationsV0.filter((v) => v.level === 'blocker').length}
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                  {([
-                    { key: 'targets', label: 'Fix targets', onClick: () => jumpTo('target-weights'), disabled: false },
-                    { key: 'prices', label: 'Refresh prices', onClick: () => jumpTo('prices'), disabled: false },
-                    { key: 'recovery', label: 'Open guided recovery', onClick: () => openPreflightForRun(paperRunLastConfirmedOpts ?? {}), disabled: paperRunLoading },
-                  ] as const).map((action) => (
-                    <button key={action.key} type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={action.onClick} disabled={action.disabled}>
-                      {action.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="button secondary"
-                    style={{ padding: '4px 8px' }}
-                    onClick={() => {
-                      const debug = {
-                        at: new Date().toISOString(),
-                        paperRunLoading,
-                        paperRunError,
-                        paperRunFailureDetails,
-                        preTradeCashCheck,
-                        blockers: preRunViolationsV0.filter((v) => v.level === 'blocker').map((v) => v.title),
-                      };
-                      void copyTextToClipboard(pretty(debug)).catch(() => {
-                        // ignore
-                      });
-                    }}
-                  >
-                    Copy diagnostics
-                  </button>
-                </div>
-              </div>
-            </details>
+            <DaaRebalancePanelRunDebuggerV0
+              paperRunLoading={paperRunLoading}
+              paperRunError={paperRunError}
+              paperRunRecordedAt={paperRunRecordedAt}
+              targetWeightsReady={targetWeights.length > 0}
+              cashBlocked={preTradeCashCheck.blocking}
+              blockerCount={preRunViolationsV0.filter((v) => v.level === 'blocker').length}
+              onFixTargets={() => jumpTo('target-weights')}
+              onRefreshPrices={() => jumpTo('prices')}
+              onOpenGuidedRecovery={() => openPreflightForRun(paperRunLastConfirmedOpts ?? {})}
+              onCopyDiagnostics={() => {
+                const debug = {
+                  at: new Date().toISOString(),
+                  paperRunLoading,
+                  paperRunError,
+                  paperRunFailureDetails,
+                  preTradeCashCheck,
+                  blockers: preRunViolationsV0.filter((v) => v.level === 'blocker').map((v) => v.title),
+                };
+                void copyTextToClipboard(pretty(debug)).catch(() => {
+                  // ignore
+                });
+              }}
+            />
             {paperRunDriftAlert ? (
               <div
                 style={{
