@@ -2,6 +2,7 @@ import { calibrateQatFeedbackLoopV0 } from '@/src/daa/qatFeedbackCalibrationLoop
 import { buildGuardrailBreachExplainerTimelineV0 } from '@/src/daa/guardrailBreachExplainerTimelineV0';
 import { scoreHumanFactorLogicConsistencyV0 } from '@/src/daa/humanFactorLogicConsistencyScoringV0';
 import { runQatDecisionMatrixEngineV0 } from '@/src/daa/qatDecisionMatrixEngineV0';
+import { buildIntegratedDecisionWorkbenchRowV0 } from '@/src/daa/integratedDecisionWorkbenchV0';
 
 type RebalanceRowV0 = {
   id: string;
@@ -326,6 +327,37 @@ export default function DaaRebalancePanelExtraInsightsV0({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        );
+      })()}
+      {(() => {
+        const rows = rebalanceTableRows.slice(0, 8);
+        if (!rows.length) return null;
+        const missingSet = new Set(priceDataWarningsV0.missing.map((x) => warningSymV0(x)));
+        const staleSet = new Set(priceDataWarningsV0.lastClose.map((x) => warningSymV0(x)));
+        const hasGuardrailBlocker = preRunViolationsV0.some((v) => v.level === 'blocker') || preTradeCashCheck.blocking;
+        const workbenchRows = rows.map((r) =>
+          buildIntegratedDecisionWorkbenchRowV0({
+            id: String(r.id ?? '').trim(),
+            targetPct: r.targetPct,
+            deltaPct: r.deltaPct,
+            thresholdPct: driftThresholdPct,
+            isMissingPrice: missingSet.has(String(r.id ?? '').trim()),
+            isStalePrice: staleSet.has(String(r.id ?? '').trim()),
+            hasGuardrailBlocker,
+          })
+        );
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Integrated DAA decision workbench</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Human tag, threshold status, buy/sell suggestion, and risk constraint are shown on one screen.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {workbenchRows.map((r) => (
+                <div key={r.id} style={{ fontSize: 11 }}>
+                  {r.id}: tag=<b>{r.humanTag}</b> · threshold=<b>{r.thresholdStatus}</b> · suggestion=<b>{r.suggestion}</b> · risk=<b style={{ color: r.riskConstraint === 'ok' ? '#16a34a' : 'var(--danger)' }}>{r.riskConstraint}</b>
+                </div>
+              ))}
             </div>
           </div>
         );
