@@ -518,8 +518,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     const concentrationRisk = topShare >= 0.55 || bucketCounts.size <= 2;
     return { bucketCounts, topShare, concentrationRisk };
   }, [rebalanceTableRows]);
-  const topShare = analystCorrelationDiversityCheckV0.topShare;
-  const concentrationRisk = analystCorrelationDiversityCheckV0.concentrationRisk;
+  const topShare = analystCorrelationDiversityCheckV0.topShare; const concentrationRisk = analystCorrelationDiversityCheckV0.concentrationRisk;
   const driftCounts = useMemo(() => {
     let over = 0;
     let under = 0;
