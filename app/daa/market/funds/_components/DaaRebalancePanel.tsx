@@ -66,6 +66,7 @@ import DaaRebalanceDriftAlertHeaderV0 from './DaaRebalanceDriftAlertHeaderV0';
 import DaaRebalanceDriftBreachesSummaryV0 from './DaaRebalanceDriftBreachesSummaryV0';
 import DaaRebalanceDriftActionSuggestionsV0 from './DaaRebalanceDriftActionSuggestionsV0';
 import DaaRebalanceDriftTriggerSummaryV0 from './DaaRebalanceDriftTriggerSummaryV0';
+import DaaRebalanceDriftWithinThresholdHintV0 from './DaaRebalanceDriftWithinThresholdHintV0';
 import DaaRebalancePreRunNoBlockersV0 from './DaaRebalancePreRunNoBlockersV0';
 import DaaRebalancePreRunViolationItemV0 from './DaaRebalancePreRunViolationItemV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
@@ -1505,9 +1506,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     onTuneThreshold={() => jumpTo('policy')}
                   />
                 ) : (
-                  <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
-                    Drift is within threshold. Suggested action: keep monitoring or lower threshold for tighter control.
-                  </div>
+                  <DaaRebalanceDriftWithinThresholdHintV0 breachCount={paperRunDriftAlert.breaches.length} />
                 )}
                 <DaaRebalanceDriftTriggerSummaryV0
                   reasons={paperRunDriftAlert.reasons ?? []}
