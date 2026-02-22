@@ -9,7 +9,7 @@ function readRepoFile(relPath: string): string {
 
 describe("execution cost preview v0", () => {
   it("keeps execution cost preview with fee/slippage ranges", () => {
-    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanel.tsx");
+    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalanceWhatIfSectionV0.tsx");
 
     expect(source).toContain("Execution cost preview");
     expect(source).toContain("Estimated fee range≈");

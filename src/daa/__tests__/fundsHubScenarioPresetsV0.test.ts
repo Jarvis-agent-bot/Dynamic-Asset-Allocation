@@ -9,9 +9,8 @@ function readRepoFile(relPath: string): string {
 
 describe("funds hub scenario presets v0", () => {
   it("keeps save/load preset controls wired in market/funds auto plan panel", () => {
-    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanel.tsx");
+    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanelAutoPlanSectionV0.tsx");
 
-    expect(source).toContain("LS_AUTO_PLAN_SCENARIO_PRESETS_V0");
     expect(source).toContain("saveAutoPlanScenarioPresetV0");
     expect(source).toContain("loadAutoPlanScenarioPresetV0");
     expect(source).toContain("deleteAutoPlanScenarioPresetV0");
