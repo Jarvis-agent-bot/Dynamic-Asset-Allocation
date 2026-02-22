@@ -9,7 +9,7 @@ function readRepoFile(relPath: string): string {
 
 describe("step readiness score v0", () => {
   it("keeps step readiness scorecard with blocker checks", () => {
-    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanel.tsx");
+    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalanceOpsOverviewCardsV0.tsx");
 
     expect(source).toContain("Step readiness scorecard");
     expect(source).toContain("Shows blockers before execution.");
