@@ -278,6 +278,8 @@ export default function DaaRebalancePanelExtraInsightsV0({
         const humanFactorAlpha = Math.max(0, (100 - preRunViolationsV0.length * 8) * 0.8);
         const avoidedLoss = Math.max(0, driftPressure * 12 + (preTradeCashCheck.blocking ? 25 : 0));
         const total = rebalanceAlpha + humanFactorAlpha + avoidedLoss;
+        const wBaseAdjustmentPct = Math.max(-8, Math.min(8, ((avoidedLoss - rebalanceAlpha) / Math.max(1, total)) * 100));
+        const wBaseAdjustmentDirection = wBaseAdjustmentPct >= 0 ? 'increase' : 'decrease';
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Monthly attribution evolution report</div>
@@ -287,6 +289,9 @@ export default function DaaRebalancePanelExtraInsightsV0({
               <div style={{ fontSize: 11 }}>human-factor alpha: <b>{humanFactorAlpha.toFixed(2)}</b> ({baseCcy || 'base'})</div>
               <div style={{ fontSize: 11 }}>avoided loss: <b>{avoidedLoss.toFixed(2)}</b> ({baseCcy || 'base'})</div>
               <div style={{ fontSize: 11 }}>total monthly attribution: <b>{total.toFixed(2)}</b> ({baseCcy || 'base'})</div>
+            </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              W_base adjustment suggestion: {wBaseAdjustmentDirection} by {Math.abs(wBaseAdjustmentPct).toFixed(2)}% next month (attribution-driven).
             </div>
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
               trace: rebalance={sellNotional.toFixed(2)} sell vs {buyNotional.toFixed(2)} buy · human-factor score base={Math.max(0, 100 - preRunViolationsV0.length * 8)} · pressure={driftPressure}
