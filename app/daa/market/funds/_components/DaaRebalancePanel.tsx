@@ -68,6 +68,7 @@ import DaaRebalanceDriftActionSuggestionsV0 from './DaaRebalanceDriftActionSugge
 import DaaRebalanceDriftTriggerSummaryV0 from './DaaRebalanceDriftTriggerSummaryV0';
 import DaaRebalanceDriftWithinThresholdHintV0 from './DaaRebalanceDriftWithinThresholdHintV0';
 import DaaRebalanceQuickFiltersHeaderV0 from './DaaRebalanceQuickFiltersHeaderV0';
+import DaaRebalanceEngineNotesV0 from './DaaRebalanceEngineNotesV0';
 import DaaRebalancePreRunNoBlockersV0 from './DaaRebalancePreRunNoBlockersV0';
 import DaaRebalancePreRunViolationItemV0 from './DaaRebalancePreRunViolationItemV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
@@ -1685,19 +1686,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       ) : null}
                     </div>
                   ) : null}
-                  {effectiveEngineNotes.length ? (
-                    <details className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-                      <summary style={{ cursor: "pointer" }}>Engine notes</summary>
-                      <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                        {effectiveEngineNotes.slice(0, 10).map((n, idx) => (
-                          <div key={idx}>{n}</div>
-                        ))}
-                      </div>
-                      {effectiveEngineNotes.length > 10 ? (
-                        <div style={{ fontSize: 11, marginTop: 6 }}>+{effectiveEngineNotes.length - 10} more notes...</div>
-                      ) : null}
-                    </details>
-                  ) : null}
+                  <DaaRebalanceEngineNotesV0 notes={effectiveEngineNotes} />
                   <details style={{ marginTop: 10 }}>
                     <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Trade rationale (why each trade)</summary>
                     <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
