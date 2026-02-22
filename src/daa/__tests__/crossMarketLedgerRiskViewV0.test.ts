@@ -9,7 +9,7 @@ function readRepoFile(relPath: string): string {
 
 describe("cross-market ledger risk view v0", () => {
   it("keeps A/H/US unified base-ccy exposure risk view", () => {
-    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanel.tsx");
+    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanelMaintainabilityCardsV0.tsx");
 
     expect(source).toContain("Cross-market ledger risk view");
     expect(source).toContain("Unified base-ccy exposure for A/H/US books.");

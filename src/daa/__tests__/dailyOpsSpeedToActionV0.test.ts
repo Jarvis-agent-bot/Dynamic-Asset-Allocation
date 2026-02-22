@@ -9,7 +9,7 @@ function readRepoFile(relPath: string): string {
 
 describe("daily ops speed-to-action v0", () => {
   it("keeps fast path run+preflight actions in funds hub", () => {
-    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanel.tsx");
+    const source = readRepoFile("app/daa/market/funds/_components/DaaRebalancePanelHeaderActionsV0.tsx");
 
     expect(source).toContain("Run + preflight");
     expect(source).toContain("Run+checklist");

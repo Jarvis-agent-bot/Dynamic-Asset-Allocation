@@ -1,4 +1,4 @@
-type LiveTimelineEntryV0 = { id: string; at: string; stage: string; detail: string; level: 'info' | 'ok' | 'error' };
+import type { LiveTimelineEntryV0 } from './DaaRebalancePanel.liveTimelineV0';
 
 type DaaRebalancePanelLiveSummaryV0Props = {
   open: boolean;
@@ -33,7 +33,9 @@ export default function DaaRebalancePanelLiveSummaryV0(props: DaaRebalancePanelL
             ))}
           </div>
         </details>
-      ) : null}
+      ) : (
+        <div style={{ marginTop: 8, fontSize: 11 }}>Live execution events will appear here after Run DAA starts.</div>
+      )}
     </div>
   );
 }
