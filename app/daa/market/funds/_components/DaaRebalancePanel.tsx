@@ -56,6 +56,7 @@ import DaaRebalancePanelWorkflowSectionsV0 from './DaaRebalancePanelWorkflowSect
 import DaaRebalancePreflightModalV0 from './DaaRebalancePreflightModalV0';
 import DaaRebalanceWhatIfSectionV0 from './DaaRebalanceWhatIfSectionV0';
 import DaaRebalanceRunOutcomePanelV0 from './DaaRebalanceRunOutcomePanelV0';
+import DaaRebalancePreTradeCashSnapshotV0 from './DaaRebalancePreTradeCashSnapshotV0';
 import DaaRebalancePanelHeaderActionsV0 from './DaaRebalancePanelHeaderActionsV0';
 import DaaRebalancePanelLiveSummaryV0 from './DaaRebalancePanelLiveSummaryV0';
 import DaaRebalancePanelRunDebuggerV0 from './DaaRebalancePanelRunDebuggerV0';
@@ -1447,12 +1448,14 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     <option value="CASH">Cash (allow sells to fund buys)</option>
                   </select>
                 </div>
-                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                  cashStart=<b>{preTradeCashCheck.cashStart.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
-                  {' '}· buy=<b>{preTradeCashCheck.buyNotional.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
-                  {' '}· sell=<b>{preTradeCashCheck.sellNotional.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
-                  {' '}· cashAfter≈<b>{preTradeCashCheck.cashAfter.toFixed(2)}</b>{baseCcy ? ` ${baseCcy}` : ''}
-                </div>
+                <DaaRebalancePreTradeCashSnapshotV0
+                  cashStart={preTradeCashCheck.cashStart}
+                  buyNotional={preTradeCashCheck.buyNotional}
+                  sellNotional={preTradeCashCheck.sellNotional}
+                  cashAfter={preTradeCashCheck.cashAfter}
+                  baseCcy={baseCcy}
+                  blocking={preTradeCashCheck.blocking}
+                />
                 {preTradeCashCheck.blocking ? (
                   <div style={{ fontSize: 11, marginTop: 6, color: 'var(--danger)' }}>{preTradeCashCheck.message}</div>
                 ) : (
