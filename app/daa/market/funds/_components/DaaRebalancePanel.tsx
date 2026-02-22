@@ -62,6 +62,7 @@ import DaaRebalancePanelHeaderActionsV0 from './DaaRebalancePanelHeaderActionsV0
 import DaaRebalancePanelLiveSummaryV0 from './DaaRebalancePanelLiveSummaryV0';
 import DaaRebalancePanelRunDebuggerV0 from './DaaRebalancePanelRunDebuggerV0';
 import DaaRebalancePreRunInfoDetailsV0 from './DaaRebalancePreRunInfoDetailsV0';
+import DaaRebalanceDriftAlertHeaderV0 from './DaaRebalanceDriftAlertHeaderV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
 import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintainabilityCardsV0';
@@ -1489,20 +1490,17 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   borderRadius: 10,
                   background: 'rgba(0,0,0,0.12)'}}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' as const, alignItems: 'baseline' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: paperRunDriftAlert.breached ? 'var(--danger)' : 'var(--muted)' }}>
-                    Live drift alerts
-                    {paperRunLoading ? <span className="muted" style={{ marginLeft: 6, fontWeight: 500 }}>(running...)</span> : null}
-                  </div>
-                  <div className="muted" style={{ fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular' }}>
-                    {paperRunDriftAlert.source} @ {paperRunDriftAlert.at}
-                  </div>
-                </div>
-                <div style={{ marginTop: 4, fontSize: 12, color: paperRunDriftAlert.breached ? 'var(--danger)' : 'var(--text)' }}>
-                  maxAbsDrift={fmtPct01(paperRunDriftAlert.maxAbsDriftPct)}
-                  {paperRunDriftAlert.maxAbsDriftSymbol ? ` (${paperRunDriftAlert.maxAbsDriftSymbol})` : ''}; threshold={fmtPct01(paperRunDriftAlert.thresholdPct)}
-                  {paperRunDriftAlert.shouldRebalance !== undefined ? `; shouldRebalance=${String(paperRunDriftAlert.shouldRebalance)}` : ''}
-                </div>
+                <DaaRebalanceDriftAlertHeaderV0
+                  breached={paperRunDriftAlert.breached}
+                  breachCount={paperRunDriftAlert.breaches.length}
+                  loading={paperRunLoading}
+                  source={paperRunDriftAlert.source}
+                  at={paperRunDriftAlert.at}
+                  maxAbsDriftPct={paperRunDriftAlert.maxAbsDriftPct}
+                  maxAbsDriftSymbol={paperRunDriftAlert.maxAbsDriftSymbol}
+                  thresholdPct={paperRunDriftAlert.thresholdPct}
+                  shouldRebalance={paperRunDriftAlert.shouldRebalance}
+                />
                 {paperRunDriftAlert.breaches.length ? (
                   <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                     Breaches:{' '}
