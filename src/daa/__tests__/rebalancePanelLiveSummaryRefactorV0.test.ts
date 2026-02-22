@@ -19,5 +19,6 @@ describe('feature-rebalance-panel-live-summary-refactor-v0', () => {
     expect(summarySource).toContain('Each event captures stage, timestamp, and status.');
     expect(summarySource).toContain('Use this stream to confirm progress before staging orders.');
     expect(summarySource).toContain('Errors surface in red so intervention is immediate.');
+    expect(summarySource).toContain('Green statuses indicate steps that completed successfully.');
   });
 });
