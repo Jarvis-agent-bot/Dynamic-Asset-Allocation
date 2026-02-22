@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 
 describe('feature-analyst-correlation-diversity-check-v0', () => {
   it('adds a visible correlation-diversity check to prevent hidden concentration', () => {
-    const file = resolve(process.cwd(), 'app/daa/market/funds/_components/DaaRebalancePanel.tsx');
+    // The correlation-diversity insight card now lives in the extracted ExtraInsights module.
+    const file = resolve(process.cwd(), 'app/daa/market/funds/_components/DaaRebalancePanelExtraInsightsV0.tsx');
     const source = readFileSync(file, 'utf8');
 
     expect(source).toContain('Analyst correlation-diversity check');
