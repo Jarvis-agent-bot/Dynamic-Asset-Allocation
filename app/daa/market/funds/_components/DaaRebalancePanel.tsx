@@ -65,6 +65,7 @@ import DaaRebalancePreRunInfoDetailsV0 from './DaaRebalancePreRunInfoDetailsV0';
 import DaaRebalanceDriftAlertHeaderV0 from './DaaRebalanceDriftAlertHeaderV0';
 import DaaRebalanceDriftBreachesSummaryV0 from './DaaRebalanceDriftBreachesSummaryV0';
 import DaaRebalanceDriftActionSuggestionsV0 from './DaaRebalanceDriftActionSuggestionsV0';
+import DaaRebalanceDriftTriggerSummaryV0 from './DaaRebalanceDriftTriggerSummaryV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
 import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintainabilityCardsV0';
@@ -1515,12 +1516,10 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     Drift is within threshold. Suggested action: keep monitoring or lower threshold for tighter control.
                   </div>
                 )}
-                {paperRunDriftAlert.reasons?.length ? (
-                  <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-                    Trigger: {paperRunDriftAlert.reasons.slice(0, 3).join('; ')}
-                    {paperRunDriftAlert.eligibleOrderCount !== undefined ? `; eligibleOrders=${paperRunDriftAlert.eligibleOrderCount}` : ''}
-                  </div>
-                ) : null}
+                <DaaRebalanceDriftTriggerSummaryV0
+                  reasons={paperRunDriftAlert.reasons ?? []}
+                  eligibleOrderCount={paperRunDriftAlert.eligibleOrderCount}
+                />
               </div>
             ) : null}
             {rebalanceTableRows.length ? (
