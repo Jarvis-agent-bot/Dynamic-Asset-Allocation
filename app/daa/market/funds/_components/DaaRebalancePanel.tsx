@@ -71,7 +71,6 @@ type FundLike = { code: string; name?: string; dwjz?: string | number; gsz?: str
 type HoldingsLike = Record<string, { share: number; cost?: number }>;
 type Props = { funds?: FundLike[]; holdings?: HoldingsLike };
 type LiveTimelineEntryV0 = { id: string; at: string; stage: string; detail: string; level: 'info' | 'ok' | 'error' };
-
 function useLiveTimelineV0(params: {
   runDaaStatus: 'idle' | 'running' | 'ok' | 'error';
   runDaaStatusText: string;
