@@ -1292,14 +1292,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       <div className="card" style={{ padding: '10px 12px', marginBottom: 10 }}>
         <div style={{ fontWeight: 800, fontSize: 13 }}>Analyst correlation-diversity check</div>
         <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Prevent hidden concentration by checking cross-bucket style diversity.</div>
-        <div style={{ marginTop: 6, fontSize: 11 }}>
-          buckets=<b>{analystCorrelationDiversityCheckV0.bucketCounts.size}</b> · top correlation bucket share=<b>{(topShare * 100).toFixed(1)}%</b> · status=<b style={{ color: concentrationRisk ? 'var(--danger)' : '#16a34a' }}>{concentrationRisk ? 'hidden concentration risk' : 'diversity acceptable'}</b>
-        </div>
-        <div style={{ marginTop: 8 }}>
-          <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
-            Stage de-correlation orders
-          </button>
-        </div>
+        <div style={{ marginTop: 6, fontSize: 11 }}>buckets=<b>{analystCorrelationDiversityCheckV0.bucketCounts.size}</b> · top correlation bucket share=<b>{(topShare * 100).toFixed(1)}%</b> · status=<b style={{ color: concentrationRisk ? 'var(--danger)' : '#16a34a' }}>{concentrationRisk ? 'hidden concentration risk' : 'diversity acceptable'}</b></div>
+        <div style={{ marginTop: 8 }}><button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>Stage de-correlation orders</button></div>
       </div>
       <DaaRebalancePanelExtraInsightsV0
         baseCcy={baseCcy}
