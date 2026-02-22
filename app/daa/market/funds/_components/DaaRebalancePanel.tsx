@@ -63,6 +63,7 @@ import DaaRebalancePanelLiveSummaryV0 from './DaaRebalancePanelLiveSummaryV0';
 import DaaRebalancePanelRunDebuggerV0 from './DaaRebalancePanelRunDebuggerV0';
 import DaaRebalancePreRunInfoDetailsV0 from './DaaRebalancePreRunInfoDetailsV0';
 import DaaRebalanceDriftAlertHeaderV0 from './DaaRebalanceDriftAlertHeaderV0';
+import DaaRebalanceDriftBreachesSummaryV0 from './DaaRebalanceDriftBreachesSummaryV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
 import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintainabilityCardsV0';
@@ -1501,16 +1502,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                   thresholdPct={paperRunDriftAlert.thresholdPct}
                   shouldRebalance={paperRunDriftAlert.shouldRebalance}
                 />
-                {paperRunDriftAlert.breaches.length ? (
-                  <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-                    Breaches:{' '}
-                    {paperRunDriftAlert.breaches
-                      .map((b) => `${b.label}(${b.id}) ${b.driftPct >= 0 ? '+' : ''}${(b.driftPct * 100).toFixed(1)}%`)
-                      .join(' · ')}
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>No symbols exceed the drift threshold.</div>
-                )}
+                <DaaRebalanceDriftBreachesSummaryV0 breaches={paperRunDriftAlert.breaches} />
                 {paperRunDriftAlert.breached ? (
                   <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
                     <span className="muted" style={{ fontSize: 11 }}>Threshold-based action suggestions:</span>
