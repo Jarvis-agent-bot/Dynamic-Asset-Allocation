@@ -121,7 +121,10 @@ function useLiveTimelineV0(params: {
 
 // moved to DaaRebalancePanel.autoPlanUtilsV0
 
-const PREVIEW_ORDER_OPTIONS_V0: Array<{ key: OrdersPreviewSourceV0; label: string; title: string }> = [{ key: 'RECOMPUTE', label: 'Recompute', title: 'Recompute orders via the core engine using current inputs + threshold' }, { key: 'ENGINE_LAST_RUN', label: 'Last run (core)', title: 'Use orders from the last core run (saved in localStorage)' }];
+const PREVIEW_ORDER_OPTIONS_V0: Array<{ key: OrdersPreviewSourceV0; label: string; title: string }> = [
+  { key: 'RECOMPUTE', label: 'Recompute', title: 'Recompute orders via the core engine using current inputs + threshold' },
+  { key: 'ENGINE_LAST_RUN', label: 'Last run (core)', title: 'Use orders from the last core run (saved in localStorage)' },
+];
 
 export function DaaRebalancePanel({ funds, holdings }: Props) {
   const rt = useDaaRuntime();
@@ -179,7 +182,8 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
       window.removeEventListener('storage', onData);
     };
   }, []);
-  // timeline handlers + side effects moved into useLiveTimelineV0
+  // timeline handlers moved into useLiveTimelineV0
+  // timeline side effects moved into useLiveTimelineV0
   useEffect(() => {
     // Persist the latest drift input(s) so users can refresh and keep the plan editor state.
     saveJsonToLs(LS_AUTO_PLAN_INPUT, { schemaVersion: 2, active: autoPlanScenario, a: { text: autoPlanInputTextA, thresholdPctOverride: autoPlanThresholdOverridePctA }, b: { text: autoPlanInputTextB, thresholdPctOverride: autoPlanThresholdOverridePctB } });
@@ -499,22 +503,6 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
     rows.sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct));
     return rows;
   }, [currentWeights, portfolioCash, targetWeightsEffective]);
-  const analystCorrelationDiversityCheckV0 = useMemo(() => {
-    const bucketCounts = new Map<string, number>();
-    for (const row of rebalanceTableRows) {
-      const weight = Math.max(0, Math.abs(toFiniteNumber(row.targetPct) ?? 0));
-      if (!(weight > 0)) continue;
-      const normalizedId = String(row.id ?? '').trim().toUpperCase();
-      const bucket = normalizedId.slice(0, 2) || 'OTHER';
-      bucketCounts.set(bucket, (bucketCounts.get(bucket) ?? 0) + 1);
-    }
-    const totalBuckets = Array.from(bucketCounts.values()).reduce((acc, value) => acc + value, 0);
-    const topCount = totalBuckets > 0 ? Math.max(...Array.from(bucketCounts.values())) : 0;
-    const topShare = totalBuckets > 0 ? topCount / totalBuckets : 0;
-    const concentrationRisk = topShare >= 0.55 || bucketCounts.size <= 2;
-    return { bucketCounts, topShare, concentrationRisk };
-  }, [rebalanceTableRows]);
-  const topShare = analystCorrelationDiversityCheckV0.topShare; const concentrationRisk = analystCorrelationDiversityCheckV0.concentrationRisk;
   const driftCounts = useMemo(() => {
     let over = 0;
     let under = 0;
@@ -1284,12 +1272,6 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
         jumpTo={jumpTo}
         openPreflightForRun={openPreflightForRun}
       />
-      <div className="card" style={{ padding: '10px 12px', marginBottom: 10 }}>
-        <div style={{ fontWeight: 800, fontSize: 13 }}>Analyst correlation-diversity check</div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Prevent hidden concentration by checking cross-bucket style diversity.</div>
-        <div style={{ marginTop: 6, fontSize: 11 }}>buckets=<b>{analystCorrelationDiversityCheckV0.bucketCounts.size}</b> · top correlation bucket share=<b>{(topShare * 100).toFixed(1)}%</b> · status=<b style={{ color: concentrationRisk ? 'var(--danger)' : '#16a34a' }}>{concentrationRisk ? 'hidden concentration risk' : 'diversity acceptable'}</b></div>
-        <div style={{ marginTop: 8 }}><button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>Stage de-correlation orders</button></div>
-      </div>
       <DaaRebalancePanelExtraInsightsV0
         baseCcy={baseCcy}
         portfolioCash={toFiniteNumber(portfolioCash) ?? 0}
