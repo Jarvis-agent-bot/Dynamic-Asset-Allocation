@@ -102,6 +102,9 @@ export default function DaaRebalancePanelMaintainabilityCardsV0({
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Cross-market ledger risk view</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Unified base-ccy exposure for A/H/US books.</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              Source snapshot: holdings/weights from current rebalance table rows (n={rows.length}); valuation base={baseCcy || 'portfolio base ccy'}.
+            </div>
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {(['A', 'H', 'US', 'Other'] as const).map((k) => (
                 <div key={k} style={{ fontSize: 11 }}>

@@ -13,6 +13,7 @@ describe("cross-market ledger risk view v0", () => {
 
     expect(source).toContain("Cross-market ledger risk view");
     expect(source).toContain("Unified base-ccy exposure for A/H/US books.");
+    expect(source).toContain("Source snapshot: holdings/weights from current rebalance table rows (n={rows.length}); valuation base={baseCcy || 'portfolio base ccy'}.");
     expect(source).toContain("exposure≈<b>");
     expect(source).toContain("(['A', 'H', 'US', 'Other'] as const)");
     expect(source).toContain("max|drift|≈<b>");
