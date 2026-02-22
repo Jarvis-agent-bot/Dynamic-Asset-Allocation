@@ -15,5 +15,6 @@ describe('feature-rebalance-panel-live-summary-refactor-v0', () => {
     expect(summarySource).toContain('Run DAA: {runDaaStatusText}');
     expect(summarySource).toContain('timelineSummaryLabel');
     expect(summarySource).toContain('Newest entries appear first.');
+    expect(summarySource).toContain('Showing {liveTimelineV0.length} recent events.');
   });
 });
