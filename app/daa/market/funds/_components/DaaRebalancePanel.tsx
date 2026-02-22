@@ -67,8 +67,7 @@ import { applySampleScenarioV0 as applySampleScenarioWorkflowV0, jumpToV0, runDa
 import { getDriftBadgeV0, readAutoPlanBootstrapV0, readAutoPlanPresetsV0 } from './DaaRebalancePanel.autoPlanUtilsV0';
 import { buildAutoPlanHoldingsMapV0, buildPricesMapV0, buildRunConstraintsV0, buildRunHoldingsMapV0, runAutoPlanV0 as runAutoPlanActionV0, seedAutoPlanFromCurrentSnapshotV0 as seedAutoPlanActionV0 } from './DaaRebalancePanel.planActionsV0';
 import { useDaaRebalancePanelExecutionKernelV0 } from './DaaRebalancePanel.executionKernelV0'; type FundLike = { code: string; name?: string; dwjz?: string | number; gsz?: string | number; estPricedCoverage?: number; estGsz?: number };
-type HoldingsLike = Record<string, { share: number; cost?: number }>;
-type Props = { funds?: FundLike[]; holdings?: HoldingsLike };
+type HoldingsLike = Record<string, { share: number; cost?: number }>; type Props = { funds?: FundLike[]; holdings?: HoldingsLike };
 type LiveTimelineEntryV0 = { id: string; at: string; stage: string; detail: string; level: 'info' | 'ok' | 'error' };
 function useLiveTimelineV0(params: {
   runDaaStatus: 'idle' | 'running' | 'ok' | 'error';
