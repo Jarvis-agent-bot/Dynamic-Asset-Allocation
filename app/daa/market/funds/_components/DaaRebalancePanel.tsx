@@ -57,6 +57,7 @@ import DaaRebalancePreflightModalV0 from './DaaRebalancePreflightModalV0';
 import DaaRebalanceWhatIfSectionV0 from './DaaRebalanceWhatIfSectionV0';
 import DaaRebalanceRunOutcomePanelV0 from './DaaRebalanceRunOutcomePanelV0';
 import DaaRebalancePreTradeCashSnapshotV0 from './DaaRebalancePreTradeCashSnapshotV0';
+import DaaRebalancePreTradeSettlementHintV0 from './DaaRebalancePreTradeSettlementHintV0';
 import DaaRebalancePanelHeaderActionsV0 from './DaaRebalancePanelHeaderActionsV0';
 import DaaRebalancePanelLiveSummaryV0 from './DaaRebalancePanelLiveSummaryV0';
 import DaaRebalancePanelRunDebuggerV0 from './DaaRebalancePanelRunDebuggerV0';
@@ -1459,11 +1460,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                 {preTradeCashCheck.blocking ? (
                   <div style={{ fontSize: 11, marginTop: 6, color: 'var(--danger)' }}>{preTradeCashCheck.message}</div>
                 ) : (
-                  <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-                    {sellProceedsRoutingV0 === 'CASH'
-                      ? 'Assumption: sell proceeds can fund BUY orders (T+0-style settlement).' 
-                      : 'Assumption: sell proceeds may settle later (T+1/T+2), so BUY notional must be covered by starting cash.'}
-                  </div>
+                  <DaaRebalancePreTradeSettlementHintV0 sellProceedsRoutingV0={sellProceedsRoutingV0} />
                 )}
               </div>
             ) : null}
