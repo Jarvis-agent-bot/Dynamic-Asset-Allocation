@@ -1,6 +1,7 @@
 import { calibrateQatFeedbackLoopV0 } from '@/src/daa/qatFeedbackCalibrationLoopV0';
 import { buildGuardrailBreachExplainerTimelineV0 } from '@/src/daa/guardrailBreachExplainerTimelineV0';
 import { scoreHumanFactorLogicConsistencyV0 } from '@/src/daa/humanFactorLogicConsistencyScoringV0';
+import { runQatDecisionMatrixEngineV0 } from '@/src/daa/qatDecisionMatrixEngineV0';
 
 type RebalanceRowV0 = {
   id: string;
@@ -311,14 +312,17 @@ export default function DaaRebalancePanelExtraInsightsV0({
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {recRows.map((r) => {
                 const id = String(r.id ?? '').trim();
-                const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
-                const hMultiplier = Math.max(0.75, 1 - Math.min(0.2, driftAbs * 1.2));
-                const aiBias = missingSet.has(id) ? 0.85 : staleSet.has(id) ? 0.92 : 1.05;
-                const wQat = Math.max(0, r.targetPct * hMultiplier * aiBias);
-                const recommendation = wQat >= r.targetPct * 0.9 ? 'keep' : wQat >= r.targetPct * 0.75 ? 'trim' : 'defer';
+                const decision = runQatDecisionMatrixEngineV0({
+                  wBase: r.targetPct,
+                  driftPct: r.deltaPct,
+                  thresholdPct: driftThresholdPct,
+                  isMissingPrice: missingSet.has(id),
+                  isStalePrice: staleSet.has(id),
+                });
+                const { hMultiplier, aiBias, wQat, recommendation } = decision;
                 return (
                   <div key={id} style={{ fontSize: 11 }}>
-                    {id}: rec=<b>{recommendation}</b> · factors(W_base={(r.targetPct * 100).toFixed(2)}%, H={hMultiplier.toFixed(2)}, AI={aiBias.toFixed(2)}, W_qat={(wQat * 100).toFixed(2)}%)
+                    {id}: rec=<b>{recommendation}</b> · factors(W_base={(r.targetPct * 100).toFixed(2)}%, H={hMultiplier.toFixed(2)}, AI={aiBias.toFixed(2)}, thr={(driftThresholdPct * 100).toFixed(2)}%, W_qat={(wQat * 100).toFixed(2)}%)
                   </div>
                 );
               })}

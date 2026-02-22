@@ -10,6 +10,6 @@ describe('mainline-goal-operator-visible-factor-trace-for-every-recommendation-v
     expect(source).toContain('Operator-visible factor trace by recommendation');
     expect(source).toContain('Every recommendation includes factor-level rationale before order routing.');
     expect(source).toContain('const recommendation = wQat >= r.targetPct * 0.9 ? \'keep\' : wQat >= r.targetPct * 0.75 ? \'trim\' : \'defer\';');
-    expect(source).toContain('rec=<b>{recommendation}</b> · factors(W_base={(r.targetPct * 100).toFixed(2)}%, H={hMultiplier.toFixed(2)}, AI={aiBias.toFixed(2)}, W_qat={(wQat * 100).toFixed(2)}%)');
+    expect(source).toContain('rec=<b>{recommendation}</b> · factors(W_base={(r.targetPct * 100).toFixed(2)}%, H={hMultiplier.toFixed(2)}, AI={aiBias.toFixed(2)}, thr={(driftThresholdPct * 100).toFixed(2)}%, W_qat={(wQat * 100).toFixed(2)}%)');
   });
 });
