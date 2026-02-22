@@ -30,6 +30,7 @@ export default function DaaRebalancePanelLiveSummaryV0(props: DaaRebalancePanelL
           <div style={{ marginTop: 2, fontSize: 11 }}>Use this stream to confirm progress before staging orders.</div>
           <div style={{ marginTop: 2, fontSize: 11 }}>Errors surface in red so intervention is immediate.</div>
           <div style={{ marginTop: 2, fontSize: 11 }}>Green statuses indicate steps that completed successfully.</div>
+          <div style={{ marginTop: 2, fontSize: 11 }}>Expand the timeline to inspect the latest step-by-step details.</div>
           <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
             {liveTimelineV0.map((e) => (
               <div key={e.id} style={{ fontSize: 11, borderLeft: `2px solid ${e.level === 'error' ? 'var(--danger)' : e.level === 'ok' ? '#16a34a' : 'rgba(127,127,127,0.6)'}`, paddingLeft: 8 }}>
