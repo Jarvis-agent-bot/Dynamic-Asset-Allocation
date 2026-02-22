@@ -24,6 +24,7 @@ export default function DaaRebalancePanelLiveSummaryV0(props: DaaRebalancePanelL
       {liveTimelineV0.length ? (
         <details style={{ marginTop: 8 }} open>
           <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>{timelineSummaryLabel}</summary>
+          <div style={{ marginTop: 4, fontSize: 11 }}>Newest entries appear first.</div>
           <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
             {liveTimelineV0.map((e) => (
               <div key={e.id} style={{ fontSize: 11, borderLeft: `2px solid ${e.level === 'error' ? 'var(--danger)' : e.level === 'ok' ? '#16a34a' : 'rgba(127,127,127,0.6)'}`, paddingLeft: 8 }}>
