@@ -1,4 +1,4 @@
-type LiveTimelineEntryV0 = { id: string; at: string; stage: string; detail: string; level: 'info' | 'ok' | 'error' };
+import type { LiveTimelineEntryV0 } from './DaaRebalancePanel.liveTimelineV0';
 
 type DaaRebalancePanelLiveSummaryV0Props = {
   open: boolean;
@@ -24,14 +24,6 @@ export default function DaaRebalancePanelLiveSummaryV0(props: DaaRebalancePanelL
       {liveTimelineV0.length ? (
         <details style={{ marginTop: 8 }} open>
           <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>{timelineSummaryLabel}</summary>
-          <div style={{ marginTop: 4, fontSize: 11 }}>Newest entries appear first.</div>
-          <div style={{ marginTop: 2, fontSize: 11 }}>Showing {liveTimelineV0.length} recent events.</div>
-          <div style={{ marginTop: 2, fontSize: 11 }}>Each event captures stage, timestamp, and status.</div>
-          <div style={{ marginTop: 2, fontSize: 11 }}>Use this stream to confirm progress before staging orders.</div>
-          <div style={{ marginTop: 2, fontSize: 11 }}>Errors surface in red so intervention is immediate.</div>
-          <div style={{ marginTop: 2, fontSize: 11 }}>Green statuses indicate steps that completed successfully.</div>
-          <div style={{ marginTop: 2, fontSize: 11 }}>Expand the timeline to inspect the latest step-by-step details.</div>
-          <div style={{ marginTop: 2, fontSize: 11 }}>Timeline keeps the 20 most recent events.</div>
           <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
             {liveTimelineV0.map((e) => (
               <div key={e.id} style={{ fontSize: 11, borderLeft: `2px solid ${e.level === 'error' ? 'var(--danger)' : e.level === 'ok' ? '#16a34a' : 'rgba(127,127,127,0.6)'}`, paddingLeft: 8 }}>
@@ -41,7 +33,9 @@ export default function DaaRebalancePanelLiveSummaryV0(props: DaaRebalancePanelL
             ))}
           </div>
         </details>
-      ) : null}
+      ) : (
+        <div style={{ marginTop: 8, fontSize: 11 }}>Live execution events will appear here after Run DAA starts.</div>
+      )}
     </div>
   );
 }

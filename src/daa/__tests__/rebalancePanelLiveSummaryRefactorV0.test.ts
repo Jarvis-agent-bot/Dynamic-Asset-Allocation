@@ -8,19 +8,17 @@ describe('feature-rebalance-panel-live-summary-refactor-v0', () => {
     const panelSource = readFileSync(panelFile, 'utf8');
     const summaryFile = resolve(process.cwd(), 'app/daa/market/funds/_components/DaaRebalancePanelLiveSummaryV0.tsx');
     const summarySource = readFileSync(summaryFile, 'utf8');
+    const timelineFile = resolve(process.cwd(), 'app/daa/market/funds/_components/DaaRebalancePanel.liveTimelineV0.ts');
+    const timelineSource = readFileSync(timelineFile, 'utf8');
 
     expect(panelSource).toContain("import DaaRebalancePanelLiveSummaryV0 from './DaaRebalancePanelLiveSummaryV0';");
+    expect(panelSource).toContain("import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';");
     expect(panelSource).toContain('<DaaRebalancePanelLiveSummaryV0');
     expect(panelSource).toContain('Live execution timeline (latest 20)');
     expect(summarySource).toContain('Run DAA: {runDaaStatusText}');
     expect(summarySource).toContain('timelineSummaryLabel');
-    expect(summarySource).toContain('Newest entries appear first.');
-    expect(summarySource).toContain('Showing {liveTimelineV0.length} recent events.');
-    expect(summarySource).toContain('Each event captures stage, timestamp, and status.');
-    expect(summarySource).toContain('Use this stream to confirm progress before staging orders.');
-    expect(summarySource).toContain('Errors surface in red so intervention is immediate.');
-    expect(summarySource).toContain('Green statuses indicate steps that completed successfully.');
-    expect(summarySource).toContain('Expand the timeline to inspect the latest step-by-step details.');
-    expect(summarySource).toContain('Timeline keeps the 20 most recent events.');
+    expect(summarySource).toContain('Live execution events will appear here after Run DAA starts.');
+    expect(timelineSource).toContain('export function useLiveTimelineV0');
+    expect(timelineSource).toContain("stage: 'Preflight execution'");
   });
 });
