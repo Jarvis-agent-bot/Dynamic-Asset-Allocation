@@ -61,6 +61,7 @@ import DaaRebalancePreTradeSettlementHintV0 from './DaaRebalancePreTradeSettleme
 import DaaRebalancePanelHeaderActionsV0 from './DaaRebalancePanelHeaderActionsV0';
 import DaaRebalancePanelLiveSummaryV0 from './DaaRebalancePanelLiveSummaryV0';
 import DaaRebalancePanelRunDebuggerV0 from './DaaRebalancePanelRunDebuggerV0';
+import DaaRebalancePreRunInfoDetailsV0 from './DaaRebalancePreRunInfoDetailsV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
 import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintainabilityCardsV0';
@@ -1403,21 +1404,11 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                     No blockers detected for current inputs.
                   </div>
                 )}
-                {preRunViolationsV0.some((v) => v.level === 'info') ? (
-                  <details className="muted" style={{ marginTop: 10, fontSize: 11 }}>
-                    <summary style={{ cursor: 'pointer' }}>More details</summary>
-                    <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
-                      {preRunViolationsV0
-                        .filter((v) => v.level === 'info')
-                        .map((v, idx) => (
-                          <div key={`info-${v.kind}-${idx}`}>
-                            <div style={{ fontWeight: 700 }}>{v.title}</div>
-                            <div style={{ marginTop: 4 }}>{v.details.join(' ')}</div>
-                          </div>
-                        ))}
-                    </div>
-                  </details>
-                ) : null}
+                <DaaRebalancePreRunInfoDetailsV0
+                  infoViolations={preRunViolationsV0
+                    .filter((v) => v.level === 'info')
+                    .map((v) => ({ kind: v.kind, title: v.title, details: v.details }))}
+                />
               </div>
             ) : null}
             {effectiveOrders.length ? (
