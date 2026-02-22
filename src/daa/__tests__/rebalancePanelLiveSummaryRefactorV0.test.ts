@@ -18,5 +18,6 @@ describe('feature-rebalance-panel-live-summary-refactor-v0', () => {
     expect(summarySource).toContain('Showing {liveTimelineV0.length} recent events.');
     expect(summarySource).toContain('Each event captures stage, timestamp, and status.');
     expect(summarySource).toContain('Use this stream to confirm progress before staging orders.');
+    expect(summarySource).toContain('Errors surface in red so intervention is immediate.');
   });
 });
