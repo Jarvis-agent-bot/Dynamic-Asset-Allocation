@@ -67,6 +67,7 @@ import DaaRebalanceDriftBreachesSummaryV0 from './DaaRebalanceDriftBreachesSumma
 import DaaRebalanceDriftActionSuggestionsV0 from './DaaRebalanceDriftActionSuggestionsV0';
 import DaaRebalanceDriftTriggerSummaryV0 from './DaaRebalanceDriftTriggerSummaryV0';
 import DaaRebalanceDriftWithinThresholdHintV0 from './DaaRebalanceDriftWithinThresholdHintV0';
+import DaaRebalanceQuickFiltersHeaderV0 from './DaaRebalanceQuickFiltersHeaderV0';
 import DaaRebalancePreRunNoBlockersV0 from './DaaRebalancePreRunNoBlockersV0';
 import DaaRebalancePreRunViolationItemV0 from './DaaRebalancePreRunViolationItemV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
@@ -1517,7 +1518,7 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
             {rebalanceTableRows.length ? (
               <div style={{ marginTop: 10 }}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center', marginBottom: 8 }}>
-                  <span className="muted" style={{ fontSize: 12 }}>Quick filters:</span>
+                  <DaaRebalanceQuickFiltersHeaderV0 total={driftCounts.total} />
                   {([
                     { key: 'all', label: 'All', count: driftCounts.total, disabled: false },
                     { key: 'over', label: 'Over target', count: driftCounts.over, disabled: !driftCounts.over },
