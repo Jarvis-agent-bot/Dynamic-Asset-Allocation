@@ -120,7 +120,6 @@ function useLiveTimelineV0(params: {
 }
 
 // moved to DaaRebalancePanel.autoPlanUtilsV0
-
 const PREVIEW_ORDER_OPTIONS_V0: Array<{ key: OrdersPreviewSourceV0; label: string; title: string }> = [
   { key: 'RECOMPUTE', label: 'Recompute', title: 'Recompute orders via the core engine using current inputs + threshold' },
   { key: 'ENGINE_LAST_RUN', label: 'Last run (core)', title: 'Use orders from the last core run (saved in localStorage)' },
