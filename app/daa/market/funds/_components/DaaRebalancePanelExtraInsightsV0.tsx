@@ -1,4 +1,5 @@
 import { calibrateQatFeedbackLoopV0 } from '@/src/daa/qatFeedbackCalibrationLoopV0';
+import { buildGuardrailBreachExplainerTimelineV0 } from '@/src/daa/guardrailBreachExplainerTimelineV0';
 
 type RebalanceRowV0 = {
   id: string;
@@ -187,6 +188,50 @@ export default function DaaRebalancePanelExtraInsightsV0({
                 </button>
               </div>
             ) : null}
+          </div>
+        );
+      })()}
+      {(() => {
+        const guardrailBlockers = preRunViolationsV0.filter((v) => v.level === 'blocker');
+        const guardrailWarnings = preRunViolationsV0.filter((v) => v.level === 'warning');
+        const timeline = buildGuardrailBreachExplainerTimelineV0([
+          {
+            gate: 'price-warnings',
+            blocked: priceDataWarningsV0.missing.length > 0,
+            reason: priceDataWarningsV0.missing.length > 0
+              ? `${priceDataWarningsV0.missing.length} symbols missing live price`
+              : 'all symbols have live prices',
+          },
+          {
+            gate: 'guardrail-violations',
+            blocked: guardrailBlockers.length > 0,
+            reason: guardrailBlockers.length > 0
+              ? `${guardrailBlockers.length} blocker violations detected`
+              : `no blocker violations (${guardrailWarnings.length} warnings)`,
+          },
+          {
+            gate: 'cash-settlement',
+            blocked: preTradeCashCheck.blocking,
+            reason: preTradeCashCheck.blocking ? 'pre-trade cash/settlement check failed' : 'cash/settlement check passed',
+          },
+          {
+            gate: 'liquidity-t+n',
+            blocked: preTradeCashCheck.blocking,
+            reason: preTradeCashCheck.blocking ? 'liquidity T+N gate blocked by settlement coverage' : 'liquidity T+N gate passed',
+          },
+        ]);
+        const blockedCount = timeline.filter((t) => t.status === 'blocked').length;
+        return (
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${blockedCount ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 12, background: blockedCount ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Guardrail-breach explainer timeline</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Gate-by-gate timeline showing why execution is blocked or allowed.</div>
+            <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+              {timeline.map((t, idx) => (
+                <div key={t.gate} style={{ fontSize: 11 }}>
+                  {idx + 1}. gate=<b>{t.gate}</b> · status=<b style={{ color: t.status === 'pass' ? '#16a34a' : 'var(--danger)' }}>{t.status}</b> · reason={t.reason}
+                </div>
+              ))}
+            </div>
           </div>
         );
       })()}
