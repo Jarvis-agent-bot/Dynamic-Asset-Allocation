@@ -66,6 +66,7 @@ import DaaRebalanceDriftAlertHeaderV0 from './DaaRebalanceDriftAlertHeaderV0';
 import DaaRebalanceDriftBreachesSummaryV0 from './DaaRebalanceDriftBreachesSummaryV0';
 import DaaRebalanceDriftActionSuggestionsV0 from './DaaRebalanceDriftActionSuggestionsV0';
 import DaaRebalanceDriftTriggerSummaryV0 from './DaaRebalanceDriftTriggerSummaryV0';
+import DaaRebalancePreRunNoBlockersV0 from './DaaRebalancePreRunNoBlockersV0';
 import { useLiveTimelineV0 } from './DaaRebalancePanel.liveTimelineV0';
 import DaaSafetyStopModalV0 from './DaaSafetyStopModalV0';
 import DaaRebalancePanelMaintainabilityCardsV0 from './DaaRebalancePanelMaintainabilityCardsV0';
@@ -1404,9 +1405,9 @@ export function DaaRebalancePanel({ funds, holdings }: Props) {
                       );
                     })
                 ) : (
-                  <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
-                    No blockers detected for current inputs.
-                  </div>
+                  <DaaRebalancePreRunNoBlockersV0
+                    warningCount={preRunViolationsV0.filter((v) => v.level === 'warning').length}
+                  />
                 )}
                 <DaaRebalancePreRunInfoDetailsV0
                   infoViolations={preRunViolationsV0
