@@ -348,14 +348,19 @@ export default function DaaRebalancePanelExtraInsightsV0({
             hasGuardrailBlocker,
           })
         );
+        const blockedCount = workbenchRows.filter((r) => r.riskConstraint === 'blocked').length;
+        const breachCount = workbenchRows.filter((r) => r.thresholdStatus === 'breach').length;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Integrated DAA decision workbench</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Human tag, threshold status, buy/sell suggestion, and risk constraint are shown on one screen.</div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              breaches=<b>{breachCount}</b> · blocked=<b>{blockedCount}</b> · ready=<b>{Math.max(0, workbenchRows.length - blockedCount)}</b>
+            </div>
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {workbenchRows.map((r) => (
                 <div key={r.id} style={{ fontSize: 11 }}>
-                  {r.id}: tag=<b>{r.humanTag}</b> · threshold=<b>{r.thresholdStatus}</b> · suggestion=<b>{r.suggestion}</b> · risk=<b style={{ color: r.riskConstraint === 'ok' ? '#16a34a' : 'var(--danger)' }}>{r.riskConstraint}</b>
+                  {r.id}: tag=<b>{r.humanTag}</b> · threshold=<b>{r.thresholdStatus}</b> · suggestion=<b>{r.suggestion}</b> · risk=<b style={{ color: r.riskConstraint === 'ok' ? '#16a34a' : 'var(--danger)' }}>{r.riskConstraint}</b> ({r.constraintReason})
                 </div>
               ))}
             </div>
