@@ -1,4 +1,6 @@
-type LiveTimelineEntryV0 = { id: string; at: string; stage: string; detail: string; level: 'info' | 'ok' | 'error' };
+import type { LiveTimelineEntryV0 } from './DaaRebalancePanel.liveTimelineV0';
+import DaaRebalancePanelLiveTimelineListV0 from './DaaRebalancePanelLiveTimelineListV0';
+import DaaRebalancePanelLiveTimelineEmptyStateV0 from './DaaRebalancePanelLiveTimelineEmptyStateV0';
 
 type DaaRebalancePanelLiveSummaryV0Props = {
   open: boolean;
@@ -24,16 +26,11 @@ export default function DaaRebalancePanelLiveSummaryV0(props: DaaRebalancePanelL
       {liveTimelineV0.length ? (
         <details style={{ marginTop: 8 }} open>
           <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>{timelineSummaryLabel}</summary>
-          <div style={{ marginTop: 6, display: 'grid', gap: 6 }}>
-            {liveTimelineV0.map((e) => (
-              <div key={e.id} style={{ fontSize: 11, borderLeft: `2px solid ${e.level === 'error' ? 'var(--danger)' : e.level === 'ok' ? '#16a34a' : 'rgba(127,127,127,0.6)'}`, paddingLeft: 8 }}>
-                <span className="muted" style={{ fontFamily: 'ui-monospace, SFMono-Regular' }}>{e.at}</span>
-                {' '}· <b>{e.stage}</b> · <span style={{ color: e.level === 'error' ? 'var(--danger)' : 'inherit' }}>{e.detail}</span>
-              </div>
-            ))}
-          </div>
+          <DaaRebalancePanelLiveTimelineListV0 liveTimelineV0={liveTimelineV0} />
         </details>
-      ) : null}
+      ) : (
+        <DaaRebalancePanelLiveTimelineEmptyStateV0 />
+      )}
     </div>
   );
 }
