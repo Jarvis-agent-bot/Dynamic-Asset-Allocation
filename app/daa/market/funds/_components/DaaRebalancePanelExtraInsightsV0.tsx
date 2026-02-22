@@ -358,23 +358,33 @@ export default function DaaRebalancePanelExtraInsightsV0({
         ];
         const defenseVotes = eliteSignals.filter((s) => s.defensive).length;
         const consensusDefense = defenseVotes >= 2;
+        const rows = rebalanceTableRows.slice(0, 30);
+        const bucketKey = (id: string) => (/^\d{6}$/.test(id) ? 'CN-A' : /^HK/i.test(id) || /^0\d{4}$/.test(id) ? 'HK' : /^[A-Z]{1,5}$/.test(id) ? 'US' : 'OTHER');
+        const bucketCounts = new Map<string, number>();
+        for (const r of rows) {
+          const key = bucketKey(String(r.id ?? '').trim());
+          bucketCounts.set(key, (bucketCounts.get(key) || 0) + 1);
+        }
+        const topShare = rows.length ? Math.max(...Array.from(bucketCounts.values(), (v) => v / rows.length)) : 0;
+        const concentrationRisk = rows.length ? topShare >= 0.55 || bucketCounts.size <= 2 : false;
+        const earlyWarning = consensusDefense || concentrationRisk;
         return (
-          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${consensusDefense ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.12)'}`, borderRadius: 12, background: consensusDefense ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.1)' }}>
-            <div style={{ fontWeight: 800, fontSize: 13 }}>Black-swan consensus warning</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Warn when elite cohort consensus shifts from offense to defense.</div>
+          <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${earlyWarning ? 'rgba(239,68,68,0.6)' : 'rgba(255,255,255,0.12)'}`, borderRadius: 12, background: earlyWarning ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.1)' }}>
+            <div style={{ fontWeight: 800, fontSize: 13 }}>Analyst-consensus shift early-warning</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Combine consensus and concentration cues to flag early regime-risk shifts.</div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
-              defense votes <b>{defenseVotes}/3</b> · consensus <b style={{ color: consensusDefense ? 'var(--danger)' : '#16a34a' }}>{consensusDefense ? 'defense shift detected' : 'stable risk posture'}</b>
+              consensus cue=<b style={{ color: consensusDefense ? 'var(--danger)' : '#16a34a' }}>{consensusDefense ? 'defense shift detected' : 'stable risk posture'}</b> · concentration cue=<b style={{ color: concentrationRisk ? 'var(--danger)' : '#16a34a' }}>{concentrationRisk ? 'hidden concentration risk' : 'diversity acceptable'}</b>
             </div>
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-              cohort: {eliteSignals.map((s) => `${s.name}:${s.defensive ? 'defense' : 'offense'}`).join(' · ')}
+              defense votes {defenseVotes}/3 · top bucket share {(topShare * 100).toFixed(1)}% · buckets {bucketCounts.size || 0}
             </div>
-            {consensusDefense ? (
+            {earlyWarning ? (
               <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
-                  Switch to defensive routing
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
+                  Re-check analyst concentration cues
                 </button>
-                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('history-audit')}>
-                  Review prior black-swan episodes
+                <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+                  Stage defensive rebalance routing
                 </button>
               </div>
             ) : null}
