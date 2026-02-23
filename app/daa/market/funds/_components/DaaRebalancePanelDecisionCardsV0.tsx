@@ -144,6 +144,24 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
               rule: when tag=isolated and lock=LOCKED_MAX_IN, route buys to hold-only until operator unlocks physical limit.
             </div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              Buy gate precheck simulator (incompetence / MaxIn / liquidity / T+N)
+            </div>
+            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+              {(rows.slice(0, 4)).map((r) => {
+                const id = String(r.id ?? '').trim();
+                const incompetenceGate = Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 2.2, 0.06);
+                const maxInGate = lockedIds.has(id);
+                const liquidityGate = liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking;
+                const settlementGate = liquiditySettlementGateV0.settlementLagDays > 1;
+                const verdict = incompetenceGate || maxInGate || liquidityGate || settlementGate ? 'blocked' : 'ready';
+                return (
+                  <div key={`precheck-${id}`}>
+                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} => <b>{verdict}</b>
+                  </div>
+                );
+              })}
+            </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
                 Review isolated tags
