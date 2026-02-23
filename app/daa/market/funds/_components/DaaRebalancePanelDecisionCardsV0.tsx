@@ -204,7 +204,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
           const envelopeLower = -(maxInThreshold + 0.01);
           const envelopeUpper = maxOutThreshold + 0.01;
           const envelopeStatus = drift < envelopeLower || drift > envelopeUpper ? 'outside-envelope' : 'inside-envelope';
-          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus };
+          const thesisRegimeDrift = Math.abs(drift) >= Math.max(driftThresholdPct * 1.8, 0.05);
+          const downWeightFactor = thesisRegimeDrift ? 0.85 : 1;
+          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, thesisRegimeDrift, downWeightFactor };
         });
         const totalMaxInImpact = whatIfRows.reduce((sum, r) => sum + r.maxInImpact, 0);
         const totalMaxOutImpact = whatIfRows.reduce((sum, r) => sum + r.maxOutImpact, 0);
@@ -238,6 +240,16 @@ export default function DaaRebalancePanelDecisionCardsV0({
               {whatIfRows.map((r) => (
                 <div key={`risk-envelope-${r.id}`}>
                   {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              Thesis-regime drift alert timeline (down-weight rationale)
+            </div>
+            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+              {whatIfRows.map((r) => (
+                <div key={`thesis-regime-drift-${r.id}`}>
+                  {r.id}: thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b> · rationale={r.thesisRegimeDrift ? 'drift above tolerance; reduce recommendation weight' : 'inside tolerance; keep baseline weight'}
                 </div>
               ))}
             </div>
