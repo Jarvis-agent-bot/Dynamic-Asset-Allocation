@@ -257,6 +257,21 @@ export default function DaaRebalancePanelDecisionCardsV0({
               })()}
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
+              MaxIn/MaxOut guardrail audit view (threshold trace)
+            </div>
+            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+              {whatIfRows.map((r) => {
+                const maxInThresholdHit = r.maxInImpact > 0;
+                const maxOutThresholdHit = r.maxOutImpact > 0;
+                const guardrailAuditVerdict = maxInThresholdHit || maxOutThresholdHit ? 'threshold-breached' : 'threshold-safe';
+                return (
+                  <div key={`guardrail-audit-${r.id}`}>
+                    {r.id}: maxIn threshold={maxInThreshold.toFixed(2)} ({maxInThresholdHit ? 'hit' : 'safe'}) · maxOut threshold={maxOutThreshold.toFixed(2)} ({maxOutThresholdHit ? 'hit' : 'safe'}) · trace verdict=<b>{guardrailAuditVerdict}</b>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
               Guardrail threshold what-if sandbox (maxIn/maxOut impacts)
             </div>
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
