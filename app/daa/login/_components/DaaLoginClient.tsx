@@ -676,7 +676,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               <div className="font-medium text-foreground">Check your inbox</div>
               <div className="mt-1">
                 {otp.cooldownActive
-                  ? <>A code was already sent recently to <span className="font-medium text-foreground">{otp.email}</span>. Wait for cooldown{formatClockTimeV0(otp.cooldownUntilIso) ? ` until ${formatClockTimeV0(otp.cooldownUntilIso)}` : ""}, then resend if needed.</>
+                  ? <>A code was already sent recently to <span className="font-medium text-foreground">{otp.email}</span>. Wait for cooldown{formatClockTimeV0(otp.cooldownUntilIso) ? ` until ${formatClockTimeV0(otp.cooldownUntilIso)} (device local time)` : ""}, then resend if needed.</>
                   : <>We sent a code to <span className="font-medium text-foreground">{otp.email}</span>.</>}
               </div>
               <ul className="mt-2 list-disc space-y-1 pl-4">

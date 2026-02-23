@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v10', () => {
-  it('shows cooldown-until hint with same-day time and cross-day date+time fallback', () => {
+describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v11', () => {
+  it('shows cooldown-until hint with explicit local-time label in inbox cooldown copy', () => {
     const handlerSource = fs.readFileSync(
       path.join(process.cwd(), 'app/api/daa/auth/email-login/_lib/emailLoginRequestHandlerV0.ts'),
       'utf8'
@@ -36,6 +36,7 @@ describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v10',
     expect(loginSource).toContain('cooldownUntilIso: typeof sent?.cooldownUntilIso === "string" ? sent.cooldownUntilIso : undefined');
     expect(loginSource).toContain('formatClockTimeV0(otp.cooldownUntilIso)');
     expect(loginSource).toContain('A code was already sent recently to');
+    expect(loginSource).toContain('(device local time)');
     expect(loginSource).toContain('Email delivery channel is not configured. Request was accepted, but verification emails may not arrive yet.');
     expect(loginSource).toContain('<AlertTitle>Email delivery notice</AlertTitle>');
   });
