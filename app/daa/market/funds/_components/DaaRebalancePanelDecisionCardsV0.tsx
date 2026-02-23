@@ -232,6 +232,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
         });
         const totalMaxInImpact = whatIfRows.reduce((sum, r) => sum + r.maxInImpact, 0);
         const totalMaxOutImpact = whatIfRows.reduce((sum, r) => sum + r.maxOutImpact, 0);
+        const netGuardrailPressure = totalMaxOutImpact - totalMaxInImpact;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -303,7 +304,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 </div>
               ))}
               <div>
-                sandbox totals: maxIn impact=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b>
+                sandbox totals: maxIn impact=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b> · net pressure=<b>{(netGuardrailPressure * 100).toFixed(1)}%</b>
               </div>
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
