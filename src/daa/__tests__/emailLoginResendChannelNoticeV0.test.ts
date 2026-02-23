@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v9', () => {
-  it('shows resend countdown with cooldown-until local-time hint and keeps cooldown copy visible', () => {
+describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v10', () => {
+  it('shows cooldown-until hint with same-day time and cross-day date+time fallback', () => {
     const handlerSource = fs.readFileSync(
       path.join(process.cwd(), 'app/api/daa/auth/email-login/_lib/emailLoginRequestHandlerV0.ts'),
       'utf8'
@@ -24,7 +24,9 @@ describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v9', 
     expect(loginSource).toContain('deriveRequestedAtMsFromRetryV0(cooldownSeconds, retryAfterSeconds, nowMs)');
     expect(loginSource).toContain('const resendAvailableAtLabel = otp.kind === "sent" ? formatClockTimeV0(otp.cooldownUntilIso) : null;');
     expect(loginSource).toContain('Resend in ${formatSeconds(cooldownRemainingSeconds)}${resendAvailableAtLabel ? ` (after ${resendAvailableAtLabel})` : ""}');
-    expect(loginSource).toContain('formatClockTimeV0');
+    expect(loginSource).toContain('function formatClockTimeV0');
+    expect(loginSource).toContain('const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();');
+    expect(loginSource).toContain('toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })');
     expect(loginSource).toContain('json?.cooldownUntilIso');
     expect(loginSource).toContain('A code was just sent. Please wait');
     expect(loginSource).toContain('local time');
