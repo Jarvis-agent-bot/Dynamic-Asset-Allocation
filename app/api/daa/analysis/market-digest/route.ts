@@ -126,6 +126,26 @@ type UpstreamResult<T> =
   | { ok: true; status: number; data: T }
   | { ok: false; status?: number; error: string };
 
+type ProdSmokeProbeV0 = { ok: boolean; status: number | null };
+
+async function fetchProdSmokeProbeV0(url: string, timeoutMs: number): Promise<ProdSmokeProbeV0> {
+  const ac = new AbortController();
+  const id = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, {
+      method: "GET",
+      cache: "no-store",
+      signal: ac.signal,
+      headers: { accept: "text/html,application/json" },
+    });
+    return { ok: r.ok, status: r.status };
+  } catch {
+    return { ok: false, status: null };
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 async function fetchTextWithTimeout(url: URL, init: RequestInit, timeoutMs: number): Promise<{ ok: boolean; status: number; text: string }> {
   const ac = new AbortController();
   const id = setTimeout(() => ac.abort(), timeoutMs);
@@ -280,11 +300,15 @@ export async function GET(req: Request) {
 
     // Cron should never hang forever: keep each upstream bounded.
     const perUpstreamTimeoutMs = Math.min(25_000, Math.max(1_000, Number(url.searchParams.get("timeoutMs") ?? "8000")));
+    const smokeTimeoutMs = Math.min(4_000, perUpstreamTimeoutMs);
+    const origin = `${url.protocol}//${url.host}`;
 
-    const [tw, yf, xq] = await Promise.all([
+    const [tw, yf, xq, engineHealthProbe, dashboardProbe] = await Promise.all([
       fetchTwitterListLatestTweets(listId, Math.max(20, tweetsLimit), perUpstreamTimeoutMs),
       fetchYahooRss(yahooSymbol, perUpstreamTimeoutMs),
       fetchXueqiuQuotec(xueqiuSymbol, perUpstreamTimeoutMs),
+      fetchProdSmokeProbeV0(`${origin}/api/daa/engine-health`, smokeTimeoutMs),
+      fetchProdSmokeProbeV0(`${origin}/daa/dashboard`, smokeTimeoutMs),
     ]);
 
     const tweets = tw.ok ? extractTwitterdataTweets((tw.data as any)?.payload).slice(0, tweetsLimit) : [];
@@ -307,6 +331,13 @@ export async function GET(req: Request) {
     const lines: string[] = [];
     lines.push(`[DAA][MarketDigest] list=${listId} yahoo=${yahooSymbol} xq=${xueqiuSymbol}`);
     lines.push(`- tweets: ${tweets.length}, yahoo items: ${yahooItems.length}`);
+
+    const failedProdSmokeGates: string[] = [];
+    if (!engineHealthProbe.ok) failedProdSmokeGates.push(`engine-health:${engineHealthProbe.status ?? "ERR"}`);
+    if (!dashboardProbe.ok) failedProdSmokeGates.push(`dashboard:${dashboardProbe.status ?? "ERR"}`);
+    if (failedProdSmokeGates.length) {
+      lines.push(`- [DAA][ProdSmokeGate] FAIL ${failedProdSmokeGates.join(" | ")}`);
+    }
 
     if (warnings.length) {
       lines.push(`- warnings: ${warnings.map((w) => clip(w, 120)).join(" | ")}`);
@@ -342,6 +373,11 @@ export async function GET(req: Request) {
       inputs: { listId, yahooSymbol, xueqiuSymbol, tweetsLimit, timeoutMs: perUpstreamTimeoutMs },
       sources,
       warnings,
+      prodSmokeGate: {
+        engineHealth: engineHealthProbe,
+        dashboard: dashboardProbe,
+        ok: engineHealthProbe.ok && dashboardProbe.ok,
+      },
       tweets,
       yahooItems: yahooItems.slice(0, 10),
       xueqiuQuote: xqQuote,
