@@ -83,6 +83,7 @@ describe("postEmailLoginLinkV0", () => {
 
     expect(body.ok).toBe(true);
     expect(body.cooldownSeconds).toBe(30);
+    expect(body.resendChannelReady).toBe(false);
     expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
     expect(mocks.revokeToken).not.toHaveBeenCalled();
     expect(mocks.sendEmail).toHaveBeenCalledWith(
@@ -111,7 +112,7 @@ describe("postEmailLoginLinkV0", () => {
     const res = await postEmailLoginLinkV0(req, { mode: "request" });
     const body = await res.json();
 
-    expect(body).toEqual({ ok: true, cooldownSeconds: 30 });
+    expect(body).toEqual({ ok: true, cooldownSeconds: 30, resendChannelReady: false });
     expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 
@@ -128,6 +129,7 @@ describe("postEmailLoginLinkV0", () => {
     const body = await res.json();
 
     expect(body.ok).toBe(true);
+    expect(body.resendChannelReady).toBe(false);
     expect(mocks.revokeToken).toHaveBeenCalledWith({ tokenId: "tok_1" });
     expect(mocks.appendAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -150,6 +152,7 @@ describe("postEmailLoginLinkV0", () => {
     const body = await res.json();
 
     expect(body.ok).toBe(true);
+    expect(body.resendChannelReady).toBe(false);
     expect(body.debugCode).toBe("123456");
     expect(body.delivery).toEqual({ ok: false, skipped: true, error: "missing RESEND_API_KEY" });
   });

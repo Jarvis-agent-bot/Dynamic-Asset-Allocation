@@ -26,6 +26,12 @@ function normalizeEmailLoose(raw: unknown): string {
   return v;
 }
 
+function isResendChannelReadyV0(): boolean {
+  const key = typeof process.env.RESEND_API_KEY === "string" ? process.env.RESEND_API_KEY.trim() : "";
+  const from = normalizeEmailLoose(process.env.DAA_AUTH_EMAIL_FROM);
+  return Boolean(key && from);
+}
+
 export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request" | "resend" }) {
   let body: any = null;
   try {
@@ -39,15 +45,16 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
 
   // Cooldown is a practical anti-spam limiter, even if the endpoint is hidden behind the login UI.
   const cooldownSeconds = 30;
+  const resendChannelReady = isResendChannelReadyV0();
 
   // Always return ok to avoid leaking whether an account exists.
   if (!email) {
-    return NextResponse.json({ ok: true, cooldownSeconds });
+    return NextResponse.json({ ok: true, cooldownSeconds, resendChannelReady });
   }
 
   const account = await getDaaAuthAccountByUsernameV0(email).catch(() => null);
   if (!account || account.status !== "active") {
-    return NextResponse.json({ ok: true, cooldownSeconds });
+    return NextResponse.json({ ok: true, cooldownSeconds, resendChannelReady });
   }
 
   // Best-effort cooldown per account.
@@ -57,7 +64,7 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
       const lastMs = Date.parse(last);
       const nowMs = Date.now();
       if (Number.isFinite(lastMs) && nowMs - lastMs < cooldownSeconds * 1000) {
-        return NextResponse.json({ ok: true, cooldownSeconds });
+        return NextResponse.json({ ok: true, cooldownSeconds, resendChannelReady });
       }
     }
   } catch {
@@ -115,8 +122,8 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
 
   const debug = process.env.DAA_EMAIL_LOGIN_DEBUG === "1";
   if (debug) {
-    return NextResponse.json({ ok: true, cooldownSeconds, debugCode: code, delivery });
+    return NextResponse.json({ ok: true, cooldownSeconds, resendChannelReady, debugCode: code, delivery });
   }
 
-  return NextResponse.json({ ok: true, cooldownSeconds });
+  return NextResponse.json({ ok: true, cooldownSeconds, resendChannelReady });
 }
