@@ -83,7 +83,11 @@ function formatSeconds(s: number): string {
 function formatClockTimeV0(iso: unknown): string | null {
   const d = typeof iso === "string" ? new Date(iso) : null;
   if (!d || !Number.isFinite(d.getTime())) return null;
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  return sameDay
+    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function deriveRequestedAtMsFromRetryV0(cooldownSeconds: number, retryAfterSeconds: number | null, nowMs: number): number {
