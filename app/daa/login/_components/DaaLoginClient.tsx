@@ -86,6 +86,14 @@ function formatClockTimeV0(iso: unknown): string | null {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function deriveRequestedAtMsFromRetryV0(cooldownSeconds: number, retryAfterSeconds: number | null, nowMs: number): number {
+  if (!Number.isFinite(nowMs)) return Date.now();
+  if (!Number.isFinite(cooldownSeconds) || cooldownSeconds <= 0) return nowMs;
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds === null) return nowMs;
+  const elapsedSeconds = Math.max(0, cooldownSeconds - Math.max(0, retryAfterSeconds));
+  return nowMs - elapsedSeconds * 1000;
+}
+
 function isBrowserOnline(): boolean {
   if (typeof navigator === "undefined") return true;
   const n: any = navigator;
@@ -357,14 +365,16 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         setEmailChannelNotice("Email delivery channel is not configured. Request was accepted, but verification emails may not arrive yet.");
       }
       const cooldownActive = json?.cooldownActive === true;
+      let retryAfterSeconds: number | null = null;
       if (cooldownActive) {
-        const retryAfterSeconds = Number.isFinite(Number(json?.retryAfterSeconds)) ? Math.max(1, Math.floor(Number(json.retryAfterSeconds))) : null;
+        retryAfterSeconds = Number.isFinite(Number(json?.retryAfterSeconds)) ? Math.max(1, Math.floor(Number(json.retryAfterSeconds))) : null;
         const cooldownUntilLabel = formatClockTimeV0(json?.cooldownUntilIso);
         setEmailChannelNotice(retryAfterSeconds
           ? `A code was just sent. Please wait ${formatSeconds(retryAfterSeconds)} before requesting another email${cooldownUntilLabel ? ` (after ${cooldownUntilLabel})` : ""}.`
           : "A code was just sent. Please wait for cooldown before requesting another email.");
       }
-      const requestedAtMs = Date.now();
+      const nowMs = Date.now();
+      const requestedAtMs = cooldownActive ? deriveRequestedAtMsFromRetryV0(cooldownSeconds, retryAfterSeconds, nowMs) : nowMs;
       const next = {
         kind: "sent",
         email,

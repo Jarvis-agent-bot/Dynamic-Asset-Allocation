@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v6', () => {
-  it('persists cooldownUntilIso in otp state and shows it in cooldown inbox copy', () => {
+describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v7', () => {
+  it('aligns cooldown countdown with backend retry-after timing and keeps cooldown copy visible', () => {
     const handlerSource = fs.readFileSync(
       path.join(process.cwd(), 'app/api/daa/auth/email-login/_lib/emailLoginRequestHandlerV0.ts'),
       'utf8'
@@ -20,6 +20,8 @@ describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v6', 
     expect(handlerSource).toContain('cooldownUntilIso');
     expect(loginSource).toContain('const resendChannelReady = json?.resendChannelReady !== false;');
     expect(loginSource).toContain('const cooldownActive = json?.cooldownActive === true;');
+    expect(loginSource).toContain('function deriveRequestedAtMsFromRetryV0');
+    expect(loginSource).toContain('deriveRequestedAtMsFromRetryV0(cooldownSeconds, retryAfterSeconds, nowMs)');
     expect(loginSource).toContain('formatClockTimeV0');
     expect(loginSource).toContain('json?.cooldownUntilIso');
     expect(loginSource).toContain('A code was just sent. Please wait');
