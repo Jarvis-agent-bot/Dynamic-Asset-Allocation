@@ -48,9 +48,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const qatRows = rows.map((r) => {
           const id = String(r.id ?? '').trim();
           const driftAbs = Math.abs(Number.isFinite(r.deltaPct) ? r.deltaPct : 0);
-          const quality = Math.max(0.6, 1 - Math.min(0.35, driftAbs * 1.8) - (missingSet.has(id) ? 0.2 : 0) - (staleSet.has(id) ? 0.1 : 0));
+          const driftGatePenalty = Math.min(0.35, driftAbs * 1.8);
+          const missingGatePenalty = missingSet.has(id) ? 0.2 : 0;
+          const staleGatePenalty = staleSet.has(id) ? 0.1 : 0;
+          const quality = Math.max(0.6, 1 - driftGatePenalty - missingGatePenalty - staleGatePenalty);
           const wQat = Math.max(0, r.targetPct * quality);
-          return { id, targetPct: r.targetPct, quality, wQat, driftAbs };
+          return { id, targetPct: r.targetPct, quality, wQat, driftAbs, driftGatePenalty, missingGatePenalty, staleGatePenalty };
         });
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
@@ -59,7 +62,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {qatRows.map((r) => (
                 <div key={r.id} style={{ fontSize: 11 }}>
-                  {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) {'=>'} W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b>
+                  {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) {'=>'} W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b> · gates(drift=-{(r.driftGatePenalty * 100).toFixed(1)}pp, missing=-{(r.missingGatePenalty * 100).toFixed(1)}pp, stale=-{(r.staleGatePenalty * 100).toFixed(1)}pp)
                 </div>
               ))}
             </div>
