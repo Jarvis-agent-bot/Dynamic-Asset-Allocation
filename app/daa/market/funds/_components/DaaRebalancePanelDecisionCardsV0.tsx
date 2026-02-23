@@ -177,6 +177,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const rows = rebalanceTableRows.slice(0, 20);
         if (!rows.length) return null;
         const gate = liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking ? 'blocked' : 'pass';
+        const maxInThreshold = 0.03;
+        const maxOutThreshold = 0.04;
+        const whatIfRows = rows.slice(0, 4).map((r) => {
+          const drift = Number.isFinite(r.deltaPct) ? r.deltaPct : 0;
+          const maxInImpact = drift < 0 ? Math.max(0, Math.abs(drift) - maxInThreshold) : 0;
+          const maxOutImpact = drift > 0 ? Math.max(0, Math.abs(drift) - maxOutThreshold) : 0;
+          const verdict = maxInImpact > 0 || maxOutImpact > 0 ? 'guardrail-hit' : 'inside-guardrail';
+          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict };
+        });
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -186,6 +195,16 @@ export default function DaaRebalancePanelDecisionCardsV0({
             </div>
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
               buy={liquiditySettlementGateV0.estimatedBuys.toFixed(2)} · sell={liquiditySettlementGateV0.estimatedSells.toFixed(2)} · cash={liquiditySettlementGateV0.availableCash.toFixed(2)} · settled coverage={liquiditySettlementGateV0.settledLiquidityCoverage.toFixed(2)}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              Guardrail threshold what-if sandbox (maxIn/maxOut impacts)
+            </div>
+            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+              {whatIfRows.map((r) => (
+                <div key={`guardrail-whatif-${r.id}`}>
+                  {r.id}: drift={(r.drift * 100).toFixed(1)}% · maxIn impact={r.maxInImpact > 0 ? `+${(r.maxInImpact * 100).toFixed(1)}%` : '0.0%'} · maxOut impact={r.maxOutImpact > 0 ? `+${(r.maxOutImpact * 100).toFixed(1)}%` : '0.0%'} => <b>{r.verdict}</b>
+                </div>
+              ))}
             </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
