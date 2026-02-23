@@ -39,7 +39,7 @@ type SessionModel =
 type OtpModel =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "sent"; email: string; requestedAtMs: number; cooldownSeconds: number };
+  | { kind: "sent"; email: string; requestedAtMs: number; cooldownSeconds: number; cooldownActive?: boolean };
 
 const LS_DAA_LAST_EMAIL_LOGIN_EMAIL_V0 = "daa.emailLogin.lastEmail.v0";
 const LS_DAA_EMAIL_OTP_SENT_V0 = "daa.emailOtp.sent.v0";
@@ -247,7 +247,13 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         const requestedAtMs = Number(sent?.requestedAtMs);
         const cooldownSeconds = Number(sent?.cooldownSeconds);
         if (email && Number.isFinite(requestedAtMs) && Number.isFinite(cooldownSeconds)) {
-          setOtp({ kind: "sent", email, requestedAtMs, cooldownSeconds: Math.max(0, Math.floor(cooldownSeconds)) });
+          setOtp({
+            kind: "sent",
+            email,
+            requestedAtMs,
+            cooldownSeconds: Math.max(0, Math.floor(cooldownSeconds)),
+            cooldownActive: sent?.cooldownActive === true,
+          });
         }
       }
     } catch {
@@ -351,7 +357,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           : "A code was just sent. Please wait for cooldown before requesting another email.");
       }
       const requestedAtMs = Date.now();
-      const next = { kind: "sent", email, requestedAtMs, cooldownSeconds } as const;
+      const next = { kind: "sent", email, requestedAtMs, cooldownSeconds, cooldownActive } as const;
       setOtp(next);
       setCode("");
       if (cooldownActive) {
@@ -638,7 +644,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           {otp.kind === "sent" ? (
             <div className="rounded-md border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground">
               <div className="font-medium text-foreground">Check your inbox</div>
-              <div className="mt-1">We sent a code to <span className="font-medium text-foreground">{otp.email}</span>.</div>
+              <div className="mt-1">
+                {otp.cooldownActive
+                  ? <>A code was already sent recently to <span className="font-medium text-foreground">{otp.email}</span>. Wait for cooldown, then resend if needed.</>
+                  : <>We sent a code to <span className="font-medium text-foreground">{otp.email}</span>.</>}
+              </div>
               <ul className="mt-2 list-disc space-y-1 pl-4">
                 <li>Check spam/promotions if it doesn&apos;t arrive in 1 minute.</li>
                 <li>Do not forward or share the verification code.</li>
