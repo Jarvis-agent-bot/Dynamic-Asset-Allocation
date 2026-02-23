@@ -14,6 +14,11 @@ describe('feature-scenario-routing-evidence-panel-v0', () => {
     expect(source).toContain('data-quality-gate=');
     expect(source).toContain('deep-negative-gate=');
     expect(source).toContain('trigger reason:');
+    expect(source).toContain('Scenario routing evidence matrix (A/B gate snapshot)');
+    expect(source).toContain('policy-gate threshold(40):');
+    expect(source).toContain('deep-negative gate threshold(2):');
+    expect(source).toContain('data-quality gate threshold(missing>0):');
+    expect(source).toContain('data-quality gate threshold(stale>0):');
     expect(source).toContain('Apply gate in rebalance orders');
   });
 });

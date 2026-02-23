@@ -100,6 +100,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
               trigger reason: {routing.triggerReasons.length ? routing.triggerReasons.join(' + ') : 'none (scenario A)'}
             </div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
+              Scenario routing evidence matrix (A/B gate snapshot)
+            </div>
+            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+              <div>policy-gate threshold(40): <b>{routing.stressScore >= 40 ? 'B path candidate' : 'A path candidate'}</b> (score {routing.stressScore})</div>
+              <div>deep-negative gate threshold(2): <b>{deepNegativeCount >= 2 ? 'B path candidate' : 'A path candidate'}</b> (count {deepNegativeCount})</div>
+              <div>data-quality gate threshold(missing>0): <b>{priceDataWarningsV0.missing.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (missing {priceDataWarningsV0.missing.length})</div>
+              <div>data-quality gate threshold(stale>0): <b>{priceDataWarningsV0.lastClose.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (stale {priceDataWarningsV0.lastClose.length})</div>
+            </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
                 Open scenario weight routing
