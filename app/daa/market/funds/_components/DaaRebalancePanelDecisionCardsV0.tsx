@@ -304,12 +304,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 </div>
               ))}
             </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(245,158,11,0.55)', borderRadius: 10, background: 'rgba(245,158,11,0.08)', fontSize: 11 }}>
+              AI recommender manual confirmation checkpoint: operator must confirm preflight checkpoint before any execution suggestion is treated as actionable.
+            </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
                 Open liquidity-sensitive orders
               </button>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun()}>
-                Re-run T+N preflight
+                Confirm manual checkpoint
               </button>
             </div>
           </div>
