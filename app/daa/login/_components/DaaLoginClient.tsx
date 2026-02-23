@@ -193,6 +193,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   }, [otp]);
 
   const canResend = otp.kind === "sent" && cooldownRemainingSeconds <= 0;
+  const resendAvailableAtLabel = otp.kind === "sent" ? formatClockTimeV0(otp.cooldownUntilIso) : null;
   const otpBusy = otp.kind === "sending";
 
   useEffect(() => {
@@ -645,7 +646,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                   Sending...
                 </>
               ) : otp.kind === "sent" ? (
-                canResend ? "Resend code" : `Resend in ${formatSeconds(cooldownRemainingSeconds)}`
+                canResend ? "Resend code" : `Resend in ${formatSeconds(cooldownRemainingSeconds)}${resendAvailableAtLabel ? ` (after ${resendAvailableAtLabel})` : ""}`
               ) : (
                 <>
                   <Mail className="mr-2 h-4 w-4" />
