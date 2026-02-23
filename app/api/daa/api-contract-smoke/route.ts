@@ -51,10 +51,14 @@ export async function GET(req: Request) {
     passRatePct: total > 0 ? Math.round((pass / total) * 100) : 0,
   };
 
+  const statusTag = summary.fail === 0 ? "PASS" : "FAIL";
+  const deterministicKey = `v2-${statusTag}-${summary.pass}-${summary.total}-${summary.passRatePct}`;
+
   return NextResponse.json({
     ok: summary.fail === 0,
-    smoke: "nextjs-api-contract-v1",
-    summaryLine: `[DAA][ApiContractSmoke] ${summary.fail === 0 ? "PASS" : "FAIL"} ${summary.pass}/${summary.total} checks (${summary.passRatePct}%)`,
+    smoke: "nextjs-api-contract-v2",
+    summaryLine: `[DAA][ApiContractSmoke] ${statusTag} ${summary.pass}/${summary.total} checks (${summary.passRatePct}%)`,
+    deterministicKey,
     summary,
     checks: API_CONTRACT_SMOKE_ITEMS_V0,
   });
