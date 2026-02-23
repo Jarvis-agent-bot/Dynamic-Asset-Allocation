@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v3', () => {
-  it('returns resendChannelReady/cooldownActive and surfaces non-misleading user notices', () => {
+describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v4', () => {
+  it('returns resendChannelReady/cooldownActive and keeps inbox copy accurate during cooldown', () => {
     const handlerSource = fs.readFileSync(
       path.join(process.cwd(), 'app/api/daa/auth/email-login/_lib/emailLoginRequestHandlerV0.ts'),
       'utf8'
@@ -21,6 +21,9 @@ describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v3', 
     expect(loginSource).toContain('const cooldownActive = json?.cooldownActive === true;');
     expect(loginSource).toContain('A code was just sent. Please wait');
     expect(loginSource).toContain('toast("A code was already sent recently. Cooldown is still active.");');
+    expect(loginSource).toContain('cooldownActive?: boolean');
+    expect(loginSource).toContain('otp.cooldownActive');
+    expect(loginSource).toContain('A code was already sent recently to');
     expect(loginSource).toContain('Email delivery channel is not configured. Request was accepted, but verification emails may not arrive yet.');
     expect(loginSource).toContain('<AlertTitle>Email delivery notice</AlertTitle>');
   });
