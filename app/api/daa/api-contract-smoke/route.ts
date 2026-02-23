@@ -9,6 +9,13 @@ type ApiContractSmokeItemV0 = {
   status: "ok";
 };
 
+type ApiContractSmokeSummaryV1 = {
+  total: number;
+  pass: number;
+  fail: number;
+  passRatePct: number;
+};
+
 const API_CONTRACT_SMOKE_ITEMS_V0: ApiContractSmokeItemV0[] = [
   {
     key: "engine-health",
@@ -34,10 +41,21 @@ export async function GET(req: Request) {
   const denied = await requireDaaAdminViewerAuth(req);
   if (denied) return denied;
 
+  const total = API_CONTRACT_SMOKE_ITEMS_V0.length;
+  const pass = API_CONTRACT_SMOKE_ITEMS_V0.filter((item) => item.status === "ok").length;
+  const fail = Math.max(0, total - pass);
+  const summary: ApiContractSmokeSummaryV1 = {
+    total,
+    pass,
+    fail,
+    passRatePct: total > 0 ? Math.round((pass / total) * 100) : 0,
+  };
+
   return NextResponse.json({
-    ok: true,
-    smoke: "nextjs-api-contract-v0",
-    summaryLine: `[DAA][ApiContractSmoke] PASS ${API_CONTRACT_SMOKE_ITEMS_V0.length}/${API_CONTRACT_SMOKE_ITEMS_V0.length} deterministic checks`,
+    ok: summary.fail === 0,
+    smoke: "nextjs-api-contract-v1",
+    summaryLine: `[DAA][ApiContractSmoke] ${summary.fail === 0 ? "PASS" : "FAIL"} ${summary.pass}/${summary.total} checks (${summary.passRatePct}%)`,
+    summary,
     checks: API_CONTRACT_SMOKE_ITEMS_V0,
   });
 }
