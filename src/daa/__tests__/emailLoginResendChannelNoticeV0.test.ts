@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v7', () => {
-  it('aligns cooldown countdown with backend retry-after timing and keeps cooldown copy visible', () => {
+describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v8', () => {
+  it('shows resend countdown with cooldown-until clock hint and keeps cooldown copy visible', () => {
     const handlerSource = fs.readFileSync(
       path.join(process.cwd(), 'app/api/daa/auth/email-login/_lib/emailLoginRequestHandlerV0.ts'),
       'utf8'
@@ -22,6 +22,8 @@ describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v7', 
     expect(loginSource).toContain('const cooldownActive = json?.cooldownActive === true;');
     expect(loginSource).toContain('function deriveRequestedAtMsFromRetryV0');
     expect(loginSource).toContain('deriveRequestedAtMsFromRetryV0(cooldownSeconds, retryAfterSeconds, nowMs)');
+    expect(loginSource).toContain('const resendAvailableAtLabel = otp.kind === "sent" ? formatClockTimeV0(otp.cooldownUntilIso) : null;');
+    expect(loginSource).toContain('Resend in ${formatSeconds(cooldownRemainingSeconds)}${resendAvailableAtLabel ? ` (after ${resendAvailableAtLabel})` : ""}');
     expect(loginSource).toContain('formatClockTimeV0');
     expect(loginSource).toContain('json?.cooldownUntilIso');
     expect(loginSource).toContain('A code was just sent. Please wait');
