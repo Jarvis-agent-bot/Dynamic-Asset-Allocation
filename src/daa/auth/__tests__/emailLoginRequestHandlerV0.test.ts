@@ -153,6 +153,7 @@ describe("postEmailLoginLinkV0", () => {
     expect(body.ok).toBe(true);
     expect(body.cooldownActive).toBe(true);
     expect(body.retryAfterSeconds).toBeGreaterThan(0);
+    expect(typeof body.cooldownUntilIso).toBe("string");
     expect(mocks.createToken).not.toHaveBeenCalled();
     expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
