@@ -605,6 +605,9 @@ export default function DaaDashboardOverviewCards() {
                   <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
                     <a href="/daa/dashboard" target="_blank" rel="noreferrer">Dashboard 200</a>
                   </Button>
+                  <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
+                    <a href="/api/daa/pm-bridge-smoke" target="_blank" rel="noreferrer">PM bridge admission</a>
+                  </Button>
                 </div>
               </div>
             </>
