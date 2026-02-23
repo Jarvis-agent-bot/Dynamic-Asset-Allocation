@@ -73,6 +73,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 );
               })}
             </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
+              W_qat multiplier explainer: <b>W_qat = W_target × Q × analystTierMultiplier</b> where Q = 1 - driftPenalty - missingPenalty - stalePenalty.
+            </div>
           </div>
         );
       })()}
