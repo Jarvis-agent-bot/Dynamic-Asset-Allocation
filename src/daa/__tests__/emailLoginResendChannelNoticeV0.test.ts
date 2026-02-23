@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v4', () => {
-  it('returns resendChannelReady/cooldownActive and keeps inbox copy accurate during cooldown', () => {
+describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v5', () => {
+  it('returns cooldownUntilIso and shows a cooldown-until hint in user notice', () => {
     const handlerSource = fs.readFileSync(
       path.join(process.cwd(), 'app/api/daa/auth/email-login/_lib/emailLoginRequestHandlerV0.ts'),
       'utf8'
@@ -17,8 +17,11 @@ describe('mainline-dod-sends-email-via-resend-v4-e-delegate-no-pr-recovery-v4', 
     expect(handlerSource).toContain('resendChannelReady');
     expect(handlerSource).toContain('cooldownActive: true');
     expect(handlerSource).toContain('retryAfterSeconds');
+    expect(handlerSource).toContain('cooldownUntilIso');
     expect(loginSource).toContain('const resendChannelReady = json?.resendChannelReady !== false;');
     expect(loginSource).toContain('const cooldownActive = json?.cooldownActive === true;');
+    expect(loginSource).toContain('formatClockTimeV0');
+    expect(loginSource).toContain('json?.cooldownUntilIso');
     expect(loginSource).toContain('A code was just sent. Please wait');
     expect(loginSource).toContain('toast("A code was already sent recently. Cooldown is still active.");');
     expect(loginSource).toContain('cooldownActive?: boolean');

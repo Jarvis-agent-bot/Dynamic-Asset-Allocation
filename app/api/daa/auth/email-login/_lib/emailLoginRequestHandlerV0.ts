@@ -65,7 +65,8 @@ export async function postEmailLoginLinkV0(req: Request, opts: { mode: "request"
       const nowMs = Date.now();
       if (Number.isFinite(lastMs) && nowMs - lastMs < cooldownSeconds * 1000) {
         const retryAfterSeconds = Math.max(1, Math.ceil((cooldownSeconds * 1000 - (nowMs - lastMs)) / 1000));
-        return NextResponse.json({ ok: true, cooldownSeconds, resendChannelReady, cooldownActive: true, retryAfterSeconds });
+        const cooldownUntilIso = new Date(nowMs + retryAfterSeconds * 1000).toISOString();
+        return NextResponse.json({ ok: true, cooldownSeconds, resendChannelReady, cooldownActive: true, retryAfterSeconds, cooldownUntilIso });
       }
     }
   } catch {

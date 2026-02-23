@@ -80,6 +80,12 @@ function formatSeconds(s: number): string {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
+function formatClockTimeV0(iso: unknown): string | null {
+  const d = typeof iso === "string" ? new Date(iso) : null;
+  if (!d || !Number.isFinite(d.getTime())) return null;
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 function isBrowserOnline(): boolean {
   if (typeof navigator === "undefined") return true;
   const n: any = navigator;
@@ -352,8 +358,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       const cooldownActive = json?.cooldownActive === true;
       if (cooldownActive) {
         const retryAfterSeconds = Number.isFinite(Number(json?.retryAfterSeconds)) ? Math.max(1, Math.floor(Number(json.retryAfterSeconds))) : null;
+        const cooldownUntilLabel = formatClockTimeV0(json?.cooldownUntilIso);
         setEmailChannelNotice(retryAfterSeconds
-          ? `A code was just sent. Please wait ${formatSeconds(retryAfterSeconds)} before requesting another email.`
+          ? `A code was just sent. Please wait ${formatSeconds(retryAfterSeconds)} before requesting another email${cooldownUntilLabel ? ` (after ${cooldownUntilLabel})` : ""}.`
           : "A code was just sent. Please wait for cooldown before requesting another email.");
       }
       const requestedAtMs = Date.now();
