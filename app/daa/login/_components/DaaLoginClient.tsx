@@ -343,7 +343,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       if (!resendChannelReady) {
         setEmailChannelNotice("Email delivery channel is not configured. Request was accepted, but verification emails may not arrive yet.");
       }
-      if (json?.cooldownActive === true) {
+      const cooldownActive = json?.cooldownActive === true;
+      if (cooldownActive) {
         const retryAfterSeconds = Number.isFinite(Number(json?.retryAfterSeconds)) ? Math.max(1, Math.floor(Number(json.retryAfterSeconds))) : null;
         setEmailChannelNotice(retryAfterSeconds
           ? `A code was just sent. Please wait ${formatSeconds(retryAfterSeconds)} before requesting another email.`
@@ -353,7 +354,11 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       const next = { kind: "sent", email, requestedAtMs, cooldownSeconds } as const;
       setOtp(next);
       setCode("");
-      toast.success("If an account exists for that email, we sent a verification code.");
+      if (cooldownActive) {
+        toast("A code was already sent recently. Cooldown is still active.");
+      } else {
+        toast.success("If an account exists for that email, we sent a verification code.");
+      }
       try {
         window.localStorage.setItem(LS_DAA_EMAIL_OTP_SENT_V0, JSON.stringify(next));
       } catch {
