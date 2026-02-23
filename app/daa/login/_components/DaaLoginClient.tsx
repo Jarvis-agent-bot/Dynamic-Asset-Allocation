@@ -163,6 +163,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const [code, setCode] = useState("");
   const [otp, setOtp] = useState<OtpModel>({ kind: "idle" });
   const [otpError, setOtpError] = useState<string | null>(null);
+  const [emailChannelNotice, setEmailChannelNotice] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [online, setOnline] = useState(true);
 
@@ -306,6 +307,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     }
 
     setOtpError(null);
+    setEmailChannelNotice(null);
     setOtp({ kind: "sending" });
 
     try {
@@ -337,6 +339,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
       const cooldownSeconds =
         typeof json?.cooldownSeconds === "number" && Number.isFinite(json.cooldownSeconds) ? Math.max(0, Math.floor(json.cooldownSeconds)) : 30;
+      const resendChannelReady = json?.resendChannelReady !== false;
+      if (!resendChannelReady) {
+        setEmailChannelNotice("Email delivery channel is not configured. Request was accepted, but verification emails may not arrive yet.");
+      }
       const requestedAtMs = Date.now();
       const next = { kind: "sent", email, requestedAtMs, cooldownSeconds } as const;
       setOtp(next);
@@ -511,6 +517,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 onChange={(e) => {
                   setUsername(e.target.value);
                   setOtpError(null);
+                  setEmailChannelNotice(null);
                 }}
                 onPaste={handleEmailPaste}
                 onBlur={() => {
@@ -577,6 +584,14 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{otpError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {emailChannelNotice ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Email delivery notice</AlertTitle>
+              <AlertDescription>{emailChannelNotice}</AlertDescription>
             </Alert>
           ) : null}
 
