@@ -185,9 +185,18 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const settlementGate = liquiditySettlementGateV0.settlementLagDays > 1;
                 const blockedGateCount = [incompetenceGate, maxInGate, liquidityGate, settlementGate].filter(Boolean).length;
                 const verdict = blockedGateCount > 0 ? 'blocked' : 'ready';
+                const primaryBlocker = incompetenceGate
+                  ? 'incompetence'
+                  : maxInGate
+                    ? 'maxIn'
+                    : liquidityGate
+                      ? 'liquidity'
+                      : settlementGate
+                        ? 'T+N'
+                        : 'none';
                 return (
                   <div key={`precheck-${id}`}>
-                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} · blocked gates=<b>{blockedGateCount}</b> => <b>{verdict}</b>
+                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} · blocked gates=<b>{blockedGateCount}</b> · primary blocker=<b>{primaryBlocker}</b> => <b>{verdict}</b>
                   </div>
                 );
               })}
