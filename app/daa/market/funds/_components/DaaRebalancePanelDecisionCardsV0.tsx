@@ -236,6 +236,27 @@ export default function DaaRebalancePanelDecisionCardsV0({
               })}
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
+              T+N settlement and cash-gap gate explainer
+            </div>
+            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+              {(() => {
+                const settlementBlocked = liquiditySettlementGateV0.settlementLagDays > 1;
+                const cashGapBlocked = liquiditySettlementGateV0.cashGap > 0;
+                const gateReason = settlementBlocked && cashGapBlocked
+                  ? 'blocked by delayed settlement and positive cash gap'
+                  : settlementBlocked
+                    ? 'blocked by delayed settlement window'
+                    : cashGapBlocked
+                      ? 'blocked by positive cash gap forecast'
+                      : 'pass: settlement window and cash gap are inside limits';
+                return (
+                  <div>
+                    settlement gate(T+N={liquiditySettlementGateV0.settlementLagDays})={settlementBlocked ? 'block' : 'pass'} · cash-gap gate({liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''})={cashGapBlocked ? 'block' : 'pass'} · explanation=<b>{gateReason}</b>
+                  </div>
+                );
+              })()}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
               Guardrail threshold what-if sandbox (maxIn/maxOut impacts)
             </div>
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
