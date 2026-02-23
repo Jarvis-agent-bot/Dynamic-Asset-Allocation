@@ -371,7 +371,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         retryAfterSeconds = Number.isFinite(Number(json?.retryAfterSeconds)) ? Math.max(1, Math.floor(Number(json.retryAfterSeconds))) : null;
         const cooldownUntilLabel = formatClockTimeV0(json?.cooldownUntilIso);
         setEmailChannelNotice(retryAfterSeconds
-          ? `A code was just sent. Please wait ${formatSeconds(retryAfterSeconds)} before requesting another email${cooldownUntilLabel ? ` (after ${cooldownUntilLabel})` : ""}.`
+          ? `A code was just sent. Please wait ${formatSeconds(retryAfterSeconds)} before requesting another email${cooldownUntilLabel ? ` (after ${cooldownUntilLabel} local time)` : ""}.`
           : "A code was just sent. Please wait for cooldown before requesting another email.");
       }
       const nowMs = Date.now();
