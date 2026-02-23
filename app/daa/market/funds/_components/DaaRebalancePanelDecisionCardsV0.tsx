@@ -78,12 +78,18 @@ export default function DaaRebalancePanelDecisionCardsV0({
           missingPriceCount: priceDataWarningsV0.missing.length,
           staleCloseCount: priceDataWarningsV0.lastClose.length,
         });
+        const policyGateStatus = routing.stressScore >= 40 ? 'tripped' : 'clear';
+        const dataQualityGateStatus = priceDataWarningsV0.missing.length > 0 || priceDataWarningsV0.lastClose.length > 0 ? 'degraded' : 'clean';
+        const deepNegativeGateStatus = deepNegativeCount >= 2 ? 'tripped' : 'clear';
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${routing.scenario === 'A' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: routing.scenario === 'A' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Rebalance scenario A/B gates</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Route execution by strong-hold vs value-trap decision gate.</div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
               scenario <b>{routing.scenario}</b> · gate <b>{routing.gateLabel}</b> · decision <b>{routing.routeLabel}</b>
+            </div>
+            <div style={{ marginTop: 4, fontSize: 11 }}>
+              Scenario-routing evidence: policy-gate=<b>{policyGateStatus}</b> · data-quality-gate=<b>{dataQualityGateStatus}</b> · deep-negative-gate=<b>{deepNegativeGateStatus}</b>
             </div>
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
               stress score = high drift {highDriftCount}×5 + missing prices {priceDataWarningsV0.missing.length}×8 + stale closes {priceDataWarningsV0.lastClose.length}×3 = {routing.stressScore}
