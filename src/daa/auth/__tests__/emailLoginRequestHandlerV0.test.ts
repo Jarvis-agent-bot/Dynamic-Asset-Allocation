@@ -138,6 +138,25 @@ describe("postEmailLoginLinkV0", () => {
     );
   });
 
+  it("returns cooldownActive + retryAfterSeconds when resend is requested too soon", async () => {
+    mocks.findLastCreatedAt.mockResolvedValueOnce(new Date(Date.now() - 5_000).toISOString());
+
+    const req = new Request("http://localhost/api/daa/auth/email-login/resend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "trader@example.com", returnTo: "/daa/dashboard" }),
+    });
+
+    const res = await postEmailLoginLinkV0(req, { mode: "resend" });
+    const body = await res.json();
+
+    expect(body.ok).toBe(true);
+    expect(body.cooldownActive).toBe(true);
+    expect(body.retryAfterSeconds).toBeGreaterThan(0);
+    expect(mocks.createToken).not.toHaveBeenCalled();
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+
   it("includes delivery status in debug mode when Resend call is skipped", async () => {
     process.env.DAA_EMAIL_LOGIN_DEBUG = "1";
     mocks.sendEmail.mockResolvedValueOnce({ ok: false, skipped: true, error: "missing RESEND_API_KEY" });
