@@ -221,6 +221,21 @@ export default function DaaRebalancePanelDecisionCardsV0({
               buy={liquiditySettlementGateV0.estimatedBuys.toFixed(2)} · sell={liquiditySettlementGateV0.estimatedSells.toFixed(2)} · cash={liquiditySettlementGateV0.availableCash.toFixed(2)} · settled coverage={liquiditySettlementGateV0.settledLiquidityCoverage.toFixed(2)}
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
+              Liquidity cap sensitivity panel (execution sizing)
+            </div>
+            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+              {([0.8, 1.0, 1.2] as const).map((cap) => {
+                const capBuys = liquiditySettlementGateV0.estimatedBuys * cap;
+                const capCoverage = capBuys > 0 ? liquiditySettlementGateV0.availableCash / capBuys : 1;
+                const capVerdict = capCoverage >= 1 ? 'sized' : 'clipped';
+                return (
+                  <div key={`liquidity-cap-${cap}`}>
+                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} => <b>{capVerdict}</b>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11 }}>
               Guardrail threshold what-if sandbox (maxIn/maxOut impacts)
             </div>
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
