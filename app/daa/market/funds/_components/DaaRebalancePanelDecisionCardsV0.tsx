@@ -874,6 +874,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, driftAlertThreshold, driftAlert, pressure, action };
         });
         const manualConfirmationDriftAlertCount = manualConfirmationDriftAlertRows.filter((row) => row.driftAlert).length;
+        const manualConfirmationDriftReadinessPct = manualConfirmationDriftAlertRows.length
+          ? Math.round(((manualConfirmationDriftAlertRows.length - manualConfirmationDriftAlertCount) / manualConfirmationDriftAlertRows.length) * 100)
+          : 0;
+        const manualConfirmationDriftRouteMode = manualConfirmationDriftAlertCount === 0
+          ? 'manual-confirmation-drift-clear'
+          : manualConfirmationDriftAlertCount === 1
+            ? 'single-checkpoint-review'
+            : 'multi-checkpoint-remediation';
         const manualConfirmationContractSmokeRows = manualConfirmationPrecheckSimulator.map((row) => {
           const contractSmokeFailed = row.status === 'blocked';
           const contractState = contractSmokeFailed ? 'contract-risk' : 'contract-ok';
@@ -1120,7 +1128,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b></div>
+                <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b> · readiness=<b>{manualConfirmationDriftReadinessPct}%</b> · route=<b>{manualConfirmationDriftRouteMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualConfirmationContractSmokeFailCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
