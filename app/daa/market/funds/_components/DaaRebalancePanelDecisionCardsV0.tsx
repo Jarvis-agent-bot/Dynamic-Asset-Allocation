@@ -441,6 +441,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
           `T2 decision flow=${guardrailDecisionFlowBlocked ? 'route-to-remediation' : 'ready-for-preflight'}`,
           `T3 operator action=${guardrailDecisionFlowBlocked ? 'resolve top guardrail blocker before execution' : 'open preflight and continue execution checklist'}`,
         ];
+        const manualConfirmationTimeline = [
+          `T0 checkpoint state=${manualCheckpointConfirmed ? 'confirmed' : 'pending'}`,
+          `T1 execution mode=${manualCheckpointConfirmed ? 'live-actionable' : 'simulation-only'}`,
+          `T2 preflight handoff=${manualCheckpointConfirmed ? 'open' : 'blocked'}`,
+          `T3 operator action=${manualCheckpointConfirmed ? 'review live order routing' : 'confirm checkpoint and open preflight'}`,
+        ];
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -607,6 +613,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
             </div>
             <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
               Execution suggestion mode: <b>{manualCheckpointConfirmed ? 'unlocked (manual gate open)' : 'locked (simulation-only)'}</b>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualCheckpointConfirmed ? 'rgba(34,197,94,0.55)' : 'rgba(245,158,11,0.55)'}`, borderRadius: 10, background: manualCheckpointConfirmed ? 'rgba(22,163,74,0.08)' : 'rgba(245,158,11,0.08)', fontSize: 11 }}>
+              Manual confirmation checkpoint audit timeline
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {manualConfirmationTimeline.map((entry) => (
+                  <div key={entry}>{entry}</div>
+                ))}
+                <div>timeline verdict: <b>{manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation'}</b></div>
+              </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
               Manual confirmation evidence panel: checkpoint status=<b>{manualCheckpointConfirmed ? 'confirmed' : 'pending'}</b> · execution mode=<b>{manualCheckpointConfirmed ? 'live-actionable' : 'simulation-only'}</b> · preflight handoff=<b>{manualCheckpointConfirmed ? 'open' : 'blocked'}</b>
