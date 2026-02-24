@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getDefaultExecutionAdapterV0, getExecutionAdapterV0 } from "../executionAdapterV0";
+import { getDefaultExecutionAdapterV0, getExecutionAdapterV0, makeRealExecutionAdapterV0 } from "../executionAdapterV0";
 import { LS_PAPER_EXECUTION_LOG_V0, loadPaperExecutionLog } from "../executionLogStore";
 
 class MemStorage {
@@ -45,12 +45,56 @@ describe("daa/executionAdapterV0", () => {
     expect(roundtrip[0].id).toBe(r.entry.id);
   });
 
-  it("real adapter returns an explicit not-configured error", () => {
+  it("real adapter validates idempotency key and config with structured errors", () => {
     const ex = getExecutionAdapterV0("real");
-    const r = ex.executeOrders({ storage: null, source: "rebalance-core", orders: [] });
-    expect(r.ok).toBe(false);
-    if (r.ok) throw new Error("unreachable");
-    expect(r.kind).toBe("real");
-    expect(r.error).toMatch(/not configured/i);
+
+    const missingKey = ex.executeOrders({ storage: null, source: "rebalance-core", orders: [] });
+    expect(missingKey.ok).toBe(false);
+    if (missingKey.ok) throw new Error("unreachable");
+    expect(missingKey.kind).toBe("real");
+    expect(missingKey.errorDetail?.code).toBe("missing_idempotency_key");
+
+    const invalidConfig = ex.executeOrders({
+      storage: null,
+      source: "rebalance-core",
+      idempotencyKey: "idem-1",
+      orders: [],
+      realConfig: { provider: "okx", accountId: "acc-1" },
+    });
+    expect(invalidConfig.ok).toBe(false);
+    if (invalidConfig.ok) throw new Error("unreachable");
+    expect(invalidConfig.errorDetail?.code).toBe("config_invalid");
+    expect(invalidConfig.error).toMatch(/missing/i);
+  });
+
+  it("real adapter is idempotent for same idempotency key", () => {
+    const ex = makeRealExecutionAdapterV0({ now: () => "2026-02-24T07:00:00.000Z" });
+
+    const args = {
+      storage: null,
+      source: "rebalance-core" as const,
+      idempotencyKey: "idem-2",
+      orders: [{ symbol: "SPY", side: "BUY", notional: 10 }],
+      realConfig: {
+        provider: "okx" as const,
+        accountId: "acc-1",
+        apiKey: "k",
+        apiSecret: "s",
+        apiPassphrase: "p",
+      },
+    };
+
+    const first = ex.executeOrders(args);
+    const second = ex.executeOrders(args);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) throw new Error("unreachable");
+
+    expect(first.kind).toBe("real");
+    expect(second.kind).toBe("real");
+    expect(first.receipt).toEqual(second.receipt);
+    expect(first.receipt.idempotencyKey).toBe("idem-2");
+    expect(first.receipt.orderCount).toBe(1);
   });
 });
