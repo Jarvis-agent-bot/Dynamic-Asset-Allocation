@@ -781,6 +781,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailPrecheckBlockedCount === 1
             ? 'partial-remediation'
             : 'full-remediation';
+        const guardrailPrecheckReviewPressurePct = guardrailPrecheckSimulator.length
+          ? Math.round((guardrailPrecheckBlockedCount / guardrailPrecheckSimulator.length) * 100)
+          : 0;
+        const guardrailPrecheckHandoff = guardrailPrecheckBlockedCount === 0 && guardrailEvidenceReviewCount === 0
+          ? 'ready-for-preflight-handoff'
+          : guardrailPrecheckBlockedCount === 0
+            ? 'evidence-review-before-handoff'
+            : 'remediation-before-handoff';
         const manualConfirmationTimeline = [
           `T0 checkpoint state=${manualCheckpointConfirmed ? 'confirmed' : 'pending'}`,
           `T1 execution mode=${manualCheckpointConfirmed ? 'live-actionable' : 'simulation-only'}`,
@@ -990,7 +998,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b>
+                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b>
                 </div>
               </div>
             </div>
