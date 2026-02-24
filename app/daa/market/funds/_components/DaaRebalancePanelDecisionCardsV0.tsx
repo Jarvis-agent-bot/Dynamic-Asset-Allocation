@@ -75,6 +75,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
           `T2 tier stage: apply analyst multiplier => avg net=${avgNetMultiplier.toFixed(3)}`,
           `T3 explainability action: ${avgNetMultiplier < 0.8 ? 'inspect gate penalties before routing execution' : 'formula signal stable for routing review'}`,
         ];
+        const wQatFormulaDriftAlertRows = qatRows.slice(0, 5).map((row) => {
+          const driftAlertThreshold = Math.max(driftThresholdPct * 1.7, 0.05);
+          const netMultiplier = row.quality * row.analystTierMultiplier;
+          const driftAlert = row.driftAbs >= driftAlertThreshold || netMultiplier < 0.8;
+          const explainabilityPressure = netMultiplier < 0.75 ? 'critical' : driftAlert ? 'elevated' : 'normal';
+          const action = driftAlert ? 'audit formula inputs before routing' : 'formula drift stable';
+          return { id: row.id, driftAlertThreshold, driftAlert, netMultiplier, explainabilityPressure, action };
+        });
+        const wQatFormulaDriftAlertCount = wQatFormulaDriftAlertRows.filter((row) => row.driftAlert).length;
         const wQatPrecheckSimulator = [
           {
             gate: 'quality-stage',
@@ -234,6 +243,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatFormulaDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              W_qat formula drift alert view (explainability)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {wQatFormulaDriftAlertRows.map((row) => (
+                  <div key={`wqat-formula-drift-alert-${row.id}`}>
+                    {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · net multiplier=<b>{row.netMultiplier.toFixed(3)}</b> · pressure=<b>{row.explainabilityPressure}</b> · action=<b>{row.action}</b>
+                  </div>
+                ))}
+                <div>drift alert verdict: alerts=<b>{wQatFormulaDriftAlertCount}/{wQatFormulaDriftAlertRows.length}</b> · mode=<b>{wQatFormulaDriftAlertCount > 0 ? 'formula-drift-review-required' : 'formula-drift-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
