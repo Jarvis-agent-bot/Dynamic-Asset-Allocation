@@ -284,9 +284,10 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     : cashGapBlocked
                       ? 'blocked by positive cash gap forecast'
                       : 'pass: settlement window and cash gap are inside limits';
+                const gateSeverity = settlementBlocked && cashGapBlocked ? 'high' : settlementBlocked || cashGapBlocked ? 'medium' : 'none';
                 return (
                   <div>
-                    settlement gate(T+N={liquiditySettlementGateV0.settlementLagDays})={settlementBlocked ? 'block' : 'pass'} · cash-gap gate({liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''})={cashGapBlocked ? 'block' : 'pass'} · explanation=<b>{gateReason}</b>
+                    settlement gate(T+N={liquiditySettlementGateV0.settlementLagDays})={settlementBlocked ? 'block' : 'pass'} · cash-gap gate({liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''})={cashGapBlocked ? 'block' : 'pass'} · severity=<b>{gateSeverity}</b> · explanation=<b>{gateReason}</b>
                   </div>
                 );
               })()}
