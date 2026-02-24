@@ -365,6 +365,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 liquidityHits: precheckRows.filter((row) => row.liquidityGate).length,
                 settlementHits: precheckRows.filter((row) => row.settlementGate).length,
               };
+              const readyRows = precheckRows.filter((row) => row.verdict === 'ready').length;
+              const routeMode = readyRows === precheckRows.length
+                ? 'auto-buy-on'
+                : readyRows > 0
+                  ? 'auto-buy-partial'
+                  : 'auto-buy-hold';
               const topEvidence = precheckRows.find((row) => row.blockedGateCount > 0) ?? precheckRows[0];
               const auditTimeline = topEvidence
                 ? [
@@ -389,6 +395,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                   <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
                     Buy gate precheck evidence panel: blocked rows=<b>{evidencePanel.blockedRows}/{precheckRows.length}</b> · incompetence hits=<b>{evidencePanel.incompetenceHits}</b> · maxIn hits=<b>{evidencePanel.maxInHits}</b> · liquidity hits=<b>{evidencePanel.liquidityHits}</b> · T+N hits=<b>{evidencePanel.settlementHits}</b>
+                    <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                      Auto-buy precheck simulator: ready rows=<b>{readyRows}/{precheckRows.length}</b> · route mode=<b>{routeMode}</b>
+                    </div>
                     {topEvidence ? (
                       <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                         top blocker evidence: <b>{topEvidence.id}</b> · blocker=<b>{topEvidence.primaryBlocker}</b> · fingerprint=<b>{topEvidence.gateFingerprint}</b> · unblock next=<b>{topEvidence.unblockHint}</b>
