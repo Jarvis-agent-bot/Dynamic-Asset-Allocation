@@ -622,6 +622,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, driftAlertThreshold, driftAlert, pressure, action };
         });
         const guardrailDriftAlertCount = guardrailDriftAlertRows.filter((row) => row.driftAlert).length;
+        const guardrailContractSmokeRows = whatIfRows.map((row) => {
+          const contractSmokeThreshold = Math.max(driftThresholdPct * 1.8, 0.05);
+          const contractSmokeFailed = row.verdict === 'guardrail-hit' || Math.abs(row.drift) >= contractSmokeThreshold;
+          const contractState = contractSmokeFailed ? 'contract-risk' : 'contract-ok';
+          const nextAction = contractSmokeFailed ? 'run guardrail remediation before preflight' : 'guardrail contract stable';
+          return { id: row.id, contractSmokeThreshold, contractSmokeFailed, contractState, nextAction };
+        });
+        const guardrailContractSmokeFailCount = guardrailContractSmokeRows.filter((row) => row.contractSmokeFailed).length;
         const guardrailPrecheckSimulator = [
           {
             gate: 'threshold',
@@ -791,6 +799,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Guardrail contract smoke guard (decision flow)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {guardrailContractSmokeRows.map((row) => (
+                  <div key={`guardrail-contract-smoke-${row.id}`}>
+                    {row.id}: contract threshold=<b>{(row.contractSmokeThreshold * 100).toFixed(1)}%</b> · status=<b>{row.contractSmokeFailed ? 'fail' : 'pass'}</b> · state=<b>{row.contractState}</b> · action=<b>{row.nextAction}</b>
+                  </div>
+                ))}
+                <div>contract smoke verdict: fails=<b>{guardrailContractSmokeFailCount}/{guardrailContractSmokeRows.length}</b> · mode=<b>{guardrailContractSmokeFailCount > 0 ? 'guardrail-contract-review-required' : 'guardrail-contract-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
