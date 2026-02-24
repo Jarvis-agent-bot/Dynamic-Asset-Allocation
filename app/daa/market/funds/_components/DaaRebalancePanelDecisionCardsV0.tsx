@@ -160,6 +160,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: r.id, driftAlertThreshold, driftAlert, driftPressureBand, action };
         });
         const driftAlertCount = factorTraceDriftAlertRows.filter((row) => row.driftAlert).length;
+        const factorTraceEvidenceRows = qatRows.slice(0, 4).map((row) => {
+          const totalPenalty = row.gatePenaltyTotal;
+          const evidenceStatus = totalPenalty >= 0.2 ? 'blocked' : totalPenalty >= 0.1 ? 'review' : 'ready';
+          const nextAction = evidenceStatus === 'blocked'
+            ? 'route to factor remediation checklist'
+            : evidenceStatus === 'review'
+              ? 'review dominant gate before routing'
+              : 'factor trace evidence clean';
+          return { id: row.id, evidenceStatus, totalPenalty, nextAction };
+        });
+        const factorTraceEvidenceBlockedCount = factorTraceEvidenceRows.filter((row) => row.evidenceStatus !== 'ready').length;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
@@ -247,6 +258,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Factor-trace transparency evidence panel
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {factorTraceEvidenceRows.map((row) => (
+                  <div key={`factor-trace-evidence-${row.id}`}>
+                    {row.id}: evidence status=<b>{row.evidenceStatus}</b> · total penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · action=<b>{row.nextAction}</b>
+                  </div>
+                ))}
+                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
