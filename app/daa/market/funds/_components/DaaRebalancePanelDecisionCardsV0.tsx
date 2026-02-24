@@ -550,6 +550,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
               Execution suggestion mode: <b>{manualCheckpointConfirmed ? 'unlocked (manual gate open)' : 'locked (simulation-only)'}</b>
             </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Manual confirmation evidence panel: checkpoint status=<b>{manualCheckpointConfirmed ? 'confirmed' : 'pending'}</b> · execution mode=<b>{manualCheckpointConfirmed ? 'live-actionable' : 'simulation-only'}</b> · preflight handoff=<b>{manualCheckpointConfirmed ? 'open' : 'blocked'}</b>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                checkpoint evidence trace: next operator action=<b>{manualCheckpointConfirmed ? 'review live order routing' : 'confirm checkpoint and open preflight'}</b> · gate rationale=<b>{manualCheckpointConfirmed ? 'manual confirmation present' : 'manual confirmation missing'}</b>
+              </div>
+            </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} title={executionSuggestionLockTitle} disabled={!manualCheckpointConfirmed} onClick={() => jumpTo('rebalance')}>
                 Open liquidity-sensitive orders
