@@ -707,6 +707,13 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, driftAlertThreshold, driftAlert, pressure, action };
         });
         const manualConfirmationDriftAlertCount = manualConfirmationDriftAlertRows.filter((row) => row.driftAlert).length;
+        const manualConfirmationContractSmokeRows = manualConfirmationPrecheckSimulator.map((row) => {
+          const contractSmokeFailed = row.status === 'blocked';
+          const contractState = contractSmokeFailed ? 'contract-risk' : 'contract-ok';
+          const nextAction = contractSmokeFailed ? 'confirm manual checkpoint before preflight handoff' : 'manual checkpoint contract stable';
+          return { gate: row.gate, contractSmokeFailed, contractState, nextAction };
+        });
+        const manualConfirmationContractSmokeFailCount = manualConfirmationContractSmokeRows.filter((row) => row.contractSmokeFailed).length;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -927,6 +934,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualConfirmationContractSmokeFailCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Manual confirmation contract smoke guard (checkpoint)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {manualConfirmationContractSmokeRows.map((row) => (
+                  <div key={`manual-confirmation-contract-smoke-${row.gate}`}>
+                    gate=<b>{row.gate}</b> · status=<b>{row.contractSmokeFailed ? 'fail' : 'pass'}</b> · state=<b>{row.contractState}</b> · action=<b>{row.nextAction}</b>
+                  </div>
+                ))}
+                <div>contract smoke verdict: fails=<b>{manualConfirmationContractSmokeFailCount}/{manualConfirmationContractSmokeRows.length}</b> · mode=<b>{manualConfirmationContractSmokeFailCount > 0 ? 'manual-confirmation-contract-review-required' : 'manual-confirmation-contract-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualPrecheckBlockedCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
