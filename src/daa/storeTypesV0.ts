@@ -44,3 +44,14 @@ export type DaaRunAuditEventListRowV0 = {
   actorUserId: string;
   payload: unknown;
 };
+
+export type DaaExecutionStatusValueV0 = "submitted" | "filled" | "failed";
+
+export type DaaRunExecutionStatusRowV0 = {
+  runId: string;
+  orderId: string;
+  status: DaaExecutionStatusValueV0;
+  reason: string;
+  code: string;
+  updatedAt: string;
+};
