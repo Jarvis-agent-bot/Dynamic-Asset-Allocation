@@ -66,6 +66,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id, targetPct: r.targetPct, quality, wQat, driftAbs, driftGatePenalty, missingGatePenalty, staleGatePenalty, gatePenaltyTotal, gatePenaltyTier, analystTierPreview, analystTierMultiplier };
         });
         const explainerExample = qatRows[0] ?? null;
+        const avgQuality = qatRows.reduce((sum, row) => sum + row.quality, 0) / qatRows.length;
+        const avgAnalystMultiplier = qatRows.reduce((sum, row) => sum + row.analystTierMultiplier, 0) / qatRows.length;
+        const avgNetMultiplier = qatRows.reduce((sum, row) => sum + (row.quality * row.analystTierMultiplier), 0) / qatRows.length;
+        const formulaAuditTimeline = [
+          `T0 formula inputs: rows=${qatRows.length} avg-quality=${avgQuality.toFixed(3)} avg-tier=${avgAnalystMultiplier.toFixed(3)}`,
+          `T1 quality stage: W_target x Q => avg net=${avgQuality.toFixed(3)}`,
+          `T2 tier stage: apply analyst multiplier => avg net=${avgNetMultiplier.toFixed(3)}`,
+          `T3 explainability action: ${avgNetMultiplier < 0.8 ? 'inspect gate penalties before routing execution' : 'formula signal stable for routing review'}`,
+        ];
         const gateLevelTraceTotals = qatRows.reduce(
           (acc, row) => {
             acc.drift += row.driftGatePenalty;
@@ -147,6 +156,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   Formula contribution trace: quality drag=<b>{((1 - explainerExample.quality) * 100).toFixed(1)}pp</b> · tier lift=<b>{((explainerExample.analystTierMultiplier - 1) * 100).toFixed(1)}pp</b> · net multiplier=<b>{(explainerExample.quality * explainerExample.analystTierMultiplier).toFixed(3)}</b>
                 </div>
               ) : null}
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(56,189,248,0.35)', borderRadius: 10, background: 'rgba(56,189,248,0.06)', fontSize: 11 }}>
+              W_qat formula explainability audit timeline
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {formulaAuditTimeline.map((entry) => (
+                  <div key={entry}>{entry}</div>
+                ))}
+                <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
+              </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
               W_qat formula evidence panel: avg quality=<b>{(qatRows.reduce((sum, row) => sum + row.quality, 0) / qatRows.length).toFixed(3)}</b> · avg analyst multiplier=<b>{(qatRows.reduce((sum, row) => sum + row.analystTierMultiplier, 0) / qatRows.length).toFixed(3)}</b> · avg net multiplier=<b>{(qatRows.reduce((sum, row) => sum + (row.quality * row.analystTierMultiplier), 0) / qatRows.length).toFixed(3)}</b>
