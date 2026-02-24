@@ -440,6 +440,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
               Manual checkpoint status: <b>{manualCheckpointConfirmed ? 'confirmed' : 'not confirmed'}</b>
             </div>
+            <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
+              Execution suggestion mode: <b>{manualCheckpointConfirmed ? 'unlocked (manual gate open)' : 'locked (simulation-only)'}</b>
+            </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} title={executionSuggestionLockTitle} disabled={!manualCheckpointConfirmed} onClick={() => jumpTo('rebalance')}>
                 Open liquidity-sensitive orders
