@@ -206,9 +206,10 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         ? 'T+N'
                         : 'none';
                 const blockerSeverity = blockedGateCount >= 3 ? 'critical' : blockedGateCount === 2 ? 'high' : blockedGateCount === 1 ? 'medium' : 'none';
+                const gateFingerprint = `${incompetenceGate ? 'I' : '-'}${maxInGate ? 'M' : '-'}${liquidityGate ? 'L' : '-'}${settlementGate ? 'T' : '-'}`;
                 return (
                   <div key={`precheck-${id}`}>
-                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} · blocked gates=<b>{blockedGateCount}</b> · primary blocker=<b>{primaryBlocker}</b> · severity=<b>{blockerSeverity}</b> => <b>{verdict}</b>
+                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} · blocked gates=<b>{blockedGateCount}</b> · primary blocker=<b>{primaryBlocker}</b> · severity=<b>{blockerSeverity}</b> · fingerprint=<b>{gateFingerprint}</b> => <b>{verdict}</b>
                   </div>
                 );
               })}
