@@ -592,6 +592,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 return { id: row.id, driftAlertThreshold, driftAlert, driftPressureBand, action };
               });
               const buyGateDriftAlertCount = buyGateDriftAlertRows.filter((row) => row.driftAlert).length;
+              const buyGateDriftReadinessPct = buyGateDriftAlertRows.length
+                ? Math.round(((buyGateDriftAlertRows.length - buyGateDriftAlertCount) / buyGateDriftAlertRows.length) * 100)
+                : 0;
+              const buyGateDriftRouteMode = buyGateDriftAlertCount === 0
+                ? 'buy-gate-drift-clear'
+                : buyGateDriftAlertCount === 1
+                  ? 'single-gate-review'
+                  : 'multi-gate-remediation';
               const buyGateEvidenceTraceRows = precheckRows.map((row) => {
                 const evidenceStatus = row.blockedGateCount >= 2 ? 'review-required' : row.blockedGateCount === 1 ? 'watch' : 'clear';
                 const nextAction = evidenceStatus === 'review-required'
@@ -680,7 +688,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                           {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.driftPressureBand}</b> · action=<b>{row.action}</b>
                         </div>
                       ))}
-                      <div>drift alert verdict: alerts=<b>{buyGateDriftAlertCount}/{buyGateDriftAlertRows.length}</b> · mode=<b>{buyGateDriftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b></div>
+                      <div>drift alert verdict: alerts=<b>{buyGateDriftAlertCount}/{buyGateDriftAlertRows.length}</b> · mode=<b>{buyGateDriftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{buyGateDriftReadinessPct}%</b> · route=<b>{buyGateDriftRouteMode}</b></div>
                     </div>
                   </div>
                 </>
