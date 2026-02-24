@@ -139,6 +139,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 </div>
               ) : null}
             </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              W_qat formula evidence panel: avg quality=<b>{(qatRows.reduce((sum, row) => sum + row.quality, 0) / qatRows.length).toFixed(3)}</b> · avg analyst multiplier=<b>{(qatRows.reduce((sum, row) => sum + row.analystTierMultiplier, 0) / qatRows.length).toFixed(3)}</b> · avg net multiplier=<b>{(qatRows.reduce((sum, row) => sum + (row.quality * row.analystTierMultiplier), 0) / qatRows.length).toFixed(3)}</b>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                top formula evidence: <b>{explainerExample?.id || 'n/a'}</b> · quality=<b>{explainerExample ? explainerExample.quality.toFixed(2) : 'n/a'}</b> · analyst multiplier=<b>{explainerExample ? explainerExample.analystTierMultiplier.toFixed(2) : 'n/a'}</b> · recommendation=<b>{explainerExample && explainerExample.quality < 0.8 ? 'inspect gate penalties before trusting weight' : 'formula signal stable'}</b>
+              </div>
+            </div>
           </div>
         );
       })()}
