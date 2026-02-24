@@ -383,9 +383,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const maxInBreachDistance = maxInThresholdHit ? r.maxInImpact : 0;
                 const maxOutBreachDistance = maxOutThresholdHit ? r.maxOutImpact : 0;
                 const dominantSide = maxInBreachDistance > maxOutBreachDistance ? 'maxIn' : maxOutBreachDistance > maxInBreachDistance ? 'maxOut' : 'balanced';
+                const guardrailAuditScore = Math.min(100, (maxInBreachDistance + maxOutBreachDistance) * 1000);
+                const guardrailAuditBand = guardrailAuditScore >= 20 ? 'critical' : guardrailAuditScore >= 10 ? 'elevated' : guardrailAuditScore > 0 ? 'watch' : 'clear';
                 return (
                   <div key={`guardrail-audit-${r.id}`}>
-                    {r.id}: maxIn threshold={maxInThreshold.toFixed(2)} ({maxInThresholdHit ? 'hit' : 'safe'}) · maxOut threshold={maxOutThreshold.toFixed(2)} ({maxOutThresholdHit ? 'hit' : 'safe'}) · breaches=<b>{breachCount}</b> · maxIn distance=<b>{(maxInBreachDistance * 100).toFixed(1)}%</b> · maxOut distance=<b>{(maxOutBreachDistance * 100).toFixed(1)}%</b> · dominant side=<b>{dominantSide}</b> · trace verdict=<b>{guardrailAuditVerdict}</b>
+                    {r.id}: maxIn threshold={maxInThreshold.toFixed(2)} ({maxInThresholdHit ? 'hit' : 'safe'}) · maxOut threshold={maxOutThreshold.toFixed(2)} ({maxOutThresholdHit ? 'hit' : 'safe'}) · breaches=<b>{breachCount}</b> · maxIn distance=<b>{(maxInBreachDistance * 100).toFixed(1)}%</b> · maxOut distance=<b>{(maxOutBreachDistance * 100).toFixed(1)}%</b> · dominant side=<b>{dominantSide}</b> · audit score=<b>{guardrailAuditScore.toFixed(1)}</b> · audit band=<b>{guardrailAuditBand}</b> · trace verdict=<b>{guardrailAuditVerdict}</b>
                   </div>
                 );
               })}
