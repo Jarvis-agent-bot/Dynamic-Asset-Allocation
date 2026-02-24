@@ -115,7 +115,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const traceConfidenceBand = effectiveMultiplier >= 0.95 ? 'strong' : effectiveMultiplier >= 0.8 ? 'moderate' : 'weak';
                 return (
                   <div key={r.id} style={{ fontSize: 11 }}>
-                    {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) {'=>'} W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b> · gates(drift=-{(r.driftGatePenalty * 100).toFixed(1)}pp, missing=-{(r.missingGatePenalty * 100).toFixed(1)}pp, stale=-{(r.staleGatePenalty * 100).toFixed(1)}pp, total=-{(r.gatePenaltyTotal * 100).toFixed(1)}pp, tier=<b>{r.gatePenaltyTier}</b>, penalty-share=<b>{(gatePenaltyShare * 100).toFixed(1)}%</b>) · analyst-tier=<b>{r.analystTierPreview}</b> (x{r.analystTierMultiplier.toFixed(2)}) => preview weight=<b>{(weightedPreview * 100).toFixed(2)}%</b> · tier impact delta=<b>{(tierImpactDelta * 100).toFixed(2)}%</b> · tier impact ratio=<b>{tierImpactPct.toFixed(1)}%</b> · tier impact direction=<b>{tierImpactDirection}</b> · tier impact band=<b>{tierImpactBand}</b> · effective multiplier=<b>{effectiveMultiplier.toFixed(3)}</b> · confidence band=<b>{traceConfidenceBand}</b>
+                    {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) {'=>'} W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b> · gates(drift=-{(r.driftGatePenalty * 100).toFixed(1)}pp, missing=-{(r.missingGatePenalty * 100).toFixed(1)}pp, stale=-{(r.staleGatePenalty * 100).toFixed(1)}pp, total=-{(r.gatePenaltyTotal * 100).toFixed(1)}pp, tier=<b>{r.gatePenaltyTier}</b>, penalty-share=<b>{(gatePenaltyShare * 100).toFixed(1)}%</b>) · analyst-tier=<b>{r.analystTierPreview}</b> (x{r.analystTierMultiplier.toFixed(2)}) {'=>'} preview weight=<b>{(weightedPreview * 100).toFixed(2)}%</b> · tier impact delta=<b>{(tierImpactDelta * 100).toFixed(2)}%</b> · tier impact ratio=<b>{tierImpactPct.toFixed(1)}%</b> · tier impact direction=<b>{tierImpactDirection}</b> · tier impact band=<b>{tierImpactBand}</b> · effective multiplier=<b>{effectiveMultiplier.toFixed(3)}</b> · confidence band=<b>{traceConfidenceBand}</b>
                   </div>
                 );
               })}
@@ -241,8 +241,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
               <div>policy-gate threshold(40): <b>{routing.stressScore >= 40 ? 'B path candidate' : 'A path candidate'}</b> (score {routing.stressScore})</div>
               <div>deep-negative gate threshold(2): <b>{deepNegativeCount >= 2 ? 'B path candidate' : 'A path candidate'}</b> (count {deepNegativeCount})</div>
-              <div>data-quality gate threshold(missing>0): <b>{priceDataWarningsV0.missing.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (missing {priceDataWarningsV0.missing.length})</div>
-              <div>data-quality gate threshold(stale>0): <b>{priceDataWarningsV0.lastClose.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (stale {priceDataWarningsV0.lastClose.length})</div>
+              <div>data-quality gate threshold(missing{'>'}0): <b>{priceDataWarningsV0.missing.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (missing {priceDataWarningsV0.missing.length})</div>
+              <div>data-quality gate threshold(stale{'>'}0): <b>{priceDataWarningsV0.lastClose.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (stale {priceDataWarningsV0.lastClose.length})</div>
               <div>evidence matrix votes: A=<b>{aPathVotes}</b> · B=<b>{bPathVotes}</b> · consensus=<b>{matrixConsensus}</b> · dominant gate=<b>{dominantGate}</b> · strength=<b>{consensusStrengthPct}%</b></div>
               <div>A/B gate snapshots: strong-hold=<b>{aGateSnapshot}</b> · value-trap=<b>{bGateSnapshot}</b> · buy-path=<b>{buyPathSnapshot}</b></div>
               <div>snapshot alignment verdict: <b>{gateSnapshotAlignment}</b></div>
@@ -357,7 +357,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       const unblockHint = row.unblockHint;
                       return (
                         <div key={`precheck-${row.id}`}>
-                          {row.id}: incompetence={row.incompetenceGate ? 'block' : 'pass'} · maxIn={row.maxInGate ? 'block' : 'pass'} · liquidity={row.liquidityGate ? 'block' : 'pass'} · T+N={row.settlementGate ? 'block' : 'pass'} · blocked gates=<b>{row.blockedGateCount}</b> · primary blocker=<b>{row.primaryBlocker}</b> · severity=<b>{row.blockerSeverity}</b> · fingerprint=<b>{row.gateFingerprint}</b> · gate block score=<b>{row.gateBlockScore.toFixed(2)}</b> · readiness=<b>{row.readinessPct}%</b> · unblock hint=<b>{unblockHint}</b> => <b>{row.verdict}</b>
+                          {row.id}: incompetence={row.incompetenceGate ? 'block' : 'pass'} · maxIn={row.maxInGate ? 'block' : 'pass'} · liquidity={row.liquidityGate ? 'block' : 'pass'} · T+N={row.settlementGate ? 'block' : 'pass'} · blocked gates=<b>{row.blockedGateCount}</b> · primary blocker=<b>{row.primaryBlocker}</b> · severity=<b>{row.blockerSeverity}</b> · fingerprint=<b>{row.gateFingerprint}</b> · gate block score=<b>{row.gateBlockScore.toFixed(2)}</b> · readiness=<b>{row.readinessPct}%</b> · unblock hint=<b>{unblockHint}</b> {'=>'} <b>{row.verdict}</b>
                         </div>
                       );
                     })}
@@ -474,7 +474,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const suggestedScalePct = capCoverage >= 1 ? 100 : Math.max(0, Math.min(100, capCoverage * 100));
                 return (
                   <div key={`liquidity-cap-${cap}`}>
-                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} · headroom={capHeadroom.toFixed(2)} · utilization={capUtilizationPct.toFixed(1)}% · clip={clipAmount.toFixed(2)} · pressure={executionSizingPressurePct.toFixed(1)}% · pressure band=<b>{executionSizingBand}</b> · action=<b>{sizingAction}</b> · suggested scale=<b>{suggestedScalePct.toFixed(1)}%</b> => <b>{capVerdict}</b>
+                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} · headroom={capHeadroom.toFixed(2)} · utilization={capUtilizationPct.toFixed(1)}% · clip={clipAmount.toFixed(2)} · pressure={executionSizingPressurePct.toFixed(1)}% · pressure band=<b>{executionSizingBand}</b> · action=<b>{sizingAction}</b> · suggested scale=<b>{suggestedScalePct.toFixed(1)}%</b> {'=>'} <b>{capVerdict}</b>
                   </div>
                 );
               })}
@@ -540,7 +540,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
               {whatIfRows.map((r) => (
                 <div key={`guardrail-whatif-${r.id}`}>
-                  {r.id}: drift={(r.drift * 100).toFixed(1)}% · maxIn impact={r.maxInImpact > 0 ? `+${(r.maxInImpact * 100).toFixed(1)}%` : '0.0%'} · maxOut impact={r.maxOutImpact > 0 ? `+${(r.maxOutImpact * 100).toFixed(1)}%` : '0.0%'} => <b>{r.verdict}</b>
+                  {r.id}: drift={(r.drift * 100).toFixed(1)}% · maxIn impact={r.maxInImpact > 0 ? `+${(r.maxInImpact * 100).toFixed(1)}%` : '0.0%'} · maxOut impact={r.maxOutImpact > 0 ? `+${(r.maxOutImpact * 100).toFixed(1)}%` : '0.0%'} {'=>'} <b>{r.verdict}</b>
                 </div>
               ))}
               <div>
@@ -583,7 +583,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       : 'hold';
                 return (
                   <div key={`risk-envelope-${r.id}`}>
-                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · safety margin=<b>{(r.envelopeSafetyMargin * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b> · pressure score=<b>{envelopePressureScore.toFixed(2)}</b> · pressure tier=<b>{envelopePressureTier}</b> · action=<b>{envelopeAction}</b>
+                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% {'=>'} <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · safety margin=<b>{(r.envelopeSafetyMargin * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b> · pressure score=<b>{envelopePressureScore.toFixed(2)}</b> · pressure tier=<b>{envelopePressureTier}</b> · action=<b>{envelopeAction}</b>
                   </div>
                 );
               })}

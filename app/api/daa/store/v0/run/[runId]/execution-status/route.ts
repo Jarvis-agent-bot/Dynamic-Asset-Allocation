@@ -11,7 +11,9 @@ export const runtime = "nodejs";
 
 function normalizeStatuses(body: any): Array<{ orderId: string; status: string; reason?: string; code?: string; updatedAt?: string }> {
   const statuses = Array.isArray(body?.statuses) ? body.statuses : [];
-  return statuses.filter((x) => x && typeof x === "object");
+  return statuses.filter((x: unknown): x is { orderId: string; status: string; reason?: string; code?: string; updatedAt?: string } => {
+    return !!x && typeof x === "object";
+  });
 }
 
 export async function GET(req: Request, ctx: { params: { runId: string } }) {

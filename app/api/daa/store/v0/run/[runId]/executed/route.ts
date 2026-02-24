@@ -34,8 +34,9 @@ export async function POST(req: Request, ctx: { params: { runId: string } }) {
     await setDaaRunExecutedV0({ runId, payload, actorUserId });
 
     const orders = Array.isArray((payload as any)?.orders) ? (payload as any).orders : [];
+    type ExecutionStatusV0 = { orderId: string; status: "submitted" | "filled" | "failed"; reason: string; code: string };
     const statuses = orders
-      .map((o: any, idx: number) => {
+      .map((o: any, idx: number): ExecutionStatusV0 | null => {
         const status = String(o?.status ?? "").trim().toLowerCase();
         if (status !== "submitted" && status !== "filled" && status !== "failed") return null;
         return {
@@ -45,7 +46,7 @@ export async function POST(req: Request, ctx: { params: { runId: string } }) {
           code: String(o?.code ?? "").trim(),
         };
       })
-      .filter((x): x is { orderId: string; status: "submitted" | "filled" | "failed"; reason: string; code: string } => !!x);
+      .filter((x: ExecutionStatusV0 | null): x is ExecutionStatusV0 => !!x);
 
     if (statuses.length) {
       await setDaaRunExecutionStatusesV0({ runId, statuses, actorUserId });

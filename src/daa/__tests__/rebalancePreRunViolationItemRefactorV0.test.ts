@@ -11,6 +11,8 @@ describe('feature-rebalance-prerun-violation-item-refactor-v0', () => {
 
     expect(panelSource).toContain("import DaaRebalancePreRunViolationItemV0 from './DaaRebalancePreRunViolationItemV0';");
     expect(panelSource).toContain('<DaaRebalancePreRunViolationItemV0');
+    expect(itemSource).toContain("level: 'blocker' | 'warning' | 'info';");
+    expect(itemSource).toContain("level === 'warning' ? '#f59e0b' : '#38bdf8'");
     expect(itemSource).toContain('({details.length} details)');
     expect(itemSource).toContain('Suggestion: {suggestion}');
   });
