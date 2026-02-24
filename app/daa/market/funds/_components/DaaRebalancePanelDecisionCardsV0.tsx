@@ -562,6 +562,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 return { id: row.id, evidenceStatus, primaryBlocker: row.primaryBlocker, nextAction };
               });
               const buyGateEvidenceReviewCount = buyGateEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
+              const buyGateTimelineVerdict = buyGateEvidenceReviewCount > 0 ? 'buy-gate-precheck-review-required' : 'buy-gate-precheck-clear';
               const auditTimeline = topEvidence
                 ? [
                     { gate: 'incompetence', blocked: topEvidence.incompetenceGate, unblock: 'reduce drift or reassess thesis' },
@@ -598,6 +599,13 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         Buy gate precheck audit timeline: {auditTimeline.map((entry) => `${entry.gate}=${entry.blocked ? 'blocked' : 'pass'}${entry.blocked ? ` (next: ${entry.unblock})` : ''}`).join(' -> ')}
                       </div>
                     ) : null}
+                    <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                      <div>T0 precheck snapshot: rows=<b>{precheckRows.length}</b> · ready rows=<b>{readyRows}</b></div>
+                      <div>T1 gate hit rollup: incompetence=<b>{evidencePanel.incompetenceHits}</b> · maxIn=<b>{evidencePanel.maxInHits}</b> · liquidity=<b>{evidencePanel.liquidityHits}</b> · T+N=<b>{evidencePanel.settlementHits}</b></div>
+                      <div>T2 blocker focus: <b>{topEvidence ? `${topEvidence.id} / ${topEvidence.primaryBlocker}` : 'none'}</b></div>
+                      <div>T3 route mode: <b>{routeMode}</b></div>
+                      <div>T4 timeline verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateTimelineVerdict}</b></div>
+                    </div>
                   </div>
                   <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateEvidenceReviewCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
                     Buy gate evidence trace panel (precheck)
