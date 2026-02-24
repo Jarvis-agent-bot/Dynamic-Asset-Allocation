@@ -700,6 +700,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const guardrailThresholdGateBlocked = thresholdHitCount > 0;
         const guardrailLiquidityGateBlocked = liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking;
         const guardrailDecisionFlowBlocked = guardrailThresholdGateBlocked || guardrailLiquidityGateBlocked;
+        const guardrailDecisionFlowTimelineVerdict = guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight';
         const guardrailDecisionFlowTimeline = [
           `T0 threshold gate=${guardrailThresholdGateBlocked ? 'blocked' : 'pass'} (hits ${thresholdHitCount}/${whatIfRows.length})`,
           `T1 liquidity gate=${guardrailLiquidityGateBlocked ? 'blocked' : 'pass'} (cash gap ${liquiditySettlementGateV0.cashGap.toFixed(2)} ${baseCcy || ''})`,
@@ -732,6 +733,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, evidenceStatus, dominantRisk: row.maxInImpact > row.maxOutImpact ? 'maxIn' : row.maxOutImpact > row.maxInImpact ? 'maxOut' : 'balanced', nextAction };
         });
         const guardrailEvidenceReviewCount = guardrailEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
+        const guardrailTimelineReviewMode = guardrailEvidenceReviewCount > 0 ? 'guardrail-timeline-review-required' : 'guardrail-timeline-clear';
         const guardrailPrecheckSimulator = [
           {
             gate: 'threshold',
@@ -925,7 +927,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 {guardrailDecisionFlowTimeline.map((entry) => (
                   <div key={entry}>{entry}</div>
                 ))}
-                <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
+                <div>T4 evidence review: rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailTimelineReviewMode}</b></div>
+                <div>timeline verdict: <b>{guardrailDecisionFlowTimelineVerdict}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
