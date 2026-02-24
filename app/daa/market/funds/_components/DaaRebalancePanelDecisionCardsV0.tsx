@@ -473,11 +473,18 @@ export default function DaaRebalancePanelDecisionCardsV0({
               Thesis-regime drift alert timeline (down-weight rationale)
             </div>
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
-              {whatIfRows.map((r) => (
-                <div key={`thesis-regime-drift-${r.id}`}>
-                  {r.id}: thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · threshold=<b>{(r.thesisRegimeThreshold * 100).toFixed(1)}%</b> · drift severity=<b>{r.driftSeverity}</b> · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b> · down-weight delta=<b>{r.downWeightDeltaPct.toFixed(1)}%</b> · rationale code=<b>{r.downWeightRationaleCode}</b> · rationale={r.thesisRegimeDrift ? 'drift above tolerance; reduce recommendation weight' : 'inside tolerance; keep baseline weight'}
-                </div>
-              ))}
+              {whatIfRows.map((r) => {
+                const timelineAction = !r.thesisRegimeDrift
+                  ? 'monitor'
+                  : r.driftSeverity === 'critical'
+                    ? 'escalate'
+                    : 'review';
+                return (
+                  <div key={`thesis-regime-drift-${r.id}`}>
+                    {r.id}: thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · threshold=<b>{(r.thesisRegimeThreshold * 100).toFixed(1)}%</b> · drift severity=<b>{r.driftSeverity}</b> · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b> · down-weight delta=<b>{r.downWeightDeltaPct.toFixed(1)}%</b> · rationale code=<b>{r.downWeightRationaleCode}</b> · timeline action=<b>{timelineAction}</b> · rationale={r.thesisRegimeDrift ? 'drift above tolerance; reduce recommendation weight' : 'inside tolerance; keep baseline weight'}
+                  </div>
+                );
+              })}
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(245,158,11,0.55)', borderRadius: 10, background: 'rgba(245,158,11,0.08)', fontSize: 11 }}>
               AI recommender manual confirmation checkpoint: operator must confirm preflight checkpoint before any execution suggestion is treated as actionable. Without manual confirmation, recommendations stay in simulation-only mode.
