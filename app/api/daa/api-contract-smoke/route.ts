@@ -52,15 +52,17 @@ export async function GET(req: Request) {
   };
 
   const statusTag = summary.fail === 0 ? "PASS" : "FAIL";
-  const deterministicKey = `v5-${statusTag}-${summary.pass}-${summary.total}-${summary.passRatePct}`;
+  const deterministicKey = `v6-${statusTag}-${summary.pass}-${summary.total}-${summary.passRatePct}`;
   const deterministicRouteVector = API_CONTRACT_SMOKE_ITEMS_V0.map((item) => item.route).join("|");
-  const contractVersion = "nextjs-api-contract-v5";
+  const deterministicContractDigest = API_CONTRACT_SMOKE_ITEMS_V0.map((item) => `${item.key}:${item.status}`).join("|");
+  const contractVersion = "nextjs-api-contract-v6";
   const compatibilityMatrix = {
     apiDaaPrefix: "/api/daa",
     expectedContentType: "application/json",
     requiredStatus: 200,
     deterministicKey,
     deterministicRouteVector,
+    deterministicContractDigest,
   };
 
   return NextResponse.json({
@@ -69,6 +71,7 @@ export async function GET(req: Request) {
     summaryLine: `[DAA][ApiContractSmoke] ${statusTag} ${summary.pass}/${summary.total} checks (${summary.passRatePct}%)`,
     deterministicKey,
     deterministicRouteVector,
+    deterministicContractDigest,
     contractVersion,
     compatibilityMatrix,
     summary,
