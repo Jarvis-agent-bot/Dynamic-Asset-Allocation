@@ -826,6 +826,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const manualPrecheckBlockedCount = manualConfirmationPrecheckSimulator.filter((row) => row.status === 'blocked').length;
         const manualTimelineVerdictMode = manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation';
         const manualPrecheckRouteMode = manualPrecheckBlockedCount === 0 ? 'execution-ready' : 'confirmation-required';
+        const manualPrecheckReadinessPct = manualConfirmationPrecheckSimulator.length
+          ? Math.round(((manualConfirmationPrecheckSimulator.length - manualPrecheckBlockedCount) / manualConfirmationPrecheckSimulator.length) * 100)
+          : 0;
+        const manualPrecheckHandoffMode = manualPrecheckBlockedCount === 0 && manualCheckpointConfirmed
+          ? 'ready-for-preflight-handoff'
+          : manualPrecheckBlockedCount === 0
+            ? 'review-evidence-before-handoff'
+            : 'confirm-checkpoint-before-handoff';
         const manualConfirmationDriftAlertRows = whatIfRows.map((row) => {
           const driftAlertThreshold = Math.max(driftThresholdPct * 1.8, 0.05);
           const driftAlert = !manualCheckpointConfirmed && (Math.abs(row.drift) >= driftAlertThreshold || row.verdict === 'guardrail-hit');
@@ -1103,7 +1111,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b>
+                  precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b>
                 </div>
               </div>
             </div>
