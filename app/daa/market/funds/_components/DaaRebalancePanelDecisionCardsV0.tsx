@@ -414,6 +414,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return score > bestScore ? row : best;
         }, whatIfRows[0]);
         const peakImpactScorePct = (peakImpactRow.maxInImpact + peakImpactRow.maxOutImpact) * 100;
+        const guardrailThresholdGateBlocked = thresholdHitCount > 0;
+        const guardrailLiquidityGateBlocked = liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking;
+        const guardrailDecisionFlowBlocked = guardrailThresholdGateBlocked || guardrailLiquidityGateBlocked;
+        const guardrailDecisionFlowTimeline = [
+          `T0 threshold gate=${guardrailThresholdGateBlocked ? 'blocked' : 'pass'} (hits ${thresholdHitCount}/${whatIfRows.length})`,
+          `T1 liquidity gate=${guardrailLiquidityGateBlocked ? 'blocked' : 'pass'} (cash gap ${liquiditySettlementGateV0.cashGap.toFixed(2)} ${baseCcy || ''})`,
+          `T2 decision flow=${guardrailDecisionFlowBlocked ? 'route-to-remediation' : 'ready-for-preflight'}`,
+          `T3 operator action=${guardrailDecisionFlowBlocked ? 'resolve top guardrail blocker before execution' : 'open preflight and continue execution checklist'}`,
+        ];
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -518,6 +527,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
               Guardrail-first evidence panel: threshold-hit rows=<b>{thresholdHitCount}/{whatIfRows.length}</b> · maxIn impact total=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact total=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b> · pressure bias=<b>{pressureBias}</b> · pressure severity=<b>{pressureSeverity}</b>
               <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                 top guardrail evidence: <b>{peakImpactRow.id || 'n/a'}</b> · impact score=<b>{peakImpactScorePct.toFixed(1)}%</b> · recommendation=<b>{pressureBias === 'maxIn-heavy' ? 'prioritize maxIn relief' : pressureBias === 'maxOut-heavy' ? 'prioritize maxOut relief' : 'keep balanced guardrails'}</b>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailDecisionFlowBlocked ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: guardrailDecisionFlowBlocked ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)', fontSize: 11 }}>
+              Guardrail-first decision flow audit timeline
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {guardrailDecisionFlowTimeline.map((entry) => (
+                  <div key={entry}>{entry}</div>
+                ))}
+                <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
