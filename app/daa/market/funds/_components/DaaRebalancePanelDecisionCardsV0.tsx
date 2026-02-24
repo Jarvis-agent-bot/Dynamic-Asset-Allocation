@@ -368,9 +368,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const clipAmount = capHeadroom < 0 ? Math.abs(capHeadroom) : 0;
                 const executionSizingPressurePct = capBuys > 0 ? Math.min(100, (clipAmount / capBuys) * 100) : 0;
                 const executionSizingBand = executionSizingPressurePct >= 15 ? 'high' : executionSizingPressurePct >= 5 ? 'medium' : 'low';
+                const sizingAction = capCoverage >= 1 ? 'hold size' : capCoverage >= 0.9 ? 'trim lightly' : 'trim aggressively';
+                const suggestedScalePct = capCoverage >= 1 ? 100 : Math.max(0, Math.min(100, capCoverage * 100));
                 return (
                   <div key={`liquidity-cap-${cap}`}>
-                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} · headroom={capHeadroom.toFixed(2)} · utilization={capUtilizationPct.toFixed(1)}% · clip={clipAmount.toFixed(2)} · pressure={executionSizingPressurePct.toFixed(1)}% · pressure band=<b>{executionSizingBand}</b> => <b>{capVerdict}</b>
+                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} · headroom={capHeadroom.toFixed(2)} · utilization={capUtilizationPct.toFixed(1)}% · clip={clipAmount.toFixed(2)} · pressure={executionSizingPressurePct.toFixed(1)}% · pressure band=<b>{executionSizingBand}</b> · action=<b>{sizingAction}</b> · suggested scale=<b>{suggestedScalePct.toFixed(1)}%</b> => <b>{capVerdict}</b>
                   </div>
                 );
               })}
