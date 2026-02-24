@@ -694,6 +694,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, contractSmokeThreshold, contractSmokeFailed, contractState, nextAction };
         });
         const guardrailContractSmokeFailCount = guardrailContractSmokeRows.filter((row) => row.contractSmokeFailed).length;
+        const guardrailEvidenceTraceRows = whatIfRows.map((row) => {
+          const evidenceStatus = row.verdict === 'guardrail-hit' ? 'review-required' : 'clear';
+          const nextAction = evidenceStatus === 'review-required' ? 'de-risk drift before preflight routing' : 'guardrail evidence clear';
+          return { id: row.id, evidenceStatus, dominantRisk: row.maxInImpact > row.maxOutImpact ? 'maxIn' : row.maxOutImpact > row.maxInImpact ? 'maxOut' : 'balanced', nextAction };
+        });
+        const guardrailEvidenceReviewCount = guardrailEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
         const guardrailPrecheckSimulator = [
           {
             gate: 'threshold',
@@ -861,6 +867,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
               Guardrail-first evidence panel: threshold-hit rows=<b>{thresholdHitCount}/{whatIfRows.length}</b> · maxIn impact total=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact total=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b> · pressure bias=<b>{pressureBias}</b> · pressure severity=<b>{pressureSeverity}</b>
               <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                 top guardrail evidence: <b>{peakImpactRow.id || 'n/a'}</b> · impact score=<b>{peakImpactScorePct.toFixed(1)}%</b> · recommendation=<b>{pressureBias === 'maxIn-heavy' ? 'prioritize maxIn relief' : pressureBias === 'maxOut-heavy' ? 'prioritize maxOut relief' : 'keep balanced guardrails'}</b>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailEvidenceReviewCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Guardrail-first evidence trace panel
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {guardrailEvidenceTraceRows.map((row) => (
+                  <div key={`guardrail-evidence-trace-${row.id}`}>
+                    {row.id}: evidence status=<b>{row.evidenceStatus}</b> · dominant risk=<b>{row.dominantRisk}</b> · action=<b>{row.nextAction}</b>
+                  </div>
+                ))}
+                <div>evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailDecisionFlowBlocked ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: guardrailDecisionFlowBlocked ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)', fontSize: 11 }}>
