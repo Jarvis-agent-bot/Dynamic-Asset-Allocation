@@ -528,6 +528,16 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 return { id: row.id, driftAlertThreshold, driftAlert, driftPressureBand, action };
               });
               const buyGateDriftAlertCount = buyGateDriftAlertRows.filter((row) => row.driftAlert).length;
+              const buyGateEvidenceTraceRows = precheckRows.map((row) => {
+                const evidenceStatus = row.blockedGateCount >= 2 ? 'review-required' : row.blockedGateCount === 1 ? 'watch' : 'clear';
+                const nextAction = evidenceStatus === 'review-required'
+                  ? 'resolve primary blocker before auto-buy'
+                  : evidenceStatus === 'watch'
+                    ? 'monitor blocker and keep simulator active'
+                    : 'evidence trace clear for auto-buy';
+                return { id: row.id, evidenceStatus, primaryBlocker: row.primaryBlocker, nextAction };
+              });
+              const buyGateEvidenceReviewCount = buyGateEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
               const auditTimeline = topEvidence
                 ? [
                     { gate: 'incompetence', blocked: topEvidence.incompetenceGate, unblock: 'reduce drift or reassess thesis' },
@@ -564,6 +574,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         Buy gate precheck audit timeline: {auditTimeline.map((entry) => `${entry.gate}=${entry.blocked ? 'blocked' : 'pass'}${entry.blocked ? ` (next: ${entry.unblock})` : ''}`).join(' -> ')}
                       </div>
                     ) : null}
+                  </div>
+                  <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateEvidenceReviewCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+                    Buy gate evidence trace panel (precheck)
+                    <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                      {buyGateEvidenceTraceRows.map((row) => (
+                        <div key={`buy-gate-evidence-trace-${row.id}`}>
+                          {row.id}: evidence status=<b>{row.evidenceStatus}</b> · blocker=<b>{row.primaryBlocker}</b> · action=<b>{row.nextAction}</b>
+                        </div>
+                      ))}
+                      <div>evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b></div>
+                    </div>
                   </div>
                   <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
                     Buy gate contract smoke guard (precheck)
