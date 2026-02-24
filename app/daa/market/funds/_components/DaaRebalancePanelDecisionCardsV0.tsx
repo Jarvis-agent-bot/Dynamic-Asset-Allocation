@@ -84,6 +84,16 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, driftAlertThreshold, driftAlert, netMultiplier, explainabilityPressure, action };
         });
         const wQatFormulaDriftAlertCount = wQatFormulaDriftAlertRows.filter((row) => row.driftAlert).length;
+        const wQatExplainabilityContractSmokeRows = qatRows.slice(0, 5).map((row) => {
+          const recomposedWQat = row.targetPct * row.quality;
+          const contractDelta = Math.abs(row.wQat - recomposedWQat);
+          const qualityOutOfRange = row.quality > 1 || row.quality < 0.6;
+          const contractSmokeFailed = contractDelta > 0.0001 || qualityOutOfRange;
+          const explainabilityState = contractSmokeFailed ? 'formula-contract-risk' : 'formula-contract-ok';
+          const nextAction = contractSmokeFailed ? 'pause auto-routing and inspect formula terms' : 'keep explainability contract active';
+          return { id: row.id, contractDelta, qualityOutOfRange, contractSmokeFailed, explainabilityState, nextAction };
+        });
+        const wQatExplainabilityContractSmokeFailCount = wQatExplainabilityContractSmokeRows.filter((row) => row.contractSmokeFailed).length;
         const wQatPrecheckSimulator = [
           {
             gate: 'quality-stage',
@@ -286,6 +296,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 <div>
                   precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b>
                 </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatExplainabilityContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              W_qat formula contract smoke guard (explainability)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {wQatExplainabilityContractSmokeRows.map((row) => (
+                  <div key={`wqat-formula-contract-smoke-${row.id}`}>
+                    {row.id}: recomposition delta=<b>{(row.contractDelta * 100).toFixed(3)}%</b> · quality-range=<b>{row.qualityOutOfRange ? 'invalid' : 'valid'}</b> · status=<b>{row.contractSmokeFailed ? 'fail' : 'pass'}</b> · state=<b>{row.explainabilityState}</b> · action=<b>{row.nextAction}</b>
+                  </div>
+                ))}
+                <div>contract smoke verdict: fails=<b>{wQatExplainabilityContractSmokeFailCount}/{wQatExplainabilityContractSmokeRows.length}</b> · mode=<b>{wQatExplainabilityContractSmokeFailCount > 0 ? 'wqat-formula-contract-review-required' : 'wqat-formula-contract-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
