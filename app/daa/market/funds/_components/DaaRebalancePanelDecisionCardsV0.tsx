@@ -69,6 +69,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const avgQuality = qatRows.reduce((sum, row) => sum + row.quality, 0) / qatRows.length;
         const avgAnalystMultiplier = qatRows.reduce((sum, row) => sum + row.analystTierMultiplier, 0) / qatRows.length;
         const avgNetMultiplier = qatRows.reduce((sum, row) => sum + (row.quality * row.analystTierMultiplier), 0) / qatRows.length;
+        const formulaTimelineVerdictMode = avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing';
         const formulaAuditTimeline = [
           `T0 formula inputs: rows=${qatRows.length} avg-quality=${avgQuality.toFixed(3)} avg-tier=${avgAnalystMultiplier.toFixed(3)}`,
           `T1 quality stage: W_target x Q => avg net=${avgQuality.toFixed(3)}`,
@@ -306,7 +307,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 {formulaAuditTimeline.map((entry) => (
                   <div key={entry}>{entry}</div>
                 ))}
-                <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
+                <div>T4 formula gate check: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b></div>
+                <div>timeline verdict: <b>{formulaTimelineVerdictMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatFormulaDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
