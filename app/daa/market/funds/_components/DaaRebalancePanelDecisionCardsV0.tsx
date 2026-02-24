@@ -292,11 +292,13 @@ export default function DaaRebalancePanelDecisionCardsV0({
           const envelopeSafetyMargin = envelopeStatus === 'inside-envelope'
             ? Math.min(drift - envelopeLower, envelopeUpper - drift)
             : 0;
-          const thesisRegimeDrift = Math.abs(drift) >= Math.max(driftThresholdPct * 1.8, 0.05);
+          const thesisRegimeThreshold = Math.max(driftThresholdPct * 1.8, 0.05);
+          const thesisRegimeDrift = Math.abs(drift) >= thesisRegimeThreshold;
           const downWeightFactor = thesisRegimeDrift ? 0.85 : 1;
           const downWeightDeltaPct = thesisRegimeDrift ? (1 - downWeightFactor) * 100 : 0;
           const driftSeverity = Math.abs(drift) >= Math.max(driftThresholdPct * 2.4, 0.07) ? 'critical' : thesisRegimeDrift ? 'warning' : 'normal';
-          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, envelopeBreachDistance, envelopeSafetyMargin, thesisRegimeDrift, downWeightFactor, downWeightDeltaPct, driftSeverity };
+          const downWeightRationaleCode = thesisRegimeDrift ? `REGIME_DRIFT_${driftSeverity.toUpperCase()}` : 'REGIME_STABLE';
+          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, envelopeBreachDistance, envelopeSafetyMargin, thesisRegimeThreshold, thesisRegimeDrift, downWeightFactor, downWeightDeltaPct, driftSeverity, downWeightRationaleCode };
         });
         const totalMaxInImpact = whatIfRows.reduce((sum, r) => sum + r.maxInImpact, 0);
         const totalMaxOutImpact = whatIfRows.reduce((sum, r) => sum + r.maxOutImpact, 0);
@@ -416,7 +418,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
               {whatIfRows.map((r) => (
                 <div key={`thesis-regime-drift-${r.id}`}>
-                  {r.id}: thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · drift severity=<b>{r.driftSeverity}</b> · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b> · down-weight delta=<b>{r.downWeightDeltaPct.toFixed(1)}%</b> · rationale={r.thesisRegimeDrift ? 'drift above tolerance; reduce recommendation weight' : 'inside tolerance; keep baseline weight'}
+                  {r.id}: thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · threshold=<b>{(r.thesisRegimeThreshold * 100).toFixed(1)}%</b> · drift severity=<b>{r.driftSeverity}</b> · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b> · down-weight delta=<b>{r.downWeightDeltaPct.toFixed(1)}%</b> · rationale code=<b>{r.downWeightRationaleCode}</b> · rationale={r.thesisRegimeDrift ? 'drift above tolerance; reduce recommendation weight' : 'inside tolerance; keep baseline weight'}
                 </div>
               ))}
             </div>
