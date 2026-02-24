@@ -328,9 +328,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const capVerdict = capCoverage >= 1 ? 'sized' : 'clipped';
                 const capUtilizationPct = capBuys > 0 ? Math.min(200, Math.max(0, (liquiditySettlementGateV0.availableCash / capBuys) * 100)) : 100;
                 const clipAmount = capHeadroom < 0 ? Math.abs(capHeadroom) : 0;
+                const executionSizingPressurePct = capBuys > 0 ? Math.min(100, (clipAmount / capBuys) * 100) : 0;
+                const executionSizingBand = executionSizingPressurePct >= 15 ? 'high' : executionSizingPressurePct >= 5 ? 'medium' : 'low';
                 return (
                   <div key={`liquidity-cap-${cap}`}>
-                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} · headroom={capHeadroom.toFixed(2)} · utilization={capUtilizationPct.toFixed(1)}% · clip={clipAmount.toFixed(2)} => <b>{capVerdict}</b>
+                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} · headroom={capHeadroom.toFixed(2)} · utilization={capUtilizationPct.toFixed(1)}% · clip={clipAmount.toFixed(2)} · pressure={executionSizingPressurePct.toFixed(1)}% · pressure band=<b>{executionSizingBand}</b> => <b>{capVerdict}</b>
                   </div>
                 );
               })}
