@@ -121,6 +121,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : wQatPrecheckBlockedCount === 1
             ? 'review-before-route'
             : 'hold-for-explainability';
+        const wQatPrecheckReadinessPct = wQatPrecheckSimulator.length
+          ? Math.round(((wQatPrecheckSimulator.length - wQatPrecheckBlockedCount) / wQatPrecheckSimulator.length) * 100)
+          : 0;
+        const wQatPrecheckHandoffMode = wQatPrecheckBlockedCount === 0 && wQatFormulaDriftAlertCount === 0
+          ? 'ready-for-formula-routing'
+          : wQatPrecheckBlockedCount === 0
+            ? 'review-drift-before-routing'
+            : 'remediate-formula-before-routing';
         const wQatExplainabilityEvidenceTraceRows = qatRows.slice(0, 4).map((row) => {
           const netMultiplier = row.quality * row.analystTierMultiplier;
           const evidenceStatus = netMultiplier < 0.8 ? 'review-required' : netMultiplier < 0.9 ? 'watch' : 'clear';
@@ -334,7 +342,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b>
+                  precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b> · readiness=<b>{wQatPrecheckReadinessPct}%</b> · handoff=<b>{wQatPrecheckHandoffMode}</b>
                 </div>
               </div>
             </div>
