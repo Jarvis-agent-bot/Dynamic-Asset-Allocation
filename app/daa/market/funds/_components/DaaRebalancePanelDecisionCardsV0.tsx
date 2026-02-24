@@ -237,7 +237,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
               : 0;
           const thesisRegimeDrift = Math.abs(drift) >= Math.max(driftThresholdPct * 1.8, 0.05);
           const downWeightFactor = thesisRegimeDrift ? 0.85 : 1;
-          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, envelopeBreachDistance, thesisRegimeDrift, downWeightFactor };
+          const downWeightDeltaPct = thesisRegimeDrift ? (1 - downWeightFactor) * 100 : 0;
+          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, envelopeBreachDistance, thesisRegimeDrift, downWeightFactor, downWeightDeltaPct };
         });
         const totalMaxInImpact = whatIfRows.reduce((sum, r) => sum + r.maxInImpact, 0);
         const totalMaxOutImpact = whatIfRows.reduce((sum, r) => sum + r.maxOutImpact, 0);
@@ -338,7 +339,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
               {whatIfRows.map((r) => (
                 <div key={`thesis-regime-drift-${r.id}`}>
-                  {r.id}: thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b> · rationale={r.thesisRegimeDrift ? 'drift above tolerance; reduce recommendation weight' : 'inside tolerance; keep baseline weight'}
+                  {r.id}: thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b> · down-weight delta=<b>{r.downWeightDeltaPct.toFixed(1)}%</b> · rationale={r.thesisRegimeDrift ? 'drift above tolerance; reduce recommendation weight' : 'inside tolerance; keep baseline weight'}
                 </div>
               ))}
             </div>
