@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { buildPriceWarningSymbolSetV0 } from '@/src/daa/priceWarningSymbolsV0';
 import { deriveScenarioRoutingV0 } from '@/src/daa/scenarioRoutingV0';
 
@@ -38,6 +39,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
   jumpTo,
   openPreflightForRun,
 }: Props) {
+  const [manualCheckpointConfirmed, setManualCheckpointConfirmed] = useState(false);
+  const executionSuggestionLockTitle = manualCheckpointConfirmed
+    ? undefined
+    : 'Confirm manual checkpoint before applying execution suggestions.';
+
   return (
     <>
       {(() => {
@@ -154,7 +160,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
                 Open scenario weight routing
               </button>
-              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} title={executionSuggestionLockTitle} disabled={!manualCheckpointConfirmed} onClick={() => jumpTo('rebalance')}>
                 Apply gate in rebalance orders
               </button>
             </div>
@@ -219,7 +225,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
                 Review isolated tags
               </button>
-              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} title={executionSuggestionLockTitle} disabled={!manualCheckpointConfirmed} onClick={() => jumpTo('rebalance')}>
                 Apply MaxIn lock routing
               </button>
             </div>
@@ -373,12 +379,23 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(245,158,11,0.55)', borderRadius: 10, background: 'rgba(245,158,11,0.08)', fontSize: 11 }}>
               AI recommender manual confirmation checkpoint: operator must confirm preflight checkpoint before any execution suggestion is treated as actionable. Without manual confirmation, recommendations stay in simulation-only mode.
             </div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+              Manual checkpoint status: <b>{manualCheckpointConfirmed ? 'confirmed' : 'not confirmed'}</b>
+            </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('rebalance')}>
+              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} title={executionSuggestionLockTitle} disabled={!manualCheckpointConfirmed} onClick={() => jumpTo('rebalance')}>
                 Open liquidity-sensitive orders
               </button>
-              <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => openPreflightForRun()}>
-                Confirm manual checkpoint
+              <button
+                type="button"
+                className="button secondary"
+                style={{ padding: '4px 8px' }}
+                onClick={() => {
+                  setManualCheckpointConfirmed(true);
+                  openPreflightForRun();
+                }}
+              >
+                {manualCheckpointConfirmed ? 'Manual checkpoint confirmed' : 'Confirm manual checkpoint'}
               </button>
             </div>
           </div>
