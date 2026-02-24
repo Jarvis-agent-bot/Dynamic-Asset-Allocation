@@ -120,6 +120,31 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 );
               })}
             </div>
+            {(() => {
+              const simulatorRows = qatRows.slice(0, 4).map((r) => {
+                const totalPenalty = r.gatePenaltyTotal;
+                const verdict = totalPenalty >= 0.2 ? 'blocked' : totalPenalty >= 0.1 ? 'review' : 'ready';
+                const dominantGate = r.driftGatePenalty >= r.missingGatePenalty && r.driftGatePenalty >= r.staleGatePenalty
+                  ? 'drift'
+                  : r.missingGatePenalty >= r.staleGatePenalty
+                    ? 'missing'
+                    : 'stale';
+                const confidence = r.quality >= 0.9 ? 'high' : r.quality >= 0.8 ? 'medium' : 'low';
+                return { id: r.id, totalPenalty, dominantGate, confidence, verdict };
+              });
+              return (
+                <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(56,189,248,0.35)', borderRadius: 10, background: 'rgba(56,189,248,0.06)', fontSize: 11 }}>
+                  Factor-trace precheck simulator (transparency)
+                  <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                    {simulatorRows.map((row) => (
+                      <div key={`factor-precheck-${row.id}`}>
+                        {row.id}: penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · dominant gate=<b>{row.dominantGate}</b> · confidence=<b>{row.confidence}</b> {'=>'} <b>{row.verdict}</b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
               W_qat factor breakdown panel (gate-level trace)
               <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
