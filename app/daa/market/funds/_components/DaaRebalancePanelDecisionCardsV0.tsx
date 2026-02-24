@@ -323,6 +323,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 settlementHits: precheckRows.filter((row) => row.settlementGate).length,
               };
               const topEvidence = precheckRows.find((row) => row.blockedGateCount > 0) ?? precheckRows[0];
+              const auditTimeline = topEvidence
+                ? [
+                    { gate: 'incompetence', blocked: topEvidence.incompetenceGate, unblock: 'reduce drift or reassess thesis' },
+                    { gate: 'maxIn', blocked: topEvidence.maxInGate, unblock: 'unlock MaxIn limit' },
+                    { gate: 'liquidity', blocked: topEvidence.liquidityGate, unblock: 'raise cash or trim buy size' },
+                    { gate: 'T+N', blocked: topEvidence.settlementGate, unblock: 'wait for settlement window' },
+                  ]
+                : [];
 
               return (
                 <>
@@ -341,6 +349,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {topEvidence ? (
                       <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                         top blocker evidence: <b>{topEvidence.id}</b> · blocker=<b>{topEvidence.primaryBlocker}</b> · fingerprint=<b>{topEvidence.gateFingerprint}</b> · unblock next=<b>{topEvidence.unblockHint}</b>
+                      </div>
+                    ) : null}
+                    {auditTimeline.length ? (
+                      <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                        Buy gate precheck audit timeline: {auditTimeline.map((entry) => `${entry.gate}=${entry.blocked ? 'blocked' : 'pass'}${entry.blocked ? ` (next: ${entry.unblock})` : ''}`).join(' -> ')}
                       </div>
                     ) : null}
                   </div>
