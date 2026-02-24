@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getDaaAdminActorUserIdFromRequestV1, requireDaaAdminEditorAuth } from "../../../../../../../../src/daa/adminAuth";
-import { setDaaRunExecutedV0, setDaaRunExecutionStatusesV0 } from "../../../../../../../../src/daa/storeV0";
+import { getDaaRunBundleV0, setDaaRunExecutedV0, setDaaRunExecutionStatusesV0 } from "../../../../../../../../src/daa/storeV0";
 
 export const runtime = "nodejs";
 
@@ -25,6 +25,11 @@ export async function POST(req: Request, ctx: { params: { runId: string } }) {
 
   try {
     const actorUserId = await getDaaAdminActorUserIdFromRequestV1(req);
+    const bundle = await getDaaRunBundleV0(runId);
+    if (!bundle.confirm) {
+      return NextResponse.json({ ok: false, error: "confirm required before executed" }, { status: 409 });
+    }
+
     const payload = (body as any).payload ?? body;
     await setDaaRunExecutedV0({ runId, payload, actorUserId });
 
