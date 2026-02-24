@@ -217,6 +217,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const confidence = r.quality >= 0.9 ? 'high' : r.quality >= 0.8 ? 'medium' : 'low';
                 return { id: r.id, totalPenalty, dominantGate, confidence, verdict };
               });
+              const factorPrecheckBlockedCount = simulatorRows.filter((row) => row.verdict !== 'ready').length;
+              const factorPrecheckRouteMode = factorPrecheckBlockedCount === 0 ? 'precheck-clear' : factorPrecheckBlockedCount === 1 ? 'review-dominant-gate' : 'hold-for-remediation';
               return (
                 <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(56,189,248,0.35)', borderRadius: 10, background: 'rgba(56,189,248,0.06)', fontSize: 11 }}>
                   Factor-trace precheck simulator (transparency)
@@ -226,6 +228,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         {row.id}: penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · dominant gate=<b>{row.dominantGate}</b> · confidence=<b>{row.confidence}</b> {'=>'} <b>{row.verdict}</b>
                       </div>
                     ))}
+                    <div>precheck verdict: blocked rows=<b>{factorPrecheckBlockedCount}/{simulatorRows.length}</b> · route mode=<b>{factorPrecheckRouteMode}</b></div>
                   </div>
                 </div>
               );
