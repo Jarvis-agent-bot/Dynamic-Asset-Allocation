@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 
+import { requireDaaFixtureSmokeGateV0 } from "@/src/daa/fixtureSmokeGateV0";
+
 // Demo payloads for Step2 ingestion.
 // Kept server-side so we don't ship large sample blobs in the client bundle.
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await requireDaaFixtureSmokeGateV0(req, "fixture");
+  if (denied) return denied;
+
   return NextResponse.json(
     {
       twitter: [

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+import { requireDaaFixtureSmokeGateV0 } from "@/src/daa/fixtureSmokeGateV0";
 
 type ApiContractSmokeItemV0 = {
   key: string;
@@ -38,7 +38,7 @@ const API_CONTRACT_SMOKE_ITEMS_V0: ApiContractSmokeItemV0[] = [
 ];
 
 export async function GET(req: Request) {
-  const denied = await requireDaaAdminViewerAuth(req);
+  const denied = await requireDaaFixtureSmokeGateV0(req, "smoke");
   if (denied) return denied;
 
   const total = API_CONTRACT_SMOKE_ITEMS_V0.length;
