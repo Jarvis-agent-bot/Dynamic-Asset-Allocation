@@ -123,6 +123,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 dominant gate=<b>{dominantGate}</b> · dominant share=<b>{dominantGateSharePct.toFixed(1)}%</b>
               </div>
             </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(56,189,248,0.35)', borderRadius: 10, background: 'rgba(56,189,248,0.06)', fontSize: 11 }}>
+              Factor-trace transparency audit timeline
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                <div>T0 input snapshot: rows=<b>{qatRows.length}</b> · avg quality=<b>{(qatRows.reduce((sum, row) => sum + row.quality, 0) / qatRows.length).toFixed(3)}</b></div>
+                <div>T1 gate aggregation: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b></div>
+                <div>T2 dominance audit: dominant gate=<b>{dominantGate}</b> · share=<b>{dominantGateSharePct.toFixed(1)}%</b></div>
+                <div>T3 operator action: <b>{dominantGate === 'drift' ? 'review drift thresholds first' : dominantGate === 'missing' ? 'backfill missing prices first' : 'refresh stale close prices first'}</b></div>
+              </div>
+            </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
               W_qat multiplier explainer: <b>W_qat = W_target × Q × analystTierMultiplier</b> where Q = 1 - driftPenalty - missingPenalty - stalePenalty.
               <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
