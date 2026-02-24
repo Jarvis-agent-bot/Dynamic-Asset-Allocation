@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { isDaaEngineRebalanceSimulateResponse } from "@/src/core/contracts/daaEngine";
-import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { parsePositiveIntEnv } from "@/src/daa/env";
+import { requireDaaFixtureSmokeGateV0 } from "@/src/daa/fixtureSmokeGateV0";
 import { proxyToEngineJson } from "@/src/daa/proxyToEngine";
 
 const PM_BRIDGE_SMOKE_REQUEST_V0 = {
@@ -32,7 +32,7 @@ const PM_BRIDGE_SMOKE_REQUEST_V0 = {
 } as const;
 
 export async function GET(req: Request) {
-  const denied = await requireDaaAdminViewerAuth(req);
+  const denied = await requireDaaFixtureSmokeGateV0(req, "smoke");
   if (denied) return denied;
 
   const timeoutMs = parsePositiveIntEnv("DAA_ENGINE_TIMEOUT_MS", 30_000);
