@@ -541,6 +541,25 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   ? 'auto-buy-partial'
                   : 'auto-buy-hold';
               const topEvidence = precheckRows.find((row) => row.blockedGateCount > 0) ?? precheckRows[0];
+              const blockerConsensus = precheckRows.reduce(
+                (acc, row) => {
+                  if (row.blockedGateCount > 0) {
+                    acc[row.primaryBlocker] += 1;
+                  }
+                  return acc;
+                },
+                { incompetence: 0, maxIn: 0, liquidity: 0, settlement: 0 },
+              );
+              const dominantBlocker = blockerConsensus.incompetence >= blockerConsensus.maxIn
+                && blockerConsensus.incompetence >= blockerConsensus.liquidity
+                && blockerConsensus.incompetence >= blockerConsensus.settlement
+                ? 'incompetence'
+                : blockerConsensus.maxIn >= blockerConsensus.liquidity && blockerConsensus.maxIn >= blockerConsensus.settlement
+                  ? 'maxIn'
+                  : blockerConsensus.liquidity >= blockerConsensus.settlement
+                    ? 'liquidity'
+                    : 'settlement';
+              const dominantBlockerHits = blockerConsensus[dominantBlocker];
               const buyGateContractSmokeRows = precheckRows.map((row) => {
                 const contractSmokeThreshold = Math.max(driftThresholdPct * 2, 0.06);
                 const contractSmokeFailed = row.blockedGateCount >= 2 || row.incompetenceGate;
@@ -593,6 +612,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     Buy gate precheck evidence panel: blocked rows=<b>{evidencePanel.blockedRows}/{precheckRows.length}</b> · incompetence hits=<b>{evidencePanel.incompetenceHits}</b> · maxIn hits=<b>{evidencePanel.maxInHits}</b> · liquidity hits=<b>{evidencePanel.liquidityHits}</b> · T+N hits=<b>{evidencePanel.settlementHits}</b>
                     <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                       Auto-buy precheck simulator: ready rows=<b>{readyRows}/{precheckRows.length}</b> · route mode=<b>{routeMode}</b>
+                    </div>
+                    <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
+                      precheck blocker consensus: dominant blocker=<b>{dominantBlocker}</b> · hits=<b>{dominantBlockerHits}</b>
                     </div>
                     {topEvidence ? (
                       <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
