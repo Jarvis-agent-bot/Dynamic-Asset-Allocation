@@ -75,6 +75,32 @@ export default function DaaRebalancePanelDecisionCardsV0({
           `T2 tier stage: apply analyst multiplier => avg net=${avgNetMultiplier.toFixed(3)}`,
           `T3 explainability action: ${avgNetMultiplier < 0.8 ? 'inspect gate penalties before routing execution' : 'formula signal stable for routing review'}`,
         ];
+        const wQatPrecheckSimulator = [
+          {
+            gate: 'quality-stage',
+            status: avgQuality < 0.8 ? 'blocked' : 'pass',
+            signal: `avg quality ${avgQuality.toFixed(3)}`,
+            nextStep: avgQuality < 0.8 ? 'inspect drift/missing/stale penalties' : 'quality stage clear',
+          },
+          {
+            gate: 'tier-stage',
+            status: avgAnalystMultiplier < 0.95 ? 'blocked' : 'pass',
+            signal: `avg tier ${avgAnalystMultiplier.toFixed(3)}`,
+            nextStep: avgAnalystMultiplier < 0.95 ? 'review analyst tier downgrades' : 'tier stage clear',
+          },
+          {
+            gate: 'net-formula',
+            status: avgNetMultiplier < 0.8 ? 'blocked' : 'pass',
+            signal: `avg net ${avgNetMultiplier.toFixed(3)}`,
+            nextStep: avgNetMultiplier < 0.8 ? 'hold auto-routing until explainability review' : 'formula explainability clear',
+          },
+        ] as const;
+        const wQatPrecheckBlockedCount = wQatPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const wQatPrecheckRouteMode = wQatPrecheckBlockedCount === 0
+          ? 'auto-route-ready'
+          : wQatPrecheckBlockedCount === 1
+            ? 'review-before-route'
+            : 'hold-for-explainability';
         const gateLevelTraceTotals = qatRows.reduce(
           (acc, row) => {
             acc.drift += row.driftGatePenalty;
@@ -189,6 +215,19 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              W_qat precheck simulator (formula explainability)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {wQatPrecheckSimulator.map((row) => (
+                  <div key={`wqat-precheck-${row.gate}`}>
+                    gate=<b>{row.gate}</b> · status=<b>{row.status}</b> · signal=<b>{row.signal}</b> · next=<b>{row.nextStep}</b>
+                  </div>
+                ))}
+                <div>
+                  precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b>
+                </div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
