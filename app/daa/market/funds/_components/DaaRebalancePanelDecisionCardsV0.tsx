@@ -475,6 +475,26 @@ export default function DaaRebalancePanelDecisionCardsV0({
           `T2 decision flow=${guardrailDecisionFlowBlocked ? 'route-to-remediation' : 'ready-for-preflight'}`,
           `T3 operator action=${guardrailDecisionFlowBlocked ? 'resolve top guardrail blocker before execution' : 'open preflight and continue execution checklist'}`,
         ];
+        const guardrailPrecheckSimulator = [
+          {
+            gate: 'threshold',
+            status: guardrailThresholdGateBlocked ? 'blocked' : 'pass',
+            signal: `${thresholdHitCount}/${whatIfRows.length} rows above threshold`,
+            nextStep: guardrailThresholdGateBlocked ? 'de-risk rows with maxIn/maxOut breaches' : 'threshold gate clear',
+          },
+          {
+            gate: 'liquidity',
+            status: guardrailLiquidityGateBlocked ? 'blocked' : 'pass',
+            signal: `cash gap ${liquiditySettlementGateV0.cashGap.toFixed(2)} ${baseCcy || ''}`,
+            nextStep: guardrailLiquidityGateBlocked ? 'raise cash buffer or trim buys' : 'liquidity gate clear',
+          },
+        ] as const;
+        const guardrailPrecheckBlockedCount = guardrailPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const guardrailPrecheckRoute = guardrailPrecheckBlockedCount === 0
+          ? 'guardrail-ready'
+          : guardrailPrecheckBlockedCount === 1
+            ? 'partial-remediation'
+            : 'full-remediation';
         const manualConfirmationTimeline = [
           `T0 checkpoint state=${manualCheckpointConfirmed ? 'confirmed' : 'pending'}`,
           `T1 execution mode=${manualCheckpointConfirmed ? 'live-actionable' : 'simulation-only'}`,
@@ -594,6 +614,19 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Guardrail-first precheck simulator
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {guardrailPrecheckSimulator.map((row) => (
+                  <div key={`guardrail-precheck-${row.gate}`}>
+                    gate=<b>{row.gate}</b> · status=<b>{row.status}</b> · signal=<b>{row.signal}</b> · next=<b>{row.nextStep}</b>
+                  </div>
+                ))}
+                <div>
+                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b>
+                </div>
               </div>
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
