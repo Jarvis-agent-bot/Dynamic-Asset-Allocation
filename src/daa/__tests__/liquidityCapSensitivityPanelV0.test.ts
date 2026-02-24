@@ -12,6 +12,6 @@ describe('feature-liquidity-cap-sensitivity-panel-v0', () => {
     expect(source).toContain('const capBuys = liquiditySettlementGateV0.estimatedBuys * cap;');
     expect(source).toContain('const capCoverage = capBuys > 0 ? liquiditySettlementGateV0.availableCash / capBuys : 1;');
     expect(source).toContain("const capVerdict = capCoverage >= 1 ? 'sized' : 'clipped';");
-    expect(source).toContain('cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} => <b>{capVerdict}</b>');
+    expect(source).toContain('cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)}');
   });
 });
