@@ -302,9 +302,13 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       ? 'blocked by positive cash gap forecast'
                       : 'pass: settlement window and cash gap are inside limits';
                 const gateSeverity = settlementBlocked && cashGapBlocked ? 'high' : settlementBlocked || cashGapBlocked ? 'medium' : 'none';
+                const settlementPenaltyPts = settlementBlocked ? Math.min(40, liquiditySettlementGateV0.settlementLagDays * 10) : 0;
+                const cashGapPenaltyPts = cashGapBlocked ? Math.min(60, Math.max(5, liquiditySettlementGateV0.cashGap / 1000)) : 0;
+                const gateScore = Math.max(0, 100 - settlementPenaltyPts - cashGapPenaltyPts);
+                const unblockCashNeeded = cashGapBlocked ? liquiditySettlementGateV0.cashGap : 0;
                 return (
                   <div>
-                    settlement gate(T+N={liquiditySettlementGateV0.settlementLagDays})={settlementBlocked ? 'block' : 'pass'} · cash-gap gate({liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''})={cashGapBlocked ? 'block' : 'pass'} · severity=<b>{gateSeverity}</b> · explanation=<b>{gateReason}</b>
+                    settlement gate(T+N={liquiditySettlementGateV0.settlementLagDays})={settlementBlocked ? 'block' : 'pass'} · cash-gap gate({liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''})={cashGapBlocked ? 'block' : 'pass'} · severity=<b>{gateSeverity}</b> · gate score=<b>{gateScore.toFixed(1)}</b> · unblock cash=<b>{unblockCashNeeded.toFixed(2)} {baseCcy || ''}</b> · explanation=<b>{gateReason}</b>
                   </div>
                 );
               })()}
