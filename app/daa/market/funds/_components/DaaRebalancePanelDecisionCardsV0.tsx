@@ -430,6 +430,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   ? 'auto-buy-partial'
                   : 'auto-buy-hold';
               const topEvidence = precheckRows.find((row) => row.blockedGateCount > 0) ?? precheckRows[0];
+              const buyGateDriftAlertRows = precheckRows.map((row) => {
+                const driftAlertThreshold = Math.max(driftThresholdPct * 2, 0.06);
+                const driftAlert = row.primaryBlocker === 'incompetence' || row.blockedGateCount >= 2;
+                const driftPressureBand = row.blockedGateCount >= 3 ? 'critical' : row.blockedGateCount >= 2 ? 'elevated' : driftAlert ? 'watch' : 'normal';
+                const action = driftAlert ? 'reduce drift before enabling buy route' : 'drift stable for buy route';
+                return { id: row.id, driftAlertThreshold, driftAlert, driftPressureBand, action };
+              });
+              const buyGateDriftAlertCount = buyGateDriftAlertRows.filter((row) => row.driftAlert).length;
               const auditTimeline = topEvidence
                 ? [
                     { gate: 'incompetence', blocked: topEvidence.incompetenceGate, unblock: 'reduce drift or reassess thesis' },
@@ -466,6 +474,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         Buy gate precheck audit timeline: {auditTimeline.map((entry) => `${entry.gate}=${entry.blocked ? 'blocked' : 'pass'}${entry.blocked ? ` (next: ${entry.unblock})` : ''}`).join(' -> ')}
                       </div>
                     ) : null}
+                  </div>
+                  <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+                    Buy gate drift alert view (precheck)
+                    <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                      {buyGateDriftAlertRows.map((row) => (
+                        <div key={`buy-gate-drift-alert-${row.id}`}>
+                          {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.driftPressureBand}</b> · action=<b>{row.action}</b>
+                        </div>
+                      ))}
+                      <div>drift alert verdict: alerts=<b>{buyGateDriftAlertCount}/{buyGateDriftAlertRows.length}</b> · mode=<b>{buyGateDriftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b></div>
+                    </div>
                   </div>
                 </>
               );
