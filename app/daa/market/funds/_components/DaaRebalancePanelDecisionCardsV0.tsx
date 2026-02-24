@@ -134,6 +134,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const dominantGateSharePct = gateLevelTraceTotals.total > 0
           ? ((dominantGate === 'drift' ? gateLevelTraceTotals.drift : dominantGate === 'missing' ? gateLevelTraceTotals.missing : gateLevelTraceTotals.stale) / gateLevelTraceTotals.total) * 100
           : 0;
+        const factorTraceContractSmokeRows = qatRows.slice(0, 5).map((row) => {
+          const contractSmokeThreshold = Math.max(driftThresholdPct * 1.6, 0.05);
+          const contractSmokeFailed = row.driftAbs >= contractSmokeThreshold || row.gatePenaltyTotal >= 0.35;
+          const contractState = contractSmokeFailed ? 'contract-risk' : 'contract-ok';
+          const nextAction = contractSmokeFailed ? 'run factor-trace remediation pass' : 'keep transparency contract active';
+          return { id: row.id, contractSmokeThreshold, contractSmokeFailed, contractState, nextAction };
+        });
+        const factorTraceContractSmokeFailCount = factorTraceContractSmokeRows.filter((row) => row.contractSmokeFailed).length;
         const factorTraceDriftAlertRows = qatRows.slice(0, 5).map((r) => {
           const driftAlertThreshold = Math.max(driftThresholdPct * 1.6, 0.05);
           const driftAlert = r.driftAbs >= driftAlertThreshold;
@@ -207,6 +215,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 <div>T1 gate aggregation: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b></div>
                 <div>T2 dominance audit: dominant gate=<b>{dominantGate}</b> · share=<b>{dominantGateSharePct.toFixed(1)}%</b></div>
                 <div>T3 operator action: <b>{dominantGate === 'drift' ? 'review drift thresholds first' : dominantGate === 'missing' ? 'backfill missing prices first' : 'refresh stale close prices first'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${factorTraceContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Factor-trace contract smoke guard (transparency)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {factorTraceContractSmokeRows.map((row) => (
+                  <div key={`factor-trace-contract-smoke-${row.id}`}>
+                    {row.id}: contract threshold=<b>{(row.contractSmokeThreshold * 100).toFixed(1)}%</b> · status=<b>{row.contractSmokeFailed ? 'fail' : 'pass'}</b> · state=<b>{row.contractState}</b> · action=<b>{row.nextAction}</b>
+                  </div>
+                ))}
+                <div>contract smoke verdict: fails=<b>{factorTraceContractSmokeFailCount}/{factorTraceContractSmokeRows.length}</b> · mode=<b>{factorTraceContractSmokeFailCount > 0 ? 'contract-review-required' : 'contract-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${driftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
