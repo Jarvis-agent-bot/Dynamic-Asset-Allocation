@@ -121,6 +121,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   Worked example ({explainerExample.id}): {(explainerExample.targetPct * 100).toFixed(2)}% × {explainerExample.quality.toFixed(2)} × {explainerExample.analystTierMultiplier.toFixed(2)} = {((explainerExample.targetPct * explainerExample.quality * explainerExample.analystTierMultiplier) * 100).toFixed(2)}% preview weight.
                 </div>
               ) : null}
+              {explainerExample ? (
+                <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
+                  Formula contribution trace: quality drag=<b>{((1 - explainerExample.quality) * 100).toFixed(1)}pp</b> · tier lift=<b>{((explainerExample.analystTierMultiplier - 1) * 100).toFixed(1)}pp</b> · net multiplier=<b>{(explainerExample.quality * explainerExample.analystTierMultiplier).toFixed(3)}</b>
+                </div>
+              ) : null}
             </div>
           </div>
         );
