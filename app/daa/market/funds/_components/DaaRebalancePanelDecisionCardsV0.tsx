@@ -82,6 +82,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           stale: gateLevelTraceTotals.stale / qatRows.length,
           total: gateLevelTraceTotals.total / qatRows.length,
         };
+        const dominantGate = gateLevelTraceTotals.drift >= gateLevelTraceTotals.missing && gateLevelTraceTotals.drift >= gateLevelTraceTotals.stale
+          ? 'drift'
+          : gateLevelTraceTotals.missing >= gateLevelTraceTotals.stale
+            ? 'missing'
+            : 'stale';
+        const dominantGateSharePct = gateLevelTraceTotals.total > 0
+          ? ((dominantGate === 'drift' ? gateLevelTraceTotals.drift : dominantGate === 'missing' ? gateLevelTraceTotals.missing : gateLevelTraceTotals.stale) / gateLevelTraceTotals.total) * 100
+          : 0;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
@@ -109,6 +117,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
               </div>
               <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
                 aggregate gate penalties: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b> · total=<b>{(gateLevelTraceTotals.total * 100).toFixed(1)}pp</b>
+              </div>
+              <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
+                dominant gate=<b>{dominantGate}</b> · dominant share=<b>{dominantGateSharePct.toFixed(1)}%</b>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
