@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, Query
 
@@ -156,6 +156,8 @@ class Constraints(BaseModel):
     maxPositionPct: float = Field(gt=0, le=1)
     maxIn: float = Field(ge=0)
     maxOut: float = Field(ge=0)
+    minTradeNotional: float = Field(default=0, ge=0)
+    minTradeUnit: float = Field(default=0, ge=0)
 
 
 class Tags(BaseModel):
@@ -171,10 +173,22 @@ class AllocationItem(BaseModel):
     tags: Optional[Tags] = None
 
 
+class Position(BaseModel):
+    symbol: str = Field(min_length=1)
+    notional: float = Field(ge=0)
+
+
+class TradingCosts(BaseModel):
+    buyBps: float = Field(default=0, ge=0)
+    sellBps: float = Field(default=0, ge=0)
+
+
 class MoneyPlan(BaseModel):
     account: MoneyAccount
     constraints: Constraints
     allocations: list[AllocationItem]
+    positions: list[Position] = Field(default_factory=list)
+    costs: TradingCosts = Field(default_factory=TradingCosts)
 
 
 class Signal(BaseModel):
@@ -202,68 +216,170 @@ class RebalanceResponse(BaseModel):
     explain: dict
 
 
+def _round_down_to_unit(value: float, unit: float) -> float:
+    if unit <= 0:
+        return max(0.0, value)
+    steps = int(value / unit)
+    return max(0.0, float(steps) * unit)
+
+
 @app.post("/v1/rebalance/simulate", response_model=RebalanceResponse)
 def rebalance_simulate(req: RebalanceRequest):
-    """v0: minimal bridge from signals + money constraints to suggested orders.
-
-    Heuristic (intentionally simple):
-    - BUY => allocate up to investable * maxPositionPct (capped by maxIn and available cash)
-    - SELL => suggest a sell of the same notional cap (capped by maxOut)
-    - HOLD => no order
-
-    This is NOT a full portfolio optimizer. It's a product scaffold.
-    """
+    """v1 constraint optimizer with holdings, budgets, costs, and diagnostics."""
 
     acct = req.money_plan.account
     c = req.money_plan.constraints
+    costs = req.money_plan.costs
 
-    # Basic consistency warnings
     warnings: list[str] = []
     if acct.cash > acct.totalEquity:
         warnings.append("cash > totalEquity (input inconsistency)")
     if acct.investable > acct.totalEquity:
         warnings.append("investable > totalEquity (input inconsistency)")
 
-    per_position_cap = max(0.0, acct.investable * c.maxPositionPct)
+    position_map = {p.symbol: p.notional for p in req.money_plan.positions}
+    max_position_notional = max(0.0, acct.investable * c.maxPositionPct)
+
+    max_in_remaining = c.maxIn
+    max_out_remaining = c.maxOut
+    cash_remaining = acct.cash
+
+    buy_fee = costs.buyBps / 10_000
+    sell_fee = costs.sellBps / 10_000
 
     orders: list[SuggestedOrder] = []
-    for s in req.signals:
-        if s.action == "HOLD":
+    diagnostics: list[dict[str, Any]] = []
+
+    sell_signals = sorted((s for s in req.signals if s.action == "SELL"), key=lambda x: x.score, reverse=True)
+    buy_signals = sorted((s for s in req.signals if s.action == "BUY"), key=lambda x: x.score, reverse=True)
+
+    for s in sell_signals:
+        current = position_map.get(s.symbol, 0.0)
+        cap = min(current, max_out_remaining)
+        tradable = _round_down_to_unit(cap, c.minTradeUnit)
+        if tradable < c.minTradeNotional:
+            diagnostics.append(
+                {
+                    "symbol": s.symbol,
+                    "action": s.action,
+                    "score": s.score,
+                    "status": "suppressed",
+                    "reason": "below_min_trade_notional",
+                    "candidate_notional": tradable,
+                }
+            )
+            continue
+        if tradable <= 0:
+            diagnostics.append(
+                {
+                    "symbol": s.symbol,
+                    "action": s.action,
+                    "score": s.score,
+                    "status": "suppressed",
+                    "reason": "no_sell_capacity",
+                }
+            )
             continue
 
-        if s.action == "BUY":
-            notional = min(per_position_cap, c.maxIn, acct.cash)
-            if notional <= 0:
-                continue
-            orders.append(
-                SuggestedOrder(
-                    symbol=s.symbol,
-                    side="BUY",
-                    notional=float(notional),
-                    reason=f"BUY signal (score={s.score:.2f}); capped by maxPositionPct/maxIn/cash",
-                )
+        orders.append(
+            SuggestedOrder(
+                symbol=s.symbol,
+                side="SELL",
+                notional=tradable,
+                reason=f"SELL signal (score={s.score:.2f}); capped by holdings/maxOut/minTradeUnit",
             )
+        )
+        max_out_remaining = max(0.0, max_out_remaining - tradable)
+        cash_remaining += tradable * (1 - sell_fee)
+        position_map[s.symbol] = max(0.0, current - tradable)
 
-        if s.action == "SELL":
-            notional = min(per_position_cap, c.maxOut)
-            if notional <= 0:
-                continue
-            orders.append(
-                SuggestedOrder(
-                    symbol=s.symbol,
-                    side="SELL",
-                    notional=float(notional),
-                    reason=f"SELL signal (score={s.score:.2f}); capped by maxPositionPct/maxOut",
-                )
+        diagnostics.append(
+            {
+                "symbol": s.symbol,
+                "action": s.action,
+                "score": s.score,
+                "status": "applied",
+                "notional": tradable,
+                "current_position": current,
+                "remaining_maxOut": max_out_remaining,
+            }
+        )
+
+    for s in buy_signals:
+        current = position_map.get(s.symbol, 0.0)
+        position_headroom = max(0.0, max_position_notional - current)
+        cash_cap = cash_remaining / (1 + buy_fee) if (1 + buy_fee) > 0 else 0.0
+        cap = min(position_headroom, max_in_remaining, cash_cap)
+        tradable = _round_down_to_unit(cap, c.minTradeUnit)
+
+        if tradable < c.minTradeNotional:
+            diagnostics.append(
+                {
+                    "symbol": s.symbol,
+                    "action": s.action,
+                    "score": s.score,
+                    "status": "suppressed",
+                    "reason": "below_min_trade_notional",
+                    "candidate_notional": tradable,
+                }
             )
+            continue
+        if tradable <= 0:
+            diagnostics.append(
+                {
+                    "symbol": s.symbol,
+                    "action": s.action,
+                    "score": s.score,
+                    "status": "suppressed",
+                    "reason": "no_buy_capacity",
+                    "position_headroom": position_headroom,
+                    "maxIn_remaining": max_in_remaining,
+                    "cash_remaining": cash_remaining,
+                }
+            )
+            continue
+
+        orders.append(
+            SuggestedOrder(
+                symbol=s.symbol,
+                side="BUY",
+                notional=tradable,
+                reason=f"BUY signal (score={s.score:.2f}); capped by maxPosition/maxIn/cash/minTradeUnit",
+            )
+        )
+        max_in_remaining = max(0.0, max_in_remaining - tradable)
+        cash_remaining -= tradable * (1 + buy_fee)
+        position_map[s.symbol] = current + tradable
+
+        diagnostics.append(
+            {
+                "symbol": s.symbol,
+                "action": s.action,
+                "score": s.score,
+                "status": "applied",
+                "notional": tradable,
+                "current_position": current,
+                "remaining_maxIn": max_in_remaining,
+                "remaining_cash": cash_remaining,
+            }
+        )
 
     explain = {
-        "policy": "v0 heuristic",
-        "per_position_cap": per_position_cap,
+        "policy": "v1 constrained optimizer",
+        "max_position_notional": max_position_notional,
         "constraints": c.model_dump(),
+        "costs": costs.model_dump(),
+        "budget": {
+            "start_cash": acct.cash,
+            "end_cash": cash_remaining,
+            "remaining_maxIn": max_in_remaining,
+            "remaining_maxOut": max_out_remaining,
+        },
+        "diagnostics": diagnostics,
         "notes": [
-            "v0 does not consider existing positions",
-            "v0 does not do portfolio-level optimization",
+            "v1 is holdings-aware",
+            "v1 enforces maxIn/maxOut/maxPosition and min-trade controls",
+            "v1 accounts for buy/sell bps costs in cash budget",
         ],
     }
 
