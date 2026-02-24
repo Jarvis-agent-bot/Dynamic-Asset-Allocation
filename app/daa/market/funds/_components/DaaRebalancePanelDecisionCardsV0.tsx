@@ -486,6 +486,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 sandbox totals: maxIn impact=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b> · net pressure=<b>{(netGuardrailPressure * 100).toFixed(1)}%</b> · bias=<b>{pressureBias}</b> · severity=<b>{pressureSeverity}</b> · threshold-hit rows=<b>{thresholdHitCount}/{whatIfRows.length}</b> · hit rate=<b>{thresholdHitRatePct}%</b> · peak impact row=<b>{peakImpactRow.id || 'n/a'}</b> · peak impact score=<b>{peakImpactScorePct.toFixed(1)}%</b>
               </div>
             </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Guardrail-first evidence panel: threshold-hit rows=<b>{thresholdHitCount}/{whatIfRows.length}</b> · maxIn impact total=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact total=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b> · pressure bias=<b>{pressureBias}</b> · pressure severity=<b>{pressureSeverity}</b>
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                top guardrail evidence: <b>{peakImpactRow.id || 'n/a'}</b> · impact score=<b>{peakImpactScorePct.toFixed(1)}%</b> · recommendation=<b>{pressureBias === 'maxIn-heavy' ? 'prioritize maxIn relief' : pressureBias === 'maxOut-heavy' ? 'prioritize maxOut relief' : 'keep balanced guardrails'}</b>
+              </div>
+            </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
               Rebalance risk-envelope visualizer (dynamic decision bounds)
             </div>
