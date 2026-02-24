@@ -125,6 +125,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const dominantGateSharePct = gateLevelTraceTotals.total > 0
           ? ((dominantGate === 'drift' ? gateLevelTraceTotals.drift : dominantGate === 'missing' ? gateLevelTraceTotals.missing : gateLevelTraceTotals.stale) / gateLevelTraceTotals.total) * 100
           : 0;
+        const factorTraceDriftAlertRows = qatRows.slice(0, 5).map((r) => {
+          const driftAlertThreshold = Math.max(driftThresholdPct * 1.6, 0.05);
+          const driftAlert = r.driftAbs >= driftAlertThreshold;
+          const driftPressureBand = r.driftAbs >= driftAlertThreshold * 1.35 ? 'critical' : driftAlert ? 'elevated' : 'normal';
+          const action = driftAlert ? 'inspect factor penalties before routing' : 'no drift action';
+          return { id: r.id, driftAlertThreshold, driftAlert, driftPressureBand, action };
+        });
+        const driftAlertCount = factorTraceDriftAlertRows.filter((row) => row.driftAlert).length;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
@@ -190,6 +198,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 <div>T1 gate aggregation: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b></div>
                 <div>T2 dominance audit: dominant gate=<b>{dominantGate}</b> · share=<b>{dominantGateSharePct.toFixed(1)}%</b></div>
                 <div>T3 operator action: <b>{dominantGate === 'drift' ? 'review drift thresholds first' : dominantGate === 'missing' ? 'backfill missing prices first' : 'refresh stale close prices first'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${driftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Factor-trace drift alert view (transparency)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {factorTraceDriftAlertRows.map((row) => (
+                  <div key={`factor-trace-drift-alert-${row.id}`}>
+                    {row.id}: drift alert threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.driftPressureBand}</b> · action=<b>{row.action}</b>
+                  </div>
+                ))}
+                <div>drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
