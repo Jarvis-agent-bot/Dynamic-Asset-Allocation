@@ -66,6 +66,22 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id, targetPct: r.targetPct, quality, wQat, driftAbs, driftGatePenalty, missingGatePenalty, staleGatePenalty, gatePenaltyTotal, gatePenaltyTier, analystTierPreview, analystTierMultiplier };
         });
         const explainerExample = qatRows[0] ?? null;
+        const gateLevelTraceTotals = qatRows.reduce(
+          (acc, row) => {
+            acc.drift += row.driftGatePenalty;
+            acc.missing += row.missingGatePenalty;
+            acc.stale += row.staleGatePenalty;
+            acc.total += row.gatePenaltyTotal;
+            return acc;
+          },
+          { drift: 0, missing: 0, stale: 0, total: 0 },
+        );
+        const gateLevelTraceAvg = {
+          drift: gateLevelTraceTotals.drift / qatRows.length,
+          missing: gateLevelTraceTotals.missing / qatRows.length,
+          stale: gateLevelTraceTotals.stale / qatRows.length,
+          total: gateLevelTraceTotals.total / qatRows.length,
+        };
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
@@ -84,6 +100,15 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 );
               })}
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              W_qat factor breakdown panel (gate-level trace)
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                avg gate penalties: drift=<b>{(gateLevelTraceAvg.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceAvg.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceAvg.stale * 100).toFixed(1)}pp</b> · total=<b>{(gateLevelTraceAvg.total * 100).toFixed(1)}pp</b>
+              </div>
+              <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
+                aggregate gate penalties: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b> · total=<b>{(gateLevelTraceTotals.total * 100).toFixed(1)}pp</b>
+              </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
               W_qat multiplier explainer: <b>W_qat = W_target × Q × analystTierMultiplier</b> where Q = 1 - driftPenalty - missingPenalty - stalePenalty.
