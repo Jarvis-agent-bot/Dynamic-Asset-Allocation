@@ -436,6 +436,10 @@ export function RebalanceSimulatePanel({
       setPaperExecError(r.error);
       return;
     }
+    if (r.kind !== "paper") {
+      setPaperExecError("paper execution adapter returned unexpected result");
+      return;
+    }
 
     setPaperExecAt(r.entry.at);
 

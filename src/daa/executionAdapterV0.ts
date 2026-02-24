@@ -109,14 +109,19 @@ function validateRealConfigV0(configLike: Partial<RealExecutionConfigV0> | null 
     };
   }
 
+  const safeAccountId = accountId as string;
+  const safeApiKey = apiKey as string;
+  const safeApiSecret = apiSecret as string;
+  const safeApiPassphrase = apiPassphrase as string;
+
   return {
     ok: true,
     config: {
-      provider,
-      accountId,
-      apiKey,
-      apiSecret,
-      apiPassphrase,
+      provider: "okx",
+      accountId: safeAccountId,
+      apiKey: safeApiKey,
+      apiSecret: safeApiSecret,
+      apiPassphrase: safeApiPassphrase,
     },
   };
 }

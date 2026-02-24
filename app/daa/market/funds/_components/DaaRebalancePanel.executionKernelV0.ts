@@ -405,6 +405,11 @@ export function useDaaRebalancePanelExecutionKernelV0(params: Params) {
           if (statusRunId) failRebalanceOrderStatusRunV0({ storage: window.localStorage, runId: statusRunId, error: r.error, message: 'paper execution log failed' });
           return;
         }
+        if (r.kind !== 'paper') {
+          setPaperRunError('paper execution adapter returned unexpected result');
+          if (statusRunId) failRebalanceOrderStatusRunV0({ storage: window.localStorage, runId: statusRunId, error: 'unexpected execution adapter result', message: 'paper execution adapter mismatch' });
+          return;
+        }
         if (statusRunId) {
           await simulatePaperBrokerFillProgressV0({ storage: window.localStorage, runId: statusRunId, orders: orders as any, signal: controller.signal });
           finishRebalanceOrderStatusRunV0({ storage: window.localStorage, runId: statusRunId, phase: 'recorded', message: `recorded ${orders.length} paper orders (simulated broker fills)` });

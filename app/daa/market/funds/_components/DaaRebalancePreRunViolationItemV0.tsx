@@ -1,12 +1,12 @@
 type DaaRebalancePreRunViolationItemV0Props = {
-  level: 'blocker' | 'warning';
+  level: 'blocker' | 'warning' | 'info';
   title: string;
   details: string[];
   suggestion?: string;
 };
 
 export default function DaaRebalancePreRunViolationItemV0({ level, title, details, suggestion }: DaaRebalancePreRunViolationItemV0Props) {
-  const color = level === 'blocker' ? 'var(--danger)' : '#f59e0b';
+  const color = level === 'blocker' ? 'var(--danger)' : level === 'warning' ? '#f59e0b' : '#38bdf8';
 
   return (
     <div style={{ marginTop: 8 }}>
