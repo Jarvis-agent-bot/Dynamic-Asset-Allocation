@@ -120,6 +120,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : wQatPrecheckBlockedCount === 1
             ? 'review-before-route'
             : 'hold-for-explainability';
+        const wQatExplainabilityEvidenceTraceRows = qatRows.slice(0, 4).map((row) => {
+          const netMultiplier = row.quality * row.analystTierMultiplier;
+          const evidenceStatus = netMultiplier < 0.8 ? 'review-required' : netMultiplier < 0.9 ? 'watch' : 'clear';
+          const action = evidenceStatus === 'review-required'
+            ? 'inspect quality penalties and tier downgrades'
+            : evidenceStatus === 'watch'
+              ? 'monitor formula drift before auto-route'
+              : 'formula evidence clear';
+          return { id: row.id, netMultiplier, evidenceStatus, action };
+        });
+        const wQatExplainabilityEvidenceReviewCount = wQatExplainabilityEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
         const gateLevelTraceTotals = qatRows.reduce(
           (acc, row) => {
             acc.drift += row.driftGatePenalty;
@@ -329,6 +340,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>contract smoke verdict: fails=<b>{wQatExplainabilityContractSmokeFailCount}/{wQatExplainabilityContractSmokeRows.length}</b> · mode=<b>{wQatExplainabilityContractSmokeFailCount > 0 ? 'wqat-formula-contract-review-required' : 'wqat-formula-contract-stable'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatExplainabilityEvidenceReviewCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              W_qat explainability evidence trace panel
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {wQatExplainabilityEvidenceTraceRows.map((row) => (
+                  <div key={`wqat-explainability-evidence-trace-${row.id}`}>
+                    {row.id}: evidence status=<b>{row.evidenceStatus}</b> · net multiplier=<b>{row.netMultiplier.toFixed(3)}</b> · action=<b>{row.action}</b>
+                  </div>
+                ))}
+                <div>evidence trace verdict: review rows=<b>{wQatExplainabilityEvidenceReviewCount}/{wQatExplainabilityEvidenceTraceRows.length}</b> · mode=<b>{wQatExplainabilityEvidenceReviewCount > 0 ? 'wqat-explainability-evidence-review-required' : 'wqat-explainability-evidence-clear'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
