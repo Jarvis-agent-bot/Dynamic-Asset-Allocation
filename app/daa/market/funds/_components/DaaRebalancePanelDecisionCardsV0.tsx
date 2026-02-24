@@ -552,6 +552,18 @@ export default function DaaRebalancePanelDecisionCardsV0({
           `T2 decision flow=${guardrailDecisionFlowBlocked ? 'route-to-remediation' : 'ready-for-preflight'}`,
           `T3 operator action=${guardrailDecisionFlowBlocked ? 'resolve top guardrail blocker before execution' : 'open preflight and continue execution checklist'}`,
         ];
+        const guardrailDriftAlertRows = whatIfRows.map((row) => {
+          const driftAlertThreshold = Math.max(driftThresholdPct * 1.8, 0.05);
+          const driftAlert = Math.abs(row.drift) >= driftAlertThreshold || row.verdict === 'guardrail-hit';
+          const pressure = row.verdict === 'guardrail-hit'
+            ? 'critical'
+            : driftAlert
+              ? 'elevated'
+              : 'normal';
+          const action = driftAlert ? 'route to guardrail remediation' : 'keep decision flow on preflight path';
+          return { id: row.id, driftAlertThreshold, driftAlert, pressure, action };
+        });
+        const guardrailDriftAlertCount = guardrailDriftAlertRows.filter((row) => row.driftAlert).length;
         const guardrailPrecheckSimulator = [
           {
             gate: 'threshold',
@@ -713,6 +725,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Guardrail drift alert view (decision flow)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {guardrailDriftAlertRows.map((row) => (
+                  <div key={`guardrail-drift-alert-${row.id}`}>
+                    {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
+                  </div>
+                ))}
+                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
