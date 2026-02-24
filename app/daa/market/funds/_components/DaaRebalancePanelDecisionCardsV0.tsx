@@ -770,6 +770,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, driftAlertThreshold, driftAlert, pressure, action };
         });
         const guardrailDriftAlertCount = guardrailDriftAlertRows.filter((row) => row.driftAlert).length;
+        const guardrailDriftReadinessPct = guardrailDriftAlertRows.length
+          ? Math.round(((guardrailDriftAlertRows.length - guardrailDriftAlertCount) / guardrailDriftAlertRows.length) * 100)
+          : 0;
+        const guardrailDriftRouteMode = guardrailDriftAlertCount === 0
+          ? 'guardrail-drift-clear'
+          : guardrailDriftAlertCount === 1
+            ? 'single-guardrail-review'
+            : 'multi-guardrail-remediation';
         const guardrailContractSmokeRows = whatIfRows.map((row) => {
           const contractSmokeThreshold = Math.max(driftThresholdPct * 1.8, 0.05);
           const contractSmokeFailed = row.verdict === 'guardrail-hit' || Math.abs(row.drift) >= contractSmokeThreshold;
@@ -1018,7 +1026,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b></div>
+                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
