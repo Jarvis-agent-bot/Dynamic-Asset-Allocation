@@ -320,11 +320,16 @@ export default function DaaRebalancePanelDecisionCardsV0({
               Rebalance risk-envelope visualizer (dynamic decision bounds)
             </div>
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
-              {whatIfRows.map((r) => (
-                <div key={`risk-envelope-${r.id}`}>
-                  {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b>
-                </div>
-              ))}
+              {whatIfRows.map((r) => {
+                const envelopeUtilizationPct = r.envelopeUpper > r.envelopeLower
+                  ? Math.min(200, Math.max(0, ((r.drift - r.envelopeLower) / (r.envelopeUpper - r.envelopeLower)) * 100))
+                  : 0;
+                return (
+                  <div key={`risk-envelope-${r.id}`}>
+                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b>
+                  </div>
+                );
+              })}
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
               Thesis-regime drift alert timeline (down-weight rationale)
