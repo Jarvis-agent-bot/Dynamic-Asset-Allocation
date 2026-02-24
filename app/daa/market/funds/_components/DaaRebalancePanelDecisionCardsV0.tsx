@@ -78,6 +78,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
               W_qat multiplier explainer: <b>W_qat = W_target × Q × analystTierMultiplier</b> where Q = 1 - driftPenalty - missingPenalty - stalePenalty.
+              <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                Formula trace order: <b>1) derive Q</b> from gate penalties, <b>2) apply analyst tier multiplier</b>, <b>3) finalize recommendation preview weight</b>.
+              </div>
             </div>
           </div>
         );
