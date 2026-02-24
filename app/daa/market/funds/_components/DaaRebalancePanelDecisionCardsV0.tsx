@@ -356,9 +356,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const cashGapPenaltyPts = cashGapBlocked ? Math.min(60, Math.max(5, liquiditySettlementGateV0.cashGap / 1000)) : 0;
                 const gateScore = Math.max(0, 100 - settlementPenaltyPts - cashGapPenaltyPts);
                 const unblockCashNeeded = cashGapBlocked ? liquiditySettlementGateV0.cashGap : 0;
+                const earliestClearanceDays = settlementBlocked ? liquiditySettlementGateV0.settlementLagDays - 1 : 0;
+                const nextOperatorAction = settlementBlocked && cashGapBlocked
+                  ? 'stage sell-then-buy and top up cash'
+                  : settlementBlocked
+                    ? 'wait for settlement window'
+                    : cashGapBlocked
+                      ? 'top up cash or reduce buy size'
+                      : 'proceed with planned sizing';
                 return (
                   <div>
-                    settlement gate(T+N={liquiditySettlementGateV0.settlementLagDays})={settlementBlocked ? 'block' : 'pass'} · cash-gap gate({liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''})={cashGapBlocked ? 'block' : 'pass'} · severity=<b>{gateSeverity}</b> · gate score=<b>{gateScore.toFixed(1)}</b> · unblock cash=<b>{unblockCashNeeded.toFixed(2)} {baseCcy || ''}</b> · explanation=<b>{gateReason}</b>
+                    settlement gate(T+N={liquiditySettlementGateV0.settlementLagDays})={settlementBlocked ? 'block' : 'pass'} · cash-gap gate({liquiditySettlementGateV0.cashGap.toFixed(2)} {baseCcy || ''})={cashGapBlocked ? 'block' : 'pass'} · severity=<b>{gateSeverity}</b> · gate score=<b>{gateScore.toFixed(1)}</b> · unblock cash=<b>{unblockCashNeeded.toFixed(2)} {baseCcy || ''}</b> · earliest clearance=<b>T+{earliestClearanceDays}</b> · next action=<b>{nextOperatorAction}</b> · explanation=<b>{gateReason}</b>
                   </div>
                 );
               })()}
