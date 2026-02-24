@@ -237,6 +237,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const liquidityGate = liquiditySettlementGateV0.blocked || preTradeCashCheck.blocking;
                 const settlementGate = liquiditySettlementGateV0.settlementLagDays > 1;
                 const blockedGateCount = [incompetenceGate, maxInGate, liquidityGate, settlementGate].filter(Boolean).length;
+                const gateBlockScore = blockedGateCount / 4;
+                const readinessPct = Math.round((1 - gateBlockScore) * 100);
                 const verdict = blockedGateCount > 0 ? 'blocked' : 'ready';
                 const primaryBlocker = incompetenceGate
                   ? 'incompetence'
@@ -251,7 +253,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const gateFingerprint = `${incompetenceGate ? 'I' : '-'}${maxInGate ? 'M' : '-'}${liquidityGate ? 'L' : '-'}${settlementGate ? 'T' : '-'}`;
                 return (
                   <div key={`precheck-${id}`}>
-                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} · blocked gates=<b>{blockedGateCount}</b> · primary blocker=<b>{primaryBlocker}</b> · severity=<b>{blockerSeverity}</b> · fingerprint=<b>{gateFingerprint}</b> => <b>{verdict}</b>
+                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} · blocked gates=<b>{blockedGateCount}</b> · primary blocker=<b>{primaryBlocker}</b> · severity=<b>{blockerSeverity}</b> · fingerprint=<b>{gateFingerprint}</b> · gate block score=<b>{gateBlockScore.toFixed(2)}</b> · readiness=<b>{readinessPct}%</b> => <b>{verdict}</b>
                   </div>
                 );
               })}
