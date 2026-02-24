@@ -244,10 +244,13 @@ export default function DaaRebalancePanelDecisionCardsV0({
             : drift > envelopeUpper
               ? drift - envelopeUpper
               : 0;
+          const envelopeSafetyMargin = envelopeStatus === 'inside-envelope'
+            ? Math.min(drift - envelopeLower, envelopeUpper - drift)
+            : 0;
           const thesisRegimeDrift = Math.abs(drift) >= Math.max(driftThresholdPct * 1.8, 0.05);
           const downWeightFactor = thesisRegimeDrift ? 0.85 : 1;
           const downWeightDeltaPct = thesisRegimeDrift ? (1 - downWeightFactor) * 100 : 0;
-          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, envelopeBreachDistance, thesisRegimeDrift, downWeightFactor, downWeightDeltaPct };
+          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, envelopeBreachDistance, envelopeSafetyMargin, thesisRegimeDrift, downWeightFactor, downWeightDeltaPct };
         });
         const totalMaxInImpact = whatIfRows.reduce((sum, r) => sum + r.maxInImpact, 0);
         const totalMaxOutImpact = whatIfRows.reduce((sum, r) => sum + r.maxOutImpact, 0);
@@ -341,7 +344,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   : 0;
                 return (
                   <div key={`risk-envelope-${r.id}`}>
-                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b>
+                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · safety margin=<b>{(r.envelopeSafetyMargin * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b>
                   </div>
                 );
               })}
