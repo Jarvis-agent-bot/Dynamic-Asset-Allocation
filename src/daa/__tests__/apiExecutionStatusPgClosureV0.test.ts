@@ -86,8 +86,17 @@ describe("/api/daa/store/v0/run/{runId}/execution-status pg closure v0", () => {
       createdAt: "2026-02-24T08:00:00.000Z",
     });
 
+    const confirmMod = await import("../../../app/api/daa/store/v0/run/[runId]/confirm/route");
     const executedMod = await import("../../../app/api/daa/store/v0/run/[runId]/executed/route");
     const statusMod = await import("../../../app/api/daa/store/v0/run/[runId]/execution-status/route");
+
+    const confirmReq = new Request(`https://example.com/api/daa/store/v0/run/${encodeURIComponent(create.runId)}/confirm`, {
+      method: "POST",
+      headers: { cookie: editorCookie, "content-type": "application/json" },
+      body: JSON.stringify({ payload: { ok: true } }),
+    });
+    const confirmRes: Response = await (confirmMod as any).POST(confirmReq, { params: { runId: create.runId } });
+    expect(confirmRes.status).toBe(200);
 
     const executedReq = new Request(`https://example.com/api/daa/store/v0/run/${encodeURIComponent(create.runId)}/executed`, {
       method: "POST",
