@@ -182,6 +182,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, evidenceStatus, totalPenalty, nextAction };
         });
         const factorTraceEvidenceBlockedCount = factorTraceEvidenceRows.filter((row) => row.evidenceStatus !== 'ready').length;
+        const factorTraceTimelineVerdict = factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-audit-review-required' : 'factor-trace-audit-clear';
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
@@ -247,6 +248,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 <div>T1 gate aggregation: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b></div>
                 <div>T2 dominance audit: dominant gate=<b>{dominantGate}</b> · share=<b>{dominantGateSharePct.toFixed(1)}%</b></div>
                 <div>T3 operator action: <b>{dominantGate === 'drift' ? 'review drift thresholds first' : dominantGate === 'missing' ? 'backfill missing prices first' : 'refresh stale close prices first'}</b></div>
+                <div>T4 audit verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceTimelineVerdict}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${factorTraceContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
