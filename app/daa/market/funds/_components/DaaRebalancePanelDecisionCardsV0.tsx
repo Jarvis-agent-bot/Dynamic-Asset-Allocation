@@ -783,6 +783,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
           },
         ] as const;
         const manualPrecheckBlockedCount = manualConfirmationPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const manualTimelineVerdictMode = manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation';
         const manualPrecheckRouteMode = manualPrecheckBlockedCount === 0 ? 'execution-ready' : 'confirmation-required';
         const manualConfirmationDriftAlertRows = whatIfRows.map((row) => {
           const driftAlertThreshold = Math.max(driftThresholdPct * 1.8, 0.05);
@@ -1026,7 +1027,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 {manualConfirmationTimeline.map((entry) => (
                   <div key={entry}>{entry}</div>
                 ))}
-                <div>timeline verdict: <b>{manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation'}</b></div>
+                <div>T4 checkpoint gate check: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b></div>
+                <div>timeline verdict: <b>{manualTimelineVerdictMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualConfirmationDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
