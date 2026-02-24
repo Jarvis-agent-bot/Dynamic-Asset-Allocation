@@ -226,9 +226,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           const envelopeLower = -(maxInThreshold + 0.01);
           const envelopeUpper = maxOutThreshold + 0.01;
           const envelopeStatus = drift < envelopeLower || drift > envelopeUpper ? 'outside-envelope' : 'inside-envelope';
+          const envelopeBreachDistance = drift < envelopeLower
+            ? envelopeLower - drift
+            : drift > envelopeUpper
+              ? drift - envelopeUpper
+              : 0;
           const thesisRegimeDrift = Math.abs(drift) >= Math.max(driftThresholdPct * 1.8, 0.05);
           const downWeightFactor = thesisRegimeDrift ? 0.85 : 1;
-          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, thesisRegimeDrift, downWeightFactor };
+          return { id: String(r.id ?? '').trim(), drift, maxInImpact, maxOutImpact, verdict, envelopeLower, envelopeUpper, envelopeStatus, envelopeBreachDistance, thesisRegimeDrift, downWeightFactor };
         });
         const totalMaxInImpact = whatIfRows.reduce((sum, r) => sum + r.maxInImpact, 0);
         const totalMaxOutImpact = whatIfRows.reduce((sum, r) => sum + r.maxOutImpact, 0);
@@ -313,7 +318,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
               {whatIfRows.map((r) => (
                 <div key={`risk-envelope-${r.id}`}>
-                  {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b>
+                  {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b>
                 </div>
               ))}
             </div>
