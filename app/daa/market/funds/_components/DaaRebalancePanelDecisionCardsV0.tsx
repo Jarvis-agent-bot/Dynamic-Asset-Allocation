@@ -61,17 +61,18 @@ export default function DaaRebalancePanelDecisionCardsV0({
           const wQat = Math.max(0, r.targetPct * quality);
           const gatePenaltyTotal = driftGatePenalty + missingGatePenalty + staleGatePenalty;
           const gatePenaltyTier = gatePenaltyTotal >= 0.35 ? 'heavy' : gatePenaltyTotal >= 0.2 ? 'medium' : 'light';
-          return { id, targetPct: r.targetPct, quality, wQat, driftAbs, driftGatePenalty, missingGatePenalty, staleGatePenalty, gatePenaltyTotal, gatePenaltyTier };
+          const analystTierPreview = gatePenaltyTotal >= 0.35 ? 'incompetent' : gatePenaltyTotal >= 0.2 ? 'neutral' : 'elite';
+          const analystTierMultiplier = analystTierPreview === 'elite' ? 1.05 : analystTierPreview === 'neutral' ? 1 : 0.85;
+          return { id, targetPct: r.targetPct, quality, wQat, driftAbs, driftGatePenalty, missingGatePenalty, staleGatePenalty, gatePenaltyTotal, gatePenaltyTier, analystTierPreview, analystTierMultiplier };
         });
+        const explainerExample = qatRows[0] ?? null;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>QAT weight-adjusted targets (W_qat)</div>
             <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Operator-visible factor trace for quality-adjusted target weights.</div>
             <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
               {qatRows.map((r) => {
-                const analystTierPreview = r.gatePenaltyTotal >= 0.35 ? 'incompetent' : r.gatePenaltyTotal >= 0.2 ? 'neutral' : 'elite';
-                const analystTierMultiplier = analystTierPreview === 'elite' ? 1.05 : analystTierPreview === 'neutral' ? 1 : 0.85;
-                const weightedPreview = r.wQat * analystTierMultiplier;
+                const weightedPreview = r.wQat * r.analystTierMultiplier;
                 const effectiveMultiplier = r.targetPct > 0 ? weightedPreview / r.targetPct : 0;
                 const gatePenaltyShare = 1 - r.quality;
                 const tierImpactDelta = weightedPreview - r.wQat;
@@ -79,7 +80,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const traceConfidenceBand = effectiveMultiplier >= 0.95 ? 'strong' : effectiveMultiplier >= 0.8 ? 'moderate' : 'weak';
                 return (
                   <div key={r.id} style={{ fontSize: 11 }}>
-                    {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) {'=>'} W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b> · gates(drift=-{(r.driftGatePenalty * 100).toFixed(1)}pp, missing=-{(r.missingGatePenalty * 100).toFixed(1)}pp, stale=-{(r.staleGatePenalty * 100).toFixed(1)}pp, total=-{(r.gatePenaltyTotal * 100).toFixed(1)}pp, tier=<b>{r.gatePenaltyTier}</b>, penalty-share=<b>{(gatePenaltyShare * 100).toFixed(1)}%</b>) · analyst-tier=<b>{analystTierPreview}</b> (x{analystTierMultiplier.toFixed(2)}) => preview weight=<b>{(weightedPreview * 100).toFixed(2)}%</b> · tier impact delta=<b>{(tierImpactDelta * 100).toFixed(2)}%</b> · tier impact ratio=<b>{tierImpactPct.toFixed(1)}%</b> · effective multiplier=<b>{effectiveMultiplier.toFixed(3)}</b> · confidence band=<b>{traceConfidenceBand}</b>
+                    {r.id}: W_target={(r.targetPct * 100).toFixed(2)}% × Q={r.quality.toFixed(2)} (|drift|={(r.driftAbs * 100).toFixed(1)}%, missing={missingSet.has(r.id) ? 'yes' : 'no'}, stale={staleSet.has(r.id) ? 'yes' : 'no'}) {'=>'} W_qat=<b>{(r.wQat * 100).toFixed(2)}%</b> · gates(drift=-{(r.driftGatePenalty * 100).toFixed(1)}pp, missing=-{(r.missingGatePenalty * 100).toFixed(1)}pp, stale=-{(r.staleGatePenalty * 100).toFixed(1)}pp, total=-{(r.gatePenaltyTotal * 100).toFixed(1)}pp, tier=<b>{r.gatePenaltyTier}</b>, penalty-share=<b>{(gatePenaltyShare * 100).toFixed(1)}%</b>) · analyst-tier=<b>{r.analystTierPreview}</b> (x{r.analystTierMultiplier.toFixed(2)}) => preview weight=<b>{(weightedPreview * 100).toFixed(2)}%</b> · tier impact delta=<b>{(tierImpactDelta * 100).toFixed(2)}%</b> · tier impact ratio=<b>{tierImpactPct.toFixed(1)}%</b> · effective multiplier=<b>{effectiveMultiplier.toFixed(3)}</b> · confidence band=<b>{traceConfidenceBand}</b>
                   </div>
                 );
               })}
@@ -89,6 +90,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
               <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
                 Formula trace order: <b>1) derive Q</b> from gate penalties, <b>2) apply analyst tier multiplier</b>, <b>3) finalize recommendation preview weight</b>.
               </div>
+              {explainerExample ? (
+                <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                  Worked example ({explainerExample.id}): {(explainerExample.targetPct * 100).toFixed(2)}% × {explainerExample.quality.toFixed(2)} × {explainerExample.analystTierMultiplier.toFixed(2)} = {((explainerExample.targetPct * explainerExample.quality * explainerExample.analystTierMultiplier) * 100).toFixed(2)}% preview weight.
+                </div>
+              ) : null}
             </div>
           </div>
         );
