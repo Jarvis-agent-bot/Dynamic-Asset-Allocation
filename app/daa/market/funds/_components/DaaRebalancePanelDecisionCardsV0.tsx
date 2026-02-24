@@ -85,6 +85,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, driftAlertThreshold, driftAlert, netMultiplier, explainabilityPressure, action };
         });
         const wQatFormulaDriftAlertCount = wQatFormulaDriftAlertRows.filter((row) => row.driftAlert).length;
+        const wQatFormulaDriftReadinessPct = wQatFormulaDriftAlertRows.length
+          ? Math.round(((wQatFormulaDriftAlertRows.length - wQatFormulaDriftAlertCount) / wQatFormulaDriftAlertRows.length) * 100)
+          : 0;
+        const wQatFormulaDriftRouteMode = wQatFormulaDriftAlertCount === 0
+          ? 'formula-drift-clear'
+          : wQatFormulaDriftAlertCount === 1
+            ? 'single-formula-review'
+            : 'multi-formula-remediation';
         const wQatExplainabilityContractSmokeRows = qatRows.slice(0, 5).map((row) => {
           const recomposedWQat = row.targetPct * row.quality;
           const contractDelta = Math.abs(row.wQat - recomposedWQat);
@@ -338,7 +346,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · net multiplier=<b>{row.netMultiplier.toFixed(3)}</b> · pressure=<b>{row.explainabilityPressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{wQatFormulaDriftAlertCount}/{wQatFormulaDriftAlertRows.length}</b> · mode=<b>{wQatFormulaDriftAlertCount > 0 ? 'formula-drift-review-required' : 'formula-drift-stable'}</b></div>
+                <div>drift alert verdict: alerts=<b>{wQatFormulaDriftAlertCount}/{wQatFormulaDriftAlertRows.length}</b> · mode=<b>{wQatFormulaDriftAlertCount > 0 ? 'formula-drift-review-required' : 'formula-drift-stable'}</b> · readiness=<b>{wQatFormulaDriftReadinessPct}%</b> · route=<b>{wQatFormulaDriftRouteMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
