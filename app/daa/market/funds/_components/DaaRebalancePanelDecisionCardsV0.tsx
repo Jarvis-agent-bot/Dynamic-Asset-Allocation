@@ -180,6 +180,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const gateSnapshotAlignment = routing.scenario === 'A'
           ? (routing.buyPathBlocked ? 'A-path mismatch (buy path blocked)' : 'A-path aligned')
           : (routing.buyPathBlocked ? 'B-path aligned' : 'B-path mismatch (buy path open)');
+        const matrixConfidenceTier = consensusStrengthPct >= 75 && gateSnapshotAlignment.includes('aligned')
+          ? 'high-confidence'
+          : consensusStrengthPct >= 50
+            ? 'medium-confidence'
+            : 'low-confidence';
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${routing.scenario === 'A' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: routing.scenario === 'A' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Rebalance scenario A/B gates</div>
@@ -207,6 +212,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
               <div>evidence matrix votes: A=<b>{aPathVotes}</b> · B=<b>{bPathVotes}</b> · consensus=<b>{matrixConsensus}</b> · dominant gate=<b>{dominantGate}</b> · strength=<b>{consensusStrengthPct}%</b></div>
               <div>A/B gate snapshots: strong-hold=<b>{aGateSnapshot}</b> · value-trap=<b>{bGateSnapshot}</b> · buy-path=<b>{buyPathSnapshot}</b></div>
               <div>snapshot alignment verdict: <b>{gateSnapshotAlignment}</b></div>
+              <div>routing confidence tier: <b>{matrixConfidenceTier}</b></div>
             </div>
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
