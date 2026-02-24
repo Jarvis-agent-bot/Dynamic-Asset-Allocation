@@ -338,6 +338,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const pressureSeverity = Math.abs(netGuardrailPressure) >= 0.03 ? 'elevated' : Math.abs(netGuardrailPressure) >= 0.015 ? 'watch' : 'normal';
         const thresholdHitCount = whatIfRows.filter((r) => r.maxInImpact > 0 || r.maxOutImpact > 0).length;
         const thresholdHitRatePct = whatIfRows.length > 0 ? Math.round((thresholdHitCount / whatIfRows.length) * 100) : 0;
+        const peakImpactRow = whatIfRows.reduce((best, row) => {
+          const score = row.maxInImpact + row.maxOutImpact;
+          const bestScore = best.maxInImpact + best.maxOutImpact;
+          return score > bestScore ? row : best;
+        }, whatIfRows[0]);
+        const peakImpactScorePct = (peakImpactRow.maxInImpact + peakImpactRow.maxOutImpact) * 100;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -433,7 +439,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 </div>
               ))}
               <div>
-                sandbox totals: maxIn impact=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b> · net pressure=<b>{(netGuardrailPressure * 100).toFixed(1)}%</b> · bias=<b>{pressureBias}</b> · severity=<b>{pressureSeverity}</b> · threshold-hit rows=<b>{thresholdHitCount}/{whatIfRows.length}</b> · hit rate=<b>{thresholdHitRatePct}%</b>
+                sandbox totals: maxIn impact=<b>{(totalMaxInImpact * 100).toFixed(1)}%</b> · maxOut impact=<b>{(totalMaxOutImpact * 100).toFixed(1)}%</b> · net pressure=<b>{(netGuardrailPressure * 100).toFixed(1)}%</b> · bias=<b>{pressureBias}</b> · severity=<b>{pressureSeverity}</b> · threshold-hit rows=<b>{thresholdHitCount}/{whatIfRows.length}</b> · hit rate=<b>{thresholdHitRatePct}%</b> · peak impact row=<b>{peakImpactRow.id || 'n/a'}</b> · peak impact score=<b>{peakImpactScorePct.toFixed(1)}%</b>
               </div>
             </div>
             <div style={{ marginTop: 6, fontSize: 11 }}>
