@@ -612,7 +612,7 @@ export default function DaaDashboardOverviewCards() {
                     <a href="/api/daa/decision-trace-export?slice=AAA" target="_blank" rel="noreferrer">Download decision trace</a>
                   </Button>
                   <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
-                    <a href="/api/daa/api-contract-smoke" target="_blank" rel="noreferrer">API contract smoke v5</a>
+                    <a href="/api/daa/api-contract-smoke" target="_blank" rel="noreferrer">API contract smoke v6</a>
                   </Button>
                 </div>
               </div>
