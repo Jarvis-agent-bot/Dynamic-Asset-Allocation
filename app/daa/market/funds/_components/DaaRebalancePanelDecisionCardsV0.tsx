@@ -261,10 +261,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
               {([0.8, 1.0, 1.2] as const).map((cap) => {
                 const capBuys = liquiditySettlementGateV0.estimatedBuys * cap;
                 const capCoverage = capBuys > 0 ? liquiditySettlementGateV0.availableCash / capBuys : 1;
+                const capHeadroom = liquiditySettlementGateV0.availableCash - capBuys;
                 const capVerdict = capCoverage >= 1 ? 'sized' : 'clipped';
                 return (
                   <div key={`liquidity-cap-${cap}`}>
-                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} => <b>{capVerdict}</b>
+                    cap x{cap.toFixed(1)}: planned buy={capBuys.toFixed(2)} · cash coverage={capCoverage.toFixed(2)} · headroom={capHeadroom.toFixed(2)} => <b>{capVerdict}</b>
                   </div>
                 );
               })}
