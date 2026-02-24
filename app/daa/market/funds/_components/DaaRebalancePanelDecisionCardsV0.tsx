@@ -398,9 +398,13 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const envelopeUtilizationPct = r.envelopeUpper > r.envelopeLower
                   ? Math.min(200, Math.max(0, ((r.drift - r.envelopeLower) / (r.envelopeUpper - r.envelopeLower)) * 100))
                   : 0;
+                const envelopePressureScore = r.envelopeStatus === 'outside-envelope'
+                  ? Math.min(1, r.envelopeBreachDistance / 0.05)
+                  : Math.max(0, 1 - Math.min(1, r.envelopeSafetyMargin / 0.05));
+                const envelopePressureTier = envelopePressureScore >= 0.75 ? 'high' : envelopePressureScore >= 0.4 ? 'medium' : 'low';
                 return (
                   <div key={`risk-envelope-${r.id}`}>
-                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · safety margin=<b>{(r.envelopeSafetyMargin * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b>
+                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · safety margin=<b>{(r.envelopeSafetyMargin * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b> · pressure score=<b>{envelopePressureScore.toFixed(2)}</b> · pressure tier=<b>{envelopePressureTier}</b>
                   </div>
                 );
               })}
