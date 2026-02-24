@@ -632,6 +632,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
         ] as const;
         const manualPrecheckBlockedCount = manualConfirmationPrecheckSimulator.filter((row) => row.status === 'blocked').length;
         const manualPrecheckRouteMode = manualPrecheckBlockedCount === 0 ? 'execution-ready' : 'confirmation-required';
+        const manualConfirmationDriftAlertRows = whatIfRows.map((row) => {
+          const driftAlertThreshold = Math.max(driftThresholdPct * 1.8, 0.05);
+          const driftAlert = !manualCheckpointConfirmed && (Math.abs(row.drift) >= driftAlertThreshold || row.verdict === 'guardrail-hit');
+          const pressure = driftAlert ? (Math.abs(row.drift) >= driftAlertThreshold * 1.25 ? 'critical' : 'elevated') : 'normal';
+          const action = driftAlert ? 'confirm manual checkpoint before acting on drift' : 'manual confirmation flow stable';
+          return { id: row.id, driftAlertThreshold, driftAlert, pressure, action };
+        });
+        const manualConfirmationDriftAlertCount = manualConfirmationDriftAlertRows.filter((row) => row.driftAlert).length;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -830,6 +838,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>timeline verdict: <b>{manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation'}</b></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualConfirmationDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Manual confirmation drift alert view (checkpoint)
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {manualConfirmationDriftAlertRows.map((row) => (
+                  <div key={`manual-confirmation-drift-alert-${row.id}`}>
+                    {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
+                  </div>
+                ))}
+                <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualPrecheckBlockedCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
