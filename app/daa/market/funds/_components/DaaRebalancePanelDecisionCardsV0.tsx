@@ -469,6 +469,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   ? 'auto-buy-partial'
                   : 'auto-buy-hold';
               const topEvidence = precheckRows.find((row) => row.blockedGateCount > 0) ?? precheckRows[0];
+              const buyGateContractSmokeRows = precheckRows.map((row) => {
+                const contractSmokeThreshold = Math.max(driftThresholdPct * 2, 0.06);
+                const contractSmokeFailed = row.blockedGateCount >= 2 || row.incompetenceGate;
+                const contractState = contractSmokeFailed ? 'contract-risk' : 'contract-ok';
+                const action = contractSmokeFailed ? 'resolve blocked gates before buy-route contract pass' : 'buy gate contract clear';
+                return { id: row.id, contractSmokeThreshold, contractSmokeFailed, contractState, action };
+              });
+              const buyGateContractSmokeFailCount = buyGateContractSmokeRows.filter((row) => row.contractSmokeFailed).length;
               const buyGateDriftAlertRows = precheckRows.map((row) => {
                 const driftAlertThreshold = Math.max(driftThresholdPct * 2, 0.06);
                 const driftAlert = row.primaryBlocker === 'incompetence' || row.blockedGateCount >= 2;
@@ -513,6 +521,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         Buy gate precheck audit timeline: {auditTimeline.map((entry) => `${entry.gate}=${entry.blocked ? 'blocked' : 'pass'}${entry.blocked ? ` (next: ${entry.unblock})` : ''}`).join(' -> ')}
                       </div>
                     ) : null}
+                  </div>
+                  <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+                    Buy gate contract smoke guard (precheck)
+                    <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                      {buyGateContractSmokeRows.map((row) => (
+                        <div key={`buy-gate-contract-smoke-${row.id}`}>
+                          {row.id}: contract threshold=<b>{(row.contractSmokeThreshold * 100).toFixed(1)}%</b> · status=<b>{row.contractSmokeFailed ? 'fail' : 'pass'}</b> · state=<b>{row.contractState}</b> · action=<b>{row.action}</b>
+                        </div>
+                      ))}
+                      <div>contract smoke verdict: fails=<b>{buyGateContractSmokeFailCount}/{buyGateContractSmokeRows.length}</b> · mode=<b>{buyGateContractSmokeFailCount > 0 ? 'buy-gate-contract-review-required' : 'buy-gate-contract-stable'}</b></div>
+                    </div>
                   </div>
                   <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
                     Buy gate drift alert view (precheck)
