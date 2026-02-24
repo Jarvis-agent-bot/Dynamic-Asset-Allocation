@@ -300,9 +300,10 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 const maxInThresholdHit = r.maxInImpact > 0;
                 const maxOutThresholdHit = r.maxOutImpact > 0;
                 const guardrailAuditVerdict = maxInThresholdHit || maxOutThresholdHit ? 'threshold-breached' : 'threshold-safe';
+                const breachCount = Number(maxInThresholdHit) + Number(maxOutThresholdHit);
                 return (
                   <div key={`guardrail-audit-${r.id}`}>
-                    {r.id}: maxIn threshold={maxInThreshold.toFixed(2)} ({maxInThresholdHit ? 'hit' : 'safe'}) · maxOut threshold={maxOutThreshold.toFixed(2)} ({maxOutThresholdHit ? 'hit' : 'safe'}) · trace verdict=<b>{guardrailAuditVerdict}</b>
+                    {r.id}: maxIn threshold={maxInThreshold.toFixed(2)} ({maxInThresholdHit ? 'hit' : 'safe'}) · maxOut threshold={maxOutThreshold.toFixed(2)} ({maxOutThresholdHit ? 'hit' : 'safe'}) · breaches=<b>{breachCount}</b> · trace verdict=<b>{guardrailAuditVerdict}</b>
                   </div>
                 );
               })}
