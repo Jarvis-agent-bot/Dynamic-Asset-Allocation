@@ -785,6 +785,13 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { gate: row.gate, contractSmokeFailed, contractState, nextAction };
         });
         const manualConfirmationContractSmokeFailCount = manualConfirmationContractSmokeRows.filter((row) => row.contractSmokeFailed).length;
+        const manualConfirmationEvidenceTraceRows = manualConfirmationPrecheckSimulator.map((row) => {
+          const evidenceStatus = row.status === 'blocked' ? 'review-required' : 'clear';
+          const operatorLane = row.gate === 'checkpoint' ? 'operator-confirmation' : row.gate === 'execution-mode' ? 'execution-safety' : 'preflight-handoff';
+          const action = evidenceStatus === 'review-required' ? row.nextStep : 'checkpoint evidence clear';
+          return { gate: row.gate, evidenceStatus, operatorLane, action };
+        });
+        const manualConfirmationEvidenceReviewCount = manualConfirmationEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -1040,6 +1047,17 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 <div>
                   precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b>
                 </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualConfirmationEvidenceReviewCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+              Manual confirmation checkpoint evidence trace panel
+              <div className="muted" style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                {manualConfirmationEvidenceTraceRows.map((row) => (
+                  <div key={`manual-confirmation-evidence-trace-${row.gate}`}>
+                    gate=<b>{row.gate}</b> · evidence status=<b>{row.evidenceStatus}</b> · operator lane=<b>{row.operatorLane}</b> · action=<b>{row.action}</b>
+                  </div>
+                ))}
+                <div>evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
