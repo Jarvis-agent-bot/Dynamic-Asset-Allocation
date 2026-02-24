@@ -2,6 +2,7 @@ import type {
   DaaRunAuditEventListRowV0,
   DaaRunAuditEventV0,
   DaaRunBundleV0,
+  DaaRunExecutionStatusRowV0,
   DaaRunListRowV0,
   DaaRunRowV0,
 } from "../storeTypesV0";
@@ -241,6 +242,19 @@ export async function ensureDaaStoreSchemaPgV0(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_run_audit_events_actor_created_event_desc
             ON daa_run_audit_events(actor_user_id, created_at DESC, event_id DESC);
 
+          CREATE TABLE IF NOT EXISTS daa_run_execution_status (
+            run_id TEXT NOT NULL REFERENCES daa_runs(run_id) ON DELETE CASCADE,
+            order_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            code TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (run_id, order_id)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_run_execution_status_run_updated_at
+            ON daa_run_execution_status(run_id, updated_at, order_id);
+
           CREATE TABLE IF NOT EXISTS daa_admin_user_status (
             user_id TEXT PRIMARY KEY,
             status TEXT NOT NULL,
@@ -392,6 +406,104 @@ export async function setDaaRunConfirmV0(args: { runId: string; payload: unknown
 
 export async function setDaaRunExecutedV0(args: { runId: string; payload: unknown; createdAt?: string; actorUserId?: string }) {
   return upsertRunAttachment({ table: "daa_run_executed", auditKind: "executed_set", auditPayload: { payload: args.payload }, auditActorUserId: args.actorUserId, ...args });
+}
+
+function normalizeExecutionStatusValueV0(raw: unknown): "submitted" | "filled" | "failed" | null {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (v === "submitted" || v === "filled" || v === "failed") return v;
+  return null;
+}
+
+export async function setDaaRunExecutionStatusesV0(args: {
+  runId: string;
+  statuses: Array<{ orderId: string; status: unknown; reason?: unknown; code?: unknown; updatedAt?: string }>;
+  actorUserId?: string;
+}): Promise<{ runId: string; saved: number; updatedAt: string }> {
+  await ensureDaaStoreSchemaPgV0();
+
+  const runId = String(args.runId ?? "").trim();
+  if (!runId) throw new Error("missing runId");
+
+  const normalized = (Array.isArray(args.statuses) ? args.statuses : [])
+    .map((s) => {
+      const orderId = String((s as any)?.orderId ?? "").trim();
+      const status = normalizeExecutionStatusValueV0((s as any)?.status);
+      if (!orderId || !status) return null;
+      return {
+        orderId,
+        status,
+        reason: String((s as any)?.reason ?? "").trim(),
+        code: String((s as any)?.code ?? "").trim(),
+      };
+    })
+    .filter((x): x is { orderId: string; status: "submitted" | "filled" | "failed"; reason: string; code: string } => !!x);
+
+  if (!normalized.length) throw new Error("missing statuses");
+
+  const updatedAt = nowIso();
+
+  await withDaaPgClientV0(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      const chk = await query("SELECT run_id FROM daa_runs WHERE run_id = $1", [runId]);
+      if (!chk.rowCount) throw new Error("run not found");
+
+      for (const item of normalized) {
+        await query(
+          `INSERT INTO daa_run_execution_status (run_id, order_id, status, reason, code, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT(run_id, order_id) DO UPDATE
+           SET status = excluded.status,
+               reason = excluded.reason,
+               code = excluded.code,
+               updated_at = excluded.updated_at`,
+          [runId, item.orderId, item.status, item.reason, item.code, updatedAt],
+        );
+      }
+
+      await query(
+        "INSERT INTO daa_run_audit_events (event_id, run_id, created_at, kind, payload, actor_user_id) VALUES ($1, $2, $3, $4, $5::jsonb, $6)",
+        [makeId("audit"), runId, updatedAt, "execution_status_set", safeJsonStringify({ count: normalized.length }), args.actorUserId || null],
+      );
+
+      await query("COMMIT");
+    } catch (e) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw e;
+    }
+  });
+
+  return { runId, saved: normalized.length, updatedAt };
+}
+
+export async function getDaaRunExecutionStatusesV0(runIdRaw: string): Promise<DaaRunExecutionStatusRowV0[]> {
+  await ensureDaaStoreSchemaPgV0();
+
+  const runId = String(runIdRaw ?? "").trim();
+  if (!runId) throw new Error("missing runId");
+
+  return withDaaPgClientV0(async ({ query }) => {
+    const chk = await query("SELECT run_id FROM daa_runs WHERE run_id = $1", [runId]);
+    if (!chk.rowCount) throw new Error("run not found");
+
+    const res = await query(
+      "SELECT run_id, order_id, status, reason, code, updated_at FROM daa_run_execution_status WHERE run_id = $1 ORDER BY updated_at ASC, order_id ASC",
+      [runId],
+    );
+
+    return (res.rows || []).map((row: any) => ({
+      runId: String(row.run_id ?? ""),
+      orderId: String(row.order_id ?? ""),
+      status: normalizeExecutionStatusValueV0(row.status) ?? "submitted",
+      reason: String(row.reason ?? ""),
+      code: String(row.code ?? ""),
+      updatedAt: String(row.updated_at ?? ""),
+    }));
+  });
 }
 
 export async function appendDaaRunAuditEventV0(args: {
