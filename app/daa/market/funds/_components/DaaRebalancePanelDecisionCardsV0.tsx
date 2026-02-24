@@ -253,8 +253,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 6, fontSize: 11 }}>
               Buy gate precheck simulator (incompetence / MaxIn / liquidity / T+N)
             </div>
-            <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
-              {(rows.slice(0, 4)).map((r) => {
+            {(() => {
+              const precheckRows = rows.slice(0, 4).map((r) => {
                 const id = String(r.id ?? '').trim();
                 const incompetenceGate = Math.abs(r.deltaPct) >= Math.max(driftThresholdPct * 2.2, 0.06);
                 const maxInGate = lockedIds.has(id);
@@ -284,13 +284,54 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       : primaryBlocker === 'T+N'
                         ? 'wait for settlement window'
                         : 'ready to route';
-                return (
-                  <div key={`precheck-${id}`}>
-                    {id}: incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} · blocked gates=<b>{blockedGateCount}</b> · primary blocker=<b>{primaryBlocker}</b> · severity=<b>{blockerSeverity}</b> · fingerprint=<b>{gateFingerprint}</b> · gate block score=<b>{gateBlockScore.toFixed(2)}</b> · readiness=<b>{readinessPct}%</b> · unblock hint=<b>{unblockHint}</b> => <b>{verdict}</b>
+                return {
+                  id,
+                  incompetenceGate,
+                  maxInGate,
+                  liquidityGate,
+                  settlementGate,
+                  blockedGateCount,
+                  gateBlockScore,
+                  readinessPct,
+                  verdict,
+                  primaryBlocker,
+                  blockerSeverity,
+                  gateFingerprint,
+                  unblockHint,
+                };
+              });
+              const evidencePanel = {
+                blockedRows: precheckRows.filter((row) => row.verdict === 'blocked').length,
+                incompetenceHits: precheckRows.filter((row) => row.incompetenceGate).length,
+                maxInHits: precheckRows.filter((row) => row.maxInGate).length,
+                liquidityHits: precheckRows.filter((row) => row.liquidityGate).length,
+                settlementHits: precheckRows.filter((row) => row.settlementGate).length,
+              };
+              const topEvidence = precheckRows.find((row) => row.blockedGateCount > 0) ?? precheckRows[0];
+
+              return (
+                <>
+                  <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
+                    {precheckRows.map((row) => {
+                      const unblockHint = row.unblockHint;
+                      return (
+                        <div key={`precheck-${row.id}`}>
+                          {row.id}: incompetence={row.incompetenceGate ? 'block' : 'pass'} · maxIn={row.maxInGate ? 'block' : 'pass'} · liquidity={row.liquidityGate ? 'block' : 'pass'} · T+N={row.settlementGate ? 'block' : 'pass'} · blocked gates=<b>{row.blockedGateCount}</b> · primary blocker=<b>{row.primaryBlocker}</b> · severity=<b>{row.blockerSeverity}</b> · fingerprint=<b>{row.gateFingerprint}</b> · gate block score=<b>{row.gateBlockScore.toFixed(2)}</b> · readiness=<b>{row.readinessPct}%</b> · unblock hint=<b>{unblockHint}</b> => <b>{row.verdict}</b>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                  <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
+                    Buy gate precheck evidence panel: blocked rows=<b>{evidencePanel.blockedRows}/{precheckRows.length}</b> · incompetence hits=<b>{evidencePanel.incompetenceHits}</b> · maxIn hits=<b>{evidencePanel.maxInHits}</b> · liquidity hits=<b>{evidencePanel.liquidityHits}</b> · T+N hits=<b>{evidencePanel.settlementHits}</b>
+                    {topEvidence ? (
+                      <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
+                        top blocker evidence: <b>{topEvidence.id}</b> · blocker=<b>{topEvidence.primaryBlocker}</b> · fingerprint=<b>{topEvidence.gateFingerprint}</b> · unblock next=<b>{topEvidence.unblockHint}</b>
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              );
+            })()}
             <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
               <button type="button" className="button secondary" style={{ padding: '4px 8px' }} onClick={() => jumpTo('target-weights')}>
                 Review isolated tags
