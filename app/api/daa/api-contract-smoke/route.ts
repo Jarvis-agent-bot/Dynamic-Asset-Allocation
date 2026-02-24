@@ -52,13 +52,15 @@ export async function GET(req: Request) {
   };
 
   const statusTag = summary.fail === 0 ? "PASS" : "FAIL";
-  const deterministicKey = `v2-${statusTag}-${summary.pass}-${summary.total}-${summary.passRatePct}`;
+  const deterministicKey = `v3-${statusTag}-${summary.pass}-${summary.total}-${summary.passRatePct}`;
+  const contractVersion = "nextjs-api-contract-v3";
 
   return NextResponse.json({
     ok: summary.fail === 0,
-    smoke: "nextjs-api-contract-v2",
+    smoke: contractVersion,
     summaryLine: `[DAA][ApiContractSmoke] ${statusTag} ${summary.pass}/${summary.total} checks (${summary.passRatePct}%)`,
     deterministicKey,
+    contractVersion,
     summary,
     checks: API_CONTRACT_SMOKE_ITEMS_V0,
   });
