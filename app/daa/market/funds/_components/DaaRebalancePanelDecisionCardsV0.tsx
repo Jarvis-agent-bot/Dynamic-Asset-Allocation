@@ -626,6 +626,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 return { id: row.id, evidenceStatus, primaryBlocker: row.primaryBlocker, nextAction };
               });
               const buyGateEvidenceReviewCount = buyGateEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
+              const buyGateEvidenceReadinessPct = buyGateEvidenceTraceRows.length
+                ? Math.round(((buyGateEvidenceTraceRows.length - buyGateEvidenceReviewCount) / buyGateEvidenceTraceRows.length) * 100)
+                : 0;
+              const buyGateEvidenceRouteMode = buyGateEvidenceReviewCount === 0
+                ? 'buy-gate-evidence-clear-route'
+                : buyGateEvidenceReviewCount === 1
+                  ? 'buy-gate-evidence-review-route'
+                  : 'buy-gate-evidence-remediation-route';
               const buyGateTimelineVerdict = buyGateEvidenceReviewCount > 0 ? 'buy-gate-precheck-review-required' : 'buy-gate-precheck-clear';
               const auditTimeline = topEvidence
                 ? [
@@ -682,7 +690,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                           {row.id}: evidence status=<b>{row.evidenceStatus}</b> · blocker=<b>{row.primaryBlocker}</b> · action=<b>{row.nextAction}</b>
                         </div>
                       ))}
-                      <div>evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b></div>
+                      <div>evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b> · readiness=<b>{buyGateEvidenceReadinessPct}%</b> · route=<b>{buyGateEvidenceRouteMode}</b></div>
                     </div>
                   </div>
                   <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
