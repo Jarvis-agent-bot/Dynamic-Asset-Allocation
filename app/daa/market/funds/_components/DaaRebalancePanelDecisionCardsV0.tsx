@@ -88,6 +88,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const wQatFormulaDriftReadinessPct = wQatFormulaDriftAlertRows.length
           ? Math.round(((wQatFormulaDriftAlertRows.length - wQatFormulaDriftAlertCount) / wQatFormulaDriftAlertRows.length) * 100)
           : 0;
+        const wQatFormulaCriticalDriftCount = wQatFormulaDriftAlertRows.filter((row) => row.explainabilityPressure === 'critical').length;
+        const wQatFormulaDriftEscalationLane = wQatFormulaDriftAlertCount === 0
+          ? 'monitor-only'
+          : wQatFormulaCriticalDriftCount > 0
+            ? 'critical-formula-remediation'
+            : 'standard-formula-review';
         const wQatFormulaDriftRouteMode = wQatFormulaDriftAlertCount === 0
           ? 'formula-drift-clear'
           : wQatFormulaDriftAlertCount === 1
@@ -383,7 +389,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · net multiplier=<b>{row.netMultiplier.toFixed(3)}</b> · pressure=<b>{row.explainabilityPressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{wQatFormulaDriftAlertCount}/{wQatFormulaDriftAlertRows.length}</b> · mode=<b>{wQatFormulaDriftAlertCount > 0 ? 'formula-drift-review-required' : 'formula-drift-stable'}</b> · readiness=<b>{wQatFormulaDriftReadinessPct}%</b> · route=<b>{wQatFormulaDriftRouteMode}</b></div>
+                <div>drift alert verdict: alerts=<b>{wQatFormulaDriftAlertCount}/{wQatFormulaDriftAlertRows.length}</b> · mode=<b>{wQatFormulaDriftAlertCount > 0 ? 'formula-drift-review-required' : 'formula-drift-stable'}</b> · readiness=<b>{wQatFormulaDriftReadinessPct}%</b> · route=<b>{wQatFormulaDriftRouteMode}</b> · critical alerts=<b>{wQatFormulaCriticalDriftCount}</b> · escalation lane=<b>{wQatFormulaDriftEscalationLane}</b></div>
+                {/* drift alert verdict: alerts=<b>{wQatFormulaDriftAlertCount}/{wQatFormulaDriftAlertRows.length}</b> · mode=<b>{wQatFormulaDriftAlertCount > 0 ? 'formula-drift-review-required' : 'formula-drift-stable'}</b> · readiness=<b>{wQatFormulaDriftReadinessPct}%</b> · route=<b>{wQatFormulaDriftRouteMode}</b> */}
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
