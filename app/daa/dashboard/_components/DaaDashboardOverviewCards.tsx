@@ -133,6 +133,32 @@ export default function DaaDashboardOverviewCards() {
   const recentRuns = Array.isArray(runsResp?.runs) ? runsResp.runs.slice(0, 3) : [];
   const storeOk = !!(runsResp && runsResp.ok);
 
+  const dualTrackExecutorStateV0 = latestRun
+    ? latestRun.hasExecuted
+      ? "armed"
+      : "pending"
+    : "bootstrap";
+  const dualTrackAuditorStateV0 = latestRun
+    ? latestRun.hasConfirm
+      ? "armed"
+      : "pending"
+    : "bootstrap";
+  const dualTrackSingleWriteEntryStateV0 = latestRun
+    ? latestRun.hasPortfolio
+      ? "online"
+      : "offline"
+    : "bootstrap";
+  const dualTrackStateMachinePersistedV0 = latestRun
+    ? latestRun.auditCount > 0
+    : false;
+  const dualTrackBootstrapVerdictV0 =
+    dualTrackExecutorStateV0 === "armed" &&
+    dualTrackAuditorStateV0 === "armed" &&
+    dualTrackSingleWriteEntryStateV0 === "online" &&
+    dualTrackStateMachinePersistedV0
+      ? "dualtrack-ready"
+      : "bootstrap-required";
+
   useEffect(() => {
     let cancelled = false;
 
@@ -634,6 +660,26 @@ export default function DaaDashboardOverviewCards() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Dual-track bootstrap</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          <div className="text-sm">
+            Verdict: <span className="font-medium">{dualTrackBootstrapVerdictV0}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Executor lane: {dualTrackExecutorStateV0} · Auditor lane: {dualTrackAuditorStateV0}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Single-write entry: {dualTrackSingleWriteEntryStateV0}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            State machine persistence: {dualTrackStateMachinePersistedV0 ? "persisted" : "not-persisted"}
+          </div>
         </CardContent>
       </Card>
 
