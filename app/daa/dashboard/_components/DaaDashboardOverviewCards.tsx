@@ -133,6 +133,15 @@ export default function DaaDashboardOverviewCards() {
   const recentRuns = Array.isArray(runsResp?.runs) ? runsResp.runs.slice(0, 3) : [];
   const storeOk = !!(runsResp && runsResp.ok);
 
+  const latestRunAgeMinutesV0 = latestRun ? Math.max(0, Math.floor((Date.now() - Date.parse(latestRun.createdAt)) / 60000)) : 0;
+  const latestRunStatusV0 = String(latestRun?.status ?? "").toLowerCase();
+  const milestoneStalledAlertV0 = !!latestRun && (latestRunStatusV0 === "created" || latestRunStatusV0 === "running") && latestRunAgeMinutesV0 >= 30;
+  const queueHasActiveRunV0 = recentRuns.some((run) => {
+    const status = String(run.status ?? "").toLowerCase();
+    return status === "created" || status === "running";
+  });
+  const queueDepletedAlertV0 = !!runsResp && !!runsResp.ok && recentRuns.length > 0 && !queueHasActiveRunV0;
+
   const dualTrackExecutorStateV0 = latestRun
     ? latestRun.hasExecuted
       ? "armed"
@@ -292,6 +301,14 @@ export default function DaaDashboardOverviewCards() {
       runItems.push({ label: "Latest run failed", action: "Review history", href: "/daa/dashboard?tab=dashboard#history-audit" });
       runItems.push({ label: "Retry flow via Market/Funds", action: "Open Market/Funds", href: "/daa/dashboard?tab=market-funds" });
     }
+    if (milestoneStalledAlertV0) {
+      runItems.push({ label: `Milestone may be stalled (${latestRunAgeMinutesV0}m with status ${latestRunStatusV0 || "unknown"})`, action: "Inspect stalled run", href: "/daa/dashboard?tab=dashboard#history-audit" });
+      runItems.push({ label: "Repair suggestion: rerun from Market/Funds and verify confirm/executed checkpoints", action: "Open Market/Funds", href: "/daa/dashboard?tab=market-funds" });
+    }
+    if (queueDepletedAlertV0) {
+      runItems.push({ label: "Run queue looks depleted (no active created/running entries)", action: "Create next run", href: "/daa/dashboard?tab=wizard&step=1" });
+      runItems.push({ label: "Repair suggestion: seed a new milestone run and monitor Ops alert center", action: "Open wizard", href: "/daa/dashboard?tab=wizard&step=1" });
+    }
     if (runItems.length) groups.push({ title: "Runs", items: runItems });
 
     const deployItems: Array<{ label: string; action: string; href: string }> = [];
@@ -302,7 +319,16 @@ export default function DaaDashboardOverviewCards() {
     if (deployItems.length) groups.push({ title: "Deploy", items: deployItems });
 
     return groups;
-  }, [auth, deployBootstrapMissingRequiredCount, latestRun, sha]);
+  }, [
+    auth,
+    deployBootstrapMissingRequiredCount,
+    latestRun,
+    latestRunAgeMinutesV0,
+    latestRunStatusV0,
+    milestoneStalledAlertV0,
+    queueDepletedAlertV0,
+    sha,
+  ]);
 
   const deployPrereqs: ChecklistItem[] = useMemo(() => {
     return [
