@@ -303,6 +303,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 return { id: r.id, totalPenalty, dominantGate, confidence, verdict };
               });
               const factorPrecheckBlockedCount = simulatorRows.filter((row) => row.verdict !== 'ready').length;
+              const factorPrecheckCriticalCount = simulatorRows.filter((row) => row.verdict === 'blocked').length;
+              const factorPrecheckEscalationLane = factorPrecheckBlockedCount === 0
+                ? 'monitor-only'
+                : factorPrecheckCriticalCount > 0
+                  ? 'critical-factor-precheck-remediation'
+                  : 'standard-factor-precheck-review';
               const factorPrecheckRouteMode = factorPrecheckBlockedCount === 0 ? 'precheck-clear' : factorPrecheckBlockedCount === 1 ? 'review-dominant-gate' : 'hold-for-remediation';
               const factorPrecheckReadinessPct = simulatorRows.length
                 ? Math.round(((simulatorRows.length - factorPrecheckBlockedCount) / simulatorRows.length) * 100)
@@ -316,7 +322,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         {row.id}: penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · dominant gate=<b>{row.dominantGate}</b> · confidence=<b>{row.confidence}</b> {'=>'} <b>{row.verdict}</b>
                       </div>
                     ))}
-                    <div>precheck verdict: blocked rows=<b>{factorPrecheckBlockedCount}/{simulatorRows.length}</b> · route mode=<b>{factorPrecheckRouteMode}</b> · readiness=<b>{factorPrecheckReadinessPct}%</b></div>
+                    <div>precheck verdict: blocked rows=<b>{factorPrecheckBlockedCount}/{simulatorRows.length}</b> · route mode=<b>{factorPrecheckRouteMode}</b> · readiness=<b>{factorPrecheckReadinessPct}%</b> · critical rows=<b>{factorPrecheckCriticalCount}</b> · escalation lane=<b>{factorPrecheckEscalationLane}</b></div>
+                    {/* precheck verdict: blocked rows=<b>{factorPrecheckBlockedCount}/{simulatorRows.length}</b> · route mode=<b>{factorPrecheckRouteMode}</b> · readiness=<b>{factorPrecheckReadinessPct}%</b> */}
                   </div>
                 </div>
               );
