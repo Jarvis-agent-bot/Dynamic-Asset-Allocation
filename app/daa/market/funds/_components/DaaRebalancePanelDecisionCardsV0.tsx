@@ -886,6 +886,9 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const guardrailPrecheckReviewPressurePct = guardrailPrecheckSimulator.length
           ? Math.round((guardrailPrecheckBlockedCount / guardrailPrecheckSimulator.length) * 100)
           : 0;
+        const guardrailPrecheckReadinessPct = guardrailPrecheckSimulator.length
+          ? Math.round(((guardrailPrecheckSimulator.length - guardrailPrecheckBlockedCount) / guardrailPrecheckSimulator.length) * 100)
+          : 0;
         const guardrailPrecheckHandoff = guardrailPrecheckBlockedCount === 0 && guardrailEvidenceReviewCount === 0
           ? 'ready-for-preflight-handoff'
           : guardrailPrecheckBlockedCount === 0
@@ -1133,7 +1136,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b>
+                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · readiness=<b>{guardrailPrecheckReadinessPct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b>
+                  {/* simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b> */}
                 </div>
               </div>
             </div>
