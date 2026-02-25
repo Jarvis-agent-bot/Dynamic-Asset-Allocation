@@ -223,6 +223,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : factorTraceEvidenceBlockedCount === 1
             ? 'factor-trace-evidence-review-route'
             : 'factor-trace-evidence-remediation-route';
+        const factorTraceTimelineReadinessPct = factorTraceEvidenceRows.length
+          ? Math.round(((factorTraceEvidenceRows.length - factorTraceEvidenceBlockedCount) / factorTraceEvidenceRows.length) * 100)
+          : 0;
+        const factorTraceTimelineRouteMode = factorTraceEvidenceBlockedCount === 0
+          ? 'factor-trace-timeline-clear-route'
+          : factorTraceEvidenceBlockedCount === 1
+            ? 'factor-trace-timeline-review-route'
+            : 'factor-trace-timeline-remediation-route';
         const factorTraceTimelineVerdict = factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-audit-review-required' : 'factor-trace-audit-clear';
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
@@ -292,7 +300,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 <div>T1 gate aggregation: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b></div>
                 <div>T2 dominance audit: dominant gate=<b>{dominantGate}</b> · share=<b>{dominantGateSharePct.toFixed(1)}%</b></div>
                 <div>T3 operator action: <b>{dominantGate === 'drift' ? 'review drift thresholds first' : dominantGate === 'missing' ? 'backfill missing prices first' : 'refresh stale close prices first'}</b></div>
-                <div>T4 audit verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceTimelineVerdict}</b></div>
+                <div>T4 audit verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceTimelineVerdict}</b> · readiness=<b>{factorTraceTimelineReadinessPct}%</b> · route=<b>{factorTraceTimelineRouteMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${factorTraceContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
