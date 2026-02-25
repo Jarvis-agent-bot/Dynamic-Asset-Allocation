@@ -228,6 +228,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, evidenceStatus, totalPenalty, nextAction };
         });
         const factorTraceEvidenceBlockedCount = factorTraceEvidenceRows.filter((row) => row.evidenceStatus !== 'ready').length;
+        const factorTraceEvidenceCriticalCount = factorTraceEvidenceRows.filter((row) => row.evidenceStatus === 'blocked').length;
+        const factorTraceEvidenceEscalationLane = factorTraceEvidenceBlockedCount === 0
+          ? 'monitor-only'
+          : factorTraceEvidenceCriticalCount > 0
+            ? 'critical-factor-remediation'
+            : 'standard-factor-review';
         const factorTraceEvidenceReadinessPct = factorTraceEvidenceRows.length
           ? Math.round(((factorTraceEvidenceRows.length - factorTraceEvidenceBlockedCount) / factorTraceEvidenceRows.length) * 100)
           : 0;
@@ -350,7 +356,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · total penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · action=<b>{row.nextAction}</b>
                   </div>
                 ))}
-                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b></div>
+                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> · critical rows=<b>{factorTraceEvidenceCriticalCount}</b> · escalation lane=<b>{factorTraceEvidenceEscalationLane}</b></div>
+                {/* evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> */}
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
