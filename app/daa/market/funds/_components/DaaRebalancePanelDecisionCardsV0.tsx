@@ -207,6 +207,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, evidenceStatus, totalPenalty, nextAction };
         });
         const factorTraceEvidenceBlockedCount = factorTraceEvidenceRows.filter((row) => row.evidenceStatus !== 'ready').length;
+        const factorTraceEvidenceReadinessPct = factorTraceEvidenceRows.length
+          ? Math.round(((factorTraceEvidenceRows.length - factorTraceEvidenceBlockedCount) / factorTraceEvidenceRows.length) * 100)
+          : 0;
+        const factorTraceEvidenceRouteMode = factorTraceEvidenceBlockedCount === 0
+          ? 'factor-trace-evidence-clear-route'
+          : factorTraceEvidenceBlockedCount === 1
+            ? 'factor-trace-evidence-review-route'
+            : 'factor-trace-evidence-remediation-route';
         const factorTraceTimelineVerdict = factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-audit-review-required' : 'factor-trace-audit-clear';
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, background: 'rgba(0,0,0,0.1)' }}>
@@ -309,7 +317,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · total penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · action=<b>{row.nextAction}</b>
                   </div>
                 ))}
-                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b></div>
+                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, background: 'rgba(255,255,255,0.02)', fontSize: 11 }}>
