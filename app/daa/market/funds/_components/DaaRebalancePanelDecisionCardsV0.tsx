@@ -746,6 +746,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : buyGateEvidenceCriticalCount > 0
                   ? 'critical-buy-gate-remediation'
                   : 'standard-buy-gate-review';
+              const buyGateEvidencePressureMode = buyGateEvidenceReviewCount === 0
+                ? 'stable-pressure'
+                : buyGateEvidenceCriticalCount > 0
+                  ? 'critical-pressure'
+                  : 'elevated-pressure';
               const buyGateEvidenceReadinessPct = buyGateEvidenceTraceRows.length
                 ? Math.round(((buyGateEvidenceTraceRows.length - buyGateEvidenceReviewCount) / buyGateEvidenceTraceRows.length) * 100)
                 : 0;
@@ -827,7 +832,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                           {row.id}: evidence status=<b>{row.evidenceStatus}</b> · blocker=<b>{row.primaryBlocker}</b> · action=<b>{row.nextAction}</b>
                         </div>
                       ))}
-                      <div>evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b> · readiness=<b>{buyGateEvidenceReadinessPct}%</b> · route=<b>{buyGateEvidenceRouteMode}</b> · critical rows=<b>{buyGateEvidenceCriticalCount}</b> · escalation lane=<b>{buyGateEvidenceEscalationLane}</b></div>
+                      <div>evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b> · readiness=<b>{buyGateEvidenceReadinessPct}%</b> · route=<b>{buyGateEvidenceRouteMode}</b> · critical rows=<b>{buyGateEvidenceCriticalCount}</b> · escalation lane=<b>{buyGateEvidenceEscalationLane}</b> · pressure mode=<b>{buyGateEvidencePressureMode}</b></div>
                       {/* evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b> · readiness=<b>{buyGateEvidenceReadinessPct}%</b> · route=<b>{buyGateEvidenceRouteMode}</b> */}
                     </div>
                   </div>
