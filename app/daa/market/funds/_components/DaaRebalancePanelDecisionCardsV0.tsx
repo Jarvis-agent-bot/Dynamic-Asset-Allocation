@@ -1039,12 +1039,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const manualPrecheckReadinessPct = manualConfirmationPrecheckSimulator.length
           ? Math.round(((manualConfirmationPrecheckSimulator.length - manualPrecheckBlockedCount) / manualConfirmationPrecheckSimulator.length) * 100)
           : 0;
-        const manualTimelineCriticalCount = manualConfirmationPrecheckSimulator.filter((row) => row.status === 'blocked').length;
-        const manualTimelineEscalationLane = manualPrecheckBlockedCount === 0
+        const manualPrecheckCriticalGateCount = manualConfirmationPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const manualPrecheckEscalationLane = manualPrecheckBlockedCount === 0
           ? 'monitor-only'
-          : manualTimelineCriticalCount > 1
-            ? 'critical-checkpoint-timeline-remediation'
-            : 'standard-checkpoint-timeline-review';
+          : manualPrecheckCriticalGateCount > 1
+            ? 'critical-checkpoint-precheck-remediation'
+            : 'standard-checkpoint-precheck-review';
+        const manualTimelineCriticalCount = manualPrecheckCriticalGateCount;
+        const manualTimelineEscalationLane = manualPrecheckEscalationLane;
         const manualPrecheckHandoffMode = manualPrecheckBlockedCount === 0 && manualCheckpointConfirmed
           ? 'ready-for-preflight-handoff'
           : manualPrecheckBlockedCount === 0
@@ -1366,8 +1368,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b> · checkpoint gate=<b>{manualPrecheckCheckpointGate}</b> · action lane=<b>{manualPrecheckOperatorActionLane}</b>
-                  {/* precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b> */}
+                  precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b> · checkpoint gate=<b>{manualPrecheckCheckpointGate}</b> · action lane=<b>{manualPrecheckOperatorActionLane}</b> · critical gates=<b>{manualPrecheckCriticalGateCount}</b> · escalation lane=<b>{manualPrecheckEscalationLane}</b>
+                  {/* precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b> · checkpoint gate=<b>{manualPrecheckCheckpointGate}</b> · action lane=<b>{manualPrecheckOperatorActionLane}</b> */}
                 </div>
               </div>
             </div>
