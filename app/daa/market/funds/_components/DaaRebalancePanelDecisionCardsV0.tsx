@@ -1016,6 +1016,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const manualPrecheckReadinessPct = manualConfirmationPrecheckSimulator.length
           ? Math.round(((manualConfirmationPrecheckSimulator.length - manualPrecheckBlockedCount) / manualConfirmationPrecheckSimulator.length) * 100)
           : 0;
+        const manualTimelineCriticalCount = manualConfirmationPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const manualTimelineEscalationLane = manualPrecheckBlockedCount === 0
+          ? 'monitor-only'
+          : manualTimelineCriticalCount > 1
+            ? 'critical-checkpoint-timeline-remediation'
+            : 'standard-checkpoint-timeline-review';
         const manualPrecheckHandoffMode = manualPrecheckBlockedCount === 0 && manualCheckpointConfirmed
           ? 'ready-for-preflight-handoff'
           : manualPrecheckBlockedCount === 0
@@ -1299,7 +1305,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 checkpoint gate check: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b></div>
-                <div>T5 timeline telemetry: readiness=<b>{manualPrecheckReadinessPct}%</b> · route=<b>{manualPrecheckRouteMode}</b></div>
+                <div>T5 timeline telemetry: readiness=<b>{manualPrecheckReadinessPct}%</b> · route=<b>{manualPrecheckRouteMode}</b> · critical gates=<b>{manualTimelineCriticalCount}</b> · escalation lane=<b>{manualTimelineEscalationLane}</b></div>
+                {/* T5 timeline telemetry: readiness=<b>{manualPrecheckReadinessPct}%</b> · route=<b>{manualPrecheckRouteMode}</b> */}
                 <div>timeline verdict: <b>{manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation'}</b></div>
                 {/* timeline verdict: <b>{manualTimelineVerdictMode}</b> */}
               </div>
