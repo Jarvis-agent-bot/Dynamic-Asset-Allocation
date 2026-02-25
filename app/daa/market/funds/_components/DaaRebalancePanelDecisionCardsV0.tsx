@@ -148,6 +148,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, netMultiplier, evidenceStatus, action };
         });
         const wQatExplainabilityEvidenceReviewCount = wQatExplainabilityEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
+        const wQatEvidenceReadinessPct = wQatExplainabilityEvidenceTraceRows.length
+          ? Math.round(((wQatExplainabilityEvidenceTraceRows.length - wQatExplainabilityEvidenceReviewCount) / wQatExplainabilityEvidenceTraceRows.length) * 100)
+          : 0;
+        const wQatEvidenceRouteMode = wQatExplainabilityEvidenceReviewCount === 0
+          ? 'wqat-explainability-evidence-clear-route'
+          : wQatExplainabilityEvidenceReviewCount === 1
+            ? 'wqat-explainability-evidence-review-route'
+            : 'wqat-explainability-evidence-remediation-route';
         const gateLevelTraceTotals = qatRows.reduce(
           (acc, row) => {
             acc.drift += row.driftGatePenalty;
@@ -390,7 +398,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · net multiplier=<b>{row.netMultiplier.toFixed(3)}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{wQatExplainabilityEvidenceReviewCount}/{wQatExplainabilityEvidenceTraceRows.length}</b> · mode=<b>{wQatExplainabilityEvidenceReviewCount > 0 ? 'wqat-explainability-evidence-review-required' : 'wqat-explainability-evidence-clear'}</b></div>
+                <div>evidence trace verdict: review rows=<b>{wQatExplainabilityEvidenceReviewCount}/{wQatExplainabilityEvidenceTraceRows.length}</b> · mode=<b>{wQatExplainabilityEvidenceReviewCount > 0 ? 'wqat-explainability-evidence-review-required' : 'wqat-explainability-evidence-clear'}</b> · readiness=<b>{wQatEvidenceReadinessPct}%</b> · route=<b>{wQatEvidenceRouteMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
