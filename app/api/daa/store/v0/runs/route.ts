@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireDaaAdminViewerAuth } from "../../../../../../src/daa/adminAuth";
 
+import { buildDaaAuditExecutorProtocolV0 } from "../../../../../../src/daa/auditExecutorProtocolV0";
 import { listDaaRunsV0 } from "../../../../../../src/daa/storeV0";
 
 export const runtime = "nodejs";
@@ -62,7 +63,19 @@ export async function GET(req: Request) {
 
   try {
     const runs = await listDaaRunsV0({ limit, beforeCreatedAt, beforeRunId, fromCreatedAt, toCreatedAt, actor, status, source, q, sort });
-    return NextResponse.json({ ok: true, runs });
+    const runsWithProtocol = runs.map((run) => ({
+      ...run,
+      protocol: buildDaaAuditExecutorProtocolV0({
+        runId: run.runId,
+        kind: run.kind,
+        status: run.status,
+        hasPortfolio: run.hasPortfolio,
+        hasConfirm: run.hasConfirm,
+        hasExecuted: run.hasExecuted,
+        auditCount: run.auditCount,
+      }),
+    }));
+    return NextResponse.json({ ok: true, runs: runsWithProtocol });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message ?? e ?? "error") }, { status: 500 });
   }
