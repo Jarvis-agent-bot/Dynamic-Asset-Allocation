@@ -200,6 +200,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const factorTraceDriftReadinessPct = factorTraceDriftAlertRows.length
           ? Math.round(((factorTraceDriftAlertRows.length - driftAlertCount) / factorTraceDriftAlertRows.length) * 100)
           : 0;
+        const factorTraceCriticalDriftCount = factorTraceDriftAlertRows.filter((row) => row.driftPressureBand === 'critical').length;
+        const factorTraceDriftEscalationLane = driftAlertCount === 0
+          ? 'monitor-only'
+          : factorTraceCriticalDriftCount > 0
+            ? 'critical-drift-remediation'
+            : 'standard-drift-review';
         const factorTraceDriftRouteMode = driftAlertCount === 0
           ? 'factor-drift-clear'
           : driftAlertCount === 1
@@ -326,7 +332,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift alert threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.driftPressureBand}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{factorTraceDriftReadinessPct}%</b> · route=<b>{factorTraceDriftRouteMode}</b></div>
+                <div>drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{factorTraceDriftReadinessPct}%</b> · route=<b>{factorTraceDriftRouteMode}</b> · critical alerts=<b>{factorTraceCriticalDriftCount}</b> · escalation lane=<b>{factorTraceDriftEscalationLane}</b></div>
+                {/* drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{factorTraceDriftReadinessPct}%</b> · route=<b>{factorTraceDriftRouteMode}</b> */}
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
