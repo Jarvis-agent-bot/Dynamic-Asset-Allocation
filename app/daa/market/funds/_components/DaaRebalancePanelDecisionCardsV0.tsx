@@ -979,6 +979,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const guardrailPrecheckReadinessPct = guardrailPrecheckSimulator.length
           ? Math.round(((guardrailPrecheckSimulator.length - guardrailPrecheckBlockedCount) / guardrailPrecheckSimulator.length) * 100)
           : 0;
+        const guardrailPrecheckCriticalCount = guardrailPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const guardrailPrecheckEscalationLane = guardrailPrecheckBlockedCount === 0
+          ? 'monitor-only'
+          : guardrailPrecheckCriticalCount > 1
+            ? 'critical-guardrail-precheck-remediation'
+            : 'standard-guardrail-precheck-review';
         const guardrailPrecheckHandoff = guardrailPrecheckBlockedCount === 0 && guardrailEvidenceReviewCount === 0
           ? 'ready-for-preflight-handoff'
           : guardrailPrecheckBlockedCount === 0
@@ -1255,8 +1261,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · readiness=<b>{guardrailPrecheckReadinessPct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b>
-                  {/* simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b> */}
+                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · readiness=<b>{guardrailPrecheckReadinessPct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b> · critical gates=<b>{guardrailPrecheckCriticalCount}</b> · escalation lane=<b>{guardrailPrecheckEscalationLane}</b>
+                  {/* simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · readiness=<b>{guardrailPrecheckReadinessPct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b> */}
                 </div>
               </div>
             </div>
