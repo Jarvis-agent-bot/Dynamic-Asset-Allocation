@@ -593,6 +593,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : readyRows > 0
                   ? 'auto-buy-partial'
                   : 'auto-buy-hold';
+              const buyGatePrecheckReadinessPct = precheckRows.length
+                ? Math.round((readyRows / precheckRows.length) * 100)
+                : 0;
+              const buyGatePrecheckHandoffMode = readyRows === precheckRows.length
+                ? 'ready-for-buy-route-handoff'
+                : readyRows > 0
+                  ? 'partial-handoff-with-review'
+                  : 'remediate-before-buy-route-handoff';
               const topEvidence = precheckRows.find((row) => row.blockedGateCount > 0) ?? precheckRows[0];
               const blockerConsensus = precheckRows.reduce(
                 (acc, row) => {
@@ -681,6 +689,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       return (
                         <div key={`precheck-${row.id}`}>
                           {row.id}: incompetence={row.incompetenceGate ? 'block' : 'pass'} · maxIn={row.maxInGate ? 'block' : 'pass'} · liquidity={row.liquidityGate ? 'block' : 'pass'} · T+N={row.settlementGate ? 'block' : 'pass'} · blocked gates=<b>{row.blockedGateCount}</b> · primary blocker=<b>{row.primaryBlocker}</b> · severity=<b>{row.blockerSeverity}</b> · fingerprint=<b>{row.gateFingerprint}</b> · gate block score=<b>{row.gateBlockScore.toFixed(2)}</b> · readiness=<b>{row.readinessPct}%</b> · unblock hint=<b>{unblockHint}</b> {'=>'} <b>{row.verdict}</b>
+                          {/* incompetence={incompetenceGate ? 'block' : 'pass'} · maxIn={maxInGate ? 'block' : 'pass'} · liquidity={liquidityGate ? 'block' : 'pass'} · T+N={settlementGate ? 'block' : 'pass'} => <b>{verdict}</b> */}
                         </div>
                       );
                     })}
@@ -688,7 +697,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
                     Buy gate precheck evidence panel: blocked rows=<b>{evidencePanel.blockedRows}/{precheckRows.length}</b> · incompetence hits=<b>{evidencePanel.incompetenceHits}</b> · maxIn hits=<b>{evidencePanel.maxInHits}</b> · liquidity hits=<b>{evidencePanel.liquidityHits}</b> · T+N hits=<b>{evidencePanel.settlementHits}</b>
                     <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-                      Auto-buy precheck simulator: ready rows=<b>{readyRows}/{precheckRows.length}</b> · route mode=<b>{routeMode}</b>
+                      Auto-buy precheck simulator: ready rows=<b>{readyRows}/{precheckRows.length}</b> · route mode=<b>{routeMode}</b> · readiness=<b>{buyGatePrecheckReadinessPct}%</b> · handoff=<b>{buyGatePrecheckHandoffMode}</b>
                     </div>
                     <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
                       precheck blocker consensus: dominant blocker=<b>{dominantBlocker}</b> · hits=<b>{dominantBlockerHits}</b>
