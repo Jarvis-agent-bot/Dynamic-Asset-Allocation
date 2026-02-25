@@ -359,6 +359,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 formula gate check: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b></div>
+                <div>T5 timeline telemetry: readiness=<b>{wQatPrecheckReadinessPct}%</b> · route=<b>{wQatPrecheckRouteMode}</b></div>
                 <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
                 {/* timeline verdict: <b>{formulaTimelineVerdictMode}</b> */}
               </div>
