@@ -343,7 +343,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 formula gate check: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b></div>
-                <div>timeline verdict: <b>{formulaTimelineVerdictMode}</b></div>
+                <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${wQatFormulaDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
@@ -467,8 +467,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
             <div style={{ marginTop: 4, display: 'grid', gap: 2, fontSize: 11 }}>
               <div>policy-gate threshold(40): <b>{routing.stressScore >= 40 ? 'B path candidate' : 'A path candidate'}</b> (score {routing.stressScore})</div>
               <div>deep-negative gate threshold(2): <b>{deepNegativeCount >= 2 ? 'B path candidate' : 'A path candidate'}</b> (count {deepNegativeCount})</div>
-              <div>data-quality gate threshold(missing{'>'}0): <b>{priceDataWarningsV0.missing.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (missing {priceDataWarningsV0.missing.length})</div>
-              <div>data-quality gate threshold(stale{'>'}0): <b>{priceDataWarningsV0.lastClose.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (stale {priceDataWarningsV0.lastClose.length})</div>
+              <div>data-quality gate threshold(missing>0): <b>{priceDataWarningsV0.missing.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (missing {priceDataWarningsV0.missing.length})</div>
+              <div>data-quality gate threshold(stale>0): <b>{priceDataWarningsV0.lastClose.length > 0 ? 'B path candidate' : 'A path candidate'}</b> (stale {priceDataWarningsV0.lastClose.length})</div>
               <div>evidence matrix votes: A=<b>{aPathVotes}</b> · B=<b>{bPathVotes}</b> · consensus=<b>{matrixConsensus}</b> · dominant gate=<b>{dominantGate}</b> · strength=<b>{consensusStrengthPct}%</b></div>
               <div>A/B gate snapshots: strong-hold=<b>{aGateSnapshot}</b> · value-trap=<b>{bGateSnapshot}</b> · buy-path=<b>{buyPathSnapshot}</b></div>
               <div>snapshot alignment verdict: <b>{gateSnapshotAlignment}</b></div>
@@ -1036,7 +1036,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 evidence review: rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailTimelineReviewMode}</b></div>
-                <div>timeline verdict: <b>{guardrailDecisionFlowTimelineVerdict}</b></div>
+                <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailContractSmokeFailCount > 0 ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
@@ -1095,7 +1095,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       : 'hold';
                 return (
                   <div key={`risk-envelope-${r.id}`}>
-                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% {'=>'} <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · safety margin=<b>{(r.envelopeSafetyMargin * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b> · pressure score=<b>{envelopePressureScore.toFixed(2)}</b> · pressure tier=<b>{envelopePressureTier}</b> · action=<b>{envelopeAction}</b>
+                    {r.id}: envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b> · breach distance=<b>{(r.envelopeBreachDistance * 100).toFixed(1)}%</b> · safety margin=<b>{(r.envelopeSafetyMargin * 100).toFixed(1)}%</b> · utilization=<b>{envelopeUtilizationPct.toFixed(0)}%</b> · pressure score=<b>{envelopePressureScore.toFixed(2)}</b> · pressure tier=<b>{envelopePressureTier}</b> · action=<b>{envelopeAction}</b>
                   </div>
                 );
               })}
@@ -1133,7 +1133,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 checkpoint gate check: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b></div>
-                <div>timeline verdict: <b>{manualTimelineVerdictMode}</b></div>
+                <div>timeline verdict: <b>{manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation'}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualConfirmationDriftAlertCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
