@@ -651,6 +651,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : buyGateEvidenceReviewCount === 1
                   ? 'buy-gate-evidence-review-route'
                   : 'buy-gate-evidence-remediation-route';
+              const buyGateTimelineReadinessPct = buyGateEvidenceTraceRows.length
+                ? Math.round(((buyGateEvidenceTraceRows.length - buyGateEvidenceReviewCount) / buyGateEvidenceTraceRows.length) * 100)
+                : 0;
+              const buyGateTimelineRouteMode = buyGateEvidenceReviewCount === 0
+                ? 'buy-gate-timeline-clear-route'
+                : buyGateEvidenceReviewCount === 1
+                  ? 'buy-gate-timeline-review-route'
+                  : 'buy-gate-timeline-remediation-route';
               const buyGateTimelineVerdict = buyGateEvidenceReviewCount > 0 ? 'buy-gate-precheck-review-required' : 'buy-gate-precheck-clear';
               const auditTimeline = topEvidence
                 ? [
@@ -696,7 +704,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       <div>T1 gate hit rollup: incompetence=<b>{evidencePanel.incompetenceHits}</b> · maxIn=<b>{evidencePanel.maxInHits}</b> · liquidity=<b>{evidencePanel.liquidityHits}</b> · T+N=<b>{evidencePanel.settlementHits}</b></div>
                       <div>T2 blocker focus: <b>{topEvidence ? `${topEvidence.id} / ${topEvidence.primaryBlocker}` : 'none'}</b></div>
                       <div>T3 route mode: <b>{routeMode}</b></div>
-                      <div>T4 timeline verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateTimelineVerdict}</b></div>
+                      <div>T4 timeline verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateTimelineVerdict}</b> · readiness=<b>{buyGateTimelineReadinessPct}%</b> · route=<b>{buyGateTimelineRouteMode}</b></div>
                     </div>
                   </div>
                   <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${buyGateEvidenceReviewCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
