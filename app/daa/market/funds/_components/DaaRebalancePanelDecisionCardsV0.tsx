@@ -138,12 +138,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const wQatPrecheckReadinessPct = wQatPrecheckSimulator.length
           ? Math.round(((wQatPrecheckSimulator.length - wQatPrecheckBlockedCount) / wQatPrecheckSimulator.length) * 100)
           : 0;
-        const wQatTimelineCriticalCount = wQatPrecheckSimulator.filter((row) => row.status === 'blocked').length;
-        const wQatTimelineEscalationLane = wQatPrecheckBlockedCount === 0
+        const wQatPrecheckCriticalCount = wQatPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const wQatPrecheckEscalationLane = wQatPrecheckBlockedCount === 0
           ? 'monitor-only'
-          : wQatTimelineCriticalCount > 1
-            ? 'critical-formula-timeline-remediation'
-            : 'standard-formula-timeline-review';
+          : wQatPrecheckCriticalCount > 1
+            ? 'critical-formula-precheck-remediation'
+            : 'standard-formula-precheck-review';
+        const wQatTimelineCriticalCount = wQatPrecheckCriticalCount;
+        const wQatTimelineEscalationLane = wQatPrecheckEscalationLane;
         const wQatPrecheckHandoffMode = wQatPrecheckBlockedCount === 0 && wQatFormulaDriftAlertCount === 0
           ? 'ready-for-formula-routing'
           : wQatPrecheckBlockedCount === 0
@@ -436,7 +438,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b> · readiness=<b>{wQatPrecheckReadinessPct}%</b> · handoff=<b>{wQatPrecheckHandoffMode}</b> · confidence=<b>{wQatPrecheckConfidencePct}%</b>
+                  precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b> · readiness=<b>{wQatPrecheckReadinessPct}%</b> · handoff=<b>{wQatPrecheckHandoffMode}</b> · confidence=<b>{wQatPrecheckConfidencePct}%</b> · critical gates=<b>{wQatPrecheckCriticalCount}</b> · escalation lane=<b>{wQatPrecheckEscalationLane}</b>
+                  {/* precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b> · readiness=<b>{wQatPrecheckReadinessPct}%</b> · handoff=<b>{wQatPrecheckHandoffMode}</b> · confidence=<b>{wQatPrecheckConfidencePct}%</b> */}
                 </div>
               </div>
             </div>
