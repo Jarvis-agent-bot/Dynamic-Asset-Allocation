@@ -896,6 +896,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { id: row.id, evidenceStatus, dominantRisk: row.maxInImpact > row.maxOutImpact ? 'maxIn' : row.maxOutImpact > row.maxInImpact ? 'maxOut' : 'balanced', nextAction };
         });
         const guardrailEvidenceReviewCount = guardrailEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
+        const guardrailEvidenceCriticalCount = guardrailEvidenceTraceRows.filter((row) => row.evidenceStatus === 'review-required').length;
+        const guardrailEvidenceEscalationLane = guardrailEvidenceReviewCount === 0
+          ? 'monitor-only'
+          : guardrailEvidenceCriticalCount > 0
+            ? 'critical-guardrail-remediation'
+            : 'standard-guardrail-review';
         const guardrailEvidenceReadinessPct = guardrailEvidenceTraceRows.length
           ? Math.round(((guardrailEvidenceTraceRows.length - guardrailEvidenceReviewCount) / guardrailEvidenceTraceRows.length) * 100)
           : 0;
@@ -1141,7 +1147,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · dominant risk=<b>{row.dominantRisk}</b> · action=<b>{row.nextAction}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b></div>
+                <div>evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> · critical rows=<b>{guardrailEvidenceCriticalCount}</b> · escalation lane=<b>{guardrailEvidenceEscalationLane}</b></div>
+                {/* evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> */}
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailDecisionFlowBlocked ? 'rgba(239,68,68,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: guardrailDecisionFlowBlocked ? 'rgba(220,38,38,0.08)' : 'rgba(22,163,74,0.08)', fontSize: 11 }}>
