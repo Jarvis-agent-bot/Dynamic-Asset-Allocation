@@ -138,6 +138,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const wQatPrecheckReadinessPct = wQatPrecheckSimulator.length
           ? Math.round(((wQatPrecheckSimulator.length - wQatPrecheckBlockedCount) / wQatPrecheckSimulator.length) * 100)
           : 0;
+        const wQatTimelineCriticalCount = wQatPrecheckSimulator.filter((row) => row.status === 'blocked').length;
+        const wQatTimelineEscalationLane = wQatPrecheckBlockedCount === 0
+          ? 'monitor-only'
+          : wQatTimelineCriticalCount > 1
+            ? 'critical-formula-timeline-remediation'
+            : 'standard-formula-timeline-review';
         const wQatPrecheckHandoffMode = wQatPrecheckBlockedCount === 0 && wQatFormulaDriftAlertCount === 0
           ? 'ready-for-formula-routing'
           : wQatPrecheckBlockedCount === 0
@@ -396,7 +402,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 formula gate check: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b></div>
-                <div>T5 timeline telemetry: readiness=<b>{wQatPrecheckReadinessPct}%</b> · route=<b>{wQatPrecheckRouteMode}</b></div>
+                <div>T5 timeline telemetry: readiness=<b>{wQatPrecheckReadinessPct}%</b> · route=<b>{wQatPrecheckRouteMode}</b> · critical gates=<b>{wQatTimelineCriticalCount}</b> · escalation lane=<b>{wQatTimelineEscalationLane}</b></div>
+                {/* T5 timeline telemetry: readiness=<b>{wQatPrecheckReadinessPct}%</b> · route=<b>{wQatPrecheckRouteMode}</b> */}
                 <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
                 {/* timeline verdict: <b>{formulaTimelineVerdictMode}</b> */}
               </div>
