@@ -1107,6 +1107,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
             : 'standard-checkpoint-precheck-review';
         const manualTimelineCriticalCount = manualPrecheckCriticalGateCount;
         const manualTimelineEscalationLane = manualPrecheckEscalationLane;
+        const manualTimelinePressureMode = manualTimelineCriticalCount === 0
+          ? 'stable-pressure'
+          : manualTimelineCriticalCount > 1
+            ? 'critical-pressure'
+            : 'elevated-pressure';
         const manualPrecheckHandoffMode = manualPrecheckBlockedCount === 0 && manualCheckpointConfirmed
           ? 'ready-for-preflight-handoff'
           : manualPrecheckBlockedCount === 0
@@ -1400,7 +1405,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 checkpoint gate check: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b></div>
-                <div>T5 timeline telemetry: readiness=<b>{manualPrecheckReadinessPct}%</b> · route=<b>{manualPrecheckRouteMode}</b> · critical gates=<b>{manualTimelineCriticalCount}</b> · escalation lane=<b>{manualTimelineEscalationLane}</b></div>
+                <div>T5 timeline telemetry: readiness=<b>{manualPrecheckReadinessPct}%</b> · route=<b>{manualPrecheckRouteMode}</b> · critical gates=<b>{manualTimelineCriticalCount}</b> · escalation lane=<b>{manualTimelineEscalationLane}</b> · pressure mode=<b>{manualTimelinePressureMode}</b></div>
                 {/* T5 timeline telemetry: readiness=<b>{manualPrecheckReadinessPct}%</b> · route=<b>{manualPrecheckRouteMode}</b> */}
                 <div>timeline verdict: <b>{manualCheckpointConfirmed ? 'checkpoint-cleared-for-execution-review' : 'awaiting-manual-confirmation'}</b></div>
                 {/* timeline verdict: <b>{manualTimelineVerdictMode}</b> */}
