@@ -929,6 +929,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { gate: row.gate, evidenceStatus, operatorLane, action };
         });
         const manualConfirmationEvidenceReviewCount = manualConfirmationEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
+        const manualConfirmationEvidenceReadinessPct = manualConfirmationEvidenceTraceRows.length
+          ? Math.round(((manualConfirmationEvidenceTraceRows.length - manualConfirmationEvidenceReviewCount) / manualConfirmationEvidenceTraceRows.length) * 100)
+          : 0;
+        const manualConfirmationEvidenceRouteMode = manualConfirmationEvidenceReviewCount === 0
+          ? 'manual-confirmation-evidence-clear-route'
+          : manualConfirmationEvidenceReviewCount === 1
+            ? 'manual-confirmation-evidence-review-route'
+            : 'manual-confirmation-evidence-remediation-route';
         return (
           <div style={{ marginTop: 8, padding: '10px 12px', border: `1px solid ${gate === 'pass' ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`, borderRadius: 12, background: gate === 'pass' ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)' }}>
             <div style={{ fontWeight: 800, fontSize: 13 }}>Liquidity + settlement pre-trade gate</div>
@@ -1198,7 +1206,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     gate=<b>{row.gate}</b> · evidence status=<b>{row.evidenceStatus}</b> · operator lane=<b>{row.operatorLane}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b></div>
+                <div>evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b> · readiness=<b>{manualConfirmationEvidenceReadinessPct}%</b> · route=<b>{manualConfirmationEvidenceRouteMode}</b></div>
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
