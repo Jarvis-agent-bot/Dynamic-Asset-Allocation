@@ -878,6 +878,14 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailPrecheckBlockedCount === 0
             ? 'evidence-review-before-handoff'
             : 'remediation-before-handoff';
+        const guardrailTimelineReadinessPct = guardrailDecisionFlowTimeline.length
+          ? Math.round(((guardrailDecisionFlowTimeline.length - guardrailPrecheckBlockedCount) / guardrailDecisionFlowTimeline.length) * 100)
+          : 0;
+        const guardrailTimelineRouteMode = guardrailPrecheckBlockedCount === 0
+          ? 'guardrail-timeline-clear-route'
+          : guardrailPrecheckBlockedCount === 1
+            ? 'guardrail-timeline-review-route'
+            : 'guardrail-timeline-remediation-route';
         const manualConfirmationTimeline = [
           `T0 checkpoint state=${manualCheckpointConfirmed ? 'confirmed' : 'pending'}`,
           `T1 execution mode=${manualCheckpointConfirmed ? 'live-actionable' : 'simulation-only'}`,
@@ -1076,7 +1084,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 {guardrailDecisionFlowTimeline.map((entry) => (
                   <div key={entry}>{entry}</div>
                 ))}
-                <div>T4 evidence review: rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailTimelineReviewMode}</b></div>
+                <div>T4 evidence review: rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailTimelineReviewMode}</b> · readiness=<b>{guardrailTimelineReadinessPct}%</b> · route=<b>{guardrailTimelineRouteMode}</b></div>
                 <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
                 {/* timeline verdict: <b>{guardrailDecisionFlowTimelineVerdict}</b> */}
               </div>
