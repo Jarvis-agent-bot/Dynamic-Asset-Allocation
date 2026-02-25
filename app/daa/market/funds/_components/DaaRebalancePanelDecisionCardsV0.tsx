@@ -932,6 +932,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailCriticalDriftCount > 0
             ? 'critical-guardrail-remediation'
             : 'standard-guardrail-review';
+        const guardrailDriftPressureMode = guardrailDriftAlertCount === 0
+          ? 'stable-pressure'
+          : guardrailCriticalDriftCount > 0
+            ? 'critical-pressure'
+            : 'elevated-pressure';
         const guardrailDriftRouteMode = guardrailDriftAlertCount === 0
           ? 'guardrail-drift-clear'
           : guardrailDriftAlertCount === 1
@@ -1263,7 +1268,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> · critical alerts=<b>{guardrailCriticalDriftCount}</b> · escalation lane=<b>{guardrailDriftEscalationLane}</b></div>
+                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> · critical alerts=<b>{guardrailCriticalDriftCount}</b> · escalation lane=<b>{guardrailDriftEscalationLane}</b> · pressure mode=<b>{guardrailDriftPressureMode}</b></div>
                 {/* drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> */}
               </div>
             </div>
