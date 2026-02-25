@@ -980,6 +980,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const manualConfirmationDriftReadinessPct = manualConfirmationDriftAlertRows.length
           ? Math.round(((manualConfirmationDriftAlertRows.length - manualConfirmationDriftAlertCount) / manualConfirmationDriftAlertRows.length) * 100)
           : 0;
+        const manualConfirmationCriticalDriftCount = manualConfirmationDriftAlertRows.filter((row) => row.pressure === 'critical').length;
+        const manualConfirmationDriftEscalationLane = manualConfirmationDriftAlertCount === 0
+          ? 'monitor-only'
+          : manualConfirmationCriticalDriftCount > 0
+            ? 'critical-checkpoint-remediation'
+            : 'standard-checkpoint-review';
         const manualConfirmationDriftRouteMode = manualConfirmationDriftAlertCount === 0
           ? 'manual-confirmation-drift-clear'
           : manualConfirmationDriftAlertCount === 1
@@ -1244,7 +1250,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b> · readiness=<b>{manualConfirmationDriftReadinessPct}%</b> · route=<b>{manualConfirmationDriftRouteMode}</b></div>
+                <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b> · readiness=<b>{manualConfirmationDriftReadinessPct}%</b> · route=<b>{manualConfirmationDriftRouteMode}</b> · critical alerts=<b>{manualConfirmationCriticalDriftCount}</b> · escalation lane=<b>{manualConfirmationDriftEscalationLane}</b></div>
+                {/* drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b> · readiness=<b>{manualConfirmationDriftReadinessPct}%</b> · route=<b>{manualConfirmationDriftRouteMode}</b> */}
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${manualConfirmationContractSmokeFailCount > 0 ? 'rgba(245,158,11,0.55)' : 'rgba(34,197,94,0.55)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
