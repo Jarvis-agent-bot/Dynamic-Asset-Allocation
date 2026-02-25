@@ -1032,6 +1032,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
           return { gate: row.gate, evidenceStatus, operatorLane, action };
         });
         const manualConfirmationEvidenceReviewCount = manualConfirmationEvidenceTraceRows.filter((row) => row.evidenceStatus !== 'clear').length;
+        const manualConfirmationEvidenceCriticalCount = manualConfirmationEvidenceTraceRows.filter((row) => row.evidenceStatus === 'review-required').length;
+        const manualConfirmationEvidenceEscalationLane = manualConfirmationEvidenceReviewCount === 0
+          ? 'monitor-only'
+          : manualConfirmationEvidenceCriticalCount > 0
+            ? 'critical-checkpoint-remediation'
+            : 'standard-checkpoint-review';
         const manualConfirmationEvidenceReadinessPct = manualConfirmationEvidenceTraceRows.length
           ? Math.round(((manualConfirmationEvidenceTraceRows.length - manualConfirmationEvidenceReviewCount) / manualConfirmationEvidenceTraceRows.length) * 100)
           : 0;
@@ -1315,7 +1321,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     gate=<b>{row.gate}</b> · evidence status=<b>{row.evidenceStatus}</b> · operator lane=<b>{row.operatorLane}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b> · readiness=<b>{manualConfirmationEvidenceReadinessPct}%</b> · route=<b>{manualConfirmationEvidenceRouteMode}</b></div>
+                <div>evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b> · readiness=<b>{manualConfirmationEvidenceReadinessPct}%</b> · route=<b>{manualConfirmationEvidenceRouteMode}</b> · critical rows=<b>{manualConfirmationEvidenceCriticalCount}</b> · escalation lane=<b>{manualConfirmationEvidenceEscalationLane}</b></div>
+                {/* evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b> · readiness=<b>{manualConfirmationEvidenceReadinessPct}%</b> · route=<b>{manualConfirmationEvidenceRouteMode}</b> */}
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
