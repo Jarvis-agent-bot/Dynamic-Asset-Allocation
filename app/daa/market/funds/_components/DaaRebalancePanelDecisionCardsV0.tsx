@@ -850,6 +850,12 @@ export default function DaaRebalancePanelDecisionCardsV0({
         const guardrailDriftReadinessPct = guardrailDriftAlertRows.length
           ? Math.round(((guardrailDriftAlertRows.length - guardrailDriftAlertCount) / guardrailDriftAlertRows.length) * 100)
           : 0;
+        const guardrailCriticalDriftCount = guardrailDriftAlertRows.filter((row) => row.pressure === 'critical').length;
+        const guardrailDriftEscalationLane = guardrailDriftAlertCount === 0
+          ? 'monitor-only'
+          : guardrailCriticalDriftCount > 0
+            ? 'critical-guardrail-remediation'
+            : 'standard-guardrail-review';
         const guardrailDriftRouteMode = guardrailDriftAlertCount === 0
           ? 'guardrail-drift-clear'
           : guardrailDriftAlertCount === 1
@@ -1141,7 +1147,8 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b></div>
+                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> · critical alerts=<b>{guardrailCriticalDriftCount}</b> · escalation lane=<b>{guardrailDriftEscalationLane}</b></div>
+                {/* drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> */}
               </div>
             </div>
             <div style={{ marginTop: 6, padding: '8px 10px', border: `1px dashed ${guardrailPrecheckBlockedCount > 0 ? 'rgba(239,68,68,0.45)' : 'rgba(34,197,94,0.45)'}`, borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
