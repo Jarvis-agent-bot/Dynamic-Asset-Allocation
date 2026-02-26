@@ -348,6 +348,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : factorTraceEvidenceReviewPriority === 'p2'
             ? 'next-day-review'
             : 'monitoring-backlog';
+        const factorTraceEvidenceOwnerLane = factorTraceEvidenceReviewPriority === 'p1'
+          ? 'factor-trace-ops-oncall'
+          : factorTraceEvidenceReviewPriority === 'p2'
+            ? 'factor-trace-review-queue'
+            : 'factor-trace-watchlist';
         const factorTraceEvidenceReadinessPct = factorTraceEvidenceRows.length
           ? Math.round(((factorTraceEvidenceRows.length - factorTraceEvidenceBlockedCount) / factorTraceEvidenceRows.length) * 100)
           : 0;
@@ -514,7 +519,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · total penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · action=<b>{row.nextAction}</b>
                   </div>
                 ))}
-                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> · critical rows=<b>{factorTraceEvidenceCriticalCount}</b> · escalation lane=<b>{factorTraceEvidenceEscalationLane}</b> · pressure mode=<b>{factorTraceEvidencePressureMode}</b> · review priority=<b>{factorTraceEvidenceReviewPriority}</b> · sla lane=<b>{factorTraceEvidenceSlaLane}</b></div>
+                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> · critical rows=<b>{factorTraceEvidenceCriticalCount}</b> · escalation lane=<b>{factorTraceEvidenceEscalationLane}</b> · pressure mode=<b>{factorTraceEvidencePressureMode}</b> · review priority=<b>{factorTraceEvidenceReviewPriority}</b> · sla lane=<b>{factorTraceEvidenceSlaLane}</b> · owner lane=<b>{factorTraceEvidenceOwnerLane}</b></div>
                 {/* evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> */}
               </div>
             </div>
