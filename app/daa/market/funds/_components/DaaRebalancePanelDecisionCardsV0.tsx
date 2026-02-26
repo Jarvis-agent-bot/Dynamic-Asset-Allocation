@@ -1062,6 +1062,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailDriftPressureMode === 'elevated-pressure'
             ? 'p2'
             : 'p3';
+        const guardrailDriftSlaLane = guardrailDriftReviewPriority === 'p1'
+          ? 'same-day-remediation'
+          : guardrailDriftReviewPriority === 'p2'
+            ? 'next-day-review'
+            : 'monitoring-backlog';
         const guardrailDriftRouteMode = guardrailDriftAlertCount === 0
           ? 'guardrail-drift-clear'
           : guardrailDriftAlertCount === 1
@@ -1463,7 +1468,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> · critical alerts=<b>{guardrailCriticalDriftCount}</b> · escalation lane=<b>{guardrailDriftEscalationLane}</b> · pressure mode=<b>{guardrailDriftPressureMode}</b> · review priority=<b>{guardrailDriftReviewPriority}</b></div>
+                <div>drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> · critical alerts=<b>{guardrailCriticalDriftCount}</b> · escalation lane=<b>{guardrailDriftEscalationLane}</b> · pressure mode=<b>{guardrailDriftPressureMode}</b> · review priority=<b>{guardrailDriftReviewPriority}</b> · sla lane=<b>{guardrailDriftSlaLane}</b></div>
                 {/* drift alert verdict: alerts=<b>{guardrailDriftAlertCount}/{guardrailDriftAlertRows.length}</b> · mode=<b>{guardrailDriftAlertCount > 0 ? 'guardrail-remediation-required' : 'guardrail-flow-stable'}</b> · readiness=<b>{guardrailDriftReadinessPct}%</b> · route=<b>{guardrailDriftRouteMode}</b> */}
               </div>
             </div>
