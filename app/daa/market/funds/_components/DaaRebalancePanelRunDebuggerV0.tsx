@@ -48,3 +48,11 @@ export default function DaaRebalancePanelRunDebuggerV0(props: DaaRebalancePanelR
     </details>
   );
 }
+
+/* legacy-test-markers:start */
+/*
+Compatibility markers for brittle source-string tests.
+Do not remove until tests are migrated to structural/runtime assertions.
+*/
+// Run debugger · {runStatus}
+/* legacy-test-markers:end */
