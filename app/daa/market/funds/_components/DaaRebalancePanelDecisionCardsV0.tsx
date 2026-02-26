@@ -1053,6 +1053,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailPrecheckCriticalCount > 1
             ? 'critical-guardrail-precheck-remediation'
             : 'standard-guardrail-precheck-review';
+        const guardrailPrecheckPressureMode = guardrailPrecheckBlockedCount === 0
+          ? 'stable-pressure'
+          : guardrailPrecheckCriticalCount > 1
+            ? 'critical-pressure'
+            : 'elevated-pressure';
         const guardrailPrecheckHandoff = guardrailPrecheckBlockedCount === 0 && guardrailEvidenceReviewCount === 0
           ? 'ready-for-preflight-handoff'
           : guardrailPrecheckBlockedCount === 0
@@ -1351,7 +1356,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · readiness=<b>{guardrailPrecheckReadinessPct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b> · critical gates=<b>{guardrailPrecheckCriticalCount}</b> · escalation lane=<b>{guardrailPrecheckEscalationLane}</b>
+                  simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · readiness=<b>{guardrailPrecheckReadinessPct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b> · critical gates=<b>{guardrailPrecheckCriticalCount}</b> · escalation lane=<b>{guardrailPrecheckEscalationLane}</b> · pressure mode=<b>{guardrailPrecheckPressureMode}</b>
                   {/* simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · readiness=<b>{guardrailPrecheckReadinessPct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b> */}
                 </div>
               </div>
