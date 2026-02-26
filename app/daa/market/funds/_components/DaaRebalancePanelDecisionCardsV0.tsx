@@ -301,6 +301,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : factorTraceDriftReviewPriority === 'p2'
             ? 'next-day-review'
             : 'monitoring-backlog';
+        const factorTraceDriftOwnerLane = factorTraceDriftReviewPriority === 'p1'
+          ? 'risk-ops-oncall'
+          : factorTraceDriftReviewPriority === 'p2'
+            ? 'risk-ops-review-queue'
+            : 'observability-watchlist';
         const factorTraceDriftRouteMode = driftAlertCount === 0
           ? 'factor-drift-clear'
           : driftAlertCount === 1
@@ -492,7 +497,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift alert threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.driftPressureBand}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{factorTraceDriftReadinessPct}%</b> · route=<b>{factorTraceDriftRouteMode}</b> · critical alerts=<b>{factorTraceCriticalDriftCount}</b> · escalation lane=<b>{factorTraceDriftEscalationLane}</b> · pressure mode=<b>{factorTraceDriftPressureMode}</b> · review priority=<b>{factorTraceDriftReviewPriority}</b> · sla lane=<b>{factorTraceDriftSlaLane}</b></div>
+                <div>drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{factorTraceDriftReadinessPct}%</b> · route=<b>{factorTraceDriftRouteMode}</b> · critical alerts=<b>{factorTraceCriticalDriftCount}</b> · escalation lane=<b>{factorTraceDriftEscalationLane}</b> · pressure mode=<b>{factorTraceDriftPressureMode}</b> · review priority=<b>{factorTraceDriftReviewPriority}</b> · sla lane=<b>{factorTraceDriftSlaLane}</b> · owner lane=<b>{factorTraceDriftOwnerLane}</b></div>
                 {/* drift alert verdict: alerts=<b>{driftAlertCount}/{factorTraceDriftAlertRows.length}</b> · mode=<b>{driftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{factorTraceDriftReadinessPct}%</b> · route=<b>{factorTraceDriftRouteMode}</b> */}
               </div>
             </div>
