@@ -1186,6 +1186,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : manualConfirmationCriticalDriftCount > 0
             ? 'critical-pressure'
             : 'elevated-pressure';
+        const manualConfirmationDriftReviewPriority = manualConfirmationDriftPressureMode === 'critical-pressure'
+          ? 'p1'
+          : manualConfirmationDriftPressureMode === 'elevated-pressure'
+            ? 'p2'
+            : 'p3';
         const manualConfirmationDriftRouteMode = manualConfirmationDriftAlertCount === 0
           ? 'manual-confirmation-drift-clear'
           : manualConfirmationDriftAlertCount === 1
@@ -1464,7 +1469,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.pressure}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b> · readiness=<b>{manualConfirmationDriftReadinessPct}%</b> · route=<b>{manualConfirmationDriftRouteMode}</b> · critical alerts=<b>{manualConfirmationCriticalDriftCount}</b> · escalation lane=<b>{manualConfirmationDriftEscalationLane}</b> · pressure mode=<b>{manualConfirmationDriftPressureMode}</b></div>
+                <div>drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b> · readiness=<b>{manualConfirmationDriftReadinessPct}%</b> · route=<b>{manualConfirmationDriftRouteMode}</b> · critical alerts=<b>{manualConfirmationCriticalDriftCount}</b> · escalation lane=<b>{manualConfirmationDriftEscalationLane}</b> · pressure mode=<b>{manualConfirmationDriftPressureMode}</b> · review priority=<b>{manualConfirmationDriftReviewPriority}</b></div>
                 {/* drift alert verdict: alerts=<b>{manualConfirmationDriftAlertCount}/{manualConfirmationDriftAlertRows.length}</b> · mode=<b>{manualConfirmationDriftAlertCount > 0 ? 'manual-confirmation-required' : 'checkpoint-flow-stable'}</b> · readiness=<b>{manualConfirmationDriftReadinessPct}%</b> · route=<b>{manualConfirmationDriftRouteMode}</b> */}
               </div>
             </div>
