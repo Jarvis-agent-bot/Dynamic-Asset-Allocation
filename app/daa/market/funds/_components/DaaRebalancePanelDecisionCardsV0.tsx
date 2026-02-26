@@ -1212,6 +1212,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailTimelinePressureMode === 'elevated-pressure'
             ? 'p2'
             : 'p3';
+        const guardrailTimelineSlaLane = guardrailTimelineReviewPriority === 'p1'
+          ? 'same-day-remediation'
+          : guardrailTimelineReviewPriority === 'p2'
+            ? 'next-day-review'
+            : 'monitoring-backlog';
         const guardrailTimelineRouteMode = guardrailPrecheckBlockedCount === 0
           ? 'guardrail-timeline-clear-route'
           : guardrailPrecheckBlockedCount === 1
@@ -1488,7 +1493,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 {guardrailDecisionFlowTimeline.map((entry) => (
                   <div key={entry}>{entry}</div>
                 ))}
-                <div>T4 evidence review: rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailTimelineReviewMode}</b> · readiness=<b>{guardrailTimelineReadinessPct}%</b> · route=<b>{guardrailTimelineRouteMode}</b> · critical rows=<b>{guardrailTimelineCriticalCount}</b> · escalation lane=<b>{guardrailTimelineEscalationLane}</b> · pressure mode=<b>{guardrailTimelinePressureMode}</b> · review priority=<b>{guardrailTimelineReviewPriority}</b></div>
+                <div>T4 evidence review: rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailTimelineReviewMode}</b> · readiness=<b>{guardrailTimelineReadinessPct}%</b> · route=<b>{guardrailTimelineRouteMode}</b> · critical rows=<b>{guardrailTimelineCriticalCount}</b> · escalation lane=<b>{guardrailTimelineEscalationLane}</b> · pressure mode=<b>{guardrailTimelinePressureMode}</b> · review priority=<b>{guardrailTimelineReviewPriority}</b> · sla lane=<b>{guardrailTimelineSlaLane}</b></div>
                 {/* T4 evidence review: rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailTimelineReviewMode}</b> · readiness=<b>{guardrailTimelineReadinessPct}%</b> · route=<b>{guardrailTimelineRouteMode}</b> */}
                 <div>timeline verdict: <b>{guardrailDecisionFlowBlocked ? 'blocked-by-guardrails' : 'clear-for-preflight'}</b></div>
                 {/* timeline verdict: <b>{guardrailDecisionFlowTimelineVerdict}</b> */}
