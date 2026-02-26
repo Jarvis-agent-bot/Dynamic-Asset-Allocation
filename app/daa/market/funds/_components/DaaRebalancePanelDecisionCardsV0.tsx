@@ -288,6 +288,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : factorTraceEvidenceCriticalCount > 0
             ? 'critical-pressure'
             : 'elevated-pressure';
+        const factorTraceEvidenceReviewPriority = factorTraceEvidencePressureMode === 'critical-pressure'
+          ? 'p1'
+          : factorTraceEvidencePressureMode === 'elevated-pressure'
+            ? 'p2'
+            : 'p3';
         const factorTraceEvidenceReadinessPct = factorTraceEvidenceRows.length
           ? Math.round(((factorTraceEvidenceRows.length - factorTraceEvidenceBlockedCount) / factorTraceEvidenceRows.length) * 100)
           : 0;
@@ -434,7 +439,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · total penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · action=<b>{row.nextAction}</b>
                   </div>
                 ))}
-                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> · critical rows=<b>{factorTraceEvidenceCriticalCount}</b> · escalation lane=<b>{factorTraceEvidenceEscalationLane}</b> · pressure mode=<b>{factorTraceEvidencePressureMode}</b></div>
+                <div>evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> · critical rows=<b>{factorTraceEvidenceCriticalCount}</b> · escalation lane=<b>{factorTraceEvidenceEscalationLane}</b> · pressure mode=<b>{factorTraceEvidencePressureMode}</b> · review priority=<b>{factorTraceEvidenceReviewPriority}</b></div>
                 {/* evidence verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceEvidenceBlockedCount > 0 ? 'factor-trace-evidence-review-required' : 'factor-trace-evidence-clear'}</b> · readiness=<b>{factorTraceEvidenceReadinessPct}%</b> · route=<b>{factorTraceEvidenceRouteMode}</b> */}
               </div>
             </div>
