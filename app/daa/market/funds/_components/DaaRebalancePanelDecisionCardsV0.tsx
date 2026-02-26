@@ -1125,6 +1125,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : manualPrecheckCriticalGateCount > 1
             ? 'critical-checkpoint-precheck-remediation'
             : 'standard-checkpoint-precheck-review';
+        const manualPrecheckPressureMode = manualPrecheckBlockedCount === 0
+          ? 'stable-pressure'
+          : manualPrecheckCriticalGateCount > 1
+            ? 'critical-pressure'
+            : 'elevated-pressure';
         const manualTimelineCriticalCount = manualPrecheckCriticalGateCount;
         const manualTimelineEscalationLane = manualPrecheckEscalationLane;
         const manualTimelinePressureMode = manualTimelineCriticalCount === 0
@@ -1463,7 +1468,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b> · checkpoint gate=<b>{manualPrecheckCheckpointGate}</b> · action lane=<b>{manualPrecheckOperatorActionLane}</b> · critical gates=<b>{manualPrecheckCriticalGateCount}</b> · escalation lane=<b>{manualPrecheckEscalationLane}</b>
+                  precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b> · checkpoint gate=<b>{manualPrecheckCheckpointGate}</b> · action lane=<b>{manualPrecheckOperatorActionLane}</b> · critical gates=<b>{manualPrecheckCriticalGateCount}</b> · escalation lane=<b>{manualPrecheckEscalationLane}</b> · pressure mode=<b>{manualPrecheckPressureMode}</b>
                   {/* precheck verdict: blocked gates=<b>{manualPrecheckBlockedCount}/{manualConfirmationPrecheckSimulator.length}</b> · route mode=<b>{manualPrecheckRouteMode}</b> · readiness=<b>{manualPrecheckReadinessPct}%</b> · handoff=<b>{manualPrecheckHandoffMode}</b> · checkpoint gate=<b>{manualPrecheckCheckpointGate}</b> · action lane=<b>{manualPrecheckOperatorActionLane}</b> */}
                 </div>
               </div>
