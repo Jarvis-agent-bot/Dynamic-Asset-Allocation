@@ -194,6 +194,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : wQatEvidenceCriticalCount > 0
             ? 'critical-pressure'
             : 'elevated-pressure';
+        const wQatEvidenceReviewPriority = wQatEvidencePressureMode === 'critical-pressure'
+          ? 'p1'
+          : wQatEvidencePressureMode === 'elevated-pressure'
+            ? 'p2'
+            : 'p3';
         const wQatEvidenceReadinessPct = wQatExplainabilityEvidenceTraceRows.length
           ? Math.round(((wQatExplainabilityEvidenceTraceRows.length - wQatExplainabilityEvidenceReviewCount) / wQatExplainabilityEvidenceTraceRows.length) * 100)
           : 0;
@@ -517,7 +522,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · net multiplier=<b>{row.netMultiplier.toFixed(3)}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{wQatExplainabilityEvidenceReviewCount}/{wQatExplainabilityEvidenceTraceRows.length}</b> · mode=<b>{wQatExplainabilityEvidenceReviewCount > 0 ? 'wqat-explainability-evidence-review-required' : 'wqat-explainability-evidence-clear'}</b> · readiness=<b>{wQatEvidenceReadinessPct}%</b> · route=<b>{wQatEvidenceRouteMode}</b> · critical rows=<b>{wQatEvidenceCriticalCount}</b> · escalation lane=<b>{wQatEvidenceEscalationLane}</b> · pressure mode=<b>{wQatEvidencePressureMode}</b></div>
+                <div>evidence trace verdict: review rows=<b>{wQatExplainabilityEvidenceReviewCount}/{wQatExplainabilityEvidenceTraceRows.length}</b> · mode=<b>{wQatExplainabilityEvidenceReviewCount > 0 ? 'wqat-explainability-evidence-review-required' : 'wqat-explainability-evidence-clear'}</b> · readiness=<b>{wQatEvidenceReadinessPct}%</b> · route=<b>{wQatEvidenceRouteMode}</b> · critical rows=<b>{wQatEvidenceCriticalCount}</b> · escalation lane=<b>{wQatEvidenceEscalationLane}</b> · pressure mode=<b>{wQatEvidencePressureMode}</b> · review priority=<b>{wQatEvidenceReviewPriority}</b></div>
                 {/* evidence trace verdict: review rows=<b>{wQatExplainabilityEvidenceReviewCount}/{wQatExplainabilityEvidenceTraceRows.length}</b> · mode=<b>{wQatExplainabilityEvidenceReviewCount > 0 ? 'wqat-explainability-evidence-review-required' : 'wqat-explainability-evidence-clear'}</b> · readiness=<b>{wQatEvidenceReadinessPct}%</b> · route=<b>{wQatEvidenceRouteMode}</b> */}
               </div>
             </div>
