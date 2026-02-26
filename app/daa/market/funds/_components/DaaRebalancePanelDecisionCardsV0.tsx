@@ -760,6 +760,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : buyGateCriticalDriftCount > 0
                   ? 'critical-pressure'
                   : 'elevated-pressure';
+              const buyGateDriftReviewPriority = buyGateDriftPressureMode === 'critical-pressure'
+                ? 'p1'
+                : buyGateDriftPressureMode === 'elevated-pressure'
+                  ? 'p2'
+                  : 'p3';
               const buyGateDriftRouteMode = buyGateDriftAlertCount === 0
                 ? 'buy-gate-drift-clear'
                 : buyGateDriftAlertCount === 1
@@ -895,7 +900,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                           {row.id}: drift threshold=<b>{(row.driftAlertThreshold * 100).toFixed(1)}%</b> · status=<b>{row.driftAlert ? 'alert' : 'clear'}</b> · pressure=<b>{row.driftPressureBand}</b> · action=<b>{row.action}</b>
                         </div>
                       ))}
-                      <div>drift alert verdict: alerts=<b>{buyGateDriftAlertCount}/{buyGateDriftAlertRows.length}</b> · mode=<b>{buyGateDriftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{buyGateDriftReadinessPct}%</b> · route=<b>{buyGateDriftRouteMode}</b> · critical alerts=<b>{buyGateCriticalDriftCount}</b> · escalation lane=<b>{buyGateDriftEscalationLane}</b> · pressure mode=<b>{buyGateDriftPressureMode}</b></div>
+                      <div>drift alert verdict: alerts=<b>{buyGateDriftAlertCount}/{buyGateDriftAlertRows.length}</b> · mode=<b>{buyGateDriftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{buyGateDriftReadinessPct}%</b> · route=<b>{buyGateDriftRouteMode}</b> · critical alerts=<b>{buyGateCriticalDriftCount}</b> · escalation lane=<b>{buyGateDriftEscalationLane}</b> · pressure mode=<b>{buyGateDriftPressureMode}</b> · review priority=<b>{buyGateDriftReviewPriority}</b></div>
                       {/* drift alert verdict: alerts=<b>{buyGateDriftAlertCount}/{buyGateDriftAlertRows.length}</b> · mode=<b>{buyGateDriftAlertCount > 0 ? 'drift-review-required' : 'drift-stable'}</b> · readiness=<b>{buyGateDriftReadinessPct}%</b> · route=<b>{buyGateDriftRouteMode}</b> */}
                     </div>
                   </div>
