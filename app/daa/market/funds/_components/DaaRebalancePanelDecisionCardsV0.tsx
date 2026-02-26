@@ -1047,6 +1047,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailEvidenceCriticalCount > 0
             ? 'critical-pressure'
             : 'elevated-pressure';
+        const guardrailEvidenceReviewPriority = guardrailEvidencePressureMode === 'critical-pressure'
+          ? 'p1'
+          : guardrailEvidencePressureMode === 'elevated-pressure'
+            ? 'p2'
+            : 'p3';
         const guardrailEvidenceReadinessPct = guardrailEvidenceTraceRows.length
           ? Math.round(((guardrailEvidenceTraceRows.length - guardrailEvidenceReviewCount) / guardrailEvidenceTraceRows.length) * 100)
           : 0;
@@ -1353,7 +1358,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · dominant risk=<b>{row.dominantRisk}</b> · action=<b>{row.nextAction}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> · critical rows=<b>{guardrailEvidenceCriticalCount}</b> · escalation lane=<b>{guardrailEvidenceEscalationLane}</b> · pressure mode=<b>{guardrailEvidencePressureMode}</b></div>
+                <div>evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> · critical rows=<b>{guardrailEvidenceCriticalCount}</b> · escalation lane=<b>{guardrailEvidenceEscalationLane}</b> · pressure mode=<b>{guardrailEvidencePressureMode}</b> · review priority=<b>{guardrailEvidenceReviewPriority}</b></div>
                 {/* evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> */}
               </div>
             </div>
