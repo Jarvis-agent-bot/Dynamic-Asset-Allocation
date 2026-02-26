@@ -159,6 +159,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : wQatPrecheckCriticalCount > 1
             ? 'critical-pressure'
             : 'elevated-pressure';
+        const wQatPrecheckReviewPriority = wQatPrecheckPressureMode === 'critical-pressure'
+          ? 'p1'
+          : wQatPrecheckPressureMode === 'elevated-pressure'
+            ? 'p2'
+            : 'p3';
         const wQatTimelineCriticalCount = wQatPrecheckCriticalCount;
         const wQatTimelineEscalationLane = wQatPrecheckEscalationLane;
         const wQatTimelinePressureMode = wQatTimelineCriticalCount === 0
@@ -513,7 +518,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   </div>
                 ))}
                 <div>
-                  precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b> · readiness=<b>{wQatPrecheckReadinessPct}%</b> · handoff=<b>{wQatPrecheckHandoffMode}</b> · confidence=<b>{wQatPrecheckConfidencePct}%</b> · critical gates=<b>{wQatPrecheckCriticalCount}</b> · escalation lane=<b>{wQatPrecheckEscalationLane}</b> · pressure mode=<b>{wQatPrecheckPressureMode}</b>
+                  precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b> · readiness=<b>{wQatPrecheckReadinessPct}%</b> · handoff=<b>{wQatPrecheckHandoffMode}</b> · confidence=<b>{wQatPrecheckConfidencePct}%</b> · critical gates=<b>{wQatPrecheckCriticalCount}</b> · escalation lane=<b>{wQatPrecheckEscalationLane}</b> · pressure mode=<b>{wQatPrecheckPressureMode}</b> · review priority=<b>{wQatPrecheckReviewPriority}</b>
                   {/* precheck verdict: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b> · readiness=<b>{wQatPrecheckReadinessPct}%</b> · handoff=<b>{wQatPrecheckHandoffMode}</b> · confidence=<b>{wQatPrecheckConfidencePct}%</b> */}
                 </div>
               </div>
