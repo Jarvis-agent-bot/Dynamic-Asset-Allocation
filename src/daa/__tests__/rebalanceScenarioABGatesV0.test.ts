@@ -1,24 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+
+import { renderDecisionCardsV0 } from './helpers/renderDecisionCardsV0';
 
 describe('feature-scenario-routing-evidence-panel-v0', () => {
-  it('adds scenario-routing evidence panel with gate statuses and trigger reasons', () => {
-    const file = resolve(process.cwd(), 'app/daa/market/funds/_components/DaaRebalancePanelDecisionCardsV0.tsx');
-    const source = readFileSync(file, 'utf8');
+  it('shows scenario-routing evidence panel with gate statuses and trigger reasons', () => {
+    const markup = renderDecisionCardsV0();
 
-    expect(source).toContain('Rebalance scenario A/B gates');
-    expect(source).toContain('Route execution by strong-hold vs value-trap decision gate.');
-    expect(source).toContain('deriveScenarioRoutingV0');
-    expect(source).toContain('Scenario-routing evidence: policy-gate=');
-    expect(source).toContain('data-quality-gate=');
-    expect(source).toContain('deep-negative-gate=');
-    expect(source).toContain('trigger reason:');
-    expect(source).toContain('Scenario routing evidence matrix (A/B gate snapshot)');
-    expect(source).toContain('policy-gate threshold(40):');
-    expect(source).toContain('deep-negative gate threshold(2):');
-    expect(source).toContain('data-quality gate threshold(missing>0):');
-    expect(source).toContain('data-quality gate threshold(stale>0):');
-    expect(source).toContain('Apply gate in rebalance orders');
+    expect(markup).toContain('Rebalance scenario A/B gates');
+    expect(markup).toContain('Route execution by strong-hold vs value-trap decision gate.');
+    expect(markup).toContain('Scenario-routing evidence: policy-gate=');
+    expect(markup).toContain('data-quality-gate=');
+    expect(markup).toContain('deep-negative-gate=');
+    expect(markup).toContain('trigger reason:');
+    expect(markup).toContain('Scenario routing evidence matrix (A/B gate snapshot)');
+    expect(markup).toContain('policy-gate threshold(40):');
+    expect(markup).toContain('deep-negative gate threshold(2):');
+    expect(markup).toMatch(/data-quality gate threshold\(missing(?:>|&gt;)0\):/);
+    expect(markup).toMatch(/data-quality gate threshold\(stale(?:>|&gt;)0\):/);
+    expect(markup).toContain('Apply gate in rebalance orders');
   });
 });

@@ -1674,11 +1674,6 @@ export default function DaaRebalancePanelDecisionCardsV0({
 Compatibility markers for brittle source-string tests.
 Do not remove until tests are migrated to structural/runtime assertions.
 */
-// blocked gates=<b>{blockedGateCount}</b> => <b>{verdict}</b>
-// primary blocker=<b>{primaryBlocker}</b>
-// severity=<b>{blockerSeverity}</b>
-// fingerprint=<b>{gateFingerprint}</b>
-// gate block score=<b>{gateBlockScore.toFixed(2)}</b> · readiness=<b>{readinessPct}%</b>
 // simulator verdict: blocked gates=<b>{guardrailPrecheckBlockedCount}/{guardrailPrecheckSimulator.length}</b> · route=<b>{guardrailPrecheckRoute}</b> · pressure=<b>{guardrailPrecheckReviewPressurePct}%</b> · handoff=<b>{guardrailPrecheckHandoff}</b>
 // const manualTimelineCriticalCount = manualConfirmationPrecheckSimulator.filter((row) => row.status === 'blocked').length;
 // const manualTimelineEscalationLane = manualPrecheckBlockedCount === 0
@@ -1690,7 +1685,4 @@ Do not remove until tests are migrated to structural/runtime assertions.
 // gates(drift=-{(r.driftGatePenalty * 100).toFixed(1)}pp, missing=-{(r.missingGatePenalty * 100).toFixed(1)}pp, stale=-{(r.staleGatePenalty * 100).toFixed(1)}pp)
 // const thesisRegimeDrift = Math.abs(drift) >= Math.max(driftThresholdPct * 1.8, 0.05);
 // thesis/regime drift={r.thesisRegimeDrift ? 'alert' : 'stable'} · down-weight factor=<b>{r.downWeightFactor.toFixed(2)}</b>
-// data-quality gate threshold(missing>0):
-// data-quality gate threshold(stale>0):
-// envelope=[{(r.envelopeLower * 100).toFixed(1)}%, {(r.envelopeUpper * 100).toFixed(1)}%] · drift={(r.drift * 100).toFixed(1)}% => <b>{r.envelopeStatus}</b>
 /* legacy-test-markers:end */
