@@ -130,26 +130,6 @@ export async function ensureDaaAuthSchemaPgV0(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_auth_sessions_revoked_at
             ON daa_auth_sessions(revoked_at);
 
-          CREATE TABLE IF NOT EXISTS daa_auth_email_login_tokens (
-            token_id TEXT PRIMARY KEY,
-            account_id TEXT NOT NULL REFERENCES daa_auth_accounts(account_id) ON DELETE CASCADE,
-            token_sha256 TEXT NOT NULL UNIQUE,
-            created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            used_at TEXT,
-            user_agent TEXT,
-            ip TEXT
-          );
-
-          CREATE INDEX IF NOT EXISTS idx_daa_auth_email_login_tokens_account_created_at
-            ON daa_auth_email_login_tokens(account_id, created_at);
-
-          CREATE INDEX IF NOT EXISTS idx_daa_auth_email_login_tokens_expires_at
-            ON daa_auth_email_login_tokens(expires_at);
-
-          CREATE INDEX IF NOT EXISTS idx_daa_auth_email_login_tokens_used_at
-            ON daa_auth_email_login_tokens(used_at);
-
           CREATE TABLE IF NOT EXISTS daa_auth_audit_events (
             event_id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,

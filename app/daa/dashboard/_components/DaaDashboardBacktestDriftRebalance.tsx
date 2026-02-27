@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+
 import type { PriceBar } from "@/src/core/domain";
 
 import { backtestDriftRebalance, type DriftRebalanceBacktestRequest, type DriftRebalanceBacktestResult } from "@/src/core/backtestDriftRebalance";
@@ -439,231 +446,219 @@ export default function DaaDashboardBacktestDriftRebalance() {
   }, [sweepText]);
 
   return (
-    <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontWeight: 900, fontSize: 14 }}>Backtest — Drift + Rebalance simulator（v0）</div>
-          <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
-            粘贴 <b>价格序列</b>（seriesBySymbol）或 <b>价格快照序列</b>（snapshots）→ 运行 drift+rebalance 回测 → 输出指标摘要（用于复盘/调参）。
+    <Card>
+      <CardHeader className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-base font-semibold">Backtest — Drift + Rebalance simulator (v0)</CardTitle>
+            <CardDescription>
+              粘贴价格序列（seriesBySymbol）或价格快照序列（snapshots），运行回测并输出指标摘要用于复盘和调参。
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" onClick={run}>Run backtest</Button>
+            <Button type="button" variant="outline" onClick={copyRequest}>Copy request</Button>
+            <Button type="button" variant="outline" disabled={!result} onClick={copyOutput}>Copy output</Button>
+            {copyStatus === "copied" ? <span className="text-xs text-emerald-600">Copied</span> : null}
+            {copyStatus === "failed" ? <span className="text-xs text-destructive">Copy failed</span> : null}
           </div>
         </div>
+      </CardHeader>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            type="button"
-            onClick={run}
-            style={{
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              cursor: "pointer",
-              fontSize: 12,
-            }}
-          >
-            Run backtest
-          </button>
-          <button type="button" onClick={copyRequest} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: "#fafafa", fontSize: 12 }}>
-            Copy request
-          </button>
-          <button type="button" disabled={!result} onClick={copyOutput} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: result ? "#fafafa" : "#f3f3f3", color: result ? "#111" : "#888", fontSize: 12 }}>
-            Copy output
-          </button>
-          {copyStatus === "copied" ? <span style={{ fontSize: 12, color: "#0a7" }}>Copied</span> : null}
-          {copyStatus === "failed" ? <span style={{ fontSize: 12, color: "#b00020" }}>Copy failed</span> : null}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Price input (JSON)</div>
-          <textarea value={priceInputText} onChange={(e) => setPriceInputText(e.target.value)} rows={14} style={{ width: "100%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, padding: 10, borderRadius: 10, border: "1px solid #e5e5e5" }} />
-          <div style={{ marginTop: 6, fontSize: 12, color: derived.ok ? "#666" : "#b00020" }}>
-            {derived.ok ? `Detected symbols: ${derived.symbols.join(", ")}` : `Input error: ${derived.error}`}
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-2">
+            <div className="text-xs font-semibold uppercase text-muted-foreground">Price input (JSON)</div>
+            <Textarea
+              value={priceInputText}
+              onChange={(e) => setPriceInputText(e.target.value)}
+              rows={14}
+              className="font-mono text-xs"
+            />
+            <p className={`text-xs ${derived.ok ? "text-muted-foreground" : "text-destructive"}`}>
+              {derived.ok ? `Detected symbols: ${derived.symbols.join(", ")}` : `Input error: ${derived.error}`}
+            </p>
           </div>
-        </div>
 
-        <div>
-          <div style={{ display: "grid", gap: 10 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 800 }}>initialEquity</span>
-              <input type="number" value={initialEquity} onChange={(e) => setInitialEquity(Number(e.target.value))} style={{ padding: 8, borderRadius: 10, border: "1px solid #e5e5e5" }} />
+          <div className="space-y-3">
+            <label className="grid gap-1 text-sm">
+              <span className="text-xs font-semibold uppercase text-muted-foreground">Initial equity</span>
+              <Input type="number" value={initialEquity} onChange={(e) => setInitialEquity(Number(e.target.value))} />
             </label>
 
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12 }}>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input type="checkbox" checked={bootstrapToTarget} onChange={(e) => setBootstrapToTarget(e.target.checked)} />
               Bootstrap to target weights on day 0
             </label>
 
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>targetWeights (optional JSON)</div>
-              <textarea value={targetWeightsText} onChange={(e) => setTargetWeightsText(e.target.value)} rows={5} style={{ width: "100%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, padding: 10, borderRadius: 10, border: "1px solid #e5e5e5" }} />
-              <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>留空则默认 equal-weights（按 detected symbols）。</div>
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Target weights (optional JSON)</div>
+              <Textarea
+                value={targetWeightsText}
+                onChange={(e) => setTargetWeightsText(e.target.value)}
+                rows={5}
+                className="font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">留空则默认 equal-weights（按 detected symbols）。</p>
             </div>
 
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>policy (optional JSON)</div>
-              <textarea value={policyText} onChange={(e) => setPolicyText(e.target.value)} rows={5} style={{ width: "100%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, padding: 10, borderRadius: 10, border: "1px solid #e5e5e5" }} />
-              <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>默认从 Funds hub 的 rebalance policy store 读取（可直接覆盖）。</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {runError ? <div style={{ marginTop: 10, fontSize: 12, color: "#b00020" }}>Run error: {runError}</div> : null}
-
-      {summary ? (
-        <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 13 }}>Summary</div>
-          <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
-            <div style={{ border: "1px solid #f0f0f0", borderRadius: 10, padding: 10, background: "#fafafa" }}>
-              <div style={{ fontWeight: 800 }}>Performance</div>
-              <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                <div>totalReturn: {fmtPct(summary.totalReturn)}</div>
-                <div>maxDrawdown: {fmtPct(summary.maxDrawdown)}</div>
-                <div>sharpe: {fmtNum(summary.sharpe)}</div>
-                <div>winRate: {fmtPct(summary.winRate)}</div>
-              </div>
-            </div>
-
-            <div style={{ border: "1px solid #f0f0f0", borderRadius: 10, padding: 10, background: "#fafafa" }}>
-              <div style={{ fontWeight: 800 }}>Rebalance</div>
-              <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                <div>initialEquityAbs: {fmtNum(summary.initialEquityAbs)}</div>
-                <div>finalEquityAbs: {fmtNum(summary.finalEquityAbs)}</div>
-                <div>rebalanceCount: {String(summary.rebalanceCount)}</div>
-                <div>turnoverNotional: {fmtNum(summary.turnoverNotional)}</div>
-              </div>
-            </div>
-          </div>
-
-          {summary.warnings?.length ? (
-            <div style={{ marginTop: 10, fontSize: 12 }}>
-              <div style={{ fontWeight: 800, color: "#b45309" }}>Warnings</div>
-              <ul style={{ margin: "6px 0 0", paddingLeft: 18, color: "#b45309" }}>
-                {summary.warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          <details style={{ marginTop: 10 }}>
-            <summary style={{ cursor: "pointer", fontSize: 12, color: "#444" }}>Raw output JSON</summary>
-            <pre style={{ marginTop: 8, padding: 10, borderRadius: 10, border: "1px solid #eee", background: "#fcfcfc", fontSize: 12, overflow: "auto" }}>{pretty(result)}</pre>
-          </details>
-        </div>
-      ) : null}
-
-      {/* Policy sweep is intentionally UI-only v0: it lets you tune policy params by ranking backtest metrics. */}
-      <div style={{ marginTop: 16, borderTop: "1px solid #eee", paddingTop: 12 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Policy sweep（v0）</div>
-            <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
-              对 <code>thresholdPct</code>/<code>minTradeNotional</code>/<code>cooldownSeconds</code> 做网格扫描，输出指标对比和排名（用于调参）。
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              type="button"
-              onClick={runSweep}
-              style={{
-                padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid #0b5",
-                background: "#0b5",
-                color: "#fff",
-                cursor: "pointer",
-                fontSize: 12,
-              }}
-            >
-              Run sweep
-            </button>
-            <button type="button" disabled={!sweepResult} onClick={copySweepOutput} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: sweepResult ? "#fafafa" : "#f3f3f3", color: sweepResult ? "#111" : "#888", fontSize: 12 }}>
-              Copy sweep JSON
-            </button>
-            <button type="button" disabled={!sweepResult?.best} onClick={copyBestPolicy} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: sweepResult?.best ? "#fafafa" : "#f3f3f3", color: sweepResult?.best ? "#111" : "#888", fontSize: 12 }}>
-              Copy best policy
-            </button>
-            <button type="button" disabled={!sweepResult?.best} onClick={adoptBestPolicyToTextarea} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e5e5", background: sweepResult?.best ? "#fafafa" : "#f3f3f3", color: sweepResult?.best ? "#111" : "#888", fontSize: 12 }}>
-              Adopt best → policy
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Sweep config (JSON)</div>
-            <textarea value={sweepText} onChange={(e) => setSweepText(e.target.value)} rows={9} style={{ width: "100%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12, padding: 10, borderRadius: 10, border: "1px solid #e5e5e5" }} />
-            <div style={{ marginTop: 6, fontSize: 12, color: sweepCombos != null ? "#666" : "#b00020" }}>{sweepCombos != null ? `Combos: ${sweepCombos}` : "Config invalid (see error after Run sweep)"}</div>
-          </div>
-
-          <div>
-            <div style={{ border: "1px solid #f0f0f0", borderRadius: 10, padding: 10, background: "#fafafa", fontSize: 12 }}>
-              <div style={{ fontWeight: 800 }}>Best (rank #1)</div>
-              {sweepResult?.best ? (
-                <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
-                  <div>score: {fmtNum(sweepResult.best.score)}</div>
-                  <div>totalReturn: {fmtPct(sweepResult.best.metrics.totalReturn)}</div>
-                  <div>maxDrawdown: {fmtPct(sweepResult.best.metrics.maxDrawdown)}</div>
-                  <div>sharpe: {fmtNum(sweepResult.best.metrics.sharpe)}</div>
-                  <div>winRate: {fmtPct(sweepResult.best.metrics.winRate)}</div>
-                  <div>rebalanceCount: {String(sweepResult.best.summary.rebalanceCount)}</div>
-                  <div>turnoverNotional: {fmtNum(sweepResult.best.summary.turnoverNotional)}</div>
-                  <div style={{ marginTop: 6, fontWeight: 800 }}>policy</div>
-                  <pre style={{ margin: 0, padding: 8, borderRadius: 10, border: "1px solid #e5e5e5", background: "#fff", overflow: "auto" }}>{pretty(sweepResult.best.policy)}</pre>
-                </div>
-              ) : (
-                <div style={{ marginTop: 6, color: "#666" }}>Run sweep to see ranking.</div>
-              )}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Policy (optional JSON)</div>
+              <Textarea value={policyText} onChange={(e) => setPolicyText(e.target.value)} rows={5} className="font-mono text-xs" />
+              <p className="text-xs text-muted-foreground">默认从 Funds hub 的 rebalance policy store 读取（可直接覆盖）。</p>
             </div>
           </div>
         </div>
 
-        {sweepResult?.top?.length ? (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontWeight: 900, fontSize: 13 }}>Top results</div>
-            <div style={{ marginTop: 8, border: "1px solid #eee", borderRadius: 10, overflow: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: "#fafafa", textAlign: "left" }}>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>#</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>score</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>return</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>mdd</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>sharpe</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>rebalance</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>turnover</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>thresholdPct</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>minTrade</th>
-                    <th style={{ padding: 8, borderBottom: "1px solid #eee" }}>cooldown</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sweepResult.top.map((r, i) => (
-                    <tr key={i} style={{ borderTop: "1px solid #f2f2f2" }}>
-                      <td style={{ padding: 8 }}>{i + 1}</td>
-                      <td style={{ padding: 8 }}>{fmtNum(r.score)}</td>
-                      <td style={{ padding: 8 }}>{fmtPct(r.metrics.totalReturn)}</td>
-                      <td style={{ padding: 8 }}>{fmtPct(r.metrics.maxDrawdown)}</td>
-                      <td style={{ padding: 8 }}>{fmtNum(r.metrics.sharpe)}</td>
-                      <td style={{ padding: 8 }}>{String(r.summary.rebalanceCount)}</td>
-                      <td style={{ padding: 8 }}>{fmtNum(r.summary.turnoverNotional)}</td>
-                      <td style={{ padding: 8 }}>{fmtPct(r.policy.thresholdPct)}</td>
-                      <td style={{ padding: 8 }}>{fmtNum(r.policy.minTradeNotional)}</td>
-                      <td style={{ padding: 8 }}>{fmtSecs(r.policy.cooldownSeconds)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {runError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Run error</AlertTitle>
+            <AlertDescription>{runError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {summary ? (
+          <div className="space-y-3 border-t pt-4">
+            <div className="text-sm font-semibold">Summary</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Card className="bg-muted/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Performance</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-1 text-xs">
+                  <div>totalReturn: {fmtPct(summary.totalReturn)}</div>
+                  <div>maxDrawdown: {fmtPct(summary.maxDrawdown)}</div>
+                  <div>sharpe: {fmtNum(summary.sharpe)}</div>
+                  <div>winRate: {fmtPct(summary.winRate)}</div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-muted/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Rebalance</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-1 text-xs">
+                  <div>initialEquityAbs: {fmtNum(summary.initialEquityAbs)}</div>
+                  <div>finalEquityAbs: {fmtNum(summary.finalEquityAbs)}</div>
+                  <div>rebalanceCount: {String(summary.rebalanceCount)}</div>
+                  <div>turnoverNotional: {fmtNum(summary.turnoverNotional)}</div>
+                </CardContent>
+              </Card>
             </div>
-            <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>Total runs: {String(sweepResult.runs)} (saved in localStorage)</div>
+
+            {summary.warnings?.length ? (
+              <Alert>
+                <AlertTitle>Warnings</AlertTitle>
+                <AlertDescription>
+                  <ul className="list-disc space-y-1 pl-5 text-xs">
+                    {summary.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            <details className="rounded-md border p-2">
+              <summary className="cursor-pointer text-xs text-muted-foreground">Raw output JSON</summary>
+              <pre className="mt-2 max-h-64 overflow-auto rounded border bg-muted/20 p-2 text-xs">{pretty(result)}</pre>
+            </details>
           </div>
         ) : null}
-      </div>
-    </div>
+
+        <div className="space-y-4 border-t pt-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">Policy sweep (v0)</div>
+              <p className="text-xs text-muted-foreground">
+                对 <code>thresholdPct</code>/<code>minTradeNotional</code>/<code>cooldownSeconds</code> 做网格扫描，输出指标对比和排名。
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="secondary" onClick={runSweep}>Run sweep</Button>
+              <Button type="button" variant="outline" disabled={!sweepResult} onClick={copySweepOutput}>Copy sweep JSON</Button>
+              <Button type="button" variant="outline" disabled={!sweepResult?.best} onClick={copyBestPolicy}>Copy best policy</Button>
+              <Button type="button" variant="outline" disabled={!sweepResult?.best} onClick={adoptBestPolicyToTextarea}>Adopt best → policy</Button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase text-muted-foreground">Sweep config (JSON)</div>
+              <Textarea value={sweepText} onChange={(e) => setSweepText(e.target.value)} rows={9} className="font-mono text-xs" />
+              <p className={`text-xs ${sweepCombos != null ? "text-muted-foreground" : "text-destructive"}`}>
+                {sweepCombos != null ? `Combos: ${sweepCombos}` : "Config invalid (see error after Run sweep)"}
+              </p>
+            </div>
+
+            <Card className="bg-muted/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Best (rank #1)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {sweepResult?.best ? (
+                  <div className="grid gap-1 text-xs">
+                    <div>score: {fmtNum(sweepResult.best.score)}</div>
+                    <div>totalReturn: {fmtPct(sweepResult.best.metrics.totalReturn)}</div>
+                    <div>maxDrawdown: {fmtPct(sweepResult.best.metrics.maxDrawdown)}</div>
+                    <div>sharpe: {fmtNum(sweepResult.best.metrics.sharpe)}</div>
+                    <div>winRate: {fmtPct(sweepResult.best.metrics.winRate)}</div>
+                    <div>rebalanceCount: {String(sweepResult.best.summary.rebalanceCount)}</div>
+                    <div>turnoverNotional: {fmtNum(sweepResult.best.summary.turnoverNotional)}</div>
+                    <div className="pt-1 text-xs font-semibold uppercase text-muted-foreground">Policy</div>
+                    <pre className="max-h-48 overflow-auto rounded border bg-background p-2 text-xs">{pretty(sweepResult.best.policy)}</pre>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Run sweep to see ranking.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {sweepResult?.top?.length ? (
+            <div className="space-y-2">
+              <div className="text-sm font-semibold">Top results</div>
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>score</TableHead>
+                      <TableHead>return</TableHead>
+                      <TableHead>mdd</TableHead>
+                      <TableHead>sharpe</TableHead>
+                      <TableHead>rebalance</TableHead>
+                      <TableHead>turnover</TableHead>
+                      <TableHead>thresholdPct</TableHead>
+                      <TableHead>minTrade</TableHead>
+                      <TableHead>cooldown</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sweepResult.top.map((r, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{i + 1}</TableCell>
+                        <TableCell>{fmtNum(r.score)}</TableCell>
+                        <TableCell>{fmtPct(r.metrics.totalReturn)}</TableCell>
+                        <TableCell>{fmtPct(r.metrics.maxDrawdown)}</TableCell>
+                        <TableCell>{fmtNum(r.metrics.sharpe)}</TableCell>
+                        <TableCell>{String(r.summary.rebalanceCount)}</TableCell>
+                        <TableCell>{fmtNum(r.summary.turnoverNotional)}</TableCell>
+                        <TableCell>{fmtPct(r.policy.thresholdPct)}</TableCell>
+                        <TableCell>{fmtNum(r.policy.minTradeNotional)}</TableCell>
+                        <TableCell>{fmtSecs(r.policy.cooldownSeconds)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground">Total runs: {String(sweepResult.runs)} (saved in localStorage)</p>
+            </div>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   );
+
 }
