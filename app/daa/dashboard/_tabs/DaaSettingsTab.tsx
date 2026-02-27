@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -145,27 +146,23 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Security</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          <ul className="list-disc space-y-1 pl-5">
+      <Alert>
+        <AlertTitle>Security</AlertTitle>
+        <AlertDescription>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
             <li>
               Login is username/password only. Use <code className="rounded bg-muted px-1 py-0.5">/daa/login</code> with your assigned account credentials.
             </li>
             <li>Sessions are stored in this browser. If you're on a shared device, sign out when you're done.</li>
             <li>In non-production with zero accounts, default bootstrap can initialize <code className="rounded bg-muted px-1 py-0.5">admin / admin123</code>.</li>
           </ul>
-        </CardContent>
-      </Card>
+        </AlertDescription>
+      </Alert>
 
-      <Card className="border-muted-foreground/20">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Safety</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          <ul className="list-disc space-y-1 pl-5">
+      <Alert>
+        <AlertTitle>Safety</AlertTitle>
+        <AlertDescription>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
             <li>
               The canonical entry is <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>; legacy <code className="rounded bg-muted px-1 py-0.5">/daa*</code> routes redirect here.
             </li>
@@ -173,8 +170,8 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
               The UI may produce <code className="rounded bg-muted px-1 py-0.5">ai_orders_draft</code> only; never auto-execute trades.
             </li>
           </ul>
-        </CardContent>
-      </Card>
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }
