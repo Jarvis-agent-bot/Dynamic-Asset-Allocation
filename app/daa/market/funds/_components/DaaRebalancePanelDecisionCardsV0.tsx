@@ -390,6 +390,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : factorTraceTimelineReviewPriority === 'p2'
             ? 'next-day-review'
             : 'monitoring-backlog';
+        const factorTraceTimelineOwnerLane = factorTraceTimelineReviewPriority === 'p1'
+          ? 'factor-trace-ops-oncall'
+          : factorTraceTimelineReviewPriority === 'p2'
+            ? 'factor-trace-review-queue'
+            : 'factor-trace-watchlist';
         const factorTraceTimelineRouteMode = factorTraceEvidenceBlockedCount === 0
           ? 'factor-trace-timeline-clear-route'
           : factorTraceEvidenceBlockedCount === 1
@@ -489,7 +494,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 <div>T1 gate aggregation: drift=<b>{(gateLevelTraceTotals.drift * 100).toFixed(1)}pp</b> · missing=<b>{(gateLevelTraceTotals.missing * 100).toFixed(1)}pp</b> · stale=<b>{(gateLevelTraceTotals.stale * 100).toFixed(1)}pp</b></div>
                 <div>T2 dominance audit: dominant gate=<b>{dominantGate}</b> · share=<b>{dominantGateSharePct.toFixed(1)}%</b></div>
                 <div>T3 operator action: <b>{dominantGate === 'drift' ? 'review drift thresholds first' : dominantGate === 'missing' ? 'backfill missing prices first' : 'refresh stale close prices first'}</b></div>
-                <div>T4 audit verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceTimelineVerdict}</b> · readiness=<b>{factorTraceTimelineReadinessPct}%</b> · route=<b>{factorTraceTimelineRouteMode}</b> · critical rows=<b>{factorTraceTimelineCriticalCount}</b> · escalation lane=<b>{factorTraceTimelineEscalationLane}</b> · pressure mode=<b>{factorTraceTimelinePressureMode}</b> · review priority=<b>{factorTraceTimelineReviewPriority}</b> · sla lane=<b>{factorTraceTimelineSlaLane}</b></div>
+                <div>T4 audit verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceTimelineVerdict}</b> · readiness=<b>{factorTraceTimelineReadinessPct}%</b> · route=<b>{factorTraceTimelineRouteMode}</b> · critical rows=<b>{factorTraceTimelineCriticalCount}</b> · escalation lane=<b>{factorTraceTimelineEscalationLane}</b> · pressure mode=<b>{factorTraceTimelinePressureMode}</b> · review priority=<b>{factorTraceTimelineReviewPriority}</b> · sla lane=<b>{factorTraceTimelineSlaLane}</b> · owner lane=<b>{factorTraceTimelineOwnerLane}</b></div>
                 {/* T4 audit verdict: blocked-or-review rows=<b>{factorTraceEvidenceBlockedCount}/{factorTraceEvidenceRows.length}</b> · mode=<b>{factorTraceTimelineVerdict}</b> · readiness=<b>{factorTraceTimelineReadinessPct}%</b> · route=<b>{factorTraceTimelineRouteMode}</b> */}
               </div>
             </div>
