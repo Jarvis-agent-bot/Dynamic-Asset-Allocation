@@ -9,12 +9,7 @@ function readRepoFile(relPath: string): string {
 
 describe("DAA Postgres-only persistence guard", () => {
   it("keeps auth/store/admin persistence modules free of sqlite/sql.js runtime paths", () => {
-    const files = [
-      "src/daa/storeV0.ts",
-      "src/daa/adminUserStatusStoreV0.ts",
-      "src/daa/auth/daaAuthStoreV0.ts",
-      "src/daa/auth/daaAuthEmailLoginStoreV0.ts",
-    ];
+    const files = ["src/daa/storeV0.ts", "src/daa/adminUserStatusStoreV0.ts", "src/daa/auth/daaAuthStoreV0.ts"];
 
     const forbidden = /\b(sqlite|better-sqlite3|sql\.js|sqljs|initSqlJs)\b/i;
     const offenders: string[] = [];

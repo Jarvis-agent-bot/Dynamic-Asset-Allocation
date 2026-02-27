@@ -154,30 +154,6 @@ export function buildDeployBootstrapChecksV0(env: Record<string, string | undefi
     note: "Needed only if some Step4/5 routes proxy to an external Python engine.",
   });
 
-  checks.push({
-    id: "DAA_PUBLIC_ORIGIN",
-    label: "Public origin",
-    group: "optional",
-    ok: isSet(env.DAA_PUBLIC_ORIGIN),
-    note: "Required for email login links / safe redirects (e.g. https://YOUR_DOMAIN).",
-  });
-
-  checks.push({
-    id: "RESEND_API_KEY",
-    label: "Resend API key",
-    group: "optional",
-    ok: isSet(env.RESEND_API_KEY),
-    note: "Only needed for email login.",
-  });
-
-  checks.push({
-    id: "DAA_AUTH_EMAIL_FROM",
-    label: "Auth email from",
-    group: "optional",
-    ok: isSet(env.DAA_AUTH_EMAIL_FROM),
-    note: "Only needed for email login.",
-  });
-
   return checks;
 }
 

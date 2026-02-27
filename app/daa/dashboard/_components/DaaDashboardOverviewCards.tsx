@@ -428,10 +428,6 @@ export default function DaaDashboardOverviewCards() {
       "# Optional (Python engine behind nginx; needed for some Step4/5 routes)",
       "DAA_ENGINE_BASE_URL=https://YOUR_DOMAIN",
       "",
-      "# Optional (email login)",
-      "# RESEND_API_KEY=...",
-      "# DAA_AUTH_EMAIL_FROM=admin@YOUR_DOMAIN",
-      "# DAA_PUBLIC_ORIGIN=https://YOUR_DOMAIN",
     ].join("\n");
   }, [deployEnv]);
 
@@ -451,10 +447,6 @@ export default function DaaDashboardOverviewCards() {
       "# Optional (Python engine behind nginx; needed for some Step4/5 routes)",
       'export DAA_ENGINE_BASE_URL="https://YOUR_DOMAIN"',
       "",
-      "# Optional (email login)",
-      '# export RESEND_API_KEY="..."',
-      '# export DAA_AUTH_EMAIL_FROM="admin@YOUR_DOMAIN"',
-      '# export DAA_PUBLIC_ORIGIN="https://YOUR_DOMAIN"',
     ].join("\n");
   }, [deployEnv]);
 

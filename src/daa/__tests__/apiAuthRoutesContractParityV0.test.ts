@@ -59,14 +59,14 @@ describe("/api/daa/auth regression pack (Postgres-backed contracts)", () => {
     expect(await hasAnyDaaAuthAccountsV0()).toBe(false);
 
     const account = await bootstrapCreateFirstDaaAuthAccountV0({
-      username: "admin@example.com",
+      username: "admin",
       password: "pw-1",
       roles: ["viewer"],
     });
     expect(account.roles).toContain("editor");
     expect(await hasAnyDaaAuthAccountsV0()).toBe(true);
 
-    const auth = await authenticateDaaAuthAccountV0({ username: "admin@example.com", password: "pw-1" });
+    const auth = await authenticateDaaAuthAccountV0({ username: "admin", password: "pw-1" });
     expect(auth?.accountId).toBe(account.accountId);
 
     const { session, token } = await createDaaAuthSessionV0({ accountId: account.accountId, userAgent: "vitest", ip: "127.0.0.1" });
