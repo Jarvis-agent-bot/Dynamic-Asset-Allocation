@@ -1441,6 +1441,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : manualConfirmationEvidenceReviewPriority === 'p2'
             ? 'next-day-review'
             : 'monitoring-backlog';
+        const manualConfirmationEvidenceOwnerLane = manualConfirmationEvidenceReviewPriority === 'p1'
+          ? 'manual-ops-oncall'
+          : manualConfirmationEvidenceReviewPriority === 'p2'
+            ? 'manual-review-queue'
+            : 'manual-watchlist';
         const manualConfirmationEvidenceReadinessPct = manualConfirmationEvidenceTraceRows.length
           ? Math.round(((manualConfirmationEvidenceTraceRows.length - manualConfirmationEvidenceReviewCount) / manualConfirmationEvidenceTraceRows.length) * 100)
           : 0;
@@ -1726,7 +1731,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     gate=<b>{row.gate}</b> · evidence status=<b>{row.evidenceStatus}</b> · operator lane=<b>{row.operatorLane}</b> · action=<b>{row.action}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b> · readiness=<b>{manualConfirmationEvidenceReadinessPct}%</b> · route=<b>{manualConfirmationEvidenceRouteMode}</b> · critical rows=<b>{manualConfirmationEvidenceCriticalCount}</b> · escalation lane=<b>{manualConfirmationEvidenceEscalationLane}</b> · pressure mode=<b>{manualConfirmationEvidencePressureMode}</b> · review priority=<b>{manualConfirmationEvidenceReviewPriority}</b> · sla lane=<b>{manualConfirmationEvidenceSlaLane}</b></div>
+                <div>evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b> · readiness=<b>{manualConfirmationEvidenceReadinessPct}%</b> · route=<b>{manualConfirmationEvidenceRouteMode}</b> · critical rows=<b>{manualConfirmationEvidenceCriticalCount}</b> · escalation lane=<b>{manualConfirmationEvidenceEscalationLane}</b> · pressure mode=<b>{manualConfirmationEvidencePressureMode}</b> · review priority=<b>{manualConfirmationEvidenceReviewPriority}</b> · sla lane=<b>{manualConfirmationEvidenceSlaLane}</b> · owner lane=<b>{manualConfirmationEvidenceOwnerLane}</b></div>
                 {/* evidence trace verdict: review rows=<b>{manualConfirmationEvidenceReviewCount}/{manualConfirmationEvidenceTraceRows.length}</b> · mode=<b>{manualConfirmationEvidenceReviewCount > 0 ? 'manual-confirmation-evidence-review-required' : 'manual-confirmation-evidence-clear'}</b> · readiness=<b>{manualConfirmationEvidenceReadinessPct}%</b> · route=<b>{manualConfirmationEvidenceRouteMode}</b> */}
               </div>
             </div>
