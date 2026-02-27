@@ -9,9 +9,12 @@ function readRoute(relPath: string): string {
 }
 
 describe("/api/daa/auth/login route v0", () => {
-  it("disables password login and returns explicit 410 contract", async () => {
+  it("enables username/password login and no longer returns the disabled contract", async () => {
     const loginRoute = readRoute("app/api/daa/auth/login/route.ts");
-    expect(loginRoute).toContain('error: "password login disabled"');
-    expect(loginRoute).toContain("status: 410");
+    expect(loginRoute).toContain("authenticateDaaAuthAccountV0");
+    expect(loginRoute).toContain('error: "invalid_credentials"');
+    expect(loginRoute).toContain("ensureDevDefaultDaaAuthAccountV0");
+    expect(loginRoute).not.toContain('error: "password login disabled"');
+    expect(loginRoute).not.toContain("status: 410");
   });
 });

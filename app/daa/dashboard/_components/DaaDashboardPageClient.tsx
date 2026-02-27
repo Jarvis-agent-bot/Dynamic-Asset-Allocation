@@ -237,9 +237,9 @@ function SignedOutState({ returnTo }: { returnTo: string }) {
 }
 
 function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("admin123");
   const [bootstrapToken, setBootstrapToken] = useState("");
-  // OTP-only bootstrap flow no longer asks for a password.
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -254,8 +254,9 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
 
   const bootstrapCurl = useMemo(() => {
     const base = baseUrl || "https://YOUR_DOMAIN";
-    const u = (email || "admin@example.com").trim() || "admin@example.com";
-    const payload = JSON.stringify({ username: u });
+    const u = (username || "admin").trim() || "admin";
+    const p = password || "admin123";
+    const payload = JSON.stringify({ username: u, password: p });
 
     return [
       `curl -sS -X POST "${base}/api/daa/auth/bootstrap" \\`,
@@ -266,7 +267,7 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
       payload,
       "JSON",
     ].join("\n");
-  }, [baseUrl, email]);
+  }, [baseUrl, password, username]);
 
   async function copyBootstrapCurl() {
     try {
@@ -290,7 +291,7 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
           "content-type": "application/json",
           "x-daa-bootstrap-token": bootstrapToken,
         },
-        body: JSON.stringify({ username: email }),
+        body: JSON.stringify({ username, password }),
       });
 
       const text = await res.text();
@@ -332,23 +333,33 @@ function BootstrapRequiredState({ returnTo }: { returnTo: string }) {
 
         <div className="grid gap-3">
           <div className="grid gap-1">
-            <Label htmlFor="daa-bootstrap-email">Admin email</Label>
+            <Label htmlFor="daa-bootstrap-username">Admin username</Label>
             <Input
-              id="daa-bootstrap-email"
-              type="email"
-              inputMode="email"
+              id="daa-bootstrap-username"
+              type="text"
+              inputMode="text"
               enterKeyHint="next"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              autoComplete="email"
-              placeholder="admin@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              placeholder="admin"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
             />
           </div>
 
-          <div className="text-xs text-muted-foreground">Password sign-in is disabled; this account will use email OTP only.</div>
+          <div className="grid gap-1">
+            <Label htmlFor="daa-bootstrap-password">Admin password</Label>
+            <Input
+              id="daa-bootstrap-password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="admin123"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
 
           <div className="grid gap-1">
             <Label htmlFor="daa-bootstrap-token">Bootstrap token</Label>

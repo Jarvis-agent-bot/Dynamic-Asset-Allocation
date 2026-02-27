@@ -33,6 +33,8 @@ After your first deploy, set a build SHA env var so the dashboard can display ve
 
 If there are zero DAA admin accounts, the dashboard will prompt for bootstrap.
 
+In non-production (`NODE_ENV!="production"`), `/api/daa/auth/login` can auto-bootstrap a local default admin (`admin` / `admin123`) when no accounts exist.
+
 You will need:
 - server env `DAA_AUTH_BOOTSTRAP_TOKEN`
 - request header `x-daa-bootstrap-token` (the same token)
@@ -47,6 +49,6 @@ curl -sS -X POST "https://YOUR_DOMAIN/api/daa/auth/bootstrap" \
   -H "content-type: application/json" \
   -H "x-daa-bootstrap-token: $DAA_AUTH_BOOTSTRAP_TOKEN" \
   --data-binary @- <<'JSON'
-{"username":"admin@example.com","password":"YOUR_PASSWORD"}
+{"username":"admin","password":"YOUR_PASSWORD"}
 JSON
 ```
