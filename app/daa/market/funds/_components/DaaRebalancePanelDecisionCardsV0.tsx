@@ -196,6 +196,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : wQatTimelineReviewPriority === 'p2'
             ? 'next-day-review'
             : 'monitoring-backlog';
+        const wQatTimelineOwnerLane = wQatTimelineReviewPriority === 'p1'
+          ? 'formula-ops-oncall'
+          : wQatTimelineReviewPriority === 'p2'
+            ? 'formula-review-queue'
+            : 'formula-watchlist';
         const wQatPrecheckHandoffMode = wQatPrecheckBlockedCount === 0 && wQatFormulaDriftAlertCount === 0
           ? 'ready-for-formula-routing'
           : wQatPrecheckBlockedCount === 0
@@ -556,7 +561,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div key={entry}>{entry}</div>
                 ))}
                 <div>T4 formula gate check: blocked gates=<b>{wQatPrecheckBlockedCount}/{wQatPrecheckSimulator.length}</b> · route mode=<b>{wQatPrecheckRouteMode}</b></div>
-                <div>T5 timeline telemetry: readiness=<b>{wQatPrecheckReadinessPct}%</b> · route=<b>{wQatPrecheckRouteMode}</b> · critical gates=<b>{wQatTimelineCriticalCount}</b> · escalation lane=<b>{wQatTimelineEscalationLane}</b> · pressure mode=<b>{wQatTimelinePressureMode}</b> · review priority=<b>{wQatTimelineReviewPriority}</b> · sla lane=<b>{wQatTimelineSlaLane}</b></div>
+                <div>T5 timeline telemetry: readiness=<b>{wQatPrecheckReadinessPct}%</b> · route=<b>{wQatPrecheckRouteMode}</b> · critical gates=<b>{wQatTimelineCriticalCount}</b> · escalation lane=<b>{wQatTimelineEscalationLane}</b> · pressure mode=<b>{wQatTimelinePressureMode}</b> · review priority=<b>{wQatTimelineReviewPriority}</b> · sla lane=<b>{wQatTimelineSlaLane}</b> · owner lane=<b>{wQatTimelineOwnerLane}</b></div>
                 {/* T5 timeline telemetry: readiness=<b>{wQatPrecheckReadinessPct}%</b> · route=<b>{wQatPrecheckRouteMode}</b> */}
                 <div>timeline verdict: <b>{avgNetMultiplier < 0.8 ? 'requires-formula-review' : 'formula-ready-for-routing'}</b></div>
                 {/* timeline verdict: <b>{formulaTimelineVerdictMode}</b> */}
