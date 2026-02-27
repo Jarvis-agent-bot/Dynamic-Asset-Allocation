@@ -135,6 +135,10 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
                 <TableCell className="w-[160px] text-muted-foreground">Last seen</TableCell>
                 <TableCell>{me.session.lastSeenAt ?? "-"}</TableCell>
               </TableRow>
+              <TableRow>
+                <TableCell className="w-[160px] text-muted-foreground">Revoked</TableCell>
+                <TableCell>{me.session.revokedAt ?? "-"}</TableCell>
+              </TableRow>
             </TableBody>
           </Table>
 
