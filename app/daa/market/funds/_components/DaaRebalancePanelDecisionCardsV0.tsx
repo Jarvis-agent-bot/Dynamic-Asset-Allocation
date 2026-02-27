@@ -461,6 +461,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : factorPrecheckReviewPriority === 'p2'
                   ? 'next-day-review'
                   : 'monitoring-backlog';
+              const factorPrecheckOwnerLane = factorPrecheckReviewPriority === 'p1'
+                ? 'factor-trace-ops-oncall'
+                : factorPrecheckReviewPriority === 'p2'
+                  ? 'factor-trace-review-queue'
+                  : 'factor-trace-watchlist';
               const factorPrecheckRouteMode = factorPrecheckBlockedCount === 0 ? 'precheck-clear' : factorPrecheckBlockedCount === 1 ? 'review-dominant-gate' : 'hold-for-remediation';
               const factorPrecheckReadinessPct = simulatorRows.length
                 ? Math.round(((simulatorRows.length - factorPrecheckBlockedCount) / simulatorRows.length) * 100)
@@ -474,7 +479,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                         {row.id}: penalty=<b>{(row.totalPenalty * 100).toFixed(1)}pp</b> · dominant gate=<b>{row.dominantGate}</b> · confidence=<b>{row.confidence}</b> {'=>'} <b>{row.verdict}</b>
                       </div>
                     ))}
-                    <div>precheck verdict: blocked rows=<b>{factorPrecheckBlockedCount}/{simulatorRows.length}</b> · route mode=<b>{factorPrecheckRouteMode}</b> · readiness=<b>{factorPrecheckReadinessPct}%</b> · critical rows=<b>{factorPrecheckCriticalCount}</b> · escalation lane=<b>{factorPrecheckEscalationLane}</b> · pressure mode=<b>{factorPrecheckPressureMode}</b> · review priority=<b>{factorPrecheckReviewPriority}</b> · sla lane=<b>{factorPrecheckSlaLane}</b></div>
+                    <div>precheck verdict: blocked rows=<b>{factorPrecheckBlockedCount}/{simulatorRows.length}</b> · route mode=<b>{factorPrecheckRouteMode}</b> · readiness=<b>{factorPrecheckReadinessPct}%</b> · critical rows=<b>{factorPrecheckCriticalCount}</b> · escalation lane=<b>{factorPrecheckEscalationLane}</b> · pressure mode=<b>{factorPrecheckPressureMode}</b> · review priority=<b>{factorPrecheckReviewPriority}</b> · sla lane=<b>{factorPrecheckSlaLane}</b> · owner lane=<b>{factorPrecheckOwnerLane}</b></div>
                     {/* precheck verdict: blocked rows=<b>{factorPrecheckBlockedCount}/{simulatorRows.length}</b> · route mode=<b>{factorPrecheckRouteMode}</b> · readiness=<b>{factorPrecheckReadinessPct}%</b> */}
                   </div>
                 </div>
