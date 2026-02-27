@@ -958,6 +958,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : buyGateTimelineReviewPriority === 'p2'
                   ? 'next-day-review'
                   : 'monitoring-backlog';
+              const buyGateTimelineOwnerLane = buyGateTimelineReviewPriority === 'p1'
+                ? 'buy-gate-ops-oncall'
+                : buyGateTimelineReviewPriority === 'p2'
+                  ? 'buy-gate-review-queue'
+                  : 'buy-gate-watchlist';
               const buyGateTimelineRouteMode = buyGateEvidenceReviewCount === 0
                 ? 'buy-gate-timeline-clear-route'
                 : buyGateEvidenceReviewCount === 1
@@ -1010,7 +1015,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                       <div>T1 gate hit rollup: incompetence=<b>{evidencePanel.incompetenceHits}</b> · maxIn=<b>{evidencePanel.maxInHits}</b> · liquidity=<b>{evidencePanel.liquidityHits}</b> · T+N=<b>{evidencePanel.settlementHits}</b></div>
                       <div>T2 blocker focus: <b>{topEvidence ? `${topEvidence.id} / ${topEvidence.primaryBlocker}` : 'none'}</b></div>
                       <div>T3 route mode: <b>{routeMode}</b></div>
-                      <div>T4 timeline verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateTimelineVerdict}</b> · readiness=<b>{buyGateTimelineReadinessPct}%</b> · route=<b>{buyGateTimelineRouteMode}</b> · critical rows=<b>{buyGateTimelineCriticalCount}</b> · escalation lane=<b>{buyGateTimelineEscalationLane}</b> · pressure mode=<b>{buyGateTimelinePressureMode}</b> · review priority=<b>{buyGateTimelineReviewPriority}</b> · sla lane=<b>{buyGateTimelineSlaLane}</b></div>
+                      <div>T4 timeline verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateTimelineVerdict}</b> · readiness=<b>{buyGateTimelineReadinessPct}%</b> · route=<b>{buyGateTimelineRouteMode}</b> · critical rows=<b>{buyGateTimelineCriticalCount}</b> · escalation lane=<b>{buyGateTimelineEscalationLane}</b> · pressure mode=<b>{buyGateTimelinePressureMode}</b> · review priority=<b>{buyGateTimelineReviewPriority}</b> · sla lane=<b>{buyGateTimelineSlaLane}</b> · owner lane=<b>{buyGateTimelineOwnerLane}</b></div>
                       {/* T4 timeline verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateTimelineVerdict}</b> · readiness=<b>{buyGateTimelineReadinessPct}%</b> · route=<b>{buyGateTimelineRouteMode}</b> */}
                     </div>
                   </div>
