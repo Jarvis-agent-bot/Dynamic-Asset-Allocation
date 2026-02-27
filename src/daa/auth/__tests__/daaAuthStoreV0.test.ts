@@ -6,6 +6,7 @@ import {
   bootstrapCreateFirstDaaAuthAccountV0,
   createDaaAuthAccountV0,
   createDaaAuthSessionV0,
+  ensureDevDefaultDaaAuthAccountV0,
   getDaaAuthAccountBySessionTokenV0,
   getDaaAuthAccountByUsernameV0,
   hasAnyDaaAuthAccountsV0,
@@ -38,29 +39,29 @@ describe("daa/auth store v0", () => {
   it("creates + authenticates an account", async () => {
     resetPgMem();
 
-    const a1 = await createDaaAuthAccountV0({ username: "Admin@Example.com", password: "pw-1", roles: ["editor"] });
-    expect(a1.username).toBe("admin@example.com");
+    const a1 = await createDaaAuthAccountV0({ username: "Admin", password: "pw-1", roles: ["editor"] });
+    expect(a1.username).toBe("admin");
     expect(a1.roles).toEqual(["editor"]);
 
-    const a2 = await getDaaAuthAccountByUsernameV0("ADMIN@EXAMPLE.COM");
+    const a2 = await getDaaAuthAccountByUsernameV0("ADMIN");
     expect(a2?.accountId).toBe(a1.accountId);
 
-    const ok = await authenticateDaaAuthAccountV0({ username: "admin@example.com", password: "pw-1" });
+    const ok = await authenticateDaaAuthAccountV0({ username: "admin", password: "pw-1" });
     expect(ok?.accountId).toBe(a1.accountId);
 
-    const bad = await authenticateDaaAuthAccountV0({ username: "admin@example.com", password: "wrong" });
+    const bad = await authenticateDaaAuthAccountV0({ username: "admin", password: "wrong" });
     expect(bad).toBe(null);
 
-    await expect(createDaaAuthAccountV0({ username: "not-an-email", password: "pw-x", roles: ["viewer"] })).rejects.toThrow(/invalid email/i);
+    await expect(createDaaAuthAccountV0({ username: "bad username", password: "pw-x", roles: ["viewer"] })).rejects.toThrow(/invalid username/i);
   });
 
-  it("allows creating an account without providing a password (OTP-only mode)", async () => {
+  it("allows creating an account without providing a password", async () => {
     resetPgMem();
 
-    const a1 = await createDaaAuthAccountV0({ username: "otp-only@example.com", roles: ["viewer"] });
-    expect(a1.username).toBe("otp-only@example.com");
+    const a1 = await createDaaAuthAccountV0({ username: "temp-user", roles: ["viewer"] });
+    expect(a1.username).toBe("temp-user");
 
-    const auth = await authenticateDaaAuthAccountV0({ username: "otp-only@example.com", password: "any-value" });
+    const auth = await authenticateDaaAuthAccountV0({ username: "temp-user", password: "any-value" });
     expect(auth).toBe(null);
   });
 
@@ -83,6 +84,22 @@ describe("daa/auth store v0", () => {
     await expect(bootstrapCreateFirstDaaAuthAccountV0({ username: "admin2@example.com", password: "pw-2" })).rejects.toThrow(
       /bootstrap not allowed|accounts already exist/i,
     );
+  });
+
+  it("auto-bootstraps deterministic default admin in non-production", async () => {
+    resetPgMem();
+
+    process.env.NODE_ENV = "test";
+    delete process.env.DAA_AUTH_DEV_DEFAULT_ACCOUNT;
+    delete process.env.DAA_AUTH_DEV_DEFAULT_USERNAME;
+    delete process.env.DAA_AUTH_DEV_DEFAULT_PASSWORD;
+
+    const result = await ensureDevDefaultDaaAuthAccountV0();
+    expect(result.created).toBe(true);
+    expect(result.account?.username).toBe("admin");
+
+    const auth = await authenticateDaaAuthAccountV0({ username: "admin", password: "admin123" });
+    expect(auth?.username).toBe("admin");
   });
 
   it("creates + verifies + revokes a session", async () => {

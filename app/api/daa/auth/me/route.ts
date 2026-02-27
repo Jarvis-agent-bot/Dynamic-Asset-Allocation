@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 
 import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { getDaaAuthContextFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
-import { hasAnyDaaAuthAccountsV0, refreshDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
+import { ensureDevDefaultDaaAuthAccountV0, hasAnyDaaAuthAccountsV0, refreshDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  await ensureDevDefaultDaaAuthAccountV0().catch(() => null);
+
   const ctx = await getDaaAuthContextFromRequestV0(req, { touch: false });
   if (!ctx) {
     const anyAccounts = await hasAnyDaaAuthAccountsV0();

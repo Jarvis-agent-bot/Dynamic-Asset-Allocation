@@ -39,30 +39,24 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function normalizeEmailLoose(raw: unknown): string {
+function normalizeUsernameLoose(raw: unknown): string {
   const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
   if (!v) return "";
 
-  // Basic sanity check; keep server contract minimal and dependency-free.
-  if (v.length > 254) return "";
+  // Keep username rules simple and deterministic for test-stage auth.
+  if (v.length > 64) return "";
   if (/\s/.test(v)) return "";
-
-  const at = v.indexOf("@");
-  if (at <= 0 || at !== v.lastIndexOf("@")) return "";
-
-  const domain = v.slice(at + 1);
-  if (!domain || domain.startsWith(".") || domain.endsWith(".")) return "";
-  if (!domain.includes(".")) return "";
+  if (!/^[a-z0-9._@+\-]+$/.test(v)) return "";
 
   return v;
 }
 
-function normalizeEmailStrict(raw: unknown): string {
+function normalizeUsernameStrict(raw: unknown): string {
   const provided = typeof raw === "string" ? raw.trim() : "";
-  const email = normalizeEmailLoose(raw);
-  if (!provided) throw new Error("missing email");
-  if (!email) throw new Error("invalid email");
-  return email;
+  const username = normalizeUsernameLoose(raw);
+  if (!provided) throw new Error("missing username");
+  if (!username) throw new Error("invalid username");
+  return username;
 }
 
 function normalizeRole(raw: unknown): DaaAuthRoleV0 | null {
@@ -313,7 +307,7 @@ export async function listDaaAuthAuditEventsV0(args: {
 function resolvePasswordForStorageV0(passwordRaw: unknown): string {
   const password = typeof passwordRaw === "string" ? passwordRaw : "";
   if (password.trim()) return password;
-  // OTP-only mode still needs a non-empty password hash because of schema constraints.
+  // Missing password still needs a non-empty hash because of schema constraints.
   return `${randomUUID()}-${randomUUID()}`;
 }
 
@@ -323,7 +317,7 @@ export async function createDaaAuthAccountV0(args: {
   roles?: DaaAuthRoleV0[];
   createdAt?: string;
 }): Promise<DaaAuthAccountV0> {
-  const username = normalizeEmailStrict(args.username);
+  const username = normalizeUsernameStrict(args.username);
 
   const passwordHash = hashPasswordV0(resolvePasswordForStorageV0(args.password));
   const roles = uniqRoles(args.roles);
@@ -367,13 +361,49 @@ export async function hasAnyDaaAuthAccountsV0(): Promise<boolean> {
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
+const DAA_DEV_DEFAULT_USERNAME_V0 = "admin";
+const DAA_DEV_DEFAULT_PASSWORD_V0 = "admin123";
+
+function isDevDefaultAccountEnabledV0(): boolean {
+  if ((process.env.NODE_ENV || "").toLowerCase() === "production") return false;
+
+  const raw = String(process.env.DAA_AUTH_DEV_DEFAULT_ACCOUNT || "").trim().toLowerCase();
+  if (!raw) return true;
+  if (raw === "0" || raw === "false" || raw === "off") return false;
+  return true;
+}
+
+export async function ensureDevDefaultDaaAuthAccountV0(): Promise<{ created: boolean; account: DaaAuthAccountV0 | null }> {
+  if (!isDevDefaultAccountEnabledV0()) return { created: false, account: null };
+
+  if (await hasAnyDaaAuthAccountsV0()) return { created: false, account: null };
+
+  const username = normalizeUsernameStrict(process.env.DAA_AUTH_DEV_DEFAULT_USERNAME || DAA_DEV_DEFAULT_USERNAME_V0);
+  const password = String(process.env.DAA_AUTH_DEV_DEFAULT_PASSWORD || DAA_DEV_DEFAULT_PASSWORD_V0);
+
+  try {
+    const account = await bootstrapCreateFirstDaaAuthAccountV0({
+      username,
+      password,
+      roles: ["editor"],
+    });
+    return { created: true, account };
+  } catch (e: any) {
+    const msg = String(e?.message || e || "").toLowerCase();
+    if (msg.includes("accounts already exist") || msg.includes("bootstrap not allowed") || msg.includes("unique constraint")) {
+      return { created: false, account: null };
+    }
+    throw e;
+  }
+}
+
 export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
   username: string;
   password?: string;
   roles?: DaaAuthRoleV0[];
   createdAt?: string;
 }): Promise<DaaAuthAccountV0> {
-  const username = normalizeEmailStrict(args.username);
+  const username = normalizeUsernameStrict(args.username);
   const passwordHash = hashPasswordV0(resolvePasswordForStorageV0(args.password));
 
   // First admin should always be able to administer the dashboard.
@@ -427,7 +457,7 @@ export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
 }
 
 export async function getDaaAuthAccountByUsernameV0(usernameRaw: unknown): Promise<DaaAuthAccountV0 | null> {
-  const username = normalizeEmailStrict(usernameRaw);
+  const username = normalizeUsernameStrict(usernameRaw);
 
   await ensureAuthSchemaIfPgV0();
 
@@ -460,7 +490,7 @@ export async function authenticateDaaAuthAccountV0(args: {
   username: string;
   password: string;
 }): Promise<DaaAuthAccountV0 | null> {
-  const username = normalizeEmailLoose(args.username);
+  const username = normalizeUsernameLoose(args.username);
   const password = typeof args.password === "string" ? args.password : "";
   if (!username || !password) return null;
 
