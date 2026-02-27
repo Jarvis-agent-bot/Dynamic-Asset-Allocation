@@ -911,6 +911,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : buyGateEvidenceReviewPriority === 'p2'
                   ? 'next-day-review'
                   : 'monitoring-backlog';
+              const buyGateEvidenceOwnerLane = buyGateEvidenceReviewPriority === 'p1'
+                ? 'buy-gate-ops-oncall'
+                : buyGateEvidenceReviewPriority === 'p2'
+                  ? 'buy-gate-review-queue'
+                  : 'buy-gate-watchlist';
               const buyGateEvidenceReadinessPct = buyGateEvidenceTraceRows.length
                 ? Math.round(((buyGateEvidenceTraceRows.length - buyGateEvidenceReviewCount) / buyGateEvidenceTraceRows.length) * 100)
                 : 0;
@@ -1007,7 +1012,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                           {row.id}: evidence status=<b>{row.evidenceStatus}</b> · blocker=<b>{row.primaryBlocker}</b> · action=<b>{row.nextAction}</b>
                         </div>
                       ))}
-                      <div>evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b> · readiness=<b>{buyGateEvidenceReadinessPct}%</b> · route=<b>{buyGateEvidenceRouteMode}</b> · critical rows=<b>{buyGateEvidenceCriticalCount}</b> · escalation lane=<b>{buyGateEvidenceEscalationLane}</b> · pressure mode=<b>{buyGateEvidencePressureMode}</b> · review priority=<b>{buyGateEvidenceReviewPriority}</b> · sla lane=<b>{buyGateEvidenceSlaLane}</b></div>
+                      <div>evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b> · readiness=<b>{buyGateEvidenceReadinessPct}%</b> · route=<b>{buyGateEvidenceRouteMode}</b> · critical rows=<b>{buyGateEvidenceCriticalCount}</b> · escalation lane=<b>{buyGateEvidenceEscalationLane}</b> · pressure mode=<b>{buyGateEvidencePressureMode}</b> · review priority=<b>{buyGateEvidenceReviewPriority}</b> · sla lane=<b>{buyGateEvidenceSlaLane}</b> · owner lane=<b>{buyGateEvidenceOwnerLane}</b></div>
                       {/* evidence trace verdict: review rows=<b>{buyGateEvidenceReviewCount}/{buyGateEvidenceTraceRows.length}</b> · mode=<b>{buyGateEvidenceReviewCount > 0 ? 'buy-gate-evidence-review-required' : 'buy-gate-evidence-clear'}</b> · readiness=<b>{buyGateEvidenceReadinessPct}%</b> · route=<b>{buyGateEvidenceRouteMode}</b> */}
                     </div>
                   </div>
