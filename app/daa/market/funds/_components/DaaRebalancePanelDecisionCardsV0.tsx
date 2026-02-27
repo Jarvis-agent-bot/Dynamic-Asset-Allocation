@@ -1187,6 +1187,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
           : guardrailEvidenceReviewPriority === 'p2'
             ? 'next-day-review'
             : 'monitoring-backlog';
+        const guardrailEvidenceOwnerLane = guardrailEvidenceReviewPriority === 'p1'
+          ? 'guardrail-ops-oncall'
+          : guardrailEvidenceReviewPriority === 'p2'
+            ? 'guardrail-review-queue'
+            : 'guardrail-watchlist';
         const guardrailEvidenceReadinessPct = guardrailEvidenceTraceRows.length
           ? Math.round(((guardrailEvidenceTraceRows.length - guardrailEvidenceReviewCount) / guardrailEvidenceTraceRows.length) * 100)
           : 0;
@@ -1553,7 +1558,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                     {row.id}: evidence status=<b>{row.evidenceStatus}</b> · dominant risk=<b>{row.dominantRisk}</b> · action=<b>{row.nextAction}</b>
                   </div>
                 ))}
-                <div>evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> · critical rows=<b>{guardrailEvidenceCriticalCount}</b> · escalation lane=<b>{guardrailEvidenceEscalationLane}</b> · pressure mode=<b>{guardrailEvidencePressureMode}</b> · review priority=<b>{guardrailEvidenceReviewPriority}</b> · sla lane=<b>{guardrailEvidenceSlaLane}</b></div>
+                <div>evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> · critical rows=<b>{guardrailEvidenceCriticalCount}</b> · escalation lane=<b>{guardrailEvidenceEscalationLane}</b> · pressure mode=<b>{guardrailEvidencePressureMode}</b> · review priority=<b>{guardrailEvidenceReviewPriority}</b> · sla lane=<b>{guardrailEvidenceSlaLane}</b> · owner lane=<b>{guardrailEvidenceOwnerLane}</b></div>
                 {/* evidence trace verdict: review rows=<b>{guardrailEvidenceReviewCount}/{guardrailEvidenceTraceRows.length}</b> · mode=<b>{guardrailEvidenceReviewCount > 0 ? 'guardrail-evidence-review-required' : 'guardrail-evidence-clear'}</b> · readiness=<b>{guardrailEvidenceReadinessPct}%</b> · route=<b>{guardrailEvidenceRouteMode}</b> */}
               </div>
             </div>
