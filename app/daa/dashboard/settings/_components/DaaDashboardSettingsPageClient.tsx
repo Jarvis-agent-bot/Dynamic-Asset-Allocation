@@ -93,6 +93,7 @@ export default function DaaDashboardSettingsPageClient() {
 
   const [auth, setAuth] = useState<AuthModel>({ kind: "loading" });
   const [authRev, setAuthRev] = useState(0);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +110,7 @@ export default function DaaDashboardSettingsPageClient() {
 
         if (res.status === 401) {
           setAuth({ kind: "signedOut" });
+          setLastCheckedAt(new Date().toLocaleTimeString());
           return;
         }
 
@@ -122,19 +124,23 @@ export default function DaaDashboardSettingsPageClient() {
 
         if (!res.ok) {
           setAuth({ kind: "error", message: String(json?.error ?? `HTTP ${res.status}`) });
+          setLastCheckedAt(new Date().toLocaleTimeString());
           return;
         }
 
         const payload = json as MeResponse;
         if (!payload?.ok) {
           setAuth({ kind: "signedOut" });
+          setLastCheckedAt(new Date().toLocaleTimeString());
           return;
         }
 
         setAuth({ kind: "signedIn", me: payload });
+        setLastCheckedAt(new Date().toLocaleTimeString());
       } catch (e) {
         if (cancelled) return;
         setAuth({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+        setLastCheckedAt(new Date().toLocaleTimeString());
       }
     }
 
@@ -144,6 +150,25 @@ export default function DaaDashboardSettingsPageClient() {
       cancelled = true;
     };
   }, [authRev]);
+
+  useEffect(() => {
+    function onFocus() {
+      setAuthRev((x) => x + 1);
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        setAuthRev((x) => x + 1);
+      }
+    }
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -162,6 +187,20 @@ export default function DaaDashboardSettingsPageClient() {
       </Breadcrumb>
 
       <PageHeader title="Settings" description="Account and session details for DAA. Canonical entry remains /daa/dashboard." />
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-2 pt-6">
+          <div className="text-xs text-muted-foreground">{lastCheckedAt ? `Last checked: ${lastCheckedAt}` : "Checking auth session…"}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild type="button" variant="outline" size="sm">
+              <Link href="/daa/dashboard">Back to dashboard</Link>
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setAuthRev((x) => x + 1)}>
+              Refresh session
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {auth.kind === "loading" ? (
         <LoadingState />

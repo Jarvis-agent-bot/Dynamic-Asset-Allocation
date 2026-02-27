@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+
+import { formatIsoLocalV0, formatSessionRemainingV0 } from "@/src/daa/settings/sessionFormatV0";
 
 type Me = {
   account: { accountId: string; username: string; roles: string[]; status: string };
@@ -36,8 +38,15 @@ async function copyToClipboard(label: string, value: string) {
 
 export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: string }) {
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const roles = useMemo(() => formatRoles(me.account.roles), [me.account.roles]);
+  const sessionRemaining = useMemo(() => formatSessionRemainingV0(me.session.expiresAt, nowMs), [me.session.expiresAt, nowMs]);
 
   async function logout() {
     setLogoutBusy(true);
@@ -125,15 +134,21 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
               </TableRow>
               <TableRow>
                 <TableCell className="w-[160px] text-muted-foreground">Created</TableCell>
-                <TableCell>{me.session.createdAt}</TableCell>
+                <TableCell>{formatIsoLocalV0(me.session.createdAt)}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="w-[160px] text-muted-foreground">Expires</TableCell>
-                <TableCell>{me.session.expiresAt}</TableCell>
+                <TableCell>{formatIsoLocalV0(me.session.expiresAt)}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="w-[160px] text-muted-foreground">Time remaining</TableCell>
+                <TableCell>
+                  <span className={sessionRemaining === "expired" ? "text-destructive" : "text-foreground"}>{sessionRemaining}</span>
+                </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="w-[160px] text-muted-foreground">Last seen</TableCell>
-                <TableCell>{me.session.lastSeenAt ?? "-"}</TableCell>
+                <TableCell>{me.session.lastSeenAt ? formatIsoLocalV0(me.session.lastSeenAt) : "-"}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="w-[160px] text-muted-foreground">Revoked</TableCell>
@@ -158,7 +173,9 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
               Login is username/password only. Use <code className="rounded bg-muted px-1 py-0.5">/daa/login</code> with your assigned account credentials.
             </li>
             <li>Sessions are stored in this browser. If you're on a shared device, sign out when you're done.</li>
-            <li>In non-production with zero accounts, default bootstrap can initialize <code className="rounded bg-muted px-1 py-0.5">admin / admin123</code>.</li>
+            <li>
+              In non-production with zero accounts, default bootstrap can initialize <code className="rounded bg-muted px-1 py-0.5">admin / admin123</code>.
+            </li>
           </ul>
         </AlertDescription>
       </Alert>
