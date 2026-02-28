@@ -825,6 +825,11 @@ export default function DaaRebalancePanelDecisionCardsV0({
                 : buyGatePrecheckReviewPriority === 'p2'
                   ? 'next-day-review'
                   : 'monitoring-backlog';
+              const buyGatePrecheckOwnerLane = buyGatePrecheckReviewPriority === 'p1'
+                ? 'buy-gate-ops-oncall'
+                : buyGatePrecheckReviewPriority === 'p2'
+                  ? 'buy-gate-review-queue'
+                  : 'buy-gate-watchlist';
               const buyGatePrecheckHandoffMode = readyRows === precheckRows.length
                 ? 'ready-for-buy-route-handoff'
                 : readyRows > 0
@@ -1004,7 +1009,7 @@ export default function DaaRebalancePanelDecisionCardsV0({
                   <div style={{ marginTop: 6, padding: '8px 10px', border: '1px dashed rgba(255,255,255,0.2)', borderRadius: 10, background: 'rgba(255,255,255,0.01)', fontSize: 11 }}>
                     Buy gate precheck evidence panel: blocked rows=<b>{evidencePanel.blockedRows}/{precheckRows.length}</b> · incompetence hits=<b>{evidencePanel.incompetenceHits}</b> · maxIn hits=<b>{evidencePanel.maxInHits}</b> · liquidity hits=<b>{evidencePanel.liquidityHits}</b> · T+N hits=<b>{evidencePanel.settlementHits}</b>
                     <div className="muted" style={{ marginTop: 4, fontSize: 11 }}>
-                      Auto-buy precheck simulator: ready rows=<b>{readyRows}/{precheckRows.length}</b> · route mode=<b>{routeMode}</b> · readiness=<b>{buyGatePrecheckReadinessPct}%</b> · handoff=<b>{buyGatePrecheckHandoffMode}</b> · critical rows=<b>{buyGatePrecheckCriticalCount}</b> · escalation lane=<b>{buyGatePrecheckEscalationLane}</b> · pressure mode=<b>{buyGatePrecheckPressureMode}</b> · review priority=<b>{buyGatePrecheckReviewPriority}</b> · sla lane=<b>{buyGatePrecheckSlaLane}</b>
+                      Auto-buy precheck simulator: ready rows=<b>{readyRows}/{precheckRows.length}</b> · route mode=<b>{routeMode}</b> · readiness=<b>{buyGatePrecheckReadinessPct}%</b> · handoff=<b>{buyGatePrecheckHandoffMode}</b> · critical rows=<b>{buyGatePrecheckCriticalCount}</b> · escalation lane=<b>{buyGatePrecheckEscalationLane}</b> · pressure mode=<b>{buyGatePrecheckPressureMode}</b> · review priority=<b>{buyGatePrecheckReviewPriority}</b> · sla lane=<b>{buyGatePrecheckSlaLane}</b> · owner lane=<b>{buyGatePrecheckOwnerLane}</b>
                       {/* Auto-buy precheck simulator: ready rows=<b>{readyRows}/{precheckRows.length}</b> · route mode=<b>{routeMode}</b> · readiness=<b>{buyGatePrecheckReadinessPct}%</b> · handoff=<b>{buyGatePrecheckHandoffMode}</b> */}
                     </div>
                     <div className="muted" style={{ marginTop: 2, fontSize: 11 }}>
