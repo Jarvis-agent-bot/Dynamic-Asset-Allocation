@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 
+const distDir = (process.env.NEXT_DIST_DIR || "").trim();
+
 const nextConfig = {
   reactStrictMode: true,
   // The app routes already live under /daa (see app/daa/*).
@@ -14,5 +16,9 @@ const nextConfig = {
   trailingSlash: false,
   skipTrailingSlashRedirect: true,
 };
+
+if (distDir) {
+  nextConfig.distDir = distDir;
+}
 
 module.exports = nextConfig;

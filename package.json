@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:check": "NEXT_DIST_DIR=.next-check next build",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:daa-e2e-chain-gate-v0": "pnpm run gates",
     "typecheck": "tsc -p tsconfig.core.json",
-    "gates": "pnpm test && pnpm run typecheck && pnpm build"
+    "gates": "pnpm test && pnpm run typecheck && pnpm run build:check"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
