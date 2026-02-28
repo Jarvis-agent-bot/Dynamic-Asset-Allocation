@@ -451,9 +451,14 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="text-sm text-muted-foreground">{message}</div>
-        <Button type="button" variant="outline" onClick={onRetry}>
-          Retry
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={onRetry}>
+            Retry
+          </Button>
+          <Button asChild type="button" variant="secondary">
+            <Link href="/daa/login?returnTo=%2Fdaa%2Fdashboard">Sign in again</Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
