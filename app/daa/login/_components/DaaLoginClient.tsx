@@ -64,6 +64,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("admin123");
   const [busy, setBusy] = useState(false);
+  const [refreshingSession, setRefreshingSession] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
     async function run() {
       try {
-        const res = await fetch("/api/daa/auth/me", { method: "GET", headers: { accept: "application/json" } });
+        const res = await fetch("/api/daa/auth/me", { method: "GET", cache: "no-store", headers: { accept: "application/json" } });
         const text = await res.text();
         let json: any = null;
         try {
@@ -179,6 +180,44 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     }
   }
 
+
+  async function refreshSession() {
+    if (refreshingSession) return;
+    setRefreshingSession(true);
+    try {
+      const res = await fetch("/api/daa/auth/me", { method: "GET", cache: "no-store", headers: { accept: "application/json" } });
+      const text = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = null;
+      }
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          setSession({ kind: "signedOut" });
+          toast.error("Session expired. Please sign in again.");
+          return;
+        }
+        throw new Error(parseApiError(json, "HTTP " + res.status));
+      }
+
+      if (json?.ok) {
+        setSession({ kind: "signedIn", me: json });
+        toast.success("Session refreshed.");
+        return;
+      }
+
+      setSession({ kind: "signedOut" });
+      toast.error("Session unavailable. Please sign in again.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRefreshingSession(false);
+    }
+  }
+
   async function logout() {
     try {
       const res = await fetch("/api/daa/auth/logout", { method: "POST", headers: { accept: "application/json" } });
@@ -210,6 +249,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button asChild className="w-full sm:w-auto">
               <Link href={safeReturnTo}>Continue to dashboard</Link>
+            </Button>
+            <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void refreshSession()} disabled={refreshingSession}>
+              {refreshingSession ? "Refreshing..." : "Refresh session"}
             </Button>
             <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void logout()}>
               Sign out
