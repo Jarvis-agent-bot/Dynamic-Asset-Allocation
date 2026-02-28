@@ -359,9 +359,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             </AlertDescription>
           </Alert>
 
-          <div className="text-xs text-muted-foreground">
-            Need help? <Link className="underline underline-offset-2" href="/support">Support</Link>
-          </div>
+          <Alert>
+            <AlertTitle>Need help?</AlertTitle>
+            <AlertDescription>
+              <Link className="underline underline-offset-2" href="/support">Support</Link>
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
     </div>
