@@ -352,12 +352,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             )}
           </Button>
 
-          <div className="rounded-md border border-dashed border-muted-foreground/30 p-3 text-xs text-muted-foreground">
-            <div className="font-medium text-foreground">Dev/Test default account</div>
-            <div className="mt-1">
+          <Alert>
+            <AlertTitle>Dev/Test default account</AlertTitle>
+            <AlertDescription>
               In non-production, the first login auto-bootstraps <code className="rounded bg-muted px-1 py-0.5">admin / admin123</code> when no account exists yet.
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
 
           <div className="text-xs text-muted-foreground">
             Need help? <Link className="underline underline-offset-2" href="/support">Support</Link>
