@@ -2,18 +2,18 @@
 
 import { useMemo, useState } from "react";
 
-import { AlertCircle, CheckCircle2, Cpu, RefreshCcw, ShieldAlert, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Cpu, Database, LineChart, RefreshCcw, ShieldAlert, Signal } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarketDataClient } from "@/app/daa/useMarketDataClient";
 import { readUnifiedInputSliceV1, saveUnifiedRequestDraftV1 } from "@/app/daa/unifiedInputStore";
 import { DAA_UNIFIED_SAMPLE_REQUEST_V1, type DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
-import DaaJiguBaoModule from "./_modules/DaaJiguBaoModule";
 
 type ApiResult = {
   summary?: {
@@ -169,6 +169,16 @@ function applyRealtimeSignals(
   return next;
 }
 
+function formatPercent(v: number, digits = 2): string {
+  if (!Number.isFinite(v)) return "0.00%";
+  return `${v.toFixed(digits)}%`;
+}
+
+function formatNotional(v: number): string {
+  if (!Number.isFinite(v)) return "0";
+  return Math.round(v).toLocaleString();
+}
+
 export default function DaaUnifiedArchitectureTab() {
   const marketData = useMarketDataClient();
 
@@ -179,9 +189,9 @@ export default function DaaUnifiedArchitectureTab() {
     }
     return prettyJson(DAA_UNIFIED_SAMPLE_REQUEST_V1);
   });
+
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
-
   const [error, setError] = useState("");
   const [resultText, setResultText] = useState("");
   const [result, setResult] = useState<ApiResult | null>(null);
@@ -195,20 +205,49 @@ export default function DaaUnifiedArchitectureTab() {
 
   const parsedInput = useMemo(() => parseJsonSafe<DaaUnifiedRequestV1>(input), [input]);
 
-  const metrics = useMemo(() => {
+  const inputMetrics = useMemo(() => {
     if (!parsedInput) return null;
+
     const positions = Array.isArray(parsedInput.positions) ? parsedInput.positions : [];
     const holdings = positions.reduce((sum, p) => sum + (Number(p.qty) || 0) * (Number(p.price) || 0), 0);
     const cash = Number(parsedInput.account?.cash || 0);
     const equity = Number(parsedInput.account?.totalEquity || holdings + cash);
 
+    const symbolCount = new Set(positions.map((p) => String(p.symbol || "").trim().toUpperCase()).filter(Boolean)).size;
+    const analystCount = Array.isArray(parsedInput.analysts) ? parsedInput.analysts.length : 0;
+    const assetViewCount = Array.isArray(parsedInput.assetViews) ? parsedInput.assetViews.length : 0;
+
     return {
-      symbolCount: new Set(positions.map((p) => String(p.symbol || "").trim().toUpperCase()).filter(Boolean)).size,
-      analystCount: Array.isArray(parsedInput.analysts) ? parsedInput.analysts.length : 0,
-      assetViewCount: Array.isArray(parsedInput.assetViews) ? parsedInput.assetViews.length : 0,
+      symbolCount,
+      analystCount,
+      assetViewCount,
       equity,
     };
   }, [parsedInput]);
+
+  const strategySignals = useMemo(() => {
+    const exposure = result?.layers?.sensory?.crossMarketExposure ?? {};
+    const exposureItems = Object.entries(exposure)
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+      .slice(0, 6);
+
+    const targetWeights = result?.layers?.strategy?.adjustedTargetWeights ?? {};
+    const targetItems = Object.entries(targetWeights)
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+      .slice(0, 6);
+
+    const defensiveConsensusPct = Number(result?.layers?.humanFactor?.defensiveConsensusPct || 0) * 100;
+    const liquidityCoveragePct = Number(result?.layers?.sensory?.liquidityCoveragePct || 0) * 100;
+
+    return {
+      exposureItems,
+      targetItems,
+      defensiveConsensusPct,
+      liquidityCoveragePct,
+      duplicatedStyleClusters: result?.layers?.humanFactor?.duplicatedStyleClusters ?? [],
+      isolatedSymbols: result?.layers?.guardrail?.isolatedSymbols ?? [],
+    };
+  }, [result]);
 
   async function run() {
     if (busy) return;
@@ -331,7 +370,7 @@ export default function DaaUnifiedArchitectureTab() {
 
       setInput(prettyJson(merged));
       saveUnifiedRequestDraftV1(merged, { dispatchEvent: false });
-      setSyncLog((prev) => [...nextLogs, ...prev].slice(0, 20));
+      setSyncLog((prev) => [...nextLogs, ...prev].slice(0, 30));
     } catch (e) {
       setError(`实时同步失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -341,72 +380,44 @@ export default function DaaUnifiedArchitectureTab() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr),380px]">
-        <Card className="border-sky-100 bg-gradient-to-br from-white via-sky-50/40 to-cyan-50/20">
-          <CardHeader>
-            <CardTitle className="text-base">DAA 统一运营台（Unified Core）</CardTitle>
-            <CardDescription>以“数学底线 + 智慧过滤 + 风险隔离”为骨架，统一输入直连同一条决策链。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-slate-600">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <div className="mb-1 font-medium text-slate-900">数据感知层</div>
-                <div>统一输入 + yfinance/雪球/Twitter 自动汇总。</div>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <div className="mb-1 font-medium text-slate-900">策略计算层</div>
-                <div>动态阈值 + 再平衡核心 + 解释型输出。</div>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <div className="mb-1 font-medium text-slate-900">人因过滤层</div>
-                <div>高手加权、价值陷阱、流派集中度预警。</div>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <div className="mb-1 font-medium text-slate-900">风控执行层</div>
-                <div>Tag 隔离 + Max In/Out + 流动性硬约束。</div>
-              </div>
+      <Card className="border-sky-100 bg-gradient-to-br from-white via-sky-50/50 to-cyan-50/20">
+        <CardHeader>
+          <CardTitle className="text-base">DAA 统一运营台架构</CardTitle>
+          <CardDescription>数学底线 + 智慧过滤 + 风险隔离，所有模块只保留一条统一输入与统一输出链路。</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-xs text-slate-700 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-1 inline-flex items-center gap-1 font-medium text-slate-900">
+              <Database className="h-3.5 w-3.5" /> 输入层
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 bg-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">运行指标</CardTitle>
-            <CardDescription>输入完整度与执行结果快照</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">标的数</span>
-              <span className="font-medium">{metrics?.symbolCount ?? 0}</span>
+            <div>统一 JSON 输入、阈值、仓位与规则。</div>
+          </div>
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-1 inline-flex items-center gap-1 font-medium text-slate-900">
+              <Signal className="h-3.5 w-3.5" /> 信号层
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">分析师数</span>
-              <span className="font-medium">{metrics?.analystCount ?? 0}</span>
+            <div>yfinance / 雪球 / Twitter 情报汇总。</div>
+          </div>
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-1 inline-flex items-center gap-1 font-medium text-slate-900">
+              <Cpu className="h-3.5 w-3.5" /> 计算层
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">资产视图数</span>
-              <span className="font-medium">{metrics?.assetViewCount ?? 0}</span>
+            <div>统一再平衡引擎 + 人因过滤。</div>
+          </div>
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-1 inline-flex items-center gap-1 font-medium text-slate-900">
+              <LineChart className="h-3.5 w-3.5" /> 指标层
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">权益估算</span>
-              <span className="font-medium">{Number(metrics?.equity ?? 0).toLocaleString()}</span>
+            <div>输入完整度、风险暴露、触发状态。</div>
+          </div>
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-1 inline-flex items-center gap-1 font-medium text-slate-900">
+              <ShieldAlert className="h-3.5 w-3.5" /> 输出层
             </div>
-            {result?.summary ? (
-              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs">
-                {result.summary.shouldRebalance ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-600">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> 当前满足再平衡触发
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-amber-600">
-                    <ShieldAlert className="h-3.5 w-3.5" /> 当前未达到触发条件
-                  </span>
-                )}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+            <div>可执行订单、阻断订单、告警清单。</div>
+          </div>
+        </CardContent>
+      </Card>
 
       {error ? (
         <Alert variant="destructive">
@@ -419,8 +430,8 @@ export default function DaaUnifiedArchitectureTab() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr),420px]">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">统一输入编排区</CardTitle>
-            <CardDescription>拉取实时情报后直接执行统一决策。</CardDescription>
+            <CardTitle className="text-base">输入层（Input Hub）</CardTitle>
+            <CardDescription>先同步实时情报，再执行统一决策。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -446,10 +457,27 @@ export default function DaaUnifiedArchitectureTab() {
                 </div>
               </div>
 
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Database className="h-3.5 w-3.5" />
+                  输入
+                </span>
+                <ArrowRight className="h-3.5 w-3.5" />
+                <span className="inline-flex items-center gap-1">
+                  <Signal className="h-3.5 w-3.5" />
+                  信号
+                </span>
+                <ArrowRight className="h-3.5 w-3.5" />
+                <span className="inline-flex items-center gap-1">
+                  <Cpu className="h-3.5 w-3.5" />
+                  输出
+                </span>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={() => void syncRealtimeIntel()} disabled={syncing}>
                   <RefreshCcw className="mr-2 h-4 w-4" />
-                  {syncing ? "同步中..." : "接入真实情报并自动更新"}
+                  {syncing ? "同步中..." : "同步真实情报源"}
                 </Button>
                 <Button type="button" onClick={() => void run()} disabled={busy}>
                   <Cpu className="mr-2 h-4 w-4" />
@@ -482,28 +510,89 @@ export default function DaaUnifiedArchitectureTab() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">执行摘要</CardTitle>
-              <CardDescription>统一引擎输出</CardDescription>
+              <CardTitle className="text-base">系统概览（Overview）</CardTitle>
+              <CardDescription>输入规模与当前执行状态</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">总权益</span>
-                <span className="font-medium">{Number(result?.summary?.totalEquity ?? 0).toLocaleString()}</span>
+                <span className="text-muted-foreground">标的数</span>
+                <span className="font-medium">{inputMetrics?.symbolCount ?? 0}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">触发阈值</span>
-                <span className="font-medium">{((result?.summary?.triggerThresholdPct ?? 0) * 100).toFixed(2)}%</span>
+                <span className="text-muted-foreground">分析师数</span>
+                <span className="font-medium">{inputMetrics?.analystCount ?? 0}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">执行订单</span>
-                <span className="font-medium">{result?.summary?.executableOrderCount ?? 0}</span>
+                <span className="text-muted-foreground">资产视图数</span>
+                <span className="font-medium">{inputMetrics?.assetViewCount ?? 0}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">拦截订单</span>
-                <span className="font-medium">{result?.summary?.blockedOrderCount ?? 0}</span>
+                <span className="text-muted-foreground">权益估算</span>
+                <span className="font-medium">{formatNotional(Number(inputMetrics?.equity ?? 0))}</span>
               </div>
-              <div className="rounded-md border p-2 text-xs text-muted-foreground">
-                隔离标的：{result?.layers?.guardrail?.isolatedSymbols?.length ? result.layers.guardrail.isolatedSymbols.join(", ") : "无"}
+              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-muted-foreground">
+                流动性覆盖：{formatPercent(strategySignals.liquidityCoveragePct)}
+              </div>
+              {result?.summary ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-xs">
+                  {result.summary.shouldRebalance ? (
+                    <span className="inline-flex items-center gap-1 text-emerald-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> 已触发再平衡
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-amber-600">
+                      <ShieldAlert className="h-3.5 w-3.5" /> 未达到触发条件
+                    </span>
+                  )}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">信号与指标（Signal Bus）</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs">
+              <div>
+                <div className="mb-1 text-muted-foreground">跨市场暴露</div>
+                <div className="space-y-1">
+                  {strategySignals.exposureItems.length ? (
+                    strategySignals.exposureItems.map(([k, v]) => (
+                      <div key={`exp-${k}`} className="flex items-center justify-between rounded border bg-slate-50 px-2 py-1">
+                        <span>{k}</span>
+                        <span className="font-medium">{formatPercent(Number(v) * 100)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-muted-foreground">暂无</div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-1 text-muted-foreground">调整后目标权重</div>
+                <div className="space-y-1">
+                  {strategySignals.targetItems.length ? (
+                    strategySignals.targetItems.map(([k, v]) => (
+                      <div key={`target-${k}`} className="flex items-center justify-between rounded border bg-slate-50 px-2 py-1">
+                        <span>{k}</span>
+                        <span className="font-medium">{formatPercent(Number(v) * 100)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-muted-foreground">暂无</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-md border bg-slate-50 p-2 text-muted-foreground">
+                防守共识：{formatPercent(strategySignals.defensiveConsensusPct)}；风格聚类：
+                {strategySignals.duplicatedStyleClusters.length ? strategySignals.duplicatedStyleClusters.join(" / ") : "无"}
+              </div>
+
+              <div className="rounded-md border bg-slate-50 p-2 text-muted-foreground">
+                隔离标的：{strategySignals.isolatedSymbols.length ? strategySignals.isolatedSymbols.join(", ") : "无"}
               </div>
             </CardContent>
           </Card>
@@ -526,34 +615,103 @@ export default function DaaUnifiedArchitectureTab() {
               </div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">原始响应</CardTitle>
-              <CardDescription>便于审计与导出</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Textarea readOnly className="min-h-[260px] font-mono text-xs leading-5" value={resultText || "请先运行统一决策。"} />
-            </CardContent>
-          </Card>
-
-          <Card className="border-cyan-100 bg-cyan-50/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="inline-flex items-center gap-2 text-base">
-                <Sparkles className="h-4 w-4 text-cyan-600" />
-                架构升级建议
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-xs text-slate-700">
-              <div>1. 把 Twitter/雪球解析结果沉淀到统一 event schema，减少字段漂移。</div>
-              <div>2. 将实时同步流程切分为可观测任务链，补齐失败重试与告警。</div>
-              <div>3. 基估宝模块建议接入日终回放，对“估值评分 → 实际收益”做自动校准。</div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
-      <DaaJiguBaoModule request={parsedInput} />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">输出（Executable Orders）</CardTitle>
+            <CardDescription>引擎允许执行的指令</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {result?.executableOrders?.length ? (
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>标的</TableHead>
+                      <TableHead>方向</TableHead>
+                      <TableHead className="text-right">金额</TableHead>
+                      <TableHead>约束</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.executableOrders.map((row, idx) => (
+                      <TableRow key={`exec-${row.symbol}-${idx}`}>
+                        <TableCell className="font-medium">{row.symbol}</TableCell>
+                        <TableCell>{row.side}</TableCell>
+                        <TableCell className="text-right">{formatNotional(Number(row.notional || 0))}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{row.cappedBy?.length ? row.cappedBy.join(", ") : "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">暂无可执行指令。</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">风控阻断（Blocked + Warnings）</CardTitle>
+            <CardDescription>被拦截指令与风险告警</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {result?.blockedOrders?.length ? (
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>标的</TableHead>
+                      <TableHead>方向</TableHead>
+                      <TableHead className="text-right">金额</TableHead>
+                      <TableHead>阻断原因</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.blockedOrders.map((row, idx) => (
+                      <TableRow key={`blocked-${row.symbol}-${idx}`}>
+                        <TableCell className="font-medium">{row.symbol}</TableCell>
+                        <TableCell>{row.side}</TableCell>
+                        <TableCell className="text-right">{formatNotional(Number(row.notional || 0))}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{row.blockedBy || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">当前无阻断订单。</div>
+            )}
+
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">告警列表</div>
+              {result?.warnings?.length ? (
+                result.warnings.map((warning, idx) => (
+                  <div key={`warn-${idx}`} className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    {warning}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">暂无系统告警。</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">原始响应（审计）</CardTitle>
+          <CardDescription>用于排障、复盘与导出</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea readOnly className="min-h-[220px] font-mono text-xs leading-5" value={resultText || "请先运行统一决策。"} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

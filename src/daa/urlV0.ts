@@ -1,5 +1,5 @@
 const DUMMY_ORIGIN_V0 = "https://daa.local";
-const DEFAULT_CONSOLE_RETURN_TO_V0 = "/daa/dashboard?tab=unified-core";
+const DEFAULT_CONSOLE_RETURN_TO_V0 = "/daa/dashboard";
 
 /**
  * Normalize a potentially-untrusted returnTo into a safe, canonical DAA dashboard path.
@@ -29,10 +29,7 @@ export function normalizeDaaReturnToV0(raw: unknown): string {
 
     // Canonicalize `/daa/dashboard` (and tolerate `/daa/dashboard/`).
     if (u.pathname === "/daa/dashboard" || u.pathname === "/daa/dashboard/") {
-      const tab = String(u.searchParams.get("tab") || "").trim();
-      if (tab !== "settings" && tab !== "unified-core") {
-        u.searchParams.set("tab", "unified-core");
-      }
+      u.searchParams.delete("tab");
       const qs = u.searchParams.toString();
       return `/daa/dashboard${qs ? `?${qs}` : ""}${u.hash || ""}`;
     }
@@ -46,7 +43,7 @@ export function normalizeDaaReturnToV0(raw: unknown): string {
 /**
  * Append/overwrite a `notice` query param for client-side redirects.
  *
- * Input is expected to be a relative path (e.g. "/daa/dashboard?tab=unified-core").
+ * Input is expected to be a relative path (e.g. "/daa/dashboard").
  * Returns a relative path (pathname + search + hash).
  */
 export function appendNoticeParamV0(path: string, notice: string): string {

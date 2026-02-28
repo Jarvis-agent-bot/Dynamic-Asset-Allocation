@@ -18,8 +18,6 @@ function SidebarNavSkeleton() {
   return (
     <div className="flex flex-col gap-1" aria-hidden="true">
       <Skeleton className="h-10 w-full" />
-      <Skeleton className="h-10 w-full" />
-      <Skeleton className="h-10 w-full" />
     </div>
   );
 }

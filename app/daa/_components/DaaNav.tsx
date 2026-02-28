@@ -2,45 +2,28 @@
 
 import type { ComponentType } from "react";
 
-import { Cpu, Menu, Settings } from "lucide-react";
+import { Cpu, Menu } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-type Tab = "unified-core" | "settings";
+type NavKey = "dashboard";
 
 type IconType = ComponentType<{ className?: string }>;
 
-type NavItem = { key: Tab; href: string; label: string; Icon: IconType };
+type NavItem = { key: NavKey; href: string; label: string; Icon: IconType };
 
-function normalizeTab(raw: string | null): Tab {
-  if (raw === "unified-core") return "unified-core";
-  if (raw === "settings") return "settings";
-  return "unified-core";
-}
-
-function useActiveTab(): Tab | null {
+function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
-  const searchParams = useSearchParams();
-
-  const tab = normalizeTab(searchParams.get("tab"));
-  const isOnDashboard = pathname === "/daa/dashboard" || pathname === "/daa/dashboard/";
-
-  return isOnDashboard ? tab : null;
+  return pathname.startsWith("/daa/dashboard") ? "dashboard" : null;
 }
 
 function useNavItems(): NavItem[] {
-  return useMemo(
-    () => [
-      { key: "unified-core", href: "/daa/dashboard?tab=unified-core", label: "Unified Core", Icon: Cpu },
-      { key: "settings", href: "/daa/dashboard?tab=settings", label: "Settings", Icon: Settings },
-    ],
-    []
-  );
+  return useMemo(() => [{ key: "dashboard", href: "/daa/dashboard", label: "控制台", Icon: Cpu }], []);
 }
 
 type NavListProps = {
@@ -50,7 +33,7 @@ type NavListProps = {
 
 function DaaNavList({ variant, onNavigate }: NavListProps) {
   const items = useNavItems();
-  const active = useActiveTab();
+  const active = useActiveNav();
 
   if (variant === "horizontal") {
     return (
@@ -65,7 +48,7 @@ function DaaNavList({ variant, onNavigate }: NavListProps) {
               size="sm"
               className={cn(
                 isActive && "bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
-                "focus-visible:ring-offset-1"
+                "focus-visible:ring-offset-1",
               )}
             >
               <Link href={it.href} aria-current={isActive ? "page" : undefined} onClick={onNavigate}>

@@ -9,7 +9,7 @@ pnpm dev
 
 打开：
 - http://localhost:3000/daa
-- http://localhost:3000/daa/dashboard?tab=unified-core
+- http://localhost:3000/daa/dashboard
 
 ## 2) 登录方式
 

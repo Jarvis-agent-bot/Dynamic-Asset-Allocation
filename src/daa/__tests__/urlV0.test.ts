@@ -8,15 +8,11 @@ describe("daa/urlV0", () => {
   });
 
   it("preserves existing query params", () => {
-    expect(appendNoticeParamV0("/daa/dashboard?tab=unified-core", "signed_in")).toBe(
-      "/daa/dashboard?tab=unified-core&notice=signed_in"
-    );
+    expect(appendNoticeParamV0("/daa/dashboard?source=login", "signed_in")).toBe("/daa/dashboard?source=login&notice=signed_in");
   });
 
   it("preserves hash", () => {
-    expect(appendNoticeParamV0("/daa/dashboard?tab=unified-core#ops", "signed_in")).toBe(
-      "/daa/dashboard?tab=unified-core&notice=signed_in#ops"
-    );
+    expect(appendNoticeParamV0("/daa/dashboard?source=login#ops", "signed_in")).toBe("/daa/dashboard?source=login&notice=signed_in#ops");
   });
 
   it("overwrites an existing notice", () => {
@@ -24,27 +20,23 @@ describe("daa/urlV0", () => {
   });
 
   describe("normalizeDaaReturnToV0", () => {
-    it("defaults to unified-core console for empty/unsafe values", () => {
-      expect(normalizeDaaReturnToV0("")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("https://evil.com")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("//evil.com/daa/dashboard")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("not-a-path")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("/not-daa")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("/daa/login?returnTo=%2Fdaa%2Fdashboard")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("/daa/wizard")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("/daa/step/5")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("/daa/market/funds")).toBe("/daa/dashboard?tab=unified-core");
+    it("defaults to dashboard console for empty/unsafe values", () => {
+      expect(normalizeDaaReturnToV0("")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("https://evil.com")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("//evil.com/daa/dashboard")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("not-a-path")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/not-daa")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/login?returnTo=%2Fdaa%2Fdashboard")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/wizard")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/step/5")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/market/funds")).toBe("/daa/dashboard");
     });
 
-    it("canonicalizes /daa/dashboard and preserves query/hash", () => {
-      expect(normalizeDaaReturnToV0("/daa")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("/daa/dashboard/")).toBe("/daa/dashboard?tab=unified-core");
-      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=unknown#x")).toBe("/daa/dashboard?tab=unified-core#x");
-    });
-
-    it("保留 tab=settings 的统一入口，不接受旧 settings 路径", () => {
-      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=settings")).toBe("/daa/dashboard?tab=settings");
-      expect(normalizeDaaReturnToV0("/daa/dashboard/settings")).toBe("/daa/dashboard?tab=unified-core");
+    it("canonicalizes /daa/dashboard and strips legacy tab", () => {
+      expect(normalizeDaaReturnToV0("/daa")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/dashboard/")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=unknown#x")).toBe("/daa/dashboard#x");
+      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=settings&section=security#x")).toBe("/daa/dashboard?section=security#x");
     });
   });
 });

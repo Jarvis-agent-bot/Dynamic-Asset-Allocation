@@ -62,7 +62,7 @@
 
 ### 3) 统一工作台（UI）
 - 文件：`app/daa/dashboard/_tabs/DaaUnifiedArchitectureTab.tsx`
-- 入口：`/daa/dashboard?tab=unified-core`
+- 入口：`/daa/dashboard`
 - 能力：
   - 粘贴 JSON 快照
   - 一键接入 yfinance / 雪球 / Twitter 做实时同步

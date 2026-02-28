@@ -5,8 +5,7 @@ DAA 是一个以“动态再平衡 + 人因过滤 + 风险隔离”为核心的�
 ## 当前产品形态
 
 - `/daa`：统一入口（自动进入控制台）
-- `/daa/dashboard?tab=unified-core`：统一运营台（主入口）
-- `/daa/dashboard?tab=settings`：账号与会话设置
+- `/daa/dashboard`：统一运营台（主入口）
 - `/daa/login`：账号密码登录
 
 ## 已收敛的核心能力

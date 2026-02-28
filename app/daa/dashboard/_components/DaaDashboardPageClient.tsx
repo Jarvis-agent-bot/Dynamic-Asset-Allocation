@@ -19,16 +19,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { DaaUnifiedInputBootstrap } from "../../_components/DaaUnifiedInputBootstrap";
-import DaaSettingsTab from "../_tabs/DaaSettingsTab";
 import DaaUnifiedArchitectureTab from "../_tabs/DaaUnifiedArchitectureTab";
-
-type Tab = "unified-core" | "settings";
-
-function normalizeTab(raw: string | null): Tab {
-  if (raw === "unified-core") return "unified-core";
-  if (raw === "settings") return "settings";
-  return "unified-core";
-}
 
 type MeResponse =
   | {
@@ -50,50 +41,24 @@ type AuthModel =
   | { kind: "error"; message: string }
   | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
 
-function DaaDashboardHeader({ tab }: { tab: Tab }) {
-  const title = tab === "unified-core" ? "控制台" : "Settings";
-
-  const desc =
-    tab === "unified-core" ? (
-      <>DAA 一体化控制台：再平衡算法 + 人因评价 + 风控执行。</>
-    ) : (
-      <>账号、会话与权限信息。</>
-    );
-
+function DaaDashboardHeader() {
   return (
     <div className="space-y-3">
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href="/daa/dashboard?tab=unified-core">DAA</Link>
+              <Link href="/daa/dashboard">DAA</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage>{title}</BreadcrumbPage>
+            <BreadcrumbPage>统一控制台</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
 
-      <PageHeader
-        title={title}
-        description={desc}
-        actions={
-          <>
-            {tab !== "unified-core" ? (
-              <Button asChild variant="outline" size="sm">
-                <Link href="/daa/dashboard?tab=unified-core">控制台</Link>
-              </Button>
-            ) : null}
-            {tab !== "settings" ? (
-              <Button asChild variant="outline" size="sm">
-                <Link href="/daa/dashboard?tab=settings">Settings</Link>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+      <PageHeader title="统一控制台" description={<>输入 → 信号 → 指标 → 输出，全部收敛到一条 DAA 决策链。</>} />
     </div>
   );
 }
@@ -106,14 +71,9 @@ function SignedOutState({ returnTo }: { returnTo: string }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="text-sm text-muted-foreground">当前会话不可用，请先登录。</div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link href={`/daa/login?returnTo=${encodeURIComponent(returnTo)}`}>去登录</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/daa/login?returnTo=%2Fdaa%2Fdashboard%3Ftab%3Dunified-core">登录页</Link>
-          </Button>
-        </div>
+        <Button asChild>
+          <Link href={`/daa/login?returnTo=${encodeURIComponent(returnTo)}`}>去登录</Link>
+        </Button>
       </CardContent>
     </Card>
   );
@@ -126,10 +86,7 @@ function LoadingState() {
         <span className="sr-only">Loading DAA dashboard session</span>
         <Skeleton className="h-5 w-[220px]" />
         <Skeleton className="h-4 w-[420px]" />
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-[120px]" />
-          <Skeleton className="h-9 w-[120px]" />
-        </div>
+        <Skeleton className="h-9 w-[120px]" />
       </CardContent>
     </Card>
   );
@@ -148,7 +105,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
             重试
           </Button>
           <Button asChild type="button" variant="secondary">
-            <Link href="/daa/login?returnTo=%2Fdaa%2Fdashboard%3Ftab%3Dunified-core">重新登录</Link>
+            <Link href="/daa/login?returnTo=%2Fdaa%2Fdashboard">重新登录</Link>
           </Button>
         </div>
       </CardContent>
@@ -162,22 +119,34 @@ export default function DaaDashboardPageClient() {
 
   useEffect(() => {
     const n = String(notice || "").trim();
-    if (!n) return;
-
     if (n === "signed_in") {
       toast.success("Signed in.");
     }
 
     try {
       const url = new URL(window.location.href);
-      url.searchParams.delete("notice");
-      window.history.replaceState({}, "", url.toString());
+      let changed = false;
+
+      if (url.searchParams.has("notice")) {
+        url.searchParams.delete("notice");
+        changed = true;
+      }
+
+      // 兼容旧链接：tab 参数不再参与页面分流。
+      if (url.searchParams.has("tab")) {
+        url.searchParams.delete("tab");
+        changed = true;
+      }
+
+      if (changed) {
+        const next = `${url.pathname}${url.search}${url.hash}`;
+        window.history.replaceState({}, "", next);
+      }
     } catch {
       // Ignore URL parsing / history errors.
     }
   }, [notice]);
 
-  const tab = normalizeTab(searchParams.get("tab"));
   const [auth, setAuth] = useState<AuthModel>({ kind: "loading" });
   const [authRev, setAuthRev] = useState(0);
 
@@ -213,9 +182,9 @@ export default function DaaDashboardPageClient() {
   }, []);
 
   const returnTo = useMemo(() => {
-    if (typeof window === "undefined") return "/daa/dashboard?tab=unified-core";
+    if (typeof window === "undefined") return "/daa/dashboard";
     return `${window.location.pathname}${window.location.search}`;
-  }, [tab, authRev]);
+  }, [authRev]);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,7 +242,7 @@ export default function DaaDashboardPageClient() {
     };
   }, [authRev]);
 
-  const header = <DaaDashboardHeader tab={tab} />;
+  const header = <DaaDashboardHeader />;
 
   if (auth.kind === "loading") {
     return (
@@ -305,13 +274,11 @@ export default function DaaDashboardPageClient() {
     );
   }
 
-  const content = tab === "settings" ? <DaaSettingsTab me={auth.me} returnTo={returnTo} /> : <DaaUnifiedArchitectureTab />;
-
   return (
     <div className="space-y-4">
       <DaaUnifiedInputBootstrap />
       {header}
-      {content}
+      <DaaUnifiedArchitectureTab />
     </div>
   );
 }

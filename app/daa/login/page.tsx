@@ -10,5 +10,5 @@ export default function DaaLoginPage(props: { searchParams?: Record<string, stri
   const rawNotice = props?.searchParams?.notice;
   const notice = typeof rawNotice === "string" ? rawNotice.trim() : "";
 
-  return <DaaLoginClient returnTo={returnTo || "/daa/dashboard?tab=unified-core"} error={error} notice={notice} />;
+  return <DaaLoginClient returnTo={returnTo || "/daa/dashboard"} error={error} notice={notice} />;
 }
