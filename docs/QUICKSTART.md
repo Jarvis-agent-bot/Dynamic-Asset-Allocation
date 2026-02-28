@@ -1,54 +1,33 @@
 # Quickstart
 
-This repo is a Next.js (App Router) app with a testable TypeScript core, plus an optional Python engine.
-
-## Local dev
+## 1) 本地启动
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Open:
-- http://localhost:3000/daa/
-- http://localhost:3000/daa/dashboard/
+打开：
+- http://localhost:3000/daa
+- http://localhost:3000/daa/dashboard?tab=unified-core
 
-## CI gates (recommended)
+## 2) 登录方式
+
+- 仅支持账号密码登录。
+- 非生产环境首次会自动初始化默认账号：`admin / admin123`。
+- 未配置数据库连接时，会自动使用内置 `pg-mem`（本地内存 Postgres 兼容层）。
+
+## 3) 数据库环境变量（可选）
+
+- `DAA_DB_URL`：DAA 专用 Postgres 连接串（优先）。
+- `DATABASE_URL`：通用 Postgres 连接串（回退）。
+
+如果两者都不配，开发环境可直接运行，不会阻塞登录。
+
+## 4) 常用验证
 
 ```bash
 pnpm test
 pnpm run typecheck
 pnpm build
-```
-
-## First deploy (VPS/Docker)
-
-See: [deploy/README.md](../deploy/README.md)
-
-After your first deploy, set a build SHA env var so the dashboard can display version info:
-
-- `NEXT_PUBLIC_BUILD_SHA` (full git SHA)
-
-## Admin bootstrap (fresh deployment)
-
-If there are zero DAA admin accounts, the dashboard will prompt for bootstrap.
-
-In non-production (`NODE_ENV!="production"`), `/api/daa/auth/login` can auto-bootstrap a local default admin (`admin` / `admin123`) when no accounts exist.
-
-You will need:
-- server env `DAA_AUTH_BOOTSTRAP_TOKEN`
-- request header `x-daa-bootstrap-token` (the same token)
-
-Then use `/api/daa/auth/bootstrap` to create the first admin (example via curl):
-
-```bash
-export DAA_AUTH_BOOTSTRAP_TOKEN="..."
-
-curl -sS -X POST "https://YOUR_DOMAIN/api/daa/auth/bootstrap" \
-  -H "accept: application/json" \
-  -H "content-type: application/json" \
-  -H "x-daa-bootstrap-token: $DAA_AUTH_BOOTSTRAP_TOKEN" \
-  --data-binary @- <<'JSON'
-{"username":"admin","password":"YOUR_PASSWORD"}
-JSON
 ```

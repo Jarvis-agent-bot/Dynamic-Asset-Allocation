@@ -1,38 +1,30 @@
-# VPS Deployment (Docker)
+# VPS 部署（Docker）
 
-This project can be deployed to a VPS using Docker.
+## 前置条件
 
-## Prerequisites
-- A VPS with Docker + Docker Compose v2 installed
-- This repo cloned on the VPS
+- VPS 已安装 Docker 与 Docker Compose v2
+- 已拉取本仓库代码
 
-## Start / Update
+## 启动 / 更新
+
 ```bash
 chmod +x deploy/start.sh
 ./deploy/start.sh
 ```
 
-It will pull latest `main`, build the image, and restart the service.
+脚本会拉取最新 `main`、重建镜像并重启服务。
 
-## Notes
-- Web (Next.js): 127.0.0.1:3000
-- Python engine (FastAPI): 127.0.0.1:18000
-- Suggested Nginx routing:
-  - `/daa/` → http://127.0.0.1:3000/daa/
-  - `/daa-api/` → http://127.0.0.1:18000/
-  - `/api/daa/` → http://127.0.0.1:3000/api/daa/ (Next.js API routes used by Step4/5)
-- No qlib / AI secrets are required for the v0 framework.
+## 端口与路由建议
 
-## DAA API Auth (FastAPI)
-The Python engine includes a legacy passwordless (email magic-link) auth flow.
-In the current epoch, public `/api/daa/*` is owned by Next.js and FastAPI public
-`/api/daa/*` handlers are disabled by default (`DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=0`).
+- Next.js（Web + `/api/daa/*`）：`127.0.0.1:3000`
+- Python 引擎（可选）：`127.0.0.1:18000`
 
-Env vars (legacy/optional):
-- `DAA_ADMIN_EDITOR_EMAILS`: comma-separated allowlist (editor role)
-- `DAA_ADMIN_VIEWER_EMAILS`: comma-separated allowlist (viewer role)
-- `RESEND_API_KEY`: Resend API key
-- `DAA_AUTH_EMAIL_FROM`: sender (e.g. `DAA <no-reply@your-domain>`)
-- `DAA_AUTH_PUBLIC_BASE_URL`: public base URL for the engine, e.g. `https://exwxyzi.cn/daa-api`
-- Optional: `DAA_AUTH_COOKIE_NAME` (default: `daa_api_session`)
-- Optional (legacy override): `DAA_ENABLE_FASTAPI_PUBLIC_DAA_ROUTES=1`
+建议 Nginx 路由：
+- `/daa/` → `http://127.0.0.1:3000/daa/`
+- `/api/daa/` → `http://127.0.0.1:3000/api/daa/`
+- `/daa-api/` → `http://127.0.0.1:18000/`
+
+## 说明
+
+- 当前登录由 Next.js 的账号密码鉴权统一处理（`/api/daa/auth/*`）。
+- Python 侧仅作为策略/计算引擎，不承载公共鉴权入口。

@@ -9,7 +9,6 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:daa-e2e-chain-gate-v0": "vitest run src/daa/__tests__/signalToStoreChainGateV0.e2e.test.ts",
     "typecheck": "tsc -p tsconfig.core.json",
     "gates": "pnpm test && pnpm run typecheck && pnpm build"
   },
