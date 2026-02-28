@@ -250,10 +250,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             <Button asChild className="w-full sm:w-auto">
               <Link href={safeReturnTo}>Continue to dashboard</Link>
             </Button>
-            <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void refreshSession()} disabled={refreshingSession}>
+            <Button type="button" className="w-full sm:w-auto" variant="secondary" onClick={() => void refreshSession()} disabled={refreshingSession}>
               {refreshingSession ? "Refreshing..." : "Refresh session"}
             </Button>
-            <Button type="button" className="w-full sm:w-auto" variant="outline" onClick={() => void logout()}>
+            <Button type="button" className="w-full sm:w-auto" variant="ghost" onClick={() => void logout()}>
               Sign out
             </Button>
           </CardContent>
