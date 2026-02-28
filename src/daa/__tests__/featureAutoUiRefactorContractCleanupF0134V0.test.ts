@@ -7,6 +7,6 @@ describe("feature-auto-ui-refactor-contract-cleanup-f0134-v0", () => {
     const file = resolve(process.cwd(), "app/daa/dashboard/_tabs/DaaSettingsTab.tsx");
     const source = readFileSync(file, "utf8");
 
-    expect(source).toContain("Legacy <code className=\"rounded bg-muted px-1 py-0.5\">/daa/settings</code> paths are normalized into this route for parity.");
+    expect(source).toContain("Legacy <code className=\"rounded bg-muted px-1 py-0.5\">/daa/settings</code> paths are normalized into this route for parity");
   });
 });
