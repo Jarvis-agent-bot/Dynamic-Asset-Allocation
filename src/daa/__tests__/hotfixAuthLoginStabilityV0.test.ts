@@ -7,8 +7,8 @@ describe("hotfix-auth-login-stability-v0", () => {
     const file = resolve(process.cwd(), "app/daa/login/_components/DaaLoginClient.tsx");
     const source = readFileSync(file, "utf8");
 
-    expect(source).toContain("Refresh session");
+    expect(source).toContain("刷新会话");
     expect(source).toContain("cache: \"no-store\"");
-    expect(source).toContain("toast.success(\"Session refreshed.\")");
+    expect(source).toContain("toast.success(\"会话已刷新。\")");
   });
 });

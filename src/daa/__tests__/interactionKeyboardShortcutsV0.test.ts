@@ -8,15 +8,16 @@ function readRepoFile(relPath: string): string {
 }
 
 describe("interaction keyboard shortcuts v0", () => {
-  it("keeps dashboard action-rail keyboard shortcuts wired", () => {
+  it("removes legacy action-rail keyboard shortcuts from dashboard page", () => {
     const source = readRepoFile("app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
 
-    expect(source).toContain("quickFilterInputRef");
-    expect(source).toContain("if (ev.key === \"/\" && !isTyping)");
-    expect(source).toContain("if (ev.key === \"1\")");
-    expect(source).toContain("if (ev.key === \"2\")");
-    expect(source).toContain("Shortcuts:");
-    expect(source).toContain("Alt+1");
-    expect(source).toContain("Alt+2");
+    expect(source).not.toContain("quickFilterInputRef");
+    expect(source).not.toContain("if (ev.key === \"/\" && !isTyping)");
+    expect(source).not.toContain("if (ev.key === \"1\")");
+    expect(source).not.toContain("if (ev.key === \"2\")");
+    expect(source).not.toContain("Shortcuts:");
+    expect(source).not.toContain("Alt+1");
+    expect(source).not.toContain("Alt+2");
+    expect(source).toContain("window.addEventListener(\"focus\", onFocus)");
   });
 });

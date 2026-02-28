@@ -3,14 +3,15 @@
 这是一个以 **Dynamic Asset Allocation（DAA）** 为核心的产品化系统（Next.js App Router + 可测试的 core 算法层 + 可选的 Python 在线引擎）。
 
 - 线上入口（VPS）：https://exwxyzi.cn/daa/
-- 目标交付方式：按 Step 页面逐步交付，从“可运行闭环”开始，再逐步增强策略/数据/资金管理/推荐/解释。
+- 当前产品入口：统一控制台（Unified Core）。
 
 > 说明：本仓库为 `Jarvis-agent-bot/Dynamic-Asset-Allocation`，持续维护中。
 
 ## Product 结构（前端优先）
 
-- `/daa/step/*`：引导式工作流页面（产品主线）
-- `/daa/market/funds/`：legacy「基金估值/重仓」模块（保留 + 归位为 DAA 子模块，不再作为项目对外主定位）
+- `/daa/dashboard?tab=unified-core`：DAA 统一运营台（核心入口）
+- `/daa/dashboard?tab=settings`：账号、会话、权限配置页
+- `/daa`：入口重定向到 Unified Core
 
 ## 🧠 DAA 核心（算法层）
 
@@ -18,6 +19,7 @@
 
 - 基础工程文档：[`docs/DAA_FOUNDATION.md`](./docs/DAA_FOUNDATION.md)（模块边界 + 核心数据模型）
 - 信号规格（v0）：[`docs/DAA_SIGNAL_SPEC_V0.md`](./docs/DAA_SIGNAL_SPEC_V0.md)
+- 全局架构指引（v1）：[`docs/DAA_GLOBAL_ARCHITECTURE_GUIDE.md`](./docs/DAA_GLOBAL_ARCHITECTURE_GUIDE.md)（再平衡 + 人因 + 风控一体化）
 
 - `src/core/domain.ts`：核心数据模型（Asset/Portfolio/Strategy/BacktestResult/MarketEvent 等）
 - `src/core/strategies.ts`：策略接口实现（如 Buy&Hold、SMA crossover、策略组合 ensemble）
@@ -53,21 +55,22 @@ await fetchValidatedPriceSeries(provider, {
 });
 ```
 
-> 路线（按顺序推进）：回测算法组合 → 市场信息（Twitter+yfinance/雪球）→ 资金管理 → 基准买卖推荐 → AI 分析 → 人因模型 → Tag 体系
+> 路线（按顺序推进）：回测算法组合 → 市场信息（Twitter+yfinance/雪球）→ 资金管理 → 统一再平衡推荐 → AI 分析 → 人因模型 → Tag 体系
 
 ## Python 在线引擎（可选）
 
 - Python 引擎对外通过 Nginx 前缀：`/daa-api/`
 - 典型健康检查：`https://exwxyzi.cn/daa-api/health`
-- Next.js 同域 API（供前端调用）：`/api/daa/*`（例如 Step4/Step5 调用的 `POST /api/daa/rebalance/simulate`）
+- Next.js 同域 API（供前端调用）：`/api/daa/*`（例如 `POST /api/daa/rebalance/unified`）
 
 部署相关：见 `deploy/README.md`。
 
-## ✨ 当前已交付（v0）
+## ✨ 当前已交付（v1）
 
-- Step 页面产品化骨架（/daa/step/*）
+- Unified Core 控制台（算法层 + 人因层 + 风控层一体化）
+- 统一输入模型（`daa.unified.input.v1`）+ 旧 key 自动清理机制
 - 最小 contracts/providers + 测试闭环（pnpm test/typecheck/build）
-- v0 再平衡建议：Step4/Step5 通过 `POST /api/daa/rebalance/simulate` 生成建议，并在 UI 展示“建议 + 解释 + 可复制 JSON”
+- 统一再平衡 API：`POST /api/daa/rebalance/unified`
 
 ## 🛠 技术栈
 
@@ -88,6 +91,13 @@ pnpm dev
 ```
 
 打开 http://localhost:3000/daa/
+
+### 本地登录与数据库说明
+
+- DAA 鉴权默认使用 Postgres（环境变量 `DAA_DB_URL` 或 `DATABASE_URL`）。
+- 若本地未配置数据库连接，开发模式会自动启用内置 `pg-mem`（免配置即可用账号密码登录）。
+- 开发默认账号：`admin / admin123`（仅非生产环境自动初始化）。
+- 统一输入模型主存储：`daa.unified.input.v1`（已直接作为唯一写入通道）。
 
 ### 构建与测试
 

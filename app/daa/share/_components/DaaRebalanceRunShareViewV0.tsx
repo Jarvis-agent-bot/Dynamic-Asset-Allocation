@@ -8,7 +8,10 @@ import {
 } from '@/src/daa/rebalanceRunShareCodec';
 
 import { copyTextToClipboard } from '../../copyToClipboard';
-import { pretty } from '../../wizardStorage';
+
+function prettyJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
 
 function downloadTextAsFile(args: { filename: string; text: string; mime: string }) {
   try {
@@ -136,7 +139,7 @@ export default function DaaRebalanceRunShareViewV0() {
     const token = getTokenFromLocation();
     if (!token) {
       setReport(null);
-      setError('Missing token. Generate a share link from Funds hub > Paper rebalance log.');
+      setError('Missing token. Generate a share link from Unified Core > Paper rebalance log.');
       return;
     }
 
@@ -219,7 +222,7 @@ export default function DaaRebalanceRunShareViewV0() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, alignItems: 'center' }}>
-          <button type="button" className="button secondary" onClick={() => copyJson(pretty(report))} style={{ padding: '6px 10px' }}>
+          <button type="button" className="button secondary" onClick={() => copyJson(prettyJson(report))} style={{ padding: '6px 10px' }}>
             {copyStatus === 'ok' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy report JSON'}
           </button>
           <button
@@ -228,7 +231,7 @@ export default function DaaRebalanceRunShareViewV0() {
             onClick={() =>
               downloadTextAsFile({
                 filename: `daa-rebalance-run-share-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`,
-                text: pretty(report),
+                text: prettyJson(report),
                 mime: 'application/json',
               })
             }
@@ -311,7 +314,7 @@ export default function DaaRebalanceRunShareViewV0() {
       {report.notes?.length ? (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 6 }}>Notes</div>
-          <pre style={{ margin: 0, fontSize: 11, opacity: 0.85, overflowX: 'auto' }}>{pretty(report.notes)}</pre>
+          <pre style={{ margin: 0, fontSize: 11, opacity: 0.85, overflowX: 'auto' }}>{prettyJson(report.notes)}</pre>
         </div>
       ) : null}
     </section>

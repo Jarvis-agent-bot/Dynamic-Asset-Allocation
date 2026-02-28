@@ -102,7 +102,7 @@ body {
   color: var(--text);
 }
 
-.container {
+.legacy-container {
   max-width: 1120px;
   margin: 0 auto;
   padding: 24px;
@@ -136,19 +136,19 @@ body {
   color: var(--muted);
 }
 
-.grid {
+.legacy-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 16px;
 }
 
-.col-12 { grid-column: span 12; }
-.col-6 { grid-column: span 6; }
-.col-4 { grid-column: span 4; }
-.col-3 { grid-column: span 3; }
+.legacy-col-12 { grid-column: span 12; }
+.legacy-col-6 { grid-column: span 6; }
+.legacy-col-4 { grid-column: span 4; }
+.legacy-col-3 { grid-column: span 3; }
 
 @media (max-width: 1024px) {
-  .col-6, .col-4, .col-3 { grid-column: span 12; }
+  .legacy-col-6, .legacy-col-4, .legacy-col-3 { grid-column: span 12; }
 }
 
 .navbar {

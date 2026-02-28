@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
-import { ensureDaaAuthSchemaPgV0, isDaaPgEnabledV0, withDaaPgClientV0 } from "../pg/daaPgV0";
+import { ensureDaaAuthSchemaPgV0, isDaaPgEnabledV0, isDaaPgMemRuntimeV0, withDaaPgClientV0 } from "../pg/daaPgV0";
 
 export type DaaAuthRoleV0 = "viewer" | "editor";
 export type DaaAuthAccountStatusV0 = "active" | "inactive";
@@ -422,7 +422,7 @@ export async function bootstrapCreateFirstDaaAuthAccountV0(args: {
         await query("BEGIN");
         try {
           // Prevent races when two bootstraps are attempted concurrently.
-          if (process.env.DAA_PG_MEM !== "1") {
+          if (!isDaaPgMemRuntimeV0()) {
             await query("LOCK TABLE daa_auth_accounts IN EXCLUSIVE MODE");
           }
 

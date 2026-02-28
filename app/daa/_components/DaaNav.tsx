@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { BarChart3, LayoutDashboard, Menu, Settings, Wand2 } from "lucide-react";
+import { Cpu, Menu, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -11,25 +11,21 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-type Tab = "dashboard" | "wizard" | "market-funds" | "settings";
+type Tab = "unified-core" | "settings";
 
 type IconType = ComponentType<{ className?: string }>;
 
 type NavItem = { key: Tab; href: string; label: string; Icon: IconType };
 
 function normalizeTab(raw: string | null): Tab {
-  if (raw === "dashboard") return "dashboard";
-  if (raw === "wizard") return "wizard";
-  if (raw === "market-funds") return "market-funds";
+  if (raw === "unified-core") return "unified-core";
   if (raw === "settings") return "settings";
-  return "market-funds";
+  return "unified-core";
 }
 
 function useActiveTab(): Tab | null {
   const pathname = usePathname() || "";
   const searchParams = useSearchParams();
-
-  if (pathname === "/daa/dashboard/settings" || pathname === "/daa/dashboard/settings/") return "settings";
 
   const tab = normalizeTab(searchParams.get("tab"));
   const isOnDashboard = pathname === "/daa/dashboard" || pathname === "/daa/dashboard/";
@@ -40,10 +36,8 @@ function useActiveTab(): Tab | null {
 function useNavItems(): NavItem[] {
   return useMemo(
     () => [
-      { key: "dashboard", href: "/daa/dashboard?tab=dashboard", label: "Dashboard", Icon: LayoutDashboard },
-      { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard", Icon: Wand2 },
-      { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds", Icon: BarChart3 },
-      { key: "settings", href: "/daa/dashboard/settings", label: "Settings", Icon: Settings },
+      { key: "unified-core", href: "/daa/dashboard?tab=unified-core", label: "Unified Core", Icon: Cpu },
+      { key: "settings", href: "/daa/dashboard?tab=settings", label: "Settings", Icon: Settings },
     ],
     []
   );

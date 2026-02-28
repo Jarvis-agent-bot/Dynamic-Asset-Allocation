@@ -22,16 +22,26 @@ afterEach(() => {
 });
 
 describe("daa pg url guard", () => {
-  it("rejects sqlite urls to enforce Postgres-only runtime", () => {
+  it("allows sqlite urls in non-production by falling back to pg-mem", () => {
     process.env.DAA_DB_URL = "sqlite:///var/lib/daa/daa.sqlite";
     delete process.env.DATABASE_URL;
+    process.env.NODE_ENV = "development";
 
-    expect(() => getDaaPgUrlV0()).toThrowError(/Postgres-only runtime/);
+    expect(getDaaPgUrlV0()).toBeNull();
   });
 
-  it("rejects non-Postgres url schemes", () => {
+  it("allows non-Postgres schemes in non-production by falling back to pg-mem", () => {
     process.env.DAA_DB_URL = "mysql://user:pass@localhost:3306/daa";
     delete process.env.DATABASE_URL;
+    process.env.NODE_ENV = "development";
+
+    expect(getDaaPgUrlV0()).toBeNull();
+  });
+
+  it("still rejects non-Postgres url schemes in production", () => {
+    process.env.DAA_DB_URL = "mysql://user:pass@localhost:3306/daa";
+    delete process.env.DATABASE_URL;
+    process.env.NODE_ENV = "production";
 
     expect(() => getDaaPgUrlV0()).toThrowError(/unsupported database URL scheme/);
   });
@@ -78,11 +88,12 @@ describe("daa pg url guard", () => {
     expect(getDaaPgUrlV0()).toBe("POSTGRES://daa:pass@localhost:5432/daa");
   });
 
-  it("still rejects non-Postgres DATABASE_URL fallback schemes", () => {
+  it("allows non-Postgres DATABASE_URL fallback in non-production via pg-mem", () => {
     process.env.DAA_DB_URL = "   ";
     process.env.DATABASE_URL = "mysql://user:pass@localhost:3306/daa";
+    process.env.NODE_ENV = "development";
 
-    expect(() => getDaaPgUrlV0()).toThrowError(/unsupported database URL scheme/);
+    expect(getDaaPgUrlV0()).toBeNull();
   });
 
   it("normalizes sqlalchemy DATABASE_URL fallback when DAA_DB_URL is blank", () => {
@@ -106,13 +117,13 @@ describe("daa pg url guard", () => {
     expect(getDaaPgUrlV0()).toBe("postgresql://daa:pass@primary-host:5432/daa");
   });
 
-  it("rejects DAA_PG_MEM outside test runtime", () => {
+  it("rejects DAA_PG_MEM in production runtime", () => {
     delete process.env.DAA_DB_URL;
     delete process.env.DATABASE_URL;
     process.env.DAA_PG_MEM = "1";
     process.env.NODE_ENV = "production";
 
-    expect(() => isDaaPgEnabledV0()).toThrowError(/test-only/);
+    expect(() => isDaaPgEnabledV0()).toThrowError(/must not be enabled in production/);
   });
 
   it("allows DAA_PG_MEM in test runtime", () => {

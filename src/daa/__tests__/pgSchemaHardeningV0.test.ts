@@ -15,21 +15,17 @@ function resetPgState() {
 }
 
 describe("pg schema hardening v0", () => {
-  it("retries store schema init after transient configuration failure", async () => {
+  it("auto-falls back to pg-mem for store schema init when DB URL is missing in non-production", async () => {
     resetPgState();
+    process.env.NODE_ENV = "test";
 
-    await expect(ensureDaaStoreSchemaPgV0()).rejects.toThrow(/Postgres not configured/);
-
-    process.env.DAA_PG_MEM = "1";
     await expect(ensureDaaStoreSchemaPgV0()).resolves.toBeUndefined();
   });
 
-  it("retries auth schema init after transient configuration failure", async () => {
+  it("auto-falls back to pg-mem for auth schema init when DB URL is missing in non-production", async () => {
     resetPgState();
+    process.env.NODE_ENV = "test";
 
-    await expect(ensureDaaAuthSchemaPgV0()).rejects.toThrow(/Postgres not configured/);
-
-    process.env.DAA_PG_MEM = "1";
     await expect(ensureDaaAuthSchemaPgV0()).resolves.toBeUndefined();
   });
 });

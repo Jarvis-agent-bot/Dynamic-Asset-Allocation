@@ -76,7 +76,6 @@ function deriveRunActorSourceV0(args: { kind: string; payload: unknown }): { act
     const kindLower = kind.toLowerCase();
 
     if (sourceLower.includes("/daa/dashboard") || kindLower.includes("dashboard")) actor = "dashboard";
-    else if (sourceLower.includes("/daa/market/funds") || kindLower.includes("market-funds")) actor = "market-funds";
     else actor = "unknown";
   }
 

@@ -9,8 +9,8 @@ function isLoginPath(pathname: string): boolean {
 }
 
 /**
- * If a DAA auth session exists, hitting `/daa/login` should bounce users back into the canonical entry:
- * `/daa/dashboard` (optionally preserving a safe `returnTo` deep-link).
+ * If a DAA auth session exists, hitting `/daa/login` should bounce users back into the
+ * canonical console entry (optionally preserving a safe `returnTo` deep-link).
  */
 export function getDaaLoginAuthedRedirect(args: {
   pathname: string;

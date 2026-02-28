@@ -1,19 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { DAA_AUTH_SESSION_COOKIE_V0 } from "./src/daa/auth/daaAuthConstantsV0";
-import { getDaaDashboardCompatRedirect } from "./src/daa/dashboardCompat";
 import { getDaaLoginAuthedRedirect } from "./src/daa/loginCompat";
 
-// VPS smoke checks for v0 hit explicit trailing-slash URLs like `/daa/step/4/`.
-// Some deployments still treat the non-slash form as canonical and will 308-redirect.
-// To make smoke checks deterministic, internally rewrite `/daa/**/` -> `/daa/**` (no redirect).
+// 统一 DAA 路径的尾部斜杠，避免线上环境 308 干扰体验。
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-
-  const compatRedirect = getDaaDashboardCompatRedirect(pathname, search);
-  if (compatRedirect) {
-    return NextResponse.redirect(new URL(compatRedirect, req.url), 307);
-  }
 
   const token = req.cookies.get(DAA_AUTH_SESSION_COOKIE_V0)?.value?.trim() || "";
 
@@ -29,11 +21,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL(`${normalized}${search}`, req.url));
   }
 
-  // Keep the canonical dashboard entry public so unauthenticated users can land on it.
-  const isPublicDashboardEntry = pathname === "/daa/dashboard" || pathname === "/daa/dashboard/";
-
-  // Auth gate: non-public DAA console pages require a session cookie; redirect to /daa/login.
-  if (pathname === "/daa/login" || pathname.startsWith("/daa/login/") || isPublicDashboardEntry) {
+  // Auth gate: all DAA console pages (except login) require a session cookie.
+  if (pathname === "/daa/login" || pathname.startsWith("/daa/login/")) {
     return NextResponse.next();
   }
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { WIZARD_DATA_EVENT } from "./wizardStorage";
+import { DAA_RUNTIME_DATA_EVENT_V1, loadUnifiedPriceSnapshotV1, saveUnifiedPriceSnapshotV1 } from "./unifiedInputStore";
 
+// 历史 key（仅保留给测试和迁移说明，不再用于读写）。
 export const LS_PRICE_SNAPSHOT = "daa.priceSnapshot.v1";
 
 export type PriceSnapshotV1 = {
@@ -12,15 +13,6 @@ export type PriceSnapshotV1 = {
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function safeJsonParse(raw: string | null): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
 }
 
 function toFinitePositiveNumber(x: unknown): number | null {
@@ -73,25 +65,22 @@ export function defaultPriceSnapshotV1(): PriceSnapshotV1 {
 }
 
 export function loadPriceSnapshotV1(): PriceSnapshotV1 {
-  if (typeof window === "undefined") return defaultPriceSnapshotV1();
-
-  const raw = safeJsonParse(window.localStorage.getItem(LS_PRICE_SNAPSHOT));
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return defaultPriceSnapshotV1();
-
-  const r: any = raw as any;
-  if (r.schemaVersion !== 1) return defaultPriceSnapshotV1();
-
-  const prices = normalizePrices(r.prices);
-  const updatedAt = typeof r.updatedAt === "string" && r.updatedAt ? r.updatedAt : nowIso();
-
-  return { schemaVersion: 1, updatedAt, prices };
+  const fromUnified = loadUnifiedPriceSnapshotV1();
+  if (fromUnified && typeof fromUnified === "object" && !Array.isArray(fromUnified)) {
+    const r: any = fromUnified as any;
+    if (r.schemaVersion === 1) {
+      const prices = normalizePrices(r.prices);
+      const updatedAt = typeof r.updatedAt === "string" && r.updatedAt ? r.updatedAt : nowIso();
+      return { schemaVersion: 1, updatedAt, prices };
+    }
+  }
+  return defaultPriceSnapshotV1();
 }
 
 export function savePriceSnapshotV1(st: PriceSnapshotV1) {
-  if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(LS_PRICE_SNAPSHOT, JSON.stringify(st));
-    window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
+    saveUnifiedPriceSnapshotV1(st, { dispatchEvent: false });
+    window.dispatchEvent(new CustomEvent(DAA_RUNTIME_DATA_EVENT_V1));
   } catch {
     // ignore
   }

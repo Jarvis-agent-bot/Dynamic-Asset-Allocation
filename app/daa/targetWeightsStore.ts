@@ -1,10 +1,15 @@
 "use client";
 
-import { WIZARD_DATA_EVENT } from "./wizardStorage";
+import {
+  DAA_RUNTIME_DATA_EVENT_V1,
+  loadUnifiedTargetWeightsStateV1,
+  saveUnifiedTargetWeightsStateV1,
+} from "./unifiedInputStore";
 
 // Target weights editor (v0): persist user-provided target weights in localStorage.
-// This is used by Market/Funds paper rebalance so users can override engine/money_plan outputs.
+// 用于统一控制台的纸上再平衡调权输入。
 
+// 历史 key（仅保留给测试和迁移说明，不再用于读写）。
 export const LS_TARGET_WEIGHTS = "daa.targetWeights";
 
 export type TargetWeightV1 = {
@@ -22,15 +27,6 @@ export type TargetWeightsStateV1 = {
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function safeJsonParse(raw: string | null): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
 }
 
 function toFiniteNumber(x: unknown): number | null {
@@ -69,7 +65,7 @@ export function normalizeTargetWeightsInput(x: unknown): TargetWeightV1[] {
   if (x && typeof x === "object") {
     const r: any = x as any;
 
-    // Common wrapper shapes (export bundles / engine req+resp / wizard state).
+    // Common wrapper shapes (export bundles / engine req+resp / runtime state).
     if (r.targetWeights !== undefined) return normalizeTargetWeightsInput(r.targetWeights);
     if (r.target_weights !== undefined) return normalizeTargetWeightsInput(r.target_weights);
     if (r.money_plan && typeof r.money_plan === "object" && (r.money_plan as any).allocations !== undefined) {
@@ -96,18 +92,16 @@ function defaultStateV1(): TargetWeightsStateV1 {
 }
 
 export function loadTargetWeightsStateV1(): TargetWeightsStateV1 {
-  if (typeof window === "undefined") return defaultStateV1();
-
-  const raw = safeJsonParse(window.localStorage.getItem(LS_TARGET_WEIGHTS));
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return defaultStateV1();
-
-  const r: any = raw as any;
-  if (r.schemaVersion !== 1) return defaultStateV1();
-
-  const targetWeights = normalizeTargetWeightsInput(r.targetWeights);
-  const updatedAt = typeof r.updatedAt === "string" && r.updatedAt ? r.updatedAt : nowIso();
-
-  return { schemaVersion: 1, updatedAt, targetWeights };
+  const fromUnified = loadUnifiedTargetWeightsStateV1();
+  if (fromUnified && typeof fromUnified === "object" && !Array.isArray(fromUnified)) {
+    const r: any = fromUnified as any;
+    if (r.schemaVersion === 1) {
+      const targetWeights = normalizeTargetWeightsInput(r.targetWeights);
+      const updatedAt = typeof r.updatedAt === "string" && r.updatedAt ? r.updatedAt : nowIso();
+      return { schemaVersion: 1, updatedAt, targetWeights };
+    }
+  }
+  return defaultStateV1();
 }
 
 export function loadTargetWeightsV1(): TargetWeightV1[] {
@@ -115,12 +109,7 @@ export function loadTargetWeightsV1(): TargetWeightV1[] {
 }
 
 export function saveTargetWeightsStateV1(state: TargetWeightsStateV1) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(LS_TARGET_WEIGHTS, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
+  saveUnifiedTargetWeightsStateV1(state, { dispatchEvent: false });
 }
 
 export function persistTargetWeightsV1(items: unknown) {
@@ -137,7 +126,7 @@ export function persistTargetWeightsV1(items: unknown) {
 
   // Trigger refresh in the same tab.
   try {
-    window.dispatchEvent(new CustomEvent(WIZARD_DATA_EVENT));
+    window.dispatchEvent(new CustomEvent(DAA_RUNTIME_DATA_EVENT_V1));
   } catch {
     // ignore
   }

@@ -8,14 +8,14 @@ describe("daa/urlV0", () => {
   });
 
   it("preserves existing query params", () => {
-    expect(appendNoticeParamV0("/daa/dashboard?tab=wizard&step=1", "signed_in")).toBe(
-      "/daa/dashboard?tab=wizard&step=1&notice=signed_in"
+    expect(appendNoticeParamV0("/daa/dashboard?tab=unified-core", "signed_in")).toBe(
+      "/daa/dashboard?tab=unified-core&notice=signed_in"
     );
   });
 
   it("preserves hash", () => {
-    expect(appendNoticeParamV0("/daa/dashboard?tab=wizard#step5", "signed_in")).toBe(
-      "/daa/dashboard?tab=wizard&notice=signed_in#step5"
+    expect(appendNoticeParamV0("/daa/dashboard?tab=unified-core#ops", "signed_in")).toBe(
+      "/daa/dashboard?tab=unified-core&notice=signed_in#ops"
     );
   });
 
@@ -24,31 +24,27 @@ describe("daa/urlV0", () => {
   });
 
   describe("normalizeDaaReturnToV0", () => {
-    it("defaults to /daa/dashboard for empty/unsafe values", () => {
-      expect(normalizeDaaReturnToV0("")).toBe("/daa/dashboard");
-      expect(normalizeDaaReturnToV0("https://evil.com")).toBe("/daa/dashboard");
-      expect(normalizeDaaReturnToV0("//evil.com/daa/dashboard")).toBe("/daa/dashboard");
-      expect(normalizeDaaReturnToV0("not-a-path")).toBe("/daa/dashboard");
-      expect(normalizeDaaReturnToV0("/not-daa")).toBe("/daa/dashboard");
-      expect(normalizeDaaReturnToV0("/daa/login?returnTo=%2Fdaa%2Fdashboard")).toBe("/daa/dashboard");
-    });
-
-    it("maps legacy /daa* routes into the canonical /daa/dashboard", () => {
-      expect(normalizeDaaReturnToV0("/daa/step/5")).toBe("/daa/dashboard?tab=wizard&step=5");
-      expect(normalizeDaaReturnToV0("/daa?step=4")).toBe("/daa/dashboard?step=4&tab=wizard");
-      expect(normalizeDaaReturnToV0("/daa/market/funds")).toBe("/daa/dashboard?tab=market-funds");
+    it("defaults to unified-core console for empty/unsafe values", () => {
+      expect(normalizeDaaReturnToV0("")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("https://evil.com")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("//evil.com/daa/dashboard")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("not-a-path")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("/not-daa")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("/daa/login?returnTo=%2Fdaa%2Fdashboard")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("/daa/wizard")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("/daa/step/5")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("/daa/market/funds")).toBe("/daa/dashboard?tab=unified-core");
     });
 
     it("canonicalizes /daa/dashboard and preserves query/hash", () => {
-      expect(normalizeDaaReturnToV0("/daa/dashboard/")).toBe("/daa/dashboard");
-      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=wizard&step=1#x")).toBe("/daa/dashboard?tab=wizard&step=1#x");
-      expect(normalizeDaaReturnToV0("/daa/step/2#foo")).toBe("/daa/dashboard?tab=wizard&step=2#foo");
+      expect(normalizeDaaReturnToV0("/daa")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("/daa/dashboard/")).toBe("/daa/dashboard?tab=unified-core");
+      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=unknown#x")).toBe("/daa/dashboard?tab=unified-core#x");
     });
 
-    it("allows /daa/dashboard/settings deep-links", () => {
-      expect(normalizeDaaReturnToV0("/daa/dashboard/settings")).toBe("/daa/dashboard/settings");
-      expect(normalizeDaaReturnToV0("/daa/dashboard/settings/")).toBe("/daa/dashboard/settings");
-      expect(normalizeDaaReturnToV0("/daa/dashboard/settings?x=1#y")).toBe("/daa/dashboard/settings?x=1#y");
+    it("保留 tab=settings 的统一入口，不接受旧 settings 路径", () => {
+      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=settings")).toBe("/daa/dashboard?tab=settings");
+      expect(normalizeDaaReturnToV0("/daa/dashboard/settings")).toBe("/daa/dashboard?tab=unified-core");
     });
   });
 });

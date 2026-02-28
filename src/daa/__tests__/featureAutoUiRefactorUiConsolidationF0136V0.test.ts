@@ -7,7 +7,7 @@ describe("feature-auto-ui-refactor-ui-consolidation-f0136-v0", () => {
     const file = resolve(process.cwd(), "app/daa/login/_components/DaaLoginClient.tsx");
     const source = readFileSync(file, "utf8");
 
-    expect(source).toContain("<AlertTitle>Dev/Test default account</AlertTitle>");
+    expect(source).toContain("<AlertTitle>本地默认账号</AlertTitle>");
     expect(source).toContain("<AlertDescription>");
   });
 });

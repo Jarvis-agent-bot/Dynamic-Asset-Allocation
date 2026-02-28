@@ -7,6 +7,7 @@ describe("feature-auto-dead-code-contract-cleanup-f0135-v0", () => {
     const file = resolve(process.cwd(), "app/daa/dashboard/_tabs/DaaSettingsTab.tsx");
     const source = readFileSync(file, "utf8");
 
-    expect(source).toContain("removed legacy surfaces like <code className=\"rounded bg-muted px-1 py-0.5\">/daa/wizard</code> are redirected to canonical dashboard tabs.");
+    expect(source).toContain("Console entry is <code className=\"rounded bg-muted px-1 py-0.5\">/daa/dashboard?tab=unified-core</code>.");
+    expect(source).toContain("Settings canonical URL is");
   });
 });

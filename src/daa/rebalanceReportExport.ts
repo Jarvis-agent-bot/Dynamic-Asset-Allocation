@@ -43,20 +43,7 @@ function pickLatestByAt<T extends { at: string }>(entries: T[]): T | null {
   return best;
 }
 
-function safeJsonParse(raw: string | null): unknown {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-// Kept in sync with app/daa/wizardStorage.ts (but defined here so src/daa stays standalone).
-const LS_REBALANCE_REQUEST = "daa.wizard.rebalanceRequest";
-const LS_REBALANCE_RESPONSE = "daa.wizard.rebalanceResponse";
-
-const PAPER_RUN_NOTE = "ui:market/funds:paper-run";
+const PAPER_RUN_NOTE = "ui:unified-core:paper-run";
 
 export function buildLatestRebalanceRunReportV1(storage: Pick<Storage, "getItem"> | null | undefined): RebalanceRunReportV1 {
   const notes: string[] = [];
@@ -76,14 +63,14 @@ export function buildLatestRebalanceRunReportV1(storage: Pick<Storage, "getItem"
 
   if (runId && !paperExecutionLogEntryByRunId) notes.push(`missing paperExecutionLog entry for runId=${runId}`);
 
-  // Prefer request/response attached to the rebalance log entry (it should be the source of truth for the run).
-  const request = rebalanceLogEntry?.request !== undefined ? rebalanceLogEntry.request : safeJsonParse(storage?.getItem(LS_REBALANCE_REQUEST) ?? null);
-  const response = rebalanceLogEntry?.response !== undefined ? rebalanceLogEntry.response : safeJsonParse(storage?.getItem(LS_REBALANCE_RESPONSE) ?? null);
+  // 统一控制台下 request/response 以 rebalanceLog 为唯一来源。
+  const request = rebalanceLogEntry?.request !== undefined ? rebalanceLogEntry.request : null;
+  const response = rebalanceLogEntry?.response !== undefined ? rebalanceLogEntry.response : null;
 
   if (!rebalanceLogEntry) notes.push("missing rebalanceLog entry (no prior runs recorded)");
   if (!paperExecutionLogEntry) notes.push("missing paperExecutionLog entry (orders may not have been recorded)");
-  if (request == null) notes.push(`missing ${LS_REBALANCE_REQUEST}`);
-  if (response == null) notes.push(`missing ${LS_REBALANCE_RESPONSE}`);
+  if (request == null) notes.push("missing request in rebalanceLog");
+  if (response == null) notes.push("missing response in rebalanceLog");
 
   return {
     schemaVersion: REBALANCE_RUN_REPORT_SCHEMA_VERSION,

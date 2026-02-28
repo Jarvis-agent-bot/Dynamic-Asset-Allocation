@@ -7,6 +7,7 @@ describe("product-ui-logic-screenshot-optimization-v0", () => {
     const file = resolve(process.cwd(), "app/daa/dashboard/_components/DaaDashboardPageClient.tsx");
     const source = readFileSync(file, "utf8");
 
-    expect(source).toContain("<Link href=\"/daa/login?returnTo=%2Fdaa%2Fdashboard\">Sign in again</Link>");
+    expect(source).toContain("<Link href={`/daa/login?returnTo=${encodeURIComponent(returnTo)}`}>去登录</Link>");
+    expect(source).toContain("/daa/login?returnTo=%2Fdaa%2Fdashboard%3Ftab%3Dunified-core");
   });
 });

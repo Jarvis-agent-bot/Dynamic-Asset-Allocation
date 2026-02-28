@@ -168,10 +168,8 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
         <AlertDescription>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
             <li>
-              The canonical entry is <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>; legacy <code className="rounded bg-muted px-1 py-0.5">/daa*</code> routes redirect here.
-            </li>
-            <li>
-              Settings stays aligned under <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard/settings</code> so dashboard + settings share the same auth/session guard behavior. Legacy <code className="rounded bg-muted px-1 py-0.5">/daa/settings</code> paths are normalized into this route for parity, and removed legacy surfaces like <code className="rounded bg-muted px-1 py-0.5">/daa/wizard</code> are redirected to canonical dashboard tabs.
+              Console entry is <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard?tab=unified-core</code>. Settings canonical URL is{" "}
+              <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard?tab=settings</code>.
             </li>
             <li>
               The UI may produce <code className="rounded bg-muted px-1 py-0.5">ai_orders_draft</code> only; never auto-execute trades.
