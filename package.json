@@ -9,6 +9,7 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:daa-e2e-chain-gate-v0": "pnpm run gates",
     "typecheck": "tsc -p tsconfig.core.json",
     "gates": "pnpm test && pnpm run typecheck && pnpm build"
   },
