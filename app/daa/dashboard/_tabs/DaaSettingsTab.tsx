@@ -171,7 +171,7 @@ export default function DaaSettingsTab({ me, returnTo }: { me: Me; returnTo: str
               The canonical entry is <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>; legacy <code className="rounded bg-muted px-1 py-0.5">/daa*</code> routes redirect here.
             </li>
             <li>
-              Settings stays aligned under <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard/settings</code> so dashboard + settings share the same auth/session guard behavior.
+              Settings stays aligned under <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard/settings</code> so dashboard + settings share the same auth/session guard behavior. Legacy <code className="rounded bg-muted px-1 py-0.5">/daa/settings</code> paths are normalized into this route for parity.
             </li>
             <li>
               The UI may produce <code className="rounded bg-muted px-1 py-0.5">ai_orders_draft</code> only; never auto-execute trades.
