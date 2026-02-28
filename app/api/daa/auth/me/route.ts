@@ -6,13 +6,27 @@ import { ensureDevDefaultDaaAuthAccountV0, refreshDaaAuthSessionV0 } from "@/src
 
 export const runtime = "nodejs";
 
+function unauthenticatedResponse() {
+  const res = NextResponse.json({ ok: false, error: "not_authenticated" }, { status: 401 });
+  res.cookies.set({
+    name: DAA_AUTH_SESSION_COOKIE_V0,
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
+    maxAge: 0,
+  });
+  return res;
+}
+
 export async function GET(req: Request) {
   try {
     await ensureDevDefaultDaaAuthAccountV0().catch(() => null);
 
     const ctx = await getDaaAuthContextFromRequestV0(req, { touch: false });
     if (!ctx) {
-      return NextResponse.json({ ok: false, error: "not_authenticated" }, { status: 401 });
+      return unauthenticatedResponse();
     }
 
     const { account, session, token } = ctx;

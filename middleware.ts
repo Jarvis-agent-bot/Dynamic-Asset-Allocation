@@ -1,19 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { DAA_AUTH_SESSION_COOKIE_V0 } from "./src/daa/auth/daaAuthConstantsV0";
-import { getDaaLoginAuthedRedirect } from "./src/daa/loginCompat";
 
 // 统一 DAA 路径的尾部斜杠，避免线上环境 308 干扰体验。
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
   const token = req.cookies.get(DAA_AUTH_SESSION_COOKIE_V0)?.value?.trim() || "";
-
-  // If the user is already signed in, `/daa/login` should bounce back into the canonical entry.
-  const loginAuthedRedirect = getDaaLoginAuthedRedirect({ pathname, search, hasSession: Boolean(token) });
-  if (loginAuthedRedirect) {
-    return NextResponse.redirect(new URL(loginAuthedRedirect, req.url), 307);
-  }
 
   // Keep `/daa/` as-is; only normalize deeper paths.
   if (pathname.startsWith("/daa/") && pathname.length > "/daa/".length && pathname.endsWith("/")) {

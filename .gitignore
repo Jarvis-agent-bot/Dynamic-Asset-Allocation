@@ -80,6 +80,7 @@ fabric.properties
 /node_modules/
 /.next/
 *.tsbuildinfo
+.venv*/
 
 # Local automation artifacts
 .prbody*.md
