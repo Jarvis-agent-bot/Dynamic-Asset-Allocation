@@ -16,6 +16,8 @@ export type HydrateUnifiedRequestResultV1 = {
     addedTargets: string[];
     candidateCount: number;
     fxRateCount: number;
+    humanSourceStatus: "live" | "fallback_seed" | "unknown";
+    humanDiagnostics: string[];
   };
 };
 
@@ -35,7 +37,17 @@ function clamp(v: number, lo: number, hi: number): number {
   return v;
 }
 
-function normalizeWatchlistCandidate(candidate: Partial<DaaUnifiedWatchlistCandidateV1>): DaaUnifiedWatchlistCandidateV1 | null {
+type WatchlistCandidateLikeV1 = {
+  symbol?: unknown;
+  market?: unknown;
+  currency?: unknown;
+  targetWeightHint?: unknown;
+  enabled?: unknown;
+  tags?: unknown;
+  notes?: unknown;
+};
+
+function normalizeWatchlistCandidate(candidate: WatchlistCandidateLikeV1): DaaUnifiedWatchlistCandidateV1 | null {
   const symbol = normalizeSymbol(candidate.symbol);
   if (!symbol) return null;
   return {
@@ -51,7 +63,7 @@ function normalizeWatchlistCandidate(candidate: Partial<DaaUnifiedWatchlistCandi
 
 function mergeWatchlistCandidates(
   requestCandidates: DaaUnifiedWatchlistCandidateV1[] | undefined,
-  persistedCandidates: Array<Partial<DaaUnifiedWatchlistCandidateV1>>,
+  persistedCandidates: WatchlistCandidateLikeV1[],
 ): DaaUnifiedWatchlistCandidateV1[] {
   const map = new Map<string, DaaUnifiedWatchlistCandidateV1>();
 
@@ -393,6 +405,8 @@ export async function hydrateUnifiedRequestWithSignalsV1(request: DaaUnifiedRequ
       addedTargets,
       candidateCount: mergedCandidates.length,
       fxRateCount: dedupFx.size,
+      humanSourceStatus: panel.diagnostics.humanSourceStatus,
+      humanDiagnostics: panel.diagnostics.humanDiagnostics,
     },
   };
 }

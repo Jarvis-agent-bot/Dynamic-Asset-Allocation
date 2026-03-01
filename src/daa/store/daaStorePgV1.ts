@@ -1301,17 +1301,6 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
         const shouldBookTrade = (status === "executed" || status === "partial") && incrementalQty > 0 && executedPrice > 0;
         if (!shouldBookTrade) continue;
 
-        const notional = incrementalQty * executedPrice;
-        await query(
-          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, rebalance_decision_id, execution_order_id, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),'rebalance_sync',$8,$9,$10,NOW())",
-          [randomUUID(), oldOrder.symbol, oldOrder.side, incrementalQty, executedPrice, notional, incrementalFee, decisionId, orderId, notes || null],
-        );
-
-        await query(
-          "UPDATE daa_execution_orders SET booked_qty = $1, booked_notional = $2, booked_fee = $3, booked_at = COALESCE(booked_at, NOW()) WHERE order_id = $4",
-          [bookedQtyBefore + incrementalQty, bookedNotionalBefore + notional, bookedFeeBefore + incrementalFee, orderId],
-        );
-
         const current = positionsMap.get(oldOrder.symbol) ?? {
           id: oldOrder.symbol,
           symbol: oldOrder.symbol,
@@ -1324,6 +1313,21 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
           liquidityNotional24h: 0,
           updatedAt: new Date().toISOString(),
         };
+
+        if (oldOrder.side === "SELL" && incrementalQty > current.qty + 1e-8) {
+          throw new Error(`execution qty exceeds holdings for ${oldOrder.symbol}: ${incrementalQty.toFixed(8)} > ${current.qty.toFixed(8)}`);
+        }
+
+        const notional = incrementalQty * executedPrice;
+        await query(
+          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, rebalance_decision_id, execution_order_id, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),'rebalance_sync',$8,$9,$10,NOW())",
+          [randomUUID(), oldOrder.symbol, oldOrder.side, incrementalQty, executedPrice, notional, incrementalFee, decisionId, orderId, notes || null],
+        );
+
+        await query(
+          "UPDATE daa_execution_orders SET booked_qty = $1, booked_notional = $2, booked_fee = $3, booked_at = COALESCE(booked_at, NOW()) WHERE order_id = $4",
+          [bookedQtyBefore + incrementalQty, bookedNotionalBefore + notional, bookedFeeBefore + incrementalFee, orderId],
+        );
 
         const nextQty = oldOrder.side === "BUY"
           ? current.qty + incrementalQty

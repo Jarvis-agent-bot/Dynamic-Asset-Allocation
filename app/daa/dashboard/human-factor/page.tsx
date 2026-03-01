@@ -49,6 +49,8 @@ type HumanSignalBatch = {
   generatedAt: string;
   asOfDate: string;
   mode: string;
+  sourceStatus?: "live" | "fallback_seed" | "unknown";
+  diagnostics?: string[];
   marketScope: string[];
   actorCount: number;
   holdingCount: number;
@@ -263,6 +265,8 @@ export default function HumanFactorPage() {
         generatedAt: String(batch?.generatedAt ?? ""),
         asOfDate: String(batch?.asOfDate ?? ""),
         mode: String(batch?.mode ?? ""),
+        sourceStatus: batch?.sourceStatus === "live" || batch?.sourceStatus === "fallback_seed" ? batch.sourceStatus : "unknown",
+        diagnostics: Array.isArray(batch?.diagnostics) ? batch.diagnostics : [],
         marketScope: Array.isArray(batch?.marketScope) ? batch.marketScope : [],
         actorCount: Number(batch?.actorCount ?? 0),
         holdingCount: Number(batch?.holdingCount ?? 0),
@@ -388,10 +392,29 @@ export default function HumanFactorPage() {
             </Alert>
           ) : null}
 
+          {signalBatch?.sourceStatus === "fallback_seed" ? (
+            <Alert variant="destructive" className="py-2">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <AlertDescription className="text-xs">
+                当前人因信号来自本地回退样本（seed），不是最新外部采集结果。请检查数据源配置后重新采集。
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
           <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-md border px-2 py-1.5">
               <span className="text-muted-foreground">采集模式</span>
               <div className="font-medium">{signalBatch?.mode || "-"}</div>
+            </div>
+            <div className="rounded-md border px-2 py-1.5">
+              <span className="text-muted-foreground">来源状态</span>
+              <div className="font-medium">
+                {signalBatch?.sourceStatus === "live"
+                  ? "实时采集"
+                  : signalBatch?.sourceStatus === "fallback_seed"
+                    ? "回退样本"
+                    : "-"}
+              </div>
             </div>
             <div className="rounded-md border px-2 py-1.5">
               <span className="text-muted-foreground">市场范围</span>
@@ -414,6 +437,15 @@ export default function HumanFactorPage() {
               <div className="font-medium">{latestGeneratedAtText}</div>
             </div>
           </div>
+
+          {signalBatch?.diagnostics?.length ? (
+            <div className="rounded-md border px-2 py-2 text-xs text-muted-foreground">
+              <div className="mb-1 font-medium text-foreground">采集诊断</div>
+              {signalBatch.diagnostics.map((line, index) => (
+                <div key={`diag-${index}`}>- {line}</div>
+              ))}
+            </div>
+          ) : null}
 
           <div className="space-y-1">
             <div className="text-xs font-medium">来源分布</div>

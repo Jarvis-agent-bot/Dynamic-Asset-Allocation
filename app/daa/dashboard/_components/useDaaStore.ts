@@ -40,10 +40,21 @@ import type { DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
 
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
 const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
+export const DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1 = "daa:dashboard:persist-error";
 
 function emitDashboardDataUpdatedV1() {
   try {
     window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
+  } catch {
+    // ignore browser event failures
+  }
+}
+
+function emitDashboardPersistErrorV1(message: string) {
+  const text = String(message || "").trim();
+  if (!text) return;
+  try {
+    window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1, { detail: { message: text, ts: Date.now() } }));
   } catch {
     // ignore browser event failures
   }
@@ -100,8 +111,16 @@ export function usePositions() {
   }, [setValue]);
 
   const set = useCallback((rows: DaaPositionRow[] | null) => {
+    const previous = readUnifiedInputSliceV1<DaaPositionRow[]>("positions");
     setValue(rows);
-    void replacePositionsV1((rows ?? []) as any[]).catch(() => {});
+    void replacePositionsV1((rows ?? []) as any[])
+      .then(() => {
+        emitDashboardDataUpdatedV1();
+      })
+      .catch((error) => {
+        setValue(previous ?? null);
+        emitDashboardPersistErrorV1(`保存持仓失败：${getApiErrorMessageV1(error)}`);
+      });
   }, [setValue]);
 
   return [value, set] as const;
@@ -144,6 +163,7 @@ export function useHfFundRegistry() {
   }, [setValue]);
 
   const set = useCallback((rows: DaaHfFundTrackRow[] | null) => {
+    const previous = readUnifiedInputSliceV1<DaaHfFundTrackRow[]>("hfFundRegistry");
     setValue(rows);
     void replaceDataSourcesV1([
       {
@@ -152,7 +172,14 @@ export function useHfFundRegistry() {
         enabled: true,
         configJson: { funds: rows ?? [] },
       },
-    ] as any[]).catch(() => {});
+    ] as any[])
+      .then(() => {
+        emitDashboardDataUpdatedV1();
+      })
+      .catch((error) => {
+        setValue(previous ?? null);
+        emitDashboardPersistErrorV1(`保存基金池失败：${getApiErrorMessageV1(error)}`);
+      });
   }, [setValue]);
 
   return [value, set] as const;
@@ -185,8 +212,16 @@ export function useWatchlistCandidates() {
   }, [setValue]);
 
   const set = useCallback((rows: DaaWatchlistCandidateRow[] | null) => {
+    const previous = readUnifiedInputSliceV1<DaaWatchlistCandidateRow[]>("watchlistCandidates");
     setValue(rows);
-    void replaceWatchlistCandidatesV1((rows ?? []) as any[]).catch(() => {});
+    void replaceWatchlistCandidatesV1((rows ?? []) as any[])
+      .then(() => {
+        emitDashboardDataUpdatedV1();
+      })
+      .catch((error) => {
+        setValue(previous ?? null);
+        emitDashboardPersistErrorV1(`保存候选池失败：${getApiErrorMessageV1(error)}`);
+      });
   }, [setValue]);
 
   return [value, set] as const;
@@ -219,8 +254,16 @@ export function useFxRates() {
   }, [setValue]);
 
   const set = useCallback((rows: DaaFxRateRow[] | null) => {
+    const previous = readUnifiedInputSliceV1<DaaFxRateRow[]>("fxRates");
     setValue(rows);
-    void upsertFxRatesV1((rows ?? []) as any[]).catch(() => {});
+    void upsertFxRatesV1((rows ?? []) as any[])
+      .then(() => {
+        emitDashboardDataUpdatedV1();
+      })
+      .catch((error) => {
+        setValue(previous ?? null);
+        emitDashboardPersistErrorV1(`保存汇率失败：${getApiErrorMessageV1(error)}`);
+      });
   }, [setValue]);
 
   return [value, set] as const;
@@ -265,8 +308,16 @@ export function useStrategyConfig(): [DaaStrategyConfig, (v: DaaStrategyConfig) 
   }, [setRaw]);
 
   const set = useCallback((v: DaaStrategyConfig) => {
+    const previous = readUnifiedInputSliceV1<DaaStrategyConfig>("strategyConfig");
     setRaw(v);
-    void saveStrategyConfigV1(v as unknown as Record<string, unknown>).catch(() => {});
+    void saveStrategyConfigV1(v as unknown as Record<string, unknown>)
+      .then(() => {
+        emitDashboardDataUpdatedV1();
+      })
+      .catch((error) => {
+        setRaw(previous ?? null);
+        emitDashboardPersistErrorV1(`保存策略配置失败：${getApiErrorMessageV1(error)}`);
+      });
   }, [setRaw]);
 
   return [config as DaaStrategyConfig, set];

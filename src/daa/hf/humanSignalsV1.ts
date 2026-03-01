@@ -70,6 +70,8 @@ export type DaaHumanSignalBatchV1 = {
   asOfDate: string;
   marketScope: string[];
   mode: "official_first" | "danjuan_primary_with_official_fallback";
+  sourceStatus?: "live" | "fallback_seed";
+  diagnostics?: string[];
   actorCount: number;
   holdingCount: number;
   signals: DaaHumanSignalV1[];
@@ -83,4 +85,6 @@ export type DaaHumanIngestSummaryV1 = {
   holdingCount: number;
   signalCount: number;
   mode: "official_first" | "danjuan_primary_with_official_fallback";
+  sourceStatus?: "live" | "fallback_seed";
+  diagnostics?: string[];
 };

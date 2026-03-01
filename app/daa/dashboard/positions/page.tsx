@@ -23,7 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import TierBadge from "../_components/TierBadge";
 import { formatCurrency, formatPercent } from "../_components/daaFormatters";
-import { usePositions, useStrategyConfig, useLastRunResult } from "../_components/useDaaStore";
+import { useFxRates, useLastRunResult, usePositions, useStrategyConfig } from "../_components/useDaaStore";
 import { useMarketDataClient } from "../../useMarketDataClient";
 import type { DaaPositionRow } from "../../unifiedInputStore";
 
@@ -67,6 +67,24 @@ function normalizeMarket(value: string): string {
   const market = String(value || "").trim().toUpperCase();
   if (market === "A") return "CN";
   return market || "US";
+}
+
+function resolveFxRateToBase(
+  baseCurrency: string,
+  localCurrency: string,
+  fxLookup: Map<string, number>,
+): number | null {
+  const base = String(baseCurrency || "").trim().toUpperCase() || "USD";
+  const local = String(localCurrency || "").trim().toUpperCase() || base;
+  if (local === base) return 1;
+
+  const direct = fxLookup.get(`${local}/${base}`);
+  if (direct && direct > 0) return direct;
+
+  const reverse = fxLookup.get(`${base}/${local}`);
+  if (reverse && reverse > 0) return 1 / reverse;
+
+  return null;
 }
 
 function PositionFormDialog({
@@ -251,16 +269,47 @@ function ImportDialog({ onImport }: { onImport: (rows: DaaPositionRow[]) => void
 export default function PositionsPage() {
   const [positions, setPositions] = usePositions();
   const [config, setConfig] = useStrategyConfig();
+  const [fxRates] = useFxRates();
   const [lastRun] = useLastRunResult();
   const marketData = useMarketDataClient();
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
 
   const list = positions ?? [];
+  const fxRateRows = fxRates ?? [];
   const result = extractPlan(lastRun);
   const decisions = result?.layers?.humanFactor?.assetDecisions ?? [];
+  const displayCurrency = String(config.account.baseCurrency || "USD").trim().toUpperCase() || "USD";
 
-  const totalValue = useMemo(() => list.reduce((sum, p) => sum + p.qty * p.price, 0), [list]);
+  const fxLookup = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const row of fxRateRows) {
+      const baseCcy = String(row.baseCcy || "").trim().toUpperCase();
+      const quoteCcy = String(row.quoteCcy || "").trim().toUpperCase();
+      const rate = Number(row.rate);
+      if (!baseCcy || !quoteCcy || !Number.isFinite(rate) || rate <= 0) continue;
+      out.set(`${baseCcy}/${quoteCcy}`, rate);
+    }
+    return out;
+  }, [fxRateRows]);
+
+  const valuationRows = useMemo(() => {
+    return list.map((position) => {
+      const localValue = position.qty * position.price;
+      const fxRate = resolveFxRateToBase(displayCurrency, position.currency, fxLookup);
+      const baseValue = fxRate != null ? localValue * fxRate : null;
+      return { localValue, baseValue, fxRate };
+    });
+  }, [displayCurrency, fxLookup, list]);
+
+  const totalValue = useMemo(
+    () => valuationRows.reduce((sum, row) => sum + (row.baseValue ?? 0), 0),
+    [valuationRows],
+  );
+  const unresolvedFxCount = useMemo(
+    () => valuationRows.filter((row) => row.localValue > 0 && row.baseValue == null).length,
+    [valuationRows],
+  );
 
   const tierMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -380,9 +429,20 @@ export default function PositionsPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">持仓列表</CardTitle>
-          <CardDescription>{list.length} 个标的，总市值 {formatCurrency(totalValue)}</CardDescription>
+          <CardDescription>
+            {list.length} 个标的，总市值 {formatCurrency(totalValue, displayCurrency)}
+            {unresolvedFxCount > 0 ? `（${unresolvedFxCount} 个标的缺少 FX 汇率）` : ""}
+          </CardDescription>
         </CardHeader>
         <CardContent>
+          {unresolvedFxCount > 0 ? (
+            <Alert variant="destructive" className="mb-3">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                检测到跨币种持仓缺少汇率，当前总市值与权重按已换算标的计算。请在“系统设置 → 汇率快照”补齐。
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {list.length ? (
             <div className="overflow-x-auto rounded-lg border">
               <Table>
@@ -401,8 +461,9 @@ export default function PositionsPage() {
                 </TableHeader>
                 <TableBody>
                   {list.map((p, i) => {
-                    const mv = p.qty * p.price;
-                    const pct = totalValue > 0 ? (mv / (totalValue + config.account.cash)) * 100 : 0;
+                    const mv = valuationRows[i]?.baseValue ?? null;
+                    const portfolioBase = totalValue + config.account.cash;
+                    const pct = totalValue > 0 && mv != null && portfolioBase > 0 ? (mv / portfolioBase) * 100 : 0;
                     const tier = tierMap.get(p.symbol);
                     return (
                       <TableRow key={`${p.symbol}-${i}`}>
@@ -410,7 +471,9 @@ export default function PositionsPage() {
                         <TableCell className="text-xs text-muted-foreground">{p.market}</TableCell>
                         <TableCell className="text-right">{p.qty}</TableCell>
                         <TableCell className="text-right">{p.price.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(mv)}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          {mv != null ? formatCurrency(mv, displayCurrency) : "-"}
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {p.tags.map((t) => (

@@ -10,6 +10,8 @@ export type DaaOpportunityPanelV1 = {
   opportunities: DaaFusedOpportunityV1[];
   diagnostics: {
     humanSignalCount: number;
+    humanSourceStatus: "live" | "fallback_seed" | "unknown";
+    humanDiagnostics: string[];
     newsSignalCount: number;
     technicalSignalCount: number;
     weights: DaaFusionWeightsV1;
@@ -101,6 +103,8 @@ export async function buildOpportunityPanelV1(input: {
     opportunities,
     diagnostics: {
       humanSignalCount: batch.signals.length,
+      humanSourceStatus: batch.sourceStatus ?? "unknown",
+      humanDiagnostics: Array.isArray(batch.diagnostics) ? batch.diagnostics : [],
       newsSignalCount: newsSignals.length,
       technicalSignalCount: technicalSignals.length,
       weights,

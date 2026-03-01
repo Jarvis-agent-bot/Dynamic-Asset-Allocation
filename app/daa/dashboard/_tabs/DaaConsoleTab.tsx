@@ -78,6 +78,45 @@ type OpportunityRow = {
   riskScorePct: number;
   action: "open_or_add" | "watch" | "reduce_or_avoid";
   reasons: string[];
+  scores?: {
+    human?: number;
+    news?: number;
+    technical?: number;
+    penalty?: number;
+  };
+  human?: {
+    confidencePct?: number;
+    thesisDriftPct?: number;
+    stance?: string;
+    riskTags?: string[];
+  } | null;
+  technical?: {
+    momentumRegime?: string;
+    metrics?: {
+      close?: number;
+      sma20?: number;
+      sma60?: number;
+      rsi14?: number;
+      return20Pct?: number;
+      annualizedVolPct?: number;
+    };
+  } | null;
+  news?: {
+    evidenceCount?: number;
+    items?: Array<{
+      title?: string;
+      ts?: string;
+      link?: string | null;
+    }>;
+  } | null;
+};
+
+type HydrationDiagnostics = {
+  addedTargets?: string[];
+  candidateCount?: number;
+  fxRateCount?: number;
+  humanSourceStatus?: "live" | "fallback_seed" | "unknown";
+  humanDiagnostics?: string[];
 };
 
 type LlmAnalysis = {
@@ -120,6 +159,18 @@ function extractOpportunityRows(payload: unknown): OpportunityRow[] {
   return rows as OpportunityRow[];
 }
 
+function extractHydrationDiagnostics(payload: unknown): HydrationDiagnostics | null {
+  const value = payload as any;
+  if (!value || typeof value !== "object") return null;
+  if (value.hydrationDiagnostics && typeof value.hydrationDiagnostics === "object") {
+    return value.hydrationDiagnostics as HydrationDiagnostics;
+  }
+  if (value.plan?.hydrationDiagnostics && typeof value.plan.hydrationDiagnostics === "object") {
+    return value.plan.hydrationDiagnostics as HydrationDiagnostics;
+  }
+  return null;
+}
+
 function extractLlmAnalysis(payload: unknown): LlmAnalysis | null {
   const value = payload as any;
   if (!value || typeof value !== "object") return null;
@@ -146,6 +197,7 @@ export default function DaaConsoleTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedOpportunitySymbol, setSelectedOpportunitySymbol] = useState<string | null>(null);
 
   const positionsList = positions ?? [];
   const watchlist = watchlistCandidates ?? [];
@@ -159,7 +211,12 @@ export default function DaaConsoleTab() {
   const selectedPayload = selectedRunId ? runHistory.find((entry) => entry.id === selectedRunId)?.response : lastRun;
   const result = extractPlan(selectedPayload);
   const opportunityRows = extractOpportunityRows(selectedPayload);
+  const hydrationDiagnostics = extractHydrationDiagnostics(selectedPayload);
   const llmAnalysis = extractLlmAnalysis(selectedPayload);
+  const selectedOpportunity = useMemo(
+    () => opportunityRows.find((item) => item.symbol === selectedOpportunitySymbol) ?? opportunityRows[0] ?? null,
+    [opportunityRows, selectedOpportunitySymbol],
+  );
 
   const autoSnapRef = useRef(false);
 
@@ -284,6 +341,7 @@ export default function DaaConsoleTab() {
     setBusy(true);
     setError("");
     setSelectedRunId(null);
+    setSelectedOpportunitySymbol(null);
 
     try {
       await refreshPrices();
@@ -453,16 +511,29 @@ export default function DaaConsoleTab() {
 
                 <div className="rounded-lg border bg-sky-50/40 p-2 dark:bg-sky-950/10">
                   <div className="mb-1 text-xs font-medium text-sky-700 dark:text-sky-300">信号融合机会池</div>
+                  {hydrationDiagnostics?.humanSourceStatus === "fallback_seed" ? (
+                    <div className="mb-2 rounded border border-red-200 bg-red-50/60 px-2 py-1 text-[11px] text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300">
+                      人因来源当前为回退样本（seed），建议先在“人因中心”修复采集后再执行交易。
+                      {hydrationDiagnostics?.humanDiagnostics?.length ? ` 诊断：${hydrationDiagnostics.humanDiagnostics.join(" / ")}` : ""}
+                    </div>
+                  ) : null}
                   {opportunityRows.length > 0 ? (
                     <div className="max-h-[220px] overflow-auto rounded-md border bg-background">
                       <Table>
-                        <TableHeader><TableRow><TableHead className="text-xs">代码</TableHead><TableHead className="text-right text-xs">机会分</TableHead><TableHead className="text-right text-xs">置信度</TableHead><TableHead className="text-xs">动作</TableHead></TableRow></TableHeader>
+                        <TableHeader><TableRow><TableHead className="text-xs">代码</TableHead><TableHead className="text-right text-xs">机会分</TableHead><TableHead className="text-right text-xs">置信度</TableHead><TableHead className="text-right text-xs">人/新/技</TableHead><TableHead className="text-xs">动作</TableHead></TableRow></TableHeader>
                         <TableBody>
                           {opportunityRows.slice(0, 8).map((item, i) => (
-                            <TableRow key={`op-${i}-${item.symbol}`}>
+                            <TableRow
+                              key={`op-${i}-${item.symbol}`}
+                              className={selectedOpportunity?.symbol === item.symbol ? "bg-sky-50/60 dark:bg-sky-950/20" : ""}
+                              onClick={() => setSelectedOpportunitySymbol(item.symbol)}
+                            >
                               <TableCell className="text-xs font-medium">{item.symbol}</TableCell>
                               <TableCell className="text-right text-xs">{item.finalScorePct.toFixed(1)}</TableCell>
                               <TableCell className="text-right text-xs">{item.confidencePct.toFixed(1)}%</TableCell>
+                              <TableCell className="text-right text-xs">
+                                {(item.scores?.human ?? 0).toFixed(0)}/{(item.scores?.news ?? 0).toFixed(0)}/{(item.scores?.technical ?? 0).toFixed(0)}
+                              </TableCell>
                               <TableCell className="text-xs">
                                 {item.action === "open_or_add" ? "开/加仓" : item.action === "watch" ? "观察" : "减仓/回避"}
                               </TableCell>
@@ -474,6 +545,31 @@ export default function DaaConsoleTab() {
                   ) : (
                     <div className="rounded-md border border-dashed bg-background p-3 text-xs text-muted-foreground">当前没有融合机会池数据。</div>
                   )}
+
+                  {selectedOpportunity ? (
+                    <div className="mt-2 rounded border bg-background p-2 text-xs">
+                      <div className="mb-1 font-medium">证据明细 · {selectedOpportunity.symbol}</div>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <div className="rounded border px-2 py-1">
+                          <div className="text-muted-foreground">技术指标</div>
+                          <div>动量: {selectedOpportunity.technical?.momentumRegime || "-"}</div>
+                          <div>RSI14: {selectedOpportunity.technical?.metrics?.rsi14?.toFixed?.(1) ?? "-"}</div>
+                          <div>20日收益: {selectedOpportunity.technical?.metrics?.return20Pct?.toFixed?.(1) ?? "-"}%</div>
+                        </div>
+                        <div className="rounded border px-2 py-1">
+                          <div className="text-muted-foreground">新闻</div>
+                          <div>样本数: {selectedOpportunity.news?.evidenceCount ?? 0}</div>
+                          <div className="line-clamp-2">{selectedOpportunity.news?.items?.[0]?.title || "-"}</div>
+                        </div>
+                        <div className="rounded border px-2 py-1">
+                          <div className="text-muted-foreground">基金经理/人因</div>
+                          <div>立场: {selectedOpportunity.human?.stance || "-"}</div>
+                          <div>置信度: {selectedOpportunity.human?.confidencePct?.toFixed?.(1) ?? "-"}%</div>
+                          <div>漂移: {selectedOpportunity.human?.thesisDriftPct?.toFixed?.(1) ?? "-"}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="rounded-lg border bg-amber-50/40 p-2 dark:bg-amber-950/10">

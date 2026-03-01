@@ -53,6 +53,39 @@ function normalizeFundCodes(codes?: string[]): string[] {
   return [...dedup];
 }
 
+function extractDanjuanFundCode(actorId: string): string | null {
+  const value = String(actorId || "").trim();
+  if (!value.startsWith("danjuan_")) return null;
+  const code = value.slice("danjuan_".length).trim();
+  return code || null;
+}
+
+function filterActorsAndHoldingsByFundCodes(
+  actors: DaaHumanActorV1[],
+  holdings: DaaActorHoldingSnapshotV1[],
+  fundCodes?: string[],
+): { actors: DaaHumanActorV1[]; holdings: DaaActorHoldingSnapshotV1[] } {
+  const wanted = new Set(normalizeFundCodes(fundCodes));
+  if (!wanted.size) return { actors, holdings };
+
+  const sourceHasDanjuanActors = actors.some((actor) => extractDanjuanFundCode(actor.actorId));
+  if (!sourceHasDanjuanActors) return { actors, holdings };
+
+  const allowedActorIds = new Set<string>();
+  for (const actor of actors) {
+    const fundCode = extractDanjuanFundCode(actor.actorId);
+    if (!fundCode) continue;
+    if (wanted.has(fundCode)) allowedActorIds.add(actor.actorId);
+  }
+
+  if (!allowedActorIds.size) return { actors: [], holdings: [] };
+
+  return {
+    actors: actors.filter((actor) => allowedActorIds.has(actor.actorId)),
+    holdings: holdings.filter((row) => allowedActorIds.has(row.actorId)),
+  };
+}
+
 function actorQualityScorePct(actor: DaaHumanActorV1): number {
   const q = actor.quality;
   const base = q.accuracyPct * 0.35 + q.riskControlPct * 0.25 + q.disciplinePct * 0.2 + q.transparencyPct * 0.2;
@@ -442,6 +475,38 @@ function shouldUseCache(maxAgeMs = 6 * 60 * 60 * 1000): boolean {
   return Date.now() - ts < maxAgeMs;
 }
 
+function buildBatchFromRuntimeStateV1(opts: {
+  marketScope?: string[];
+  symbols?: string[];
+  fundCodes?: string[];
+}): DaaHumanSignalBatchV1 {
+  const baseActors = runtimeStateV1.latestActors.length > 0
+    ? runtimeStateV1.latestActors.map((x) => ({ ...x }))
+    : HF_SEED_ACTORS_V1.map((x) => ({ ...x }));
+  const baseHoldings = runtimeStateV1.latestHoldings.length > 0
+    ? runtimeStateV1.latestHoldings.map((x) => ({ ...x }))
+    : HF_SEED_HOLDINGS_V1.map((x) => ({ ...x }));
+
+  const filtered = filterActorsAndHoldingsByFundCodes(baseActors, baseHoldings, opts.fundCodes);
+  const mode = runtimeStateV1.latestBatch?.mode ?? "official_first";
+  const sourceStatus = runtimeStateV1.latestBatch?.sourceStatus ?? "fallback_seed";
+  const diagnostics = runtimeStateV1.latestBatch?.diagnostics ?? [];
+
+  const batch = buildSignalBatchFromActorsAndHoldings({
+    actors: filtered.actors,
+    holdings: filtered.holdings,
+    marketScope: opts.marketScope,
+    symbols: opts.symbols,
+    mode,
+  });
+
+  return {
+    ...batch,
+    sourceStatus,
+    diagnostics,
+  };
+}
+
 async function buildDanjuanSignalBatch(opts: {
   marketScope?: string[];
   symbols?: string[];
@@ -506,13 +571,29 @@ export async function runHumanIngestV1(opts: {
   reportDates?: string[];
   fundCodes?: string[];
 } = {}): Promise<{ summary: DaaHumanIngestSummaryV1; batch: DaaHumanSignalBatchV1 }> {
-  const danjuan = await buildDanjuanSignalBatch(opts);
+  const diagnostics: string[] = [];
+  let danjuan: Awaited<ReturnType<typeof buildDanjuanSignalBatch>> = null;
 
+  try {
+    danjuan = await buildDanjuanSignalBatch(opts);
+    if (!danjuan) diagnostics.push("danjuan_unavailable_or_empty");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    diagnostics.push(`danjuan_error:${message}`);
+    danjuan = null;
+  }
+
+  const usingFallback = !danjuan;
   const batch = danjuan?.batch ?? buildSeedSignalBatch({ marketScope: opts.marketScope, symbols: opts.symbols });
   const actors = danjuan?.actors ?? HF_SEED_ACTORS_V1;
   const holdings = danjuan?.holdings ?? HF_SEED_HOLDINGS_V1;
+  const batchWithSource: DaaHumanSignalBatchV1 = {
+    ...batch,
+    sourceStatus: usingFallback ? "fallback_seed" : "live",
+    diagnostics,
+  };
 
-  runtimeStateV1.latestBatch = batch;
+  runtimeStateV1.latestBatch = batchWithSource;
   runtimeStateV1.latestActors = actors.map((x) => ({ ...x }));
   runtimeStateV1.latestHoldings = holdings.map((x) => ({ ...x }));
   runtimeStateV1.lastIngestAt = new Date().toISOString();
@@ -526,8 +607,10 @@ export async function runHumanIngestV1(opts: {
       holdingCount: batch.holdingCount,
       signalCount: batch.signals.length,
       mode: batch.mode,
+      sourceStatus: batchWithSource.sourceStatus,
+      diagnostics,
     },
-    batch,
+    batch: batchWithSource,
   };
 }
 
@@ -538,14 +621,9 @@ export async function getLatestHumanSignalBatchV1(opts: {
   fundCodes?: string[];
   forceRefresh?: boolean;
 } = {}): Promise<DaaHumanSignalBatchV1> {
-  const hasDynamicOptions =
-    (Array.isArray(opts.marketScope) && opts.marketScope.length > 0)
-    || (Array.isArray(opts.symbols) && opts.symbols.length > 0)
-    || (Array.isArray(opts.reportDates) && opts.reportDates.length > 0)
-    || (Array.isArray(opts.fundCodes) && opts.fundCodes.length > 0)
-    || Boolean(opts.forceRefresh);
-
-  if (hasDynamicOptions || !shouldUseCache()) {
+  const shouldForceRefresh = Boolean(opts.forceRefresh)
+    || (Array.isArray(opts.reportDates) && opts.reportDates.length > 0);
+  if (shouldForceRefresh || !shouldUseCache()) {
     const ingest = await runHumanIngestV1({
       marketScope: opts.marketScope,
       symbols: opts.symbols,
@@ -555,7 +633,7 @@ export async function getLatestHumanSignalBatchV1(opts: {
     return ingest.batch;
   }
 
-  return runtimeStateV1.latestBatch as DaaHumanSignalBatchV1;
+  return buildBatchFromRuntimeStateV1(opts);
 }
 
 export function getHumanIngestRuntimeStateV1(): RuntimeHumanFactorStateV1 {
