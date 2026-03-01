@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type DaaAnalystRow,
   type DaaAssetViewRow,
@@ -11,14 +11,37 @@ import {
   type DaaStrategyConfig,
   DAA_RUNTIME_DATA_EVENT_V1,
   DEFAULT_STRATEGY_CONFIG,
-  loadUnifiedInputStateV1,
-  patchUnifiedInputStateV1,
-  type UnifiedInputSliceKeyV1,
   readUnifiedInputSliceV1,
   writeUnifiedInputSliceV1,
+  type UnifiedInputSliceKeyV1,
 } from "../../unifiedInputStore";
 
+import { getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
+import {
+  appendOpLogV1,
+  appendEquitySnapshotV1,
+  getStrategyConfigV1,
+  listDataSourcesV1,
+  listEquitySnapshotsV1,
+  listOpLogV1,
+  listPositionsV1,
+  listRunHistoryV1,
+  replaceDataSourcesV1,
+  replacePositionsV1,
+  saveStrategyConfigV1,
+} from "@/src/daa/modules/store/storeApiV1";
 import type { DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
+
+const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
+const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
+
+function emitDashboardDataUpdatedV1() {
+  try {
+    window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
+  } catch {
+    // ignore browser event failures
+  }
+}
 
 export function useDaaSlice<T>(key: UnifiedInputSliceKeyV1): [T | null, (v: T | null) => void] {
   const [value, setValue] = useState<T | null>(() => readUnifiedInputSliceV1<T>(key));
@@ -43,7 +66,39 @@ export function useDaaSlice<T>(key: UnifiedInputSliceKeyV1): [T | null, (v: T | 
 }
 
 export function usePositions() {
-  return useDaaSlice<DaaPositionRow[]>("positions");
+  const [value, setValue] = useDaaSlice<DaaPositionRow[]>("positions");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const rows = await listPositionsV1();
+        if (cancelled) return;
+        setValue(rows as DaaPositionRow[]);
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+
+    function onRefresh() {
+      void load();
+    }
+
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  const set = useCallback((rows: DaaPositionRow[] | null) => {
+    setValue(rows);
+    void replacePositionsV1((rows ?? []) as any[]).catch(() => {});
+  }, [setValue]);
+
+  return [value, set] as const;
 }
 
 export function useAnalysts() {
@@ -55,17 +110,92 @@ export function useAssetViews() {
 }
 
 export function useHfFundRegistry() {
-  return useDaaSlice<DaaHfFundTrackRow[]>("hfFundRegistry");
+  const [value, setValue] = useDaaSlice<DaaHfFundTrackRow[]>("hfFundRegistry");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const rows = await listDataSourcesV1("hf_fund");
+        if (cancelled) return;
+        const source = Array.isArray(rows) ? rows[0] : null;
+        const funds = Array.isArray(source?.configJson?.funds) ? source.configJson.funds : [];
+        setValue(funds as DaaHfFundTrackRow[]);
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  const set = useCallback((rows: DaaHfFundTrackRow[] | null) => {
+    setValue(rows);
+    void replaceDataSourcesV1([
+      {
+        id: "hf_fund.default",
+        kind: "hf_fund",
+        enabled: true,
+        configJson: { funds: rows ?? [] },
+      },
+    ] as any[]).catch(() => {});
+  }, [setValue]);
+
+  return [value, set] as const;
 }
 
 export function useStrategyConfig(): [DaaStrategyConfig, (v: DaaStrategyConfig) => void] {
   const [raw, setRaw] = useDaaSlice<DaaStrategyConfig>("strategyConfig");
-  const config = raw ?? DEFAULT_STRATEGY_CONFIG;
-  const set = useCallback(
-    (v: DaaStrategyConfig) => setRaw(v),
-    [setRaw],
-  );
-  return [config, set];
+  const config = useMemo(() => {
+    if (!raw) return DEFAULT_STRATEGY_CONFIG;
+    return {
+      ...DEFAULT_STRATEGY_CONFIG,
+      ...raw,
+      account: { ...DEFAULT_STRATEGY_CONFIG.account, ...(raw.account || {}) },
+      constraints: { ...DEFAULT_STRATEGY_CONFIG.constraints, ...(raw.constraints || {}) },
+      policy: { ...DEFAULT_STRATEGY_CONFIG.policy, ...(raw.policy || {}) },
+      risk: { ...DEFAULT_STRATEGY_CONFIG.risk, ...((raw as any).risk || {}) },
+      targetWeights: { ...DEFAULT_STRATEGY_CONFIG.targetWeights, ...(raw.targetWeights || {}) },
+    };
+  }, [raw]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const serverConfig = await getStrategyConfigV1();
+        if (cancelled) return;
+        setRaw((serverConfig && typeof serverConfig === "object") ? serverConfig as DaaStrategyConfig : DEFAULT_STRATEGY_CONFIG);
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setRaw]);
+
+  const set = useCallback((v: DaaStrategyConfig) => {
+    setRaw(v);
+    void saveStrategyConfigV1(v as unknown as Record<string, unknown>).catch(() => {});
+  }, [setRaw]);
+
+  return [config as DaaStrategyConfig, set];
 }
 
 export function useLastRunResult() {
@@ -77,15 +207,110 @@ export function useSyncLog() {
 }
 
 export function useRunHistory() {
-  return useDaaSlice<DaaRunHistoryEntry[]>("runHistory");
+  const [value, setValue] = useDaaSlice<DaaRunHistoryEntry[]>("runHistory");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const rows = await listRunHistoryV1(50);
+        if (cancelled) return;
+        setValue(
+          rows.map((row) => ({
+            id: String(row.id || ""),
+            ts: String(row.ts || new Date().toISOString()),
+            request: row.requestJson || {},
+            response: row.responseJson || {},
+          })),
+        );
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  return [value, setValue] as const;
 }
 
 export function useEquitySnapshots() {
-  return useDaaSlice<DaaEquitySnapshot[]>("equitySnapshots");
+  const [value, setValue] = useDaaSlice<DaaEquitySnapshot[]>("equitySnapshots");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const snapshots = await listEquitySnapshotsV1(200);
+        if (cancelled) return;
+        setValue(
+          snapshots.map((row: any) => ({
+            ts: String(row.ts || new Date().toISOString()),
+            equity: Number(row.totalEquity || 0),
+            holdingsValue: Number(row.holdingsValue || 0),
+            cash: Number(row.cash || 0),
+            source: String(row.source || "refresh") as DaaEquitySnapshot["source"],
+          })) as DaaEquitySnapshot[],
+        );
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  return [value, setValue] as const;
 }
 
 export function useOpLog() {
-  return useDaaSlice<string[]>("opLog");
+  const [value, setValue] = useDaaSlice<string[]>("opLog");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const rows = await listOpLogV1(100);
+        if (cancelled) return;
+        const formatted = rows.map((row) => {
+          const prefix = row.level === "error" ? "ERROR" : row.level === "warn" ? "WARN" : "INFO";
+          const ts = new Date(row.ts).toLocaleTimeString();
+          return `[${ts}] [${prefix}] ${row.message}`;
+        });
+        setValue(formatted);
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  return [value, setValue] as const;
 }
 
 export function appendRunHistory(request: unknown, response: unknown) {
@@ -98,6 +323,7 @@ export function appendRunHistory(request: unknown, response: unknown) {
   };
   const next = [entry, ...current].slice(0, 20);
   writeUnifiedInputSliceV1("runHistory", next);
+  emitDashboardDataUpdatedV1();
   return entry;
 }
 
@@ -106,6 +332,13 @@ export function appendEquitySnapshot(equity: number, holdingsValue: number, cash
   const snap: DaaEquitySnapshot = { ts: new Date().toISOString(), equity, holdingsValue, cash, source };
   const next = [...current, snap].slice(-100);
   writeUnifiedInputSliceV1("equitySnapshots", next);
+  void appendEquitySnapshotV1({
+    ts: snap.ts,
+    totalEquity: snap.equity,
+    holdingsValue: snap.holdingsValue,
+    cash: snap.cash,
+    source: snap.source,
+  }).catch(() => {});
   return snap;
 }
 
@@ -121,6 +354,13 @@ export function appendOpLog(msg: string) {
   const ts = new Date().toLocaleTimeString();
   const next = [`[${ts}] ${msg}`, ...current].slice(0, 50);
   writeUnifiedInputSliceV1("opLog", next);
+  void appendOpLogV1({ level: "info", message: msg, contextJson: {} }).then(() => {
+    emitDashboardDataUpdatedV1();
+  }).catch(() => {});
+}
+
+export function toUserErrorMessage(error: unknown): string {
+  return getApiErrorMessageV1(error);
 }
 
 export function buildUnifiedRequest(
@@ -129,11 +369,15 @@ export function buildUnifiedRequest(
   assetViews: DaaAssetViewRow[],
   config: DaaStrategyConfig,
 ): DaaUnifiedRequestV1 {
+  const snapshots = readUnifiedInputSliceV1<DaaEquitySnapshot[]>("equitySnapshots") ?? [];
+  const equityPeak = snapshots.reduce((max, row) => Math.max(max, Number(row.equity) || 0), 0);
+
   // analysts/assetViews 为兼容输入，主流程人因信号由基金池采集链路注入。
   return {
     account: {
       cash: config.account.cash,
       totalEquity: config.account.totalEquity ?? undefined,
+      equityPeak: equityPeak > 0 ? equityPeak : undefined,
     },
     constraints: {
       maxPositionPct: config.constraints.maxPositionPct,
@@ -156,9 +400,17 @@ export function buildUnifiedRequest(
       currency: p.currency,
       qty: p.qty,
       price: p.price,
+      costBasis: p.costBasis,
       tags: p.tags,
       liquidityNotional24h: p.liquidityNotional24h,
     })),
+    risk: {
+      maxDrawdownPct: config.risk.maxDrawdownPct,
+      perAssetStopLossPct: config.risk.perAssetStopLossPct,
+      maxConcentrationPct: config.risk.maxConcentrationPct,
+      correlationCapPct: config.risk.correlationCapPct,
+      maxTotalRiskExposurePct: config.risk.maxTotalRiskExposurePct,
+    },
     analysts: analysts.map((a) => ({
       analystId: a.analystId,
       accuracyPct: a.accuracyPct,
@@ -176,51 +428,4 @@ export function buildUnifiedRequest(
       momentumRegime: v.momentumRegime,
     })),
   };
-}
-
-export function migrateFromDraftIfNeeded() {
-  const state = loadUnifiedInputStateV1();
-  if (state.positions && state.positions.length > 0) return;
-
-  const draft = state.unifiedRequestDraft as DaaUnifiedRequestV1 | null;
-  if (!draft) return;
-
-  const patch: Record<string, unknown> = {};
-
-  if (Array.isArray(draft.positions) && draft.positions.length > 0) {
-    patch.positions = draft.positions.map((p) => ({
-      symbol: String(p.symbol ?? "").trim().toUpperCase(),
-      market: String((p as any).market ?? "US").trim().toUpperCase(),
-      currency: String((p as any).currency ?? "USD").trim().toUpperCase(),
-      qty: Number(p.qty) || 0,
-      price: Number(p.price) || 0,
-      tags: Array.isArray((p as any).tags) ? (p as any).tags : [],
-      liquidityNotional24h: Number((p as any).liquidityNotional24h) || 0,
-    }));
-  }
-
-  if (Array.isArray(draft.analysts) && draft.analysts.length > 0) {
-    patch.analysts = draft.analysts;
-  }
-
-  if (Array.isArray(draft.assetViews) && draft.assetViews.length > 0) {
-    patch.assetViews = draft.assetViews;
-  }
-
-  if (draft.targetWeights && typeof draft.targetWeights === "object") {
-    const defaultCfg = { ...DEFAULT_STRATEGY_CONFIG };
-    defaultCfg.targetWeights = draft.targetWeights as Record<string, number>;
-    if (draft.account?.cash) defaultCfg.account.cash = Number(draft.account.cash) || 0;
-    if ((draft as any).constraints) {
-      Object.assign(defaultCfg.constraints, (draft as any).constraints);
-    }
-    if ((draft as any).policy) {
-      Object.assign(defaultCfg.policy, (draft as any).policy);
-    }
-    patch.strategyConfig = defaultCfg;
-  }
-
-  if (Object.keys(patch).length > 0) {
-    patchUnifiedInputStateV1(patch);
-  }
 }

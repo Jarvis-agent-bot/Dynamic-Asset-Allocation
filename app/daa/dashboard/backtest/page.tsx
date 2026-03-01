@@ -2,7 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { AlertCircle, Clock, Cpu, TrendingUp } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,16 +27,49 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import StatCard from "../_components/StatCard";
 import { formatCurrency, formatPercent } from "../_components/daaFormatters";
-import { usePositions, useStrategyConfig, useRunHistory } from "../_components/useDaaStore";
+import { usePositions, useRunHistory, useStrategyConfig } from "../_components/useDaaStore";
 import { useMarketDataClient } from "../../useMarketDataClient";
 
+import { computeBacktestAttribution } from "@/src/core/backtest/attribution";
 import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from "@/src/core/backtestDriftRebalance";
+import {
+  buildTargetWeightDiffRowsV1,
+  prepareAlignedSeriesBySymbolV1,
+  runStrategyLabBacktestsV1,
+} from "@/src/daa/modules/strategyLab/strategyLabEngineV1";
+import type { StrategyLabEnsembleConfigV1, StrategyLabRunResultV1 } from "@/src/daa/modules/strategyLab/strategyLabTypesV1";
 
-type BacktestState = { running: boolean; error: string; result: DriftRebalanceBacktestResult | null };
+type BacktestState = {
+  running: boolean;
+  error: string;
+  result: DriftRebalanceBacktestResult | null;
+  seriesBySymbol: Record<string, Array<{ date: string; close: number }>>;
+};
+
+type StrategyLabState = {
+  running: boolean;
+  error: string;
+  success: string;
+  result: StrategyLabRunResultV1 | null;
+  ignoredSymbols: string[];
+  rangeLabel: string;
+};
+
+const DEFAULT_ENSEMBLE_CONFIG_V1: StrategyLabEnsembleConfigV1 = {
+  momentum: 0.4,
+  riskParity: 0.25,
+  minVariance: 0.15,
+  equalWeight: 0.2,
+};
+
+function toRangeLabel(start: string, end: string): string {
+  if (!start || !end) return "-";
+  return `${start} ~ ${end}`;
+}
 
 export default function BacktestPage() {
   const [positions] = usePositions();
-  const [config] = useStrategyConfig();
+  const [config, setConfig] = useStrategyConfig();
   const [runHistoryData] = useRunHistory();
   const marketData = useMarketDataClient();
 
@@ -31,70 +77,102 @@ export default function BacktestPage() {
   const runHistory = runHistoryData ?? [];
 
   const [days, setDays] = useState(60);
-  const [bt, setBt] = useState<BacktestState>({ running: false, error: "", result: null });
+  const [bt, setBt] = useState<BacktestState>({ running: false, error: "", result: null, seriesBySymbol: {} });
+  const [ensembleConfig, setEnsembleConfig] = useState<StrategyLabEnsembleConfigV1>(DEFAULT_ENSEMBLE_CONFIG_V1);
+  const [lab, setLab] = useState<StrategyLabState>({
+    running: false,
+    error: "",
+    success: "",
+    result: null,
+    ignoredSymbols: [],
+    rangeLabel: "-",
+  });
 
   const symbols = useMemo(() => {
     const s = new Set<string>();
-    for (const p of positionsList) s.add(p.symbol);
-    for (const sym of Object.keys(config.targetWeights)) s.add(sym);
+    for (const p of positionsList) s.add(String(p.symbol || "").trim().toUpperCase());
+    for (const sym of Object.keys(config.targetWeights || {})) s.add(String(sym || "").trim().toUpperCase());
     return Array.from(s).filter(Boolean).sort();
-  }, [positionsList, config]);
+  }, [positionsList, config.targetWeights]);
+
+  function buildInitialHoldings(symbolPool: string[]): Record<string, number> | undefined {
+    const allowed = new Set(symbolPool);
+    const out: Record<string, number> = {};
+    for (const p of positionsList) {
+      const symbol = String(p.symbol || "").trim().toUpperCase();
+      if (!allowed.has(symbol)) continue;
+      const qty = Number(p.qty);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      out[symbol] = (out[symbol] || 0) + qty;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  async function fetchRawSeries(symbolList: string[], start: string, end: string): Promise<{
+    rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>;
+    ignoredSymbols: string[];
+  }> {
+    const rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>> = {};
+    const ignoredSymbols: string[] = [];
+
+    await Promise.all(
+      symbolList.map(async (symbol) => {
+        try {
+          const bars = await marketData.yfinance.priceSeriesBars({ symbol, start, end });
+          const mapped = bars
+            .map((bar: any) => ({
+              date: String(bar?.date || "").trim(),
+              close: Number(bar?.close),
+            }))
+            .filter((bar) => Boolean(bar.date) && Number.isFinite(bar.close) && bar.close > 0);
+
+          if (mapped.length >= 2) {
+            rawSeriesBySymbol[symbol] = mapped;
+            return;
+          }
+        } catch {
+          // ignore per-symbol failures
+        }
+        ignoredSymbols.push(symbol);
+      }),
+    );
+
+    return { rawSeriesBySymbol, ignoredSymbols: ignoredSymbols.sort() };
+  }
 
   async function runBacktest() {
     if (bt.running || !symbols.length) return;
-    setBt({ running: true, error: "", result: null });
+    setBt({ running: true, error: "", result: null, seriesBySymbol: {} });
 
     try {
       const today = new Date();
       const start = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10);
       const end = today.toISOString().slice(0, 10);
 
-      const seriesBySymbol: Record<string, Array<{ date: string; close: number }>> = {};
-
-      for (const symbol of symbols) {
-        try {
-          const bars = await marketData.yfinance.priceSeriesBars({ symbol, start, end });
-          if (bars.length >= 2) {
-            seriesBySymbol[symbol] = bars.map((b: any) => ({ date: String(b.date), close: Number(b.close) }));
-          }
-        } catch {
-          // skip unavailable symbols
-        }
-      }
-
+      const { rawSeriesBySymbol } = await fetchRawSeries(symbols, start, end);
+      const seriesBySymbol = prepareAlignedSeriesBySymbolV1(rawSeriesBySymbol);
       const availableSymbols = Object.keys(seriesBySymbol);
+
       if (availableSymbols.length < 1) {
-        setBt({ running: false, error: "无法获取任何标的的历史数据，请检查代码格式。", result: null });
+        setBt({ running: false, error: "无法获取可对齐的历史数据，请减少标的或扩大回测区间。", result: null, seriesBySymbol: {} });
         return;
       }
 
-      const minLen = Math.min(...Object.values(seriesBySymbol).map((s) => s.length));
-      for (const sym of availableSymbols) {
-        seriesBySymbol[sym] = seriesBySymbol[sym].slice(-minLen);
-      }
-
       const tw: Record<string, number> = {};
-      for (const sym of availableSymbols) {
-        tw[sym] = config.targetWeights[sym] ?? 0;
-      }
+      for (const sym of availableSymbols) tw[sym] = Number(config.targetWeights[sym] || 0);
       const twSum = Object.values(tw).reduce((s, v) => s + v, 0);
       if (twSum <= 0) {
         for (const sym of availableSymbols) tw[sym] = 1 / availableSymbols.length;
       }
 
-      const initialHoldings: Record<string, number> = {};
-      for (const p of positionsList) {
-        if (availableSymbols.includes(p.symbol)) {
-          initialHoldings[p.symbol] = (initialHoldings[p.symbol] ?? 0) + p.qty;
-        }
-      }
+      const initialHoldings = buildInitialHoldings(availableSymbols);
 
       const result = backtestDriftRebalance({
         seriesBySymbol,
         targetWeights: tw,
-        initialHoldings: Object.keys(initialHoldings).length ? initialHoldings : undefined,
+        initialHoldings,
         initialCash: config.account.cash || undefined,
-        initialEquity: Object.keys(initialHoldings).length ? undefined : 10000,
+        initialEquity: initialHoldings ? undefined : 10000,
         constraints: {
           maxPositionPct: config.constraints.maxPositionPct,
           minNotional: config.constraints.minNotional,
@@ -107,10 +185,108 @@ export default function BacktestPage() {
         includeTimeline: true,
       });
 
-      setBt({ running: false, error: "", result });
+      setBt({ running: false, error: "", result, seriesBySymbol });
     } catch (e) {
-      setBt({ running: false, error: e instanceof Error ? e.message : String(e), result: null });
+      setBt({ running: false, error: e instanceof Error ? e.message : String(e), result: null, seriesBySymbol: {} });
     }
+  }
+
+  function runStrategyLabWithSeries(
+    rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>,
+    rangeLabel: string,
+    ignoredSymbols: string[],
+  ) {
+    const alignedSeriesBySymbol = prepareAlignedSeriesBySymbolV1(rawSeriesBySymbol);
+    const alignedSymbols = Object.keys(alignedSeriesBySymbol);
+
+    if (!alignedSymbols.length) {
+      setLab((prev) => ({
+        ...prev,
+        running: false,
+        error: "可对齐的历史数据不足（至少需要 2 个共同交易日），请减少标的或扩大回测区间。",
+        success: "",
+        result: null,
+        ignoredSymbols,
+        rangeLabel,
+      }));
+      return;
+    }
+
+    try {
+      const result = runStrategyLabBacktestsV1({
+        seriesBySymbol: alignedSeriesBySymbol,
+        baselineTargetWeights: config.targetWeights,
+        ensembleConfig,
+        initialHoldings: buildInitialHoldings(alignedSymbols),
+        initialCash: Number(config.account.cash) || 0,
+        initialEquity: 10000,
+        constraints: {
+          maxPositionPct: config.constraints.maxPositionPct,
+          minNotional: config.constraints.minNotional,
+        },
+        policy: {
+          thresholdPct: config.policy.baseDriftTriggerPct,
+          minTradeNotional: config.constraints.minNotional,
+        },
+      });
+
+      setLab((prev) => ({
+        ...prev,
+        running: false,
+        error: "",
+        success: "真实回测完成。",
+        result,
+        ignoredSymbols,
+        rangeLabel,
+      }));
+    } catch (error) {
+      setLab((prev) => ({
+        ...prev,
+        running: false,
+        error: error instanceof Error ? error.message : String(error),
+        success: "",
+        result: null,
+        ignoredSymbols,
+        rangeLabel,
+      }));
+    }
+  }
+
+  async function runStrategyOptimization() {
+    if (lab.running || !symbols.length) return;
+
+    const today = new Date();
+    const start = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10);
+    const end = today.toISOString().slice(0, 10);
+    const rangeLabel = toRangeLabel(start, end);
+
+    setLab((prev) => ({ ...prev, running: true, error: "", success: "" }));
+
+    const { rawSeriesBySymbol, ignoredSymbols } = await fetchRawSeries(symbols, start, end);
+    runStrategyLabWithSeries(rawSeriesBySymbol, rangeLabel, ignoredSymbols);
+  }
+
+  function rerunStrategyOptimization() {
+    if (lab.running || !lab.result) return;
+    setLab((prev) => ({ ...prev, running: true, error: "", success: "" }));
+
+    const rawSeriesBySymbol = Object.fromEntries(
+      Object.entries(lab.result.seriesBySymbol).map(([symbol, series]) => [
+        symbol,
+        series.map((bar) => ({ date: bar.date, close: bar.close })),
+      ]),
+    );
+
+    runStrategyLabWithSeries(rawSeriesBySymbol, lab.rangeLabel, lab.ignoredSymbols);
+  }
+
+  function applyEnsembleToConfig() {
+    if (!lab.result) return;
+    setConfig({
+      ...config,
+      targetWeights: lab.result.weightsByCandidate.ensemble,
+    });
+    setLab((prev) => ({ ...prev, success: "优化后的 Ensemble 权重已写回策略配置。" }));
   }
 
   const equityCurveData = useMemo(() => {
@@ -147,16 +323,54 @@ export default function BacktestPage() {
     }).reverse();
   }, [runHistory]);
 
+  const attribution = useMemo(() => {
+    if (!bt.result) return null;
+    return computeBacktestAttribution({
+      backtest: bt.result,
+      targetWeights: config.targetWeights,
+      seriesBySymbol: bt.seriesBySymbol,
+      benchmarkSymbol: "SPY",
+    });
+  }, [bt.result, bt.seriesBySymbol, config.targetWeights]);
+
+  const baseline = useMemo(() => lab.result?.candidates.find((candidate) => candidate.id === "baseline") || null, [lab.result]);
+  const ensemble = useMemo(() => lab.result?.candidates.find((candidate) => candidate.id === "ensemble") || null, [lab.result]);
+
+  const activeReturn = useMemo(() => {
+    if (!baseline || !ensemble) return 0;
+    return ensemble.backtest.metrics.totalReturn - baseline.backtest.metrics.totalReturn;
+  }, [baseline, ensemble]);
+
+  const optimizationCurveData = useMemo(() => {
+    if (!baseline || !ensemble) return [];
+    const count = Math.min(baseline.backtest.dates.length, ensemble.backtest.dates.length);
+    const rows: Array<{ date: string; baseline: number; ensemble: number }> = [];
+
+    for (let i = 0; i < count; i++) {
+      rows.push({
+        date: baseline.backtest.dates[i],
+        baseline: Number((baseline.backtest.equity[i] * 100).toFixed(2)),
+        ensemble: Number((ensemble.backtest.equity[i] * 100).toFixed(2)),
+      });
+    }
+
+    return rows;
+  }, [baseline, ensemble]);
+
+  const diffRows = useMemo(() => {
+    if (!lab.result) return [];
+    return buildTargetWeightDiffRowsV1(config.targetWeights, lab.result.weightsByCandidate.ensemble);
+  }, [config.targetWeights, lab.result]);
+
   return (
     <div className="space-y-6">
-      <PageHeader title="回测复盘" description="验证当前配置在历史行情下的表现，不修改实时配置。" />
+      <PageHeader title="回测与优化" description="先回测验证当前组合，再在同页完成策略优化与权重写回。" />
 
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">漂移回测</CardTitle>
           <CardDescription>
             拉取 yfinance 历史数据，使用当前策略参数运行 backtestDriftRebalance。
-            配置快照来自当前统一输入状态（持仓/目标权重/约束）。
             {symbols.length ? ` 标的: ${symbols.join(", ")}` : " (无标的)"}
           </CardDescription>
         </CardHeader>
@@ -164,7 +378,14 @@ export default function BacktestPage() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label className="text-xs">回测天数</Label>
-              <Input type="number" className="h-8 w-24" value={days} min={10} max={365} onChange={(e) => setDays(Math.max(10, Number(e.target.value) || 60))} />
+              <Input
+                type="number"
+                className="h-8 w-24"
+                value={days}
+                min={10}
+                max={365}
+                onChange={(e) => setDays(Math.max(10, Number(e.target.value) || 60))}
+              />
             </div>
             <Button onClick={() => void runBacktest()} disabled={bt.running || !symbols.length} size="sm">
               <Cpu className="mr-2 h-3.5 w-3.5" />
@@ -172,7 +393,13 @@ export default function BacktestPage() {
             </Button>
           </div>
 
-          {bt.error ? <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>回测失败</AlertTitle><AlertDescription>{bt.error}</AlertDescription></Alert> : null}
+          {bt.error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>回测失败</AlertTitle>
+              <AlertDescription>{bt.error}</AlertDescription>
+            </Alert>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -262,10 +489,271 @@ export default function BacktestPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          {attribution ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">绩效归因（Attribution）</CardTitle>
+                <CardDescription>
+                  组合收益 {formatPercent(attribution.totalReturn * 100)}，基准 {attribution.benchmark.symbol} {formatPercent(attribution.benchmark.return * 100)}，
+                  超额 {formatPercent(attribution.activeReturn * 100)}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <StatCard label="Sharpe" value={attribution.metrics.sharpe.toFixed(2)} />
+                  <StatCard label="MaxDD" value={formatPercent(attribution.metrics.maxDrawdown * 100)} />
+                  <StatCard label="Calmar" value={attribution.metrics.calmar.toFixed(2)} />
+                  <StatCard label="Volatility" value={formatPercent(attribution.metrics.volatility * 100)} />
+                  <StatCard label="WinRate" value={formatPercent(attribution.metrics.winRate * 100)} />
+                </div>
+
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>资产</TableHead>
+                        <TableHead className="text-right">平均权重</TableHead>
+                        <TableHead className="text-right">资产收益</TableHead>
+                        <TableHead className="text-right">收益贡献</TableHead>
+                        <TableHead className="text-right">配置效应</TableHead>
+                        <TableHead className="text-right">选择效应</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {attribution.perAsset.map((row) => (
+                        <TableRow key={`attr-${row.symbol}`}>
+                          <TableCell className="font-medium">{row.symbol}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.avgWeight * 100)}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.assetReturn * 100)}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.contributionToReturn * 100)}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.allocationEffect * 100)}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.selectionEffect * 100)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       ) : null}
 
-      {/* Historical Run Trend */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">策略优化（真实回测驱动）</CardTitle>
+          <CardDescription>
+            在同一段历史行情上比较当前配置（Baseline）与四类单策略，并生成 Ensemble 候选权重。
+            结果只影响本页，点击写回后才会更新策略配置。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">优化回测天数</Label>
+              <Input
+                type="number"
+                className="h-8 w-24"
+                value={days}
+                min={30}
+                max={365}
+                onChange={(e) => setDays(Math.max(30, Number(e.target.value) || 60))}
+              />
+            </div>
+            <Button type="button" onClick={() => void runStrategyOptimization()} disabled={lab.running || symbols.length === 0}>
+              {lab.running ? "优化中..." : "运行策略优化"}
+            </Button>
+            <Button type="button" variant="outline" onClick={rerunStrategyOptimization} disabled={lab.running || !lab.result}>
+              基于当前数据重跑
+            </Button>
+          </div>
+
+          {lab.error ? (
+            <Alert variant="destructive">
+              <AlertTitle>优化失败</AlertTitle>
+              <AlertDescription>{lab.error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {lab.success ? (
+            <Alert>
+              <AlertTitle>优化完成</AlertTitle>
+              <AlertDescription>{lab.success}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {(Object.keys(ensembleConfig) as Array<keyof StrategyLabEnsembleConfigV1>).map((key) => (
+              <div key={key} className="space-y-1">
+                <Label className="text-xs">{key}</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={ensembleConfig[key]}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setEnsembleConfig((prev) => ({
+                        ...prev,
+                        [key]: Number.isFinite(value) ? Math.max(0, value) : prev[key],
+                      }));
+                    }}
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    className="w-24"
+                    value={ensembleConfig[key]}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setEnsembleConfig((prev) => ({
+                        ...prev,
+                        [key]: Number.isFinite(value) ? Math.max(0, value) : prev[key],
+                      }));
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={applyEnsembleToConfig} disabled={!lab.result}>写回优化后权重</Button>
+            <Button type="button" variant="outline" onClick={() => setEnsembleConfig(DEFAULT_ENSEMBLE_CONFIG_V1)}>恢复默认占比</Button>
+          </div>
+
+          {lab.ignoredSymbols.length ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50/30 p-2 text-xs text-amber-800">
+              以下标的因历史数据不足被忽略：{lab.ignoredSymbols.join(", ")}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {lab.result ? (
+        <>
+          {baseline && ensemble ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Card>
+                <CardHeader className="pb-1"><CardTitle className="text-sm">Baseline 收益</CardTitle></CardHeader>
+                <CardContent className="text-lg font-semibold">{formatPercent(baseline.backtest.metrics.totalReturn * 100)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-1"><CardTitle className="text-sm">Ensemble 收益</CardTitle></CardHeader>
+                <CardContent className="text-lg font-semibold">{formatPercent(ensemble.backtest.metrics.totalReturn * 100)}</CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-1"><CardTitle className="text-sm">超额收益</CardTitle></CardHeader>
+                <CardContent className={`text-lg font-semibold ${activeReturn >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                  {formatPercent(activeReturn * 100)}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-1"><CardTitle className="text-sm">Ensemble MaxDD</CardTitle></CardHeader>
+                <CardContent className="text-lg font-semibold">{formatPercent(ensemble.backtest.metrics.maxDrawdown * 100)}</CardContent>
+              </Card>
+            </div>
+          ) : null}
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">优化策略回测对比</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>组合</TableHead>
+                      <TableHead className="text-right">总收益</TableHead>
+                      <TableHead className="text-right">MaxDD</TableHead>
+                      <TableHead className="text-right">Sharpe</TableHead>
+                      <TableHead className="text-right">再平衡次数</TableHead>
+                      <TableHead className="text-right">换手金额</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lab.result.candidates.map((candidate) => (
+                      <TableRow key={candidate.id}>
+                        <TableCell className="font-medium">{candidate.label}</TableCell>
+                        <TableCell className="text-right">{formatPercent(candidate.backtest.metrics.totalReturn * 100)}</TableCell>
+                        <TableCell className="text-right">{formatPercent(candidate.backtest.metrics.maxDrawdown * 100)}</TableCell>
+                        <TableCell className="text-right">{candidate.backtest.metrics.sharpe.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{candidate.backtest.summary.rebalanceCount}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(candidate.backtest.summary.turnoverNotional)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {optimizationCurveData.length ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Baseline vs Ensemble 权益曲线</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[260px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={optimizationCurveData} margin={{ left: 10, right: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" fontSize={10} tickFormatter={(value: string) => value.slice(5)} />
+                      <YAxis fontSize={10} tickFormatter={(value: number) => `${value}%`} />
+                      <Tooltip formatter={(value) => `${value}%`} labelFormatter={(label) => `日期: ${label}`} />
+                      <Line type="monotone" dataKey="baseline" stroke="#64748b" strokeWidth={2} dot={false} name="Baseline" />
+                      <Line type="monotone" dataKey="ensemble" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Ensemble" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">写回预览（优化后 vs 当前配置）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {diffRows.length ? (
+                <div className="overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead className="text-right">当前权重</TableHead>
+                        <TableHead className="text-right">优化后</TableHead>
+                        <TableHead className="text-right">变化</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {diffRows.map((row) => (
+                        <TableRow key={row.symbol}>
+                          <TableCell className="font-medium">{row.symbol}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.currentWeight * 100)}</TableCell>
+                          <TableCell className="text-right">{formatPercent(row.nextWeight * 100)}</TableCell>
+                          <TableCell className={`text-right ${row.deltaWeight >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                            {formatPercent(row.deltaWeight * 100)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">当前优化权重与配置一致，无需写回。</div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
+
       {equityHistory.length >= 2 ? (
         <Card>
           <CardHeader className="pb-2">

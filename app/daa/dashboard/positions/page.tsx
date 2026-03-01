@@ -38,6 +38,7 @@ function emptyPosition(): DaaPositionRow {
     currency: "USD",
     qty: 0,
     price: 0,
+    costBasis: 0,
     tags: [],
     liquidityNotional24h: 0,
   };
@@ -100,7 +101,7 @@ function PositionFormDialog({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div className="space-y-1.5">
               <Label>数量</Label>
               <Input type="number" value={form.qty || ""} onChange={(e) => update("qty", Number(e.target.value) || 0)} />
@@ -108,6 +109,10 @@ function PositionFormDialog({
             <div className="space-y-1.5">
               <Label>价格</Label>
               <Input type="number" value={form.price || ""} onChange={(e) => update("price", Number(e.target.value) || 0)} step="0.01" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>成本价</Label>
+              <Input type="number" value={form.costBasis || ""} onChange={(e) => update("costBasis", Number(e.target.value) || 0)} step="0.01" />
             </div>
             <div className="space-y-1.5">
               <Label>币种</Label>
@@ -180,6 +185,7 @@ function ImportDialog({ onImport }: { onImport: (rows: DaaPositionRow[]) => void
         currency: String(item.currency ?? "USD").trim().toUpperCase(),
         qty: Number(item.qty) || 0,
         price: Number(item.price) || 0,
+        costBasis: Number(item.costBasis) || 0,
         tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
         liquidityNotional24h: Number(item.liquidityNotional24h) || 0,
       })).filter((r) => r.symbol);

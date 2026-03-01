@@ -17,14 +17,12 @@ chmod +x deploy/start.sh
 ## 端口与路由建议
 
 - Next.js（Web + `/api/daa/*`）：`127.0.0.1:3000`
-- Python 引擎（可选）：`127.0.0.1:18000`
 
 建议 Nginx 路由：
 - `/daa/` → `http://127.0.0.1:3000/daa/`
 - `/api/daa/` → `http://127.0.0.1:3000/api/daa/`
-- `/daa-api/` → `http://127.0.0.1:18000/`
 
 ## 说明
 
-- 当前登录由 Next.js 的账号密码鉴权统一处理（`/api/daa/auth/*`）。
-- Python 侧仅作为策略/计算引擎，不承载公共鉴权入口。
+- 当前登录与再平衡执行链路均由 Next.js 统一处理。
+- 建议在 Vercel 或外部调度器中调用 `/api/daa/cron/*` 完成自动任务。

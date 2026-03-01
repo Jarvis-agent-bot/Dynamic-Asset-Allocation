@@ -84,13 +84,14 @@ export default function StrategyPage() {
   const updateAccount = <K extends keyof DaaStrategyConfig["account"]>(key: K, val: number | null) => {
     setConfig({ ...config, account: { ...config.account, [key]: val } });
   };
+  const updateRisk = <K extends keyof DaaStrategyConfig["risk"]>(key: K, val: number) => {
+    setConfig({ ...config, risk: { ...config.risk, [key]: val } });
+  };
 
   function resetToDefaults() {
     setConfig({
       ...DEFAULT_STRATEGY_CONFIG,
       targetWeights: config.targetWeights,
-      feedSymbols: config.feedSymbols,
-      twitterQuery: config.twitterQuery,
     });
   }
 
@@ -261,34 +262,62 @@ export default function StrategyPage() {
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-2">
+        <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">情报源配置</CardTitle>
-            <CardDescription>行情数据与社交媒体情绪抓取</CardDescription>
+            <CardTitle className="text-base">风险护栏</CardTitle>
+            <CardDescription>最大回撤、止损线与集中度上限</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>行情代码（逗号分隔）</Label>
-                <Input
-                  value={config.feedSymbols}
-                  onChange={(e) => {
-                    setConfig({ ...config, feedSymbols: e.target.value });
-                  }}
-                  placeholder="SPY,QQQ,BND,TSLA"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Twitter 查询语句</Label>
-                <Input
-                  value={config.twitterQuery}
-                  onChange={(e) => {
-                    setConfig({ ...config, twitterQuery: e.target.value });
-                  }}
-                  placeholder="(SPY OR QQQ) lang:en"
-                />
-              </div>
-            </div>
+          <CardContent className="space-y-5">
+            <NumberField
+              label="最大回撤"
+              description="组合从历史高点回撤超过该值时进入 risk-off"
+              value={config.risk.maxDrawdownPct}
+              onChange={(v) => updateRisk("maxDrawdownPct", v)}
+              min={0.05}
+              max={0.5}
+              step={0.01}
+              isPercent
+            />
+            <NumberField
+              label="单资产止损线"
+              description="单标的跌幅超过阈值时触发减仓提示"
+              value={config.risk.perAssetStopLossPct}
+              onChange={(v) => updateRisk("perAssetStopLossPct", v)}
+              min={0.05}
+              max={0.5}
+              step={0.01}
+              isPercent
+            />
+            <NumberField
+              label="单资产最大占比"
+              description="超过该比例时标记集中度风险"
+              value={config.risk.maxConcentrationPct}
+              onChange={(v) => updateRisk("maxConcentrationPct", v)}
+              min={0.1}
+              max={1}
+              step={0.01}
+              isPercent
+            />
+            <NumberField
+              label="高相关暴露上限"
+              description="高相关资产合计暴露上限"
+              value={config.risk.correlationCapPct}
+              onChange={(v) => updateRisk("correlationCapPct", v)}
+              min={0.1}
+              max={1}
+              step={0.01}
+              isPercent
+            />
+            <NumberField
+              label="高风险资产上限"
+              description="高风险标签资产总暴露上限"
+              value={config.risk.maxTotalRiskExposurePct}
+              onChange={(v) => updateRisk("maxTotalRiskExposurePct", v)}
+              min={0.1}
+              max={1}
+              step={0.01}
+              isPercent
+            />
           </CardContent>
         </Card>
       </div>

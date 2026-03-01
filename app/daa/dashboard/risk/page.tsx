@@ -36,6 +36,8 @@ type ApiResult = {
       isolatedSymbols?: string[];
       maxOrderPctOfNav?: number;
       maxOrderPctOfLiquidity?: number;
+      riskOffReason?: string | null;
+      concentrationWarnings?: string[];
     };
     humanFactor?: {
       defensiveConsensusPct?: number;
@@ -105,6 +107,7 @@ export default function RiskAuditPage() {
 
   const isolatedSymbols = result?.layers?.guardrail?.isolatedSymbols ?? [];
   const duplicatedStyleClusters = result?.layers?.humanFactor?.duplicatedStyleClusters ?? [];
+  const concentrationWarnings = result?.layers?.guardrail?.concentrationWarnings ?? [];
 
   return (
     <div className="space-y-6">
@@ -247,6 +250,14 @@ export default function RiskAuditPage() {
                 <div className="rounded-md border px-2 py-2">
                   <div className="mb-1 text-muted-foreground">重复风格聚类</div>
                   <div className="font-medium">{duplicatedStyleClusters.length ? duplicatedStyleClusters.join(", ") : "无"}</div>
+                </div>
+                <div className="rounded-md border px-2 py-2">
+                  <div className="mb-1 text-muted-foreground">Risk-off 原因</div>
+                  <div className="font-medium">{result.layers?.guardrail?.riskOffReason || "无"}</div>
+                </div>
+                <div className="rounded-md border px-2 py-2">
+                  <div className="mb-1 text-muted-foreground">集中度告警</div>
+                  <div className="font-medium">{concentrationWarnings.length ? concentrationWarnings.join("；") : "无"}</div>
                 </div>
               </CardContent>
             </Card>

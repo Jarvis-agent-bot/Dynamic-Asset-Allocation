@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getApiErrorMessageV1, requestDataV1 } from "@/src/daa/api/clientV1";
 
 import MetricGauge from "../_components/MetricGauge";
 import TierBadge from "../_components/TierBadge";
@@ -26,6 +27,8 @@ import {
 } from "../../unifiedInputStore";
 
 const DEFAULT_MARKET_SCOPE = ["US", "HK", "CN"];
+const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
+const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
 
 const TIER_COLORS: Record<string, string> = {
   elite: "#10b981",
@@ -216,38 +219,28 @@ export default function HumanFactorPage() {
         params.set("fundCodes", enabledFundCodes.join(","));
       }
 
-      const res = await fetch(`/api/daa/hf/scores?${params.toString()}`, {
+      const data = await requestDataV1<{ batch: HumanSignalBatch }>(`/api/daa/hf/scores?${params.toString()}`, {
         method: "GET",
         headers: { accept: "application/json" },
         cache: "no-store",
       });
-      const text = await res.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
-      }
-
-      if (!res.ok || !json?.ok) {
-        setSourceError(String(json?.error ?? `HTTP ${res.status}`));
-        return;
-      }
+      const batch = data.batch;
 
       setSignalBatch({
-        generatedAt: String(json.generatedAt ?? ""),
-        asOfDate: String(json.asOfDate ?? ""),
-        mode: String(json.mode ?? ""),
-        marketScope: Array.isArray(json.marketScope) ? json.marketScope : [],
-        actorCount: Number(json.actorCount ?? 0),
-        holdingCount: Number(json.holdingCount ?? 0),
-        signals: Array.isArray(json.signals) ? json.signals : [],
-        sources: Array.isArray(json.sources) ? json.sources : [],
+        generatedAt: String(batch?.generatedAt ?? ""),
+        asOfDate: String(batch?.asOfDate ?? ""),
+        mode: String(batch?.mode ?? ""),
+        marketScope: Array.isArray(batch?.marketScope) ? batch.marketScope : [],
+        actorCount: Number(batch?.actorCount ?? 0),
+        holdingCount: Number(batch?.holdingCount ?? 0),
+        signals: Array.isArray(batch?.signals) ? batch.signals : [],
+        sources: Array.isArray(batch?.sources) ? batch.sources : [],
       });
     } catch (e) {
-      setSourceError(e instanceof Error ? e.message : String(e));
+      setSourceError(getApiErrorMessageV1(e));
     } finally {
       setRefreshing(false);
+      window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
     }
   }, [enabledFundCodes]);
 
@@ -256,7 +249,7 @@ export default function HumanFactorPage() {
     setSourceError("");
 
     try {
-      const res = await fetch("/api/daa/hf/ingest/run", {
+      await requestDataV1<{ summary: unknown; batch: HumanSignalBatch }>("/api/daa/hf/ingest/run", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
@@ -265,29 +258,22 @@ export default function HumanFactorPage() {
         }),
       });
 
-      const text = await res.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
-      }
-
-      if (!res.ok || !json?.ok) {
-        setSourceError(String(json?.error ?? `HTTP ${res.status}`));
-        return;
-      }
-
       await loadSignalBatch();
     } catch (e) {
-      setSourceError(e instanceof Error ? e.message : String(e));
+      setSourceError(getApiErrorMessageV1(e));
     } finally {
       setIngesting(false);
+      window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
     }
   }, [enabledFundCodes, loadSignalBatch]);
 
   useEffect(() => {
+    function onRefresh() {
+      void loadSignalBatch();
+    }
     void loadSignalBatch();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
   }, [loadSignalBatch]);
 
   function updateRegistry(next: DaaHfFundTrackRow[]) {

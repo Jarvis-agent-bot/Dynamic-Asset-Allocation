@@ -97,3 +97,61 @@ export function ensembleStrategy({
     },
   };
 }
+
+function normalizeTargetWeightsV1(input: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  let sum = 0;
+  for (const [symbolRaw, valueRaw] of Object.entries(input || {})) {
+    const symbol = String(symbolRaw || "").trim().toUpperCase();
+    const value = Number(valueRaw);
+    if (!symbol || !Number.isFinite(value) || value <= 0) continue;
+    out[symbol] = value;
+    sum += value;
+  }
+  if (sum <= 0) return {};
+  for (const symbol of Object.keys(out)) {
+    out[symbol] = out[symbol] / sum;
+  }
+  return out;
+}
+
+export function buildEqualWeightTargetWeightsV1(symbols: string[]): Record<string, number> {
+  const unique = [...new Set((symbols || []).map((x) => String(x || "").trim().toUpperCase()).filter(Boolean))];
+  if (!unique.length) return {};
+  const w = 1 / unique.length;
+  return Object.fromEntries(unique.map((symbol) => [symbol, w]));
+}
+
+export function buildMomentumTargetWeightsV1(returnsBySymbol: Record<string, number>): Record<string, number> {
+  const positive: Record<string, number> = {};
+  for (const [symbolRaw, raw] of Object.entries(returnsBySymbol || {})) {
+    const symbol = String(symbolRaw || "").trim().toUpperCase();
+    const value = Number(raw);
+    if (!symbol || !Number.isFinite(value)) continue;
+    if (value <= 0) continue;
+    positive[symbol] = value;
+  }
+  return normalizeTargetWeightsV1(positive);
+}
+
+export function buildRiskParityTargetWeightsV1(volBySymbol: Record<string, number>): Record<string, number> {
+  const inverseVol: Record<string, number> = {};
+  for (const [symbolRaw, raw] of Object.entries(volBySymbol || {})) {
+    const symbol = String(symbolRaw || "").trim().toUpperCase();
+    const vol = Number(raw);
+    if (!symbol || !Number.isFinite(vol) || vol <= 0) continue;
+    inverseVol[symbol] = 1 / vol;
+  }
+  return normalizeTargetWeightsV1(inverseVol);
+}
+
+export function buildMinVarianceTargetWeightsV1(covMatrix: Record<string, Record<string, number>>): Record<string, number> {
+  const inverseVar: Record<string, number> = {};
+  for (const [symbolRaw, row] of Object.entries(covMatrix || {})) {
+    const symbol = String(symbolRaw || "").trim().toUpperCase();
+    const variance = Number((row || {})[symbol]);
+    if (!symbol || !Number.isFinite(variance) || variance <= 0) continue;
+    inverseVar[symbol] = 1 / variance;
+  }
+  return normalizeTargetWeightsV1(inverseVar);
+}

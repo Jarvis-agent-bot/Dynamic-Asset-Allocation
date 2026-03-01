@@ -200,13 +200,7 @@ export default function DaaDashboardPageClient() {
           cache: "no-store",
         });
 
-        const text = await res.text();
-        let json: any = null;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          json = null;
-        }
+        const json = await res.json().catch(() => null);
 
         if (cancelled) return;
 

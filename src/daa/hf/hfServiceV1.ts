@@ -6,6 +6,7 @@ import {
   type DanjuanFundRegistryItemV1,
   type DanjuanHoldingRowV1,
 } from "@/src/daa/hf/danjuanFundSourceV1";
+import { listDaaDataSourcesV1 } from "@/src/daa/store/daaStorePgV1";
 import { HF_DEFAULT_MARKET_SCOPE_V1, HF_SEED_ACTORS_V1, HF_SEED_HOLDINGS_V1 } from "@/src/daa/hf/hfSeedDataV1";
 import type {
   DaaActorHoldingSnapshotV1,
@@ -294,7 +295,29 @@ async function fetchDanjuanRows(opts: {
   reportDates?: string[];
   fundCodes?: string[];
 }): Promise<{ rows: DanjuanHoldingRowV1[]; registry: DanjuanFundRegistryItemV1[] }> {
-  const resolvedRegistry = resolveDanjuanFundRegistryV1().filter((item) => item.enabled);
+  let resolvedRegistry = resolveDanjuanFundRegistryV1().filter((item) => item.enabled);
+  try {
+    const sources = await listDaaDataSourcesV1("hf_fund");
+    const fundsFromDb = sources
+      .filter((source) => source.enabled)
+      .flatMap((source) => {
+        const funds = Array.isArray((source.configJson as any)?.funds) ? (source.configJson as any).funds : [];
+        return funds
+          .map((item: any) => ({
+            fundCode: String(item?.fundCode || "").trim(),
+            label: String(item?.label || "").trim() || `基金 ${String(item?.fundCode || "").trim()}`,
+            kind: item?.kind === "qdii" || item?.kind === "balanced" ? item.kind : "equity",
+            enabled: item?.enabled !== false,
+          }))
+          .filter((item: DanjuanFundRegistryItemV1) => item.fundCode);
+      });
+    if (fundsFromDb.length > 0) {
+      resolvedRegistry = fundsFromDb;
+    }
+  } catch {
+    // 数据源读取失败时回退到本地默认配置，避免采集中断。
+  }
+
   const requestedCodes = normalizeFundCodes(opts.fundCodes);
   const registry =
     requestedCodes.length > 0

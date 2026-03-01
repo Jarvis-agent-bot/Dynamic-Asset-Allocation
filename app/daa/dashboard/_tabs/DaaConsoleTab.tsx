@@ -25,10 +25,9 @@ import { formatCurrency, formatNotional, formatPercent } from "../_components/da
 import {
   appendEquitySnapshot,
   appendOpLog,
-  appendRunHistory,
   buildUnifiedRequest,
   hasTodaySnapshot,
-  migrateFromDraftIfNeeded,
+  toUserErrorMessage,
   useAnalysts,
   useAssetViews,
   useEquitySnapshots,
@@ -41,9 +40,9 @@ import {
 import { useMarketDataClient } from "../../useMarketDataClient";
 import { patchUnifiedInputStateV1, readUnifiedInputSliceV1 } from "../../unifiedInputStore";
 import type { DaaPositionRow } from "../../unifiedInputStore";
+import { runUnifiedRebalanceV1 } from "@/src/daa/modules/execution/executionApiV1";
 
 type ApiResult = {
-  ok?: boolean;
   generatedAt?: string;
   summary?: {
     totalEquity?: number;
@@ -108,10 +107,6 @@ export default function DaaConsoleTab() {
 
   const autoSnapRef = useRef(false);
 
-  useEffect(() => {
-    migrateFromDraftIfNeeded();
-  }, []);
-
   const portfolioMetrics = useMemo(() => {
     const holdingsValue = positionsList.reduce((sum, p) => sum + p.qty * p.price, 0);
     const cash = config.account.cash;
@@ -164,9 +159,9 @@ export default function DaaConsoleTab() {
       {
         key: "execute",
         title: "执行",
-        description: hasExecutableOrders ? "有可执行指令，进入审计复核" : "暂无执行指令，关注风险",
-        href: "/daa/dashboard/risk",
-        cta: "去审计",
+        description: hasExecutableOrders ? "有可执行指令，进入执行回填流程" : "暂无执行指令，可转入风控审计",
+        href: "/daa/dashboard/execution",
+        cta: "去执行",
         state: hasExecutableOrders ? "active" : hasRunSummary ? "done" : "pending",
       },
     ],
@@ -235,33 +230,16 @@ export default function DaaConsoleTab() {
       await refreshPrices();
       const freshPositions = readUnifiedInputSliceV1<DaaPositionRow[]>("positions") ?? positionsList;
       const payload = buildUnifiedRequest(freshPositions, analystsList, viewsList, config);
-      const res = await fetch("/api/daa/rebalance/unified", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const { plan } = await runUnifiedRebalanceV1<ApiResult>(payload as unknown as Record<string, unknown>, { persist: true });
 
-      const text = await res.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
-      }
-
-      if (!res.ok) {
-        setError(String(json?.error ?? `HTTP ${res.status}`));
-        return;
-      }
-
-      setLastRun(json);
-      appendRunHistory(payload, json);
+      setLastRun(plan);
+      window.dispatchEvent(new CustomEvent("daa:dashboard:refresh"));
 
       const holdingsValue = freshPositions.reduce((sum, p) => sum + p.qty * p.price, 0);
       appendEquitySnapshot(holdingsValue + config.account.cash, holdingsValue, config.account.cash, "run");
-      appendOpLog(`运行决策：${json?.summary?.shouldRebalance ? "触发再平衡" : "维持当前仓位"}`);
+      appendOpLog(`运行决策：${plan?.summary?.shouldRebalance ? "触发再平衡" : "维持当前仓位"}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(toUserErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -336,52 +314,6 @@ export default function DaaConsoleTab() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_520px]">
         <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">配置摘要（只读）</CardTitle>
-              <CardDescription>配置项请在专页编辑，控制台仅展示当前状态。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="rounded-md border px-2 py-1.5">
-                  <span className="text-muted-foreground">持仓标的</span>
-                  <div className="font-medium">{positionsList.length}</div>
-                </div>
-                <div className="rounded-md border px-2 py-1.5">
-                  <span className="text-muted-foreground">目标权重合计</span>
-                  <div className="font-medium">{formatPercent(targetWeightSummary.weightSum * 100, 1)}</div>
-                </div>
-                <div className="rounded-md border px-2 py-1.5">
-                  <span className="text-muted-foreground">行情代码</span>
-                  <div className="font-medium">{config.feedSymbols || "-"}</div>
-                </div>
-                <div className="rounded-md border px-2 py-1.5">
-                  <span className="text-muted-foreground">兼容输入（旧）</span>
-                  <div className="font-medium">分析师 {analystsList.length} / 观点 {viewsList.length}</div>
-                </div>
-              </div>
-
-              {targetWeightSummary.topWeights.length ? (
-                <div className="rounded-md border px-2 py-2">
-                  <div className="mb-1 text-muted-foreground">Top 目标权重</div>
-                  <div className="space-y-1">
-                    {targetWeightSummary.topWeights.map(([symbol, weight]) => (
-                      <div key={symbol} className="flex items-center justify-between">
-                        <span>{symbol}</span>
-                        <span className="font-medium">{formatPercent(Number(weight) * 100, 1)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button asChild size="sm" variant="outline"><Link href="/daa/dashboard/positions">编辑持仓与目标权重</Link></Button>
-                <Button asChild size="sm" variant="outline"><Link href="/daa/dashboard/strategy">编辑策略参数</Link></Button>
-              </div>
-            </CardContent>
-          </Card>
-
           {equitySnapshots.length >= 2 ? (
             <Card>
               <CardHeader className="pb-1">

@@ -11,7 +11,7 @@ export type JsonValue =
 
 export type RebalanceSimulateRequest = {
   money_plan: JsonValue;
-  // Engine expects an array of { symbol, action, score, ... } (see services/daa-py/app/main.py).
+  // Engine 兼容格式：数组元素形如 { symbol, action, score, ... }。
   signals: JsonValue;
 };
 

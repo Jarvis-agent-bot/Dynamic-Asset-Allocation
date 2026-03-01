@@ -11,6 +11,7 @@ export type DaaUnifiedPositionV1 = {
   currency?: string;
   qty: number;
   price: number;
+  costBasis?: number;
   tags?: string[];
   liquidityNotional24h?: number;
 };
@@ -49,6 +50,7 @@ export type DaaUnifiedRequestV1 = {
   account?: {
     cash?: number;
     totalEquity?: number;
+    equityPeak?: number;
   };
   constraints?: {
     maxPositionPct?: number;
@@ -63,6 +65,13 @@ export type DaaUnifiedRequestV1 = {
     riskOffScalePct?: number;
     valueTrapThesisDriftPct?: number;
     sbIsolationScorePct?: number;
+  };
+  risk?: {
+    maxDrawdownPct?: number;
+    perAssetStopLossPct?: number;
+    maxConcentrationPct?: number;
+    correlationCapPct?: number;
+    maxTotalRiskExposurePct?: number;
   };
   targetWeights: Record<string, number>;
   positions: DaaUnifiedPositionV1[];
@@ -117,6 +126,8 @@ export type DaaUnifiedResponseV1 = {
       maxOrderPctOfNav: number;
       maxOrderPctOfLiquidity: number;
       isolatedSymbols: string[];
+      riskOffReason: string | null;
+      concentrationWarnings: string[];
     };
   };
   executableOrders: DaaExecutableOrderV1[];
@@ -241,6 +252,7 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     currency: String(p.currency ?? "USD").trim().toUpperCase() || "USD",
     qty: Math.max(0, toFiniteNumber(p.qty, 0)),
     price: Math.max(0, toFiniteNumber(p.price, 0)),
+    costBasis: Math.max(0, toFiniteNumber(p.costBasis, 0)),
     tags: normalizeTags(p.tags),
     liquidityNotional24h: Math.max(0, toFiniteNumber(p.liquidityNotional24h, 0)),
   }));
@@ -268,6 +280,7 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
   const cash = Math.max(0, toFiniteNumber(req.account?.cash, 0));
   const impliedEquity = Object.entries(holdings).reduce((sum, [symbol, qty]) => sum + qty * (prices[symbol] ?? 0), 0) + cash;
   const totalEquity = Math.max(0, toFiniteNumber(req.account?.totalEquity, impliedEquity));
+  const equityPeak = Math.max(totalEquity, toFiniteNumber(req.account?.equityPeak, totalEquity));
 
   const targetWeights = normalizeTargetWeights(req.targetWeights ?? {});
 
@@ -440,6 +453,53 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
 
   const adjustedTargetWeights = normalizeTargetWeights(adjustedWeightRaw);
 
+  const riskMaxDrawdownPct = clamp01(toFiniteNumber(req.risk?.maxDrawdownPct, 0.15));
+  const riskStopLossPct = clamp01(toFiniteNumber(req.risk?.perAssetStopLossPct, 0.2));
+  const riskMaxConcentrationPct = clamp01(toFiniteNumber(req.risk?.maxConcentrationPct, 0.3));
+  const riskCorrelationCapPct = clamp01(toFiniteNumber(req.risk?.correlationCapPct, 0.6));
+  const riskTotalExposurePct = clamp01(toFiniteNumber(req.risk?.maxTotalRiskExposurePct, 0.7));
+
+  let riskOffReason: string | null = null;
+  const concentrationWarnings: string[] = [];
+
+  const drawdownPct = equityPeak > 0 ? (equityPeak - totalEquity) / equityPeak : 0;
+  if (drawdownPct >= riskMaxDrawdownPct) {
+    riskOffReason = "max_drawdown";
+    warnings.push(`触发最大回撤保护（${(drawdownPct * 100).toFixed(2)}%）`);
+  }
+
+  for (const position of positions) {
+    if (!(position.costBasis > 0) || !(position.price > 0)) continue;
+    const lossPct = (position.costBasis - position.price) / position.costBasis;
+    if (lossPct >= riskStopLossPct) {
+      warnings.push(`symbol ${position.symbol} 触发止损线（${(lossPct * 100).toFixed(2)}%）`);
+    }
+  }
+
+  const concentrationPairs = Object.entries(adjustedTargetWeights);
+  for (const [symbol, weight] of concentrationPairs) {
+    if (weight >= riskMaxConcentrationPct) {
+      concentrationWarnings.push(`${symbol} 权重 ${(weight * 100).toFixed(2)}% 超过集中度阈值`);
+    }
+  }
+  warnings.push(...concentrationWarnings);
+
+  const highRiskExposure = positions
+    .filter((p) => p.tags.includes("high") || p.tags.includes("high-risk") || p.tags.includes("growth"))
+    .reduce((sum, p) => sum + p.qty * p.price, 0);
+  const highRiskExposurePct = totalEquity > 0 ? highRiskExposure / totalEquity : 0;
+  if (highRiskExposurePct > riskTotalExposurePct) {
+    warnings.push(`高风险资产暴露 ${(highRiskExposurePct * 100).toFixed(2)}% 超过阈值`);
+  }
+
+  const correlatedExposure = positions
+    .filter((p) => p.tags.includes("high-corr") || p.tags.includes("high_corr"))
+    .reduce((sum, p) => sum + p.qty * p.price, 0);
+  const correlatedExposurePct = totalEquity > 0 ? correlatedExposure / totalEquity : 0;
+  if (correlatedExposurePct > riskCorrelationCapPct) {
+    warnings.push(`高相关资产暴露 ${(correlatedExposurePct * 100).toFixed(2)}% 超过阈值`);
+  }
+
   const strongTrendExists = assetDecisions.some((item) => item.tier === "elite" && item.momentumRegime === "strong");
   const triggerThresholdPct = strongTrendExists ? strongTrendDriftTriggerPct : baseDriftTriggerPct;
 
@@ -487,6 +547,10 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
 
     if (order.side === "BUY" && isolatedSymbols.has(symbol)) {
       blockedOrders.push({ ...order, blockedBy: "sb_isolation" });
+      continue;
+    }
+    if (riskOffReason && order.side === "BUY") {
+      blockedOrders.push({ ...order, blockedBy: riskOffReason });
       continue;
     }
 
@@ -550,6 +614,8 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
         maxOrderPctOfNav: Number((maxOrderPctOfNav * 100).toFixed(2)),
         maxOrderPctOfLiquidity: Number((maxOrderPctOfLiquidity * 100).toFixed(2)),
         isolatedSymbols: [...isolatedSymbols].sort(),
+        riskOffReason,
+        concentrationWarnings,
       },
     },
     executableOrders,
@@ -582,6 +648,13 @@ export const DAA_UNIFIED_SAMPLE_REQUEST_V1: DaaUnifiedRequestV1 = {
     riskOffConsensusPct: 0.6,
     riskOffScalePct: 0.7,
   },
+  risk: {
+    maxDrawdownPct: 0.15,
+    perAssetStopLossPct: 0.2,
+    maxConcentrationPct: 0.3,
+    correlationCapPct: 0.6,
+    maxTotalRiskExposurePct: 0.7,
+  },
   targetWeights: {
     SPY: 0.4,
     QQQ: 0.25,
@@ -589,10 +662,10 @@ export const DAA_UNIFIED_SAMPLE_REQUEST_V1: DaaUnifiedRequestV1 = {
     TSLA: 0.15,
   },
   positions: [
-    { symbol: "SPY", market: "US", currency: "USD", qty: 40, price: 545, liquidityNotional24h: 1200000000, tags: ["mid"] },
-    { symbol: "QQQ", market: "US", currency: "USD", qty: 22, price: 465, liquidityNotional24h: 900000000, tags: ["high"] },
-    { symbol: "BND", market: "US", currency: "USD", qty: 35, price: 73, liquidityNotional24h: 240000000, tags: ["low", "bond"] },
-    { symbol: "TSLA", market: "US", currency: "USD", qty: 12, price: 235, liquidityNotional24h: 2800000000, tags: ["high"] },
+    { symbol: "SPY", market: "US", currency: "USD", qty: 40, price: 545, costBasis: 520, liquidityNotional24h: 1200000000, tags: ["mid"] },
+    { symbol: "QQQ", market: "US", currency: "USD", qty: 22, price: 465, costBasis: 440, liquidityNotional24h: 900000000, tags: ["high"] },
+    { symbol: "BND", market: "US", currency: "USD", qty: 35, price: 73, costBasis: 75, liquidityNotional24h: 240000000, tags: ["low", "bond"] },
+    { symbol: "TSLA", market: "US", currency: "USD", qty: 12, price: 235, costBasis: 290, liquidityNotional24h: 2800000000, tags: ["high", "high_corr"] },
   ],
   analysts: [
     {

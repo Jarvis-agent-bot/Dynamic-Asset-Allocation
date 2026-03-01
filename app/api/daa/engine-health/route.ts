@@ -1,17 +1,26 @@
-import { isDaaEngineHealthResponse } from "@/src/core/contracts/daaEngine";
-import { proxyToEngineJson } from "@/src/daa/proxyToEngine";
-import { parsePositiveIntEnv } from "@/src/daa/env";
+import { NextResponse } from "next/server";
 
-// Health proxy for the Python engine behind nginx (/daa-api/...).
-// Enforces the v0 contract to catch accidental drift early.
+import { ensureDaaStoreSchemaPgV1 } from "@/src/daa/store/daaStorePgV1";
+
+export const runtime = "nodejs";
+
 export async function GET() {
-  const timeoutMs = parsePositiveIntEnv("DAA_ENGINE_TIMEOUT_MS", 10_000);
+  try {
+    await ensureDaaStoreSchemaPgV1();
 
-  return proxyToEngineJson({
-    upstreamPath: "/daa-api/health",
-    method: "GET",
-    timeoutMs,
-    fallbackContentType: "application/json",
-    validate: isDaaEngineHealthResponse,
-  });
+    return NextResponse.json({
+      ok: true,
+      service: "daa-engine",
+      version: "next-v1",
+      runtime: "nextjs",
+      store: "postgres-compatible",
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({
+      ok: false,
+      error: "engine_health_failed",
+      message,
+    }, { status: 500 });
+  }
 }

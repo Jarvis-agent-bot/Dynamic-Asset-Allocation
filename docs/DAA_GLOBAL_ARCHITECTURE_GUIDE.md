@@ -61,7 +61,7 @@
 - 权限：强制账号密码登录后的会话鉴权（viewer 及以上）
 
 ### 3) 统一工作台（UI）
-- 文件：`app/daa/dashboard/_tabs/DaaUnifiedArchitectureTab.tsx`
+- 文件：`app/daa/dashboard/_components/DaaDashboardPageClient.tsx` + `app/daa/dashboard/_tabs/DaaConsoleTab.tsx`
 - 入口：`/daa/dashboard`
 - 能力：
   - 粘贴 JSON 快照
@@ -88,8 +88,8 @@
    - 将人因评分与真实交易后验表现闭环联动（自动校准）。
 2. **阶段 B：风险精细化**
    - 引入资产相关性、集中度约束、跨币种 FX 压力测试。
-3. **阶段 C：执行自动化**
-   - 对接实盘券商 API，补齐审计追踪与异常回滚。
+3. **阶段 C：执行同步自动化（非自动下单）**
+   - 强化人工执行回填、审计追踪与异常回滚，不接入自动下单。
 4. **阶段 D：自进化能力**
    - 建立“决策质量评分 -> 参数漂移建议 -> 灰度发布”机制。
 
