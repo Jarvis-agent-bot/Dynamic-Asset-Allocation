@@ -313,20 +313,6 @@ export function useOpLog() {
   return [value, setValue] as const;
 }
 
-export function appendRunHistory(request: unknown, response: unknown) {
-  const current = readUnifiedInputSliceV1<DaaRunHistoryEntry[]>("runHistory") ?? [];
-  const entry: DaaRunHistoryEntry = {
-    id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    ts: new Date().toISOString(),
-    request,
-    response,
-  };
-  const next = [entry, ...current].slice(0, 20);
-  writeUnifiedInputSliceV1("runHistory", next);
-  emitDashboardDataUpdatedV1();
-  return entry;
-}
-
 export function appendEquitySnapshot(equity: number, holdingsValue: number, cash: number, source: DaaEquitySnapshot["source"]) {
   const current = readUnifiedInputSliceV1<DaaEquitySnapshot[]>("equitySnapshots") ?? [];
   const snap: DaaEquitySnapshot = { ts: new Date().toISOString(), equity, holdingsValue, cash, source };

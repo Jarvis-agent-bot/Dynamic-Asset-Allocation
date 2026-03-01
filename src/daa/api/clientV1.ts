@@ -47,6 +47,13 @@ function normalizeUnknownErrorMessageV1(error: unknown): string {
   return String(error || "unknown_error");
 }
 
+function normalizeDisplayErrorMessageV1(message: string): string {
+  if (/Unexpected end of JSON input/i.test(message)) {
+    return "服务返回了空响应，请重试；若持续出现请刷新页面并检查后端日志。";
+  }
+  return message;
+}
+
 export async function requestApiV1<T>(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -116,7 +123,7 @@ export async function requestDataV1<T>(
 
 export function getApiErrorMessageV1(error: unknown): string {
   if (error instanceof ApiClientErrorV1) {
-    return `${error.message}${error.code ? ` (${error.code})` : ""}`;
+    return `${normalizeDisplayErrorMessageV1(error.message)}${error.code ? ` (${error.code})` : ""}`;
   }
-  return normalizeUnknownErrorMessageV1(error);
+  return normalizeDisplayErrorMessageV1(normalizeUnknownErrorMessageV1(error));
 }

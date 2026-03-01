@@ -37,6 +37,14 @@ const TIER_COLORS: Record<string, string> = {
   isolated: "#ef4444",
 };
 
+function formatDateTimeText(value: string | null | undefined): string {
+  const text = String(value || "").trim();
+  if (!text) return "-";
+  const ts = Date.parse(text);
+  if (!Number.isFinite(ts)) return text;
+  return new Date(ts).toLocaleString();
+}
+
 type HumanSignalBatch = {
   generatedAt: string;
   asOfDate: string;
@@ -198,6 +206,8 @@ export default function HumanFactorPage() {
   }> = (lastRun as any)?.layers?.humanFactor?.assetDecisions ?? [];
 
   const defensiveConsensusPct = Number((lastRun as any)?.layers?.humanFactor?.defensiveConsensusPct ?? 0);
+  const signalCount = signalBatch?.signals?.length ?? 0;
+  const latestGeneratedAtText = formatDateTimeText(signalBatch?.generatedAt);
 
   const tierPieData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -294,6 +304,33 @@ export default function HumanFactorPage() {
     <div className="space-y-6">
       <PageHeader title="人因中心" description="唯一入口：维护基金池、执行采集并查看人因信号。" />
 
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-sm">启用基金池</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xl font-semibold">{enabledFundCodes.length}<span className="ml-1 text-sm font-normal text-muted-foreground">/ {registry.length}</span></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-sm">信号覆盖持仓</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xl font-semibold">{trackedPositionCount}<span className="ml-1 text-sm font-normal text-muted-foreground">/ {positionsList.length}</span></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-sm">信号总数</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xl font-semibold">{signalCount}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-sm">防守共识</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xl font-semibold">{defensiveConsensusPct.toFixed(1)}%</CardContent>
+        </Card>
+      </div>
+
       <Card className="border-sky-200/70">
         <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -328,7 +365,7 @@ export default function HumanFactorPage() {
             </Alert>
           ) : null}
 
-          <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-md border px-2 py-1.5">
               <span className="text-muted-foreground">采集模式</span>
               <div className="font-medium">{signalBatch?.mode || "-"}</div>
@@ -349,6 +386,10 @@ export default function HumanFactorPage() {
               <span className="text-muted-foreground">最新披露日</span>
               <div className="font-medium">{signalBatch?.asOfDate || "-"}</div>
             </div>
+            <div className="rounded-md border px-2 py-1.5">
+              <span className="text-muted-foreground">最近采集时间</span>
+              <div className="font-medium">{latestGeneratedAtText}</div>
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -365,97 +406,6 @@ export default function HumanFactorPage() {
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">跟踪基金池管理</CardTitle>
-              <CardDescription>选择哪些基金参与人因层计算；仅启用项会参与采集。</CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <FundFormDialog
-                onSave={(row) => {
-                  updateRegistry([...registry, row]);
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => updateRegistry(registry.map((item) => ({ ...item, enabled: true })))}
-                disabled={!registry.length}
-              >
-                全部启用
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => updateRegistry(registry.map((item) => ({ ...item, enabled: false })))}
-                disabled={!registry.length}
-              >
-                全部暂停
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setStoredRegistry(DEFAULT_HF_FUND_REGISTRY.map((item) => ({ ...item })))}
-              >
-                恢复默认
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {registry.length ? (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>状态</TableHead>
-                    <TableHead>基金代码</TableHead>
-                    <TableHead>名称</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {registry.map((fund, index) => (
-                    <TableRow key={`${fund.fundCode}-${index}`}>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant={fund.enabled ? "default" : "outline"}
-                          className="h-7 px-2.5 text-xs"
-                          onClick={() => toggleFundEnabled(index)}
-                        >
-                          {fund.enabled ? "启用" : "暂停"}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="font-medium">{fund.fundCode}</TableCell>
-                      <TableCell>{fund.label}</TableCell>
-                      <TableCell>
-                        <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">{fund.kind}</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-red-500"
-                          onClick={() => removeFund(index)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">暂无基金，请先添加至少一个基金代码。</div>
-          )}
         </CardContent>
       </Card>
 
@@ -524,49 +474,154 @@ export default function HumanFactorPage() {
         </Card>
       </div>
 
-      {signalBatch?.signals?.length ? (
+      <div className="grid gap-4 2xl:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">基金池衍生信号</CardTitle>
-            <CardDescription>展示采集后聚合的人因机会/风险信号（按强度排序）。</CardDescription>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">跟踪基金池管理</CardTitle>
+                <CardDescription>仅启用项会参与采集与评分。</CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <FundFormDialog
+                  onSave={(row) => {
+                    updateRegistry([...registry, row]);
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateRegistry(registry.map((item) => ({ ...item, enabled: true })))}
+                  disabled={!registry.length}
+                >
+                  全部启用
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => updateRegistry(registry.map((item) => ({ ...item, enabled: false })))}
+                  disabled={!registry.length}
+                >
+                  全部暂停
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStoredRegistry(DEFAULT_HF_FUND_REGISTRY.map((item) => ({ ...item })))}
+                >
+                  恢复默认
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>代码</TableHead>
-                    <TableHead>市场</TableHead>
-                    <TableHead className="text-right">评分%</TableHead>
-                    <TableHead className="text-right">置信度%</TableHead>
-                    <TableHead className="text-right">漂移%</TableHead>
-                    <TableHead className="text-right">可信度%</TableHead>
-                    <TableHead>动量</TableHead>
-                    <TableHead>风险标签</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {signalBatch.signals.slice(0, 15).map((sig) => (
-                    <TableRow key={`${sig.symbol}-${sig.market}`}>
-                      <TableCell className="font-medium">{sig.symbol}</TableCell>
-                      <TableCell>{sig.market}</TableCell>
-                      <TableCell className="text-right">{sig.aggregatedScorePct.toFixed(1)}</TableCell>
-                      <TableCell className="text-right">{sig.convictionPct.toFixed(1)}</TableCell>
-                      <TableCell className="text-right">{sig.thesisDriftPct.toFixed(1)}</TableCell>
-                      <TableCell className="text-right">{sig.confidencePct.toFixed(1)}</TableCell>
-                      <TableCell className="text-xs">{sig.momentumRegime}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{sig.riskTags.length ? sig.riskTags.join(", ") : "-"}</TableCell>
+            {registry.length ? (
+              <div className="max-h-[420px] overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>状态</TableHead>
+                      <TableHead>基金代码</TableHead>
+                      <TableHead>名称</TableHead>
+                      <TableHead>类型</TableHead>
+                      <TableHead />
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {signalBatch.signals.length > 15 ? (
-              <div className="mt-1 text-xs text-muted-foreground">仅展示前 15 条，完整结果请调用 `/api/daa/hf/scores`。</div>
-            ) : null}
+                  </TableHeader>
+                  <TableBody>
+                    {registry.map((fund, index) => (
+                      <TableRow key={`${fund.fundCode}-${index}`}>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant={fund.enabled ? "default" : "outline"}
+                            className="h-7 px-2.5 text-xs"
+                            onClick={() => toggleFundEnabled(index)}
+                          >
+                            {fund.enabled ? "启用" : "暂停"}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="font-medium">{fund.fundCode}</TableCell>
+                        <TableCell>{fund.label}</TableCell>
+                        <TableCell>
+                          <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">{fund.kind}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-red-500"
+                            onClick={() => removeFund(index)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">暂无基金，请先添加至少一个基金代码。</div>
+            )}
           </CardContent>
         </Card>
-      ) : null}
+
+        {signalBatch?.signals?.length ? (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">基金池衍生信号</CardTitle>
+              <CardDescription>展示采集后聚合的人因机会/风险信号（按强度排序）。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="max-h-[420px] overflow-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>代码</TableHead>
+                      <TableHead>市场</TableHead>
+                      <TableHead className="text-right">评分%</TableHead>
+                      <TableHead className="text-right">置信度%</TableHead>
+                      <TableHead className="text-right">漂移%</TableHead>
+                      <TableHead className="text-right">可信度%</TableHead>
+                      <TableHead>动量</TableHead>
+                      <TableHead>风险标签</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {signalBatch.signals.slice(0, 15).map((sig) => (
+                      <TableRow key={`${sig.symbol}-${sig.market}`}>
+                        <TableCell className="font-medium">{sig.symbol}</TableCell>
+                        <TableCell>{sig.market}</TableCell>
+                        <TableCell className="text-right">{sig.aggregatedScorePct.toFixed(1)}</TableCell>
+                        <TableCell className="text-right">{sig.convictionPct.toFixed(1)}</TableCell>
+                        <TableCell className="text-right">{sig.thesisDriftPct.toFixed(1)}</TableCell>
+                        <TableCell className="text-right">{sig.confidencePct.toFixed(1)}</TableCell>
+                        <TableCell className="text-xs">{sig.momentumRegime}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{sig.riskTags.length ? sig.riskTags.join(", ") : "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {signalBatch.signals.length > 15 ? (
+                <div className="mt-1 text-xs text-muted-foreground">仅展示前 15 条，完整结果请调用 `/api/daa/hf/scores`。</div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">基金池衍生信号</CardTitle>
+              <CardDescription>运行采集后这里会显示聚合信号。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                暂无信号数据，点击上方「运行采集」开始获取。
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {decisions.length ? (
         <Card>
@@ -575,7 +630,7 @@ export default function HumanFactorPage() {
             <CardDescription>来自统一再平衡引擎，可与采集信号对照校验。</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="max-h-[420px] overflow-auto rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>

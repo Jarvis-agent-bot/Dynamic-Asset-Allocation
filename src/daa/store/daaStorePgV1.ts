@@ -112,6 +112,9 @@ export type DaaStoreExecutionOrderV1 = {
   executedQty: number;
   executedPrice: number;
   fee: number;
+  bookedQty: number;
+  bookedNotional: number;
+  bookedFee: number;
   notes: string | null;
   updatedAt: string;
   bookedAt?: string | null;
@@ -270,9 +273,6 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_trade_journal_symbol_executed_desc
             ON daa_trade_journal(symbol, executed_at DESC);
 
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_trade_journal_execution_order_unique
-            ON daa_trade_journal(execution_order_id) WHERE execution_order_id IS NOT NULL;
-
           CREATE TABLE IF NOT EXISTS daa_rebalance_decisions (
             id TEXT PRIMARY KEY,
             request_json JSONB NOT NULL,
@@ -299,6 +299,9 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
             executed_qty NUMERIC NOT NULL DEFAULT 0,
             executed_price NUMERIC NOT NULL DEFAULT 0,
             fee NUMERIC NOT NULL DEFAULT 0,
+            booked_qty NUMERIC NOT NULL DEFAULT 0,
+            booked_notional NUMERIC NOT NULL DEFAULT 0,
+            booked_fee NUMERIC NOT NULL DEFAULT 0,
             booked_at TIMESTAMPTZ,
             notes TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -368,10 +371,11 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
         `);
 
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ");
+        await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_qty NUMERIC NOT NULL DEFAULT 0");
+        await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_notional NUMERIC NOT NULL DEFAULT 0");
+        await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_fee NUMERIC NOT NULL DEFAULT 0");
         await query("ALTER TABLE daa_trade_journal ADD COLUMN IF NOT EXISTS execution_order_id TEXT");
-        await query(
-          "CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_trade_journal_execution_order_unique ON daa_trade_journal(execution_order_id) WHERE execution_order_id IS NOT NULL",
-        );
+        await query("DROP INDEX IF EXISTS idx_daa_trade_journal_execution_order_unique");
 
         await query(
           "INSERT INTO daa_strategy_config (id, config_json) VALUES ('default', $1) ON CONFLICT (id) DO NOTHING",
@@ -850,6 +854,9 @@ function mapExecutionOrderRowV1(row: Record<string, unknown>): DaaStoreExecution
     executedQty: toFiniteNumber(row.executed_qty),
     executedPrice: toFiniteNumber(row.executed_price),
     fee: toFiniteNumber(row.fee),
+    bookedQty: Math.max(0, toFiniteNumber(row.booked_qty)),
+    bookedNotional: Math.max(0, toFiniteNumber(row.booked_notional)),
+    bookedFee: Math.max(0, toFiniteNumber(row.booked_fee)),
     notes: row.notes == null ? null : String(row.notes),
     updatedAt: toIsoString(row.updated_at),
     bookedAt: row.booked_at == null ? null : toIsoString(row.booked_at),
@@ -892,7 +899,7 @@ export async function createDaaRebalanceDecisionV1(input: {
         if (!symbol || (side !== "BUY" && side !== "SELL") || notional <= 0) continue;
 
         await query(
-          "INSERT INTO daa_execution_orders (order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_at, notes, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,0,0,0,NULL,NULL,NOW(),NOW())",
+          "INSERT INTO daa_execution_orders (order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, booked_at, notes, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,0,0,0,0,0,0,NULL,NULL,NOW(),NOW())",
           [randomUUID(), decisionId, symbol, side, notional, "pending"],
         );
       }
@@ -913,7 +920,7 @@ export async function createDaaRebalanceDecisionV1(input: {
     );
 
     const oRes = await query(
-      "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 ORDER BY created_at ASC",
+      "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 ORDER BY created_at ASC",
       [decisionId],
     );
 
@@ -948,7 +955,7 @@ export async function listDaaRebalanceDecisionsV1(opts?: {
 
     const ids = decisions.map((d) => d.id);
     const oRes = await query(
-      "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = ANY($1) ORDER BY created_at ASC",
+      "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = ANY($1) ORDER BY created_at ASC",
       [ids],
     );
 
@@ -989,7 +996,7 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
       if (!dRes.rows.length) throw new Error("decision not found");
 
       const oRes = await query(
-        "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 FOR UPDATE",
+        "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 FOR UPDATE",
         [decisionId],
       );
       const existingOrders = oRes.rows.map((row) => mapExecutionOrderRowV1(row as Record<string, unknown>));
@@ -1014,26 +1021,29 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
         const executedPrice = Math.max(0, toFiniteNumber(item.executedPrice, oldOrder.executedPrice));
         const fee = Math.max(0, toFiniteNumber(item.fee, oldOrder.fee));
         const notes = normalizeText(item.notes, oldOrder.notes || "");
+        const bookedQtyBefore = Math.max(0, toFiniteNumber(oldOrder.bookedQty));
+        const bookedNotionalBefore = Math.max(0, toFiniteNumber(oldOrder.bookedNotional));
+        const bookedFeeBefore = Math.max(0, toFiniteNumber(oldOrder.bookedFee));
 
         await query(
           "UPDATE daa_execution_orders SET status = $1, executed_qty = $2, executed_price = $3, fee = $4, notes = $5, updated_at = NOW() WHERE order_id = $6",
           [status, executedQty, executedPrice, fee, notes || null, orderId],
         );
 
-        const shouldBookTrade = (status === "executed" || status === "partial") && executedQty > 0 && executedPrice > 0;
+        const incrementalQty = Math.max(0, executedQty - bookedQtyBefore);
+        const incrementalFee = Math.max(0, fee - bookedFeeBefore);
+        const shouldBookTrade = (status === "executed" || status === "partial") && incrementalQty > 0 && executedPrice > 0;
         if (!shouldBookTrade) continue;
 
-        const notional = executedQty * executedPrice;
-        const insertTradeResult = await query(
-          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, rebalance_decision_id, execution_order_id, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),'rebalance_sync',$8,$9,$10,NOW()) ON CONFLICT (execution_order_id) DO NOTHING RETURNING id",
-          [randomUUID(), oldOrder.symbol, oldOrder.side, executedQty, executedPrice, notional, fee, decisionId, orderId, notes || null],
+        const notional = incrementalQty * executedPrice;
+        await query(
+          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, rebalance_decision_id, execution_order_id, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),'rebalance_sync',$8,$9,$10,NOW())",
+          [randomUUID(), oldOrder.symbol, oldOrder.side, incrementalQty, executedPrice, notional, incrementalFee, decisionId, orderId, notes || null],
         );
-        // 幂等保护：同一执行单只记账一次，重复提交不再二次改仓。
-        if (!insertTradeResult.rowCount) continue;
 
         await query(
-          "UPDATE daa_execution_orders SET booked_at = COALESCE(booked_at, NOW()) WHERE order_id = $1",
-          [orderId],
+          "UPDATE daa_execution_orders SET booked_qty = $1, booked_notional = $2, booked_fee = $3, booked_at = COALESCE(booked_at, NOW()) WHERE order_id = $4",
+          [bookedQtyBefore + incrementalQty, bookedNotionalBefore + notional, bookedFeeBefore + incrementalFee, orderId],
         );
 
         const current = positionsMap.get(oldOrder.symbol) ?? {
@@ -1050,8 +1060,8 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
         };
 
         const nextQty = oldOrder.side === "BUY"
-          ? current.qty + executedQty
-          : Math.max(0, current.qty - executedQty);
+          ? current.qty + incrementalQty
+          : Math.max(0, current.qty - incrementalQty);
 
         positionsMap.set(oldOrder.symbol, {
           ...current,
@@ -1111,7 +1121,7 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
         [decisionId],
       );
       const latestOrdersRes = await query(
-        "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 ORDER BY created_at ASC",
+        "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 ORDER BY created_at ASC",
         [decisionId],
       );
 

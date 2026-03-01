@@ -38,7 +38,7 @@ import {
   useStrategyConfig,
 } from "../_components/useDaaStore";
 import { useMarketDataClient } from "../../useMarketDataClient";
-import { patchUnifiedInputStateV1, readUnifiedInputSliceV1 } from "../../unifiedInputStore";
+import { readUnifiedInputSliceV1 } from "../../unifiedInputStore";
 import type { DaaPositionRow } from "../../unifiedInputStore";
 import { runUnifiedRebalanceV1 } from "@/src/daa/modules/execution/executionApiV1";
 
@@ -82,7 +82,7 @@ type FlowStep = {
 export default function DaaConsoleTab() {
   const marketData = useMarketDataClient();
 
-  const [positions] = usePositions();
+  const [positions, setPositions] = usePositions();
   const [analysts] = useAnalysts();
   const [assetViews] = useAssetViews();
   const [config] = useStrategyConfig();
@@ -193,7 +193,7 @@ export default function DaaConsoleTab() {
       return nextPrice && nextPrice > 0 ? { ...p, price: nextPrice } : p;
     });
 
-    patchUnifiedInputStateV1({ positions: updatedPositions });
+    setPositions(updatedPositions);
 
     appendOpLog(`刷新行情完成：${Object.keys(updates).length} 个标的`);
     appendEquitySnapshot(
@@ -447,7 +447,7 @@ export default function DaaConsoleTab() {
                   })}
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground">运行后会记录历史，最多保留 20 条。</div>
+                <div className="text-xs text-muted-foreground">运行后会记录历史，最多保留 50 条。</div>
               )}
               {selectedRunId ? <Button variant="ghost" size="sm" className="mt-1 text-xs" onClick={() => setSelectedRunId(null)}>← 返回最新结果</Button> : null}
             </CardContent>

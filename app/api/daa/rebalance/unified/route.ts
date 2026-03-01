@@ -90,19 +90,21 @@ export async function POST(req: Request) {
     }
 
     const plan = buildDaaUnifiedPlanV1(hydratedRequest);
-    try {
-      await appendDaaRunHistoryV1({
-        requestJson: hydratedRequest as unknown as Record<string, unknown>,
-        responseJson: plan as unknown as Record<string, unknown>,
-        summaryJson: (plan as any)?.summary && typeof (plan as any).summary === "object"
-          ? (plan as any).summary as Record<string, unknown>
-          : {},
-        triggerSource: persist ? "manual" : "manual_preview",
-      });
-    } catch {
-      // 运行历史写入失败不阻塞主流程。
+    if (!persist) {
+      try {
+        await appendDaaRunHistoryV1({
+          requestJson: hydratedRequest as unknown as Record<string, unknown>,
+          responseJson: plan as unknown as Record<string, unknown>,
+          summaryJson: (plan as any)?.summary && typeof (plan as any).summary === "object"
+            ? (plan as any).summary as Record<string, unknown>
+            : {},
+          triggerSource: "manual_preview",
+        });
+      } catch {
+        // 运行历史写入失败不阻塞主流程。
+      }
+      return okV1({ plan });
     }
-    if (!persist) return okV1({ plan });
 
     const created = await createDaaRebalanceDecisionV1({
       requestJson: hydratedRequest as unknown as Record<string, unknown>,
@@ -110,6 +112,27 @@ export async function POST(req: Request) {
       shouldRebalance: Boolean(plan.summary.shouldRebalance),
       triggerSource: "manual",
     });
+
+    try {
+      await appendDaaRunHistoryV1({
+        requestJson: hydratedRequest as unknown as Record<string, unknown>,
+        responseJson: {
+          ...(plan as unknown as Record<string, unknown>),
+          decisionId: created.decision.id,
+          decisionStatus: created.decision.status,
+        },
+        summaryJson: {
+          ...(((plan as any)?.summary && typeof (plan as any).summary === "object")
+            ? ((plan as any).summary as Record<string, unknown>)
+            : {}),
+          decisionId: created.decision.id,
+          decisionStatus: created.decision.status,
+        },
+        triggerSource: "manual",
+      });
+    } catch {
+      // 运行历史写入失败不阻塞主流程。
+    }
 
     return okV1({
       plan,

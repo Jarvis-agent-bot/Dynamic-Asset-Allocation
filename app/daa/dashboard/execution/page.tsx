@@ -167,7 +167,9 @@ export default function ExecutionPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">订单回填</CardTitle>
-          <CardDescription>支持 pending / executed / skipped / partial 四种状态。</CardDescription>
+          <CardDescription>
+            支持 pending / executed / skipped / partial 四种状态。可重复提交同一订单，系统仅按新增成交量记账。
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="max-h-[420px] overflow-auto rounded-md border">
@@ -177,6 +179,7 @@ export default function ExecutionPage() {
                   <TableHead>代码</TableHead>
                   <TableHead>方向</TableHead>
                   <TableHead className="text-right">建议金额</TableHead>
+                  <TableHead className="text-right">已记账数量</TableHead>
                   <TableHead>状态</TableHead>
                   <TableHead>成交数量</TableHead>
                   <TableHead>成交价格</TableHead>
@@ -192,6 +195,9 @@ export default function ExecutionPage() {
                       <TableCell className="font-medium">{order.symbol}</TableCell>
                       <TableCell>{order.side}</TableCell>
                       <TableCell className="text-right">{order.suggestedNotional.toFixed(2)}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {(Number(order.bookedQty || 0)).toFixed(4)}
+                      </TableCell>
                       <TableCell>
                         <select
                           className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"

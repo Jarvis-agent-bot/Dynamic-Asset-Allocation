@@ -62,6 +62,13 @@ const DEFAULT_ENSEMBLE_CONFIG_V1: StrategyLabEnsembleConfigV1 = {
   equalWeight: 0.2,
 };
 
+const ENSEMBLE_LABELS_V1: Record<keyof StrategyLabEnsembleConfigV1, string> = {
+  momentum: "动量",
+  riskParity: "风险平价",
+  minVariance: "最小方差",
+  equalWeight: "等权",
+};
+
 function toRangeLabel(start: string, end: string): string {
   if (!start || !end) return "-";
   return `${start} ~ ${end}`;
@@ -76,7 +83,8 @@ export default function BacktestPage() {
   const positionsList = positions ?? [];
   const runHistory = runHistoryData ?? [];
 
-  const [days, setDays] = useState(60);
+  const [backtestDays, setBacktestDays] = useState(60);
+  const [optimizationDays, setOptimizationDays] = useState(60);
   const [bt, setBt] = useState<BacktestState>({ running: false, error: "", result: null, seriesBySymbol: {} });
   const [ensembleConfig, setEnsembleConfig] = useState<StrategyLabEnsembleConfigV1>(DEFAULT_ENSEMBLE_CONFIG_V1);
   const [lab, setLab] = useState<StrategyLabState>({
@@ -146,7 +154,7 @@ export default function BacktestPage() {
 
     try {
       const today = new Date();
-      const start = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10);
+      const start = new Date(today.getTime() - backtestDays * 86400000).toISOString().slice(0, 10);
       const end = today.toISOString().slice(0, 10);
 
       const { rawSeriesBySymbol } = await fetchRawSeries(symbols, start, end);
@@ -256,7 +264,7 @@ export default function BacktestPage() {
     if (lab.running || !symbols.length) return;
 
     const today = new Date();
-    const start = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10);
+    const start = new Date(today.getTime() - optimizationDays * 86400000).toISOString().slice(0, 10);
     const end = today.toISOString().slice(0, 10);
     const rangeLabel = toRangeLabel(start, end);
 
@@ -293,7 +301,7 @@ export default function BacktestPage() {
     if (!bt.result) return [];
     return bt.result.dates.map((date, i) => ({
       date,
-      equity: Number((bt.result!.equity[i] * 100).toFixed(2)),
+      returnPct: Number(((bt.result!.equity[i] - 1) * 100).toFixed(2)),
     }));
   }, [bt.result]);
 
@@ -349,8 +357,8 @@ export default function BacktestPage() {
     for (let i = 0; i < count; i++) {
       rows.push({
         date: baseline.backtest.dates[i],
-        baseline: Number((baseline.backtest.equity[i] * 100).toFixed(2)),
-        ensemble: Number((ensemble.backtest.equity[i] * 100).toFixed(2)),
+        baseline: Number(((baseline.backtest.equity[i] - 1) * 100).toFixed(2)),
+        ensemble: Number(((ensemble.backtest.equity[i] - 1) * 100).toFixed(2)),
       });
     }
 
@@ -361,6 +369,11 @@ export default function BacktestPage() {
     if (!lab.result) return [];
     return buildTargetWeightDiffRowsV1(config.targetWeights, lab.result.weightsByCandidate.ensemble);
   }, [config.targetWeights, lab.result]);
+
+  const ensembleAlphaSum = useMemo(
+    () => Object.values(ensembleConfig).reduce((sum, value) => sum + (Number(value) || 0), 0),
+    [ensembleConfig],
+  );
 
   return (
     <div className="space-y-6">
@@ -381,10 +394,10 @@ export default function BacktestPage() {
               <Input
                 type="number"
                 className="h-8 w-24"
-                value={days}
+                value={backtestDays}
                 min={10}
                 max={365}
-                onChange={(e) => setDays(Math.max(10, Number(e.target.value) || 60))}
+                onChange={(e) => setBacktestDays(Math.max(10, Number(e.target.value) || 60))}
               />
             </div>
             <Button onClick={() => void runBacktest()} disabled={bt.running || !symbols.length} size="sm">
@@ -413,7 +426,7 @@ export default function BacktestPage() {
           </div>
 
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">权益曲线</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">累计收益率曲线</CardTitle></CardHeader>
             <CardContent>
               <div className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -422,7 +435,7 @@ export default function BacktestPage() {
                     <XAxis dataKey="date" fontSize={10} tickFormatter={(d: string) => d.slice(5)} />
                     <YAxis fontSize={10} tickFormatter={(v: number) => `${v}%`} />
                     <Tooltip formatter={(v) => `${v}%`} labelFormatter={(l) => `日期: ${l}`} />
-                    <Area type="monotone" dataKey="equity" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.15} strokeWidth={2} />
+                    <Area type="monotone" dataKey="returnPct" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.15} strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -544,8 +557,8 @@ export default function BacktestPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">策略优化（真实回测驱动）</CardTitle>
           <CardDescription>
-            在同一段历史行情上比较当前配置（Baseline）与四类单策略，并生成 Ensemble 候选权重。
-            结果只影响本页，点击写回后才会更新策略配置。
+            在同一段历史行情上比较当前配置（Baseline）与四类单策略，并自动生成 Ensemble 候选权重。
+            系数仅用于组合策略，最终权重会自动归一化；点击“写回优化后权重”后才会落库。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -555,10 +568,10 @@ export default function BacktestPage() {
               <Input
                 type="number"
                 className="h-8 w-24"
-                value={days}
+                value={optimizationDays}
                 min={30}
                 max={365}
-                onChange={(e) => setDays(Math.max(30, Number(e.target.value) || 60))}
+                onChange={(e) => setOptimizationDays(Math.max(30, Number(e.target.value) || 60))}
               />
             </div>
             <Button type="button" onClick={() => void runStrategyOptimization()} disabled={lab.running || symbols.length === 0}>
@@ -579,14 +592,21 @@ export default function BacktestPage() {
           {lab.success ? (
             <Alert>
               <AlertTitle>优化完成</AlertTitle>
-              <AlertDescription>{lab.success}</AlertDescription>
+              <AlertDescription>
+                {lab.success}
+                {lab.rangeLabel !== "-" ? ` 回测区间：${lab.rangeLabel}` : ""}
+              </AlertDescription>
             </Alert>
           ) : null}
+
+          <div className="text-xs text-muted-foreground">
+            组合系数总和：{ensembleAlphaSum.toFixed(2)}（系统会在回测前自动归一化为 100%）
+          </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             {(Object.keys(ensembleConfig) as Array<keyof StrategyLabEnsembleConfigV1>).map((key) => (
               <div key={key} className="space-y-1">
-                <Label className="text-xs">{key}</Label>
+                <Label className="text-xs">{ENSEMBLE_LABELS_V1[key]}</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="range"
@@ -697,7 +717,7 @@ export default function BacktestPage() {
           {optimizationCurveData.length ? (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Baseline vs Ensemble 权益曲线</CardTitle>
+                <CardTitle className="text-base">Baseline vs Ensemble 累计收益率曲线</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-[260px]">

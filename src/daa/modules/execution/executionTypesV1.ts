@@ -9,6 +9,10 @@ export type ExecutionOrderV1 = {
   executedQty: number;
   executedPrice: number;
   fee: number;
+  bookedQty?: number;
+  bookedNotional?: number;
+  bookedFee?: number;
+  bookedAt?: string | null;
   notes: string | null;
 };
 
