@@ -19,7 +19,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { DaaUnifiedInputBootstrap } from "../../_components/DaaUnifiedInputBootstrap";
-import DaaUnifiedArchitectureTab from "../_tabs/DaaUnifiedArchitectureTab";
+import DaaConsoleTab from "../_tabs/DaaConsoleTab";
 
 type MeResponse =
   | {
@@ -58,7 +58,7 @@ function DaaDashboardHeader() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <PageHeader title="统一控制台" description={<>输入 → 信号 → 指标 → 输出，全部收敛到一条 DAA 决策链。</>} />
+      <PageHeader title="DAA 控制台" description={<>控制台轻编排：配置 → 采集 → 运行 → 执行。</>} />
     </div>
   );
 }
@@ -120,7 +120,7 @@ export default function DaaDashboardPageClient() {
   useEffect(() => {
     const n = String(notice || "").trim();
     if (n === "signed_in") {
-      toast.success("Signed in.");
+      toast.success("登录成功");
     }
 
     try {
@@ -278,7 +278,7 @@ export default function DaaDashboardPageClient() {
     <div className="space-y-4">
       <DaaUnifiedInputBootstrap />
       {header}
-      <DaaUnifiedArchitectureTab />
+      <DaaConsoleTab />
     </div>
   );
 }

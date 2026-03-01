@@ -33,6 +33,18 @@ export type DaaUnifiedAssetViewV1 = {
   momentumRegime?: DaaMomentumRegimeV1;
 };
 
+export type DaaUnifiedHumanSignalV1 = {
+  symbol: string;
+  aggregatedScorePct: number;
+  convictionPct: number;
+  thesisDriftPct: number;
+  confidencePct?: number;
+  momentumRegime?: DaaMomentumRegimeV1;
+  stance?: DaaAnalystStanceV1;
+  riskTags?: string[];
+  sourceRefs?: string[];
+};
+
 export type DaaUnifiedRequestV1 = {
   account?: {
     cash?: number;
@@ -54,8 +66,9 @@ export type DaaUnifiedRequestV1 = {
   };
   targetWeights: Record<string, number>;
   positions: DaaUnifiedPositionV1[];
-  analysts: DaaUnifiedAnalystV1[];
-  assetViews: DaaUnifiedAssetViewV1[];
+  analysts?: DaaUnifiedAnalystV1[];
+  assetViews?: DaaUnifiedAssetViewV1[];
+  humanSignals?: DaaUnifiedHumanSignalV1[];
 };
 
 export type DaaHumanFactorDecisionV1 = {
@@ -201,8 +214,9 @@ export function isDaaUnifiedRequestV1(x: unknown): x is DaaUnifiedRequestV1 {
   if (!isPlainObject(x)) return false;
   if (!isPlainObject(x.targetWeights)) return false;
   if (!Array.isArray(x.positions)) return false;
-  if (!Array.isArray(x.analysts)) return false;
-  if (!Array.isArray(x.assetViews)) return false;
+  if (x.analysts !== undefined && !Array.isArray(x.analysts)) return false;
+  if (x.assetViews !== undefined && !Array.isArray(x.assetViews)) return false;
+  if (x.humanSignals !== undefined && !Array.isArray(x.humanSignals)) return false;
   return true;
 }
 
@@ -257,10 +271,55 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
 
   const targetWeights = normalizeTargetWeights(req.targetWeights ?? {});
 
+  const signalAnalysts: DaaUnifiedAnalystV1[] = [];
+  const signalViews: DaaUnifiedAssetViewV1[] = [];
+  for (const raw of req.humanSignals ?? []) {
+    const symbol = normalizeSymbol(raw.symbol);
+    if (!symbol) continue;
+
+    const aggregatedScorePct = clamp01(toFiniteNumber(raw.aggregatedScorePct, 50) / 100) * 100;
+    const convictionPct = clamp01(toFiniteNumber(raw.convictionPct, 50) / 100) * 100;
+    const thesisDriftPct = clamp01(toFiniteNumber(raw.thesisDriftPct, 0) / 100) * 100;
+    const confidencePct = clamp01(toFiniteNumber(raw.confidencePct, 75) / 100) * 100;
+    const analystId = `hf_auto__${symbol}`;
+
+    signalAnalysts.push({
+      analystId,
+      accuracyPct: aggregatedScorePct,
+      riskControlPct: (aggregatedScorePct * 0.7 + confidencePct * 0.3),
+      disciplinePct: (aggregatedScorePct * 0.65 + confidencePct * 0.35),
+      transparencyPct: confidencePct,
+      stance: normalizeStance(raw.stance),
+      styleCluster: "official-first",
+    });
+
+    signalViews.push({
+      symbol,
+      analystId,
+      convictionPct,
+      thesisDriftPct,
+      momentumRegime: normalizeMomentum(raw.momentumRegime),
+    });
+
+    if (confidencePct < 45) {
+      warnings.push(`symbol ${symbol} 人因信号置信度偏低（${confidencePct.toFixed(1)}%）`);
+    }
+    if ((raw.riskTags ?? []).includes("thesis_drift")) {
+      warnings.push(`symbol ${symbol} 人因层提示论点漂移`);
+    }
+  }
+
+  if (signalAnalysts.length > 0 && (req.analysts?.length ?? 0) > 0) {
+    warnings.push("检测到外部人因信号与手工分析师观点并行输入，系统已进行合并计算");
+  }
+
+  const effectiveAnalysts = [...(req.analysts ?? []), ...signalAnalysts];
+  const effectiveAssetViews = [...(req.assetViews ?? []), ...signalViews];
+
   const analystMap = new Map<string, { scorePct: number; stance: DaaAnalystStanceV1; styleCluster: string }>();
   const styleClusterCount = new Map<string, number>();
   let defensiveCount = 0;
-  for (const a of req.analysts ?? []) {
+  for (const a of effectiveAnalysts) {
     const analystId = String(a.analystId ?? "").trim();
     if (!analystId) continue;
     const scorePct = analystScorePct(a);
@@ -277,14 +336,14 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     });
   }
 
-  const defensiveConsensusPct = req.analysts.length > 0 ? defensiveCount / req.analysts.length : 0;
+  const defensiveConsensusPct = effectiveAnalysts.length > 0 ? defensiveCount / effectiveAnalysts.length : 0;
   const duplicatedStyleClusters = [...styleClusterCount.entries()]
     .filter(([, count]) => count >= 2)
     .map(([cluster]) => cluster)
     .sort();
 
   const viewsBySymbol = new Map<string, DaaUnifiedAssetViewV1[]>();
-  for (const raw of req.assetViews ?? []) {
+  for (const raw of effectiveAssetViews) {
     const symbol = normalizeSymbol(raw.symbol);
     const analystId = String(raw.analystId ?? "").trim();
     if (!symbol || !analystId) continue;

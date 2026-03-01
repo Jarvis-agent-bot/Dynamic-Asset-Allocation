@@ -82,4 +82,28 @@ describe("unified-rebalance-v1", () => {
     expect(buy!.notional).toBeCloseTo(450, 6);
     expect(buy!.cappedBy).toContain("流动性 15%");
   });
+
+  it("支持使用外部人因信号驱动 tier 与阈值判断", () => {
+    const req = baseRequest();
+    req.analysts = [];
+    req.assetViews = [];
+    req.humanSignals = [
+      {
+        symbol: "AAA",
+        aggregatedScorePct: 86,
+        convictionPct: 82,
+        thesisDriftPct: 4,
+        confidencePct: 88,
+        momentumRegime: "strong",
+        stance: "offensive",
+      },
+    ];
+
+    const result = buildDaaUnifiedPlanV1(req);
+    const aaa = result.layers.humanFactor.assetDecisions.find((x) => x.symbol === "AAA");
+
+    expect(aaa).toBeTruthy();
+    expect(aaa!.tier).toBe("elite");
+    expect(result.summary.triggerThresholdPct).toBe(0.1);
+  });
 });

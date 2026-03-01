@@ -79,10 +79,28 @@ fabric.properties
 
 /node_modules/
 /.next/
+/.next-check/
 *.tsbuildinfo
 .venv*/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # Local automation artifacts
 .prbody*.md
 **/__pycache__/
 *.py[cod]
+
+# Factory
+.factory/specs/

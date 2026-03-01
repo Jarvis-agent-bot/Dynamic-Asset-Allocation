@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { Cpu, Menu } from "lucide-react";
+import { Briefcase, Cpu, LineChart, Menu, ShieldAlert, SlidersHorizontal, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-type NavKey = "dashboard";
+type NavKey = "console" | "positions" | "strategy" | "risk" | "humanFactor" | "backtest";
 
 type IconType = ComponentType<{ className?: string }>;
 
@@ -19,11 +19,26 @@ type NavItem = { key: NavKey; href: string; label: string; Icon: IconType };
 
 function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
-  return pathname.startsWith("/daa/dashboard") ? "dashboard" : null;
+  if (pathname.startsWith("/daa/dashboard/positions")) return "positions";
+  if (pathname.startsWith("/daa/dashboard/strategy")) return "strategy";
+  if (pathname.startsWith("/daa/dashboard/risk")) return "risk";
+  if (pathname.startsWith("/daa/dashboard/human-factor")) return "humanFactor";
+  if (pathname.startsWith("/daa/dashboard/backtest")) return "backtest";
+  return "console";
 }
 
 function useNavItems(): NavItem[] {
-  return useMemo(() => [{ key: "dashboard", href: "/daa/dashboard", label: "控制台", Icon: Cpu }], []);
+  return useMemo(
+    () => [
+      { key: "console" as const, href: "/daa/dashboard", label: "控制台", Icon: Cpu },
+      { key: "positions" as const, href: "/daa/dashboard/positions", label: "持仓配置", Icon: Briefcase },
+      { key: "strategy" as const, href: "/daa/dashboard/strategy", label: "策略配置", Icon: SlidersHorizontal },
+      { key: "risk" as const, href: "/daa/dashboard/risk", label: "风控审计", Icon: ShieldAlert },
+      { key: "humanFactor" as const, href: "/daa/dashboard/human-factor", label: "人因中心", Icon: Users },
+      { key: "backtest" as const, href: "/daa/dashboard/backtest", label: "回测复盘", Icon: LineChart },
+    ],
+    [],
+  );
 }
 
 type NavListProps = {
@@ -94,7 +109,7 @@ export function DaaMobileNav() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Open navigation" className="shrink-0">
+        <Button variant="ghost" size="icon" aria-label="打开导航菜单" className="shrink-0">
           <Menu className="h-5 w-5" aria-hidden="true" />
         </Button>
       </SheetTrigger>

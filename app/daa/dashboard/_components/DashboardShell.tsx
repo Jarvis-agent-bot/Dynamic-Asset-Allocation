@@ -34,7 +34,7 @@ export default function DashboardShell({ children }: Props) {
         href="#daa-dashboard-main-content"
         className="sr-only fixed left-3 top-3 z-50 rounded-sm border bg-background px-3 py-2 text-xs text-foreground shadow focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
       >
-        Skip to dashboard content
+        跳转到主内容
       </a>
       <div className="mx-auto flex w-full max-w-6xl gap-8 px-4 py-6 sm:px-6 sm:py-8">
         <aside className="hidden w-60 shrink-0 flex-col gap-6 lg:flex">
@@ -46,7 +46,7 @@ export default function DashboardShell({ children }: Props) {
             >
               Dynamic Asset Allocation
             </Link>
-            <div className="text-sm text-muted-foreground">Console — dashboard-first</div>
+            <div className="text-sm text-muted-foreground">配置 → 采集 → 运行 → 执行</div>
             <DaaDashboardRefreshIndicator />
           </div>
 

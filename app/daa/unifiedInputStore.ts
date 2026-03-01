@@ -20,6 +20,77 @@ export const DEPRECATED_STORAGE_KEYS_V1 = [
 
 export type UnifiedInputDeprecatedKeyV1 = (typeof DEPRECATED_STORAGE_KEYS_V1)[number];
 
+export type DaaPositionRow = {
+  symbol: string;
+  market: string;
+  currency: string;
+  qty: number;
+  price: number;
+  tags: string[];
+  liquidityNotional24h: number;
+};
+
+export type DaaAnalystRow = {
+  analystId: string;
+  accuracyPct: number;
+  riskControlPct: number;
+  disciplinePct: number;
+  transparencyPct: number;
+  stance: "offensive" | "neutral" | "defensive";
+  styleCluster: string;
+};
+
+export type DaaAssetViewRow = {
+  symbol: string;
+  analystId: string;
+  convictionPct: number;
+  thesisDriftPct: number;
+  momentumRegime: "strong" | "neutral" | "weak";
+};
+
+export type DaaHfFundTrackRow = {
+  fundCode: string;
+  label: string;
+  kind: "equity" | "qdii" | "balanced";
+  enabled: boolean;
+};
+
+export type DaaStrategyConfig = {
+  account: { cash: number; totalEquity: number | null };
+  constraints: {
+    maxPositionPct: number;
+    minNotional: number;
+    maxOrderPctOfNav: number;
+    maxOrderPctOfLiquidity: number;
+  };
+  policy: {
+    baseDriftTriggerPct: number;
+    strongTrendDriftTriggerPct: number;
+    riskOffConsensusPct: number;
+    riskOffScalePct: number;
+    valueTrapThesisDriftPct: number;
+    sbIsolationScorePct: number;
+  };
+  targetWeights: Record<string, number>;
+  feedSymbols: string;
+  twitterQuery: string;
+};
+
+export type DaaRunHistoryEntry = {
+  id: string;
+  ts: string;
+  request: unknown;
+  response: unknown;
+};
+
+export type DaaEquitySnapshot = {
+  ts: string;
+  equity: number;
+  holdingsValue: number;
+  cash: number;
+  source: "auto" | "run" | "refresh";
+};
+
 export type UnifiedInputStateV1 = {
   schemaVersion: 1;
   updatedAt: string;
@@ -30,6 +101,19 @@ export type UnifiedInputStateV1 = {
   targetWeightsState: unknown | null;
   priceSnapshot: unknown | null;
   unifiedRequestDraft: unknown | null;
+  positions: DaaPositionRow[] | null;
+  // 兼容字段：当前主流程已迁移到基金池人因输入，保留用于历史数据回放。
+  analysts: DaaAnalystRow[] | null;
+  // 兼容字段：当前主流程已迁移到基金池人因输入，保留用于历史数据回放。
+  assetViews: DaaAssetViewRow[] | null;
+  // 当前人因层主输入：基金池。
+  hfFundRegistry: DaaHfFundTrackRow[] | null;
+  strategyConfig: DaaStrategyConfig | null;
+  lastRunResult: unknown | null;
+  syncLog: string[] | null;
+  runHistory: DaaRunHistoryEntry[] | null;
+  equitySnapshots: DaaEquitySnapshot[] | null;
+  opLog: string[] | null;
 };
 
 export type UnifiedInputSliceKeyV1 = keyof Omit<UnifiedInputStateV1, "schemaVersion" | "updatedAt">;
@@ -51,6 +135,40 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
+export const DEFAULT_STRATEGY_CONFIG: DaaStrategyConfig = {
+  account: { cash: 0, totalEquity: null },
+  constraints: {
+    maxPositionPct: 1,
+    minNotional: 200,
+    maxOrderPctOfNav: 0.1,
+    maxOrderPctOfLiquidity: 0.15,
+  },
+  policy: {
+    baseDriftTriggerPct: 0.05,
+    strongTrendDriftTriggerPct: 0.1,
+    riskOffConsensusPct: 0.6,
+    riskOffScalePct: 0.7,
+    valueTrapThesisDriftPct: 0.12,
+    sbIsolationScorePct: 0.35,
+  },
+  targetWeights: {},
+  feedSymbols: "SPY,QQQ,BND,TSLA",
+  twitterQuery: "(SPY OR QQQ OR TSLA) lang:en",
+};
+
+export const DEFAULT_HF_FUND_REGISTRY: DaaHfFundTrackRow[] = [
+  { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
+  { fundCode: "100055", label: "富国全球科技互联网", kind: "qdii", enabled: true },
+  { fundCode: "005827", label: "易方达蓝筹精选", kind: "equity", enabled: true },
+  { fundCode: "110011", label: "易方达中小盘", kind: "equity", enabled: true },
+  { fundCode: "161725", label: "招商中证白酒指数", kind: "equity", enabled: true },
+  { fundCode: "000248", label: "汇添富中证主要消费ETF联接", kind: "equity", enabled: true },
+  { fundCode: "005918", label: "工银前沿医疗股票", kind: "equity", enabled: true },
+  { fundCode: "486001", label: "工银全球精选股票QDII", kind: "qdii", enabled: true },
+  { fundCode: "000834", label: "大成景安短融债券", kind: "balanced", enabled: true },
+  { fundCode: "000874", label: "广发全球精选股票QDII", kind: "qdii", enabled: true },
+];
+
 function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
   return {
     schemaVersion: 1,
@@ -62,6 +180,16 @@ function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
     targetWeightsState: null,
     priceSnapshot: null,
     unifiedRequestDraft: null,
+    positions: null,
+    analysts: null,
+    assetViews: null,
+    hfFundRegistry: null,
+    strategyConfig: null,
+    lastRunResult: null,
+    syncLog: null,
+    runHistory: null,
+    equitySnapshots: null,
+    opLog: null,
   };
 }
 
@@ -79,6 +207,16 @@ function normalizeUnifiedInputStateV1(raw: unknown): UnifiedInputStateV1 | null 
     targetWeightsState: "targetWeightsState" in raw ? raw.targetWeightsState ?? null : null,
     priceSnapshot: "priceSnapshot" in raw ? raw.priceSnapshot ?? null : null,
     unifiedRequestDraft: "unifiedRequestDraft" in raw ? raw.unifiedRequestDraft ?? null : null,
+    positions: "positions" in raw && Array.isArray(raw.positions) ? raw.positions as DaaPositionRow[] : null,
+    analysts: "analysts" in raw && Array.isArray(raw.analysts) ? raw.analysts as DaaAnalystRow[] : null,
+    assetViews: "assetViews" in raw && Array.isArray(raw.assetViews) ? raw.assetViews as DaaAssetViewRow[] : null,
+    hfFundRegistry: "hfFundRegistry" in raw && Array.isArray(raw.hfFundRegistry) ? raw.hfFundRegistry as DaaHfFundTrackRow[] : null,
+    strategyConfig: "strategyConfig" in raw && isPlainObject(raw.strategyConfig) ? raw.strategyConfig as unknown as DaaStrategyConfig : null,
+    lastRunResult: "lastRunResult" in raw ? raw.lastRunResult ?? null : null,
+    syncLog: "syncLog" in raw && Array.isArray(raw.syncLog) ? raw.syncLog as string[] : null,
+    runHistory: "runHistory" in raw && Array.isArray(raw.runHistory) ? raw.runHistory as DaaRunHistoryEntry[] : null,
+    equitySnapshots: "equitySnapshots" in raw && Array.isArray(raw.equitySnapshots) ? raw.equitySnapshots as DaaEquitySnapshot[] : null,
+    opLog: "opLog" in raw && Array.isArray(raw.opLog) ? raw.opLog as string[] : null,
   };
 }
 
