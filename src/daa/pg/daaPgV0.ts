@@ -8,6 +8,10 @@ type PgStateV0 = {
 
 const GLOBAL_KEY = "__daa_pg_state_v0__";
 
+function isProductionRuntimeV0(): boolean {
+  return (process.env.NODE_ENV || "").toLowerCase() === "production";
+}
+
 function getStateV0(): PgStateV0 {
   const g: any = globalThis as any;
   if (!g[GLOBAL_KEY]) {
@@ -23,12 +27,20 @@ export function getDaaPgUrlV0(): string | null {
   if (!v) return null;
 
   if (/^(sqlite:|file:)/i.test(v)) {
-    throw new Error("Postgres-only runtime: non-Postgres database configuration is not allowed");
+    // 开发环境下允许使用 sqlite/file 占位并自动回退到 pg-mem，避免鉴权接口直接 500。
+    if (isProductionRuntimeV0()) {
+      throw new Error("Postgres-only runtime: non-Postgres database configuration is not allowed");
+    }
+    return null;
   }
 
   const scheme = v.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase();
   if (scheme && !/^(postgres|postgresql|postgresql\+psycopg)$/.test(scheme)) {
-    throw new Error("Postgres-only runtime: unsupported database URL scheme");
+    // 开发环境容错：错误 scheme 自动降级到 pg-mem，线上仍强制报错。
+    if (isProductionRuntimeV0()) {
+      throw new Error("Postgres-only runtime: unsupported database URL scheme");
+    }
+    return null;
   }
 
   // Allow sharing env with the Python service (sqlalchemy uses postgresql+psycopg://).
@@ -36,14 +48,24 @@ export function getDaaPgUrlV0(): string | null {
 }
 
 function isDaaPgMemEnabledV0(): boolean {
-  return typeof process.env.DAA_PG_MEM === "string" && process.env.DAA_PG_MEM.trim() === "1";
+  const explicit = typeof process.env.DAA_PG_MEM === "string" && process.env.DAA_PG_MEM.trim() === "1";
+  if (explicit) return true;
+
+  if (isProductionRuntimeV0()) return false;
+
+  // 本地开发兜底：未配置 PG URL 时自动启用 pg-mem，避免登录/鉴权接口直接 500。
+  return !getDaaPgUrlV0();
+}
+
+export function isDaaPgMemRuntimeV0(): boolean {
+  return isDaaPgMemEnabledV0();
 }
 
 function assertPgMemAllowedV0(): void {
   if (!isDaaPgMemEnabledV0()) return;
-  if ((process.env.NODE_ENV || "").toLowerCase() === "test") return;
-
-  throw new Error("DAA_PG_MEM is test-only and must not be enabled outside test runtime");
+  if (isProductionRuntimeV0()) {
+    throw new Error("DAA_PG_MEM must not be enabled in production");
+  }
 }
 
 export function isDaaPgEnabledV0(): boolean {

@@ -16,6 +16,9 @@ export type MarketDataClient = {
   xueqiu: {
     quoteC(params: { symbol: string }): Promise<unknown>;
   };
+  danjuan: {
+    fundAssetPercent(params: { fundCode: string; reportDate: string }): Promise<unknown>;
+  };
   yfinance: {
     priceSeries(params: { symbol: string; start?: string; end?: string }): Promise<YfinancePriceSeriesApiResponse>;
     priceSeriesBars(params: { symbol: string; start?: string; end?: string }): Promise<PriceBar[]>;
@@ -130,6 +133,14 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
         const qs = new URLSearchParams();
         qs.set("symbol", String(params.symbol || "").trim());
         return getJson("/api/daa/market/xueqiu/quotec", qs, noStore);
+      },
+    },
+    danjuan: {
+      async fundAssetPercent(params) {
+        const qs = new URLSearchParams();
+        qs.set("fund_code", String(params.fundCode || "").trim());
+        qs.set("report_date", String(params.reportDate || "").trim());
+        return getJson("/api/daa/market/danjuan/fund/asset-percent", qs, noStore);
       },
     },
     yfinance: {

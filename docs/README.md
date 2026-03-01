@@ -1,16 +1,8 @@
-# DAA Docs
+# docs 目录说明
 
-Start here:
+当前仅保留与日常使用直接相关、且已校验为有效的文档：
 
-- Quickstart: [docs/QUICKSTART.md](./QUICKSTART.md)
-- Deployment (VPS/Docker): [deploy/README.md](../deploy/README.md)
-- Foundation (architecture + data model): [docs/DAA_FOUNDATION.md](./DAA_FOUNDATION.md)
-- Signal spec (v0): [docs/DAA_SIGNAL_SPEC_V0.md](./DAA_SIGNAL_SPEC_V0.md)
+- `docs/QUICKSTART.md`：本地启动与最短上手路径。
+- `docs/architecture/DAA_REFACTOR_BLUEPRINT_2026-03-01.md`：当前架构与能力基线。
 
-More:
-
-- Step2 market events (v0): [docs/DAA_STEP2_MARKET_EVENTS_V0.md](./DAA_STEP2_MARKET_EVENTS_V0.md)
-- Step3 money management (v0): [docs/DAA_STEP3_MONEY_MGMT_V0.md](./DAA_STEP3_MONEY_MGMT_V0.md)
-- Step4 baseline rebalance (v0): [docs/DAA_STEP4_BASELINE_REBALANCE_V0.md](./DAA_STEP4_BASELINE_REBALANCE_V0.md)
-- Step5 AI analysis (v0): [docs/DAA_STEP5_AI_ANALYSIS_V0.md](./DAA_STEP5_AI_ANALYSIS_V0.md)
-- Python engine (v0): [docs/DAA_PY_ENGINE_V0.md](./DAA_PY_ENGINE_V0.md)
+其余历史规划/流程性文档已移除，避免与现状不一致造成误读。

@@ -30,8 +30,7 @@ type MeResponse =
 type SessionModel =
   | { kind: "checking" }
   | { kind: "signedOut" }
-  | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> }
-  | { kind: "error"; message: string };
+  | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
 
 function parseApiError(json: any, fallback: string): string {
   const msg = typeof json?.error === "string" ? json.error.trim() : "";
@@ -50,7 +49,8 @@ function normalizeUsernameLoose(raw: string): string {
 
 function mapLoginError(message: string): string {
   const code = String(message || "").trim();
-  if (code === "invalid_credentials") return "用户名或密码不正确。";
+  if (code === "invalid_credentials") return "账号或密码错误。";
+  if (code === "auth_backend_unavailable") return "认证服务不可用，请稍后重试。";
   return code || "登录失败，请重试。";
 }
 
@@ -64,6 +64,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("admin123");
   const [busy, setBusy] = useState(false);
+  const [redirectingToConsole, setRedirectingToConsole] = useState(false);
   const [refreshingSession, setRefreshingSession] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -71,10 +72,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     const n = String(notice || "").trim();
     if (!n) return;
 
-    if (n === "session_expired") toast.error("Session expired. Please sign in again.");
-    if (n === "signed_out") toast.success("Signed out.");
-    if (n === "bootstrapped") toast.success("Bootstrap complete. Sign in with username + password.");
-    if (n === "signed_in") toast.success("Signed in.");
+    if (n === "session_expired") toast.error("会话已过期，请重新登录。");
+    if (n === "signed_out") toast.success("已退出登录。");
+    if (n === "bootstrapped") toast.success("默认账号已初始化，请登录。");
+    if (n === "signed_in") toast.success("登录成功。");
   }, [notice]);
 
   useEffect(() => {
@@ -98,7 +99,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             setSession({ kind: "signedOut" });
             return;
           }
-          setSession({ kind: "error", message: parseApiError(json, `HTTP ${res.status}`) });
+          // 登录页不阻断：后端短暂异常时仍允许用户直接提交账号密码。
+          setSession({ kind: "signedOut" });
           return;
         }
 
@@ -109,7 +111,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
         }
       } catch (e) {
         if (cancelled) return;
-        setSession({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+        setSession({ kind: "signedOut" });
       }
     }
 
@@ -136,6 +138,16 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (!msg) return;
     setAuthError(mapLoginError(msg));
   }, [error]);
+
+  useEffect(() => {
+    if (session.kind !== "signedIn") return;
+    setRedirectingToConsole(true);
+    const timer = window.setTimeout(() => {
+      window.location.assign(safeReturnTo);
+    }, 60);
+
+    return () => window.clearTimeout(timer);
+  }, [safeReturnTo, session.kind]);
 
   async function login() {
     if (busy || session.kind === "checking") return;
@@ -197,7 +209,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       if (!res.ok) {
         if (res.status === 401) {
           setSession({ kind: "signedOut" });
-          toast.error("Session expired. Please sign in again.");
+          toast.error("会话已过期，请重新登录。");
           return;
         }
         throw new Error(parseApiError(json, "HTTP " + res.status));
@@ -205,12 +217,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
       if (json?.ok) {
         setSession({ kind: "signedIn", me: json });
-        toast.success("Session refreshed.");
+        toast.success("会话已刷新。");
         return;
       }
 
       setSession({ kind: "signedOut" });
-      toast.error("Session unavailable. Please sign in again.");
+      toast.error("会话不可用，请重新登录。");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -231,7 +243,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       if (!res.ok || !json?.ok) throw new Error(parseApiError(json, `HTTP ${res.status}`));
       window.location.href = appendNoticeParamV0("/daa/login", "signed_out");
     } catch (e) {
-      toast.error(`Sign-out failed: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`退出失败：${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -243,18 +255,18 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           <CardHeader>
             <CardTitle className="text-xl">You are already signed in</CardTitle>
             <CardDescription>
-              Signed in as <span className="font-medium">{session.me.account.username}</span> ({roles}).
+              当前已登录：<span className="font-medium">{session.me.account.username}</span>（{roles}）
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button asChild className="w-full sm:w-auto">
-              <Link href={safeReturnTo}>Continue to dashboard</Link>
+            <Button type="button" className="w-full sm:w-auto" onClick={() => window.location.assign(safeReturnTo)}>
+              {redirectingToConsole ? "正在进入控制台..." : "进入控制台"}
             </Button>
             <Button type="button" className="w-full sm:w-auto" variant="secondary" onClick={() => void refreshSession()} disabled={refreshingSession}>
-              {refreshingSession ? "Refreshing..." : "Refresh session"}
+              {refreshingSession ? "刷新中..." : "刷新会话"}
             </Button>
             <Button type="button" className="w-full sm:w-auto" variant="ghost" onClick={() => void logout()}>
-              Sign out
+              退出登录
             </Button>
           </CardContent>
         </Card>
@@ -264,32 +276,22 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-md space-y-4 sm:space-y-6">
-      {session.kind === "error" ? (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <div>
-            <AlertTitle>Couldn&apos;t verify your session.</AlertTitle>
-            <AlertDescription>You can still try signing in. ({session.message})</AlertDescription>
-          </div>
-        </Alert>
-      ) : null}
-
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Sign in with username + password</CardTitle>
-          <CardDescription>DAA test-stage auth is now password-only. Email OTP login has been disabled.</CardDescription>
+          <CardTitle className="text-xl">账号密码登录</CardTitle>
+          <CardDescription>使用 DAA 管理员账号登录。当前仅保留账号密码模式。</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
           {session.kind === "checking" ? (
             <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Checking session...
+              正在检查会话...
             </div>
           ) : null}
 
           <div className="grid gap-2">
-            <Label htmlFor="daa-login-username">Username</Label>
+            <Label htmlFor="daa-login-username">账号</Label>
             <Input
               id="daa-login-username"
               ref={userRef}
@@ -298,7 +300,8 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               autoCorrect="off"
               spellCheck={false}
               autoComplete="username"
-              placeholder="admin"
+              placeholder="请输入账号"
+              className="border-slate-300 bg-white focus-visible:ring-sky-500"
               value={username}
               disabled={busy || session.kind === "checking"}
               onChange={(e) => {
@@ -309,13 +312,14 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="daa-login-password">Password</Label>
+            <Label htmlFor="daa-login-password">密码</Label>
             <Input
               id="daa-login-password"
               ref={passRef}
               type="password"
               autoComplete="current-password"
-              placeholder="Enter password"
+              placeholder="请输入密码"
+              className="border-slate-300 bg-white focus-visible:ring-sky-500"
               value={password}
               disabled={busy || session.kind === "checking"}
               onChange={(e) => {
@@ -342,27 +346,27 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             {busy ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Signing in...
+                登录中...
               </>
             ) : (
               <>
                 <ShieldUser className="mr-2 h-4 w-4" />
-                Sign in
+                登录
               </>
             )}
           </Button>
 
           <Alert>
-            <AlertTitle>Dev/Test default account</AlertTitle>
+            <AlertTitle>本地默认账号</AlertTitle>
             <AlertDescription>
-              In non-production, the first login auto-bootstraps <code className="rounded bg-muted px-1 py-0.5">admin / admin123</code> when no account exists yet.
+              在非生产环境，首次会自动初始化 <code className="rounded bg-muted px-1 py-0.5">admin / admin123</code>。
             </AlertDescription>
           </Alert>
 
           <Alert>
-            <AlertTitle>Need help?</AlertTitle>
+            <AlertTitle>需要帮助？</AlertTitle>
             <AlertDescription>
-              <Link className="underline underline-offset-2" href="/support">Support</Link>
+              <Link className="underline underline-offset-2" href="/support">联系支持</Link>
             </AlertDescription>
           </Alert>
         </CardContent>

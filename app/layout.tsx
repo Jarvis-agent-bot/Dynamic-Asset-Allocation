@@ -7,8 +7,8 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "基估宝",
-  description: "输入基金编号添加基金，实时显示估值与前10重仓",
+  title: "Dynamic Asset Allocation",
+  description: "DAA 统一量化控制台",
 };
 
 export default function RootLayout({

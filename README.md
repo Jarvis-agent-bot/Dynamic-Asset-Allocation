@@ -1,105 +1,93 @@
 # Dynamic Asset Allocation (DAA)
 
-这是一个以 **Dynamic Asset Allocation（DAA）** 为核心的产品化系统（Next.js App Router + 可测试的 core 算法层 + 可选的 Python 在线引擎）。
+DAA 是一个面向单组合的动态资产配置系统，定位为 **决策 + 记录 + 监控**，不做自动交易执行。
 
-- 线上入口（VPS）：https://exwxyzi.cn/daa/
-- 目标交付方式：按 Step 页面逐步交付，从“可运行闭环”开始，再逐步增强策略/数据/资金管理/推荐/解释。
+## 项目目标
 
-> 说明：本仓库为 `Jarvis-agent-bot/Dynamic-Asset-Allocation`，持续维护中。
+- 用统一再平衡引擎输出可解释的调仓建议。
+- 以人工执行为主，系统负责记录、归档与审计追踪。
+- 在风险约束下持续优化配置质量与复盘能力。
 
-## Product 结构（前端优先）
+## 当前能力边界
 
-- `/daa/step/*`：引导式工作流页面（产品主线）
-- `/daa/market/funds/`：legacy「基金估值/重仓」模块（保留 + 归位为 DAA 子模块，不再作为项目对外主定位）
+- 支持：统一再平衡、账号密码鉴权、市场数据接入、控制台运营视图。
+- 不支持：自动下单、组合托管、多组合管理。
+- Python 服务：当前仓库仍保留历史兼容目录，主开发路径以 Next.js API 为准，后续按路线图移除。
 
-## 🧠 DAA 核心（算法层）
-
-算法/回测相关代码位于 `src/core/`（尽量保持 UI 无关、可测试）：
-
-- 基础工程文档：[`docs/DAA_FOUNDATION.md`](./docs/DAA_FOUNDATION.md)（模块边界 + 核心数据模型）
-- 信号规格（v0）：[`docs/DAA_SIGNAL_SPEC_V0.md`](./docs/DAA_SIGNAL_SPEC_V0.md)
-
-- `src/core/domain.ts`：核心数据模型（Asset/Portfolio/Strategy/BacktestResult/MarketEvent 等）
-- `src/core/strategies.ts`：策略接口实现（如 Buy&Hold、SMA crossover、策略组合 ensemble）
-- `src/core/signals.ts`：fixed-weight ensemble → BUY/SELL/HOLD 信号输出（v0）
-- `src/core/backtest.ts`：最小回测闭环（单资产、日频、无手续费 v0）
-- `src/core/metrics.ts`：收益/回撤/夏普/胜率等指标 + 评分
-- `src/core/providers/priceSeriesProvider.ts`：framework v0 provider contract（价格序列提供方 + 合同校验 + 包装错误类型）
-
-### Framework v0 快速上手（Contracts + Provider + E2E）
-
-框架 v0 的目标是：用一套最小但严格的 contracts，把「数据提供（provider）」与「回测/信号核心」隔离开，便于后续接入真实数据源与 UI。
-
-- Provider 只需要实现 `PriceSeriesProvider#getPriceSeries()`
-- 调用侧用 `fetchValidatedPriceSeries()`（或 `fetchValidatedPriceSeriesEnforcingRange()`）获取并校验数据
-- E2E 样例测试位于：`src/core/__tests__/frameworkV0.e2e.test.ts`
-
-```ts
-import type { PriceSeriesProvider } from "./src/core/providers";
-import { fetchValidatedPriceSeries } from "./src/core/providers";
-
-const provider: PriceSeriesProvider = {
-  name: "example",
-  async getPriceSeries({ symbol }) {
-    // return [{ date: "2026-01-01", close: 100 }, ...]
-    throw new Error(`not implemented: ${symbol}`);
-  },
-};
-
-await fetchValidatedPriceSeries(provider, {
-  symbol: "SPY",
-  start: "2026-01-01",
-  end: "2026-02-01",
-});
-```
-
-> 路线（按顺序推进）：回测算法组合 → 市场信息（Twitter+yfinance/雪球）→ 资金管理 → 基准买卖推荐 → AI 分析 → 人因模型 → Tag 体系
-
-## Python 在线引擎（可选）
-
-- Python 引擎对外通过 Nginx 前缀：`/daa-api/`
-- 典型健康检查：`https://exwxyzi.cn/daa-api/health`
-- Next.js 同域 API（供前端调用）：`/api/daa/*`（例如 Step4/Step5 调用的 `POST /api/daa/rebalance/simulate`）
-
-部署相关：见 `deploy/README.md`。
-
-## ✨ 当前已交付（v0）
-
-- Step 页面产品化骨架（/daa/step/*）
-- 最小 contracts/providers + 测试闭环（pnpm test/typecheck/build）
-- v0 再平衡建议：Step4/Step5 通过 `POST /api/daa/rebalance/simulate` 生成建议，并在 UI 展示“建议 + 解释 + 可复制 JSON”
-
-## 🛠 技术栈
-
-- 前端：Next.js（App Router）+ TypeScript（strict）
-- 算法：TypeScript core（可测试）
-- 引擎：FastAPI（可选在线 API）
-- 部署：VPS（Docker + Nginx）
-
-## 🚀 快速开始
-
-### 本地开发
+## 快速开始
 
 ```bash
-git clone git@github.com:Jarvis-agent-bot/Dynamic-Asset-Allocation.git
-cd Dynamic-Asset-Allocation
 pnpm install
 pnpm dev
 ```
 
-打开 http://localhost:3000/daa/
+启动后访问：
 
-### 构建与测试
+- http://localhost:3000/daa
+- http://localhost:3000/daa/dashboard
+
+## 本地登录与数据库
+
+- 默认使用 Postgres（优先 `DAA_DB_URL`，回退 `DATABASE_URL`）。
+- 未配置数据库时，开发环境自动回退 `pg-mem`。
+- 非生产环境默认账号会自动初始化：`admin / admin123`。
+
+## 核心架构概览
+
+- 前端：Next.js 14 App Router + TypeScript + Tailwind + shadcn/ui。
+- 核心算法：`src/core/*`（可单元测试）。
+- 业务编排：`src/daa/*` + `app/api/daa/*`。
+- 存储：Postgres（开发可回退 pg-mem）。
+- 调度（规划中）：Vercel Cron -> `/api/daa/cron/*`。
+
+## 核心 API（已上线）
+
+- `POST /api/daa/rebalance/unified`：统一再平衡决策。
+- `GET /api/daa/engine-health`：引擎健康检查。
+- `/api/daa/auth/*`：登录、会话、登出。
+- `/api/daa/hf/*`：人因数据摄取与读取。
+
+## 核心 API（规划中，Planned）
+
+- `/api/daa/store/*`：持仓/策略配置/权益快照/交易日志持久化。
+- `/api/daa/cron/*`：价格刷新、drift 检查、HF ingest 定时任务入口。
+- `/api/daa/trade-journal/manual-sync`：人工执行回填。
+
+详细契约见：`docs/architecture/DAA_REVIEW_DECISIONS_2026-03-01.md`。
+
+## 开发与验证
 
 ```bash
 pnpm test
 pnpm run typecheck
-pnpm build
+pnpm run build:check
 ```
 
-## 📄 License
+CI 与本地对齐，建议每次提交前执行上述三项检查。
 
-本项目采用 **[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)**（AGPL-3.0）。
+## 目录导航
 
----
-Maintained by [Jarvis-agent-bot](https://github.com/Jarvis-agent-bot)
+- 核心架构基线：`docs/architecture/DAA_REVIEW_DECISIONS_2026-03-01.md`
+- 核心架构说明：`docs/DAA_GLOBAL_ARCHITECTURE_GUIDE.md`
+- Codex 文档守则：`docs/engineering/CODEX_DOC_GOVERNANCE.md`
+- Codex 协作流程：`docs/engineering/CODEX_WORKFLOW.md`
+- 路线执行清单：`docs/engineering/ROADMAP_EXECUTION_CHECKLIST.md`
+- 快速开始：`docs/QUICKSTART.md`
+- 部署说明：`deploy/README.md`
+
+## 路线图摘要（Phase 1~10）
+
+1. DB schema 与 migration
+2. 服务端存储 API
+3. Vercel Cron 自动化调度
+4. 风控扩展
+5. 数据源配置化与 Settings
+6. Telegram 通知
+7. 策略扩展与 Strategy Lab
+8. Backtest 绩效归因
+9. 实时行情升级
+10. 删除 Python 服务
+
+## License
+
+[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)

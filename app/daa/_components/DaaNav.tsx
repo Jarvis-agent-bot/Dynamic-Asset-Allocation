@@ -2,50 +2,49 @@
 
 import type { ComponentType } from "react";
 
-import { BarChart3, LayoutDashboard, Menu, Settings, Wand2 } from "lucide-react";
+import { Briefcase, Cpu, LineChart, Menu, PlayCircle, Settings, ShieldAlert, SlidersHorizontal, Target, Users } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-type Tab = "dashboard" | "wizard" | "market-funds" | "settings";
+type NavKey = "console" | "positions" | "watchlist" | "strategy" | "execution" | "risk" | "humanFactor" | "backtest" | "settings";
 
 type IconType = ComponentType<{ className?: string }>;
 
-type NavItem = { key: Tab; href: string; label: string; Icon: IconType };
+type NavItem = { key: NavKey; href: string; label: string; Icon: IconType };
 
-function normalizeTab(raw: string | null): Tab {
-  if (raw === "dashboard") return "dashboard";
-  if (raw === "wizard") return "wizard";
-  if (raw === "market-funds") return "market-funds";
-  if (raw === "settings") return "settings";
-  return "market-funds";
-}
-
-function useActiveTab(): Tab | null {
+function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
-  const searchParams = useSearchParams();
-
-  if (pathname === "/daa/dashboard/settings" || pathname === "/daa/dashboard/settings/") return "settings";
-
-  const tab = normalizeTab(searchParams.get("tab"));
-  const isOnDashboard = pathname === "/daa/dashboard" || pathname === "/daa/dashboard/";
-
-  return isOnDashboard ? tab : null;
+  if (pathname.startsWith("/daa/dashboard/positions")) return "positions";
+  if (pathname.startsWith("/daa/dashboard/watchlist")) return "watchlist";
+  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "backtest";
+  if (pathname.startsWith("/daa/dashboard/strategy")) return "strategy";
+  if (pathname.startsWith("/daa/dashboard/execution")) return "execution";
+  if (pathname.startsWith("/daa/dashboard/risk")) return "risk";
+  if (pathname.startsWith("/daa/dashboard/human-factor")) return "humanFactor";
+  if (pathname.startsWith("/daa/dashboard/backtest")) return "backtest";
+  if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
+  return "console";
 }
 
 function useNavItems(): NavItem[] {
   return useMemo(
     () => [
-      { key: "dashboard", href: "/daa/dashboard?tab=dashboard", label: "Dashboard", Icon: LayoutDashboard },
-      { key: "wizard", href: "/daa/dashboard?tab=wizard&step=1", label: "Wizard", Icon: Wand2 },
-      { key: "market-funds", href: "/daa/dashboard?tab=market-funds", label: "Market/Funds", Icon: BarChart3 },
-      { key: "settings", href: "/daa/dashboard/settings", label: "Settings", Icon: Settings },
+      { key: "console" as const, href: "/daa/dashboard", label: "控制台", Icon: Cpu },
+      { key: "positions" as const, href: "/daa/dashboard/positions", label: "持仓配置", Icon: Briefcase },
+      { key: "watchlist" as const, href: "/daa/dashboard/watchlist", label: "候选池", Icon: Target },
+      { key: "strategy" as const, href: "/daa/dashboard/strategy", label: "策略配置", Icon: SlidersHorizontal },
+      { key: "execution" as const, href: "/daa/dashboard/execution", label: "执行回填", Icon: PlayCircle },
+      { key: "risk" as const, href: "/daa/dashboard/risk", label: "风控审计", Icon: ShieldAlert },
+      { key: "humanFactor" as const, href: "/daa/dashboard/human-factor", label: "人因中心", Icon: Users },
+      { key: "backtest" as const, href: "/daa/dashboard/backtest", label: "回测与优化", Icon: LineChart },
+      { key: "settings" as const, href: "/daa/dashboard/settings", label: "系统设置", Icon: Settings },
     ],
-    []
+    [],
   );
 }
 
@@ -56,7 +55,7 @@ type NavListProps = {
 
 function DaaNavList({ variant, onNavigate }: NavListProps) {
   const items = useNavItems();
-  const active = useActiveTab();
+  const active = useActiveNav();
 
   if (variant === "horizontal") {
     return (
@@ -71,7 +70,7 @@ function DaaNavList({ variant, onNavigate }: NavListProps) {
               size="sm"
               className={cn(
                 isActive && "bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
-                "focus-visible:ring-offset-1"
+                "focus-visible:ring-offset-1",
               )}
             >
               <Link href={it.href} aria-current={isActive ? "page" : undefined} onClick={onNavigate}>
@@ -117,7 +116,7 @@ export function DaaMobileNav() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Open navigation" className="shrink-0">
+        <Button variant="ghost" size="icon" aria-label="打开导航菜单" className="shrink-0">
           <Menu className="h-5 w-5" aria-hidden="true" />
         </Button>
       </SheetTrigger>

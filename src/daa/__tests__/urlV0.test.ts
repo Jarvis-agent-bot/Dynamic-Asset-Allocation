@@ -8,15 +8,11 @@ describe("daa/urlV0", () => {
   });
 
   it("preserves existing query params", () => {
-    expect(appendNoticeParamV0("/daa/dashboard?tab=wizard&step=1", "signed_in")).toBe(
-      "/daa/dashboard?tab=wizard&step=1&notice=signed_in"
-    );
+    expect(appendNoticeParamV0("/daa/dashboard?source=login", "signed_in")).toBe("/daa/dashboard?source=login&notice=signed_in");
   });
 
   it("preserves hash", () => {
-    expect(appendNoticeParamV0("/daa/dashboard?tab=wizard#step5", "signed_in")).toBe(
-      "/daa/dashboard?tab=wizard&notice=signed_in#step5"
-    );
+    expect(appendNoticeParamV0("/daa/dashboard?source=login#ops", "signed_in")).toBe("/daa/dashboard?source=login&notice=signed_in#ops");
   });
 
   it("overwrites an existing notice", () => {
@@ -24,31 +20,23 @@ describe("daa/urlV0", () => {
   });
 
   describe("normalizeDaaReturnToV0", () => {
-    it("defaults to /daa/dashboard for empty/unsafe values", () => {
+    it("defaults to dashboard console for empty/unsafe values", () => {
       expect(normalizeDaaReturnToV0("")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("https://evil.com")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("//evil.com/daa/dashboard")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("not-a-path")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("/not-daa")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("/daa/login?returnTo=%2Fdaa%2Fdashboard")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/wizard")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/step/5")).toBe("/daa/dashboard");
+      expect(normalizeDaaReturnToV0("/daa/market/funds")).toBe("/daa/dashboard");
     });
 
-    it("maps legacy /daa* routes into the canonical /daa/dashboard", () => {
-      expect(normalizeDaaReturnToV0("/daa/step/5")).toBe("/daa/dashboard?tab=wizard&step=5");
-      expect(normalizeDaaReturnToV0("/daa?step=4")).toBe("/daa/dashboard?step=4&tab=wizard");
-      expect(normalizeDaaReturnToV0("/daa/market/funds")).toBe("/daa/dashboard?tab=market-funds");
-    });
-
-    it("canonicalizes /daa/dashboard and preserves query/hash", () => {
+    it("canonicalizes /daa/dashboard and strips legacy tab", () => {
+      expect(normalizeDaaReturnToV0("/daa")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("/daa/dashboard/")).toBe("/daa/dashboard");
-      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=wizard&step=1#x")).toBe("/daa/dashboard?tab=wizard&step=1#x");
-      expect(normalizeDaaReturnToV0("/daa/step/2#foo")).toBe("/daa/dashboard?tab=wizard&step=2#foo");
-    });
-
-    it("allows /daa/dashboard/settings deep-links", () => {
-      expect(normalizeDaaReturnToV0("/daa/dashboard/settings")).toBe("/daa/dashboard/settings");
-      expect(normalizeDaaReturnToV0("/daa/dashboard/settings/")).toBe("/daa/dashboard/settings");
-      expect(normalizeDaaReturnToV0("/daa/dashboard/settings?x=1#y")).toBe("/daa/dashboard/settings?x=1#y");
+      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=unknown#x")).toBe("/daa/dashboard#x");
+      expect(normalizeDaaReturnToV0("/daa/dashboard?tab=settings&section=security#x")).toBe("/daa/dashboard?section=security#x");
     });
   });
 });

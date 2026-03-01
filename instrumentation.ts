@@ -8,14 +8,12 @@ export async function register() {
 
   try {
     const { isDaaPgEnabledV0, ensureDaaAuthSchemaPgV0 } = await import("@/src/daa/pg/daaPgV0");
-    const { ensureDaaStoreSchemaPgV0 } = await import("@/src/daa/pg/daaStorePgV0");
 
     // Allow the app to boot without a DB configured (dev/preview), but when a DB is configured,
     // fail fast so deployment issues are immediately visible.
     if (!isDaaPgEnabledV0()) return;
 
     await ensureDaaAuthSchemaPgV0();
-    await ensureDaaStoreSchemaPgV0();
   } catch (e) {
     console.error("[daa_pg] boot-time schema init failed", e);
     throw e;

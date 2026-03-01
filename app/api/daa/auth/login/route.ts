@@ -40,54 +40,65 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "invalid_credentials" }, { status: 401 });
   }
 
-  await ensureDevDefaultDaaAuthAccountV0().catch(() => null);
+  try {
+    await ensureDevDefaultDaaAuthAccountV0().catch(() => null);
 
-  const account = await authenticateDaaAuthAccountV0({ username, password });
-  if (!account) {
+    const account = await authenticateDaaAuthAccountV0({ username, password });
+    if (!account) {
+      await appendDaaAuthAuditEventV0({
+        kind: "auth.login.failed",
+        actorUserId: "anonymous",
+        payload: { username, returnTo, userAgent, ip },
+      }).catch(() => null);
+
+      return NextResponse.json({ ok: false, error: "invalid_credentials" }, { status: 401 });
+    }
+
+    const { session, token } = await createDaaAuthSessionV0({
+      accountId: account.accountId,
+      userAgent,
+      ip,
+    });
+
     await appendDaaAuthAuditEventV0({
-      kind: "auth.login.failed",
-      actorUserId: "anonymous",
-      payload: { username, returnTo, userAgent, ip },
+      kind: "auth.login.success",
+      actorUserId: account.accountId,
+      accountId: account.accountId,
+      sessionId: session.sessionId,
+      payload: { username: account.username, returnTo, userAgent, ip },
     }).catch(() => null);
 
-    return NextResponse.json({ ok: false, error: "invalid_credentials" }, { status: 401 });
+    const redirectTo = appendNoticeParamV0(returnTo, "signed_in");
+
+    const res = NextResponse.json({
+      ok: true,
+      redirectTo,
+      account: {
+        accountId: account.accountId,
+        username: account.username,
+        roles: account.roles,
+      },
+    });
+
+    res.cookies.set({
+      name: DAA_AUTH_SESSION_COOKIE_V0,
+      value: token,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
+      expires: new Date(session.expiresAt),
+    });
+
+    return res;
+  } catch (e) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "auth_backend_unavailable",
+        message: e instanceof Error ? e.message : String(e),
+      },
+      { status: 503 },
+    );
   }
-
-  const { session, token } = await createDaaAuthSessionV0({
-    accountId: account.accountId,
-    userAgent,
-    ip,
-  });
-
-  await appendDaaAuthAuditEventV0({
-    kind: "auth.login.success",
-    actorUserId: account.accountId,
-    accountId: account.accountId,
-    sessionId: session.sessionId,
-    payload: { username: account.username, returnTo, userAgent, ip },
-  }).catch(() => null);
-
-  const redirectTo = appendNoticeParamV0(returnTo, "signed_in");
-
-  const res = NextResponse.json({
-    ok: true,
-    redirectTo,
-    account: {
-      accountId: account.accountId,
-      username: account.username,
-      roles: account.roles,
-    },
-  });
-
-  res.cookies.set({
-    name: DAA_AUTH_SESSION_COOKIE_V0,
-    value: token,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
-    expires: new Date(session.expiresAt),
-  });
-
-  return res;
 }

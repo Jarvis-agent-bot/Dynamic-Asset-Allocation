@@ -1,1 +1,7 @@
-{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}
+{
+  "crons": [
+    { "path": "/api/daa/cron/price-refresh", "schedule": "0 */4 * * *" },
+    { "path": "/api/daa/cron/drift-check", "schedule": "0 9,21 * * *" },
+    { "path": "/api/daa/cron/hf-ingest", "schedule": "0 8 * * *" }
+  ]
+}

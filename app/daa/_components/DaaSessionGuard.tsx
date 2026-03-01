@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 const SESSION_EXPIRED_NOTICE_AT_KEY = "daa_notice_session_expired_at_v0";
 const SESSION_EXPIRED_REDIRECT_DELAY_MS = 650;
+const DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1 = "daa:dashboard:persist-error";
 
 function buildLoginHref(returnTo: string): string {
   const safe = returnTo && returnTo.startsWith("/") ? returnTo : "/daa/dashboard";
@@ -91,6 +92,20 @@ export default function DaaSessionGuard() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [pathname]);
+
+  useEffect(() => {
+    function onPersistError(event: Event) {
+      const custom = event as CustomEvent<{ message?: string }>;
+      const message = String(custom?.detail?.message || "").trim();
+      if (!message) return;
+      toast.error(message);
+    }
+
+    window.addEventListener(DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1, onPersistError as EventListener);
+    return () => {
+      window.removeEventListener(DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1, onPersistError as EventListener);
+    };
+  }, []);
 
   return null;
 }
