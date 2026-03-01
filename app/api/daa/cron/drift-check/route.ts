@@ -1,6 +1,6 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { getLatestHumanSignalBatchV1 } from "@/src/daa/hf/hfServiceV1";
+import { hydrateUnifiedRequestWithSignalsV1 } from "@/src/daa/modules/decision/hydrateUnifiedRequestV1";
 import { sendTelegramByEnvV1 } from "@/src/daa/notify/telegramV1";
 import {
   createDaaRebalanceDecisionV1,
@@ -41,14 +41,12 @@ export async function POST(req: Request) {
     const risk = { ...toObject((defaults as any).risk), ...toObject(strategyObj.risk) };
     const targetWeights = { ...toObject(defaults.targetWeights), ...toObject(strategyObj.targetWeights) };
 
-    const symbols = new Set<string>(Object.keys(targetWeights).map((x) => String(x || "").trim().toUpperCase()).filter(Boolean));
-    for (const position of positions) symbols.add(position.symbol);
-
-    const batch = await getLatestHumanSignalBatchV1({ symbols: [...symbols] });
-
-    const requestPayload: DaaUnifiedRequestV1 = {
+    const basePayload: DaaUnifiedRequestV1 = {
       account: {
+        baseCurrency: String(account.baseCurrency || "USD").trim().toUpperCase() || "USD",
         cash: toNum(account.cash, 0),
+        investableCash: toNum((account as any).investableCash, toNum(account.cash, 0)),
+        frozenCash: toNum((account as any).frozenCash, 0),
         totalEquity: account.totalEquity == null ? undefined : toNum(account.totalEquity, 0),
       },
       constraints: {
@@ -86,18 +84,10 @@ export async function POST(req: Request) {
         tags: position.tags,
         liquidityNotional24h: position.liquidityNotional24h,
       })),
-      humanSignals: batch.signals.map((signal) => ({
-        symbol: signal.symbol,
-        aggregatedScorePct: signal.aggregatedScorePct,
-        convictionPct: signal.convictionPct,
-        thesisDriftPct: signal.thesisDriftPct,
-        confidencePct: signal.confidencePct,
-        momentumRegime: signal.momentumRegime,
-        stance: signal.stance,
-        riskTags: signal.riskTags,
-        sourceRefs: signal.sourceRefs,
-      })),
     };
+
+    const hydrated = await hydrateUnifiedRequestWithSignalsV1(basePayload);
+    const requestPayload = hydrated.request;
 
     const plan = buildDaaUnifiedPlanV1(requestPayload);
     const created = await createDaaRebalanceDecisionV1({

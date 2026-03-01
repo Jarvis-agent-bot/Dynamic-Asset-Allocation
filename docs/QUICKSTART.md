@@ -11,6 +11,12 @@ pnpm dev
 - http://localhost:3000/daa
 - http://localhost:3000/daa/dashboard
 
+推荐入口顺序：
+- `/daa/dashboard/strategy`（先配资金池）
+- `/daa/dashboard/watchlist`（维护候选池）
+- `/daa/dashboard/human-factor`（采集人因信号）
+- `/daa/dashboard`（运行决策）
+
 ## 2) 登录方式
 
 - 仅支持账号密码登录。
@@ -29,5 +35,5 @@ pnpm dev
 ```bash
 pnpm test
 pnpm run typecheck
-pnpm build
+pnpm run build:check
 ```

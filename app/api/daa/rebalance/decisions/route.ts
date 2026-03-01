@@ -1,14 +1,11 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getLatestHumanSignalBatchV1 } from "@/src/daa/hf/hfServiceV1";
+import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
+import { hydrateUnifiedRequestWithSignalsV1 } from "@/src/daa/modules/decision/hydrateUnifiedRequestV1";
 import { buildDaaUnifiedPlanV1, isDaaUnifiedRequestV1, type DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
 import { createDaaRebalanceDecisionV1, listDaaRebalanceDecisionsV1 } from "@/src/daa/store/daaStorePgV1";
 
 export const runtime = "nodejs";
-
-function normalizeSymbol(v: unknown): string {
-  return String(v || "").trim().toUpperCase();
-}
 
 function toLimit(value: string | null): number {
   const parsed = Number(value || 50);
@@ -43,36 +40,23 @@ export async function POST(req: Request) {
     }
 
     const unifiedRequest = request as DaaUnifiedRequestV1;
-    let hydrated = unifiedRequest;
-    if (!Array.isArray(unifiedRequest.humanSignals) || unifiedRequest.humanSignals.length === 0) {
-      const targetSymbols = new Set<string>();
-      for (const symbol of Object.keys(unifiedRequest.targetWeights || {})) {
-        const key = normalizeSymbol(symbol);
-        if (key) targetSymbols.add(key);
-      }
-      for (const position of unifiedRequest.positions || []) {
-        const key = normalizeSymbol(position.symbol);
-        if (key) targetSymbols.add(key);
-      }
-
-      const batch = await getLatestHumanSignalBatchV1({ symbols: [...targetSymbols] });
-      hydrated = {
-        ...unifiedRequest,
-        humanSignals: batch.signals.map((signal) => ({
-          symbol: signal.symbol,
-          aggregatedScorePct: signal.aggregatedScorePct,
-          convictionPct: signal.convictionPct,
-          thesisDriftPct: signal.thesisDriftPct,
-          confidencePct: signal.confidencePct,
-          momentumRegime: signal.momentumRegime,
-          stance: signal.stance,
-          riskTags: signal.riskTags,
-          sourceRefs: signal.sourceRefs,
-        })),
-      };
-    }
+    const hydratedResult = await hydrateUnifiedRequestWithSignalsV1(unifiedRequest);
+    const hydrated = hydratedResult.request;
 
     const plan = buildDaaUnifiedPlanV1(hydrated);
+    const llmAnalysis = await runLlmAnalysisV1({
+      baseCurrency: plan.summary.baseCurrency,
+      shouldRebalance: plan.summary.shouldRebalance,
+      opportunities: hydratedResult.opportunityPanel.opportunities.map((item) => ({
+        symbol: item.symbol,
+        finalScorePct: item.finalScorePct,
+        confidencePct: item.confidencePct,
+        riskScorePct: item.riskScorePct,
+        action: item.action,
+        reasons: item.reasons,
+      })),
+      warnings: plan.warnings,
+    });
     const created = await createDaaRebalanceDecisionV1({
       requestJson: hydrated as unknown as Record<string, unknown>,
       responseJson: plan as unknown as Record<string, unknown>,
@@ -85,6 +69,9 @@ export async function POST(req: Request) {
       decision: created.decision,
       orders: created.orders,
       plan,
+      opportunityPanel: hydratedResult.opportunityPanel,
+      hydrationDiagnostics: hydratedResult.diagnostics,
+      llmAnalysis,
     });
   });
 }

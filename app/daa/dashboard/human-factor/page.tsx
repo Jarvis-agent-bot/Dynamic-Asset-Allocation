@@ -71,6 +71,28 @@ type HumanSignalBatch = {
   }>;
 };
 
+type LastRunPlan = {
+  layers?: {
+    humanFactor?: {
+      defensiveConsensusPct?: number;
+      assetDecisions?: Array<{
+        symbol: string;
+        tier: "elite" | "steady" | "watch" | "isolated";
+        weightedScorePct: number;
+        reasons: string[];
+      }>;
+    };
+  };
+};
+
+function extractPlan(payload: unknown): LastRunPlan | null {
+  const value = payload as any;
+  if (!value || typeof value !== "object") return null;
+  if (value.layers && typeof value.layers === "object") return value as LastRunPlan;
+  if (value.plan && typeof value.plan === "object" && value.plan.layers) return value.plan as LastRunPlan;
+  return null;
+}
+
 function normalizedFundCode(value: string): string {
   return String(value || "").trim().toUpperCase();
 }
@@ -180,6 +202,7 @@ export default function HumanFactorPage() {
   const [sourceError, setSourceError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [ingesting, setIngesting] = useState(false);
+  const result = extractPlan(lastRun);
 
   const registry = useMemo(
     () => dedupeRegistry(storedRegistry?.length ? storedRegistry : DEFAULT_HF_FUND_REGISTRY),
@@ -203,9 +226,9 @@ export default function HumanFactorPage() {
     tier: "elite" | "steady" | "watch" | "isolated";
     weightedScorePct: number;
     reasons: string[];
-  }> = (lastRun as any)?.layers?.humanFactor?.assetDecisions ?? [];
+  }> = result?.layers?.humanFactor?.assetDecisions ?? [];
 
-  const defensiveConsensusPct = Number((lastRun as any)?.layers?.humanFactor?.defensiveConsensusPct ?? 0);
+  const defensiveConsensusPct = Number(result?.layers?.humanFactor?.defensiveConsensusPct ?? 0);
   const signalCount = signalBatch?.signals?.length ?? 0;
   const latestGeneratedAtText = formatDateTimeText(signalBatch?.generatedAt);
 

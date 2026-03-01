@@ -31,11 +31,13 @@ import {
   useAnalysts,
   useAssetViews,
   useEquitySnapshots,
+  useFxRates,
   useLastRunResult,
   useOpLog,
   usePositions,
   useRunHistory,
   useStrategyConfig,
+  useWatchlistCandidates,
 } from "../_components/useDaaStore";
 import { useMarketDataClient } from "../../useMarketDataClient";
 import { readUnifiedInputSliceV1 } from "../../unifiedInputStore";
@@ -45,6 +47,7 @@ import { runUnifiedRebalanceV1 } from "@/src/daa/modules/execution/executionApiV
 type ApiResult = {
   generatedAt?: string;
   summary?: {
+    baseCurrency?: string;
     totalEquity?: number;
     triggerThresholdPct?: number;
     shouldRebalance?: boolean;
@@ -68,6 +71,25 @@ type ApiResult = {
   warnings?: string[];
 };
 
+type OpportunityRow = {
+  symbol: string;
+  finalScorePct: number;
+  confidencePct: number;
+  riskScorePct: number;
+  action: "open_or_add" | "watch" | "reduce_or_avoid";
+  reasons: string[];
+};
+
+type LlmAnalysis = {
+  status: "skipped" | "ok" | "error";
+  provider: string;
+  model: string;
+  summary: string;
+  opportunityNotes: string[];
+  riskNotes: string[];
+  reason?: string;
+};
+
 type FlowStepState = "done" | "active" | "pending";
 
 type FlowStep = {
@@ -79,10 +101,39 @@ type FlowStep = {
   state: FlowStepState;
 };
 
+function extractPlan(payload: unknown): ApiResult | null {
+  const value = payload as any;
+  if (!value || typeof value !== "object") return null;
+  if (value.summary && typeof value.summary === "object") return value as ApiResult;
+  if (value.plan && typeof value.plan === "object" && value.plan.summary) return value.plan as ApiResult;
+  return null;
+}
+
+function extractOpportunityRows(payload: unknown): OpportunityRow[] {
+  const value = payload as any;
+  if (!value || typeof value !== "object") return [];
+  const rows = Array.isArray(value?.opportunityPanel?.opportunities)
+    ? value.opportunityPanel.opportunities
+    : Array.isArray(value?.plan?.opportunityPanel?.opportunities)
+      ? value.plan.opportunityPanel.opportunities
+      : [];
+  return rows as OpportunityRow[];
+}
+
+function extractLlmAnalysis(payload: unknown): LlmAnalysis | null {
+  const value = payload as any;
+  if (!value || typeof value !== "object") return null;
+  if (value.llmAnalysis && typeof value.llmAnalysis === "object") return value.llmAnalysis as LlmAnalysis;
+  if (value.plan?.llmAnalysis && typeof value.plan.llmAnalysis === "object") return value.plan.llmAnalysis as LlmAnalysis;
+  return null;
+}
+
 export default function DaaConsoleTab() {
   const marketData = useMarketDataClient();
 
   const [positions, setPositions] = usePositions();
+  const [watchlistCandidates] = useWatchlistCandidates();
+  const [fxRates] = useFxRates();
   const [analysts] = useAnalysts();
   const [assetViews] = useAssetViews();
   const [config] = useStrategyConfig();
@@ -97,13 +148,18 @@ export default function DaaConsoleTab() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const positionsList = positions ?? [];
+  const watchlist = watchlistCandidates ?? [];
+  const fxRateRows = fxRates ?? [];
   const analystsList = analysts ?? [];
   const viewsList = assetViews ?? [];
   const runHistory = runHistoryData ?? [];
   const equitySnapshots = equitySnapshotsData ?? [];
   const opLog = opLogData ?? [];
 
-  const result = (selectedRunId ? runHistory.find((entry) => entry.id === selectedRunId)?.response : lastRun) as ApiResult | null;
+  const selectedPayload = selectedRunId ? runHistory.find((entry) => entry.id === selectedRunId)?.response : lastRun;
+  const result = extractPlan(selectedPayload);
+  const opportunityRows = extractOpportunityRows(selectedPayload);
+  const llmAnalysis = extractLlmAnalysis(selectedPayload);
 
   const autoSnapRef = useRef(false);
 
@@ -125,20 +181,23 @@ export default function DaaConsoleTab() {
   }, [config.targetWeights]);
 
   const humanSignalCount = result?.layers?.humanFactor?.assetDecisions?.length ?? 0;
-  const hasData = positionsList.length > 0;
+  const hasSignals = humanSignalCount > 0 || opportunityRows.length > 0;
+  const hasWeights = targetWeightSummary.weightSum > 0;
+  const hasData = positionsList.length > 0 || watchlist.length > 0 || hasWeights;
   const hasRunSummary = Boolean(result?.summary);
-  const hasCollectedSignals = humanSignalCount > 0 || equitySnapshots.length > 0;
+  const hasCollectedSignals = hasSignals || equitySnapshots.length > 0;
   const hasExecutableOrders = Number(result?.executableOrders?.length ?? 0) > 0;
+  const displayCurrency = (result?.summary?.baseCurrency || config.account.baseCurrency || "USD").toUpperCase();
 
   const flowSteps: FlowStep[] = useMemo(
     () => [
       {
         key: "config",
         title: "配置",
-        description: hasData && targetWeightSummary.weightSum > 0 ? "持仓与目标权重已就绪" : "先完成持仓和策略配置",
+        description: hasData ? "资金池/候选池/目标权重已就绪" : "先配置资金池、候选池或目标权重",
         href: "/daa/dashboard/positions",
         cta: "去配置",
-        state: hasData && targetWeightSummary.weightSum > 0 ? "done" : "active",
+        state: hasData ? "done" : "active",
       },
       {
         key: "collect",
@@ -165,7 +224,7 @@ export default function DaaConsoleTab() {
         state: hasExecutableOrders ? "active" : hasRunSummary ? "done" : "pending",
       },
     ],
-    [hasCollectedSignals, hasData, hasExecutableOrders, hasRunSummary, targetWeightSummary.weightSum],
+    [hasCollectedSignals, hasData, hasExecutableOrders, hasRunSummary],
   );
 
   async function refreshPrices(): Promise<boolean> {
@@ -230,14 +289,17 @@ export default function DaaConsoleTab() {
       await refreshPrices();
       const freshPositions = readUnifiedInputSliceV1<DaaPositionRow[]>("positions") ?? positionsList;
       const payload = buildUnifiedRequest(freshPositions, analystsList, viewsList, config);
-      const { plan } = await runUnifiedRebalanceV1<ApiResult>(payload as unknown as Record<string, unknown>, { persist: true });
+      const envelope = await runUnifiedRebalanceV1<ApiResult>(payload as unknown as Record<string, unknown>, { persist: true });
+      const plan = extractPlan(envelope);
+      if (!plan) throw new Error("统一决策响应缺少 plan");
 
-      setLastRun(plan);
+      setLastRun(envelope as unknown);
       window.dispatchEvent(new CustomEvent("daa:dashboard:refresh"));
 
       const holdingsValue = freshPositions.reduce((sum, p) => sum + p.qty * p.price, 0);
       appendEquitySnapshot(holdingsValue + config.account.cash, holdingsValue, config.account.cash, "run");
-      appendOpLog(`运行决策：${plan?.summary?.shouldRebalance ? "触发再平衡" : "维持当前仓位"}`);
+      const opportunityCount = extractOpportunityRows(envelope).length;
+      appendOpLog(`运行决策：${plan.summary?.shouldRebalance ? "触发再平衡" : "维持当前仓位"}；机会池 ${opportunityCount} 个`);
     } catch (e) {
       setError(toUserErrorMessage(e));
     } finally {
@@ -265,6 +327,7 @@ export default function DaaConsoleTab() {
           {refreshing ? "刷新中..." : "刷新行情"}
         </Button>
         <Button asChild variant="outline" size="sm"><Link href="/daa/dashboard/positions">持仓配置</Link></Button>
+        <Button asChild variant="outline" size="sm"><Link href="/daa/dashboard/watchlist">候选池</Link></Button>
         <Button asChild variant="outline" size="sm"><Link href="/daa/dashboard/strategy">策略配置</Link></Button>
         <Button asChild variant="outline" size="sm"><Link href="/daa/dashboard/human-factor">人因采集</Link></Button>
       </div>
@@ -306,10 +369,10 @@ export default function DaaConsoleTab() {
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="总权益" value={formatCurrency(portfolioMetrics.equity)} Icon={DollarSign} />
-        <StatCard label="持仓市值" value={formatCurrency(portfolioMetrics.holdingsValue)} Icon={TrendingUp} />
-        <StatCard label="现金" value={formatCurrency(portfolioMetrics.cash)} Icon={Wallet} />
-        <StatCard label="标的 / 人因信号" value={`${portfolioMetrics.symbolCount} / ${humanSignalCount}`} />
+        <StatCard label="总权益" value={formatCurrency(portfolioMetrics.equity, displayCurrency)} Icon={DollarSign} />
+        <StatCard label="持仓市值" value={formatCurrency(portfolioMetrics.holdingsValue, displayCurrency)} Icon={TrendingUp} />
+        <StatCard label="现金" value={formatCurrency(portfolioMetrics.cash, displayCurrency)} Icon={Wallet} />
+        <StatCard label="持仓/候选/机会/FX" value={`${portfolioMetrics.symbolCount} / ${watchlist.length} / ${opportunityRows.length || humanSignalCount} / ${fxRateRows.length}`} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_520px]">
@@ -330,7 +393,7 @@ export default function DaaConsoleTab() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="ts" fontSize={10} />
                       <YAxis fontSize={10} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} width={40} />
-                      <Tooltip formatter={(v) => formatCurrency(Number(v))} />
+                      <Tooltip formatter={(v) => formatCurrency(Number(v), displayCurrency)} />
                       <Area type="monotone" dataKey="equity" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.16} strokeWidth={1.5} />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -351,7 +414,8 @@ export default function DaaConsoleTab() {
                 <CardDescription className="text-[11px]">最新一次运行结果摘要。</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2.5 text-xs">
-                <div className="flex justify-between"><span className="text-muted-foreground">权益</span><span>{formatCurrency(result.summary.totalEquity ?? 0)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">基准币种</span><span>{result.summary.baseCurrency ?? "USD"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">权益</span><span>{formatCurrency(result.summary.totalEquity ?? 0, result.summary.baseCurrency || displayCurrency)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">阈值</span><span>{formatPercent((result.summary.triggerThresholdPct ?? 0) * 100)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">可执行 / 阻断</span><span>{result.summary.executableOrderCount ?? 0} / {result.summary.blockedOrderCount ?? 0}</span></div>
               </CardContent>
@@ -384,6 +448,31 @@ export default function DaaConsoleTab() {
                     </div>
                   ) : (
                     <div className="rounded-md border border-dashed bg-background p-3 text-xs text-muted-foreground">当前没有可执行机会。</div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border bg-sky-50/40 p-2 dark:bg-sky-950/10">
+                  <div className="mb-1 text-xs font-medium text-sky-700 dark:text-sky-300">信号融合机会池</div>
+                  {opportunityRows.length > 0 ? (
+                    <div className="max-h-[220px] overflow-auto rounded-md border bg-background">
+                      <Table>
+                        <TableHeader><TableRow><TableHead className="text-xs">代码</TableHead><TableHead className="text-right text-xs">机会分</TableHead><TableHead className="text-right text-xs">置信度</TableHead><TableHead className="text-xs">动作</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {opportunityRows.slice(0, 8).map((item, i) => (
+                            <TableRow key={`op-${i}-${item.symbol}`}>
+                              <TableCell className="text-xs font-medium">{item.symbol}</TableCell>
+                              <TableCell className="text-right text-xs">{item.finalScorePct.toFixed(1)}</TableCell>
+                              <TableCell className="text-right text-xs">{item.confidencePct.toFixed(1)}%</TableCell>
+                              <TableCell className="text-xs">
+                                {item.action === "open_or_add" ? "开/加仓" : item.action === "watch" ? "观察" : "减仓/回避"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed bg-background p-3 text-xs text-muted-foreground">当前没有融合机会池数据。</div>
                   )}
                 </div>
 
@@ -422,13 +511,40 @@ export default function DaaConsoleTab() {
             </Card>
           ) : null}
 
+          {llmAnalysis ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">LLM 二次分析</CardTitle>
+                <CardDescription className="text-[11px]">
+                  {llmAnalysis.provider}/{llmAnalysis.model} · {llmAnalysis.status}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs">
+                <div className="rounded border bg-background px-2 py-1.5">{llmAnalysis.summary}</div>
+                {llmAnalysis.opportunityNotes?.length ? (
+                  <div>
+                    <div className="mb-1 font-medium text-emerald-700 dark:text-emerald-300">机会提示</div>
+                    <div className="space-y-1 text-muted-foreground">{llmAnalysis.opportunityNotes.slice(0, 3).map((line, i) => <div key={`ln-o-${i}`}>- {line}</div>)}</div>
+                  </div>
+                ) : null}
+                {llmAnalysis.riskNotes?.length ? (
+                  <div>
+                    <div className="mb-1 font-medium text-amber-700 dark:text-amber-300">风险提示</div>
+                    <div className="space-y-1 text-muted-foreground">{llmAnalysis.riskNotes.slice(0, 3).map((line, i) => <div key={`ln-r-${i}`}>- {line}</div>)}</div>
+                  </div>
+                ) : null}
+                {llmAnalysis.reason ? <div className="text-[11px] text-muted-foreground">原因：{llmAnalysis.reason}</div> : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader className="pb-1"><CardTitle className="flex items-center gap-2 text-sm"><Clock className="h-3.5 w-3.5" />运行历史</CardTitle></CardHeader>
             <CardContent>
               {runHistory.length ? (
                 <div className="max-h-[180px] space-y-1 overflow-auto">
                   {runHistory.map((entry) => {
-                    const item = entry.response as ApiResult | null;
+                    const item = extractPlan(entry.response);
                     const isSelected = selectedRunId === entry.id;
                     return (
                       <button
@@ -441,7 +557,7 @@ export default function DaaConsoleTab() {
                           <span className="text-muted-foreground">{new Date(entry.ts).toLocaleString()}</span>
                           {item?.summary?.shouldRebalance ? <span className="ml-1.5 text-emerald-600">再平衡</span> : <span className="ml-1.5 text-amber-600">维持</span>}
                         </div>
-                        <span className="ml-2 shrink-0 text-muted-foreground">{formatCurrency(item?.summary?.totalEquity ?? 0)}</span>
+                        <span className="ml-2 shrink-0 text-muted-foreground">{formatCurrency(item?.summary?.totalEquity ?? 0, item?.summary?.baseCurrency || displayCurrency)}</span>
                       </button>
                     );
                   })}

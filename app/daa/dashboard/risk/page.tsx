@@ -25,6 +25,7 @@ type ApiResult = {
   ok?: boolean;
   generatedAt?: string;
   summary?: {
+    baseCurrency?: string;
     totalEquity?: number;
     triggerThresholdPct?: number;
     shouldRebalance?: boolean;
@@ -48,6 +49,14 @@ type ApiResult = {
   blockedOrders?: Array<{ symbol: string; side: string; notional: number; blockedBy: string }>;
   warnings?: string[];
 };
+
+function extractPlan(payload: unknown): ApiResult | null {
+  const value = payload as any;
+  if (!value || typeof value !== "object") return null;
+  if (value.summary && typeof value.summary === "object") return value as ApiResult;
+  if (value.plan && typeof value.plan === "object" && value.plan.summary) return value.plan as ApiResult;
+  return null;
+}
 
 function prettyJson(v: unknown): string {
   try {
@@ -80,7 +89,8 @@ export default function RiskAuditPage() {
   const runHistory = runHistoryData ?? [];
   const selectedHistory = selectedRunId === "latest" ? null : runHistory.find((item) => item.id === selectedRunId) ?? null;
 
-  const result = (selectedHistory?.response ?? lastRun) as ApiResult | null;
+  const selectedPayload = selectedHistory?.response ?? lastRun;
+  const result = extractPlan(selectedPayload);
   const requestPayload = selectedHistory?.request ?? null;
 
   const auditRows = useMemo(() => {
@@ -166,7 +176,7 @@ export default function RiskAuditPage() {
               Icon={result.summary.shouldRebalance ? CheckCircle2 : ShieldAlert}
               sub={`阈值 ${formatPercent((result.summary.triggerThresholdPct ?? 0) * 100)}`}
             />
-            <StatCard label="总权益" value={formatCurrency(result.summary.totalEquity ?? 0)} />
+            <StatCard label="总权益" value={formatCurrency(result.summary.totalEquity ?? 0, result.summary.baseCurrency || "USD")} />
             <StatCard label="可执行" value={result.summary.executableOrderCount ?? 0} />
             <StatCard
               label="风险信号"
@@ -237,11 +247,11 @@ export default function RiskAuditPage() {
                 </div>
                 <div className="flex items-center justify-between rounded-md border px-2 py-1.5">
                   <span className="text-muted-foreground">单笔 NAV 上限</span>
-                  <span className="font-medium">{formatPercent(Number(result.layers?.guardrail?.maxOrderPctOfNav ?? 0) * 100)}</span>
+                  <span className="font-medium">{formatPercent(Number(result.layers?.guardrail?.maxOrderPctOfNav ?? 0))}</span>
                 </div>
                 <div className="flex items-center justify-between rounded-md border px-2 py-1.5">
                   <span className="text-muted-foreground">单笔流动性上限</span>
-                  <span className="font-medium">{formatPercent(Number(result.layers?.guardrail?.maxOrderPctOfLiquidity ?? 0) * 100)}</span>
+                  <span className="font-medium">{formatPercent(Number(result.layers?.guardrail?.maxOrderPctOfLiquidity ?? 0))}</span>
                 </div>
                 <div className="rounded-md border px-2 py-2">
                   <div className="mb-1 text-muted-foreground">隔离标的</div>
@@ -312,7 +322,11 @@ export default function RiskAuditPage() {
             {showRawResponse ? (
               <Card>
                 <CardContent className="pt-4">
-                  <Textarea readOnly className="min-h-[180px] font-mono text-xs leading-5" value={prettyJson(result)} />
+                  <Textarea
+                    readOnly
+                    className="min-h-[180px] font-mono text-xs leading-5"
+                    value={prettyJson(selectedPayload)}
+                  />
                 </CardContent>
               </Card>
             ) : null}

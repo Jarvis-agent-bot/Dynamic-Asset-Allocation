@@ -16,6 +16,24 @@ export type DaaUnifiedPositionV1 = {
   liquidityNotional24h?: number;
 };
 
+export type DaaUnifiedWatchlistCandidateV1 = {
+  symbol: string;
+  market?: string;
+  currency?: string;
+  targetWeightHint?: number;
+  enabled?: boolean;
+  tags?: string[];
+  notes?: string;
+};
+
+export type DaaUnifiedFxRateV1 = {
+  baseCcy: string;
+  quoteCcy: string;
+  rate: number;
+  source?: string;
+  asOfTs?: string;
+};
+
 export type DaaUnifiedAnalystV1 = {
   analystId: string;
   accuracyPct: number;
@@ -48,7 +66,10 @@ export type DaaUnifiedHumanSignalV1 = {
 
 export type DaaUnifiedRequestV1 = {
   account?: {
+    baseCurrency?: string;
     cash?: number;
+    investableCash?: number;
+    frozenCash?: number;
     totalEquity?: number;
     equityPeak?: number;
   };
@@ -75,6 +96,8 @@ export type DaaUnifiedRequestV1 = {
   };
   targetWeights: Record<string, number>;
   positions: DaaUnifiedPositionV1[];
+  watchlistCandidates?: DaaUnifiedWatchlistCandidateV1[];
+  fxRates?: DaaUnifiedFxRateV1[];
   analysts?: DaaUnifiedAnalystV1[];
   assetViews?: DaaUnifiedAssetViewV1[];
   humanSignals?: DaaUnifiedHumanSignalV1[];
@@ -102,6 +125,7 @@ export type DaaUnifiedResponseV1 = {
   ok: true;
   generatedAt: string;
   summary: {
+    baseCurrency: string;
     totalEquity: number;
     triggerThresholdPct: number;
     shouldRebalance: boolean;
@@ -110,6 +134,8 @@ export type DaaUnifiedResponseV1 = {
   };
   layers: {
     sensory: {
+      fxCoveragePct: number;
+      fxFreshCoveragePct: number;
       crossMarketExposure: Record<string, number>;
       liquidityCoveragePct: number;
     };
@@ -210,6 +236,70 @@ function normalizeTargetWeights(weights: Record<string, number>): Record<string,
   return scaled;
 }
 
+function normalizeCcyCode(v: unknown, fallback = "USD"): string {
+  const text = String(v ?? "").trim().toUpperCase();
+  return text || fallback;
+}
+
+function normalizeFxPair(base: string, quote: string): string {
+  return `${normalizeCcyCode(base)}/${normalizeCcyCode(quote)}`;
+}
+
+type FxLookupValueV1 = {
+  rate: number;
+  asOfMs: number | null;
+};
+
+function toIsoMs(v: unknown): number | null {
+  const text = String(v ?? "").trim();
+  if (!text) return null;
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function buildFxLookup(fxRates: DaaUnifiedFxRateV1[]): Map<string, FxLookupValueV1> {
+  const map = new Map<string, FxLookupValueV1>();
+  for (const row of fxRates) {
+    const base = normalizeCcyCode(row.baseCcy);
+    const quote = normalizeCcyCode(row.quoteCcy);
+    const rate = Math.max(0, toFiniteNumber(row.rate, 0));
+    if (!base || !quote || rate <= 0) continue;
+    const key = normalizeFxPair(base, quote);
+    const asOfMs = toIsoMs(row.asOfTs);
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { rate, asOfMs });
+      continue;
+    }
+    const prevMs = prev.asOfMs ?? Number.NEGATIVE_INFINITY;
+    const nextMs = asOfMs ?? Number.NEGATIVE_INFINITY;
+    if (nextMs >= prevMs) {
+      map.set(key, { rate, asOfMs });
+    }
+  }
+  return map;
+}
+
+function resolveLocalToBaseRate(
+  fxMap: Map<string, FxLookupValueV1>,
+  localCcy: string,
+  baseCcy: string,
+): { rate: number; asOfMs: number | null } | null {
+  const local = normalizeCcyCode(localCcy, baseCcy);
+  const base = normalizeCcyCode(baseCcy, "USD");
+  if (local === base) return { rate: 1, asOfMs: Date.now() };
+
+  const direct = fxMap.get(normalizeFxPair(local, base));
+  if (direct && Number.isFinite(direct.rate) && direct.rate > 0) return direct;
+
+  const reverse = fxMap.get(normalizeFxPair(base, local));
+  if (reverse && Number.isFinite(reverse.rate) && reverse.rate > 0) {
+    return { rate: 1 / reverse.rate, asOfMs: reverse.asOfMs ?? null };
+  }
+
+  return null;
+}
+
 function collectCrossMarketExposure(positions: DaaUnifiedPositionV1[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const p of positions) {
@@ -225,6 +315,8 @@ export function isDaaUnifiedRequestV1(x: unknown): x is DaaUnifiedRequestV1 {
   if (!isPlainObject(x)) return false;
   if (!isPlainObject(x.targetWeights)) return false;
   if (!Array.isArray(x.positions)) return false;
+  if (x.watchlistCandidates !== undefined && !Array.isArray(x.watchlistCandidates)) return false;
+  if (x.fxRates !== undefined && !Array.isArray(x.fxRates)) return false;
   if (x.analysts !== undefined && !Array.isArray(x.analysts)) return false;
   if (x.assetViews !== undefined && !Array.isArray(x.assetViews)) return false;
   if (x.humanSignals !== undefined && !Array.isArray(x.humanSignals)) return false;
@@ -234,6 +326,9 @@ export function isDaaUnifiedRequestV1(x: unknown): x is DaaUnifiedRequestV1 {
 export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedResponseV1 {
   const generatedAt = new Date().toISOString();
   const warnings: string[] = [];
+  const baseCurrency = normalizeCcyCode(req.account?.baseCurrency, "USD");
+
+  const fxMap = buildFxLookup(req.fxRates ?? []);
 
   const baseDriftTriggerPct = clamp01(toFiniteNumber(req.policy?.baseDriftTriggerPct, 0.05));
   const strongTrendDriftTriggerPct = clamp01(toFiniteNumber(req.policy?.strongTrendDriftTriggerPct, 0.1));
@@ -245,17 +340,53 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
   const maxOrderPctOfNav = clamp01(toFiniteNumber(req.constraints?.maxOrderPctOfNav, 0.1));
   const maxOrderPctOfLiquidity = clamp01(toFiniteNumber(req.constraints?.maxOrderPctOfLiquidity, 0.15));
   const minNotional = Math.max(1, toFiniteNumber(req.constraints?.minNotional, 200));
+  const fxMaxAgeHours = 48;
+  const fxMaxAgeMs = fxMaxAgeHours * 3600000;
 
-  const positions = (req.positions ?? []).map((p) => ({
-    symbol: normalizeSymbol(p.symbol),
-    market: String(p.market ?? "UNKNOWN").trim().toUpperCase() || "UNKNOWN",
-    currency: String(p.currency ?? "USD").trim().toUpperCase() || "USD",
-    qty: Math.max(0, toFiniteNumber(p.qty, 0)),
-    price: Math.max(0, toFiniteNumber(p.price, 0)),
-    costBasis: Math.max(0, toFiniteNumber(p.costBasis, 0)),
-    tags: normalizeTags(p.tags),
-    liquidityNotional24h: Math.max(0, toFiniteNumber(p.liquidityNotional24h, 0)),
-  }));
+  let fxResolvedCount = 0;
+  let fxNeededCount = 0;
+  let fxFreshCount = 0;
+
+  const positions = (req.positions ?? []).map((p) => {
+    const symbol = normalizeSymbol(p.symbol);
+    const currency = normalizeCcyCode(p.currency, baseCurrency);
+    const localPrice = Math.max(0, toFiniteNumber(p.price, 0));
+    const localCostBasis = Math.max(0, toFiniteNumber(p.costBasis, 0));
+    const fxResolved = resolveLocalToBaseRate(fxMap, currency, baseCurrency);
+    const fxRate = fxResolved?.rate ?? null;
+    const priceInBase = fxRate != null ? localPrice * fxRate : 0;
+    const costBasisInBase = fxRate != null ? localCostBasis * fxRate : (currency === baseCurrency ? localCostBasis : 0);
+
+    if (currency !== baseCurrency && localPrice > 0) {
+      fxNeededCount += 1;
+      if (fxRate != null) {
+        fxResolvedCount += 1;
+        const fxAgeMs = fxResolved?.asOfMs == null ? Number.POSITIVE_INFINITY : Math.max(0, Date.now() - fxResolved.asOfMs);
+        if (fxAgeMs <= fxMaxAgeMs) {
+          fxFreshCount += 1;
+        } else {
+          warnings.push(`symbol ${symbol} FX 汇率超过 ${fxMaxAgeHours} 小时未更新，已标记为过期`);
+        }
+      } else {
+        warnings.push(`symbol ${symbol} 缺少 ${currency}->${baseCurrency} 汇率，已忽略估值`);
+      }
+    }
+
+    if (currency !== baseCurrency && localCostBasis > 0 && fxRate == null) {
+      warnings.push(`symbol ${symbol} 缺少 ${currency}->${baseCurrency} 汇率，成本价无法换算`);
+    }
+
+    return {
+      symbol,
+      market: String(p.market ?? "UNKNOWN").trim().toUpperCase() || "UNKNOWN",
+      currency,
+      qty: Math.max(0, toFiniteNumber(p.qty, 0)),
+      price: Math.max(0, priceInBase),
+      costBasis: Math.max(0, costBasisInBase),
+      tags: normalizeTags(p.tags),
+      liquidityNotional24h: Math.max(0, toFiniteNumber(p.liquidityNotional24h, 0)),
+    };
+  });
 
   const holdings: Record<string, number> = {};
   const prices: Record<string, number> = {};
@@ -277,7 +408,26 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     riskTierBudget[tier] += notional;
   }
 
+  const fxCoveragePct = fxNeededCount > 0 ? fxResolvedCount / fxNeededCount : 1;
+  const fxFreshCoveragePct = fxNeededCount > 0 ? fxFreshCount / fxNeededCount : 1;
+  if (fxCoveragePct < 1) {
+    warnings.push(`跨币种估值覆盖率 ${(fxCoveragePct * 100).toFixed(1)}%，请补充 FX 汇率`);
+  }
+  if (fxFreshCoveragePct < 1) {
+    warnings.push(`跨币种汇率时效覆盖率 ${(fxFreshCoveragePct * 100).toFixed(1)}%，已启用开仓保护`);
+  }
+
   const cash = Math.max(0, toFiniteNumber(req.account?.cash, 0));
+  const frozenCash = Math.max(0, toFiniteNumber(req.account?.frozenCash, 0));
+  const investableRaw = toFiniteNumber(req.account?.investableCash, Number.NaN);
+  const investableCashInput = Number.isFinite(investableRaw)
+    ? ((investableRaw <= 0 && cash > 0 && frozenCash < cash) ? (cash - frozenCash) : investableRaw)
+    : (cash - frozenCash);
+  const investableCash = Math.max(0, Math.min(cash, investableCashInput));
+  if (investableCash < cash) {
+    warnings.push(`检测到冻结/不可投资现金 ${(cash - investableCash).toFixed(2)} ${baseCurrency}`);
+  }
+
   const impliedEquity = Object.entries(holdings).reduce((sum, [symbol, qty]) => sum + qty * (prices[symbol] ?? 0), 0) + cash;
   const totalEquity = Math.max(0, toFiniteNumber(req.account?.totalEquity, impliedEquity));
   const equityPeak = Math.max(totalEquity, toFiniteNumber(req.account?.equityPeak, totalEquity));
@@ -505,7 +655,7 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
 
   const core = rebalanceCore({
     account: {
-      cash,
+      cash: investableCash,
       totalEquity,
     },
     constraints: {
@@ -527,6 +677,7 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
   const blockedOrders: DaaBlockedOrderV1[] = [];
 
   const navCap = totalEquity * maxOrderPctOfNav;
+  const blockBuyByFxGuardrail = fxNeededCount > 0 && (fxCoveragePct < 1 || fxFreshCoveragePct < 1);
 
   for (const order of core.orders) {
     const symbol = normalizeSymbol(order.symbol);
@@ -551,6 +702,10 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     }
     if (riskOffReason && order.side === "BUY") {
       blockedOrders.push({ ...order, blockedBy: riskOffReason });
+      continue;
+    }
+    if (order.side === "BUY" && blockBuyByFxGuardrail && normalizeCcyCode(position?.currency, baseCurrency) !== baseCurrency) {
+      blockedOrders.push({ ...order, blockedBy: "fx_guardrail" });
       continue;
     }
 
@@ -590,6 +745,7 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     ok: true,
     generatedAt,
     summary: {
+      baseCurrency,
       totalEquity,
       triggerThresholdPct,
       shouldRebalance: core.trigger.shouldRebalance,
@@ -598,6 +754,8 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     },
     layers: {
       sensory: {
+        fxCoveragePct: Number((fxCoveragePct * 100).toFixed(2)),
+        fxFreshCoveragePct: Number((fxFreshCoveragePct * 100).toFixed(2)),
         crossMarketExposure,
         liquidityCoveragePct: Number((liquidityCoveragePct * 100).toFixed(2)),
       },
@@ -633,6 +791,7 @@ export function buildDaaUnifiedPlanFromUnknownV1(raw: unknown): DaaUnifiedRespon
 
 export const DAA_UNIFIED_SAMPLE_REQUEST_V1: DaaUnifiedRequestV1 = {
   account: {
+    baseCurrency: "USD",
     cash: 12000,
   },
   constraints: {
@@ -666,6 +825,11 @@ export const DAA_UNIFIED_SAMPLE_REQUEST_V1: DaaUnifiedRequestV1 = {
     { symbol: "QQQ", market: "US", currency: "USD", qty: 22, price: 465, costBasis: 440, liquidityNotional24h: 900000000, tags: ["high"] },
     { symbol: "BND", market: "US", currency: "USD", qty: 35, price: 73, costBasis: 75, liquidityNotional24h: 240000000, tags: ["low", "bond"] },
     { symbol: "TSLA", market: "US", currency: "USD", qty: 12, price: 235, costBasis: 290, liquidityNotional24h: 2800000000, tags: ["high", "high_corr"] },
+  ],
+  fxRates: [
+    { baseCcy: "USD", quoteCcy: "USD", rate: 1, source: "sample", asOfTs: "2026-03-01T00:00:00.000Z" },
+    { baseCcy: "USD", quoteCcy: "CNY", rate: 7.2, source: "sample", asOfTs: "2026-03-01T00:00:00.000Z" },
+    { baseCcy: "USD", quoteCcy: "HKD", rate: 7.8, source: "sample", asOfTs: "2026-03-01T00:00:00.000Z" },
   ],
   analysts: [
     {

@@ -24,6 +24,8 @@ export type RebalanceDecisionV1 = {
   shouldRebalance: boolean;
   createdAt: string;
   orders: ExecutionOrderV1[];
+  requestJson?: Record<string, unknown>;
+  responseJson?: Record<string, unknown>;
 };
 
 export type ConfirmExecutionOrderInputV1 = {

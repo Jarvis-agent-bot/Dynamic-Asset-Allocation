@@ -81,7 +81,7 @@ export default function StrategyPage() {
     setConfig({ ...config, constraints: { ...config.constraints, [key]: val } });
   };
 
-  const updateAccount = <K extends keyof DaaStrategyConfig["account"]>(key: K, val: number | null) => {
+  const updateAccount = <K extends keyof DaaStrategyConfig["account"]>(key: K, val: DaaStrategyConfig["account"][K]) => {
     setConfig({ ...config, account: { ...config.account, [key]: val } });
   };
   const updateRisk = <K extends keyof DaaStrategyConfig["risk"]>(key: K, val: number) => {
@@ -109,17 +109,45 @@ export default function StrategyPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">账户设置</CardTitle>
-            <CardDescription>现金余额与总权益</CardDescription>
+            <CardDescription>资金池与估值基准</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>基准币种</Label>
+              <Input
+                value={config.account.baseCurrency || "USD"}
+                onChange={(e) => updateAccount("baseCurrency", e.target.value.trim().toUpperCase() || "USD")}
+                placeholder="USD / CNY / HKD"
+              />
+            </div>
             <div className="space-y-2">
               <Label>现金余额</Label>
               <Input
                 type="number"
-                value={config.account.cash || ""}
+                value={config.account.cash ?? ""}
                 onChange={(e) => updateAccount("cash", Number(e.target.value) || 0)}
                 placeholder="0"
               />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>可投资现金</Label>
+                <Input
+                  type="number"
+                  value={config.account.investableCash ?? ""}
+                  onChange={(e) => updateAccount("investableCash", Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="默认=现金余额"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>冻结现金</Label>
+                <Input
+                  type="number"
+                  value={config.account.frozenCash ?? ""}
+                  onChange={(e) => updateAccount("frozenCash", Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="0"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>总权益</Label>

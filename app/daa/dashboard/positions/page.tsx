@@ -31,6 +31,25 @@ const MARKETS = ["US", "HK", "CN", "CRYPTO", "OTHER"] as const;
 const CURRENCIES = ["USD", "CNY", "HKD"] as const;
 const TAG_OPTIONS = ["high", "mid", "low", "growth", "bond", "cash", "crypto", "sb"] as const;
 
+type LastRunPlan = {
+  layers?: {
+    humanFactor?: {
+      assetDecisions?: Array<{
+        symbol: string;
+        tier: string;
+      }>;
+    };
+  };
+};
+
+function extractPlan(payload: unknown): LastRunPlan | null {
+  const value = payload as any;
+  if (!value || typeof value !== "object") return null;
+  if (value.layers && typeof value.layers === "object") return value as LastRunPlan;
+  if (value.plan && typeof value.plan === "object" && value.plan.layers) return value.plan as LastRunPlan;
+  return null;
+}
+
 function emptyPosition(): DaaPositionRow {
   return {
     symbol: "",
@@ -238,7 +257,7 @@ export default function PositionsPage() {
   const [syncError, setSyncError] = useState("");
 
   const list = positions ?? [];
-  const result = lastRun as any;
+  const result = extractPlan(lastRun);
   const decisions = result?.layers?.humanFactor?.assetDecisions ?? [];
 
   const totalValue = useMemo(() => list.reduce((sum, p) => sum + p.qty * p.price, 0), [list]);

@@ -6,9 +6,11 @@ import {
   type DaaAssetViewRow,
   type DaaEquitySnapshot,
   type DaaHfFundTrackRow,
+  type DaaFxRateRow,
   type DaaPositionRow,
   type DaaRunHistoryEntry,
   type DaaStrategyConfig,
+  type DaaWatchlistCandidateRow,
   DAA_RUNTIME_DATA_EVENT_V1,
   DEFAULT_STRATEGY_CONFIG,
   readUnifiedInputSliceV1,
@@ -21,14 +23,18 @@ import {
   appendOpLogV1,
   appendEquitySnapshotV1,
   getStrategyConfigV1,
+  listFxRatesV1,
   listDataSourcesV1,
   listEquitySnapshotsV1,
   listOpLogV1,
   listPositionsV1,
   listRunHistoryV1,
+  listWatchlistCandidatesV1,
   replaceDataSourcesV1,
+  replaceWatchlistCandidatesV1,
   replacePositionsV1,
   saveStrategyConfigV1,
+  upsertFxRatesV1,
 } from "@/src/daa/modules/store/storeApiV1";
 import type { DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
 
@@ -147,6 +153,74 @@ export function useHfFundRegistry() {
         configJson: { funds: rows ?? [] },
       },
     ] as any[]).catch(() => {});
+  }, [setValue]);
+
+  return [value, set] as const;
+}
+
+export function useWatchlistCandidates() {
+  const [value, setValue] = useDaaSlice<DaaWatchlistCandidateRow[]>("watchlistCandidates");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const rows = await listWatchlistCandidatesV1();
+        if (cancelled) return;
+        setValue(rows as DaaWatchlistCandidateRow[]);
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  const set = useCallback((rows: DaaWatchlistCandidateRow[] | null) => {
+    setValue(rows);
+    void replaceWatchlistCandidatesV1((rows ?? []) as any[]).catch(() => {});
+  }, [setValue]);
+
+  return [value, set] as const;
+}
+
+export function useFxRates() {
+  const [value, setValue] = useDaaSlice<DaaFxRateRow[]>("fxRates");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const rows = await listFxRatesV1();
+        if (cancelled) return;
+        setValue(rows as DaaFxRateRow[]);
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  const set = useCallback((rows: DaaFxRateRow[] | null) => {
+    setValue(rows);
+    void upsertFxRatesV1((rows ?? []) as any[]).catch(() => {});
   }, [setValue]);
 
   return [value, set] as const;
@@ -356,12 +430,23 @@ export function buildUnifiedRequest(
   config: DaaStrategyConfig,
 ): DaaUnifiedRequestV1 {
   const snapshots = readUnifiedInputSliceV1<DaaEquitySnapshot[]>("equitySnapshots") ?? [];
+  const watchlistCandidates = readUnifiedInputSliceV1<DaaWatchlistCandidateRow[]>("watchlistCandidates") ?? [];
+  const fxRates = readUnifiedInputSliceV1<DaaFxRateRow[]>("fxRates") ?? [];
   const equityPeak = snapshots.reduce((max, row) => Math.max(max, Number(row.equity) || 0), 0);
+  const cash = Math.max(0, Number(config.account.cash) || 0);
+  const frozenCash = Math.max(0, Number(config.account.frozenCash) || 0);
+  const investableRaw = Number(config.account.investableCash);
+  const investableCash = Number.isFinite(investableRaw) && investableRaw > 0
+    ? Math.max(0, Math.min(cash, investableRaw))
+    : Math.max(0, cash - frozenCash);
 
   // analysts/assetViews 为兼容输入，主流程人因信号由基金池采集链路注入。
   return {
     account: {
-      cash: config.account.cash,
+      baseCurrency: config.account.baseCurrency || "USD",
+      cash,
+      investableCash,
+      frozenCash,
       totalEquity: config.account.totalEquity ?? undefined,
       equityPeak: equityPeak > 0 ? equityPeak : undefined,
     },
@@ -389,6 +474,22 @@ export function buildUnifiedRequest(
       costBasis: p.costBasis,
       tags: p.tags,
       liquidityNotional24h: p.liquidityNotional24h,
+    })),
+    watchlistCandidates: watchlistCandidates.map((item) => ({
+      symbol: item.symbol,
+      market: item.market,
+      currency: item.currency,
+      enabled: item.enabled,
+      targetWeightHint: item.targetWeightHint,
+      tags: item.tags,
+      notes: item.notes || undefined,
+    })),
+    fxRates: fxRates.map((item) => ({
+      baseCcy: item.baseCcy,
+      quoteCcy: item.quoteCcy,
+      rate: item.rate,
+      source: item.source,
+      asOfTs: item.asOfTs,
     })),
     risk: {
       maxDrawdownPct: config.risk.maxDrawdownPct,

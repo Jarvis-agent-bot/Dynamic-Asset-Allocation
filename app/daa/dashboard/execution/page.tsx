@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
 import { confirmRebalanceExecutionV1, listRebalanceDecisionsV1 } from "@/src/daa/modules/execution/executionApiV1";
 import type { ExecutionOrderV1, RebalanceDecisionV1 } from "@/src/daa/modules/execution/executionTypesV1";
+import { formatCurrency } from "../_components/daaFormatters";
 
 type EditableOrder = {
   status: ExecutionOrderV1["status"];
@@ -22,6 +23,35 @@ type EditableOrder = {
 
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
 const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
+
+function toFiniteNumber(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+function inferBaseCurrency(decision: RebalanceDecisionV1 | null): string {
+  if (!decision) return "USD";
+  const responseSummary = (decision.responseJson as any)?.summary;
+  const responseBase = String(responseSummary?.baseCurrency || "").trim().toUpperCase();
+  if (responseBase) return responseBase;
+
+  const requestAccount = (decision.requestJson as any)?.account;
+  const requestBase = String(requestAccount?.baseCurrency || "").trim().toUpperCase();
+  if (requestBase) return requestBase;
+
+  return "USD";
+}
+
+function inferCashInput(decision: RebalanceDecisionV1 | null): string {
+  if (!decision) return "";
+  const account = (decision.requestJson as any)?.account;
+  const investable = toFiniteNumber(account?.investableCash);
+  if (investable != null && investable >= 0) return String(investable);
+  const cash = toFiniteNumber(account?.cash);
+  if (cash != null && cash >= 0) return String(cash);
+  return "";
+}
 
 export default function ExecutionPage() {
   const [decisions, setDecisions] = useState<RebalanceDecisionV1[]>([]);
@@ -70,10 +100,12 @@ export default function ExecutionPage() {
     () => decisions.find((d) => d.id === selectedDecisionId) || null,
     [decisions, selectedDecisionId],
   );
+  const selectedBaseCurrency = useMemo(() => inferBaseCurrency(selected), [selected]);
 
   useEffect(() => {
     if (!selected) {
       setOrderEdits({});
+      setCash("");
       return;
     }
 
@@ -88,10 +120,22 @@ export default function ExecutionPage() {
       };
     }
     setOrderEdits(next);
+    setCash(inferCashInput(selected));
   }, [selected?.id]);
 
   async function submitConfirm() {
     if (!selected) return;
+    const cashText = String(cash || "").trim();
+    if (!cashText) {
+      setError("请先填写“回填后现金”，避免误写为 0。");
+      return;
+    }
+    const cashValue = Number(cashText);
+    if (!Number.isFinite(cashValue) || cashValue < 0) {
+      setError("回填后现金必须是大于等于 0 的数字。");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     setSuccess("");
@@ -111,7 +155,7 @@ export default function ExecutionPage() {
 
       await confirmRebalanceExecutionV1({
         decisionId: selected.id,
-        cash: Number(cash || 0),
+        cash: cashValue,
         orders,
       });
 
@@ -194,7 +238,7 @@ export default function ExecutionPage() {
                     <TableRow key={order.orderId}>
                       <TableCell className="font-medium">{order.symbol}</TableCell>
                       <TableCell>{order.side}</TableCell>
-                      <TableCell className="text-right">{order.suggestedNotional.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(order.suggestedNotional, selectedBaseCurrency)}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">
                         {(Number(order.bookedQty || 0)).toFixed(4)}
                       </TableCell>
@@ -301,8 +345,13 @@ export default function ExecutionPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm text-muted-foreground">回填后现金</label>
-            <Input className="h-8 w-44" value={cash} onChange={(e) => setCash(e.target.value)} />
+            <label className="text-sm text-muted-foreground">回填后现金（{selectedBaseCurrency}）</label>
+            <Input
+              className="h-8 w-44"
+              value={cash}
+              onChange={(e) => setCash(e.target.value)}
+              placeholder="请输入回填后现金"
+            />
             <Button type="button" onClick={() => void submitConfirm()} disabled={!selected || submitting}>
               {submitting ? "提交中..." : "确认执行回填"}
             </Button>

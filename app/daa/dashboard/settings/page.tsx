@@ -12,11 +12,14 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
 import {
   getNotificationConfigV1,
+  listFxRatesV1,
   listDataSourcesV1,
   replaceDataSourcesV1,
   saveNotificationConfigV1,
   type StoreDataSourceV1,
+  type StoreFxRateV1,
   type StoreNotificationConfigV1,
+  upsertFxRatesV1,
 } from "@/src/daa/modules/store/storeApiV1";
 
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
@@ -51,8 +54,23 @@ function symbolsToText(value: unknown): string {
     .join(", ");
 }
 
+function normalizeFxPairsInput(text: string): string[] {
+  const tokens = String(text || "")
+    .split(/[\n,，;\s]+/g)
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean);
+
+  const out = new Set<string>();
+  for (const token of tokens) {
+    const pair = token.replace(/-/g, "/");
+    if (/^[A-Z]{3}\/[A-Z]{3}$/.test(pair)) out.add(pair);
+  }
+  return [...out];
+}
+
 export default function SettingsPage() {
   const [dataSources, setDataSources] = useState<StoreDataSourceV1[]>([]);
+  const [fxRates, setFxRates] = useState<StoreFxRateV1[]>([]);
   const [notificationConfig, setNotificationConfig] = useState<StoreNotificationConfigV1>({
     enabled: false,
     notifyOnDrift: true,
@@ -73,9 +91,22 @@ export default function SettingsPage() {
   const [newsProvider, setNewsProvider] = useState("yahoo_rss");
   const [newsQuery, setNewsQuery] = useState("");
 
+  const [fxEnabled, setFxEnabled] = useState(true);
+  const [fxProvider, setFxProvider] = useState("manual");
+  const [fxBaseCurrency, setFxBaseCurrency] = useState("USD");
+  const [fxPairsText, setFxPairsText] = useState("USD/CNY, USD/HKD");
+
+  const [llmEnabled, setLlmEnabled] = useState(false);
+  const [llmProvider, setLlmProvider] = useState("codex");
+  const [llmModel, setLlmModel] = useState("gpt-5-codex");
+  const [llmTimeoutMs, setLlmTimeoutMs] = useState(8000);
+  const [llmEnabledInDecision, setLlmEnabledInDecision] = useState(false);
+
   const [hfConfigRaw, setHfConfigRaw] = useState<Record<string, unknown>>({});
   const [priceConfigRaw, setPriceConfigRaw] = useState<Record<string, unknown>>({});
   const [newsConfigRaw, setNewsConfigRaw] = useState<Record<string, unknown>>({});
+  const [fxConfigRaw, setFxConfigRaw] = useState<Record<string, unknown>>({});
+  const [llmConfigRaw, setLlmConfigRaw] = useState<Record<string, unknown>>({});
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -87,20 +118,26 @@ export default function SettingsPage() {
     setError("");
 
     try {
-      const [rows, notifyConfig] = await Promise.all([
+      const [rows, notifyConfig, rates] = await Promise.all([
         listDataSourcesV1(),
         getNotificationConfigV1(),
+        listFxRatesV1(),
       ]);
 
       setDataSources(rows);
+      setFxRates(rates);
 
       const hfSource = rows.find((row) => row.kind === "hf_fund");
       const priceSource = rows.find((row) => row.kind === "price_feed");
       const newsSource = rows.find((row) => row.kind === "news_feed");
+      const fxSource = rows.find((row) => row.kind === "fx_feed");
+      const llmSource = rows.find((row) => row.kind === "llm_analysis");
 
       const hfConfig = toObject(hfSource?.configJson);
       const priceConfig = toObject(priceSource?.configJson);
       const newsConfig = toObject(newsSource?.configJson);
+      const fxConfig = toObject(fxSource?.configJson);
+      const llmConfig = toObject(llmSource?.configJson);
 
       const funds = Array.isArray(hfConfig.funds) ? hfConfig.funds : [];
       const enabledFunds = funds.filter((item) => Boolean((item as any)?.enabled));
@@ -120,6 +157,19 @@ export default function SettingsPage() {
       setNewsProvider(String(newsConfig.provider || "yahoo_rss").trim() || "yahoo_rss");
       setNewsQuery(String(newsConfig.query || "").trim());
       setNewsConfigRaw(newsConfig);
+
+      setFxEnabled(fxSource?.enabled !== false);
+      setFxProvider(String(fxConfig.provider || "manual").trim() || "manual");
+      setFxBaseCurrency(String(fxConfig.baseCurrency || "USD").trim().toUpperCase() || "USD");
+      setFxPairsText(symbolsToText((fxConfig as any).pairs));
+      setFxConfigRaw(fxConfig);
+
+      setLlmEnabled(llmSource?.enabled === true);
+      setLlmProvider(String(llmConfig.provider || "codex").trim() || "codex");
+      setLlmModel(String(llmConfig.model || "gpt-5-codex").trim() || "gpt-5-codex");
+      setLlmTimeoutMs(toPositiveInt((llmConfig as any).timeoutMs, 8000));
+      setLlmEnabledInDecision(Boolean((llmConfig as any).enabledInDecision));
+      setLlmConfigRaw(llmConfig);
 
       setNotificationConfig({
         enabled: Boolean(notifyConfig?.enabled),
@@ -150,8 +200,15 @@ export default function SettingsPage() {
     setSuccess("");
 
     const symbols = normalizeSymbolsInput(priceSymbolsText);
-    if (!symbols.length) {
+    if (priceEnabled && !symbols.length) {
       setError("价格源至少需要 1 个 symbol。\n可使用逗号、空格或换行分隔。");
+      setSaving(false);
+      return;
+    }
+
+    const fxPairs = normalizeFxPairsInput(fxPairsText);
+    if (fxEnabled && !fxPairs.length) {
+      setError("FX 源至少需要 1 个币对，例如 USD/CNY。");
       setSaving(false);
       return;
     }
@@ -167,6 +224,19 @@ export default function SettingsPage() {
       ...newsConfigRaw,
       provider: newsProvider.trim() || "yahoo_rss",
       query: newsQuery.trim(),
+    };
+    const fxConfig = {
+      ...fxConfigRaw,
+      provider: fxProvider.trim() || "manual",
+      baseCurrency: fxBaseCurrency.trim().toUpperCase() || "USD",
+      pairs: fxPairs,
+    };
+    const llmConfig = {
+      ...llmConfigRaw,
+      provider: llmProvider.trim() || "codex",
+      model: llmModel.trim() || "gpt-5-codex",
+      timeoutMs: toPositiveInt(llmTimeoutMs, 8000),
+      enabledInDecision: llmEnabledInDecision,
     };
 
     const payloadSources: StoreDataSourceV1[] = [
@@ -188,12 +258,25 @@ export default function SettingsPage() {
         enabled: newsEnabled,
         configJson: newsConfig,
       },
+      {
+        id: sourceMap.get("fx_feed")?.id || "fx_feed.default",
+        kind: "fx_feed",
+        enabled: fxEnabled,
+        configJson: fxConfig,
+      },
+      {
+        id: sourceMap.get("llm_analysis")?.id || "llm_analysis.default",
+        kind: "llm_analysis",
+        enabled: llmEnabled,
+        configJson: llmConfig,
+      },
     ];
 
     try {
       await Promise.all([
         replaceDataSourcesV1(payloadSources),
         saveNotificationConfigV1(notificationConfig),
+        upsertFxRatesV1(fxRates),
       ]);
 
       setSuccess("设置已保存。密钥请继续使用环境变量管理。\nTELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID");
@@ -203,6 +286,33 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function updateFxRate(index: number, patch: Partial<StoreFxRateV1>) {
+    setFxRates((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        ...patch,
+      };
+      return next;
+    });
+  }
+
+  function addFxRateRow() {
+    setFxRates((prev) => [
+      ...prev,
+      {
+        baseCcy: fxBaseCurrency || "USD",
+        quoteCcy: "CNY",
+        rate: 7.2,
+        source: "manual",
+      },
+    ]);
+  }
+
+  function removeFxRateRow(index: number) {
+    setFxRates((prev) => prev.filter((_, i) => i !== index));
   }
 
   return (
@@ -310,6 +420,83 @@ export default function SettingsPage() {
                     placeholder="SPY OR QQQ OR TSLA"
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-medium">fx_feed（汇率源）</div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={fxEnabled} onChange={(e) => setFxEnabled(e.target.checked)} />
+                  启用
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Provider</Label>
+                  <Input value={fxProvider} onChange={(e) => setFxProvider(e.target.value)} placeholder="manual / exchangerate_api" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>基准币种</Label>
+                  <Input value={fxBaseCurrency} onChange={(e) => setFxBaseCurrency(e.target.value.toUpperCase())} placeholder="USD" />
+                </div>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                <Label>币对（逗号/空格/换行分隔）</Label>
+                <Input value={fxPairsText} onChange={(e) => setFxPairsText(e.target.value)} placeholder="USD/CNY, USD/HKD, USD/USDT" />
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-medium">llm_analysis（二次分析）</div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={llmEnabled} onChange={(e) => setLlmEnabled(e.target.checked)} />
+                  启用
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Provider</Label>
+                  <Input value={llmProvider} onChange={(e) => setLlmProvider(e.target.value)} placeholder="codex / packycode" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Model</Label>
+                  <Input value={llmModel} onChange={(e) => setLlmModel(e.target.value)} placeholder="gpt-5-codex" />
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>超时（毫秒）</Label>
+                  <Input type="number" min={2000} value={llmTimeoutMs} onChange={(e) => setLlmTimeoutMs(toPositiveInt(e.target.value, 8000))} />
+                </div>
+                <label className="mt-7 flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={llmEnabledInDecision} onChange={(e) => setLlmEnabledInDecision(e.target.checked)} />
+                  运行决策时启用二次分析
+                </label>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">密钥优先从环境变量读取：`OPENAI_API_KEY` 或 `PACKYCODE_API_KEY`。</div>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-medium">汇率快照（手工维护）</div>
+                <Button type="button" variant="outline" size="sm" onClick={addFxRateRow}>新增汇率</Button>
+              </div>
+              <div className="space-y-2">
+                {fxRates.length ? (
+                  fxRates.map((row, index) => (
+                    <div key={`${row.baseCcy}-${row.quoteCcy}-${index}`} className="grid gap-2 rounded border p-2 md:grid-cols-[120px_120px_1fr_120px_56px]">
+                      <Input value={row.baseCcy} onChange={(e) => updateFxRate(index, { baseCcy: e.target.value.toUpperCase() })} placeholder="USD" />
+                      <Input value={row.quoteCcy} onChange={(e) => updateFxRate(index, { quoteCcy: e.target.value.toUpperCase() })} placeholder="CNY" />
+                      <Input type="number" min={0} step="0.0001" value={row.rate} onChange={(e) => updateFxRate(index, { rate: Math.max(0, Number(e.target.value) || 0) })} />
+                      <Input value={row.source} onChange={(e) => updateFxRate(index, { source: e.target.value })} placeholder="manual" />
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeFxRateRow(index)}>删</Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-muted-foreground">暂无汇率，建议至少配置基准币种相关币对。</div>
+                )}
               </div>
             </div>
           </CardContent>

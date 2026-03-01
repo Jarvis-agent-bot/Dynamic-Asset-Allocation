@@ -57,8 +57,34 @@ export type DaaHfFundTrackRow = {
   enabled: boolean;
 };
 
+export type DaaWatchlistCandidateRow = {
+  id?: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  enabled: boolean;
+  targetWeightHint: number;
+  tags: string[];
+  notes?: string | null;
+};
+
+export type DaaFxRateRow = {
+  id?: string;
+  baseCcy: string;
+  quoteCcy: string;
+  rate: number;
+  source: string;
+  asOfTs?: string;
+};
+
 export type DaaStrategyConfig = {
-  account: { cash: number; totalEquity: number | null };
+  account: {
+    baseCurrency: string;
+    cash: number;
+    investableCash: number;
+    frozenCash: number;
+    totalEquity: number | null;
+  };
   constraints: {
     maxPositionPct: number;
     minNotional: number;
@@ -112,6 +138,8 @@ export type UnifiedInputStateV1 = {
   analysts: DaaAnalystRow[] | null;
   assetViews: DaaAssetViewRow[] | null;
   hfFundRegistry: DaaHfFundTrackRow[] | null;
+  watchlistCandidates: DaaWatchlistCandidateRow[] | null;
+  fxRates: DaaFxRateRow[] | null;
   strategyConfig: DaaStrategyConfig | null;
   lastRunResult: unknown | null;
   syncLog: string[] | null;
@@ -127,7 +155,13 @@ function nowIso(): string {
 }
 
 export const DEFAULT_STRATEGY_CONFIG: DaaStrategyConfig = {
-  account: { cash: 0, totalEquity: null },
+  account: {
+    baseCurrency: "USD",
+    cash: 0,
+    investableCash: 0,
+    frozenCash: 0,
+    totalEquity: null,
+  },
   constraints: {
     maxPositionPct: 1,
     minNotional: 200,
@@ -180,6 +214,8 @@ function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
     analysts: null,
     assetViews: null,
     hfFundRegistry: null,
+    watchlistCandidates: null,
+    fxRates: null,
     strategyConfig: null,
     lastRunResult: null,
     syncLog: null,

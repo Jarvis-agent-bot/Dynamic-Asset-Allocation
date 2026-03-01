@@ -106,4 +106,104 @@ describe("unified-rebalance-v1", () => {
     expect(aaa!.tier).toBe("elite");
     expect(result.summary.triggerThresholdPct).toBe(0.1);
   });
+
+  it("investableCash=0 且存在可用现金时，默认按 cash-frozen 参与下单", () => {
+    const req = baseRequest();
+    req.account = {
+      baseCurrency: "USD",
+      cash: 1000,
+      investableCash: 0,
+      frozenCash: 100,
+    };
+    req.targetWeights = { AAA: 1 };
+    req.positions = [{ symbol: "AAA", qty: 0, price: 100, tags: ["mid"], liquidityNotional24h: 500000 }];
+    req.analysts = [];
+    req.assetViews = [];
+
+    const result = buildDaaUnifiedPlanV1(req);
+    const buy = result.executableOrders.find((item) => item.symbol === "AAA" && item.side === "BUY");
+
+    expect(buy).toBeTruthy();
+    expect(buy!.notional).toBeGreaterThan(0);
+  });
+
+  it("跨币种场景会先把成本价换算到基准币，再计算止损告警", () => {
+    const req = baseRequest();
+    req.account = {
+      baseCurrency: "CNY",
+      cash: 0,
+    };
+    req.risk = {
+      maxDrawdownPct: 0.5,
+      perAssetStopLossPct: 0.05,
+      maxConcentrationPct: 1,
+      correlationCapPct: 1,
+      maxTotalRiskExposurePct: 1,
+    };
+    req.targetWeights = { USX: 1 };
+    req.positions = [
+      {
+        symbol: "USX",
+        market: "US",
+        currency: "USD",
+        qty: 1,
+        price: 100,
+        costBasis: 110,
+        tags: ["mid"],
+        liquidityNotional24h: 1000000,
+      },
+    ];
+    req.fxRates = [
+      {
+        baseCcy: "USD",
+        quoteCcy: "CNY",
+        rate: 7,
+        source: "test",
+        asOfTs: new Date().toISOString(),
+      },
+    ];
+    req.analysts = [];
+    req.assetViews = [];
+
+    const result = buildDaaUnifiedPlanV1(req);
+
+    expect(result.warnings.some((item) => item.includes("触发止损线"))).toBe(true);
+  });
+
+  it("跨币种 FX 过期时会阻断非基准币种 BUY 订单", () => {
+    const req = baseRequest();
+    req.account = {
+      baseCurrency: "USD",
+      cash: 1200,
+      investableCash: 1200,
+    };
+    req.targetWeights = { "0700.HK": 1 };
+    req.positions = [
+      {
+        symbol: "0700.HK",
+        market: "HK",
+        currency: "HKD",
+        qty: 0,
+        price: 300,
+        tags: ["mid"],
+        liquidityNotional24h: 1000000,
+      },
+    ];
+    req.fxRates = [
+      {
+        baseCcy: "USD",
+        quoteCcy: "HKD",
+        rate: 7.8,
+        source: "test",
+        asOfTs: "2024-01-01T00:00:00.000Z",
+      },
+    ];
+    req.analysts = [];
+    req.assetViews = [];
+
+    const result = buildDaaUnifiedPlanV1(req);
+    const blocked = result.blockedOrders.find((item) => item.symbol === "0700.HK" && item.side === "BUY");
+
+    expect(blocked?.blockedBy).toBe("fx_guardrail");
+  });
 });

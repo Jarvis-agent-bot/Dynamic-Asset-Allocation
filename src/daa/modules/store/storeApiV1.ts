@@ -22,7 +22,7 @@ export type StoreEquitySnapshotV1 = {
   source: string;
 };
 
-export type StoreDataSourceKindV1 = "hf_fund" | "price_feed" | "news_feed";
+export type StoreDataSourceKindV1 = "hf_fund" | "price_feed" | "news_feed" | "fx_feed" | "llm_analysis";
 
 export type StoreDataSourceV1 = {
   id: string;
@@ -55,6 +55,29 @@ export type StoreOpLogEntryV1 = {
   level: "info" | "warn" | "error";
   message: string;
   contextJson: Record<string, unknown>;
+};
+
+export type StoreWatchlistCandidateV1 = {
+  id?: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  enabled: boolean;
+  targetWeightHint: number;
+  tags: string[];
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type StoreFxRateV1 = {
+  id?: string;
+  baseCcy: string;
+  quoteCcy: string;
+  rate: number;
+  source: string;
+  asOfTs?: string;
+  updatedAt?: string;
 };
 
 export async function listPositionsV1(): Promise<StorePositionV1[]> {
@@ -184,4 +207,38 @@ export async function appendOpLogV1(input: {
     body: JSON.stringify(input),
   });
   return data.entry;
+}
+
+export async function listWatchlistCandidatesV1(): Promise<StoreWatchlistCandidateV1[]> {
+  const data = await requestDataV1<{ candidates: StoreWatchlistCandidateV1[] }>("/api/daa/store/watchlist-candidates", {
+    method: "GET",
+    cache: "no-store",
+  });
+  return Array.isArray(data.candidates) ? data.candidates : [];
+}
+
+export async function replaceWatchlistCandidatesV1(candidates: StoreWatchlistCandidateV1[]): Promise<StoreWatchlistCandidateV1[]> {
+  const data = await requestDataV1<{ candidates: StoreWatchlistCandidateV1[] }>("/api/daa/store/watchlist-candidates", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ candidates }),
+  });
+  return Array.isArray(data.candidates) ? data.candidates : [];
+}
+
+export async function listFxRatesV1(): Promise<StoreFxRateV1[]> {
+  const data = await requestDataV1<{ rates: StoreFxRateV1[] }>("/api/daa/store/fx-rates", {
+    method: "GET",
+    cache: "no-store",
+  });
+  return Array.isArray(data.rates) ? data.rates : [];
+}
+
+export async function upsertFxRatesV1(rates: StoreFxRateV1[]): Promise<StoreFxRateV1[]> {
+  const data = await requestDataV1<{ rates: StoreFxRateV1[] }>("/api/daa/store/fx-rates", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ rates }),
+  });
+  return Array.isArray(data.rates) ? data.rates : [];
 }

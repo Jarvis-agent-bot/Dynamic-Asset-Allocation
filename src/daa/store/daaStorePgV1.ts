@@ -76,7 +76,7 @@ export type DaaStoreEquitySnapshotV1 = {
 
 export type DaaStoreDataSourceV1 = {
   id: string;
-  kind: "hf_fund" | "price_feed" | "news_feed";
+  kind: "hf_fund" | "price_feed" | "news_feed" | "fx_feed" | "llm_analysis";
   configJson: Record<string, unknown>;
   enabled: boolean;
   createdAt: string;
@@ -152,6 +152,29 @@ export type DaaStoreOpLogEntryV1 = {
   contextJson: Record<string, unknown>;
 };
 
+export type DaaStoreWatchlistCandidateV1 = {
+  id: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  enabled: boolean;
+  targetWeightHint: number;
+  tags: string[];
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DaaStoreFxRateV1 = {
+  id: string;
+  baseCcy: string;
+  quoteCcy: string;
+  rate: number;
+  source: string;
+  asOfTs: string;
+  updatedAt: string;
+};
+
 const DEFAULT_DATA_SOURCES_V1: DaaStoreDataSourceV1[] = [
   {
     id: "hf_fund.default",
@@ -192,10 +215,41 @@ const DEFAULT_DATA_SOURCES_V1: DaaStoreDataSourceV1[] = [
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
+  {
+    id: "fx_feed.default",
+    kind: "fx_feed",
+    configJson: {
+      provider: "manual",
+      baseCurrency: "USD",
+      pairs: ["USD/CNY", "USD/HKD", "USD/USDT"],
+    },
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "llm_analysis.default",
+    kind: "llm_analysis",
+    configJson: {
+      provider: "codex",
+      model: "gpt-5-codex",
+      enabledInDecision: false,
+      timeoutMs: 8000,
+    },
+    enabled: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
 ];
 
 export const DEFAULT_STRATEGY_CONFIG_V1 = {
-  account: { cash: 0, totalEquity: null },
+  account: {
+    baseCurrency: "USD",
+    cash: 0,
+    investableCash: 0,
+    frozenCash: 0,
+    totalEquity: null,
+  },
   constraints: {
     maxPositionPct: 1,
     minNotional: 200,
@@ -368,6 +422,35 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
 
           CREATE INDEX IF NOT EXISTS idx_daa_op_log_ts_desc
             ON daa_op_log(ts DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_watchlist_candidates (
+            id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'US',
+            currency TEXT NOT NULL DEFAULT 'USD',
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            target_weight_hint NUMERIC NOT NULL DEFAULT 0,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_watchlist_candidates_symbol_market
+            ON daa_watchlist_candidates(symbol, market);
+
+          CREATE TABLE IF NOT EXISTS daa_fx_rates (
+            id TEXT PRIMARY KEY,
+            base_ccy TEXT NOT NULL,
+            quote_ccy TEXT NOT NULL,
+            rate NUMERIC NOT NULL,
+            source TEXT NOT NULL DEFAULT 'manual',
+            as_of_ts TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_fx_rates_pair
+            ON daa_fx_rates(base_ccy, quote_ccy);
         `);
 
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ");
@@ -392,6 +475,16 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
             [source.id, source.kind, JSON.stringify(source.configJson), source.enabled],
           );
         }
+
+        await query(
+          "INSERT INTO daa_fx_rates (id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at) VALUES ('USD/USD', 'USD', 'USD', 1, 'bootstrap', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        );
+        await query(
+          "INSERT INTO daa_fx_rates (id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at) VALUES ('USD/CNY', 'USD', 'CNY', 7.2, 'bootstrap', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        );
+        await query(
+          "INSERT INTO daa_fx_rates (id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at) VALUES ('USD/HKD', 'USD', 'HKD', 7.8, 'bootstrap', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        );
 
         await query("COMMIT");
       } catch (error) {
@@ -616,6 +709,179 @@ export async function replaceDaaDataSourcesV1(rows: DaaStoreDataSourceV1[]): Pro
 
     const result = await query("SELECT id, kind, config_json, enabled, created_at, updated_at FROM daa_data_sources ORDER BY kind ASC, id ASC");
     return result.rows.map((row) => mapDataSourceRowV1(row as Record<string, unknown>));
+  });
+}
+
+function mapWatchlistCandidateRowV1(row: Record<string, unknown>): DaaStoreWatchlistCandidateV1 {
+  return {
+    id: normalizeText(row.id),
+    symbol: normalizeText(row.symbol).toUpperCase(),
+    market: normalizeText(row.market, "US").toUpperCase(),
+    currency: normalizeText(row.currency, "USD").toUpperCase(),
+    enabled: Boolean(row.enabled),
+    targetWeightHint: Math.max(0, toFiniteNumber(row.target_weight_hint)),
+    tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
+    notes: row.notes == null ? null : normalizeText(row.notes) || null,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+export async function listDaaWatchlistCandidatesV1(): Promise<DaaStoreWatchlistCandidateV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const result = await query(
+      "SELECT id, symbol, market, currency, enabled, target_weight_hint, tags, notes, created_at, updated_at FROM daa_watchlist_candidates ORDER BY symbol ASC, market ASC",
+    );
+    return result.rows.map((row) => mapWatchlistCandidateRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function replaceDaaWatchlistCandidatesV1(
+  rows: Array<Partial<DaaStoreWatchlistCandidateV1>>,
+): Promise<DaaStoreWatchlistCandidateV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      await query("DELETE FROM daa_watchlist_candidates");
+      for (const raw of rows) {
+        const symbol = normalizeText(raw.symbol).toUpperCase();
+        if (!symbol) continue;
+        const market = normalizeText(raw.market, "US").toUpperCase();
+        const currency = normalizeText(raw.currency, "USD").toUpperCase();
+        const id = normalizeText(raw.id, `${symbol}__${market}`);
+        const enabled = raw.enabled !== false;
+        const targetWeightHint = Math.max(0, toFiniteNumber(raw.targetWeightHint));
+        const tags = Array.isArray(raw.tags) ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
+        const notes = normalizeText(raw.notes || "");
+
+        await query(
+          "INSERT INTO daa_watchlist_candidates (id, symbol, market, currency, enabled, target_weight_hint, tags, notes, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())",
+          [id, symbol, market, currency, enabled, targetWeightHint, tags, notes || null],
+        );
+      }
+      await query("COMMIT");
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+
+    const result = await query(
+      "SELECT id, symbol, market, currency, enabled, target_weight_hint, tags, notes, created_at, updated_at FROM daa_watchlist_candidates ORDER BY symbol ASC, market ASC",
+    );
+    return result.rows.map((row) => mapWatchlistCandidateRowV1(row as Record<string, unknown>));
+  });
+}
+
+function normalizeCcyCode(value: unknown, fallback = "USD"): string {
+  const code = normalizeText(value, fallback).toUpperCase();
+  return code || fallback;
+}
+
+function normalizeFxPair(baseCcy: string, quoteCcy: string): string {
+  return `${normalizeCcyCode(baseCcy)}/${normalizeCcyCode(quoteCcy)}`;
+}
+
+function mapFxRateRowV1(row: Record<string, unknown>): DaaStoreFxRateV1 {
+  return {
+    id: normalizeText(row.id),
+    baseCcy: normalizeCcyCode(row.base_ccy),
+    quoteCcy: normalizeCcyCode(row.quote_ccy),
+    rate: Math.max(0, toFiniteNumber(row.rate)),
+    source: normalizeText(row.source, "manual"),
+    asOfTs: toIsoString(row.as_of_ts),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+export async function listDaaFxRatesV1(): Promise<DaaStoreFxRateV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const result = await query(
+      "SELECT id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at FROM daa_fx_rates ORDER BY base_ccy ASC, quote_ccy ASC",
+    );
+    return result.rows.map((row) => mapFxRateRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function replaceDaaFxRatesV1(rows: Array<Partial<DaaStoreFxRateV1>>): Promise<DaaStoreFxRateV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      await query("DELETE FROM daa_fx_rates");
+      const dedup = new Map<string, { id: string; baseCcy: string; quoteCcy: string; rate: number; source: string; asOfTs: string }>();
+      for (const raw of rows) {
+        const baseCcy = normalizeCcyCode(raw.baseCcy, "USD");
+        const quoteCcy = normalizeCcyCode(raw.quoteCcy, "USD");
+        const rate = Math.max(0, toFiniteNumber(raw.rate));
+        if (rate <= 0) continue;
+        const pair = normalizeFxPair(baseCcy, quoteCcy);
+        const id = normalizeText(raw.id, pair);
+        const source = normalizeText(raw.source, "manual");
+        const asOfTs = toIsoString(raw.asOfTs, new Date().toISOString());
+        dedup.set(pair, { id, baseCcy, quoteCcy, rate, source, asOfTs });
+      }
+
+      for (const row of dedup.values()) {
+        await query(
+          "INSERT INTO daa_fx_rates (id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at) VALUES ($1,$2,$3,$4,$5,$6,NOW())",
+          [row.id, row.baseCcy, row.quoteCcy, row.rate, row.source, row.asOfTs],
+        );
+      }
+      await query("COMMIT");
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+    const result = await query(
+      "SELECT id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at FROM daa_fx_rates ORDER BY base_ccy ASC, quote_ccy ASC",
+    );
+    return result.rows.map((row) => mapFxRateRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertDaaFxRatesV1(rows: Array<Partial<DaaStoreFxRateV1>>): Promise<DaaStoreFxRateV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      for (const raw of rows) {
+        const baseCcy = normalizeCcyCode(raw.baseCcy, "USD");
+        const quoteCcy = normalizeCcyCode(raw.quoteCcy, "USD");
+        const rate = Math.max(0, toFiniteNumber(raw.rate));
+        if (rate <= 0) continue;
+        const id = normalizeText(raw.id, normalizeFxPair(baseCcy, quoteCcy));
+        const source = normalizeText(raw.source, "manual");
+        const asOfTs = toIsoString(raw.asOfTs, new Date().toISOString());
+
+        await query(
+          "INSERT INTO daa_fx_rates (id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at) VALUES ($1,$2,$3,$4,$5,$6,NOW()) ON CONFLICT (id) DO UPDATE SET base_ccy = EXCLUDED.base_ccy, quote_ccy = EXCLUDED.quote_ccy, rate = EXCLUDED.rate, source = EXCLUDED.source, as_of_ts = EXCLUDED.as_of_ts, updated_at = NOW()",
+          [id, baseCcy, quoteCcy, rate, source, asOfTs],
+        );
+      }
+      await query("COMMIT");
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+    const result = await query(
+      "SELECT id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at FROM daa_fx_rates ORDER BY base_ccy ASC, quote_ccy ASC",
+    );
+    return result.rows.map((row) => mapFxRateRowV1(row as Record<string, unknown>));
   });
 }
 
