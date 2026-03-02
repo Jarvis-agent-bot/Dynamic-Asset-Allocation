@@ -81,4 +81,62 @@ describe("backtestDriftRebalance", () => {
     const tp = (res.timeline || []).find((t) => t.date === "2026-01-02");
     expect(tp?.trigger.shouldRebalance).toBe(true);
   });
+
+  it("supports T+1 execution timing (signal day and fill day are different)", () => {
+    const seriesBySymbol = {
+      AAA: [
+        { date: "2026-01-01", close: 1 },
+        { date: "2026-01-02", close: 2 },
+        { date: "2026-01-03", close: 2 },
+        { date: "2026-01-04", close: 2 },
+      ],
+      BBB: [
+        { date: "2026-01-01", close: 1 },
+        { date: "2026-01-02", close: 1 },
+        { date: "2026-01-03", close: 1 },
+        { date: "2026-01-04", close: 1 },
+      ],
+    };
+
+    const res = backtestDriftRebalance({
+      seriesBySymbol,
+      targetWeights: { AAA: 0.5, BBB: 0.5 },
+      initialEquity: 100,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0.1, minTradeNotional: 0 },
+      execution: {
+        timing: "t_plus_1_close",
+      },
+    });
+
+    const rebalanceEvents = res.events.filter((event) => event.kind === "rebalance");
+    expect(rebalanceEvents.length).toBe(1);
+    expect(rebalanceEvents[0].signalDate).toBe("2026-01-02");
+    expect(rebalanceEvents[0].date).toBe("2026-01-03");
+    expect(rebalanceEvents[0].executionTiming).toBe("t_plus_1_close");
+  });
+
+  it("applies fee and slippage costs into turnover summary", () => {
+    const res = backtestDriftRebalance({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 1 },
+          { date: "2026-01-02", close: 1 },
+          { date: "2026-01-03", close: 1 },
+        ],
+      },
+      targetWeights: { AAA: 1 },
+      initialEquity: 100,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0.2, minTradeNotional: 0 },
+      execution: {
+        timing: "same_bar_close",
+        feeRatePct: 0.01,
+        slippageBps: 100,
+      },
+    });
+
+    expect(res.summary.totalFeesAbs).toBeGreaterThan(0);
+    expect(res.summary.initialEquityAbs).toBeLessThan(100);
+  });
 });

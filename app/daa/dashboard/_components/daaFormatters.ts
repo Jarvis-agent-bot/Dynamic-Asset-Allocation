@@ -10,10 +10,12 @@ export function formatNotional(v: number): string {
 
 export function formatCurrency(v: number, currency = "USD"): string {
   if (!Number.isFinite(v)) return "$0";
+  const normalized = String(currency || "USD").trim().toUpperCase();
+  const displayCurrency = normalized === "RMB" ? "CNY" : normalized;
   try {
-    return v.toLocaleString("en-US", { style: "currency", currency, maximumFractionDigits: 0 });
+    return v.toLocaleString("en-US", { style: "currency", currency: displayCurrency, maximumFractionDigits: 0 });
   } catch {
-    return `$${Math.round(v).toLocaleString()}`;
+    return `${displayCurrency} ${Math.round(v).toLocaleString()}`;
   }
 }
 

@@ -9,7 +9,6 @@ export type StorePositionV1 = {
   price: number;
   costBasis?: number | null;
   tags: string[];
-  liquidityNotional24h: number;
 };
 
 export type StoreStrategyConfigV1 = Record<string, unknown>;
@@ -78,6 +77,44 @@ export type StoreFxRateV1 = {
   source: string;
   asOfTs?: string;
   updatedAt?: string;
+};
+
+export type PullDailyFxSnapshotResultV1 = {
+  pulledAt: string;
+  day: string;
+  alreadyPulledToday: boolean;
+  updatedPairs?: string[];
+  skippedPairs?: string[];
+  rates: StoreFxRateV1[];
+};
+
+export type StoreCashLedgerEntryV1 = {
+  id: string;
+  ts: string;
+  side: "deposit" | "withdraw";
+  amount: number;
+  baseCurrency: string;
+  note?: string | null;
+  createdAt?: string;
+};
+
+export type StoreCashLedgerApplyInputV1 = {
+  side: "deposit" | "withdraw";
+  amount: number;
+  baseCurrency?: string;
+  note?: string;
+};
+
+export type StoreCashLedgerApplyResultV1 = {
+  entry: StoreCashLedgerEntryV1;
+  account: {
+    baseCurrency: string;
+    cash: number;
+    investableCash: number;
+    frozenCash: number;
+    totalEquity: number | null;
+  };
+  equitySnapshot: StoreEquitySnapshotV1;
 };
 
 export async function listPositionsV1(): Promise<StorePositionV1[]> {
@@ -241,4 +278,31 @@ export async function upsertFxRatesV1(rates: StoreFxRateV1[]): Promise<StoreFxRa
     body: JSON.stringify({ rates }),
   });
   return Array.isArray(data.rates) ? data.rates : [];
+}
+
+export async function pullDailyFxSnapshotV1(input: {
+  pairs: string[];
+  baseCurrency: string;
+}): Promise<PullDailyFxSnapshotResultV1> {
+  return requestDataV1<PullDailyFxSnapshotResultV1>("/api/daa/market/yfinance/fx-snapshot", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listCashLedgerV1(limit = 100): Promise<StoreCashLedgerEntryV1[]> {
+  const data = await requestDataV1<{ entries: StoreCashLedgerEntryV1[] }>(
+    `/api/daa/store/cash-ledger?limit=${Math.max(1, Math.trunc(limit))}`,
+    { method: "GET", cache: "no-store" },
+  );
+  return Array.isArray(data.entries) ? data.entries : [];
+}
+
+export async function appendCashLedgerEntryV1(input: StoreCashLedgerApplyInputV1): Promise<StoreCashLedgerApplyResultV1> {
+  return requestDataV1<StoreCashLedgerApplyResultV1>("/api/daa/store/cash-ledger", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
 }

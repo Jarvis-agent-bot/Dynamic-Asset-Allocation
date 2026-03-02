@@ -1,11 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  DEPRECATED_STORAGE_KEYS_V1,
   bootstrapUnifiedInputRuntimeV1,
-  cleanupDeprecatedStorageKeysV1,
   loadUnifiedInputStateV1,
-  saveUnifiedMoneyPlanV1,
+  writeUnifiedInputSliceV1,
 } from "../../../app/daa/unifiedInputStore";
 
 afterEach(() => {
@@ -17,8 +15,8 @@ describe("unifiedInputStore v1", () => {
     const st = loadUnifiedInputStateV1();
 
     expect(st.schemaVersion).toBe(1);
-    expect(st.moneyPlan).toBeNull();
-    expect(st.marketEvents).toBeNull();
+    expect(st.positions).toBeNull();
+    expect(st.strategyConfig).toBeNull();
   });
 
   it("统一写入走内存状态，不依赖 localStorage", () => {
@@ -31,15 +29,13 @@ describe("unifiedInputStore v1", () => {
       dispatchEvent: () => true,
     };
 
-    saveUnifiedMoneyPlanV1({ id: "u1", name: "Alice" }, { dispatchEvent: false });
+    writeUnifiedInputSliceV1("positions", [{ symbol: "SPY", market: "US", currency: "USD", qty: 2, price: 600, tags: [] }], { dispatchEvent: false });
     const st = loadUnifiedInputStateV1();
 
-    expect(st.moneyPlan).toEqual({ id: "u1", name: "Alice" });
+    expect(st.positions).toEqual([{ symbol: "SPY", market: "US", currency: "USD", qty: 2, price: 600, tags: [] }]);
   });
 
-  it("历史 key 清理函数保留但不再做浏览器存储操作", () => {
-    expect(DEPRECATED_STORAGE_KEYS_V1.length).toBeGreaterThan(0);
-    expect(cleanupDeprecatedStorageKeysV1()).toEqual([]);
+  it("运行时引导只维护内存态，不触达浏览器存储", () => {
     expect(() => bootstrapUnifiedInputRuntimeV1({ dispatchEvent: false })).not.toThrow();
   });
 });

@@ -60,7 +60,6 @@ function emptyPosition(): DaaPositionRow {
     price: 0,
     costBasis: 0,
     tags: [],
-    liquidityNotional24h: 0,
   };
 }
 
@@ -206,17 +205,6 @@ function PositionFormDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>
-              24h 流动性（名义金额）
-              <span className="ml-1 text-xs font-normal text-muted-foreground">用于流动性风险评估</span>
-            </Label>
-            <Input
-              type="number"
-              value={form.liquidityNotional24h || ""}
-              onChange={(e) => update("liquidityNotional24h", Number(e.target.value) || 0)}
-            />
-          </div>
-          <div className="space-y-1.5">
             <Label>Tags</Label>
             <div className="flex flex-wrap gap-1.5">
               {TAG_OPTIONS.map((tag) => {
@@ -271,7 +259,6 @@ function ImportDialog({ onImport }: { onImport: (rows: DaaPositionRow[]) => void
         price: Number(item.price) || 0,
         costBasis: Number(item.costBasis) || 0,
         tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
-        liquidityNotional24h: Number(item.liquidityNotional24h) || 0,
       })).filter((r) => r.symbol);
 
       if (!rows.length) {

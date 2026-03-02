@@ -260,7 +260,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           </CardHeader>
           <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button type="button" className="w-full sm:w-auto" onClick={() => window.location.assign(safeReturnTo)}>
-              {redirectingToConsole ? "正在进入控制台..." : "进入控制台"}
+              {redirectingToConsole ? "正在进入资产首页..." : "进入资产首页"}
             </Button>
             <Button type="button" className="w-full sm:w-auto" variant="secondary" onClick={() => void refreshSession()} disabled={refreshingSession}>
               {refreshingSession ? "刷新中..." : "刷新会话"}

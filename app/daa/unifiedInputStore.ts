@@ -2,25 +2,6 @@
 
 export const DAA_RUNTIME_DATA_EVENT_V1 = "daa:data:updated";
 
-// 兼容保留：老 localStorage key 已下线，不再读写。
-export const LS_UNIFIED_INPUT_V1 = "daa.unified.input.v1";
-export const LS_UNIFIED_MIGRATION_MARK_V1 = "daa.unified.input.migrated.v1";
-
-// 兼容保留：仅作为历史说明，不再执行清理逻辑。
-export const DEPRECATED_STORAGE_KEYS_V1 = [
-  "daa.wizard.moneyPlan",
-  "daa.wizard.marketEvents",
-  "daa.step6.humanProfile",
-  "daa.portfolio.state",
-  "daa.targetWeights",
-  "daa.priceSnapshot.v1",
-  "daa.wizard.rebalanceRequest",
-  "daa.wizard.rebalanceResponse",
-  "holdings",
-] as const;
-
-export type UnifiedInputDeprecatedKeyV1 = (typeof DEPRECATED_STORAGE_KEYS_V1)[number];
-
 export type DaaPositionRow = {
   symbol: string;
   market: string;
@@ -29,7 +10,6 @@ export type DaaPositionRow = {
   price: number;
   costBasis?: number;
   tags: string[];
-  liquidityNotional24h: number;
 };
 
 export type DaaAnalystRow = {
@@ -89,7 +69,6 @@ export type DaaStrategyConfig = {
     maxPositionPct: number;
     minNotional: number;
     maxOrderPctOfNav: number;
-    maxOrderPctOfLiquidity: number;
   };
   policy: {
     baseDriftTriggerPct: number;
@@ -121,19 +100,21 @@ export type DaaEquitySnapshot = {
   equity: number;
   holdingsValue: number;
   cash: number;
-  source: "auto" | "run" | "refresh";
+  source: "auto" | "run" | "refresh" | "execution_event" | "cash_ledger";
+};
+
+export type DaaCashLedgerEntry = {
+  id: string;
+  ts: string;
+  side: "deposit" | "withdraw";
+  amount: number;
+  baseCurrency: string;
+  note?: string | null;
 };
 
 export type UnifiedInputStateV1 = {
   schemaVersion: 1;
   updatedAt: string;
-  moneyPlan: unknown | null;
-  marketEvents: unknown | null;
-  humanProfile: unknown | null;
-  portfolioState: unknown | null;
-  targetWeightsState: unknown | null;
-  priceSnapshot: unknown | null;
-  unifiedRequestDraft: unknown | null;
   positions: DaaPositionRow[] | null;
   analysts: DaaAnalystRow[] | null;
   assetViews: DaaAssetViewRow[] | null;
@@ -145,6 +126,7 @@ export type UnifiedInputStateV1 = {
   syncLog: string[] | null;
   runHistory: DaaRunHistoryEntry[] | null;
   equitySnapshots: DaaEquitySnapshot[] | null;
+  cashLedger: DaaCashLedgerEntry[] | null;
   opLog: string[] | null;
 };
 
@@ -166,7 +148,6 @@ export const DEFAULT_STRATEGY_CONFIG: DaaStrategyConfig = {
     maxPositionPct: 1,
     minNotional: 200,
     maxOrderPctOfNav: 0.1,
-    maxOrderPctOfLiquidity: 0.15,
   },
   policy: {
     baseDriftTriggerPct: 0.05,
@@ -203,13 +184,6 @@ function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
   return {
     schemaVersion: 1,
     updatedAt: nowIso(),
-    moneyPlan: null,
-    marketEvents: null,
-    humanProfile: null,
-    portfolioState: null,
-    targetWeightsState: null,
-    priceSnapshot: null,
-    unifiedRequestDraft: null,
     positions: null,
     analysts: null,
     assetViews: null,
@@ -221,6 +195,7 @@ function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
     syncLog: null,
     runHistory: null,
     equitySnapshots: null,
+    cashLedger: null,
     opLog: null,
   };
 }
@@ -251,10 +226,6 @@ function dispatchDataEventV1() {
   }
 }
 
-export function cleanupDeprecatedStorageKeysV1(): string[] {
-  return [];
-}
-
 export function bootstrapUnifiedInputRuntimeV1(opts: { dispatchEvent?: boolean } = {}): UnifiedInputStateV1 {
   const current = getMutableStateV1();
   if (opts.dispatchEvent !== false) dispatchDataEventV1();
@@ -267,7 +238,7 @@ export function loadUnifiedInputStateV1(): UnifiedInputStateV1 {
 
 export function saveUnifiedInputStateV1(
   nextState: UnifiedInputStateV1,
-  opts: { dispatchEvent?: boolean; cleanupDeprecatedKeys?: boolean } = {},
+  opts: { dispatchEvent?: boolean } = {},
 ): UnifiedInputStateV1 {
   const current = getMutableStateV1();
   const next: UnifiedInputStateV1 = {
@@ -283,7 +254,7 @@ export function saveUnifiedInputStateV1(
 
 export function patchUnifiedInputStateV1(
   patch: Partial<Omit<UnifiedInputStateV1, "schemaVersion" | "updatedAt">>,
-  opts: { dispatchEvent?: boolean; cleanupDeprecatedKeys?: boolean } = {},
+  opts: { dispatchEvent?: boolean } = {},
 ): UnifiedInputStateV1 {
   const current = getMutableStateV1();
   const next: UnifiedInputStateV1 = {
@@ -305,80 +276,7 @@ export function readUnifiedInputSliceV1<T = unknown>(sliceKey: UnifiedInputSlice
 export function writeUnifiedInputSliceV1(
   sliceKey: UnifiedInputSliceKeyV1,
   value: unknown,
-  opts: { dispatchEvent?: boolean; cleanupDeprecatedKeys?: boolean } = {},
+  opts: { dispatchEvent?: boolean } = {},
 ): UnifiedInputStateV1 {
   return patchUnifiedInputStateV1({ [sliceKey]: value ?? null }, opts);
-}
-
-export function saveUnifiedRequestDraftV1(request: unknown, opts: { dispatchEvent?: boolean } = {}) {
-  writeUnifiedInputSliceV1("unifiedRequestDraft", request ?? null, {
-    dispatchEvent: opts.dispatchEvent,
-    cleanupDeprecatedKeys: false,
-  });
-}
-
-export function loadUnifiedMoneyPlanV1<T = unknown>(): T | null {
-  return readUnifiedInputSliceV1<T>("moneyPlan");
-}
-
-export function saveUnifiedMoneyPlanV1(value: unknown, opts: { dispatchEvent?: boolean } = {}) {
-  writeUnifiedInputSliceV1("moneyPlan", value, {
-    dispatchEvent: opts.dispatchEvent,
-    cleanupDeprecatedKeys: false,
-  });
-}
-
-export function loadUnifiedMarketEventsV1<T = unknown>(): T | null {
-  return readUnifiedInputSliceV1<T>("marketEvents");
-}
-
-export function saveUnifiedMarketEventsV1(value: unknown, opts: { dispatchEvent?: boolean } = {}) {
-  writeUnifiedInputSliceV1("marketEvents", value, {
-    dispatchEvent: opts.dispatchEvent,
-    cleanupDeprecatedKeys: false,
-  });
-}
-
-export function loadUnifiedHumanProfileV1<T = unknown>(): T | null {
-  return readUnifiedInputSliceV1<T>("humanProfile");
-}
-
-export function saveUnifiedHumanProfileV1(value: unknown, opts: { dispatchEvent?: boolean } = {}) {
-  writeUnifiedInputSliceV1("humanProfile", value, {
-    dispatchEvent: opts.dispatchEvent,
-    cleanupDeprecatedKeys: false,
-  });
-}
-
-export function loadUnifiedPortfolioStateV1<T = unknown>(): T | null {
-  return readUnifiedInputSliceV1<T>("portfolioState");
-}
-
-export function saveUnifiedPortfolioStateV1(value: unknown, opts: { dispatchEvent?: boolean } = {}) {
-  writeUnifiedInputSliceV1("portfolioState", value, {
-    dispatchEvent: opts.dispatchEvent,
-    cleanupDeprecatedKeys: false,
-  });
-}
-
-export function loadUnifiedTargetWeightsStateV1<T = unknown>(): T | null {
-  return readUnifiedInputSliceV1<T>("targetWeightsState");
-}
-
-export function saveUnifiedTargetWeightsStateV1(value: unknown, opts: { dispatchEvent?: boolean } = {}) {
-  writeUnifiedInputSliceV1("targetWeightsState", value, {
-    dispatchEvent: opts.dispatchEvent,
-    cleanupDeprecatedKeys: false,
-  });
-}
-
-export function loadUnifiedPriceSnapshotV1<T = unknown>(): T | null {
-  return readUnifiedInputSliceV1<T>("priceSnapshot");
-}
-
-export function saveUnifiedPriceSnapshotV1(value: unknown, opts: { dispatchEvent?: boolean } = {}) {
-  writeUnifiedInputSliceV1("priceSnapshot", value, {
-    dispatchEvent: opts.dispatchEvent,
-    cleanupDeprecatedKeys: false,
-  });
 }

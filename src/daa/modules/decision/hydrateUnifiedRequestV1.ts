@@ -93,7 +93,6 @@ function normalizePosition(position: Partial<DaaUnifiedPositionV1>): DaaUnifiedP
     price: Math.max(0, Number(position.price) || 0),
     costBasis: Math.max(0, Number(position.costBasis) || 0),
     tags: Array.isArray(position.tags) ? position.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
-    liquidityNotional24h: Math.max(0, Number(position.liquidityNotional24h) || 0),
   };
 }
 
@@ -169,7 +168,6 @@ function enrichPositionsWithSignals(
       price: signalPrice,
       costBasis: 0,
       tags: [...(candidate?.tags ?? [])],
-      liquidityNotional24h: 0,
     });
   }
 

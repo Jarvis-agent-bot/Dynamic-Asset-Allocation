@@ -8,7 +8,6 @@ function baseRequest(): DaaUnifiedRequestV1 {
     constraints: {
       minNotional: 100,
       maxOrderPctOfNav: 0.1,
-      maxOrderPctOfLiquidity: 0.15,
     },
     policy: {
       baseDriftTriggerPct: 0.05,
@@ -23,8 +22,8 @@ function baseRequest(): DaaUnifiedRequestV1 {
       BBB: 0.4,
     },
     positions: [
-      { symbol: "AAA", qty: 5, price: 100, tags: ["high"], liquidityNotional24h: 5000 },
-      { symbol: "BBB", qty: 20, price: 100, tags: ["low", "bond"], liquidityNotional24h: 200000 },
+      { symbol: "AAA", qty: 5, price: 100, tags: ["high"] },
+      { symbol: "BBB", qty: 20, price: 100, tags: ["low", "bond"] },
     ],
     analysts: [
       {
@@ -68,10 +67,10 @@ describe("unified-rebalance-v1", () => {
     expect(result.layers.strategy.adjustedTargetWeights.AAA ?? 0).toBe(0);
   });
 
-  it("订单应同时受 NAV 与流动性上限约束", () => {
+  it("订单应受 NAV 上限约束", () => {
     const req = baseRequest();
     req.account = { cash: 12000 };
-    req.positions = [{ symbol: "AAA", qty: 0, price: 100, tags: ["high"], liquidityNotional24h: 3000 }];
+    req.positions = [{ symbol: "AAA", qty: 0, price: 100, tags: ["high"] }];
     req.targetWeights = { AAA: 1 };
     req.assetViews = [{ symbol: "AAA", analystId: "a1", convictionPct: 90, thesisDriftPct: 1, momentumRegime: "strong" }];
 
@@ -79,8 +78,8 @@ describe("unified-rebalance-v1", () => {
     const buy = result.executableOrders.find((x) => x.symbol === "AAA" && x.side === "BUY");
 
     expect(buy).toBeTruthy();
-    expect(buy!.notional).toBeCloseTo(450, 6);
-    expect(buy!.cappedBy).toContain("流动性 15%");
+    expect(buy!.notional).toBeCloseTo(1200, 6);
+    expect(buy!.cappedBy).toContain("NAV 10%");
   });
 
   it("支持使用外部人因信号驱动 tier 与阈值判断", () => {
@@ -116,7 +115,7 @@ describe("unified-rebalance-v1", () => {
       frozenCash: 100,
     };
     req.targetWeights = { AAA: 1 };
-    req.positions = [{ symbol: "AAA", qty: 0, price: 100, tags: ["mid"], liquidityNotional24h: 500000 }];
+    req.positions = [{ symbol: "AAA", qty: 0, price: 100, tags: ["mid"] }];
     req.analysts = [];
     req.assetViews = [];
 
@@ -150,7 +149,6 @@ describe("unified-rebalance-v1", () => {
         price: 100,
         costBasis: 110,
         tags: ["mid"],
-        liquidityNotional24h: 1000000,
       },
     ];
     req.fxRates = [
@@ -186,7 +184,6 @@ describe("unified-rebalance-v1", () => {
         qty: 0,
         price: 300,
         tags: ["mid"],
-        liquidityNotional24h: 1000000,
       },
     ];
     req.fxRates = [

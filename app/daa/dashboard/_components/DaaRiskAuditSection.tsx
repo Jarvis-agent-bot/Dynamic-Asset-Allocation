@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -13,7 +12,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -36,7 +34,6 @@ type ApiResult = {
     guardrail?: {
       isolatedSymbols?: string[];
       maxOrderPctOfNav?: number;
-      maxOrderPctOfLiquidity?: number;
       riskOffReason?: string | null;
       concentrationWarnings?: string[];
     };
@@ -71,15 +68,13 @@ function warningTone(warning: string): "high" | "medium" {
   if (
     value.includes("isolate")
     || value.includes("隔离")
-    || value.includes("liquidity")
-    || value.includes("流动性")
   ) {
     return "high";
   }
   return "medium";
 }
 
-export default function RiskAuditPage() {
+export function DaaRiskAuditSection() {
   const [lastRun] = useLastRunResult();
   const [runHistoryData] = useRunHistory();
   const [selectedRunId, setSelectedRunId] = useState<string>("latest");
@@ -121,24 +116,6 @@ export default function RiskAuditPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="风控审计" description="唯一入口：审计解释与风险复核，不直接编辑配置。" />
-
-      <Card className="border-muted-foreground/20">
-        <CardContent className="flex flex-wrap items-center justify-between gap-2 py-4">
-          <div className="text-sm text-muted-foreground">
-            当前页为审计视角：定位风险原因、识别可执行机会、复核规则约束。
-          </div>
-          <div className="flex gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard">回控制台运行</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard/human-factor">调整基金池</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">审计对象</CardTitle>
@@ -164,7 +141,7 @@ export default function RiskAuditPage() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>暂无审计数据</AlertTitle>
-          <AlertDescription>请先在控制台运行一次统一决策，再回到本页查看解释。</AlertDescription>
+          <AlertDescription>请先触发一次统一决策，再回到本页查看解释。</AlertDescription>
         </Alert>
       ) : (
         <>
@@ -248,10 +225,6 @@ export default function RiskAuditPage() {
                 <div className="flex items-center justify-between rounded-md border px-2 py-1.5">
                   <span className="text-muted-foreground">单笔 NAV 上限</span>
                   <span className="font-medium">{formatPercent(Number(result.layers?.guardrail?.maxOrderPctOfNav ?? 0))}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-md border px-2 py-1.5">
-                  <span className="text-muted-foreground">单笔流动性上限</span>
-                  <span className="font-medium">{formatPercent(Number(result.layers?.guardrail?.maxOrderPctOfLiquidity ?? 0))}</span>
                 </div>
                 <div className="rounded-md border px-2 py-2">
                   <div className="mb-1 text-muted-foreground">隔离标的</div>

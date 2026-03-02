@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getHumanIngestRuntimeStateV1, runHumanIngestV1 } from "@/src/daa/hf/hfServiceV1";
+import { getHumanIngestRuntimeStateV1, getLatestHumanSignalBatchV1, runHumanIngestV1 } from "@/src/daa/hf/hfServiceV1";
 
 export const runtime = "nodejs";
 
@@ -31,6 +31,7 @@ export async function GET(req: Request) {
     const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
+    await getLatestHumanSignalBatchV1({ autoIngestOnMiss: false });
     const state = getHumanIngestRuntimeStateV1();
 
     return okV1({

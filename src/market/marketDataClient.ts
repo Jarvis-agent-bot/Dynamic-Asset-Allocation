@@ -20,8 +20,8 @@ export type MarketDataClient = {
     fundAssetPercent(params: { fundCode: string; reportDate: string }): Promise<unknown>;
   };
   yfinance: {
-    priceSeries(params: { symbol: string; start?: string; end?: string }): Promise<YfinancePriceSeriesApiResponse>;
-    priceSeriesBars(params: { symbol: string; start?: string; end?: string }): Promise<PriceBar[]>;
+    priceSeries(params: { symbol: string; start?: string; end?: string; adjusted?: boolean }): Promise<YfinancePriceSeriesApiResponse>;
+    priceSeriesBars(params: { symbol: string; start?: string; end?: string; adjusted?: boolean }): Promise<PriceBar[]>;
   };
 };
 
@@ -29,6 +29,12 @@ export type YfinancePriceSeriesApiResponse = {
   ok?: boolean;
   error?: string;
   message?: string;
+  source?: string;
+  interval?: string;
+  priceMode?: "adjclose" | "close";
+  rawCount?: number;
+  symbol?: string;
+  normalizedSymbol?: string;
   series?: PriceBar[];
   issues?: string[];
 };
@@ -149,6 +155,7 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
         qs.set("symbol", String(params.symbol || "").trim());
         if (params.start) qs.set("start", params.start);
         if (params.end) qs.set("end", params.end);
+        if (typeof params.adjusted === "boolean") qs.set("adjusted", params.adjusted ? "1" : "0");
         return getJson<YfinancePriceSeriesApiResponse>("/api/daa/market/yfinance/price-series", qs, noStore);
       },
       async priceSeriesBars(params) {

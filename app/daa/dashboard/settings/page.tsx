@@ -14,6 +14,7 @@ import {
   getNotificationConfigV1,
   listFxRatesV1,
   listDataSourcesV1,
+  pullDailyFxSnapshotV1,
   replaceDataSourcesV1,
   saveNotificationConfigV1,
   type StoreDataSourceV1,
@@ -112,6 +113,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pullingFxSnapshot, setPullingFxSnapshot] = useState(false);
+  const [fxSnapshotHint, setFxSnapshotHint] = useState("");
 
   async function load() {
     setLoading(true);
@@ -315,6 +318,39 @@ export default function SettingsPage() {
     setFxRates((prev) => prev.filter((_, i) => i !== index));
   }
 
+  async function pullTodayFxSnapshot() {
+    if (pullingFxSnapshot) return;
+
+    const pairs = normalizeFxPairsInput(fxPairsText);
+    if (!pairs.length) {
+      setError("请先配置至少一个合法币对（例如 USD/CNY）。");
+      return;
+    }
+
+    setPullingFxSnapshot(true);
+    setError("");
+    setFxSnapshotHint("");
+
+    try {
+      const result = await pullDailyFxSnapshotV1({
+        pairs,
+        baseCurrency: fxBaseCurrency.trim().toUpperCase() || "USD",
+      });
+      setFxRates(result.rates || []);
+      if (result.alreadyPulledToday) {
+        setFxSnapshotHint(`今天（${result.day}）已拉取过汇率快照，跳过重复拉取。`);
+      } else {
+        const count = Array.isArray(result.updatedPairs) ? result.updatedPairs.length : 0;
+        setFxSnapshotHint(`汇率快照拉取完成：更新 ${count} 个币对（日期 ${result.day}）。`);
+      }
+      window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
+    } catch (e) {
+      setError(getApiErrorMessageV1(e));
+    } finally {
+      setPullingFxSnapshot(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader title="系统设置" description="统一维护数据源配置与通知开关（敏感密钥只放环境变量）。" />
@@ -481,8 +517,15 @@ export default function SettingsPage() {
             <div className="rounded-md border p-3">
               <div className="mb-3 flex items-center justify-between">
                 <div className="text-sm font-medium">汇率快照（手工维护）</div>
-                <Button type="button" variant="outline" size="sm" onClick={addFxRateRow}>新增汇率</Button>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => void pullTodayFxSnapshot()} disabled={pullingFxSnapshot || loading || saving}>
+                    {pullingFxSnapshot ? "拉取中..." : "手动拉取今日快照"}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={addFxRateRow}>新增汇率</Button>
+                </div>
               </div>
+              <div className="mb-2 text-xs text-muted-foreground">汇率快照按自然日手动拉取，每天仅执行一次；其余时间可手工编辑。</div>
+              {fxSnapshotHint ? <div className="mb-2 text-xs text-muted-foreground">{fxSnapshotHint}</div> : null}
               <div className="space-y-2">
                 {fxRates.length ? (
                   fxRates.map((row, index) => (
@@ -530,7 +573,7 @@ export default function SettingsPage() {
                 checked={notificationConfig.notifyOnRebalance}
                 onChange={(e) => setNotificationConfig((prev) => ({ ...prev, notifyOnRebalance: e.target.checked }))}
               />
-              执行回填后通知
+              交易执行后通知
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input

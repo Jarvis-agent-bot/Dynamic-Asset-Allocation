@@ -20,7 +20,7 @@ describe("daa/urlV0", () => {
   });
 
   describe("normalizeDaaReturnToV0", () => {
-    it("defaults to dashboard console for empty/unsafe values", () => {
+    it("空值或不安全路径统一回落到资产首页", () => {
       expect(normalizeDaaReturnToV0("")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("https://evil.com")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnToV0("//evil.com/daa/dashboard")).toBe("/daa/dashboard");

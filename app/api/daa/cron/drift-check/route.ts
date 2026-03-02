@@ -53,7 +53,6 @@ export async function POST(req: Request) {
         maxPositionPct: toNum(constraints.maxPositionPct, 1),
         minNotional: toNum(constraints.minNotional, 200),
         maxOrderPctOfNav: toNum(constraints.maxOrderPctOfNav, 0.1),
-        maxOrderPctOfLiquidity: toNum(constraints.maxOrderPctOfLiquidity, 0.15),
       },
       policy: {
         baseDriftTriggerPct: toNum(policy.baseDriftTriggerPct, 0.05),
@@ -82,7 +81,6 @@ export async function POST(req: Request) {
         qty: position.qty,
         price: position.price,
         tags: position.tags,
-        liquidityNotional24h: position.liquidityNotional24h,
       })),
     };
 

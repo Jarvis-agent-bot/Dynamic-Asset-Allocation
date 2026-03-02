@@ -13,7 +13,6 @@ export type DaaUnifiedPositionV1 = {
   price: number;
   costBasis?: number;
   tags?: string[];
-  liquidityNotional24h?: number;
 };
 
 export type DaaUnifiedWatchlistCandidateV1 = {
@@ -77,7 +76,6 @@ export type DaaUnifiedRequestV1 = {
     maxPositionPct?: number;
     minNotional?: number;
     maxOrderPctOfNav?: number;
-    maxOrderPctOfLiquidity?: number;
   };
   policy?: {
     baseDriftTriggerPct?: number;
@@ -137,7 +135,6 @@ export type DaaUnifiedResponseV1 = {
       fxCoveragePct: number;
       fxFreshCoveragePct: number;
       crossMarketExposure: Record<string, number>;
-      liquidityCoveragePct: number;
     };
     strategy: {
       adjustedTargetWeights: Record<string, number>;
@@ -150,7 +147,6 @@ export type DaaUnifiedResponseV1 = {
     };
     guardrail: {
       maxOrderPctOfNav: number;
-      maxOrderPctOfLiquidity: number;
       isolatedSymbols: string[];
       riskOffReason: string | null;
       concentrationWarnings: string[];
@@ -338,7 +334,6 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
   const sbIsolationScorePct = clamp01(toFiniteNumber(req.policy?.sbIsolationScorePct, 0.35));
 
   const maxOrderPctOfNav = clamp01(toFiniteNumber(req.constraints?.maxOrderPctOfNav, 0.1));
-  const maxOrderPctOfLiquidity = clamp01(toFiniteNumber(req.constraints?.maxOrderPctOfLiquidity, 0.15));
   const minNotional = Math.max(1, toFiniteNumber(req.constraints?.minNotional, 200));
   const fxMaxAgeHours = 48;
   const fxMaxAgeMs = fxMaxAgeHours * 3600000;
@@ -384,7 +379,6 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
       price: Math.max(0, priceInBase),
       costBasis: Math.max(0, costBasisInBase),
       tags: normalizeTags(p.tags),
-      liquidityNotional24h: Math.max(0, toFiniteNumber(p.liquidityNotional24h, 0)),
     };
   });
 
@@ -688,11 +682,6 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
       caps.push({ label: `NAV ${Math.round(maxOrderPctOfNav * 100)}%`, value: navCap });
     }
 
-    const liquidity = Math.max(0, toFiniteNumber(position?.liquidityNotional24h, 0));
-    if (liquidity > 0) {
-      caps.push({ label: `流动性 ${Math.round(maxOrderPctOfLiquidity * 100)}%`, value: liquidity * maxOrderPctOfLiquidity });
-    }
-
     let orderNotional = order.notional;
     const cappedBy: string[] = [];
 
@@ -732,14 +721,6 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
   }
 
   const crossMarketExposure = collectCrossMarketExposure(positions);
-  const liquidityCoveredNotional = positions.reduce((sum, p) => {
-    const notional = p.qty * p.price;
-    if (p.liquidityNotional24h > 0) return sum + notional;
-    return sum;
-  }, 0);
-
-  const investedNotional = positions.reduce((sum, p) => sum + p.qty * p.price, 0);
-  const liquidityCoveragePct = investedNotional > 0 ? liquidityCoveredNotional / investedNotional : 0;
 
   return {
     ok: true,
@@ -757,7 +738,6 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
         fxCoveragePct: Number((fxCoveragePct * 100).toFixed(2)),
         fxFreshCoveragePct: Number((fxFreshCoveragePct * 100).toFixed(2)),
         crossMarketExposure,
-        liquidityCoveragePct: Number((liquidityCoveragePct * 100).toFixed(2)),
       },
       strategy: {
         adjustedTargetWeights,
@@ -770,7 +750,6 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
       },
       guardrail: {
         maxOrderPctOfNav: Number((maxOrderPctOfNav * 100).toFixed(2)),
-        maxOrderPctOfLiquidity: Number((maxOrderPctOfLiquidity * 100).toFixed(2)),
         isolatedSymbols: [...isolatedSymbols].sort(),
         riskOffReason,
         concentrationWarnings,
@@ -797,7 +776,6 @@ export const DAA_UNIFIED_SAMPLE_REQUEST_V1: DaaUnifiedRequestV1 = {
   constraints: {
     minNotional: 500,
     maxOrderPctOfNav: 0.1,
-    maxOrderPctOfLiquidity: 0.15,
   },
   policy: {
     baseDriftTriggerPct: 0.05,
@@ -821,10 +799,10 @@ export const DAA_UNIFIED_SAMPLE_REQUEST_V1: DaaUnifiedRequestV1 = {
     TSLA: 0.15,
   },
   positions: [
-    { symbol: "SPY", market: "US", currency: "USD", qty: 40, price: 545, costBasis: 520, liquidityNotional24h: 1200000000, tags: ["mid"] },
-    { symbol: "QQQ", market: "US", currency: "USD", qty: 22, price: 465, costBasis: 440, liquidityNotional24h: 900000000, tags: ["high"] },
-    { symbol: "BND", market: "US", currency: "USD", qty: 35, price: 73, costBasis: 75, liquidityNotional24h: 240000000, tags: ["low", "bond"] },
-    { symbol: "TSLA", market: "US", currency: "USD", qty: 12, price: 235, costBasis: 290, liquidityNotional24h: 2800000000, tags: ["high", "high_corr"] },
+    { symbol: "SPY", market: "US", currency: "USD", qty: 40, price: 545, costBasis: 520, tags: ["mid"] },
+    { symbol: "QQQ", market: "US", currency: "USD", qty: 22, price: 465, costBasis: 440, tags: ["high"] },
+    { symbol: "BND", market: "US", currency: "USD", qty: 35, price: 73, costBasis: 75, tags: ["low", "bond"] },
+    { symbol: "TSLA", market: "US", currency: "USD", qty: 12, price: 235, costBasis: 290, tags: ["high", "high_corr"] },
   ],
   fxRates: [
     { baseCcy: "USD", quoteCcy: "USD", rate: 1, source: "sample", asOfTs: "2026-03-01T00:00:00.000Z" },

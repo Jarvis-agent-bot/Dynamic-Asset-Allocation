@@ -11,6 +11,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useStrategyConfig } from "../_components/useDaaStore";
 import { DEFAULT_STRATEGY_CONFIG, type DaaStrategyConfig } from "../../unifiedInputStore";
 
+const ACCOUNT_BASE_CCY_OPTIONS = ["USD", "RMB", "HKD"] as const;
+
 type NumberFieldProps = {
   label: string;
   description?: string;
@@ -97,7 +99,7 @@ export default function StrategyPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="策略配置" description="唯一编辑入口：维护账户、约束与触发阈值。" />
+      <PageHeader title="策略配置" description="唯一编辑入口：维护基准币种、约束与触发阈值。" />
 
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={resetToDefaults}>
@@ -109,58 +111,22 @@ export default function StrategyPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">账户设置</CardTitle>
-            <CardDescription>资金池与估值基准</CardDescription>
+            <CardDescription>仅维护估值基准币种，现金与权益统一在资产首页流水中自动更新。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>基准币种</Label>
-              <Input
-                value={config.account.baseCurrency || "USD"}
-                onChange={(e) => updateAccount("baseCurrency", e.target.value.trim().toUpperCase() || "USD")}
-                placeholder="USD / CNY / HKD"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>现金余额</Label>
-              <Input
-                type="number"
-                value={config.account.cash ?? ""}
-                onChange={(e) => updateAccount("cash", Number(e.target.value) || 0)}
-                placeholder="0"
-              />
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>可投资现金</Label>
-                <Input
-                  type="number"
-                  value={config.account.investableCash ?? ""}
-                  onChange={(e) => updateAccount("investableCash", Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="默认=现金余额"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>冻结现金</Label>
-                <Input
-                  type="number"
-                  value={config.account.frozenCash ?? ""}
-                  onChange={(e) => updateAccount("frozenCash", Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>总权益</Label>
-              <p className="text-xs text-muted-foreground">留空则自动计算: 持仓市值 + 现金</p>
-              <Input
-                type="number"
-                value={config.account.totalEquity ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value.trim();
-                  updateAccount("totalEquity", v ? Number(v) || null : null);
-                }}
-                placeholder="自动计算"
-              />
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                value={String(config.account.baseCurrency || "USD").toUpperCase()}
+                onChange={(e) => updateAccount("baseCurrency", e.target.value as DaaStrategyConfig["account"]["baseCurrency"])}
+              >
+                {ACCOUNT_BASE_CCY_OPTIONS.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
             </div>
           </CardContent>
         </Card>
@@ -194,16 +160,6 @@ export default function StrategyPage() {
               description="单笔调仓不得超过总资产的此比例"
               value={config.constraints.maxOrderPctOfNav}
               onChange={(v) => updateConstraints("maxOrderPctOfNav", v)}
-              min={0.01}
-              max={1}
-              step={0.01}
-              isPercent
-            />
-            <NumberField
-              label="单笔最大占流动性%"
-              description="单笔调仓不得超过该标的 24h 流动性的此比例"
-              value={config.constraints.maxOrderPctOfLiquidity}
-              onChange={(v) => updateConstraints("maxOrderPctOfLiquidity", v)}
               min={0.01}
               max={1}
               step={0.01}

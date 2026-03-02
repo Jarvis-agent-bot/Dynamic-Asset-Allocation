@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         details: {
           expected: {
             targetWeights: "Record<string, number>",
-            positions: "Array<{ symbol, qty, price, costBasis?, market?, currency?, tags?, liquidityNotional24h? }>",
+            positions: "Array<{ symbol, qty, price, costBasis?, market?, currency?, tags? }>",
             watchlistCandidates: "Array<{ symbol, market?, currency?, targetWeightHint?, enabled?, tags?, notes? }> (optional)",
             fxRates: "Array<{ baseCcy, quoteCcy, rate, source?, asOfTs? }> (optional)",
             analysts: "Array<{ analystId, accuracyPct, riskControlPct, disciplinePct, transparencyPct, stance?, styleCluster? }> (optional)",
