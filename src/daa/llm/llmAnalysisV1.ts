@@ -1,6 +1,8 @@
 import { listDaaDataSourcesV1 } from "@/src/daa/store/daaStorePgV1";
+import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
 
 export type DaaLlmAnalysisStatusV1 = "skipped" | "ok" | "error";
+export type DaaLlmAnalysisContextV1 = "decision" | "insight" | "digest";
 
 export type DaaLlmAnalysisV1 = {
   status: DaaLlmAnalysisStatusV1;
@@ -16,8 +18,10 @@ export type DaaLlmAnalysisV1 = {
 };
 
 export type DaaLlmAnalysisInputV1 = {
+  analysisContext: DaaLlmAnalysisContextV1;
   baseCurrency: string;
   shouldRebalance: boolean;
+  analysisFocus: string;
   opportunities: Array<{
     symbol: string;
     finalScorePct: number;
@@ -29,8 +33,11 @@ export type DaaLlmAnalysisInputV1 = {
   warnings: string[];
 };
 
+export { DEFAULT_ANALYSIS_FOCUS_V1 };
+
 type LlmRuntimeConfigV1 = {
   enabled: boolean;
+  enabledInDecision: boolean;
   provider: string;
   model: string;
   endpoint: string;
@@ -71,10 +78,12 @@ async function resolveLlmRuntimeConfigV1(): Promise<LlmRuntimeConfigV1> {
       : normalizeText(process.env.OPENAI_API_KEY),
   );
 
-  const enabled = Boolean(source?.enabled) && ((config as any).enabledInDecision !== false);
+  const enabled = Boolean(source?.enabled);
+  const enabledInDecision = (config as any).enabledInDecision !== false;
 
   return {
     enabled,
+    enabledInDecision,
     provider,
     model,
     endpoint,
@@ -94,6 +103,7 @@ function buildPromptV1(input: DaaLlmAnalysisInputV1): string {
     "你是DAA投资风控分析助手，请仅输出结构化结论，不要给下单指令。",
     `基准币种: ${input.baseCurrency}`,
     `再平衡触发: ${input.shouldRebalance ? "是" : "否"}`,
+    `分析关注点: ${input.analysisFocus}`,
     `机会列表:\n${top || "无"}`,
     `系统告警: ${warningText}`,
     "请返回三段内容：",
@@ -218,6 +228,21 @@ async function callPackyCodeV1(config: LlmRuntimeConfigV1, prompt: string): Prom
 export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<DaaLlmAnalysisV1> {
   const startedAt = Date.now();
   const config = await resolveLlmRuntimeConfigV1();
+  const analysisFocus = normalizeText(input.analysisFocus);
+
+  if (!analysisFocus) {
+    return {
+      status: "error",
+      provider: config.provider,
+      model: config.model,
+      generatedAt: new Date().toISOString(),
+      summary: "LLM 二次分析失败：analysisFocus 不能为空。",
+      opportunityNotes: [],
+      riskNotes: [],
+      latencyMs: Date.now() - startedAt,
+      reason: "analysisFocus is required",
+    };
+  }
 
   if (!config.enabled) {
     return {
@@ -230,6 +255,20 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
       reason: "llm_analysis data source disabled",
+    };
+  }
+
+  if (input.analysisContext === "decision" && !config.enabledInDecision) {
+    return {
+      status: "skipped",
+      provider: config.provider,
+      model: config.model,
+      generatedAt: new Date().toISOString(),
+      summary: "LLM 二次分析在决策链路中未启用。",
+      opportunityNotes: [],
+      riskNotes: [],
+      latencyMs: Date.now() - startedAt,
+      reason: "llm_analysis disabled in decision context",
     };
   }
 
@@ -262,7 +301,10 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
   }
 
   try {
-    const prompt = buildPromptV1(input);
+    const prompt = buildPromptV1({
+      ...input,
+      analysisFocus,
+    });
 
     const result = config.provider === "packycode"
       ? await callPackyCodeV1(config, prompt)

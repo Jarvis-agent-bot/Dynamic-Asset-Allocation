@@ -26,6 +26,12 @@ type FillDraft = {
   final: boolean;
 };
 
+type DecisionSnapshotView = {
+  baseCurrency: string;
+  requestCash: number | null;
+  warning: string | null;
+};
+
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
 const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
 
@@ -43,27 +49,64 @@ function toFiniteNumber(value: unknown): number | null {
   return n;
 }
 
-function inferBaseCurrency(decision: RebalanceDecisionV1 | null): string {
-  if (!decision) return "USD";
-  const responseSummary = (decision.responseJson as any)?.summary;
-  const responseBase = String(responseSummary?.baseCurrency || "").trim().toUpperCase();
-  if (responseBase) return responseBase;
-
-  const requestAccount = (decision.requestJson as any)?.account;
-  const requestBase = String(requestAccount?.baseCurrency || "").trim().toUpperCase();
-  if (requestBase) return requestBase;
-
-  return "USD";
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }
 
-function inferDecisionCash(decision: RebalanceDecisionV1 | null): number | null {
-  if (!decision) return null;
-  const account = (decision.requestJson as any)?.account;
+function normalizeCurrency(value: unknown): string {
+  const text = String(value || "").trim().toUpperCase();
+  return text || "";
+}
+
+function parseDecisionSnapshot(decision: RebalanceDecisionV1 | null): DecisionSnapshotView {
+  if (!decision) {
+    return {
+      baseCurrency: "USD",
+      requestCash: null,
+      warning: null,
+    };
+  }
+
+  const warnings: string[] = [];
+  const response = asRecord(decision.responseJson);
+  const request = asRecord(decision.requestJson);
+
+  let responseBaseCurrency = "";
+  if (!response || Number(response.schemaVersion) !== 2) {
+    warnings.push("responseJson 不是 schemaVersion=2 的决策快照");
+  } else {
+    const plan = asRecord(response.plan);
+    const summary = asRecord(plan?.summary);
+    responseBaseCurrency = normalizeCurrency(summary?.baseCurrency);
+    if (!responseBaseCurrency) {
+      warnings.push("responseJson.plan.summary.baseCurrency 缺失");
+    }
+  }
+
+  const account = asRecord(request?.account);
+  const requestBaseCurrency = normalizeCurrency(account?.baseCurrency);
   const cash = toFiniteNumber(account?.cash);
-  if (cash != null && cash >= 0) return cash;
-  const investable = toFiniteNumber(account?.investableCash);
-  if (investable != null && investable >= 0) return investable;
-  return null;
+  const investableCash = toFiniteNumber(account?.investableCash);
+  const requestCash = cash != null && cash >= 0
+    ? cash
+    : investableCash != null && investableCash >= 0
+      ? investableCash
+      : null;
+  if (requestCash == null) {
+    warnings.push("requestJson.account.cash / investableCash 缺失");
+  }
+
+  const baseCurrency = responseBaseCurrency || requestBaseCurrency || "USD";
+  if (!responseBaseCurrency && !requestBaseCurrency) {
+    warnings.push("决策快照中缺少 baseCurrency，已回退 USD");
+  }
+
+  return {
+    baseCurrency,
+    requestCash,
+    warning: warnings.length > 0 ? warnings.join("；") : null,
+  };
 }
 
 function isOrderFinal(status: ExecutionOrderStatusV1): boolean {
@@ -140,8 +183,9 @@ export function DaaExecutionSection() {
     () => decisions.find((d) => d.id === selectedDecisionId) || null,
     [decisions, selectedDecisionId],
   );
-  const selectedBaseCurrency = useMemo(() => inferBaseCurrency(selected), [selected]);
-  const requestCash = useMemo(() => inferDecisionCash(selected), [selected]);
+  const snapshotView = useMemo(() => parseDecisionSnapshot(selected), [selected]);
+  const selectedBaseCurrency = snapshotView.baseCurrency;
+  const requestCash = snapshotView.requestCash;
 
   const latestAccount = useMemo(() => {
     if (!latestResult || latestResult.decision.id !== selected?.id) return null;
@@ -269,6 +313,13 @@ export function DaaExecutionSection() {
         <Alert>
           <AlertTitle>事件已应用</AlertTitle>
           <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {snapshotView.warning ? (
+        <Alert variant="destructive">
+          <AlertTitle>决策快照异常</AlertTitle>
+          <AlertDescription>{snapshotView.warning}</AlertDescription>
         </Alert>
       ) : null}
 

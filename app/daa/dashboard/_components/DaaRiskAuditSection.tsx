@@ -14,45 +14,142 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import type { DaaUnifiedResponseV1 } from "@/src/daa/unifiedRebalanceV1";
 
 import StatCard from "../_components/StatCard";
 import { formatCurrency, formatNotional, formatPercent } from "../_components/daaFormatters";
 import { useLastRunResult, useRunHistory } from "../_components/useDaaStore";
 
-type ApiResult = {
-  ok?: boolean;
-  generatedAt?: string;
-  summary?: {
-    baseCurrency?: string;
-    totalEquity?: number;
-    triggerThresholdPct?: number;
-    shouldRebalance?: boolean;
-    executableOrderCount?: number;
-    blockedOrderCount?: number;
-  };
-  layers?: {
-    guardrail?: {
-      isolatedSymbols?: string[];
-      maxOrderPctOfNav?: number;
-      riskOffReason?: string | null;
-      concentrationWarnings?: string[];
-    };
-    humanFactor?: {
-      defensiveConsensusPct?: number;
-      duplicatedStyleClusters?: string[];
-    };
-  };
-  executableOrders?: Array<{ symbol: string; side: string; notional: number; cappedBy?: string[] }>;
-  blockedOrders?: Array<{ symbol: string; side: string; notional: number; blockedBy: string }>;
-  warnings?: string[];
+type ExtractPlanResult = {
+  plan: DaaUnifiedResponseV1 | null;
+  error: string | null;
 };
 
-function extractPlan(payload: unknown): ApiResult | null {
-  const value = payload as any;
-  if (!value || typeof value !== "object") return null;
-  if (value.summary && typeof value.summary === "object") return value as ApiResult;
-  if (value.plan && typeof value.plan === "object" && value.plan.summary) return value.plan as ApiResult;
-  return null;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  const record = asRecord(value);
+  if (!record) return false;
+  return Object.values(record).every((item) => isFiniteNumber(item));
+}
+
+function isRiskTierBudget(value: unknown): value is Record<"low" | "mid" | "high", number> {
+  const record = asRecord(value);
+  if (!record) return false;
+  return isFiniteNumber(record.low) && isFiniteNumber(record.mid) && isFiniteNumber(record.high);
+}
+
+function isAssetDecisionList(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.every((item) => {
+    const record = asRecord(item);
+    if (!record) return false;
+    const tier = String(record.tier || "");
+    const momentumRegime = String(record.momentumRegime || "");
+    return (
+      typeof record.symbol === "string"
+      && isFiniteNumber(record.weightedScorePct)
+      && isFiniteNumber(record.weightedDriftPct)
+      && (tier === "elite" || tier === "steady" || tier === "watch" || tier === "isolated")
+      && (momentumRegime === "strong" || momentumRegime === "neutral" || momentumRegime === "weak")
+      && isFiniteNumber(record.multiplier)
+      && isStringList(record.reasons)
+    );
+  });
+}
+
+function isExecutableOrderList(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.every((item) => {
+    const record = asRecord(item);
+    const side = String(record?.side || "");
+    return Boolean(
+      record
+      && typeof record.symbol === "string"
+      && (side === "BUY" || side === "SELL")
+      && isFiniteNumber(record.notional)
+      && typeof record.reason === "string"
+      && isStringList(record.cappedBy),
+    );
+  });
+}
+
+function isBlockedOrderList(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.every((item) => {
+    const record = asRecord(item);
+    const side = String(record?.side || "");
+    return Boolean(
+      record
+      && typeof record.symbol === "string"
+      && (side === "BUY" || side === "SELL")
+      && isFiniteNumber(record.notional)
+      && typeof record.reason === "string"
+      && typeof record.blockedBy === "string",
+    );
+  });
+}
+
+function isUnifiedPlanV1(value: unknown): value is DaaUnifiedResponseV1 {
+  const plan = asRecord(value);
+  if (!plan) return false;
+  if (plan.ok !== true) return false;
+  if (typeof plan.generatedAt !== "string") return false;
+
+  const summary = asRecord(plan.summary);
+  if (!summary) return false;
+  if (typeof summary.baseCurrency !== "string") return false;
+  if (!isFiniteNumber(summary.totalEquity)) return false;
+  if (!isFiniteNumber(summary.triggerThresholdPct)) return false;
+  if (typeof summary.shouldRebalance !== "boolean") return false;
+  if (!isFiniteNumber(summary.executableOrderCount)) return false;
+  if (!isFiniteNumber(summary.blockedOrderCount)) return false;
+
+  const layers = asRecord(plan.layers);
+  if (!layers) return false;
+  const sensory = asRecord(layers.sensory);
+  const strategy = asRecord(layers.strategy);
+  const humanFactor = asRecord(layers.humanFactor);
+  const guardrail = asRecord(layers.guardrail);
+  if (!sensory || !strategy || !humanFactor || !guardrail) return false;
+
+  if (!isFiniteNumber(sensory.fxCoveragePct) || !isFiniteNumber(sensory.fxFreshCoveragePct)) return false;
+  if (!isNumberRecord(sensory.crossMarketExposure)) return false;
+  if (!isNumberRecord(strategy.adjustedTargetWeights)) return false;
+  if (!isRiskTierBudget(strategy.riskTierBudget)) return false;
+  if (!isAssetDecisionList(humanFactor.assetDecisions)) return false;
+  if (!isFiniteNumber(humanFactor.defensiveConsensusPct)) return false;
+  if (!isStringList(humanFactor.duplicatedStyleClusters)) return false;
+
+  if (!isFiniteNumber(guardrail.maxOrderPctOfNav)) return false;
+  if (!isStringList(guardrail.isolatedSymbols)) return false;
+  if (!(guardrail.riskOffReason == null || typeof guardrail.riskOffReason === "string")) return false;
+  if (!isStringList(guardrail.concentrationWarnings)) return false;
+
+  if (!isExecutableOrderList(plan.executableOrders)) return false;
+  if (!isBlockedOrderList(plan.blockedOrders)) return false;
+  if (!isStringList(plan.warnings)) return false;
+  return true;
+}
+
+function extractPlan(payload: unknown): ExtractPlanResult {
+  if (payload == null) return { plan: null, error: null };
+  const value = asRecord(payload);
+  if (!value) return { plan: null, error: "响应不是对象" };
+  if (value.schemaVersion !== 2) return { plan: null, error: "仅支持 schemaVersion=2 的响应数据" };
+  if (!isUnifiedPlanV1(value.plan)) return { plan: null, error: "plan 结构不完整或字段类型不合法" };
+  return { plan: value.plan, error: null };
 }
 
 function prettyJson(v: unknown): string {
@@ -85,7 +182,8 @@ export function DaaRiskAuditSection() {
   const selectedHistory = selectedRunId === "latest" ? null : runHistory.find((item) => item.id === selectedRunId) ?? null;
 
   const selectedPayload = selectedHistory?.response ?? lastRun;
-  const result = extractPlan(selectedPayload);
+  const extracted = useMemo(() => extractPlan(selectedPayload), [selectedPayload]);
+  const result = extracted.plan;
   const requestPayload = selectedHistory?.request ?? null;
 
   const auditRows = useMemo(() => {
@@ -141,7 +239,7 @@ export function DaaRiskAuditSection() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>暂无审计数据</AlertTitle>
-          <AlertDescription>请先触发一次统一决策，再回到本页查看解释。</AlertDescription>
+          <AlertDescription>{extracted.error || "请先触发一次统一决策，再回到本页查看解释。"}</AlertDescription>
         </Alert>
       ) : (
         <>

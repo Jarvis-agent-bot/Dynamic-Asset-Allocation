@@ -1,6 +1,15 @@
 import { randomUUID } from "node:crypto";
 
-import { daaPgPoolV0, withDaaPgClientV0 } from "@/src/daa/pg/daaPgV0";
+import { daaPgPoolV0, isDaaPgMemRuntimeV0, withDaaPgClientV0 } from "@/src/daa/pg/daaPgV0";
+import { normalizeBaseCurrencyCodeV2, normalizeCurrencyAliasV2 } from "@/src/daa/config/currencyV2";
+import {
+  applySystemConfigPatchesV2,
+  DEFAULT_SYSTEM_CONFIG_V2,
+  normalizeSystemConfigV2,
+  type DaaSystemConfigEnvelopeV2,
+  type DaaSystemConfigPatchV2,
+  type DaaSystemConfigV2,
+} from "@/src/daa/config/systemConfigV2";
 
 type DaaStoreStateV1 = {
   schemaInit: Promise<void> | null;
@@ -213,103 +222,404 @@ export type DaaStoreHumanIngestStateV1 = {
   updatedAt: string;
 };
 
-const DEFAULT_DATA_SOURCES_V1: DaaStoreDataSourceV1[] = [
-  {
-    id: "hf_fund.default",
-    kind: "hf_fund",
-    configJson: {
-      funds: [
-        { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
-        { fundCode: "100055", label: "富国全球科技互联网", kind: "qdii", enabled: true },
-        { fundCode: "005827", label: "易方达蓝筹精选", kind: "equity", enabled: true },
-        { fundCode: "110011", label: "易方达中小盘", kind: "equity", enabled: true },
-        { fundCode: "161725", label: "招商中证白酒指数", kind: "equity", enabled: true },
-      ],
+export type DaaStoreSystemConfigRowV2 = {
+  id: "default";
+  version: number;
+  config: DaaSystemConfigV2;
+  updatedAt: string;
+};
+
+function buildLegacyDataSourcesFromSystemConfigV2(config: DaaSystemConfigV2): DaaStoreDataSourceV1[] {
+  return [
+    {
+      id: config.dataSources.hfFund.id,
+      kind: "hf_fund",
+      configJson: {
+        funds: config.dataSources.hfFund.funds,
+        marketScope: config.dataSources.hfFund.marketScope,
+      },
+      enabled: config.dataSources.hfFund.enabled,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     },
-    enabled: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "price_feed.default",
-    kind: "price_feed",
-    configJson: {
-      provider: "yfinance",
-      intervalMinutes: 5,
-      symbols: ["SPY", "QQQ", "BND", "TSLA"],
+    {
+      id: config.dataSources.priceFeed.id,
+      kind: "price_feed",
+      configJson: {
+        provider: config.dataSources.priceFeed.provider,
+        intervalMinutes: config.dataSources.priceFeed.intervalMinutes,
+        symbols: config.dataSources.priceFeed.symbols,
+      },
+      enabled: config.dataSources.priceFeed.enabled,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     },
-    enabled: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "news_feed.default",
-    kind: "news_feed",
-    configJson: {
-      provider: "yahoo_rss",
-      query: "SPY OR QQQ OR TSLA",
+    {
+      id: config.dataSources.newsFeed.id,
+      kind: "news_feed",
+      configJson: {
+        provider: config.dataSources.newsFeed.provider,
+        query: config.dataSources.newsFeed.query,
+        symbols: config.dataSources.newsFeed.symbols,
+        fusionWeights: config.dataSources.newsFeed.fusionWeights,
+      },
+      enabled: config.dataSources.newsFeed.enabled,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     },
-    enabled: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "fx_feed.default",
-    kind: "fx_feed",
-    configJson: {
-      provider: "manual",
-      baseCurrency: "USD",
-      pairs: ["USD/CNY", "USD/HKD", "USD/USDT"],
+    {
+      id: config.dataSources.fxFeed.id,
+      kind: "fx_feed",
+      configJson: {
+        provider: config.dataSources.fxFeed.provider,
+        baseCurrency: config.dataSources.fxFeed.baseCurrency,
+        pairs: config.dataSources.fxFeed.pairs,
+      },
+      enabled: config.dataSources.fxFeed.enabled,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     },
-    enabled: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "llm_analysis.default",
-    kind: "llm_analysis",
-    configJson: {
-      provider: "codex",
-      model: "gpt-5-codex",
-      enabledInDecision: false,
-      timeoutMs: 8000,
+    {
+      id: config.dataSources.llmAnalysis.id,
+      kind: "llm_analysis",
+      configJson: {
+        provider: config.dataSources.llmAnalysis.provider,
+        model: config.dataSources.llmAnalysis.model,
+        enabledInDecision: config.dataSources.llmAnalysis.enabledInDecision,
+        timeoutMs: config.dataSources.llmAnalysis.timeoutMs,
+      },
+      enabled: config.dataSources.llmAnalysis.enabled,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     },
-    enabled: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+  ];
+}
+
+const DEFAULT_DATA_SOURCES_V1: DaaStoreDataSourceV1[] = buildLegacyDataSourcesFromSystemConfigV2(DEFAULT_SYSTEM_CONFIG_V2);
 
 export const DEFAULT_STRATEGY_CONFIG_V1 = {
-  account: {
-    baseCurrency: "USD",
-    cash: 0,
-    investableCash: 0,
-    frozenCash: 0,
-    totalEquity: null,
-  },
-  constraints: {
-    maxPositionPct: 1,
-    minNotional: 200,
-    maxOrderPctOfNav: 0.1,
-  },
-  policy: {
-    baseDriftTriggerPct: 0.05,
-    strongTrendDriftTriggerPct: 0.1,
-    riskOffConsensusPct: 0.6,
-    riskOffScalePct: 0.7,
-    valueTrapThesisDriftPct: 0.12,
-    sbIsolationScorePct: 0.35,
-  },
-  risk: {
-    maxDrawdownPct: 0.15,
-    perAssetStopLossPct: 0.2,
-    maxConcentrationPct: 0.3,
-    correlationCapPct: 0.6,
-    maxTotalRiskExposurePct: 0.7,
-  },
-  targetWeights: {},
+  ...DEFAULT_SYSTEM_CONFIG_V2.strategy,
 };
+
+function mapSystemConfigRowV2(row: Record<string, unknown>): DaaStoreSystemConfigRowV2 {
+  const versionRaw = Number(row.version);
+  return {
+    id: "default",
+    version: Number.isFinite(versionRaw) && versionRaw > 0 ? Math.trunc(versionRaw) : 1,
+    config: normalizeSystemConfigV2(parseJsonb<Record<string, unknown>>(row.config_json, DEFAULT_SYSTEM_CONFIG_V2)),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+type LegacyDataSourceSnapshotV2 = {
+  id: string;
+  enabled: boolean;
+  configJson: Record<string, unknown>;
+};
+
+function parseLegacyDataSourceMapV2(rows: Array<Record<string, unknown>>): Map<string, LegacyDataSourceSnapshotV2> {
+  const out = new Map<string, LegacyDataSourceSnapshotV2>();
+  for (const row of rows) {
+    const kind = normalizeText(row.kind);
+    if (!kind) continue;
+    out.set(kind, {
+      id: normalizeText(row.id),
+      enabled: Boolean(row.enabled),
+      configJson: parseJsonb<Record<string, unknown>>(row.config_json, {}),
+    });
+  }
+  return out;
+}
+
+function parseLegacySymbolListV2(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const set = new Set<string>();
+  for (const item of value) {
+    const symbol = String(item ?? "").trim().toUpperCase();
+    if (symbol) set.add(symbol);
+  }
+  return set.size > 0 ? [...set] : [...fallback];
+}
+
+function parseLegacyMarketScopeListV2(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const set = new Set<string>();
+  for (const item of value) {
+    const market = String(item ?? "").trim().toUpperCase();
+    if (market) set.add(market);
+  }
+  return set.size > 0 ? [...set] : [...fallback];
+}
+
+function parseLegacyFusionWeightsV2(
+  value: unknown,
+  fallback: DaaSystemConfigV2["dataSources"]["newsFeed"]["fusionWeights"],
+): DaaSystemConfigV2["dataSources"]["newsFeed"]["fusionWeights"] {
+  if (!isRecordV1(value)) return { ...fallback };
+  return {
+    human: toFiniteNumber(value.human, fallback.human),
+    news: toFiniteNumber(value.news, fallback.news),
+    technical: toFiniteNumber(value.technical, fallback.technical),
+  };
+}
+
+function parseLegacyFundRowsV2(
+  value: unknown,
+  fallback: DaaSystemConfigV2["dataSources"]["hfFund"]["funds"],
+): DaaSystemConfigV2["dataSources"]["hfFund"]["funds"] {
+  if (!Array.isArray(value)) return [...fallback];
+  const out = new Map<string, DaaSystemConfigV2["dataSources"]["hfFund"]["funds"][number]>();
+  for (const raw of value) {
+    if (!isRecordV1(raw)) continue;
+    const fundCode = normalizeText(raw.fundCode);
+    if (!fundCode) continue;
+    const kindRaw = normalizeText(raw.kind, "equity").toLowerCase();
+    const kind: DaaSystemConfigV2["dataSources"]["hfFund"]["funds"][number]["kind"] = (
+      kindRaw === "qdii" || kindRaw === "balanced" ? kindRaw : "equity"
+    );
+    out.set(fundCode, {
+      fundCode,
+      label: normalizeText(raw.label, `基金 ${fundCode}`),
+      kind,
+      enabled: raw.enabled !== false,
+    });
+  }
+  return out.size > 0 ? [...out.values()] : [...fallback];
+}
+
+function parseLegacyFxPairsV2(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return [...fallback];
+  const set = new Set<string>();
+  for (const item of value) {
+    const pair = String(item ?? "").trim().toUpperCase().replace(/-/g, "/");
+    if (!/^[A-Z]{3}\/[A-Z]{3}$/.test(pair)) continue;
+    const [base, quote] = pair.split("/");
+    set.add(`${normalizeCurrencyAliasV2(base)}/${normalizeCurrencyAliasV2(quote)}`);
+  }
+  return set.size > 0 ? [...set] : [...fallback];
+}
+
+function parseLegacyHfFundConfigV2(source?: LegacyDataSourceSnapshotV2): DaaSystemConfigV2["dataSources"]["hfFund"] {
+  const defaults = DEFAULT_SYSTEM_CONFIG_V2.dataSources.hfFund;
+  const config = source?.configJson ?? {};
+  return {
+    ...defaults,
+    id: normalizeText(source?.id, defaults.id),
+    enabled: source?.enabled !== false,
+    funds: parseLegacyFundRowsV2(config.funds, defaults.funds),
+    marketScope: parseLegacyMarketScopeListV2(config.marketScope, defaults.marketScope),
+  };
+}
+
+function parseLegacyPriceFeedConfigV2(source?: LegacyDataSourceSnapshotV2): DaaSystemConfigV2["dataSources"]["priceFeed"] {
+  const defaults = DEFAULT_SYSTEM_CONFIG_V2.dataSources.priceFeed;
+  const config = source?.configJson ?? {};
+  return {
+    ...defaults,
+    id: normalizeText(source?.id, defaults.id),
+    enabled: source?.enabled !== false,
+    provider: normalizeText(config.provider, defaults.provider),
+    intervalMinutes: Math.max(1, Math.trunc(toFiniteNumber(config.intervalMinutes, defaults.intervalMinutes))),
+    symbols: parseLegacySymbolListV2(config.symbols, defaults.symbols),
+  };
+}
+
+function parseLegacyNewsFeedConfigV2(source?: LegacyDataSourceSnapshotV2): DaaSystemConfigV2["dataSources"]["newsFeed"] {
+  const defaults = DEFAULT_SYSTEM_CONFIG_V2.dataSources.newsFeed;
+  const config = source?.configJson ?? {};
+  return {
+    ...defaults,
+    id: normalizeText(source?.id, defaults.id),
+    enabled: source?.enabled !== false,
+    provider: normalizeText(config.provider, defaults.provider),
+    query: normalizeText(config.query, defaults.query),
+    symbols: parseLegacySymbolListV2(config.symbols, defaults.symbols),
+    fusionWeights: parseLegacyFusionWeightsV2(config.fusionWeights, defaults.fusionWeights),
+  };
+}
+
+function parseLegacyFxFeedConfigV2(source?: LegacyDataSourceSnapshotV2): DaaSystemConfigV2["dataSources"]["fxFeed"] {
+  const defaults = DEFAULT_SYSTEM_CONFIG_V2.dataSources.fxFeed;
+  const config = source?.configJson ?? {};
+  return {
+    ...defaults,
+    id: normalizeText(source?.id, defaults.id),
+    enabled: source?.enabled !== false,
+    provider: normalizeText(config.provider, defaults.provider),
+    baseCurrency: normalizeBaseCurrencyCodeV2(config.baseCurrency, defaults.baseCurrency),
+    pairs: parseLegacyFxPairsV2(config.pairs, defaults.pairs),
+  };
+}
+
+function parseLegacyLlmConfigV2(source?: LegacyDataSourceSnapshotV2): DaaSystemConfigV2["dataSources"]["llmAnalysis"] {
+  const defaults = DEFAULT_SYSTEM_CONFIG_V2.dataSources.llmAnalysis;
+  const config = source?.configJson ?? {};
+  return {
+    ...defaults,
+    id: normalizeText(source?.id, defaults.id),
+    enabled: source?.enabled === true,
+    provider: normalizeText(config.provider, defaults.provider),
+    model: normalizeText(config.model, defaults.model),
+    timeoutMs: Math.max(2000, Math.trunc(toFiniteNumber(config.timeoutMs, defaults.timeoutMs))),
+    enabledInDecision: config.enabledInDecision === true,
+  };
+}
+
+async function readLegacySystemConfigInTxV2(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>,
+): Promise<DaaSystemConfigV2> {
+  const strategyRes = await query("SELECT config_json FROM daa_strategy_config WHERE id = 'default' LIMIT 1");
+  const notificationRes = await query(
+    "SELECT enabled, notify_on_drift, notify_on_rebalance, notify_on_price_alert FROM daa_notification_config WHERE id = 'default' LIMIT 1",
+  );
+  const dataSourceRes = await query("SELECT id, kind, config_json, enabled FROM daa_data_sources ORDER BY kind ASC, id ASC");
+
+  const strategyJson = parseJsonb<Record<string, unknown>>(strategyRes.rows[0]?.config_json, DEFAULT_SYSTEM_CONFIG_V2.strategy as Record<string, unknown>);
+  const notificationRow = notificationRes.rows[0];
+  const dataSourceRows = dataSourceRes.rows || [];
+  const dataSourceMap = parseLegacyDataSourceMapV2(dataSourceRows);
+
+  const hfSource = dataSourceMap.get("hf_fund");
+  const priceSource = dataSourceMap.get("price_feed");
+  const newsSource = dataSourceMap.get("news_feed");
+  const fxSource = dataSourceMap.get("fx_feed");
+  const llmSource = dataSourceMap.get("llm_analysis");
+
+  const merged: Record<string, unknown> = {
+    ...DEFAULT_SYSTEM_CONFIG_V2,
+    strategy: strategyJson,
+    notification: {
+      enabled: Boolean(notificationRow?.enabled),
+      notifyOnDrift: notificationRow?.notify_on_drift !== false,
+      notifyOnRebalance: notificationRow?.notify_on_rebalance !== false,
+      notifyOnPriceAlert: Boolean(notificationRow?.notify_on_price_alert),
+    },
+    dataSources: {
+      ...DEFAULT_SYSTEM_CONFIG_V2.dataSources,
+      hfFund: parseLegacyHfFundConfigV2(hfSource),
+      priceFeed: parseLegacyPriceFeedConfigV2(priceSource),
+      newsFeed: parseLegacyNewsFeedConfigV2(newsSource),
+      fxFeed: parseLegacyFxFeedConfigV2(fxSource),
+      llmAnalysis: parseLegacyLlmConfigV2(llmSource),
+    },
+    backtest: {
+      benchmarkSymbol: DEFAULT_SYSTEM_CONFIG_V2.backtest.benchmarkSymbol,
+    },
+  };
+
+  return normalizeSystemConfigV2(merged);
+}
+
+async function ensureSystemConfigRowInTxV2(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+): Promise<DaaStoreSystemConfigRowV2> {
+  if (isDaaPgMemRuntimeV0()) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS daa_system_config_v2 (
+        id TEXT,
+        version BIGINT,
+        config_json JSONB,
+        updated_at TIMESTAMPTZ
+      )
+    `);
+  } else {
+    await query(`
+      CREATE TABLE IF NOT EXISTS daa_system_config_v2 (
+        id TEXT PRIMARY KEY,
+        version BIGINT NOT NULL DEFAULT 1,
+        config_json JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  }
+
+  const existing = await query(
+    "SELECT id, version, config_json, updated_at FROM daa_system_config_v2 WHERE id='default' LIMIT 1",
+  );
+  if (existing.rows.length > 0) {
+    return mapSystemConfigRowV2(existing.rows[0]);
+  }
+
+  const migrated = await readLegacySystemConfigInTxV2(query);
+  const result = await query(
+    "INSERT INTO daa_system_config_v2 (id, version, config_json, updated_at) VALUES ('default', 1, $1::jsonb, NOW()) RETURNING id, version, config_json, updated_at",
+    [JSON.stringify(migrated)],
+  );
+  return mapSystemConfigRowV2(result.rows[0]);
+}
+
+async function saveSystemConfigInTxV2(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  nextConfigRaw: unknown,
+  baseVersion?: number,
+): Promise<DaaStoreSystemConfigRowV2> {
+  const current = await ensureSystemConfigRowInTxV2(query);
+  if (baseVersion != null && current.version !== Math.trunc(baseVersion)) {
+    throw new Error(`system_config_version_conflict:${current.version}`);
+  }
+
+  const nextConfig = normalizeSystemConfigV2(nextConfigRaw);
+  const nextVersion = current.version + 1;
+  const updated = await query(
+    "UPDATE daa_system_config_v2 SET version = $1, config_json = $2::jsonb, updated_at = NOW() WHERE id = 'default' RETURNING id, version, config_json, updated_at",
+    [nextVersion, JSON.stringify(nextConfig)],
+  );
+  return mapSystemConfigRowV2(updated.rows[0]);
+}
+
+export async function getDaaSystemConfigV2(): Promise<DaaStoreSystemConfigRowV2> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => ensureSystemConfigRowInTxV2(query as any));
+}
+
+export async function saveDaaSystemConfigV2(input: {
+  config: unknown;
+  baseVersion?: number;
+}): Promise<DaaStoreSystemConfigRowV2> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      const saved = await saveSystemConfigInTxV2(query as any, input.config, input.baseVersion);
+      await query("COMMIT");
+      return saved;
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
+}
+
+export async function patchDaaSystemConfigV2(input: {
+  patches: DaaSystemConfigPatchV2[];
+  baseVersion?: number;
+}): Promise<DaaStoreSystemConfigRowV2> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      const current = await ensureSystemConfigRowInTxV2(query as any);
+      if (input.baseVersion != null && current.version !== Math.trunc(input.baseVersion)) {
+        throw new Error(`system_config_version_conflict:${current.version}`);
+      }
+      const nextConfig = applySystemConfigPatchesV2(current.config, Array.isArray(input.patches) ? input.patches : []);
+      const saved = await saveSystemConfigInTxV2(query as any, nextConfig, current.version);
+      await query("COMMIT");
+      return saved;
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
+}
 
 export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
   const st = getStoreStateV1();
@@ -560,6 +870,8 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
           "INSERT INTO daa_fx_rates (id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at) VALUES ('USD/HKD', 'USD', 'HKD', 7.8, 'bootstrap', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
         );
 
+        await ensureSystemConfigRowInTxV2(query as any);
+
         await query("COMMIT");
       } catch (error) {
         try {
@@ -645,43 +957,26 @@ export async function replaceDaaPositionsV1(rows: Array<Partial<DaaStorePosition
 }
 
 export async function getDaaStrategyConfigV1(): Promise<DaaStoreStrategyConfigV1> {
-  await ensureDaaStoreSchemaPgV1();
-  return withDaaPgClientV0(async ({ query }) => {
-    const result = await query(
-      "SELECT id, config_json, updated_at FROM daa_strategy_config WHERE id = 'default' LIMIT 1",
-    );
-    const row = result.rows[0] as Record<string, unknown> | undefined;
-    if (!row) {
-      return {
-        id: "default",
-        configJson: { ...DEFAULT_STRATEGY_CONFIG_V1 },
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    return {
-      id: "default",
-      configJson: parseJsonb<Record<string, unknown>>(row.config_json, { ...DEFAULT_STRATEGY_CONFIG_V1 }),
-      updatedAt: toIsoString(row.updated_at),
-    };
-  });
+  const row = await getDaaSystemConfigV2();
+  return {
+    id: "default",
+    configJson: row.config.strategy as unknown as Record<string, unknown>,
+    updatedAt: row.updatedAt,
+  };
 }
 
 export async function saveDaaStrategyConfigV1(configJson: Record<string, unknown>): Promise<DaaStoreStrategyConfigV1> {
-  await ensureDaaStoreSchemaPgV1();
-  return withDaaPgClientV0(async ({ query }) => {
-    await query(
-      "INSERT INTO daa_strategy_config (id, config_json, updated_at) VALUES ('default', $1, NOW()) ON CONFLICT (id) DO UPDATE SET config_json = EXCLUDED.config_json, updated_at = NOW()",
-      [JSON.stringify(configJson || {})],
-    );
-
-    const result = await query("SELECT id, config_json, updated_at FROM daa_strategy_config WHERE id='default' LIMIT 1");
-    const row = result.rows[0] as Record<string, unknown>;
-    return {
-      id: "default",
-      configJson: parseJsonb<Record<string, unknown>>(row.config_json, { ...DEFAULT_STRATEGY_CONFIG_V1 }),
-      updatedAt: toIsoString(row.updated_at),
-    };
-  });
+  const current = await getDaaSystemConfigV2();
+  const merged = {
+    ...current.config,
+    strategy: configJson || {},
+  };
+  const saved = await saveDaaSystemConfigV2({ config: merged, baseVersion: current.version });
+  return {
+    id: "default",
+    configJson: saved.config.strategy as unknown as Record<string, unknown>,
+    updatedAt: saved.updatedAt,
+  };
 }
 
 function isRecordV1(value: unknown): value is Record<string, unknown> {
@@ -756,16 +1051,31 @@ async function syncStrategyAccountCashInTxV1(
   frozenCash: number;
   totalEquity: number | null;
 }> {
-  const result = await query(
-    "SELECT config_json FROM daa_strategy_config WHERE id = 'default' LIMIT 1 FOR UPDATE",
+  const currentSystem = await ensureSystemConfigRowInTxV2(query as any);
+  const patched = applyAccountCashDeltaToConfigV1(currentSystem.config.strategy as unknown as Record<string, unknown>, nextCash);
+
+  await query(
+    "UPDATE daa_system_config_v2 SET version = $1, config_json = $2::jsonb, updated_at = NOW() WHERE id = 'default'",
+    [
+      currentSystem.version + 1,
+      JSON.stringify(
+        normalizeSystemConfigV2({
+          ...currentSystem.config,
+          strategy: patched.configJson,
+        }),
+      ),
+    ],
   );
-  const currentConfig = parseJsonb<Record<string, unknown>>(result.rows[0]?.config_json, { ...DEFAULT_STRATEGY_CONFIG_V1 });
-  const patched = applyAccountCashDeltaToConfigV1(currentConfig, nextCash);
+
+  // 同步写回 legacy 表，确保历史 SQL 兼容逻辑可读取到账户现金变更。
   await query(
     "INSERT INTO daa_strategy_config (id, config_json, updated_at) VALUES ('default', $1, NOW()) ON CONFLICT (id) DO UPDATE SET config_json = EXCLUDED.config_json, updated_at = NOW()",
     [JSON.stringify(patched.configJson)],
   );
-  return patched.account;
+  return {
+    ...patched.account,
+    baseCurrency: normalizeCurrencyAliasV2(patched.account.baseCurrency, "USD"),
+  };
 }
 
 function mapEquitySnapshotRowV1(row: Record<string, unknown>): DaaStoreEquitySnapshotV1 {
@@ -824,48 +1134,64 @@ function mapDataSourceRowV1(row: Record<string, unknown>): DaaStoreDataSourceV1 
 }
 
 export async function listDaaDataSourcesV1(kind?: string): Promise<DaaStoreDataSourceV1[]> {
-  await ensureDaaStoreSchemaPgV1();
-  return withDaaPgClientV0(async ({ query }) => {
-    const normalizedKind = normalizeText(kind);
-    const result = normalizedKind
-      ? await query(
-        "SELECT id, kind, config_json, enabled, created_at, updated_at FROM daa_data_sources WHERE kind = $1 ORDER BY id ASC",
-        [normalizedKind],
-      )
-      : await query("SELECT id, kind, config_json, enabled, created_at, updated_at FROM daa_data_sources ORDER BY kind ASC, id ASC");
-
-    return result.rows.map((row) => mapDataSourceRowV1(row as Record<string, unknown>));
-  });
+  const system = await getDaaSystemConfigV2();
+  const all = buildLegacyDataSourcesFromSystemConfigV2(system.config);
+  const normalizedKind = normalizeText(kind);
+  if (!normalizedKind) return all;
+  return all.filter((row) => row.kind === normalizedKind);
 }
 
 export async function replaceDaaDataSourcesV1(rows: DaaStoreDataSourceV1[]): Promise<DaaStoreDataSourceV1[]> {
-  await ensureDaaStoreSchemaPgV1();
-  return withDaaPgClientV0(async ({ query }) => {
-    await query("BEGIN");
-    try {
-      for (const raw of rows) {
-        const id = normalizeText(raw.id);
-        const kind = normalizeText(raw.kind);
-        if (!id || !kind) continue;
+  const current = await getDaaSystemConfigV2();
+  const next = normalizeSystemConfigV2(current.config);
 
-        await query(
-          "INSERT INTO daa_data_sources (id, kind, config_json, enabled, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),NOW()) ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, config_json = EXCLUDED.config_json, enabled = EXCLUDED.enabled, updated_at = NOW()",
-          [id, kind, JSON.stringify(raw.configJson || {}), Boolean(raw.enabled)],
-        );
-      }
-      await query("COMMIT");
-    } catch (error) {
-      try {
-        await query("ROLLBACK");
-      } catch {
-        // ignore
-      }
-      throw error;
+  for (const raw of rows) {
+    const kind = normalizeText(raw.kind);
+    const configJson = parseJsonb<Record<string, unknown>>(raw.configJson, {});
+    if (kind === "hf_fund") {
+      next.dataSources.hfFund.id = normalizeText(raw.id, next.dataSources.hfFund.id);
+      next.dataSources.hfFund.enabled = Boolean(raw.enabled);
+      if (Array.isArray(configJson.funds)) next.dataSources.hfFund.funds = configJson.funds as any[];
+      if (Array.isArray(configJson.marketScope)) next.dataSources.hfFund.marketScope = configJson.marketScope as string[];
+      continue;
     }
+    if (kind === "price_feed") {
+      next.dataSources.priceFeed.id = normalizeText(raw.id, next.dataSources.priceFeed.id);
+      next.dataSources.priceFeed.enabled = Boolean(raw.enabled);
+      next.dataSources.priceFeed.provider = normalizeText(configJson.provider, next.dataSources.priceFeed.provider);
+      if (configJson.intervalMinutes != null) next.dataSources.priceFeed.intervalMinutes = Math.max(1, Math.trunc(toFiniteNumber(configJson.intervalMinutes, next.dataSources.priceFeed.intervalMinutes)));
+      if (Array.isArray(configJson.symbols)) next.dataSources.priceFeed.symbols = configJson.symbols as string[];
+      continue;
+    }
+    if (kind === "news_feed") {
+      next.dataSources.newsFeed.id = normalizeText(raw.id, next.dataSources.newsFeed.id);
+      next.dataSources.newsFeed.enabled = Boolean(raw.enabled);
+      next.dataSources.newsFeed.provider = normalizeText(configJson.provider, next.dataSources.newsFeed.provider);
+      next.dataSources.newsFeed.query = normalizeText(configJson.query, "");
+      if (Array.isArray(configJson.symbols)) next.dataSources.newsFeed.symbols = configJson.symbols as string[];
+      if (isRecordV1(configJson.fusionWeights)) next.dataSources.newsFeed.fusionWeights = configJson.fusionWeights as any;
+      continue;
+    }
+    if (kind === "fx_feed") {
+      next.dataSources.fxFeed.id = normalizeText(raw.id, next.dataSources.fxFeed.id);
+      next.dataSources.fxFeed.enabled = Boolean(raw.enabled);
+      next.dataSources.fxFeed.provider = normalizeText(configJson.provider, next.dataSources.fxFeed.provider);
+      next.dataSources.fxFeed.baseCurrency = normalizeCurrencyAliasV2(configJson.baseCurrency, next.dataSources.fxFeed.baseCurrency) as any;
+      if (Array.isArray(configJson.pairs)) next.dataSources.fxFeed.pairs = configJson.pairs as string[];
+      continue;
+    }
+    if (kind === "llm_analysis") {
+      next.dataSources.llmAnalysis.id = normalizeText(raw.id, next.dataSources.llmAnalysis.id);
+      next.dataSources.llmAnalysis.enabled = Boolean(raw.enabled);
+      next.dataSources.llmAnalysis.provider = normalizeText(configJson.provider, next.dataSources.llmAnalysis.provider);
+      next.dataSources.llmAnalysis.model = normalizeText(configJson.model, next.dataSources.llmAnalysis.model);
+      if (configJson.timeoutMs != null) next.dataSources.llmAnalysis.timeoutMs = Math.max(2000, Math.trunc(toFiniteNumber(configJson.timeoutMs, next.dataSources.llmAnalysis.timeoutMs)));
+      if (configJson.enabledInDecision != null) next.dataSources.llmAnalysis.enabledInDecision = Boolean(configJson.enabledInDecision);
+    }
+  }
 
-    const result = await query("SELECT id, kind, config_json, enabled, created_at, updated_at FROM daa_data_sources ORDER BY kind ASC, id ASC");
-    return result.rows.map((row) => mapDataSourceRowV1(row as Record<string, unknown>));
-  });
+  const saved = await saveDaaSystemConfigV2({ config: next, baseVersion: current.version });
+  return buildLegacyDataSourcesFromSystemConfigV2(saved.config);
 }
 
 function mapHumanIngestStateRowV1(row: Record<string, unknown>): DaaStoreHumanIngestStateV1 {
@@ -985,8 +1311,7 @@ export async function replaceDaaWatchlistCandidatesV1(
 }
 
 function normalizeCcyCode(value: unknown, fallback = "USD"): string {
-  const code = normalizeText(value, fallback).toUpperCase();
-  return code || fallback;
+  return normalizeCurrencyAliasV2(value, fallback);
 }
 
 function normalizeFxPair(baseCcy: string, quoteCcy: string): string {
@@ -1140,10 +1465,8 @@ export async function appendDaaCashLedgerEntryV1(input: DaaStoreCashLedgerApplyI
 
     await query("BEGIN");
     try {
-      const strategyResult = await query(
-        "SELECT config_json FROM daa_strategy_config WHERE id = 'default' LIMIT 1 FOR UPDATE",
-      );
-      const currentConfig = parseJsonb<Record<string, unknown>>(strategyResult.rows[0]?.config_json, { ...DEFAULT_STRATEGY_CONFIG_V1 });
+      const systemRow = await ensureSystemConfigRowInTxV2(query as any);
+      const currentConfig = systemRow.config.strategy as unknown as Record<string, unknown>;
       const accountRaw = isRecordV1(currentConfig.account) ? currentConfig.account : {};
       const currentCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
       const nextCash = side === "deposit" ? currentCash + amount : currentCash - amount;
@@ -1215,59 +1538,38 @@ export async function appendDaaCashLedgerEntryV1(input: DaaStoreCashLedgerApplyI
 }
 
 export async function getDaaNotificationConfigV1(): Promise<DaaStoreNotificationConfigV1> {
-  await ensureDaaStoreSchemaPgV1();
-  return withDaaPgClientV0(async ({ query }) => {
-    const result = await query(
-      "SELECT id, enabled, notify_on_drift, notify_on_rebalance, notify_on_price_alert, updated_at FROM daa_notification_config WHERE id='default' LIMIT 1",
-    );
-    const row = result.rows[0] as Record<string, unknown> | undefined;
-    if (!row) {
-      return {
-        id: "default",
-        enabled: false,
-        notifyOnDrift: true,
-        notifyOnRebalance: true,
-        notifyOnPriceAlert: false,
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    return {
-      id: "default",
-      enabled: Boolean(row.enabled),
-      notifyOnDrift: Boolean(row.notify_on_drift),
-      notifyOnRebalance: Boolean(row.notify_on_rebalance),
-      notifyOnPriceAlert: Boolean(row.notify_on_price_alert),
-      updatedAt: toIsoString(row.updated_at),
-    };
-  });
+  const system = await getDaaSystemConfigV2();
+  return {
+    id: "default",
+    enabled: system.config.notification.enabled,
+    notifyOnDrift: system.config.notification.notifyOnDrift,
+    notifyOnRebalance: system.config.notification.notifyOnRebalance,
+    notifyOnPriceAlert: system.config.notification.notifyOnPriceAlert,
+    updatedAt: system.updatedAt,
+  };
 }
 
 export async function saveDaaNotificationConfigV1(input: Partial<DaaStoreNotificationConfigV1>): Promise<DaaStoreNotificationConfigV1> {
-  await ensureDaaStoreSchemaPgV1();
-  return withDaaPgClientV0(async ({ query }) => {
-    await query(
-      "INSERT INTO daa_notification_config (id, enabled, notify_on_drift, notify_on_rebalance, notify_on_price_alert, updated_at) VALUES ('default', $1, $2, $3, $4, NOW()) ON CONFLICT (id) DO UPDATE SET enabled = EXCLUDED.enabled, notify_on_drift = EXCLUDED.notify_on_drift, notify_on_rebalance = EXCLUDED.notify_on_rebalance, notify_on_price_alert = EXCLUDED.notify_on_price_alert, updated_at = NOW()",
-      [
-        Boolean(input.enabled),
-        input.notifyOnDrift ?? true,
-        input.notifyOnRebalance ?? true,
-        input.notifyOnPriceAlert ?? false,
-      ],
-    );
-
-    const result = await query(
-      "SELECT id, enabled, notify_on_drift, notify_on_rebalance, notify_on_price_alert, updated_at FROM daa_notification_config WHERE id='default' LIMIT 1",
-    );
-    const row = result.rows[0] as Record<string, unknown>;
-    return {
-      id: "default",
-      enabled: Boolean(row.enabled),
-      notifyOnDrift: Boolean(row.notify_on_drift),
-      notifyOnRebalance: Boolean(row.notify_on_rebalance),
-      notifyOnPriceAlert: Boolean(row.notify_on_price_alert),
-      updatedAt: toIsoString(row.updated_at),
-    };
+  const current = await getDaaSystemConfigV2();
+  const next = normalizeSystemConfigV2({
+    ...current.config,
+    notification: {
+      ...current.config.notification,
+      enabled: input.enabled ?? current.config.notification.enabled,
+      notifyOnDrift: input.notifyOnDrift ?? current.config.notification.notifyOnDrift,
+      notifyOnRebalance: input.notifyOnRebalance ?? current.config.notification.notifyOnRebalance,
+      notifyOnPriceAlert: input.notifyOnPriceAlert ?? current.config.notification.notifyOnPriceAlert,
+    },
   });
+  const saved = await saveDaaSystemConfigV2({ config: next, baseVersion: current.version });
+  return {
+    id: "default",
+    enabled: saved.config.notification.enabled,
+    notifyOnDrift: saved.config.notification.notifyOnDrift,
+    notifyOnRebalance: saved.config.notification.notifyOnRebalance,
+    notifyOnPriceAlert: saved.config.notification.notifyOnPriceAlert,
+    updatedAt: saved.updatedAt,
+  };
 }
 
 function mapRunHistoryRowV1(row: Record<string, unknown>): DaaStoreRunHistoryEntryV1 {
@@ -1550,8 +1852,12 @@ export async function createDaaRebalanceDecisionV1(input: {
         ],
       );
 
-      const executableOrdersRaw = Array.isArray((input.responseJson as any)?.executableOrders)
-        ? (input.responseJson as any).executableOrders
+      const schemaVersion = Number((input.responseJson as any)?.schemaVersion || 0);
+      if (schemaVersion !== 2) {
+        throw new Error("responseJson must be UnifiedDecisionResultV2");
+      }
+      const executableOrdersRaw = Array.isArray((input.responseJson as any)?.plan?.executableOrders)
+        ? (input.responseJson as any).plan.executableOrders
         : [];
 
       for (const orderRaw of executableOrdersRaw) {
@@ -1616,9 +1922,10 @@ export async function listDaaRebalanceDecisionsV1(opts?: {
     if (!decisions.length) return [];
 
     const ids = decisions.map((d) => d.id);
+    const orderWhere = ids.map((_, idx) => `$${idx + 1}`).join(", ");
     const oRes = await query(
-      "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = ANY($1) ORDER BY created_at ASC",
-      [ids],
+      `SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id IN (${orderWhere}) ORDER BY created_at ASC`,
+      ids,
     );
 
     const ordersByDecision = new Map<string, DaaStoreExecutionOrderV1[]>();

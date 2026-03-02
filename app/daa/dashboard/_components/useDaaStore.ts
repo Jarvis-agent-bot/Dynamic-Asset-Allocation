@@ -19,27 +19,32 @@ import {
   type UnifiedInputSliceKeyV1,
 } from "../../unifiedInputStore";
 
-import { getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
+import { ApiClientErrorV1, getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
 import {
   appendCashLedgerEntryV1,
   appendOpLogV1,
   appendEquitySnapshotV1,
-  getStrategyConfigV1,
+  getSystemConfigV2,
   listCashLedgerV1,
   listFxRatesV1,
-  listDataSourcesV1,
   listEquitySnapshotsV1,
   listOpLogV1,
   listPositionsV1,
+  patchSystemConfigV2,
   listRunHistoryV1,
   listWatchlistCandidatesV1,
-  replaceDataSourcesV1,
   replaceWatchlistCandidatesV1,
   replacePositionsV1,
-  saveStrategyConfigV1,
   upsertFxRatesV1,
+  type StoreSystemConfigEnvelopeV2,
+  type StoreSystemConfigPatchV2,
 } from "@/src/daa/modules/store/storeApiV1";
 import type { DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
+import {
+  applySystemConfigPatchesV2,
+  DEFAULT_SYSTEM_CONFIG_V2,
+  normalizeSystemConfigV2,
+} from "@/src/daa/config/systemConfigV2";
 
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
 const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
@@ -61,6 +66,253 @@ function emitDashboardPersistErrorV1(message: string) {
   } catch {
     // ignore browser event failures
   }
+}
+
+function cloneV2<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function buildDefaultSystemConfigEnvelopeV2(): StoreSystemConfigEnvelopeV2 {
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    config: normalizeSystemConfigV2(DEFAULT_SYSTEM_CONFIG_V2),
+  };
+}
+
+type SystemConfigPatchJobV2 = {
+  seq: number;
+  patches: StoreSystemConfigPatchV2[];
+  errorPrefix: string;
+};
+
+type SystemConfigRuntimeStateV2 = {
+  envelope: StoreSystemConfigEnvelopeV2 | null;
+  loadingPromise: Promise<StoreSystemConfigEnvelopeV2> | null;
+  patchLoopRunning: boolean;
+  pendingPatchJobs: SystemConfigPatchJobV2[];
+  nextSeq: number;
+  listeners: Set<(value: StoreSystemConfigEnvelopeV2 | null) => void>;
+};
+
+const SYSTEM_CONFIG_RUNTIME_KEY_V2 = "__daa_system_config_runtime_v2__";
+
+function getSystemConfigRuntimeV2(): SystemConfigRuntimeStateV2 {
+  const g = globalThis as any;
+  if (!g[SYSTEM_CONFIG_RUNTIME_KEY_V2]) {
+    g[SYSTEM_CONFIG_RUNTIME_KEY_V2] = {
+      envelope: null,
+      loadingPromise: null,
+      patchLoopRunning: false,
+      pendingPatchJobs: [],
+      nextSeq: 0,
+      listeners: new Set(),
+    } satisfies SystemConfigRuntimeStateV2;
+  }
+  return g[SYSTEM_CONFIG_RUNTIME_KEY_V2] as SystemConfigRuntimeStateV2;
+}
+
+function notifySystemConfigListenersV2() {
+  const st = getSystemConfigRuntimeV2();
+  for (const listener of st.listeners) {
+    try {
+      listener(st.envelope ? cloneV2(st.envelope) : null);
+    } catch {
+      // ignore listener failures
+    }
+  }
+}
+
+function setSystemConfigEnvelopeV2(next: StoreSystemConfigEnvelopeV2 | null) {
+  const st = getSystemConfigRuntimeV2();
+  if (!next) {
+    st.envelope = null;
+  } else {
+    st.envelope = {
+      version: Math.max(1, Math.trunc(Number(next.version) || 1)),
+      updatedAt: String(next.updatedAt || new Date().toISOString()),
+      config: normalizeSystemConfigV2(next.config),
+    };
+  }
+  notifySystemConfigListenersV2();
+}
+
+function subscribeSystemConfigV2(listener: (value: StoreSystemConfigEnvelopeV2 | null) => void): () => void {
+  const st = getSystemConfigRuntimeV2();
+  st.listeners.add(listener);
+  return () => {
+    st.listeners.delete(listener);
+  };
+}
+
+async function loadSystemConfigV2(force = false): Promise<StoreSystemConfigEnvelopeV2> {
+  const st = getSystemConfigRuntimeV2();
+  if (!force && st.envelope) {
+    return cloneV2(st.envelope);
+  }
+  if (!force && st.loadingPromise) return st.loadingPromise;
+
+  const promise = getSystemConfigV2()
+    .then((row) => {
+      setSystemConfigEnvelopeV2(row);
+      return row;
+    })
+    .finally(() => {
+      const runtime = getSystemConfigRuntimeV2();
+      runtime.loadingPromise = null;
+    });
+
+  st.loadingPromise = promise;
+  return promise;
+}
+
+function normalizePatchListV2(patches: StoreSystemConfigPatchV2[]): StoreSystemConfigPatchV2[] {
+  if (!Array.isArray(patches)) return [];
+  return patches
+    .map((patch) => ({
+      path: String(patch?.path || "").trim(),
+      value: patch?.value,
+    }))
+    .filter((patch) => patch.path.length > 0);
+}
+
+function applyOptimisticSystemConfigPatchV2(patches: StoreSystemConfigPatchV2[]) {
+  const st = getSystemConfigRuntimeV2();
+  const current = st.envelope ? cloneV2(st.envelope) : buildDefaultSystemConfigEnvelopeV2();
+  const nextConfig = applySystemConfigPatchesV2(current.config, patches);
+  setSystemConfigEnvelopeV2({
+    ...current,
+    updatedAt: new Date().toISOString(),
+    config: nextConfig,
+  });
+}
+
+function isVersionConflictErrorV2(error: unknown): boolean {
+  return error instanceof ApiClientErrorV1 && (error.code === "VERSION_CONFLICT" || error.status === 409);
+}
+
+async function runSystemConfigPatchJobV2(job: SystemConfigPatchJobV2): Promise<void> {
+  const normalizedPatches = normalizePatchListV2(job.patches);
+  if (!normalizedPatches.length) return;
+
+  const st = getSystemConfigRuntimeV2();
+  const current = st.envelope ? cloneV2(st.envelope) : await loadSystemConfigV2(false);
+  applyOptimisticSystemConfigPatchV2(normalizedPatches);
+
+  let baseVersion = current.version;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const saved = await patchSystemConfigV2({
+        patches: normalizedPatches,
+        baseVersion,
+      });
+      const runtime = getSystemConfigRuntimeV2();
+      const hasNewerPending = runtime.pendingPatchJobs.some((item) => item.seq > job.seq);
+      if (hasNewerPending && runtime.envelope) {
+        setSystemConfigEnvelopeV2({
+          version: saved.version,
+          updatedAt: saved.updatedAt,
+          config: runtime.envelope.config,
+        });
+      } else {
+        setSystemConfigEnvelopeV2(saved);
+      }
+      emitDashboardDataUpdatedV1();
+      return;
+    } catch (error) {
+      if (isVersionConflictErrorV2(error) && attempt === 0) {
+        const latest = await loadSystemConfigV2(true);
+        baseVersion = latest.version;
+        continue;
+      }
+      emitDashboardPersistErrorV1(`${job.errorPrefix}：${getApiErrorMessageV1(error)}`);
+      try {
+        await loadSystemConfigV2(true);
+      } catch {
+        // ignore refresh failures
+      }
+      return;
+    }
+  }
+}
+
+async function processSystemConfigPatchQueueV2() {
+  const st = getSystemConfigRuntimeV2();
+  if (st.patchLoopRunning) return;
+  st.patchLoopRunning = true;
+  try {
+    while (st.pendingPatchJobs.length > 0) {
+      const job = st.pendingPatchJobs.shift()!;
+      await runSystemConfigPatchJobV2(job);
+    }
+  } finally {
+    st.patchLoopRunning = false;
+  }
+}
+
+function enqueueSystemConfigPatchV2(input: {
+  patches: StoreSystemConfigPatchV2[];
+  errorPrefix: string;
+}) {
+  const patches = normalizePatchListV2(input.patches);
+  if (!patches.length) return;
+  applyOptimisticSystemConfigPatchV2(patches);
+
+  const st = getSystemConfigRuntimeV2();
+  st.nextSeq += 1;
+  st.pendingPatchJobs.push({
+    seq: st.nextSeq,
+    patches,
+    errorPrefix: input.errorPrefix,
+  });
+  void processSystemConfigPatchQueueV2();
+}
+
+export function useSystemConfigV2() {
+  const [envelope, setEnvelope] = useState<StoreSystemConfigEnvelopeV2 | null>(() => {
+    const st = getSystemConfigRuntimeV2();
+    return st.envelope ? cloneV2(st.envelope) : null;
+  });
+
+  useEffect(() => subscribeSystemConfigV2(setEnvelope), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadSystemConfigV2(false).catch((error) => {
+      if (cancelled) return;
+      emitDashboardPersistErrorV1(`加载系统配置失败：${getApiErrorMessageV1(error)}`);
+    });
+    function onRefresh() {
+      void loadSystemConfigV2(true).catch((error) => {
+        emitDashboardPersistErrorV1(`刷新系统配置失败：${getApiErrorMessageV1(error)}`);
+      });
+    }
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, []);
+
+  const patchConfig = useCallback((patches: StoreSystemConfigPatchV2[], errorPrefix = "保存系统配置失败") => {
+    enqueueSystemConfigPatchV2({ patches, errorPrefix });
+  }, []);
+
+  const refresh = useCallback(async () => {
+    return loadSystemConfigV2(true);
+  }, []);
+
+  const stableEnvelope = useMemo(() => {
+    if (!envelope) return buildDefaultSystemConfigEnvelopeV2();
+    return cloneV2(envelope);
+  }, [envelope]);
+
+  return {
+    envelope: stableEnvelope,
+    ready: Boolean(envelope),
+    patchConfig,
+    refresh,
+  };
 }
 
 export function useDaaSlice<T>(key: UnifiedInputSliceKeyV1): [T | null, (v: T | null) => void] {
@@ -139,51 +391,28 @@ export function useAssetViews() {
 
 export function useHfFundRegistry() {
   const [value, setValue] = useDaaSlice<DaaHfFundTrackRow[]>("hfFundRegistry");
+  const { envelope, patchConfig } = useSystemConfigV2();
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const rows = await listDataSourcesV1("hf_fund");
-        if (cancelled) return;
-        const source = Array.isArray(rows) ? rows[0] : null;
-        const funds = Array.isArray(source?.configJson?.funds) ? source.configJson.funds : [];
-        setValue(funds as DaaHfFundTrackRow[]);
-        emitDashboardDataUpdatedV1();
-      } catch {
-        // ignore
-      }
-    }
-    function onRefresh() {
-      void load();
-    }
-    void load();
-    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
-    };
-  }, [setValue]);
+    const rows = Array.isArray(envelope.config.dataSources.hfFund.funds)
+      ? envelope.config.dataSources.hfFund.funds
+      : [];
+    setValue(rows as DaaHfFundTrackRow[]);
+  }, [envelope.config.dataSources.hfFund.funds, setValue]);
 
   const set = useCallback((rows: DaaHfFundTrackRow[] | null) => {
-    const previous = readUnifiedInputSliceV1<DaaHfFundTrackRow[]>("hfFundRegistry");
-    setValue(rows);
-    void replaceDataSourcesV1([
-      {
-        id: "hf_fund.default",
-        kind: "hf_fund",
-        enabled: true,
-        configJson: { funds: rows ?? [] },
-      },
-    ] as any[])
-      .then(() => {
-        emitDashboardDataUpdatedV1();
-      })
-      .catch((error) => {
-        setValue(previous ?? null);
-        emitDashboardPersistErrorV1(`保存基金池失败：${getApiErrorMessageV1(error)}`);
-      });
-  }, [setValue]);
+    const next = rows ?? [];
+    setValue(next);
+    patchConfig(
+      [
+        {
+          path: "/dataSources/hfFund/funds",
+          value: next,
+        },
+      ],
+      "保存基金池失败",
+    );
+  }, [patchConfig, setValue]);
 
   return [value, set] as const;
 }
@@ -274,6 +503,13 @@ export function useFxRates() {
 
 export function useStrategyConfig(): [DaaStrategyConfig, (v: DaaStrategyConfig) => void] {
   const [raw, setRaw] = useDaaSlice<DaaStrategyConfig>("strategyConfig");
+  const { envelope, patchConfig } = useSystemConfigV2();
+
+  useEffect(() => {
+    const strategy = envelope.config.strategy as unknown as DaaStrategyConfig;
+    setRaw(strategy);
+  }, [envelope.config.strategy, setRaw]);
+
   const config = useMemo(() => {
     if (!raw) return DEFAULT_STRATEGY_CONFIG;
     return {
@@ -287,41 +523,10 @@ export function useStrategyConfig(): [DaaStrategyConfig, (v: DaaStrategyConfig) 
     };
   }, [raw]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const serverConfig = await getStrategyConfigV1();
-        if (cancelled) return;
-        setRaw((serverConfig && typeof serverConfig === "object") ? serverConfig as DaaStrategyConfig : DEFAULT_STRATEGY_CONFIG);
-        emitDashboardDataUpdatedV1();
-      } catch {
-        // ignore
-      }
-    }
-    function onRefresh() {
-      void load();
-    }
-    void load();
-    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
-    };
-  }, [setRaw]);
-
   const set = useCallback((v: DaaStrategyConfig) => {
-    const previous = readUnifiedInputSliceV1<DaaStrategyConfig>("strategyConfig");
     setRaw(v);
-    void saveStrategyConfigV1(v as unknown as Record<string, unknown>)
-      .then(() => {
-        emitDashboardDataUpdatedV1();
-      })
-      .catch((error) => {
-        setRaw(previous ?? null);
-        emitDashboardPersistErrorV1(`保存策略配置失败：${getApiErrorMessageV1(error)}`);
-      });
-  }, [setRaw]);
+    patchConfig([{ path: "/strategy", value: v }], "保存策略配置失败");
+  }, [patchConfig, setRaw]);
 
   return [config as DaaStrategyConfig, set];
 }

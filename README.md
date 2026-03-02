@@ -47,13 +47,15 @@ pnpm dev
 - `/api/daa/auth/*`：登录、会话、登出。
 - `/api/daa/hf/*`：人因数据摄取与读取。
 
-## 核心 API（规划中，Planned）
+## 核心 API（配置与存储）
 
-- `/api/daa/store/*`：持仓/策略配置/权益快照/交易日志持久化。
-- `/api/daa/cron/*`：价格刷新、drift 检查、HF ingest 定时任务入口。
-- `/api/daa/trade-journal/manual-sync`：人工执行回填。
+- `/api/daa/store/system-config`：系统统一配置（GET / PATCH，含 `version` 乐观并发）。
+- `/api/daa/store/positions`：持仓存储。
+- `/api/daa/store/watchlist-candidates`：候选池存储。
+- `/api/daa/store/fx-rates`：汇率快照与手工维护。
+- `/api/daa/cron/*`：价格刷新、drift 检查、HF ingest 定时任务入口（逐步完善）。
 
-详细契约见：`docs/architecture/DAA_REVIEW_DECISIONS_2026-03-01.md`。
+架构与重构说明：`docs/architecture/DAA_REFACTOR_BLUEPRINT_2026-03-01.md`。
 
 ## 开发与验证
 
@@ -67,11 +69,8 @@ CI 与本地对齐，建议每次提交前执行上述三项检查。
 
 ## 目录导航
 
-- 核心架构基线：`docs/architecture/DAA_REVIEW_DECISIONS_2026-03-01.md`
-- 核心架构说明：`docs/DAA_GLOBAL_ARCHITECTURE_GUIDE.md`
-- Codex 文档守则：`docs/engineering/CODEX_DOC_GOVERNANCE.md`
-- Codex 协作流程：`docs/engineering/CODEX_WORKFLOW.md`
-- 路线执行清单：`docs/engineering/ROADMAP_EXECUTION_CHECKLIST.md`
+- 文档总览：`docs/README.md`
+- 一次性重构蓝图：`docs/architecture/DAA_REFACTOR_BLUEPRINT_2026-03-01.md`
 - 快速开始：`docs/QUICKSTART.md`
 - 部署说明：`deploy/README.md`
 

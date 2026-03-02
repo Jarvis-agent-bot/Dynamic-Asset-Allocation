@@ -728,6 +728,28 @@ function shouldUseCache(maxAgeMs = 6 * 60 * 60 * 1000): boolean {
   return Date.now() - ts < maxAgeMs;
 }
 
+export type DaaFundManagerOperationV1 = {
+  symbol: string;
+  actorId: string;
+  fundCode: string;
+  fundName: string;
+  deltaWeightPct: number;
+  weightPct: number;
+  prevWeightPct: number;
+  disclosedAt: string;
+  sourceName: string;
+  sourceRef: string;
+  confidencePct: number;
+};
+
+export type DaaFundManagerOpsBySymbolV1 = {
+  symbol: string;
+  generatedAt: string;
+  sourceStatus: "live" | "fallback_seed" | "unknown";
+  topAdds: DaaFundManagerOperationV1[];
+  topReduces: DaaFundManagerOperationV1[];
+};
+
 function buildBatchFromRuntimeStateV1(opts: {
   marketScope?: string[];
   symbols?: string[];
@@ -818,6 +840,87 @@ export function listActorHoldingsV1(actorId: string, opts: { marketScope?: strin
   return source
     .filter((row) => row.actorId === normalizedActorId && matchesScope(row.market, scope))
     .map((row) => ({ ...row }));
+}
+
+export async function listFundManagerOperationsBySymbolsV1(opts: {
+  symbols: string[];
+  marketScope?: string[];
+  topN?: number;
+}): Promise<Record<string, DaaFundManagerOpsBySymbolV1>> {
+  const symbols = [...new Set((opts.symbols ?? []).map((item) => normalizeSymbol(item)).filter(Boolean))];
+  if (!symbols.length) return {};
+
+  await getLatestHumanSignalBatchV1({
+    symbols,
+    marketScope: opts.marketScope,
+    autoIngestOnMiss: false,
+  });
+
+  const runtime = getHumanIngestRuntimeStateV1();
+  const sourceStatus = runtime.latestBatch?.sourceStatus ?? "unknown";
+  const generatedAt = runtime.latestBatch?.generatedAt || new Date().toISOString();
+  const scope = new Set(normalizeMarketScope(opts.marketScope));
+  const topN = Math.max(1, Math.min(10, Math.trunc(Number(opts.topN) || 5)));
+
+  const actors = runtime.latestActors.length > 0 ? runtime.latestActors : HF_SEED_ACTORS_V1;
+  const actorMap = new Map(actors.map((actor) => [actor.actorId, actor]));
+  const holdings = runtime.latestHoldings.length > 0
+    ? runtime.latestHoldings
+    : HF_SEED_HOLDINGS_V1;
+  const symbolSet = new Set(symbols);
+  const rowsBySymbol = new Map<string, DaaFundManagerOperationV1[]>();
+
+  for (const row of holdings) {
+    const symbol = normalizeSymbol(row.symbol);
+    if (!symbolSet.has(symbol)) continue;
+    if (!matchesScope(row.market, scope)) continue;
+
+    const deltaWeightPct = Number((Number(row.weightPct || 0) - Number(row.prevWeightPct || 0)).toFixed(4));
+    if (!Number.isFinite(deltaWeightPct) || Math.abs(deltaWeightPct) < 0.0001) continue;
+
+    const actor = actorMap.get(row.actorId);
+    const fundCode = extractDanjuanFundCode(row.actorId) || normalizeSymbol(row.actorId);
+    const operation: DaaFundManagerOperationV1 = {
+      symbol,
+      actorId: row.actorId,
+      fundCode,
+      fundName: actor?.displayName || fundCode,
+      deltaWeightPct,
+      weightPct: Number((Number(row.weightPct || 0)).toFixed(4)),
+      prevWeightPct: Number((Number(row.prevWeightPct || 0)).toFixed(4)),
+      disclosedAt: row.disclosedAt,
+      sourceName: row.sourceName,
+      sourceRef: row.sourceRef,
+      confidencePct: Number((Number(row.confidencePct || 0)).toFixed(2)),
+    };
+
+    const bucket = rowsBySymbol.get(symbol);
+    if (bucket) {
+      bucket.push(operation);
+    } else {
+      rowsBySymbol.set(symbol, [operation]);
+    }
+  }
+
+  const out: Record<string, DaaFundManagerOpsBySymbolV1> = {};
+  for (const symbol of symbols) {
+    const rows = rowsBySymbol.get(symbol) ?? [];
+    out[symbol] = {
+      symbol,
+      generatedAt,
+      sourceStatus,
+      topAdds: rows
+        .filter((row) => row.deltaWeightPct > 0)
+        .sort((a, b) => b.deltaWeightPct - a.deltaWeightPct || b.confidencePct - a.confidencePct)
+        .slice(0, topN),
+      topReduces: rows
+        .filter((row) => row.deltaWeightPct < 0)
+        .sort((a, b) => a.deltaWeightPct - b.deltaWeightPct || b.confidencePct - a.confidencePct)
+        .slice(0, topN),
+    };
+  }
+
+  return out;
 }
 
 export function computeHumanSignalBatchV1(opts: { marketScope?: string[]; symbols?: string[] } = {}): DaaHumanSignalBatchV1 {

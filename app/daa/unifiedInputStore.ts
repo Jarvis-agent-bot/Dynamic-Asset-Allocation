@@ -1,5 +1,7 @@
 "use client";
 
+import { DEFAULT_SYSTEM_CONFIG_V2 } from "@/src/daa/config/systemConfigV2";
+
 export const DAA_RUNTIME_DATA_EVENT_V1 = "daa:data:updated";
 
 export type DaaPositionRow = {
@@ -40,10 +42,14 @@ export type DaaHfFundTrackRow = {
 export type DaaWatchlistCandidateRow = {
   id?: string;
   symbol: string;
+  name?: string | null;
   market: string;
   currency: string;
   enabled: boolean;
   targetWeightHint: number;
+  currentPrice?: number | null;
+  priceChangePct?: number | null;
+  priceUpdatedAt?: string | null;
   tags: string[];
   notes?: string | null;
 };
@@ -137,48 +143,12 @@ function nowIso(): string {
 }
 
 export const DEFAULT_STRATEGY_CONFIG: DaaStrategyConfig = {
-  account: {
-    baseCurrency: "USD",
-    cash: 0,
-    investableCash: 0,
-    frozenCash: 0,
-    totalEquity: null,
-  },
-  constraints: {
-    maxPositionPct: 1,
-    minNotional: 200,
-    maxOrderPctOfNav: 0.1,
-  },
-  policy: {
-    baseDriftTriggerPct: 0.05,
-    strongTrendDriftTriggerPct: 0.1,
-    riskOffConsensusPct: 0.6,
-    riskOffScalePct: 0.7,
-    valueTrapThesisDriftPct: 0.12,
-    sbIsolationScorePct: 0.35,
-  },
-  risk: {
-    maxDrawdownPct: 0.15,
-    perAssetStopLossPct: 0.2,
-    maxConcentrationPct: 0.3,
-    correlationCapPct: 0.6,
-    maxTotalRiskExposurePct: 0.7,
-  },
-  targetWeights: {},
-};
+  ...JSON.parse(JSON.stringify(DEFAULT_SYSTEM_CONFIG_V2.strategy)),
+} as DaaStrategyConfig;
 
-export const DEFAULT_HF_FUND_REGISTRY: DaaHfFundTrackRow[] = [
-  { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
-  { fundCode: "100055", label: "富国全球科技互联网", kind: "qdii", enabled: true },
-  { fundCode: "005827", label: "易方达蓝筹精选", kind: "equity", enabled: true },
-  { fundCode: "110011", label: "易方达中小盘", kind: "equity", enabled: true },
-  { fundCode: "161725", label: "招商中证白酒指数", kind: "equity", enabled: true },
-  { fundCode: "000248", label: "汇添富中证主要消费ETF联接", kind: "equity", enabled: true },
-  { fundCode: "005918", label: "工银前沿医疗股票", kind: "equity", enabled: true },
-  { fundCode: "486001", label: "工银全球精选股票QDII", kind: "qdii", enabled: true },
-  { fundCode: "000834", label: "大成景安短融债券", kind: "balanced", enabled: true },
-  { fundCode: "000874", label: "广发全球精选股票QDII", kind: "qdii", enabled: true },
-];
+export const DEFAULT_HF_FUND_REGISTRY: DaaHfFundTrackRow[] = JSON.parse(
+  JSON.stringify(DEFAULT_SYSTEM_CONFIG_V2.dataSources.hfFund.funds),
+) as DaaHfFundTrackRow[];
 
 function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
   return {

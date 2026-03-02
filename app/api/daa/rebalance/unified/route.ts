@@ -1,7 +1,8 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
+import { DEFAULT_ANALYSIS_FOCUS_V1, runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
 import { hydrateUnifiedRequestWithSignalsV1 } from "@/src/daa/modules/decision/hydrateUnifiedRequestV1";
+import type { UnifiedDecisionResultV2 } from "@/src/daa/modules/execution/executionTypesV1";
 import { appendDaaRunHistoryV1, createDaaRebalanceDecisionV1 } from "@/src/daa/store/daaStorePgV1";
 import {
   buildDaaUnifiedPlanV1,
@@ -22,13 +23,35 @@ export async function GET(req: Request) {
 
     if (!withDemo) {
       return okV1({
-        message: "POST JSON 到该接口可获取统一再平衡方案。追加 ?demo=1 可返回示例输入/输出。",
+        message: "POST { request, analysisFocus } 到该接口可获取统一再平衡方案（schemaVersion=2）。追加 ?demo=1 可返回示例输入/输出。",
       });
     }
 
+    const hydrated = await hydrateUnifiedRequestWithSignalsV1(DAA_UNIFIED_SAMPLE_REQUEST_V1);
+    const plan = buildDaaUnifiedPlanV1(hydrated.request);
+    const response: UnifiedDecisionResultV2 = {
+      schemaVersion: 2,
+      generatedAt: new Date().toISOString(),
+      plan,
+      opportunityPanel: hydrated.opportunityPanel,
+      hydrationDiagnostics: hydrated.diagnostics,
+      llmAnalysis: {
+        status: "skipped",
+        provider: "demo",
+        model: "demo",
+        generatedAt: new Date().toISOString(),
+        summary: "demo 模式默认不触发 LLM。",
+        opportunityNotes: [],
+        riskNotes: [],
+        latencyMs: 0,
+        reason: "demo_mode",
+      },
+    };
+
     return okV1({
-      request: DAA_UNIFIED_SAMPLE_REQUEST_V1,
-      response: buildDaaUnifiedPlanV1(DAA_UNIFIED_SAMPLE_REQUEST_V1),
+      request: hydrated.request,
+      analysisFocus: DEFAULT_ANALYSIS_FOCUS_V1,
+      response,
     });
   });
 }
@@ -42,12 +65,21 @@ export async function POST(req: Request) {
     );
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<unknown>(req);
-    if (!isDaaUnifiedRequestV1(body)) {
+    const body = await readJsonBodyV1<{ request?: unknown; analysisFocus?: unknown }>(req);
+    const requestRaw = body?.request;
+    const analysisFocus = String(body?.analysisFocus || "").trim();
+
+    if (!analysisFocus) {
+      return failV1("VALIDATION_FAILED", "analysisFocus is required", { status: 400 });
+    }
+
+    if (!isDaaUnifiedRequestV1(requestRaw)) {
       return failV1("VALIDATION_FAILED", "request body is invalid", {
         status: 400,
         details: {
           expected: {
+            request: "DaaUnifiedRequestV1",
+            analysisFocus: "string (required)",
             targetWeights: "Record<string, number>",
             positions: "Array<{ symbol, qty, price, costBasis?, market?, currency?, tags? }>",
             watchlistCandidates: "Array<{ symbol, market?, currency?, targetWeightHint?, enabled?, tags?, notes? }> (optional)",
@@ -61,14 +93,16 @@ export async function POST(req: Request) {
       });
     }
 
-    const request = body as DaaUnifiedRequestV1;
+    const request = requestRaw as DaaUnifiedRequestV1;
     const hydrated = await hydrateUnifiedRequestWithSignalsV1(request);
     const hydratedRequest = hydrated.request;
 
     const plan = buildDaaUnifiedPlanV1(hydratedRequest);
     const llmAnalysis = await runLlmAnalysisV1({
+      analysisContext: "decision",
       baseCurrency: plan.summary.baseCurrency,
       shouldRebalance: plan.summary.shouldRebalance,
+      analysisFocus,
       opportunities: hydrated.opportunityPanel.opportunities.map((item) => ({
         symbol: item.symbol,
         finalScorePct: item.finalScorePct,
@@ -79,35 +113,33 @@ export async function POST(req: Request) {
       })),
       warnings: plan.warnings,
     });
+
+    const result: UnifiedDecisionResultV2 = {
+      schemaVersion: 2,
+      generatedAt: new Date().toISOString(),
+      plan,
+      opportunityPanel: hydrated.opportunityPanel,
+      hydrationDiagnostics: hydrated.diagnostics,
+      llmAnalysis,
+    };
+
     if (!persist) {
       try {
         await appendDaaRunHistoryV1({
           requestJson: hydratedRequest as unknown as Record<string, unknown>,
-          responseJson: {
-            plan,
-            opportunityPanel: hydrated.opportunityPanel,
-            hydrationDiagnostics: hydrated.diagnostics,
-            llmAnalysis,
-          } as unknown as Record<string, unknown>,
-          summaryJson: (plan as any)?.summary && typeof (plan as any).summary === "object"
-            ? (plan as any).summary as Record<string, unknown>
-            : {},
+          responseJson: result as unknown as Record<string, unknown>,
+          summaryJson: result.plan.summary as unknown as Record<string, unknown>,
           triggerSource: "manual_preview",
         });
       } catch {
         // 运行历史写入失败不阻塞主流程。
       }
-      return okV1({
-        plan,
-        opportunityPanel: hydrated.opportunityPanel,
-        hydrationDiagnostics: hydrated.diagnostics,
-        llmAnalysis,
-      });
+      return okV1(result);
     }
 
     const created = await createDaaRebalanceDecisionV1({
       requestJson: hydratedRequest as unknown as Record<string, unknown>,
-      responseJson: plan as unknown as Record<string, unknown>,
+      responseJson: result as unknown as Record<string, unknown>,
       shouldRebalance: Boolean(plan.summary.shouldRebalance),
       triggerSource: "manual",
     });
@@ -116,17 +148,12 @@ export async function POST(req: Request) {
       await appendDaaRunHistoryV1({
         requestJson: hydratedRequest as unknown as Record<string, unknown>,
         responseJson: {
-          plan,
-          opportunityPanel: hydrated.opportunityPanel,
-          hydrationDiagnostics: hydrated.diagnostics,
-          llmAnalysis,
+          ...result,
           decisionId: created.decision.id,
           decisionStatus: created.decision.status,
-        },
+        } as Record<string, unknown>,
         summaryJson: {
-          ...(((plan as any)?.summary && typeof (plan as any).summary === "object")
-            ? ((plan as any).summary as Record<string, unknown>)
-            : {}),
+          ...(result.plan.summary as unknown as Record<string, unknown>),
           decisionId: created.decision.id,
           decisionStatus: created.decision.status,
         },
@@ -137,12 +164,9 @@ export async function POST(req: Request) {
     }
 
     return okV1({
-      plan,
+      ...result,
       decisionId: created.decision.id,
       decisionStatus: created.decision.status,
-      opportunityPanel: hydrated.opportunityPanel,
-      hydrationDiagnostics: hydrated.diagnostics,
-      llmAnalysis,
     });
   });
 }

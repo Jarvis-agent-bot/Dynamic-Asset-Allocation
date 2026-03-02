@@ -4,6 +4,7 @@ import {
   computeHumanSignalBatchV1,
   getHumanIngestRuntimeStateV1,
   getLatestHumanSignalBatchV1,
+  listFundManagerOperationsBySymbolsV1,
   listActorHoldingsV1,
   listHumanActorsV1,
   runHumanIngestV1,
@@ -53,5 +54,28 @@ describe("hf-service-v1", () => {
 
     expect(after).toBe(before);
     expect(latest.sourceStatus).toBeDefined();
+  });
+
+  it("可按 symbol 聚合基金经理加减仓操作并按幅度排序", async () => {
+    const opsMap = await listFundManagerOperationsBySymbolsV1({
+      symbols: ["SPY", "0700.HK"],
+      topN: 3,
+    });
+
+    const spyOps = opsMap.SPY;
+    expect(spyOps).toBeDefined();
+    expect(spyOps.topAdds.length).toBeGreaterThan(0);
+    expect(spyOps.topAdds[0]!.deltaWeightPct).toBeGreaterThan(0);
+    if (spyOps.topAdds.length >= 2) {
+      expect(spyOps.topAdds[0]!.deltaWeightPct).toBeGreaterThanOrEqual(spyOps.topAdds[1]!.deltaWeightPct);
+    }
+    if (spyOps.topReduces.length >= 2) {
+      expect(spyOps.topReduces[0]!.deltaWeightPct).toBeLessThanOrEqual(spyOps.topReduces[1]!.deltaWeightPct);
+    }
+
+    const hkOps = opsMap["0700.HK"];
+    expect(hkOps).toBeDefined();
+    expect(hkOps.topAdds.length).toBeGreaterThan(0);
+    expect(hkOps.topAdds[0]!.sourceRef.length).toBeGreaterThan(0);
   });
 });

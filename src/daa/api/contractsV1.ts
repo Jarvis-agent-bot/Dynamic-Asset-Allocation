@@ -5,6 +5,7 @@ export type ApiErrorCodeV1 =
   | "DB_ERROR"
   | "BAD_RESPONSE_FORMAT"
   | "INTERNAL_ERROR"
+  | "VERSION_CONFLICT"
   | "ROUTE_DENIED"
   | "CRON_AUTH_FAILED"
   | "UNKNOWN";

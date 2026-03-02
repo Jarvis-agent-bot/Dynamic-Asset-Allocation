@@ -1,12 +1,13 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
+import { DEFAULT_ANALYSIS_FOCUS_V1, runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
 
 export const runtime = "nodejs";
 
 type DigestBody = {
   baseCurrency?: string;
   shouldRebalance?: boolean;
+  analysisFocus?: string;
   opportunities?: Array<{
     symbol?: string;
     finalScorePct?: number;
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     const body = await readJsonBodyV1<DigestBody>(req);
+    const analysisFocus = normalizeText(body?.analysisFocus);
     const opportunities = Array.isArray(body?.opportunities)
       ? body.opportunities.map((item) => ({
         symbol: normalizeText(item?.symbol).toUpperCase(),
@@ -48,10 +50,15 @@ export async function POST(req: Request) {
     if (!opportunities.length) {
       return failV1("VALIDATION_FAILED", "opportunities must be a non-empty array", { status: 400 });
     }
+    if (!analysisFocus) {
+      return failV1("VALIDATION_FAILED", "analysisFocus is required", { status: 400 });
+    }
 
     const analysis = await runLlmAnalysisV1({
+      analysisContext: "digest",
       baseCurrency: normalizeText(body?.baseCurrency, "USD").toUpperCase(),
       shouldRebalance: Boolean(body?.shouldRebalance),
+      analysisFocus: analysisFocus || DEFAULT_ANALYSIS_FOCUS_V1,
       opportunities,
       warnings: Array.isArray(body?.warnings) ? body.warnings.map((x) => normalizeText(x)).filter(Boolean) : [],
     });

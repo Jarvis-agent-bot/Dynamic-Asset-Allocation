@@ -6,7 +6,7 @@ import type {
   RebalanceDecisionV1,
   RebalanceDecisionStatusV1,
   ReconcileResultV1,
-  UnifiedPlanEnvelopeV1,
+  UnifiedDecisionResultV2,
 } from "./executionTypesV1";
 
 export async function listRebalanceDecisionsV1(opts: {
@@ -41,17 +41,20 @@ export async function reconcileDecisionPositionsV1(decisionId: string): Promise<
   return data;
 }
 
-export async function runUnifiedRebalanceV1<TPlan = Record<string, unknown>>(
+export async function runUnifiedRebalanceV1(
   request: Record<string, unknown>,
-  opts: { persist?: boolean } = {},
-): Promise<UnifiedPlanEnvelopeV1<TPlan>> {
+  opts: { persist?: boolean; analysisFocus: string },
+): Promise<UnifiedDecisionResultV2> {
   const persist = opts.persist !== false;
-  const data = await requestDataV1<UnifiedPlanEnvelopeV1<TPlan>>(
+  const data = await requestDataV1<UnifiedDecisionResultV2>(
     `/api/daa/rebalance/unified?persist=${persist ? "1" : "0"}`,
     {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        request,
+        analysisFocus: opts.analysisFocus,
+      }),
     },
   );
   return data;

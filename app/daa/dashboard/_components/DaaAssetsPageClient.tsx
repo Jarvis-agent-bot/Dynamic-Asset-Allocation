@@ -55,7 +55,7 @@ type AuthModel =
   | { kind: "error"; message: string }
   | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
 
-const CASH_LEDGER_CURRENCY_OPTIONS = ["USD", "RMB", "HKD"] as const;
+const CASH_LEDGER_CURRENCY_OPTIONS = ["USD", "CNY", "HKD"] as const;
 const ASSET_CHART_COLORS = ["#8b5cf6", "#06b6d4", "#14b8a6", "#22c55e", "#f59e0b", "#ef4444", "#64748b"] as const;
 
 function DaaAssetsHeader() {
@@ -143,16 +143,16 @@ function CashFlowDialog({
   submitting: boolean;
   maxCash: number;
   defaultCurrency: string;
-  onSubmit: (input: { amount: number; baseCurrency: "USD" | "RMB" | "HKD"; note?: string }) => Promise<void>;
+  onSubmit: (input: { amount: number; baseCurrency: "USD" | "CNY" | "HKD"; note?: string }) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
-  const [baseCurrency, setBaseCurrency] = useState<"USD" | "RMB" | "HKD">("USD");
+  const [baseCurrency, setBaseCurrency] = useState<"USD" | "CNY" | "HKD">("USD");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (defaultCurrency === "RMB" || defaultCurrency === "HKD" || defaultCurrency === "USD") {
+    if (defaultCurrency === "CNY" || defaultCurrency === "HKD" || defaultCurrency === "USD") {
       setBaseCurrency(defaultCurrency);
       return;
     }
@@ -219,7 +219,7 @@ function CashFlowDialog({
             <select
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
               value={baseCurrency}
-              onChange={(e) => setBaseCurrency(e.target.value as "USD" | "RMB" | "HKD")}
+              onChange={(e) => setBaseCurrency(e.target.value as "USD" | "CNY" | "HKD")}
             >
               {CASH_LEDGER_CURRENCY_OPTIONS.map((item) => (
                 <option key={item} value={item}>
@@ -411,10 +411,10 @@ export default function DaaAssetsPageClient() {
   const holdingsValue = positionsList.reduce((sum, row) => sum + row.qty * row.price, 0);
   const cash = Math.max(0, Number(config.account.cash) || 0);
   const displayCurrency = String(config.account.baseCurrency || "USD").toUpperCase();
-  const defaultCashLedgerCurrency: "USD" | "RMB" | "HKD" = displayCurrency === "HKD"
+  const defaultCashLedgerCurrency: "USD" | "CNY" | "HKD" = displayCurrency === "HKD"
     ? "HKD"
     : displayCurrency === "CNY" || displayCurrency === "RMB"
-      ? "RMB"
+      ? "CNY"
       : "USD";
   const totalEquity = config.account.totalEquity ?? holdingsValue + cash;
 
@@ -468,7 +468,7 @@ export default function DaaAssetsPageClient() {
 
   async function handleCashChange(
     side: "deposit" | "withdraw",
-    input: { amount: number; baseCurrency: "USD" | "RMB" | "HKD"; note?: string },
+    input: { amount: number; baseCurrency: "USD" | "CNY" | "HKD"; note?: string },
   ) {
     setCashSubmitting(side);
     try {
@@ -616,10 +616,10 @@ export default function DaaAssetsPageClient() {
               onSubmit={(input) => handleCashChange("withdraw", input)}
             />
             <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard/positions">持仓与权重</Link>
+              <Link href="/daa/dashboard/portfolio?tab=positions">持仓与候选</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard/strategy">策略参数</Link>
+              <Link href="/daa/dashboard/strategy-lab?tab=strategy">策略实验室</Link>
             </Button>
           </div>
 
