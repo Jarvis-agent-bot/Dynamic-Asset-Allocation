@@ -6,7 +6,7 @@ import {
   type DanjuanFundRegistryItemV1,
   type DanjuanHoldingRowV1,
 } from "@/src/daa/hf/danjuanFundSourceV1";
-import { listDaaDataSourcesV1 } from "@/src/daa/store/daaStorePgV1";
+import { getDaaHumanIngestStateV1, listDaaDataSourcesV1, saveDaaHumanIngestStateV1 } from "@/src/daa/store/daaStorePgV1";
 import { HF_DEFAULT_MARKET_SCOPE_V1, HF_SEED_ACTORS_V1, HF_SEED_HOLDINGS_V1 } from "@/src/daa/hf/hfSeedDataV1";
 import type {
   DaaActorHoldingSnapshotV1,
@@ -21,6 +21,13 @@ function clampPct(v: number, fallback = 0): number {
   if (!Number.isFinite(v)) return fallback;
   if (v <= 0) return 0;
   if (v >= 100) return 100;
+  return v;
+}
+
+function clampRange(v: number, min: number, max: number, fallback = min): number {
+  if (!Number.isFinite(v)) return fallback;
+  if (v <= min) return min;
+  if (v >= max) return max;
   return v;
 }
 
@@ -213,8 +220,100 @@ function matchesSymbolFilter(symbol: string, symbols?: Set<string>): boolean {
   return symbols.has(normalizeSymbol(symbol));
 }
 
-function deriveActorProfile(item: DanjuanFundRegistryItemV1): DaaHumanActorV1 {
+type DanjuanFundStatsV1 = {
+  reportDateCount: number;
+  avgHoldingCount: number;
+  avgTopWeightPct: number;
+  avgCashPct: number;
+  avgStockPct: number;
+  avgTurnoverPct: number;
+};
+
+function avg(values: number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function computeFundStatsByCode(rows: DanjuanHoldingRowV1[]): Map<string, DanjuanFundStatsV1> {
+  const byFundDate = new Map<string, Map<string, DanjuanHoldingRowV1[]>>();
+
+  for (const row of rows) {
+    const fundCode = String(row.fundCode || "").trim();
+    const reportDate = String(row.reportDate || "").trim();
+    if (!fundCode || !reportDate) continue;
+    if (!byFundDate.has(fundCode)) byFundDate.set(fundCode, new Map());
+    const byDate = byFundDate.get(fundCode)!;
+    if (!byDate.has(reportDate)) byDate.set(reportDate, []);
+    byDate.get(reportDate)!.push(row);
+  }
+
+  const out = new Map<string, DanjuanFundStatsV1>();
+  for (const [fundCode, byDate] of byFundDate.entries()) {
+    const dates = [...byDate.keys()].sort();
+    if (!dates.length) continue;
+
+    const holdingCounts: number[] = [];
+    const topWeights: number[] = [];
+    const cashPercents: number[] = [];
+    const stockPercents: number[] = [];
+    const turnoverPercents: number[] = [];
+
+    for (const date of dates) {
+      const rowsOnDate = byDate.get(date) ?? [];
+      const weights = rowsOnDate.map((x) => clampPct(Number(x.weightPct) || 0, 0));
+      holdingCounts.push(rowsOnDate.length);
+      topWeights.push(weights.length ? Math.max(...weights) : 0);
+      const first = rowsOnDate[0];
+      cashPercents.push(clampPct(Number(first?.cashPercent) || 0, 0));
+      stockPercents.push(clampPct(Number(first?.stockPercent) || 0, 0));
+    }
+
+    for (let i = 1; i < dates.length; i += 1) {
+      const prevRows = byDate.get(dates[i - 1]) ?? [];
+      const curRows = byDate.get(dates[i]) ?? [];
+      const prevMap = new Map(prevRows.map((x) => [normalizeSymbol(x.symbol), clampPct(Number(x.weightPct) || 0, 0)]));
+      const curMap = new Map(curRows.map((x) => [normalizeSymbol(x.symbol), clampPct(Number(x.weightPct) || 0, 0)]));
+      const allSymbols = new Set<string>([...prevMap.keys(), ...curMap.keys()]);
+      let turnover = 0;
+      for (const symbol of allSymbols) {
+        const prev = prevMap.get(symbol) ?? 0;
+        const cur = curMap.get(symbol) ?? 0;
+        turnover += Math.abs(cur - prev);
+      }
+      turnoverPercents.push(turnover);
+    }
+
+    out.set(fundCode, {
+      reportDateCount: dates.length,
+      avgHoldingCount: avg(holdingCounts),
+      avgTopWeightPct: avg(topWeights),
+      avgCashPct: avg(cashPercents),
+      avgStockPct: avg(stockPercents),
+      avgTurnoverPct: avg(turnoverPercents),
+    });
+  }
+
+  return out;
+}
+
+function deriveActorProfile(item: DanjuanFundRegistryItemV1, stats?: DanjuanFundStatsV1): DaaHumanActorV1 {
+  const statsSafe = stats ?? {
+    reportDateCount: 1,
+    avgHoldingCount: 10,
+    avgTopWeightPct: 20,
+    avgCashPct: 8,
+    avgStockPct: 92,
+    avgTurnoverPct: 35,
+  };
+
   if (item.kind === "balanced") {
+    const baseQuality = {
+      accuracyPct: 70,
+      riskControlPct: 85,
+      disciplinePct: 80,
+      transparencyPct: 78,
+      maxDrawdownPenaltyPct: 12,
+    };
     return {
       actorId: `danjuan_${item.fundCode}`,
       displayName: item.label,
@@ -224,16 +323,31 @@ function deriveActorProfile(item: DanjuanFundRegistryItemV1): DaaHumanActorV1 {
       stance: "defensive",
       sourcePolicy: "hybrid",
       quality: {
-        accuracyPct: 70,
-        riskControlPct: 85,
-        disciplinePct: 80,
-        transparencyPct: 78,
-        maxDrawdownPenaltyPct: 12,
+        accuracyPct: clampPct(baseQuality.accuracyPct + Math.min(6, statsSafe.reportDateCount * 1.2) - Math.max(0, statsSafe.avgTurnoverPct - 45) * 0.12, baseQuality.accuracyPct),
+        riskControlPct: clampPct(baseQuality.riskControlPct + (statsSafe.avgCashPct - 15) * 0.22 - Math.max(0, statsSafe.avgTopWeightPct - 24) * 0.35, baseQuality.riskControlPct),
+        disciplinePct: clampPct(baseQuality.disciplinePct + (statsSafe.reportDateCount >= 2 ? 4 : -6) - Math.max(0, statsSafe.avgTurnoverPct - 35) * 0.18, baseQuality.disciplinePct),
+        transparencyPct: clampPct(baseQuality.transparencyPct + Math.min(8, statsSafe.reportDateCount * 2) + Math.min(6, (statsSafe.avgHoldingCount - 12) * 0.3), baseQuality.transparencyPct),
+        maxDrawdownPenaltyPct: clampRange(
+          baseQuality.maxDrawdownPenaltyPct
+            + Math.max(0, statsSafe.avgTopWeightPct - 25) * 0.28
+            + Math.max(0, statsSafe.avgTurnoverPct - 40) * 0.15
+            - statsSafe.avgCashPct * 0.06,
+          6,
+          30,
+          baseQuality.maxDrawdownPenaltyPct,
+        ),
       },
     };
   }
 
   if (item.kind === "qdii") {
+    const baseQuality = {
+      accuracyPct: 72,
+      riskControlPct: 76,
+      disciplinePct: 76,
+      transparencyPct: 82,
+      maxDrawdownPenaltyPct: 17,
+    };
     return {
       actorId: `danjuan_${item.fundCode}`,
       displayName: item.label,
@@ -243,15 +357,30 @@ function deriveActorProfile(item: DanjuanFundRegistryItemV1): DaaHumanActorV1 {
       stance: "neutral",
       sourcePolicy: "hybrid",
       quality: {
-        accuracyPct: 72,
-        riskControlPct: 76,
-        disciplinePct: 76,
-        transparencyPct: 82,
-        maxDrawdownPenaltyPct: 17,
+        accuracyPct: clampPct(baseQuality.accuracyPct + Math.min(5, statsSafe.reportDateCount * 1.1) - Math.max(0, statsSafe.avgTurnoverPct - 55) * 0.08, baseQuality.accuracyPct),
+        riskControlPct: clampPct(baseQuality.riskControlPct + (statsSafe.avgCashPct - 10) * 0.16 - Math.max(0, statsSafe.avgTopWeightPct - 20) * 0.4, baseQuality.riskControlPct),
+        disciplinePct: clampPct(baseQuality.disciplinePct + (statsSafe.reportDateCount >= 2 ? 3 : -5) - Math.max(0, statsSafe.avgTurnoverPct - 40) * 0.2, baseQuality.disciplinePct),
+        transparencyPct: clampPct(baseQuality.transparencyPct + Math.min(8, statsSafe.reportDateCount * 2) + Math.min(4, (statsSafe.avgHoldingCount - 10) * 0.25), baseQuality.transparencyPct),
+        maxDrawdownPenaltyPct: clampRange(
+          baseQuality.maxDrawdownPenaltyPct
+            + Math.max(0, statsSafe.avgTopWeightPct - 22) * 0.35
+            + Math.max(0, statsSafe.avgTurnoverPct - 48) * 0.15
+            - statsSafe.avgCashPct * 0.04,
+          8,
+          35,
+          baseQuality.maxDrawdownPenaltyPct,
+        ),
       },
     };
   }
 
+  const baseQuality = {
+    accuracyPct: 75,
+    riskControlPct: 72,
+    disciplinePct: 74,
+    transparencyPct: 80,
+    maxDrawdownPenaltyPct: 18,
+  };
   return {
     actorId: `danjuan_${item.fundCode}`,
     displayName: item.label,
@@ -261,11 +390,19 @@ function deriveActorProfile(item: DanjuanFundRegistryItemV1): DaaHumanActorV1 {
     stance: "offensive",
     sourcePolicy: "hybrid",
     quality: {
-      accuracyPct: 75,
-      riskControlPct: 72,
-      disciplinePct: 74,
-      transparencyPct: 80,
-      maxDrawdownPenaltyPct: 18,
+      accuracyPct: clampPct(baseQuality.accuracyPct + Math.min(6, statsSafe.reportDateCount * 1.3) - Math.max(0, statsSafe.avgTurnoverPct - 50) * 0.1, baseQuality.accuracyPct),
+      riskControlPct: clampPct(baseQuality.riskControlPct + (statsSafe.avgCashPct - 8) * 0.18 - Math.max(0, statsSafe.avgTopWeightPct - 18) * 0.42, baseQuality.riskControlPct),
+      disciplinePct: clampPct(baseQuality.disciplinePct + (statsSafe.reportDateCount >= 2 ? 3 : -6) - Math.max(0, statsSafe.avgTurnoverPct - 38) * 0.22, baseQuality.disciplinePct),
+      transparencyPct: clampPct(baseQuality.transparencyPct + Math.min(8, statsSafe.reportDateCount * 2) + Math.min(5, (statsSafe.avgHoldingCount - 10) * 0.25), baseQuality.transparencyPct),
+      maxDrawdownPenaltyPct: clampRange(
+        baseQuality.maxDrawdownPenaltyPct
+          + Math.max(0, statsSafe.avgTopWeightPct - 18) * 0.4
+          + Math.max(0, statsSafe.avgTurnoverPct - 45) * 0.2
+          - statsSafe.avgCashPct * 0.03,
+        10,
+        40,
+        baseQuality.maxDrawdownPenaltyPct,
+      ),
     },
   };
 }
@@ -280,12 +417,13 @@ function toHoldingSnapshots(rows: DanjuanHoldingRowV1[], registry: DanjuanFundRe
   holdings: DaaActorHoldingSnapshotV1[];
 } {
   const registryByCode = new Map(registry.map((item) => [item.fundCode, item]));
+  const statsByCode = computeFundStatsByCode(rows);
   const actorById = new Map<string, DaaHumanActorV1>();
 
   for (const row of rows) {
     const config = registryByCode.get(row.fundCode);
     if (!config) continue;
-    const actor = deriveActorProfile(config);
+    const actor = deriveActorProfile(config, statsByCode.get(row.fundCode));
     actorById.set(actor.actorId, actor);
   }
 
@@ -324,10 +462,46 @@ function toHoldingSnapshots(rows: DanjuanHoldingRowV1[], registry: DanjuanFundRe
   };
 }
 
+function resolveDanjuanConcurrencyV1(): number {
+  const raw = Number(process.env.DAA_HF_DANJUAN_CONCURRENCY || 4);
+  if (!Number.isFinite(raw)) return 4;
+  return Math.max(1, Math.min(12, Math.trunc(raw)));
+}
+
+async function runTasksWithConcurrencyV1<T, R>(
+  tasks: T[],
+  concurrency: number,
+  worker: (task: T) => Promise<R>,
+): Promise<R[]> {
+  if (tasks.length === 0) return [];
+  const size = Math.max(1, Math.min(concurrency, tasks.length));
+  const out: R[] = [];
+  let cursor = 0;
+
+  async function consume() {
+    while (cursor < tasks.length) {
+      const index = cursor;
+      cursor += 1;
+      out[index] = await worker(tasks[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: size }, () => consume()));
+  return out;
+}
+
 async function fetchDanjuanRows(opts: {
   reportDates?: string[];
   fundCodes?: string[];
-}): Promise<{ rows: DanjuanHoldingRowV1[]; registry: DanjuanFundRegistryItemV1[] }> {
+}): Promise<{
+  rows: DanjuanHoldingRowV1[];
+  registry: DanjuanFundRegistryItemV1[];
+  diagnostics: {
+    requestPairs: number;
+    nonEmptyPairs: number;
+    concurrency: number;
+  };
+}> {
   let resolvedRegistry = resolveDanjuanFundRegistryV1().filter((item) => item.enabled);
   try {
     const sources = await listDaaDataSourcesV1("hf_fund");
@@ -342,7 +516,7 @@ async function fetchDanjuanRows(opts: {
             kind: item?.kind === "qdii" || item?.kind === "balanced" ? item.kind : "equity",
             enabled: item?.enabled !== false,
           }))
-          .filter((item: DanjuanFundRegistryItemV1) => item.fundCode);
+          .filter((item: DanjuanFundRegistryItemV1) => item.fundCode && item.enabled);
       });
     if (fundsFromDb.length > 0) {
       resolvedRegistry = fundsFromDb;
@@ -365,23 +539,40 @@ async function fetchDanjuanRows(opts: {
           };
         })
       : resolvedRegistry;
-  if (!registry.length) return { rows: [], registry: [] };
+  if (!registry.length) {
+    return {
+      rows: [],
+      registry: [],
+      diagnostics: { requestPairs: 0, nonEmptyPairs: 0, concurrency: resolveDanjuanConcurrencyV1() },
+    };
+  }
 
   const reportDates = (opts.reportDates && opts.reportDates.length > 0 ? opts.reportDates : resolveDanjuanReportDatesV1(2))
     .map((d) => String(d || "").trim())
     .filter(Boolean);
 
+  const tasks = registry.flatMap((item) =>
+    reportDates.map((reportDate) => ({ fundCode: item.fundCode, reportDate })),
+  );
+  const concurrency = resolveDanjuanConcurrencyV1();
+  const fetched = await runTasksWithConcurrencyV1(tasks, concurrency, async (task) => {
+    const rows = await fetchDanjuanFundAssetPercentV1({
+      fundCode: task.fundCode,
+      reportDate: task.reportDate,
+    });
+    return {
+      fundCode: task.fundCode,
+      reportDate: task.reportDate,
+      rows,
+    };
+  });
+
   const results: DanjuanHoldingRowV1[] = [];
-  for (const item of registry) {
-    for (const reportDate of reportDates) {
-      const rows = await fetchDanjuanFundAssetPercentV1({
-        fundCode: item.fundCode,
-        reportDate,
-      });
-      if (rows.length > 0) {
-        results.push(...rows);
-      }
-    }
+  let nonEmptyPairs = 0;
+  for (const item of fetched) {
+    if (!item.rows.length) continue;
+    nonEmptyPairs += 1;
+    results.push(...item.rows);
   }
 
   const dedup = new Map<string, DanjuanHoldingRowV1>();
@@ -393,6 +584,11 @@ async function fetchDanjuanRows(opts: {
   return {
     rows: [...dedup.values()],
     registry,
+    diagnostics: {
+      requestPairs: tasks.length,
+      nonEmptyPairs,
+      concurrency,
+    },
   };
 }
 
@@ -458,6 +654,7 @@ type RuntimeHumanFactorStateV1 = {
   latestBatch: DaaHumanSignalBatchV1 | null;
   latestActors: DaaHumanActorV1[];
   latestHoldings: DaaActorHoldingSnapshotV1[];
+  hydratedFromStore: boolean;
 };
 
 const runtimeStateV1: RuntimeHumanFactorStateV1 = {
@@ -466,7 +663,63 @@ const runtimeStateV1: RuntimeHumanFactorStateV1 = {
   latestBatch: null,
   latestActors: [],
   latestHoldings: [],
+  hydratedFromStore: false,
 };
+
+let runtimeHydrationPromiseV1: Promise<void> | null = null;
+
+function sanitizeBatchFromStoreV1(raw: unknown): DaaHumanSignalBatchV1 | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as any;
+  if (!Array.isArray(value.signals)) return null;
+  return {
+    generatedAt: String(value.generatedAt || new Date().toISOString()),
+    asOfDate: String(value.asOfDate || new Date().toISOString().slice(0, 10)),
+    marketScope: Array.isArray(value.marketScope) ? value.marketScope.map((x: unknown) => String(x || "").trim().toUpperCase()).filter(Boolean) : [],
+    mode: value.mode === "danjuan_primary_with_official_fallback" ? "danjuan_primary_with_official_fallback" : "official_first",
+    sourceStatus: value.sourceStatus === "live" ? "live" : "fallback_seed",
+    diagnostics: Array.isArray(value.diagnostics) ? value.diagnostics.map((x: unknown) => String(x || "")).filter(Boolean) : [],
+    actorCount: Math.max(0, Number(value.actorCount) || 0),
+    holdingCount: Math.max(0, Number(value.holdingCount) || 0),
+    signals: Array.isArray(value.signals) ? value.signals : [],
+    sources: Array.isArray(value.sources) ? value.sources : [],
+  };
+}
+
+function sanitizeActorsFromStoreV1(raw: unknown): DaaHumanActorV1[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x) => x && typeof x === "object") as DaaHumanActorV1[];
+}
+
+function sanitizeHoldingsFromStoreV1(raw: unknown): DaaActorHoldingSnapshotV1[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x) => x && typeof x === "object") as DaaActorHoldingSnapshotV1[];
+}
+
+async function ensureRuntimeHydratedFromStoreV1(): Promise<void> {
+  if (runtimeStateV1.hydratedFromStore) return;
+  if (runtimeHydrationPromiseV1) return runtimeHydrationPromiseV1;
+
+  runtimeHydrationPromiseV1 = (async () => {
+    try {
+      const persisted = await getDaaHumanIngestStateV1();
+      if (persisted) {
+        runtimeStateV1.lastIngestAt = persisted.lastIngestAt;
+        runtimeStateV1.ingestCount = Math.max(0, Number(persisted.ingestCount) || 0);
+        runtimeStateV1.latestBatch = sanitizeBatchFromStoreV1(persisted.latestBatch);
+        runtimeStateV1.latestActors = sanitizeActorsFromStoreV1(persisted.latestActors);
+        runtimeStateV1.latestHoldings = sanitizeHoldingsFromStoreV1(persisted.latestHoldings);
+      }
+    } catch {
+      // ignore store hydration failures and fall back to in-memory/seed.
+    } finally {
+      runtimeStateV1.hydratedFromStore = true;
+      runtimeHydrationPromiseV1 = null;
+    }
+  })();
+
+  return runtimeHydrationPromiseV1;
+}
 
 function shouldUseCache(maxAgeMs = 6 * 60 * 60 * 1000): boolean {
   if (!runtimeStateV1.lastIngestAt || !runtimeStateV1.latestBatch) return false;
@@ -516,10 +769,15 @@ async function buildDanjuanSignalBatch(opts: {
   batch: DaaHumanSignalBatchV1;
   actors: DaaHumanActorV1[];
   holdings: DaaActorHoldingSnapshotV1[];
+  diagnostics: {
+    requestPairs: number;
+    nonEmptyPairs: number;
+    concurrency: number;
+  };
 } | null> {
   if (!isDanjuanSourceEnabledV1()) return null;
 
-  const { rows, registry } = await fetchDanjuanRows({
+  const { rows, registry, diagnostics } = await fetchDanjuanRows({
     reportDates: opts.reportDates,
     fundCodes: opts.fundCodes,
   });
@@ -540,6 +798,7 @@ async function buildDanjuanSignalBatch(opts: {
     batch,
     actors,
     holdings,
+    diagnostics,
   };
 }
 
@@ -571,12 +830,19 @@ export async function runHumanIngestV1(opts: {
   reportDates?: string[];
   fundCodes?: string[];
 } = {}): Promise<{ summary: DaaHumanIngestSummaryV1; batch: DaaHumanSignalBatchV1 }> {
+  await ensureRuntimeHydratedFromStoreV1();
+
   const diagnostics: string[] = [];
   let danjuan: Awaited<ReturnType<typeof buildDanjuanSignalBatch>> = null;
 
   try {
     danjuan = await buildDanjuanSignalBatch(opts);
     if (!danjuan) diagnostics.push("danjuan_unavailable_or_empty");
+    if (danjuan?.diagnostics) {
+      diagnostics.push(
+        `danjuan_fetch_pairs=${danjuan.diagnostics.requestPairs},non_empty_pairs=${danjuan.diagnostics.nonEmptyPairs},concurrency=${danjuan.diagnostics.concurrency}`,
+      );
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     diagnostics.push(`danjuan_error:${message}`);
@@ -599,6 +865,19 @@ export async function runHumanIngestV1(opts: {
   runtimeStateV1.lastIngestAt = new Date().toISOString();
   runtimeStateV1.ingestCount += 1;
 
+  try {
+    await saveDaaHumanIngestStateV1({
+      lastIngestAt: runtimeStateV1.lastIngestAt,
+      ingestCount: runtimeStateV1.ingestCount,
+      latestBatch: batchWithSource as unknown as Record<string, unknown>,
+      latestActors: runtimeStateV1.latestActors as unknown as Array<Record<string, unknown>>,
+      latestHoldings: runtimeStateV1.latestHoldings as unknown as Array<Record<string, unknown>>,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    diagnostics.push(`store_persist_failed:${message}`);
+  }
+
   return {
     summary: {
       ingestedAt: runtimeStateV1.lastIngestAt,
@@ -620,10 +899,14 @@ export async function getLatestHumanSignalBatchV1(opts: {
   reportDates?: string[];
   fundCodes?: string[];
   forceRefresh?: boolean;
+  autoIngestOnMiss?: boolean;
 } = {}): Promise<DaaHumanSignalBatchV1> {
+  await ensureRuntimeHydratedFromStoreV1();
+
+  const autoIngestOnMiss = opts.autoIngestOnMiss !== false;
   const shouldForceRefresh = Boolean(opts.forceRefresh)
     || (Array.isArray(opts.reportDates) && opts.reportDates.length > 0);
-  if (shouldForceRefresh || !shouldUseCache()) {
+  if (shouldForceRefresh) {
     const ingest = await runHumanIngestV1({
       marketScope: opts.marketScope,
       symbols: opts.symbols,
@@ -633,7 +916,21 @@ export async function getLatestHumanSignalBatchV1(opts: {
     return ingest.batch;
   }
 
-  return buildBatchFromRuntimeStateV1(opts);
+  if (shouldUseCache()) {
+    return buildBatchFromRuntimeStateV1(opts);
+  }
+
+  if (!autoIngestOnMiss) {
+    return buildBatchFromRuntimeStateV1(opts);
+  }
+
+  const ingest = await runHumanIngestV1({
+    marketScope: opts.marketScope,
+    symbols: opts.symbols,
+    reportDates: opts.reportDates,
+    fundCodes: opts.fundCodes,
+  });
+  return ingest.batch;
 }
 
 export function getHumanIngestRuntimeStateV1(): RuntimeHumanFactorStateV1 {
@@ -643,5 +940,6 @@ export function getHumanIngestRuntimeStateV1(): RuntimeHumanFactorStateV1 {
     latestBatch: runtimeStateV1.latestBatch,
     latestActors: runtimeStateV1.latestActors.map((x) => ({ ...x })),
     latestHoldings: runtimeStateV1.latestHoldings.map((x) => ({ ...x })),
+    hydratedFromStore: runtimeStateV1.hydratedFromStore,
   };
 }

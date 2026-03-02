@@ -5,7 +5,7 @@ type DaaLegacyEntryProps = {
 };
 
 export default function DaaLegacyEntry({ searchParams }: DaaLegacyEntryProps) {
-  // `/daa` 统一收敛到唯一控制台入口。
+  // `/daa` 统一收敛到资产首页入口。
   const params = new URLSearchParams();
 
   for (const [k, v] of Object.entries(searchParams ?? {})) {

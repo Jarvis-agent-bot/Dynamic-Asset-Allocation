@@ -216,14 +216,35 @@ function buildInitialHoldingsV1(holdings: Record<string, number> | undefined, sy
   return Object.keys(filtered).length ? filtered : undefined;
 }
 
-export function prepareAlignedSeriesBySymbolV1(
+export type SeriesAlignmentModeV1 = "intersection" | "ffill_union";
+
+export type PreparedSeriesDiagnosticsV1 = {
+  mode: SeriesAlignmentModeV1;
+  minBars: number;
+  inputSymbolCount: number;
+  outputSymbolCount: number;
+  unionDateCount: number;
+  commonDateCount: number;
+  startDate: string;
+  endDate: string;
+  droppedSymbols: string[];
+  barsBySymbol: Record<string, { raw: number; cleaned: number; aligned: number; ffillCount: number }>;
+};
+
+export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
   rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>,
-): Record<string, PriceBar[]> {
+  opts: { mode?: SeriesAlignmentModeV1; minBars?: number } = {},
+): { seriesBySymbol: Record<string, PriceBar[]>; diagnostics: PreparedSeriesDiagnosticsV1 } {
+  const mode: SeriesAlignmentModeV1 = opts.mode === "ffill_union" ? "ffill_union" : "intersection";
+  const minBars = Math.max(2, Math.trunc(Number(opts.minBars) || 2));
+
   const cleanedBySymbol: Record<string, PriceBar[]> = {};
+  const barsBySymbol: Record<string, { raw: number; cleaned: number; aligned: number; ffillCount: number }> = {};
 
   for (const [symbolRaw, seriesRaw] of Object.entries(rawSeriesBySymbol || {})) {
     const symbol = String(symbolRaw || "").trim().toUpperCase();
     if (!symbol || !Array.isArray(seriesRaw)) continue;
+    const rawCount = seriesRaw.length;
 
     const validBars = seriesRaw
       .map((bar) => ({
@@ -232,37 +253,147 @@ export function prepareAlignedSeriesBySymbolV1(
       }))
       .filter((bar) => Boolean(bar.date) && Number.isFinite(bar.close) && bar.close > 0);
 
-    if (validBars.length < 2) continue;
-
     const dateMap = new Map<string, number>();
     for (const bar of validBars) {
       dateMap.set(bar.date, bar.close);
     }
 
-    cleanedBySymbol[symbol] = [...dateMap.entries()]
+    const cleaned = [...dateMap.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([date, close]) => ({ date, close }));
+
+    barsBySymbol[symbol] = {
+      raw: rawCount,
+      cleaned: cleaned.length,
+      aligned: 0,
+      ffillCount: 0,
+    };
+
+    if (cleaned.length >= 2) {
+      cleanedBySymbol[symbol] = cleaned;
+    }
   }
 
   const symbols = Object.keys(cleanedBySymbol).sort();
-  if (!symbols.length) return {};
+  const diagnosticsBase: PreparedSeriesDiagnosticsV1 = {
+    mode,
+    minBars,
+    inputSymbolCount: Object.keys(rawSeriesBySymbol || {}).length,
+    outputSymbolCount: 0,
+    unionDateCount: 0,
+    commonDateCount: 0,
+    startDate: "",
+    endDate: "",
+    droppedSymbols: [],
+    barsBySymbol,
+  };
 
-  let commonDates = new Set<string>(cleanedBySymbol[symbols[0]].map((bar) => bar.date));
-  for (const symbol of symbols.slice(1)) {
-    const dates = new Set(cleanedBySymbol[symbol].map((bar) => bar.date));
-    commonDates = new Set([...commonDates].filter((date) => dates.has(date)));
+  if (!symbols.length) {
+    return {
+      seriesBySymbol: {},
+      diagnostics: diagnosticsBase,
+    };
   }
 
-  const sortedDates = [...commonDates].sort();
-  if (sortedDates.length < 2) return {};
-
-  const aligned: Record<string, PriceBar[]> = {};
+  const unionDates = new Set<string>();
   for (const symbol of symbols) {
-    const map = new Map(cleanedBySymbol[symbol].map((bar) => [bar.date, bar.close]));
-    aligned[symbol] = sortedDates.map((date) => ({ date, close: Number(map.get(date) || 0) }));
+    for (const bar of cleanedBySymbol[symbol]) {
+      unionDates.add(bar.date);
+    }
+  }
+  const sortedUnionDates = [...unionDates].sort();
+
+  let aligned: Record<string, PriceBar[]> = {};
+  if (mode === "intersection") {
+    let commonDates = new Set<string>(cleanedBySymbol[symbols[0]].map((bar) => bar.date));
+    for (const symbol of symbols.slice(1)) {
+      const dates = new Set(cleanedBySymbol[symbol].map((bar) => bar.date));
+      commonDates = new Set([...commonDates].filter((date) => dates.has(date)));
+    }
+
+    const sortedDates = [...commonDates].sort();
+    for (const symbol of symbols) {
+      const map = new Map(cleanedBySymbol[symbol].map((bar) => [bar.date, bar.close]));
+      aligned[symbol] = sortedDates.map((date) => ({ date, close: Number(map.get(date) || 0) }));
+    }
+  } else {
+    const perSymbolMap: Record<string, Map<string, number>> = {};
+    const lastBySymbol: Record<string, number | undefined> = {};
+    for (const symbol of symbols) {
+      perSymbolMap[symbol] = new Map(cleanedBySymbol[symbol].map((bar) => [bar.date, bar.close]));
+      lastBySymbol[symbol] = undefined;
+      aligned[symbol] = [];
+    }
+
+    for (const date of sortedUnionDates) {
+      let allReady = true;
+      const row: Record<string, number> = {};
+
+      for (const symbol of symbols) {
+        const direct = perSymbolMap[symbol].get(date);
+        if (Number.isFinite(direct) && (direct as number) > 0) {
+          lastBySymbol[symbol] = direct as number;
+        } else if (lastBySymbol[symbol] !== undefined) {
+          barsBySymbol[symbol].ffillCount += 1;
+        }
+
+        const value = lastBySymbol[symbol];
+        if (!(Number.isFinite(value) && (value as number) > 0)) {
+          allReady = false;
+          break;
+        }
+        row[symbol] = value as number;
+      }
+
+      if (!allReady) continue;
+      for (const symbol of symbols) {
+        aligned[symbol].push({ date, close: row[symbol] });
+      }
+    }
   }
 
-  return aligned;
+  const droppedSymbols: string[] = [];
+  for (const symbol of Object.keys(aligned)) {
+    const count = aligned[symbol]?.length || 0;
+    barsBySymbol[symbol] = {
+      ...(barsBySymbol[symbol] || { raw: 0, cleaned: 0, aligned: 0, ffillCount: 0 }),
+      aligned: count,
+    };
+    if (count < minBars) {
+      droppedSymbols.push(symbol);
+      delete aligned[symbol];
+    }
+  }
+
+  const keptSymbols = Object.keys(aligned).sort();
+  if (keptSymbols.length >= 1) {
+    const commonDateCount = aligned[keptSymbols[0]].length;
+    diagnosticsBase.outputSymbolCount = keptSymbols.length;
+    diagnosticsBase.unionDateCount = sortedUnionDates.length;
+    diagnosticsBase.commonDateCount = commonDateCount;
+    diagnosticsBase.startDate = commonDateCount ? aligned[keptSymbols[0]][0].date : "";
+    diagnosticsBase.endDate = commonDateCount ? aligned[keptSymbols[0]][commonDateCount - 1].date : "";
+    diagnosticsBase.droppedSymbols = droppedSymbols;
+  } else {
+    diagnosticsBase.outputSymbolCount = 0;
+    diagnosticsBase.unionDateCount = sortedUnionDates.length;
+    diagnosticsBase.commonDateCount = 0;
+    diagnosticsBase.startDate = "";
+    diagnosticsBase.endDate = "";
+    diagnosticsBase.droppedSymbols = droppedSymbols;
+  }
+
+  return {
+    seriesBySymbol: keptSymbols.length ? aligned : {},
+    diagnostics: diagnosticsBase,
+  };
+}
+
+export function prepareAlignedSeriesBySymbolV1(
+  rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>,
+  opts: { mode?: SeriesAlignmentModeV1; minBars?: number } = {},
+): Record<string, PriceBar[]> {
+  return prepareAlignedSeriesBySymbolWithDiagnosticsV1(rawSeriesBySymbol, opts).seriesBySymbol;
 }
 
 export function runStrategyLabBacktestsV1(input: {
@@ -274,6 +405,7 @@ export function runStrategyLabBacktestsV1(input: {
   initialEquity?: number;
   constraints?: DriftRebalanceBacktestRequest["constraints"];
   policy?: DriftRebalanceBacktestRequest["policy"];
+  execution?: DriftRebalanceBacktestRequest["execution"];
 }): StrategyLabRunResultV1 {
   const symbols = Object.keys(input.seriesBySymbol || {}).sort();
   if (!symbols.length) throw new Error("seriesBySymbol is required");
@@ -303,6 +435,7 @@ export function runStrategyLabBacktestsV1(input: {
       initialEquity: initialHoldings ? undefined : input.initialEquity,
       constraints: input.constraints,
       policy: input.policy,
+      execution: input.execution,
       includeEventStates: true,
       includeTimeline: true,
     });

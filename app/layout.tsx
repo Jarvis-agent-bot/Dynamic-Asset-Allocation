@@ -8,7 +8,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Dynamic Asset Allocation",
-  description: "DAA 统一量化控制台",
+  description: "DAA 资产配置与交易记录系统",
 };
 
 export default function RootLayout({

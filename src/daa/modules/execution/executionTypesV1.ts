@@ -1,4 +1,4 @@
-export type ExecutionOrderStatusV1 = "pending" | "executed" | "skipped" | "partial";
+export type ExecutionOrderStatusV1 = "pending" | "submitted" | "partial" | "executed" | "canceled" | "skipped";
 
 export type ExecutionOrderV1 = {
   orderId: string;
@@ -16,7 +16,7 @@ export type ExecutionOrderV1 = {
   notes: string | null;
 };
 
-export type RebalanceDecisionStatusV1 = "pending" | "partial" | "executed" | "skipped";
+export type RebalanceDecisionStatusV1 = "pending" | "partial" | "executed" | "canceled" | "skipped";
 
 export type RebalanceDecisionV1 = {
   id: string;
@@ -28,22 +28,34 @@ export type RebalanceDecisionV1 = {
   responseJson?: Record<string, unknown>;
 };
 
-export type ConfirmExecutionOrderInputV1 = {
+export type ExecutionEventTypeV1 = "submit" | "cancel" | "skip" | "fill";
+
+export type ExecutionEventInputV1 = {
   orderId: string;
-  status: ExecutionOrderStatusV1;
-  executedQty?: number;
-  executedPrice?: number;
+  type: ExecutionEventTypeV1;
+  fillQty?: number;
+  fillPrice?: number;
   fee?: number;
-  notes?: string;
+  note?: string;
+  final?: boolean;
+  ts?: string;
 };
 
-export type ConfirmExecutionInputV1 = {
+export type ExecutionEventAppliedV1 = {
+  orderId: string;
+  type: ExecutionEventTypeV1;
+  fromStatus: ExecutionOrderStatusV1;
+  toStatus: ExecutionOrderStatusV1;
+  fillQty: number;
+  fillNotional: number;
+};
+
+export type ApplyExecutionEventsInputV1 = {
   decisionId: string;
-  cash?: number;
-  orders: ConfirmExecutionOrderInputV1[];
+  events: ExecutionEventInputV1[];
 };
 
-export type ConfirmExecutionResultV1 = {
+export type ApplyExecutionEventsResultV1 = {
   decision: RebalanceDecisionV1;
   orders: ExecutionOrderV1[];
   positions: Array<{
@@ -54,8 +66,14 @@ export type ConfirmExecutionResultV1 = {
     price: number;
     costBasis: number | null;
     tags: string[];
-    liquidityNotional24h: number;
   }>;
+  account: {
+    baseCurrency: string;
+    cash: number;
+    investableCash: number;
+    frozenCash: number;
+    totalEquity: number | null;
+  };
   equitySnapshot: {
     ts: string;
     totalEquity: number;
@@ -63,6 +81,7 @@ export type ConfirmExecutionResultV1 = {
     cash: number;
     source: string;
   };
+  applied: ExecutionEventAppliedV1[];
 };
 
 export type ReconcileResultV1 = {

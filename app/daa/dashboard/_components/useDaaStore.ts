@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type DaaAnalystRow,
   type DaaAssetViewRow,
+  type DaaCashLedgerEntry,
   type DaaEquitySnapshot,
   type DaaHfFundTrackRow,
   type DaaFxRateRow,
@@ -20,9 +21,11 @@ import {
 
 import { getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
 import {
+  appendCashLedgerEntryV1,
   appendOpLogV1,
   appendEquitySnapshotV1,
   getStrategyConfigV1,
+  listCashLedgerV1,
   listFxRatesV1,
   listDataSourcesV1,
   listEquitySnapshotsV1,
@@ -404,6 +407,55 @@ export function useEquitySnapshots() {
   return [value, setValue] as const;
 }
 
+export function useCashLedger() {
+  const [value, setValue] = useDaaSlice<DaaCashLedgerEntry[]>("cashLedger");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const rows = await listCashLedgerV1(100);
+        if (cancelled) return;
+        setValue(
+          rows.map((row) => ({
+            id: String(row.id || ""),
+            ts: String(row.ts || new Date().toISOString()),
+            side: row.side === "withdraw" ? "withdraw" : "deposit",
+            amount: Number(row.amount || 0),
+            baseCurrency: String(row.baseCurrency || "USD").toUpperCase(),
+            note: row.note ?? null,
+          })),
+        );
+        emitDashboardDataUpdatedV1();
+      } catch {
+        // ignore
+      }
+    }
+    function onRefresh() {
+      void load();
+    }
+    void load();
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [setValue]);
+
+  return [value, setValue] as const;
+}
+
+export async function appendCashLedgerEntry(input: {
+  side: "deposit" | "withdraw";
+  amount: number;
+  baseCurrency?: string;
+  note?: string;
+}) {
+  const result = await appendCashLedgerEntryV1(input);
+  emitDashboardDataUpdatedV1();
+  return result;
+}
+
 export function useOpLog() {
   const [value, setValue] = useDaaSlice<string[]>("opLog");
 
@@ -505,7 +557,6 @@ export function buildUnifiedRequest(
       maxPositionPct: config.constraints.maxPositionPct,
       minNotional: config.constraints.minNotional,
       maxOrderPctOfNav: config.constraints.maxOrderPctOfNav,
-      maxOrderPctOfLiquidity: config.constraints.maxOrderPctOfLiquidity,
     },
     policy: {
       baseDriftTriggerPct: config.policy.baseDriftTriggerPct,
@@ -524,7 +575,6 @@ export function buildUnifiedRequest(
       price: p.price,
       costBasis: p.costBasis,
       tags: p.tags,
-      liquidityNotional24h: p.liquidityNotional24h,
     })),
     watchlistCandidates: watchlistCandidates.map((item) => ({
       symbol: item.symbol,

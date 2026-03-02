@@ -1,8 +1,8 @@
 import { requestDataV1 } from "@/src/daa/api/clientV1";
 
 import type {
-  ConfirmExecutionInputV1,
-  ConfirmExecutionResultV1,
+  ApplyExecutionEventsInputV1,
+  ApplyExecutionEventsResultV1,
   RebalanceDecisionV1,
   RebalanceDecisionStatusV1,
   ReconcileResultV1,
@@ -25,13 +25,12 @@ export async function listRebalanceDecisionsV1(opts: {
   return Array.isArray(data.decisions) ? data.decisions : [];
 }
 
-export async function confirmRebalanceExecutionV1(input: ConfirmExecutionInputV1): Promise<ConfirmExecutionResultV1> {
-  const data = await requestDataV1<ConfirmExecutionResultV1>("/api/daa/rebalance/execution/confirm", {
+export async function applyExecutionEventsV1(input: ApplyExecutionEventsInputV1): Promise<ApplyExecutionEventsResultV1> {
+  return requestDataV1<ApplyExecutionEventsResultV1>("/api/daa/rebalance/execution/events", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-  return data;
 }
 
 export async function reconcileDecisionPositionsV1(decisionId: string): Promise<ReconcileResultV1> {

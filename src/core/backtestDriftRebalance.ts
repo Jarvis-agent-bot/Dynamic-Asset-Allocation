@@ -41,6 +41,17 @@ export type DriftRebalanceBacktestRequest = {
 
   /** When enabled, include per-day drift/trigger decisions (for UI "timeline"). Default: true. */
   includeTimeline?: boolean;
+
+  /**
+   * Execution assumptions for order fills.
+   * - same_bar_close: legacy behavior (signal and fill on same bar close)
+   * - t_plus_1_close: signal on day D close, fill on D+1 close
+   */
+  execution?: {
+    timing?: "same_bar_close" | "t_plus_1_close";
+    feeRatePct?: number;
+    slippageBps?: number;
+  };
 };
 
 export type PortfolioWeightsSnapshotV0 = {
@@ -53,10 +64,13 @@ export type PortfolioWeightsSnapshotV0 = {
 export type DriftRebalanceBacktestEvent = {
   date: string;
   kind: "init" | "rebalance";
+  signalDate?: string;
+  executionTiming?: "same_bar_close" | "t_plus_1_close";
   trigger: RebalanceTriggerDecision;
   orders: SuggestedOrder[];
   executed: SuggestedOrder[];
   turnoverNotional: number;
+  feeNotional: number;
 
   // Optional: used by UI to render a before/after weight diff for each planned action.
   before?: PortfolioWeightsSnapshotV0;
@@ -83,6 +97,7 @@ export type DriftRebalanceBacktestResult = {
     finalEquityAbs: number;
     rebalanceCount: number;
     turnoverNotional: number;
+    totalFeesAbs: number;
   };
 
   events: DriftRebalanceBacktestEvent[];
@@ -220,13 +235,24 @@ function executeOrders(opts: {
   cash: number;
   prices: Record<string, number>;
   orders: SuggestedOrder[];
+  feeRatePct: number;
+  slippageBps: number;
   warnings: string[];
-}): { holdings: Record<string, number>; cash: number; executed: SuggestedOrder[]; turnoverNotional: number } {
+}): {
+  holdings: Record<string, number>;
+  cash: number;
+  executed: SuggestedOrder[];
+  turnoverNotional: number;
+  feeNotional: number;
+} {
   const holdings = cloneHoldings(opts.holdings);
   let cash = Math.max(0, toFiniteNumber(opts.cash, 0));
 
   const executed: SuggestedOrder[] = [];
   let turnoverNotional = 0;
+  let feeNotional = 0;
+  const feeRatePct = Math.max(0, toFiniteNumber(opts.feeRatePct, 0));
+  const slippageRate = Math.max(0, toFiniteNumber(opts.slippageBps, 0) / 10000);
 
   for (const o of opts.orders || []) {
     const sym = String(o.symbol || "").trim();
@@ -243,27 +269,36 @@ function executeOrders(opts: {
 
     if (o.side === "SELL") {
       const held = toFiniteNumber(holdings[sym], 0);
-      const maxSellNotional = Math.max(0, held) * px;
+      const executionPrice = px * (1 - slippageRate);
+      if (!(Number.isFinite(executionPrice) && executionPrice > 0)) continue;
+      const maxSellNotional = Math.max(0, held) * executionPrice;
       const actualNotional = Math.min(notional, maxSellNotional);
       if (!(actualNotional > 0)) continue;
 
-      const qty = actualNotional / px;
+      const qty = actualNotional / executionPrice;
+      const fee = actualNotional * feeRatePct;
       holdings[sym] = held - qty;
-      cash += actualNotional;
+      cash += actualNotional - fee;
       turnoverNotional += actualNotional;
+      feeNotional += fee;
 
       executed.push({ ...o, notional: actualNotional });
       continue;
     }
 
     if (o.side === "BUY") {
-      const actualNotional = Math.min(notional, cash);
+      const executionPrice = px * (1 + slippageRate);
+      if (!(Number.isFinite(executionPrice) && executionPrice > 0)) continue;
+      const maxBuyNotionalByCash = cash / (1 + feeRatePct);
+      const actualNotional = Math.min(notional, maxBuyNotionalByCash);
       if (!(actualNotional > 0)) continue;
 
-      const qty = actualNotional / px;
+      const fee = actualNotional * feeRatePct;
+      const qty = actualNotional / executionPrice;
       holdings[sym] = toFiniteNumber(holdings[sym], 0) + qty;
-      cash -= actualNotional;
+      cash -= actualNotional + fee;
       turnoverNotional += actualNotional;
+      feeNotional += fee;
 
       executed.push({ ...o, notional: actualNotional });
       continue;
@@ -273,7 +308,16 @@ function executeOrders(opts: {
   // Normalize tiny negative cash from floating point.
   if (cash < 0 && cash > -1e-9) cash = 0;
 
-  return { holdings, cash, executed, turnoverNotional };
+  return { holdings, cash, executed, turnoverNotional, feeNotional };
+}
+
+function normalizeExecutionConfig(
+  input: DriftRebalanceBacktestRequest["execution"] | undefined,
+): { timing: "same_bar_close" | "t_plus_1_close"; feeRatePct: number; slippageBps: number } {
+  const timing = input?.timing === "t_plus_1_close" ? "t_plus_1_close" : "same_bar_close";
+  const feeRatePct = Math.max(0, toFiniteNumber(input?.feeRatePct, 0));
+  const slippageBps = Math.max(0, toFiniteNumber(input?.slippageBps, 0));
+  return { timing, feeRatePct, slippageBps };
 }
 
 function computeTopAbsDriftsPct01(args: {
@@ -317,6 +361,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   const bootstrapToTarget = req.bootstrapToTarget !== false;
   const includeEventStates = req.includeEventStates === true;
   const includeTimeline = req.includeTimeline !== false;
+  const execution = normalizeExecutionConfig(req.execution);
 
   let holdings = cloneHoldings(req.initialHoldings || {});
   let cash = Math.max(0, toFiniteNumber(req.initialCash, 0));
@@ -358,7 +403,15 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
 
     const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : undefined;
 
-    const ex = executeOrders({ holdings: {}, cash: equity0, prices: prices0, orders: res.orders, warnings });
+    const ex = executeOrders({
+      holdings: {},
+      cash: equity0,
+      prices: prices0,
+      orders: res.orders,
+      feeRatePct: execution.feeRatePct,
+      slippageBps: execution.slippageBps,
+      warnings,
+    });
     const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: prices0, warnings }) : undefined;
 
     holdings = ex.holdings;
@@ -367,11 +420,14 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
 
     events.push({
       date: dates[0],
+      signalDate: dates[0],
+      executionTiming: "same_bar_close",
       kind: "init",
       trigger: res.trigger,
       orders: res.orders,
       executed: ex.executed,
       turnoverNotional: ex.turnoverNotional,
+      feeNotional: ex.feeNotional,
       before,
       after,
     });
@@ -383,14 +439,59 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   const equityAbsByDay: number[] = [];
 
   let turnoverNotional = events.reduce((acc, e) => acc + e.turnoverNotional, 0);
+  let totalFeesAbs = events.reduce((acc, e) => acc + e.feeNotional, 0);
   let rebalanceCount = 0;
+  let pendingFill:
+    | {
+        signalDate: string;
+        trigger: RebalanceTriggerDecision;
+        orders: SuggestedOrder[];
+      }
+    | undefined;
 
   for (let i = 0; i < dates.length; i++) {
     const px = buildPricesAtIndex(req.seriesBySymbol, i, warnings);
+    const now = isoToIsoDateTime(dates[i]);
+
+    if (execution.timing === "t_plus_1_close" && pendingFill?.orders?.length) {
+      const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
+      const ex = executeOrders({
+        holdings,
+        cash,
+        prices: px,
+        orders: pendingFill.orders,
+        feeRatePct: execution.feeRatePct,
+        slippageBps: execution.slippageBps,
+        warnings,
+      });
+      const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
+
+      holdings = ex.holdings;
+      cash = ex.cash;
+      turnoverNotional += ex.turnoverNotional;
+      totalFeesAbs += ex.feeNotional;
+      rebalanceCount += 1;
+
+      events.push({
+        date: dates[i],
+        signalDate: pendingFill.signalDate,
+        executionTiming: execution.timing,
+        kind: "rebalance",
+        trigger: pendingFill.trigger,
+        orders: pendingFill.orders,
+        executed: ex.executed,
+        turnoverNotional: ex.turnoverNotional,
+        feeNotional: ex.feeNotional,
+        before,
+        after,
+      });
+
+      lastRebalanceAt = now;
+      pendingFill = undefined;
+    }
+
     const eq = portfolioValueAbs(holdings, cash, px, warnings);
     equityAbsByDay.push(eq);
-
-    const now = isoToIsoDateTime(dates[i]);
 
     const res = rebalanceCore({
       account: { cash },
@@ -421,28 +522,56 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     }
 
     if (res.trigger.shouldRebalance) {
-      const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
-      const ex = executeOrders({ holdings, cash, prices: px, orders: res.orders, warnings });
-      const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
+      if (execution.timing === "t_plus_1_close") {
+        if (i >= dates.length - 1) {
+          warnings.push(`warning: rebalance signal on ${dates[i]} skipped because no next bar for T+1 execution`);
+        } else {
+          pendingFill = {
+            signalDate: dates[i],
+            trigger: res.trigger,
+            orders: res.orders,
+          };
+        }
+      } else {
+        const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
+        const ex = executeOrders({
+          holdings,
+          cash,
+          prices: px,
+          orders: res.orders,
+          feeRatePct: execution.feeRatePct,
+          slippageBps: execution.slippageBps,
+          warnings,
+        });
+        const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
 
-      holdings = ex.holdings;
-      cash = ex.cash;
-      turnoverNotional += ex.turnoverNotional;
-      rebalanceCount += 1;
+        holdings = ex.holdings;
+        cash = ex.cash;
+        turnoverNotional += ex.turnoverNotional;
+        totalFeesAbs += ex.feeNotional;
+        rebalanceCount += 1;
 
-      events.push({
-        date: dates[i],
-        kind: "rebalance",
-        trigger: res.trigger,
-        orders: res.orders,
-        executed: ex.executed,
-        turnoverNotional: ex.turnoverNotional,
-        before,
-        after,
-      });
+        events.push({
+          date: dates[i],
+          signalDate: dates[i],
+          executionTiming: execution.timing,
+          kind: "rebalance",
+          trigger: res.trigger,
+          orders: res.orders,
+          executed: ex.executed,
+          turnoverNotional: ex.turnoverNotional,
+          feeNotional: ex.feeNotional,
+          before,
+          after,
+        });
 
-      lastRebalanceAt = now;
+        lastRebalanceAt = now;
+      }
     }
+  }
+
+  if (pendingFill?.orders?.length) {
+    warnings.push(`warning: pending rebalance signal on ${pendingFill.signalDate} was not executed due to missing next bar`);
   }
 
   // Convert equityAbs to daily returns and normalize to 1.
@@ -478,6 +607,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       finalEquityAbs: equityAbsByDay[equityAbsByDay.length - 1] ?? 0,
       rebalanceCount,
       turnoverNotional,
+      totalFeesAbs,
     },
     events,
     warnings,

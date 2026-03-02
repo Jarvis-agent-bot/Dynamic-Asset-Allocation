@@ -56,7 +56,6 @@ export type DaaStorePositionV1 = {
   price: number;
   costBasis: number | null;
   tags: string[];
-  liquidityNotional24h: number;
   updatedAt: string;
 };
 
@@ -96,7 +95,7 @@ export type DaaStoreRebalanceDecisionV1 = {
   id: string;
   shouldRebalance: boolean;
   triggerSource: "manual" | "cron_drift" | "cron_scheduled";
-  status: "pending" | "partial" | "executed" | "skipped";
+  status: "pending" | "partial" | "executed" | "canceled" | "skipped";
   requestJson: Record<string, unknown>;
   responseJson: Record<string, unknown>;
   createdAt: string;
@@ -108,7 +107,7 @@ export type DaaStoreExecutionOrderV1 = {
   symbol: string;
   side: "BUY" | "SELL";
   suggestedNotional: number;
-  status: "pending" | "executed" | "skipped" | "partial";
+  status: "pending" | "submitted" | "partial" | "executed" | "canceled" | "skipped";
   executedQty: number;
   executedPrice: number;
   fee: number;
@@ -120,19 +119,29 @@ export type DaaStoreExecutionOrderV1 = {
   bookedAt?: string | null;
 };
 
-export type DaaExecutionConfirmOrderInputV1 = {
+export type DaaStoreExecutionOrderEventV1 = {
+  id: string;
+  decisionId: string;
   orderId: string;
-  status: "pending" | "executed" | "skipped" | "partial";
-  executedQty?: number;
-  executedPrice?: number;
-  fee?: number;
-  notes?: string;
+  eventType: "submit" | "cancel" | "skip" | "fill";
+  payloadJson: Record<string, unknown>;
+  createdAt: string;
 };
 
-export type DaaExecutionConfirmInputV1 = {
+export type DaaExecutionEventInputV1 = {
+  orderId: string;
+  type: "submit" | "cancel" | "skip" | "fill";
+  fillQty?: number;
+  fillPrice?: number;
+  fee?: number;
+  note?: string;
+  final?: boolean;
+  ts?: string;
+};
+
+export type DaaExecutionApplyEventsInputV1 = {
   decisionId: string;
-  cash?: number;
-  orders: DaaExecutionConfirmOrderInputV1[];
+  events: DaaExecutionEventInputV1[];
 };
 
 export type DaaStoreRunHistoryEntryV1 = {
@@ -172,6 +181,35 @@ export type DaaStoreFxRateV1 = {
   rate: number;
   source: string;
   asOfTs: string;
+  updatedAt: string;
+};
+
+export type DaaStoreCashLedgerSideV1 = "deposit" | "withdraw";
+
+export type DaaStoreCashLedgerEntryV1 = {
+  id: string;
+  ts: string;
+  side: DaaStoreCashLedgerSideV1;
+  amount: number;
+  baseCurrency: string;
+  note: string | null;
+  createdAt: string;
+};
+
+export type DaaStoreCashLedgerApplyInputV1 = {
+  side: DaaStoreCashLedgerSideV1;
+  amount: number;
+  baseCurrency?: string;
+  note?: string;
+};
+
+export type DaaStoreHumanIngestStateV1 = {
+  id: "default";
+  lastIngestAt: string | null;
+  ingestCount: number;
+  latestBatch: Record<string, unknown> | null;
+  latestActors: Array<Record<string, unknown>>;
+  latestHoldings: Array<Record<string, unknown>>;
   updatedAt: string;
 };
 
@@ -254,7 +292,6 @@ export const DEFAULT_STRATEGY_CONFIG_V1 = {
     maxPositionPct: 1,
     minNotional: 200,
     maxOrderPctOfNav: 0.1,
-    maxOrderPctOfLiquidity: 0.15,
   },
   policy: {
     baseDriftTriggerPct: 0.05,
@@ -290,7 +327,6 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
             price NUMERIC NOT NULL DEFAULT 0,
             cost_basis NUMERIC,
             tags TEXT[] NOT NULL DEFAULT '{}',
-            liquidity_notional_24h NUMERIC NOT NULL DEFAULT 0,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
@@ -365,6 +401,18 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_execution_orders_decision_status
             ON daa_execution_orders(decision_id, status);
 
+          CREATE TABLE IF NOT EXISTS daa_execution_order_events (
+            id TEXT PRIMARY KEY,
+            decision_id TEXT NOT NULL REFERENCES daa_rebalance_decisions(id) ON DELETE CASCADE,
+            order_id TEXT NOT NULL REFERENCES daa_execution_orders(order_id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_execution_order_events_order_created_desc
+            ON daa_execution_order_events(order_id, created_at DESC);
+
           CREATE TABLE IF NOT EXISTS daa_equity_snapshots (
             ts TIMESTAMPTZ PRIMARY KEY,
             total_equity NUMERIC NOT NULL,
@@ -372,6 +420,19 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
             cash NUMERIC NOT NULL,
             source TEXT NOT NULL DEFAULT 'cron'
           );
+
+          CREATE TABLE IF NOT EXISTS daa_cash_ledger (
+            id TEXT PRIMARY KEY,
+            ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            side TEXT NOT NULL CHECK (side IN ('deposit', 'withdraw')),
+            amount NUMERIC NOT NULL CHECK (amount > 0),
+            base_currency TEXT NOT NULL DEFAULT 'USD',
+            note TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_cash_ledger_ts_desc
+            ON daa_cash_ledger(ts DESC);
 
           CREATE TABLE IF NOT EXISTS daa_strategy_config (
             id TEXT PRIMARY KEY,
@@ -423,6 +484,16 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_op_log_ts_desc
             ON daa_op_log(ts DESC);
 
+          CREATE TABLE IF NOT EXISTS daa_hf_ingest_state (
+            id TEXT PRIMARY KEY,
+            last_ingest_at TIMESTAMPTZ,
+            ingest_count BIGINT NOT NULL DEFAULT 0,
+            latest_batch_json JSONB,
+            latest_actors_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            latest_holdings_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
           CREATE TABLE IF NOT EXISTS daa_watchlist_candidates (
             id TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
@@ -459,6 +530,9 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_fee NUMERIC NOT NULL DEFAULT 0");
         await query("ALTER TABLE daa_trade_journal ADD COLUMN IF NOT EXISTS execution_order_id TEXT");
         await query("DROP INDEX IF EXISTS idx_daa_trade_journal_execution_order_unique");
+        await query("ALTER TABLE daa_positions DROP COLUMN IF EXISTS liquidity_notional_24h");
+        await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS channel");
+        await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS reference_id");
 
         await query(
           "INSERT INTO daa_strategy_config (id, config_json) VALUES ('default', $1) ON CONFLICT (id) DO NOTHING",
@@ -514,7 +588,6 @@ function mapPositionRowV1(row: Record<string, unknown>): DaaStorePositionV1 {
     price: toFiniteNumber(row.price),
     costBasis: row.cost_basis == null ? null : toFiniteNumber(row.cost_basis),
     tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x)).filter(Boolean) : [],
-    liquidityNotional24h: toFiniteNumber(row.liquidity_notional_24h),
     updatedAt: toIsoString(row.updated_at),
   };
 }
@@ -523,7 +596,7 @@ export async function listDaaPositionsV1(): Promise<DaaStorePositionV1[]> {
   await ensureDaaStoreSchemaPgV1();
   return withDaaPgClientV0(async ({ query }) => {
     const result = await query(
-      "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, liquidity_notional_24h, updated_at FROM daa_positions ORDER BY symbol ASC",
+      "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions ORDER BY symbol ASC",
     );
     return result.rows.map((row) => mapPositionRowV1(row as Record<string, unknown>));
   });
@@ -547,11 +620,10 @@ export async function replaceDaaPositionsV1(rows: Array<Partial<DaaStorePosition
         const tags = Array.isArray(raw.tags)
           ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
           : [];
-        const liquidityNotional24h = Math.max(0, toFiniteNumber(raw.liquidityNotional24h));
 
         await query(
-          "INSERT INTO daa_positions (id, symbol, market, currency, qty, price, cost_basis, tags, liquidity_notional_24h, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())",
-          [id, symbol, market, currency, qty, price, costBasis, tags, liquidityNotional24h],
+          "INSERT INTO daa_positions (id, symbol, market, currency, qty, price, cost_basis, tags, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())",
+          [id, symbol, market, currency, qty, price, costBasis, tags],
         );
       }
 
@@ -566,7 +638,7 @@ export async function replaceDaaPositionsV1(rows: Array<Partial<DaaStorePosition
     }
 
     const result = await query(
-      "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, liquidity_notional_24h, updated_at FROM daa_positions ORDER BY symbol ASC",
+      "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions ORDER BY symbol ASC",
     );
     return result.rows.map((row) => mapPositionRowV1(row as Record<string, unknown>));
   });
@@ -610,6 +682,90 @@ export async function saveDaaStrategyConfigV1(configJson: Record<string, unknown
       updatedAt: toIsoString(row.updated_at),
     };
   });
+}
+
+function isRecordV1(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function resolveInvestableCashV1(cash: number, frozenCash: number, investableCashRaw: unknown): number {
+  const safeCash = Math.max(0, toFiniteNumber(cash));
+  const safeFrozen = Math.max(0, toFiniteNumber(frozenCash));
+  const fallback = Math.max(0, safeCash - safeFrozen);
+  const raw = toFiniteNumber(investableCashRaw, Number.NaN);
+  if (!Number.isFinite(raw)) return fallback;
+  if (raw <= 0 && safeCash > 0 && safeFrozen < safeCash) return fallback;
+  return Math.max(0, Math.min(safeCash, raw));
+}
+
+function applyAccountCashDeltaToConfigV1(
+  configJson: Record<string, unknown>,
+  nextCash: number,
+): {
+  configJson: Record<string, unknown>;
+  account: {
+    baseCurrency: string;
+    cash: number;
+    investableCash: number;
+    frozenCash: number;
+    totalEquity: number | null;
+  };
+} {
+  const baseConfig = isRecordV1(configJson) ? configJson : {};
+  const accountRaw = isRecordV1(baseConfig.account) ? baseConfig.account : {};
+  const baseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
+  const previousCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
+  const frozenCash = Math.max(0, toFiniteNumber(accountRaw.frozenCash, 0));
+  const previousInvestable = resolveInvestableCashV1(previousCash, frozenCash, accountRaw.investableCash);
+  const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, 0));
+  const delta = normalizedNextCash - previousCash;
+  const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
+  const totalEquityRaw = toFiniteNumber(accountRaw.totalEquity, Number.NaN);
+  const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
+
+  const account = {
+    baseCurrency,
+    cash: normalizedNextCash,
+    investableCash: nextInvestable,
+    frozenCash,
+    totalEquity,
+  };
+
+  return {
+    configJson: {
+      ...baseConfig,
+      account: {
+        ...accountRaw,
+        ...account,
+      },
+    },
+    account,
+  };
+}
+
+type DaaQueryRowResultV1 = { rows: Array<Record<string, unknown>> };
+type DaaTxQueryFnV1 = (sql: string, params?: unknown[]) => Promise<DaaQueryRowResultV1>;
+
+async function syncStrategyAccountCashInTxV1(
+  query: DaaTxQueryFnV1,
+  nextCash: number,
+): Promise<{
+  baseCurrency: string;
+  cash: number;
+  investableCash: number;
+  frozenCash: number;
+  totalEquity: number | null;
+}> {
+  const result = await query(
+    "SELECT config_json FROM daa_strategy_config WHERE id = 'default' LIMIT 1 FOR UPDATE",
+  );
+  const currentConfig = parseJsonb<Record<string, unknown>>(result.rows[0]?.config_json, { ...DEFAULT_STRATEGY_CONFIG_V1 });
+  const patched = applyAccountCashDeltaToConfigV1(currentConfig, nextCash);
+  await query(
+    "INSERT INTO daa_strategy_config (id, config_json, updated_at) VALUES ('default', $1, NOW()) ON CONFLICT (id) DO UPDATE SET config_json = EXCLUDED.config_json, updated_at = NOW()",
+    [JSON.stringify(patched.configJson)],
+  );
+  return patched.account;
 }
 
 function mapEquitySnapshotRowV1(row: Record<string, unknown>): DaaStoreEquitySnapshotV1 {
@@ -709,6 +865,56 @@ export async function replaceDaaDataSourcesV1(rows: DaaStoreDataSourceV1[]): Pro
 
     const result = await query("SELECT id, kind, config_json, enabled, created_at, updated_at FROM daa_data_sources ORDER BY kind ASC, id ASC");
     return result.rows.map((row) => mapDataSourceRowV1(row as Record<string, unknown>));
+  });
+}
+
+function mapHumanIngestStateRowV1(row: Record<string, unknown>): DaaStoreHumanIngestStateV1 {
+  return {
+    id: "default",
+    lastIngestAt: row.last_ingest_at == null ? null : toIsoString(row.last_ingest_at, new Date().toISOString()),
+    ingestCount: Math.max(0, Math.trunc(toFiniteNumber(row.ingest_count, 0))),
+    latestBatch: parseJsonb<Record<string, unknown> | null>(row.latest_batch_json, null),
+    latestActors: parseJsonb<Array<Record<string, unknown>>>(row.latest_actors_json, []),
+    latestHoldings: parseJsonb<Array<Record<string, unknown>>>(row.latest_holdings_json, []),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+export async function getDaaHumanIngestStateV1(): Promise<DaaStoreHumanIngestStateV1 | null> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const result = await query(
+      "SELECT id, last_ingest_at, ingest_count, latest_batch_json, latest_actors_json, latest_holdings_json, updated_at FROM daa_hf_ingest_state WHERE id = 'default' LIMIT 1",
+    );
+    if (!result.rows.length) return null;
+    return mapHumanIngestStateRowV1(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function saveDaaHumanIngestStateV1(input: {
+  lastIngestAt?: string | null;
+  ingestCount?: number;
+  latestBatch?: Record<string, unknown> | null;
+  latestActors?: Array<Record<string, unknown>>;
+  latestHoldings?: Array<Record<string, unknown>>;
+}): Promise<DaaStoreHumanIngestStateV1> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const lastIngestAt = input.lastIngestAt ? toIsoString(input.lastIngestAt, new Date().toISOString()) : null;
+    const ingestCount = Math.max(0, Math.trunc(toFiniteNumber(input.ingestCount, 0)));
+    const latestBatch = input.latestBatch && typeof input.latestBatch === "object" ? input.latestBatch : null;
+    const latestActors = Array.isArray(input.latestActors) ? input.latestActors : [];
+    const latestHoldings = Array.isArray(input.latestHoldings) ? input.latestHoldings : [];
+
+    await query(
+      "INSERT INTO daa_hf_ingest_state (id, last_ingest_at, ingest_count, latest_batch_json, latest_actors_json, latest_holdings_json, updated_at) VALUES ('default',$1,$2,$3,$4,$5,NOW()) ON CONFLICT (id) DO UPDATE SET last_ingest_at = EXCLUDED.last_ingest_at, ingest_count = EXCLUDED.ingest_count, latest_batch_json = EXCLUDED.latest_batch_json, latest_actors_json = EXCLUDED.latest_actors_json, latest_holdings_json = EXCLUDED.latest_holdings_json, updated_at = NOW()",
+      [lastIngestAt, ingestCount, JSON.stringify(latestBatch), JSON.stringify(latestActors), JSON.stringify(latestHoldings)],
+    );
+
+    const result = await query(
+      "SELECT id, last_ingest_at, ingest_count, latest_batch_json, latest_actors_json, latest_holdings_json, updated_at FROM daa_hf_ingest_state WHERE id = 'default' LIMIT 1",
+    );
+    return mapHumanIngestStateRowV1(result.rows[0] as Record<string, unknown>);
   });
 }
 
@@ -882,6 +1088,129 @@ export async function upsertDaaFxRatesV1(rows: Array<Partial<DaaStoreFxRateV1>>)
       "SELECT id, base_ccy, quote_ccy, rate, source, as_of_ts, updated_at FROM daa_fx_rates ORDER BY base_ccy ASC, quote_ccy ASC",
     );
     return result.rows.map((row) => mapFxRateRowV1(row as Record<string, unknown>));
+  });
+}
+
+function mapCashLedgerRowV1(row: Record<string, unknown>): DaaStoreCashLedgerEntryV1 {
+  const normalizedSide = normalizeText(row.side, "deposit").toLowerCase();
+  const side: DaaStoreCashLedgerSideV1 = normalizedSide === "withdraw" ? "withdraw" : "deposit";
+  return {
+    id: normalizeText(row.id),
+    ts: toIsoString(row.ts),
+    side,
+    amount: Math.max(0, toFiniteNumber(row.amount)),
+    baseCurrency: normalizeCcyCode(row.base_currency, "USD"),
+    note: row.note == null ? null : String(row.note),
+    createdAt: toIsoString(row.created_at),
+  };
+}
+
+export async function listDaaCashLedgerEntriesV1(limit = 100): Promise<DaaStoreCashLedgerEntryV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
+  return withDaaPgClientV0(async ({ query }) => {
+    const result = await query(
+      "SELECT id, ts, side, amount, base_currency, note, created_at FROM daa_cash_ledger ORDER BY ts DESC LIMIT $1",
+      [n],
+    );
+    return result.rows.map((row) => mapCashLedgerRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function appendDaaCashLedgerEntryV1(input: DaaStoreCashLedgerApplyInputV1): Promise<{
+  entry: DaaStoreCashLedgerEntryV1;
+  account: {
+    baseCurrency: string;
+    cash: number;
+    investableCash: number;
+    frozenCash: number;
+    totalEquity: number | null;
+  };
+  equitySnapshot: DaaStoreEquitySnapshotV1;
+}> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const sideRaw = normalizeText(input.side, "deposit").toLowerCase();
+    const side: DaaStoreCashLedgerSideV1 = sideRaw === "withdraw" ? "withdraw" : "deposit";
+    const amount = Math.max(0, toFiniteNumber(input.amount));
+    if (amount <= 0) throw new Error("cash ledger amount must be greater than 0");
+
+    const note = normalizeText(input.note, "");
+    const entryId = randomUUID();
+
+    await query("BEGIN");
+    try {
+      const strategyResult = await query(
+        "SELECT config_json FROM daa_strategy_config WHERE id = 'default' LIMIT 1 FOR UPDATE",
+      );
+      const currentConfig = parseJsonb<Record<string, unknown>>(strategyResult.rows[0]?.config_json, { ...DEFAULT_STRATEGY_CONFIG_V1 });
+      const accountRaw = isRecordV1(currentConfig.account) ? currentConfig.account : {};
+      const currentCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
+      const nextCash = side === "deposit" ? currentCash + amount : currentCash - amount;
+      if (nextCash < -1e-9) {
+        throw new Error(`insufficient cash for withdraw: ${amount.toFixed(2)} > ${currentCash.toFixed(2)}`);
+      }
+      const normalizedNextCash = Math.max(0, nextCash);
+      const account = await syncStrategyAccountCashInTxV1(query as DaaTxQueryFnV1, normalizedNextCash);
+      const baseCurrency = normalizeCcyCode(input.baseCurrency, account.baseCurrency);
+
+      const ts = new Date().toISOString();
+      await query(
+        "INSERT INTO daa_cash_ledger (id, ts, side, amount, base_currency, note, created_at) VALUES ($1,$2,$3,$4,$5,$6,NOW())",
+        [entryId, ts, side, amount, baseCurrency, note || null],
+      );
+
+      const holdingsRes = await query("SELECT COALESCE(SUM(qty * price), 0) AS holdings_value FROM daa_positions");
+      const holdingsValue = Math.max(0, toFiniteNumber((holdingsRes.rows[0] as Record<string, unknown> | undefined)?.holdings_value));
+      const totalEquity = holdingsValue + account.cash;
+      await query(
+        "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
+        [ts, totalEquity, holdingsValue, account.cash, "cash_ledger"],
+      );
+
+      const opLogMessage = side === "deposit"
+        ? `资金入金 ${amount.toFixed(2)} ${baseCurrency}（余额 ${account.cash.toFixed(2)}）`
+        : `资金出金 ${amount.toFixed(2)} ${baseCurrency}（余额 ${account.cash.toFixed(2)}）`;
+      await query(
+        "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'info', $2, $3)",
+        [
+          randomUUID(),
+          opLogMessage,
+          JSON.stringify({
+            side,
+            amount,
+            baseCurrency,
+            note: note || null,
+          }),
+        ],
+      );
+
+      await query("COMMIT");
+
+      const entryRes = await query(
+        "SELECT id, ts, side, amount, base_currency, note, created_at FROM daa_cash_ledger WHERE id = $1 LIMIT 1",
+        [entryId],
+      );
+
+      return {
+        entry: mapCashLedgerRowV1(entryRes.rows[0] as Record<string, unknown>),
+        account,
+        equitySnapshot: {
+          ts,
+          totalEquity,
+          holdingsValue,
+          cash: account.cash,
+          source: "cash_ledger",
+        },
+      };
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
   });
 }
 
@@ -1097,12 +1426,79 @@ export async function latestPriceBySymbolsV1(symbols: string[]): Promise<Record<
   });
 }
 
+const EXECUTION_ORDER_STATUSES_V1 = ["pending", "submitted", "partial", "executed", "canceled", "skipped"] as const;
+const DECISION_STATUSES_V1 = ["pending", "partial", "executed", "canceled", "skipped"] as const;
+const EXECUTION_EVENT_TYPES_V1 = ["submit", "cancel", "skip", "fill"] as const;
+
+function normalizeExecutionOrderStatusV1(
+  value: unknown,
+  fallback: DaaStoreExecutionOrderV1["status"],
+): DaaStoreExecutionOrderV1["status"] {
+  const normalized = normalizeText(value, fallback).toLowerCase();
+  return (EXECUTION_ORDER_STATUSES_V1 as readonly string[]).includes(normalized)
+    ? (normalized as DaaStoreExecutionOrderV1["status"])
+    : fallback;
+}
+
+function normalizeDecisionStatusV1(
+  value: unknown,
+  fallback: DaaStoreRebalanceDecisionV1["status"],
+): DaaStoreRebalanceDecisionV1["status"] {
+  const normalized = normalizeText(value, fallback).toLowerCase();
+  return (DECISION_STATUSES_V1 as readonly string[]).includes(normalized)
+    ? (normalized as DaaStoreRebalanceDecisionV1["status"])
+    : fallback;
+}
+
+function canTransitExecutionOrderStatusV1(
+  from: DaaStoreExecutionOrderV1["status"],
+  to: DaaStoreExecutionOrderV1["status"],
+): boolean {
+  if (from === to) return true;
+  const transitions: Record<DaaStoreExecutionOrderV1["status"], DaaStoreExecutionOrderV1["status"][]> = {
+    pending: ["submitted", "partial", "executed", "canceled", "skipped"],
+    submitted: ["partial", "executed", "canceled"],
+    partial: ["partial", "executed", "canceled"],
+    executed: [],
+    canceled: [],
+    skipped: [],
+  };
+  return transitions[from].includes(to);
+}
+
+function deriveDecisionStatusFromOrdersV1(allStatuses: DaaStoreExecutionOrderV1["status"][]): DaaStoreRebalanceDecisionV1["status"] {
+  if (!allStatuses.length) return "pending";
+
+  const allSkipped = allStatuses.every((status) => status === "skipped");
+  if (allSkipped) return "skipped";
+
+  const allCanceledLike = allStatuses.every((status) => status === "canceled" || status === "skipped");
+  if (allCanceledLike) return "canceled";
+
+  const allFinalized = allStatuses.every((status) => status === "executed" || status === "canceled" || status === "skipped");
+  if (allFinalized) return "executed";
+
+  const hasAnyDone = allStatuses.some(
+    (status) => status === "partial" || status === "executed" || status === "canceled" || status === "skipped",
+  );
+  if (hasAnyDone) return "partial";
+
+  return "pending";
+}
+
+function normalizeExecutionEventTypeV1(value: unknown): DaaExecutionEventInputV1["type"] | null {
+  const normalized = normalizeText(value).toLowerCase();
+  return (EXECUTION_EVENT_TYPES_V1 as readonly string[]).includes(normalized)
+    ? (normalized as DaaExecutionEventInputV1["type"])
+    : null;
+}
+
 function mapDecisionRowV1(row: Record<string, unknown>): DaaStoreRebalanceDecisionV1 {
   return {
     id: normalizeText(row.id),
     shouldRebalance: Boolean(row.should_rebalance),
     triggerSource: normalizeText(row.trigger_source, "manual") as DaaStoreRebalanceDecisionV1["triggerSource"],
-    status: normalizeText(row.status, "pending") as DaaStoreRebalanceDecisionV1["status"],
+    status: normalizeDecisionStatusV1(row.status, "pending"),
     requestJson: parseJsonb<Record<string, unknown>>(row.request_json, {}),
     responseJson: parseJsonb<Record<string, unknown>>(row.response_json, {}),
     createdAt: toIsoString(row.created_at),
@@ -1116,7 +1512,7 @@ function mapExecutionOrderRowV1(row: Record<string, unknown>): DaaStoreExecution
     symbol: normalizeText(row.symbol).toUpperCase(),
     side: normalizeText(row.side, "BUY") as DaaStoreExecutionOrderV1["side"],
     suggestedNotional: toFiniteNumber(row.suggested_notional),
-    status: normalizeText(row.status, "pending") as DaaStoreExecutionOrderV1["status"],
+    status: normalizeExecutionOrderStatusV1(row.status, "pending"),
     executedQty: toFiniteNumber(row.executed_qty),
     executedPrice: toFiniteNumber(row.executed_price),
     fee: toFiniteNumber(row.fee),
@@ -1239,11 +1635,26 @@ export async function listDaaRebalanceDecisionsV1(opts?: {
   });
 }
 
-export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmInputV1): Promise<{
+export async function applyDaaExecutionEventsV1(input: DaaExecutionApplyEventsInputV1): Promise<{
   decision: DaaStoreRebalanceDecisionV1;
   orders: DaaStoreExecutionOrderV1[];
   positions: DaaStorePositionV1[];
+  account: {
+    baseCurrency: string;
+    cash: number;
+    investableCash: number;
+    frozenCash: number;
+    totalEquity: number | null;
+  };
   equitySnapshot: DaaStoreEquitySnapshotV1;
+  applied: Array<{
+    orderId: string;
+    type: DaaExecutionEventInputV1["type"];
+    fromStatus: DaaStoreExecutionOrderV1["status"];
+    toStatus: DaaStoreExecutionOrderV1["status"];
+    fillQty: number;
+    fillNotional: number;
+  }>;
 }> {
   await ensureDaaStoreSchemaPgV1();
 
@@ -1251,94 +1662,224 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
     const decisionId = normalizeText(input.decisionId);
     if (!decisionId) throw new Error("decisionId required");
 
-    const orderInputs = Array.isArray(input.orders) ? input.orders : [];
+    const events = Array.isArray(input.events) ? input.events : [];
+    if (!events.length) throw new Error("events required");
 
     await query("BEGIN");
     try {
-      const dRes = await query(
+      const decisionRes = await query(
         "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions WHERE id = $1 LIMIT 1 FOR UPDATE",
         [decisionId],
       );
-      if (!dRes.rows.length) throw new Error("decision not found");
+      if (!decisionRes.rows.length) throw new Error("decision not found");
 
-      const oRes = await query(
+      const orderRows = await query(
         "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 FOR UPDATE",
         [decisionId],
       );
-      const existingOrders = oRes.rows.map((row) => mapExecutionOrderRowV1(row as Record<string, unknown>));
-      const existingById = new Map(existingOrders.map((o) => [o.orderId, o]));
-
-      const pRes = await query(
-        "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, liquidity_notional_24h, updated_at FROM daa_positions",
-      );
-      const positionsMap = new Map<string, DaaStorePositionV1>();
-      for (const row of pRes.rows as Array<Record<string, unknown>>) {
-        const p = mapPositionRowV1(row);
-        positionsMap.set(p.symbol, p);
+      const orderMap = new Map<string, DaaStoreExecutionOrderV1>();
+      for (const row of orderRows.rows as Array<Record<string, unknown>>) {
+        const order = mapExecutionOrderRowV1(row);
+        orderMap.set(order.orderId, order);
       }
 
-      for (const item of orderInputs) {
-        const orderId = normalizeText(item.orderId);
-        const oldOrder = existingById.get(orderId);
-        if (!oldOrder) continue;
+      const positionsRes = await query(
+        "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions",
+      );
+      const positionsMap = new Map<string, DaaStorePositionV1>();
+      for (const row of positionsRes.rows as Array<Record<string, unknown>>) {
+        const position = mapPositionRowV1(row);
+        positionsMap.set(position.symbol, position);
+      }
 
-        const status = normalizeText(item.status, oldOrder.status) as DaaStoreExecutionOrderV1["status"];
-        const executedQty = Math.max(0, toFiniteNumber(item.executedQty, oldOrder.executedQty));
-        const executedPrice = Math.max(0, toFiniteNumber(item.executedPrice, oldOrder.executedPrice));
-        const fee = Math.max(0, toFiniteNumber(item.fee, oldOrder.fee));
-        const notes = normalizeText(item.notes, oldOrder.notes || "");
-        const bookedQtyBefore = Math.max(0, toFiniteNumber(oldOrder.bookedQty));
-        const bookedNotionalBefore = Math.max(0, toFiniteNumber(oldOrder.bookedNotional));
-        const bookedFeeBefore = Math.max(0, toFiniteNumber(oldOrder.bookedFee));
+      const strategyRes = await query(
+        "SELECT config_json FROM daa_strategy_config WHERE id = 'default' LIMIT 1 FOR UPDATE",
+      );
+      const currentConfig = parseJsonb<Record<string, unknown>>(strategyRes.rows[0]?.config_json, { ...DEFAULT_STRATEGY_CONFIG_V1 });
+      const accountRaw = isRecordV1(currentConfig.account) ? currentConfig.account : {};
+      let accountCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
 
-        await query(
-          "UPDATE daa_execution_orders SET status = $1, executed_qty = $2, executed_price = $3, fee = $4, notes = $5, updated_at = NOW() WHERE order_id = $6",
-          [status, executedQty, executedPrice, fee, notes || null, orderId],
-        );
+      const applied: Array<{
+        orderId: string;
+        type: DaaExecutionEventInputV1["type"];
+        fromStatus: DaaStoreExecutionOrderV1["status"];
+        toStatus: DaaStoreExecutionOrderV1["status"];
+        fillQty: number;
+        fillNotional: number;
+      }> = [];
 
-        const incrementalQty = Math.max(0, executedQty - bookedQtyBefore);
-        const incrementalFee = Math.max(0, fee - bookedFeeBefore);
-        const shouldBookTrade = (status === "executed" || status === "partial") && incrementalQty > 0 && executedPrice > 0;
-        if (!shouldBookTrade) continue;
+      for (const rawEvent of events) {
+        const eventType = normalizeExecutionEventTypeV1(rawEvent?.type);
+        if (!eventType) throw new Error(`invalid execution event type: ${String(rawEvent?.type ?? "")}`);
 
-        const current = positionsMap.get(oldOrder.symbol) ?? {
-          id: oldOrder.symbol,
-          symbol: oldOrder.symbol,
-          market: "US",
-          currency: "USD",
-          qty: 0,
-          price: executedPrice,
-          costBasis: executedPrice,
-          tags: [],
-          liquidityNotional24h: 0,
-          updatedAt: new Date().toISOString(),
-        };
+        const orderId = normalizeText(rawEvent?.orderId);
+        const order = orderMap.get(orderId);
+        if (!order) throw new Error(`order not found in decision: ${orderId}`);
 
-        if (oldOrder.side === "SELL" && incrementalQty > current.qty + 1e-8) {
-          throw new Error(`execution qty exceeds holdings for ${oldOrder.symbol}: ${incrementalQty.toFixed(8)} > ${current.qty.toFixed(8)}`);
+        const fromStatus = normalizeExecutionOrderStatusV1(order.status, "pending");
+        let toStatus = fromStatus;
+        let fillQty = 0;
+        let fillNotional = 0;
+        const note = normalizeText(rawEvent?.note, "");
+        const nextNotes = note || order.notes || "";
+
+        if (eventType === "submit") {
+          if (fromStatus === "pending") toStatus = "submitted";
+          else toStatus = fromStatus;
+        } else if (eventType === "cancel") {
+          if (fromStatus === "pending" || fromStatus === "submitted" || fromStatus === "partial") {
+            toStatus = "canceled";
+          } else {
+            toStatus = fromStatus;
+          }
+        } else if (eventType === "skip") {
+          if (fromStatus === "pending" || fromStatus === "submitted") {
+            toStatus = "skipped";
+          } else {
+            toStatus = fromStatus;
+          }
+        } else {
+          const qty = Math.max(0, toFiniteNumber(rawEvent?.fillQty, 0));
+          const price = Math.max(0, toFiniteNumber(rawEvent?.fillPrice, 0));
+          const fee = Math.max(0, toFiniteNumber(rawEvent?.fee, 0));
+          const final = Boolean(rawEvent?.final);
+          const fillTs = toIsoString(rawEvent?.ts, new Date().toISOString());
+          if (!(qty > 0)) throw new Error(`fillQty must be > 0 for order ${order.symbol}`);
+          if (!(price > 0)) throw new Error(`fillPrice must be > 0 for order ${order.symbol}`);
+
+          const notional = qty * price;
+          const existingPosition = positionsMap.get(order.symbol) ?? {
+            id: order.symbol,
+            symbol: order.symbol,
+            market: "US",
+            currency: "USD",
+            qty: 0,
+            price,
+            costBasis: price,
+            tags: [],
+            updatedAt: new Date().toISOString(),
+          };
+
+          if (order.side === "BUY") {
+            const cashOut = notional + fee;
+            if (accountCash + 1e-9 < cashOut) {
+              throw new Error(`insufficient cash for BUY ${order.symbol}: need ${cashOut.toFixed(2)}, have ${accountCash.toFixed(2)}`);
+            }
+            accountCash = Math.max(0, accountCash - cashOut);
+            const prevQty = Math.max(0, existingPosition.qty);
+            const nextQty = prevQty + qty;
+            const prevCostBasis = Math.max(0, toFiniteNumber(existingPosition.costBasis, 0));
+            const nextCostBasis = nextQty > 0
+              ? ((prevQty * prevCostBasis) + (qty * price)) / nextQty
+              : price;
+
+            positionsMap.set(order.symbol, {
+              ...existingPosition,
+              qty: nextQty,
+              price,
+              costBasis: nextCostBasis,
+              updatedAt: new Date().toISOString(),
+            });
+          } else {
+            const prevQty = Math.max(0, existingPosition.qty);
+            if (qty > prevQty + 1e-9) {
+              throw new Error(`SELL qty exceeds holdings for ${order.symbol}: ${qty.toFixed(8)} > ${prevQty.toFixed(8)}`);
+            }
+            const cashIn = notional - fee;
+            accountCash = Math.max(0, accountCash + cashIn);
+            const nextQty = Math.max(0, prevQty - qty);
+            if (nextQty <= 0) {
+              positionsMap.delete(order.symbol);
+            } else {
+              positionsMap.set(order.symbol, {
+                ...existingPosition,
+                qty: nextQty,
+                price,
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          }
+
+          await query(
+            "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, rebalance_decision_id, execution_order_id, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'exchange_fill',$9,$10,$11,NOW())",
+            [randomUUID(), order.symbol, order.side, qty, price, notional, fee, fillTs, decisionId, orderId, nextNotes || null],
+          );
+
+          const nextBookedQty = Math.max(0, toFiniteNumber(order.bookedQty, 0)) + qty;
+          const nextBookedNotional = Math.max(0, toFiniteNumber(order.bookedNotional, 0)) + notional;
+          const nextBookedFee = Math.max(0, toFiniteNumber(order.bookedFee, 0)) + fee;
+          const nextAvgPrice = nextBookedQty > 0 ? nextBookedNotional / nextBookedQty : 0;
+
+          order.bookedQty = nextBookedQty;
+          order.bookedNotional = nextBookedNotional;
+          order.bookedFee = nextBookedFee;
+          order.executedQty = nextBookedQty;
+          order.executedPrice = nextAvgPrice;
+          order.fee = nextBookedFee;
+          order.bookedAt = order.bookedAt || fillTs;
+
+          const autoDone = nextBookedNotional + 1e-6 >= Math.max(0, toFiniteNumber(order.suggestedNotional, 0));
+          if (final || autoDone) {
+            toStatus = "executed";
+          } else {
+            toStatus = "partial";
+          }
+
+          fillQty = qty;
+          fillNotional = notional;
         }
 
-        const notional = incrementalQty * executedPrice;
-        await query(
-          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, rebalance_decision_id, execution_order_id, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),'rebalance_sync',$8,$9,$10,NOW())",
-          [randomUUID(), oldOrder.symbol, oldOrder.side, incrementalQty, executedPrice, notional, incrementalFee, decisionId, orderId, notes || null],
-        );
+        if (!canTransitExecutionOrderStatusV1(fromStatus, toStatus)) {
+          throw new Error(`invalid order status transition: ${order.symbol} ${fromStatus} -> ${toStatus}`);
+        }
 
         await query(
-          "UPDATE daa_execution_orders SET booked_qty = $1, booked_notional = $2, booked_fee = $3, booked_at = COALESCE(booked_at, NOW()) WHERE order_id = $4",
-          [bookedQtyBefore + incrementalQty, bookedNotionalBefore + notional, bookedFeeBefore + incrementalFee, orderId],
+          "UPDATE daa_execution_orders SET status = $1, executed_qty = $2, executed_price = $3, fee = $4, booked_qty = $5, booked_notional = $6, booked_fee = $7, booked_at = $8, notes = $9, updated_at = NOW() WHERE order_id = $10",
+          [
+            toStatus,
+            Math.max(0, toFiniteNumber(order.executedQty, 0)),
+            Math.max(0, toFiniteNumber(order.executedPrice, 0)),
+            Math.max(0, toFiniteNumber(order.fee, 0)),
+            Math.max(0, toFiniteNumber(order.bookedQty, 0)),
+            Math.max(0, toFiniteNumber(order.bookedNotional, 0)),
+            Math.max(0, toFiniteNumber(order.bookedFee, 0)),
+            order.bookedAt ?? null,
+            nextNotes || null,
+            orderId,
+          ],
         );
 
-        const nextQty = oldOrder.side === "BUY"
-          ? current.qty + incrementalQty
-          : Math.max(0, current.qty - incrementalQty);
+        const payloadJson: Record<string, unknown> = {
+          fromStatus,
+          toStatus,
+          fillQty,
+          fillNotional,
+          note: note || null,
+        };
+        if (eventType === "fill") {
+          payloadJson.fillPrice = Math.max(0, toFiniteNumber(rawEvent?.fillPrice, 0));
+          payloadJson.fee = Math.max(0, toFiniteNumber(rawEvent?.fee, 0));
+          payloadJson.ts = toIsoString(rawEvent?.ts, new Date().toISOString());
+          payloadJson.final = Boolean(rawEvent?.final);
+        }
 
-        positionsMap.set(oldOrder.symbol, {
-          ...current,
-          qty: nextQty,
-          price: executedPrice,
-          costBasis: current.costBasis ?? executedPrice,
-          updatedAt: new Date().toISOString(),
+        await query(
+          "INSERT INTO daa_execution_order_events (id, decision_id, order_id, event_type, payload_json, created_at) VALUES ($1,$2,$3,$4,$5,NOW())",
+          [randomUUID(), decisionId, orderId, eventType, JSON.stringify(payloadJson)],
+        );
+
+        order.status = toStatus;
+        order.notes = nextNotes || null;
+        order.updatedAt = new Date().toISOString();
+        orderMap.set(orderId, order);
+
+        applied.push({
+          orderId,
+          type: eventType,
+          fromStatus,
+          toStatus,
+          fillQty,
+          fillNotional,
         });
       }
 
@@ -1346,7 +1887,7 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
       for (const position of positionsMap.values()) {
         if (position.qty <= 0) continue;
         await query(
-          "INSERT INTO daa_positions (id, symbol, market, currency, qty, price, cost_basis, tags, liquidity_notional_24h, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())",
+          "INSERT INTO daa_positions (id, symbol, market, currency, qty, price, cost_basis, tags, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())",
           [
             position.id,
             position.symbol,
@@ -1356,60 +1897,64 @@ export async function confirmDaaRebalanceExecutionV1(input: DaaExecutionConfirmI
             position.price,
             position.costBasis,
             position.tags,
-            position.liquidityNotional24h,
           ],
         );
       }
 
-      const statusRes = await query(
-        "SELECT status FROM daa_execution_orders WHERE decision_id = $1",
-        [decisionId],
-      );
-      const allStatuses = statusRes.rows.map((row) => normalizeText((row as Record<string, unknown>).status, "pending"));
-      let decisionStatus: DaaStoreRebalanceDecisionV1["status"] = "pending";
-      if (allStatuses.length > 0 && allStatuses.every((s) => s === "skipped")) decisionStatus = "skipped";
-      else if (allStatuses.length > 0 && allStatuses.every((s) => s === "executed" || s === "skipped")) decisionStatus = "executed";
-      else if (allStatuses.some((s) => s === "executed" || s === "partial" || s === "skipped")) decisionStatus = "partial";
-
+      const allStatuses = [...orderMap.values()].map((order) => normalizeExecutionOrderStatusV1(order.status, "pending"));
+      const decisionStatus = deriveDecisionStatusFromOrdersV1(allStatuses);
       await query("UPDATE daa_rebalance_decisions SET status = $1 WHERE id = $2", [decisionStatus, decisionId]);
 
-      const positions = [...positionsMap.values()].filter((p) => p.qty > 0);
-      const holdingsValue = positions.reduce((sum, p) => sum + p.qty * p.price, 0);
-      const cash = Math.max(0, toFiniteNumber(input.cash, 0));
-      const totalEquity = holdingsValue + cash;
-
+      const account = await syncStrategyAccountCashInTxV1(query as DaaTxQueryFnV1, accountCash);
+      const holdingsValue = [...positionsMap.values()].reduce((sum, p) => sum + Math.max(0, p.qty * p.price), 0);
+      const totalEquity = holdingsValue + account.cash;
       const snapshotTs = new Date().toISOString();
       await query(
-        "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,'execution_confirm')",
-        [snapshotTs, totalEquity, holdingsValue, cash],
+        "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
+        [snapshotTs, totalEquity, holdingsValue, account.cash, "execution_event"],
+      );
+
+      await query(
+        "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'info', $2, $3)",
+        [
+          randomUUID(),
+          `交易执行事件已应用：${applied.length} 条，现金 ${account.cash.toFixed(2)} ${account.baseCurrency}`,
+          JSON.stringify({
+            decisionId,
+            appliedCount: applied.length,
+            account,
+            applied,
+          }),
+        ],
       );
 
       await query("COMMIT");
 
-      const latestDecisionRes = await query(
+      const decisionLatestRes = await query(
         "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions WHERE id = $1 LIMIT 1",
         [decisionId],
       );
-      const latestOrdersRes = await query(
+      const orderLatestRes = await query(
         "SELECT order_id, decision_id, symbol, side, suggested_notional, status, executed_qty, executed_price, fee, booked_qty, booked_notional, booked_fee, notes, updated_at, booked_at FROM daa_execution_orders WHERE decision_id = $1 ORDER BY created_at ASC",
         [decisionId],
       );
-
-      const latestPositionsRes = await query(
-        "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, liquidity_notional_24h, updated_at FROM daa_positions ORDER BY symbol ASC",
+      const positionLatestRes = await query(
+        "SELECT id, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions ORDER BY symbol ASC",
       );
 
       return {
-        decision: mapDecisionRowV1(latestDecisionRes.rows[0] as Record<string, unknown>),
-        orders: latestOrdersRes.rows.map((row) => mapExecutionOrderRowV1(row as Record<string, unknown>)),
-        positions: latestPositionsRes.rows.map((row) => mapPositionRowV1(row as Record<string, unknown>)),
+        decision: mapDecisionRowV1(decisionLatestRes.rows[0] as Record<string, unknown>),
+        orders: orderLatestRes.rows.map((row) => mapExecutionOrderRowV1(row as Record<string, unknown>)),
+        positions: positionLatestRes.rows.map((row) => mapPositionRowV1(row as Record<string, unknown>)),
+        account,
         equitySnapshot: {
           ts: snapshotTs,
           totalEquity,
           holdingsValue,
-          cash,
-          source: "execution_confirm",
+          cash: account.cash,
+          source: "execution_event",
         },
+        applied,
       };
     } catch (error) {
       try {

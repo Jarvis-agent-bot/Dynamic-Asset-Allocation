@@ -26,6 +26,29 @@ describe("strategyLabEngineV1", () => {
     expect(aligned.BBB.map((x) => x.date)).toEqual(["2026-01-01", "2026-01-03"]);
   });
 
+  it("supports union + forward-fill alignment mode", () => {
+    const aligned = prepareAlignedSeriesBySymbolV1(
+      {
+        AAA: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 102 },
+          { date: "2026-01-03", close: 103 },
+          { date: "2026-01-04", close: 104 },
+        ],
+        BBB: [
+          { date: "2026-01-01", close: 50 },
+          { date: "2026-01-03", close: 55 },
+          { date: "2026-01-04", close: 56 },
+        ],
+      },
+      { mode: "ffill_union" },
+    );
+
+    expect(Object.keys(aligned)).toEqual(["AAA", "BBB"]);
+    expect(aligned.AAA.map((x) => x.date)).toEqual(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]);
+    expect(aligned.BBB.map((x) => x.close)).toEqual([50, 50, 55, 56]);
+  });
+
   it("runs real backtest candidates with baseline + ensemble", () => {
     const result = runStrategyLabBacktestsV1({
       seriesBySymbol: {

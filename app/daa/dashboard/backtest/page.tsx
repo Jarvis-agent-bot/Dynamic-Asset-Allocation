@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Clock, Cpu, TrendingUp } from "lucide-react";
 import {
   Area,
@@ -34,8 +34,11 @@ import { computeBacktestAttribution } from "@/src/core/backtest/attribution";
 import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from "@/src/core/backtestDriftRebalance";
 import {
   buildTargetWeightDiffRowsV1,
+  prepareAlignedSeriesBySymbolWithDiagnosticsV1,
   prepareAlignedSeriesBySymbolV1,
   runStrategyLabBacktestsV1,
+  type PreparedSeriesDiagnosticsV1,
+  type SeriesAlignmentModeV1,
 } from "@/src/daa/modules/strategyLab/strategyLabEngineV1";
 import type { StrategyLabEnsembleConfigV1, StrategyLabRunResultV1 } from "@/src/daa/modules/strategyLab/strategyLabTypesV1";
 
@@ -44,6 +47,9 @@ type BacktestState = {
   error: string;
   result: DriftRebalanceBacktestResult | null;
   seriesBySymbol: Record<string, Array<{ date: string; close: number }>>;
+  ignoredSymbols: string[];
+  rangeLabel: string;
+  dataDiagnostics: BacktestDataDiagnostics | null;
 };
 
 type StrategyLabState = {
@@ -55,12 +61,40 @@ type StrategyLabState = {
   rangeLabel: string;
 };
 
+type BacktestExecutionTiming = "same_bar_close" | "t_plus_1_close";
+
+type BacktestDataDiagnostics = {
+  source: string;
+  interval: string;
+  priceMode: "adjclose" | "close";
+  rangeStart: string;
+  rangeEnd: string;
+  alignmentMode: SeriesAlignmentModeV1;
+  alignment: PreparedSeriesDiagnosticsV1 | null;
+  executionTiming: BacktestExecutionTiming;
+  feeBps: number;
+  slippageBps: number;
+  perSymbol: Array<{
+    symbol: string;
+    status: "ok" | "ignored";
+    rawCount: number;
+    normalizedCount: number;
+    issues: string[];
+    error?: string;
+  }>;
+};
+
 const DEFAULT_ENSEMBLE_CONFIG_V1: StrategyLabEnsembleConfigV1 = {
   momentum: 0.4,
   riskParity: 0.25,
   minVariance: 0.15,
   equalWeight: 0.2,
 };
+
+const DEFAULT_ALIGNMENT_MODE_V1: SeriesAlignmentModeV1 = "ffill_union";
+const DEFAULT_EXECUTION_TIMING_V1: BacktestExecutionTiming = "t_plus_1_close";
+const DEFAULT_FEE_BPS_V1 = 5;
+const DEFAULT_SLIPPAGE_BPS_V1 = 5;
 
 const ENSEMBLE_LABELS_V1: Record<keyof StrategyLabEnsembleConfigV1, string> = {
   momentum: "动量",
@@ -84,8 +118,20 @@ export default function BacktestPage() {
   const runHistory = runHistoryData ?? [];
 
   const [backtestDays, setBacktestDays] = useState(60);
-  const [optimizationDays, setOptimizationDays] = useState(60);
-  const [bt, setBt] = useState<BacktestState>({ running: false, error: "", result: null, seriesBySymbol: {} });
+  const [alignmentMode, setAlignmentMode] = useState<SeriesAlignmentModeV1>(DEFAULT_ALIGNMENT_MODE_V1);
+  const [executionTiming, setExecutionTiming] = useState<BacktestExecutionTiming>(DEFAULT_EXECUTION_TIMING_V1);
+  const [feeBps, setFeeBps] = useState<number>(DEFAULT_FEE_BPS_V1);
+  const [slippageBps, setSlippageBps] = useState<number>(DEFAULT_SLIPPAGE_BPS_V1);
+  const [useAdjustedClose, setUseAdjustedClose] = useState(true);
+  const [bt, setBt] = useState<BacktestState>({
+    running: false,
+    error: "",
+    result: null,
+    seriesBySymbol: {},
+    ignoredSymbols: [],
+    rangeLabel: "-",
+    dataDiagnostics: null,
+  });
   const [ensembleConfig, setEnsembleConfig] = useState<StrategyLabEnsembleConfigV1>(DEFAULT_ENSEMBLE_CONFIG_V1);
   const [lab, setLab] = useState<StrategyLabState>({
     running: false,
@@ -119,14 +165,29 @@ export default function BacktestPage() {
   async function fetchRawSeries(symbolList: string[], start: string, end: string): Promise<{
     rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>;
     ignoredSymbols: string[];
+    diagnostics: Pick<BacktestDataDiagnostics, "source" | "interval" | "priceMode" | "perSymbol">;
   }> {
     const rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>> = {};
     const ignoredSymbols: string[] = [];
+    const perSymbol: BacktestDataDiagnostics["perSymbol"] = [];
+    let source = "yfinance";
+    let interval = "1d";
+    let priceMode: "adjclose" | "close" = useAdjustedClose ? "adjclose" : "close";
 
     await Promise.all(
       symbolList.map(async (symbol) => {
         try {
-          const bars = await marketData.yfinance.priceSeriesBars({ symbol, start, end });
+          const payload = await marketData.yfinance.priceSeries({ symbol, start, end, adjusted: useAdjustedClose });
+          if (!payload?.ok) {
+            const msg = payload?.error || payload?.message || "price-series route failed";
+            throw new Error(msg);
+          }
+
+          source = String(payload.source || source);
+          interval = String(payload.interval || interval);
+          priceMode = payload.priceMode === "close" ? "close" : "adjclose";
+
+          const bars = Array.isArray(payload.series) ? payload.series : [];
           const mapped = bars
             .map((bar: any) => ({
               date: String(bar?.date || "").trim(),
@@ -136,33 +197,112 @@ export default function BacktestPage() {
 
           if (mapped.length >= 2) {
             rawSeriesBySymbol[symbol] = mapped;
+            perSymbol.push({
+              symbol,
+              status: "ok",
+              rawCount: Number(payload.rawCount) || mapped.length,
+              normalizedCount: mapped.length,
+              issues: Array.isArray(payload.issues) ? payload.issues.map((issue) => String(issue || "")) : [],
+            });
             return;
           }
-        } catch {
+          perSymbol.push({
+            symbol,
+            status: "ignored",
+            rawCount: Number(payload.rawCount) || mapped.length,
+            normalizedCount: mapped.length,
+            issues: Array.isArray(payload.issues) ? payload.issues.map((issue) => String(issue || "")) : [],
+            error: "有效K线不足（<2）",
+          });
+        } catch (error) {
           // ignore per-symbol failures
+          perSymbol.push({
+            symbol,
+            status: "ignored",
+            rawCount: 0,
+            normalizedCount: 0,
+            issues: [],
+            error: error instanceof Error ? error.message : "拉取失败",
+          });
         }
         ignoredSymbols.push(symbol);
       }),
     );
 
-    return { rawSeriesBySymbol, ignoredSymbols: ignoredSymbols.sort() };
+    perSymbol.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    return {
+      rawSeriesBySymbol,
+      ignoredSymbols: ignoredSymbols.sort(),
+      diagnostics: {
+        source,
+        interval,
+        priceMode,
+        perSymbol,
+      },
+    };
   }
 
   async function runBacktest() {
-    if (bt.running || !symbols.length) return;
-    setBt({ running: true, error: "", result: null, seriesBySymbol: {} });
+    if (bt.running) return;
+    if (!symbols.length) {
+      setBt({
+        running: false,
+        error: "暂无可回测标的，请先新增持仓或配置目标权重。",
+        result: null,
+        seriesBySymbol: {},
+        ignoredSymbols: [],
+        rangeLabel: "-",
+        dataDiagnostics: null,
+      });
+      setLab((prev) => ({ ...prev, running: false, error: "", success: "", result: null, ignoredSymbols: [], rangeLabel: "-" }));
+      return;
+    }
+    setBt({ running: true, error: "", result: null, seriesBySymbol: {}, ignoredSymbols: [], rangeLabel: "-", dataDiagnostics: null });
+    setLab((prev) => ({ ...prev, running: true, error: "", success: "" }));
 
     try {
       const today = new Date();
       const start = new Date(today.getTime() - backtestDays * 86400000).toISOString().slice(0, 10);
       const end = today.toISOString().slice(0, 10);
+      const rangeLabel = toRangeLabel(start, end);
 
-      const { rawSeriesBySymbol } = await fetchRawSeries(symbols, start, end);
-      const seriesBySymbol = prepareAlignedSeriesBySymbolV1(rawSeriesBySymbol);
+      const { rawSeriesBySymbol, ignoredSymbols, diagnostics } = await fetchRawSeries(symbols, start, end);
+      const prepared = prepareAlignedSeriesBySymbolWithDiagnosticsV1(rawSeriesBySymbol, { mode: alignmentMode, minBars: 2 });
+      const seriesBySymbol = prepared.seriesBySymbol;
+      const dataDiagnostics: BacktestDataDiagnostics = {
+        source: diagnostics.source,
+        interval: diagnostics.interval,
+        priceMode: diagnostics.priceMode,
+        rangeStart: start,
+        rangeEnd: end,
+        alignmentMode,
+        alignment: prepared.diagnostics,
+        executionTiming,
+        feeBps: Math.max(0, Number(feeBps) || 0),
+        slippageBps: Math.max(0, Number(slippageBps) || 0),
+        perSymbol: diagnostics.perSymbol,
+      };
       const availableSymbols = Object.keys(seriesBySymbol);
 
       if (availableSymbols.length < 1) {
-        setBt({ running: false, error: "无法获取可对齐的历史数据，请减少标的或扩大回测区间。", result: null, seriesBySymbol: {} });
+        setBt({
+          running: false,
+          error: "无法获取可对齐的历史数据，请减少标的或扩大回测区间。",
+          result: null,
+          seriesBySymbol: {},
+          ignoredSymbols,
+          rangeLabel,
+          dataDiagnostics,
+        });
+        setLab((prev) => ({
+          ...prev,
+          running: false,
+          error: "可对齐历史数据不足，未生成优化结果。",
+          success: "",
+          result: null,
+          ignoredSymbols,
+          rangeLabel,
+        }));
         return;
       }
 
@@ -174,6 +314,11 @@ export default function BacktestPage() {
       }
 
       const initialHoldings = buildInitialHoldings(availableSymbols);
+      const executionConfig = {
+        timing: executionTiming,
+        feeRatePct: Math.max(0, Number(feeBps) || 0) / 10000,
+        slippageBps: Math.max(0, Number(slippageBps) || 0),
+      } as const;
 
       const result = backtestDriftRebalance({
         seriesBySymbol,
@@ -189,13 +334,24 @@ export default function BacktestPage() {
           thresholdPct: config.policy.baseDriftTriggerPct,
           minTradeNotional: config.constraints.minNotional,
         },
+        execution: executionConfig,
         includeEventStates: true,
         includeTimeline: true,
       });
 
-      setBt({ running: false, error: "", result, seriesBySymbol });
+      setBt({ running: false, error: "", result, seriesBySymbol, ignoredSymbols, rangeLabel, dataDiagnostics });
+      runStrategyLabWithSeries(rawSeriesBySymbol, rangeLabel, ignoredSymbols);
     } catch (e) {
-      setBt({ running: false, error: e instanceof Error ? e.message : String(e), result: null, seriesBySymbol: {} });
+      setBt({
+        running: false,
+        error: e instanceof Error ? e.message : String(e),
+        result: null,
+        seriesBySymbol: {},
+        ignoredSymbols: [],
+        rangeLabel: "-",
+        dataDiagnostics: null,
+      });
+      setLab((prev) => ({ ...prev, running: false, error: e instanceof Error ? e.message : String(e), success: "", result: null }));
     }
   }
 
@@ -204,7 +360,7 @@ export default function BacktestPage() {
     rangeLabel: string,
     ignoredSymbols: string[],
   ) {
-    const alignedSeriesBySymbol = prepareAlignedSeriesBySymbolV1(rawSeriesBySymbol);
+    const alignedSeriesBySymbol = prepareAlignedSeriesBySymbolV1(rawSeriesBySymbol, { mode: alignmentMode, minBars: 2 });
     const alignedSymbols = Object.keys(alignedSeriesBySymbol);
 
     if (!alignedSymbols.length) {
@@ -236,6 +392,11 @@ export default function BacktestPage() {
           thresholdPct: config.policy.baseDriftTriggerPct,
           minTradeNotional: config.constraints.minNotional,
         },
+        execution: {
+          timing: executionTiming,
+          feeRatePct: Math.max(0, Number(feeBps) || 0) / 10000,
+          slippageBps: Math.max(0, Number(slippageBps) || 0),
+        },
       });
 
       setLab((prev) => ({
@@ -260,33 +421,16 @@ export default function BacktestPage() {
     }
   }
 
-  async function runStrategyOptimization() {
-    if (lab.running || !symbols.length) return;
-
-    const today = new Date();
-    const start = new Date(today.getTime() - optimizationDays * 86400000).toISOString().slice(0, 10);
-    const end = today.toISOString().slice(0, 10);
-    const rangeLabel = toRangeLabel(start, end);
-
-    setLab((prev) => ({ ...prev, running: true, error: "", success: "" }));
-
-    const { rawSeriesBySymbol, ignoredSymbols } = await fetchRawSeries(symbols, start, end);
-    runStrategyLabWithSeries(rawSeriesBySymbol, rangeLabel, ignoredSymbols);
-  }
-
-  function rerunStrategyOptimization() {
-    if (lab.running || !lab.result) return;
-    setLab((prev) => ({ ...prev, running: true, error: "", success: "" }));
-
+  useEffect(() => {
+    if (!bt.result) return;
     const rawSeriesBySymbol = Object.fromEntries(
-      Object.entries(lab.result.seriesBySymbol).map(([symbol, series]) => [
+      Object.entries(bt.seriesBySymbol).map(([symbol, series]) => [
         symbol,
         series.map((bar) => ({ date: bar.date, close: bar.close })),
       ]),
     );
-
-    runStrategyLabWithSeries(rawSeriesBySymbol, lab.rangeLabel, lab.ignoredSymbols);
-  }
+    runStrategyLabWithSeries(rawSeriesBySymbol, bt.rangeLabel, bt.ignoredSymbols);
+  }, [alignmentMode, bt.ignoredSymbols, bt.rangeLabel, bt.result, bt.seriesBySymbol, ensembleConfig, executionTiming, feeBps, slippageBps]);
 
   function applyEnsembleToConfig() {
     if (!lab.result) return;
@@ -388,23 +532,84 @@ export default function BacktestPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1">
               <Label className="text-xs">回测天数</Label>
               <Input
                 type="number"
-                className="h-8 w-24"
+                className="h-8"
                 value={backtestDays}
                 min={10}
                 max={365}
                 onChange={(e) => setBacktestDays(Math.max(10, Number(e.target.value) || 60))}
               />
             </div>
-            <Button onClick={() => void runBacktest()} disabled={bt.running || !symbols.length} size="sm">
-              <Cpu className="mr-2 h-3.5 w-3.5" />
-              {bt.running ? "运行中..." : "运行回测"}
-            </Button>
+            <div className="space-y-1">
+              <Label className="text-xs">成交模型</Label>
+              <select
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                value={executionTiming}
+                onChange={(e) => setExecutionTiming((e.target.value as BacktestExecutionTiming) || DEFAULT_EXECUTION_TIMING_V1)}
+              >
+                <option value="t_plus_1_close">T+1（D 日信号，D+1 收盘成交）</option>
+                <option value="same_bar_close">同 Bar（D 日收盘信号并成交）</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">对齐策略</Label>
+              <select
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                value={alignmentMode}
+                onChange={(e) => setAlignmentMode((e.target.value as SeriesAlignmentModeV1) || DEFAULT_ALIGNMENT_MODE_V1)}
+              >
+                <option value="ffill_union">交易日并集 + 前值填充</option>
+                <option value="intersection">严格交集</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">价格口径</Label>
+              <select
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                value={useAdjustedClose ? "adjclose" : "close"}
+                onChange={(e) => setUseAdjustedClose(e.target.value !== "close")}
+              >
+                <option value="adjclose">复权价（adjclose）</option>
+                <option value="close">收盘价（close）</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">手续费（bps）</Label>
+              <Input
+                type="number"
+                className="h-8"
+                value={feeBps}
+                min={0}
+                step={0.1}
+                onChange={(e) => setFeeBps(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">滑点（bps）</Label>
+              <Input
+                type="number"
+                className="h-8"
+                value={slippageBps}
+                min={0}
+                step={0.1}
+                onChange={(e) => setSlippageBps(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={() => void runBacktest()} disabled={bt.running} size="sm">
+                <Cpu className="mr-2 h-3.5 w-3.5" />
+                {bt.running ? "运行中..." : "运行回测"}
+              </Button>
+            </div>
           </div>
+
+          {!symbols.length ? (
+            <div className="text-xs text-muted-foreground">当前无可回测标的，先在“持仓配置”新增标的或设置目标权重。</div>
+          ) : null}
 
           {bt.error ? (
             <Alert variant="destructive">
@@ -422,7 +627,11 @@ export default function BacktestPage() {
             <StatCard label="总收益" value={formatPercent(bt.result.metrics.totalReturn * 100)} variant={bt.result.metrics.totalReturn >= 0 ? "success" : "danger"} Icon={TrendingUp} />
             <StatCard label="最大回撤" value={formatPercent(bt.result.metrics.maxDrawdown * 100)} variant={bt.result.metrics.maxDrawdown > 0.1 ? "danger" : "default"} />
             <StatCard label="夏普比率" value={bt.result.metrics.sharpe.toFixed(2)} />
-            <StatCard label="再平衡次数" value={bt.result.summary.rebalanceCount} sub={`换手 ${formatCurrency(bt.result.summary.turnoverNotional)}`} />
+            <StatCard
+              label="再平衡次数"
+              value={bt.result.summary.rebalanceCount}
+              sub={`换手 ${formatCurrency(bt.result.summary.turnoverNotional)} / 费用 ${formatCurrency(bt.result.summary.totalFeesAbs)}`}
+            />
           </div>
 
           <Card>
@@ -472,7 +681,7 @@ export default function BacktestPage() {
                 <div className="max-h-[300px] overflow-auto rounded-lg border">
                   <Table>
                     <TableHeader><TableRow>
-                      <TableHead>日期</TableHead><TableHead>指令</TableHead><TableHead className="text-right">换手金额</TableHead><TableHead>触发原因</TableHead>
+                      <TableHead>日期</TableHead><TableHead>指令</TableHead><TableHead className="text-right">换手金额</TableHead><TableHead className="text-right">费用</TableHead><TableHead>触发原因</TableHead>
                     </TableRow></TableHeader>
                     <TableBody>
                       {eventsData.map((ev, i) => (
@@ -482,6 +691,7 @@ export default function BacktestPage() {
                             {ev.executed.map((o) => `${o.side} ${o.symbol}`).join(", ") || "-"}
                           </TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(ev.turnoverNotional)}</TableCell>
+                          <TableCell className="text-right text-xs">{formatCurrency(ev.feeNotional)}</TableCell>
                           <TableCell className="max-w-[200px] text-xs text-muted-foreground">{ev.trigger.reasons.join("; ")}</TableCell>
                         </TableRow>
                       ))}
@@ -499,6 +709,64 @@ export default function BacktestPage() {
                 {bt.result.warnings.slice(0, 10).map((w, i) => (
                   <div key={`bw-${i}`} className="rounded border border-amber-200 bg-amber-50/30 px-2 py-1 text-[11px] text-amber-800">{w}</div>
                 ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {bt.dataDiagnostics ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">数据诊断</CardTitle>
+                <CardDescription>
+                  数据源 {bt.dataDiagnostics.source} / {bt.dataDiagnostics.interval} / {bt.dataDiagnostics.priceMode}，
+                  区间 {bt.dataDiagnostics.rangeStart} ~ {bt.dataDiagnostics.rangeEnd}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+                  <div>成交模型：{bt.dataDiagnostics.executionTiming === "t_plus_1_close" ? "T+1" : "同 Bar"}</div>
+                  <div>手续费：{bt.dataDiagnostics.feeBps.toFixed(2)} bps</div>
+                  <div>滑点：{bt.dataDiagnostics.slippageBps.toFixed(2)} bps</div>
+                  <div>对齐策略：{bt.dataDiagnostics.alignmentMode === "ffill_union" ? "并集 + 前值填充" : "严格交集"}</div>
+                  <div>输入标的：{bt.dataDiagnostics.perSymbol.length}</div>
+                  <div>对齐后标的：{bt.dataDiagnostics.alignment?.outputSymbolCount ?? 0}</div>
+                  <div>共同K线：{bt.dataDiagnostics.alignment?.commonDateCount ?? 0}</div>
+                  <div>忽略标的：{bt.ignoredSymbols.length}</div>
+                </div>
+
+                <div className="overflow-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead className="text-right">Raw Bars</TableHead>
+                        <TableHead className="text-right">Normalized</TableHead>
+                        <TableHead className="text-right">Aligned</TableHead>
+                        <TableHead className="text-right">FFill</TableHead>
+                        <TableHead>备注</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {bt.dataDiagnostics.perSymbol.map((row) => {
+                        const aligned = bt.dataDiagnostics?.alignment?.barsBySymbol?.[row.symbol];
+                        return (
+                          <TableRow key={`diag-${row.symbol}`}>
+                            <TableCell className="font-medium">{row.symbol}</TableCell>
+                            <TableCell>{row.status === "ok" ? "可用" : "忽略"}</TableCell>
+                            <TableCell className="text-right">{row.rawCount}</TableCell>
+                            <TableCell className="text-right">{row.normalizedCount}</TableCell>
+                            <TableCell className="text-right">{aligned?.aligned ?? 0}</TableCell>
+                            <TableCell className="text-right">{aligned?.ffillCount ?? 0}</TableCell>
+                            <TableCell className="max-w-[320px] text-xs text-muted-foreground">
+                              {row.error || row.issues.slice(0, 2).join("; ") || "-"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           ) : null}
@@ -562,24 +830,8 @@ export default function BacktestPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">优化回测天数</Label>
-              <Input
-                type="number"
-                className="h-8 w-24"
-                value={optimizationDays}
-                min={30}
-                max={365}
-                onChange={(e) => setOptimizationDays(Math.max(30, Number(e.target.value) || 60))}
-              />
-            </div>
-            <Button type="button" onClick={() => void runStrategyOptimization()} disabled={lab.running || symbols.length === 0}>
-              {lab.running ? "优化中..." : "运行策略优化"}
-            </Button>
-            <Button type="button" variant="outline" onClick={rerunStrategyOptimization} disabled={lab.running || !lab.result}>
-              基于当前数据重跑
-            </Button>
+          <div className="text-xs text-muted-foreground">
+            优化会在你点击上方“运行回测”后自动完成。调整下方系数时，优化结果会自动重算。
           </div>
 
           {lab.error ? (
@@ -695,6 +947,7 @@ export default function BacktestPage() {
                       <TableHead className="text-right">Sharpe</TableHead>
                       <TableHead className="text-right">再平衡次数</TableHead>
                       <TableHead className="text-right">换手金额</TableHead>
+                      <TableHead className="text-right">交易费用</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -706,6 +959,7 @@ export default function BacktestPage() {
                         <TableCell className="text-right">{candidate.backtest.metrics.sharpe.toFixed(2)}</TableCell>
                         <TableCell className="text-right">{candidate.backtest.summary.rebalanceCount}</TableCell>
                         <TableCell className="text-right">{formatCurrency(candidate.backtest.summary.turnoverNotional)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(candidate.backtest.summary.totalFeesAbs)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -45,4 +45,13 @@ describe("hf-service-v1", () => {
     const latest = await getLatestHumanSignalBatchV1();
     expect(latest.signals.length).toBeGreaterThan(0);
   });
+
+  it("支持只读获取缓存批次（不触发自动采集）", async () => {
+    const before = getHumanIngestRuntimeStateV1().ingestCount;
+    const latest = await getLatestHumanSignalBatchV1({ autoIngestOnMiss: false });
+    const after = getHumanIngestRuntimeStateV1().ingestCount;
+
+    expect(after).toBe(before);
+    expect(latest.sourceStatus).toBeDefined();
+  });
 });

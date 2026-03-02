@@ -18,13 +18,15 @@ import MetricGauge from "../_components/MetricGauge";
 import TierBadge from "../_components/TierBadge";
 import {
   useHfFundRegistry,
-  useLastRunResult,
   usePositions,
+  useStrategyConfig,
+  useFxRates,
 } from "../_components/useDaaStore";
 import {
   DEFAULT_HF_FUND_REGISTRY,
   type DaaHfFundTrackRow,
 } from "../../unifiedInputStore";
+import { buildDaaUnifiedPlanV1, type DaaUnifiedHumanSignalV1 } from "@/src/daa/unifiedRebalanceV1";
 
 const DEFAULT_MARKET_SCOPE = ["US", "HK", "CN"];
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
@@ -72,28 +74,6 @@ type HumanSignalBatch = {
     itemCount: number;
   }>;
 };
-
-type LastRunPlan = {
-  layers?: {
-    humanFactor?: {
-      defensiveConsensusPct?: number;
-      assetDecisions?: Array<{
-        symbol: string;
-        tier: "elite" | "steady" | "watch" | "isolated";
-        weightedScorePct: number;
-        reasons: string[];
-      }>;
-    };
-  };
-};
-
-function extractPlan(payload: unknown): LastRunPlan | null {
-  const value = payload as any;
-  if (!value || typeof value !== "object") return null;
-  if (value.layers && typeof value.layers === "object") return value as LastRunPlan;
-  if (value.plan && typeof value.plan === "object" && value.plan.layers) return value.plan as LastRunPlan;
-  return null;
-}
 
 function normalizedFundCode(value: string): string {
   return String(value || "").trim().toUpperCase();
@@ -198,13 +178,13 @@ function FundFormDialog({
 export default function HumanFactorPage() {
   const [storedRegistry, setStoredRegistry] = useHfFundRegistry();
   const [positions] = usePositions();
-  const [lastRun] = useLastRunResult();
+  const [strategyConfig] = useStrategyConfig();
+  const [fxRates] = useFxRates();
 
   const [signalBatch, setSignalBatch] = useState<HumanSignalBatch | null>(null);
   const [sourceError, setSourceError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [ingesting, setIngesting] = useState(false);
-  const result = extractPlan(lastRun);
 
   const registry = useMemo(
     () => dedupeRegistry(storedRegistry?.length ? storedRegistry : DEFAULT_HF_FUND_REGISTRY),
@@ -223,14 +203,73 @@ export default function HumanFactorPage() {
     return positionsList.filter((p) => symbols.has(String(p.symbol || "").trim().toUpperCase())).length;
   }, [positionsList, signalBatch]);
 
+  const previewPlan = useMemo(() => {
+    if (!signalBatch?.signals?.length) return null;
+    try {
+      const humanSignals: DaaUnifiedHumanSignalV1[] = signalBatch.signals.map((signal) => ({
+        symbol: String(signal.symbol || "").trim().toUpperCase(),
+        aggregatedScorePct: Number(signal.aggregatedScorePct) || 0,
+        convictionPct: Number(signal.convictionPct) || 0,
+        thesisDriftPct: Number(signal.thesisDriftPct) || 0,
+        confidencePct: Number(signal.confidencePct) || 0,
+        momentumRegime: signal.momentumRegime as DaaUnifiedHumanSignalV1["momentumRegime"],
+        stance: signal.stance as DaaUnifiedHumanSignalV1["stance"],
+        riskTags: Array.isArray(signal.riskTags) ? signal.riskTags.map((tag) => String(tag || "").trim()).filter(Boolean) : [],
+        sourceRefs: [],
+      }));
+
+      return buildDaaUnifiedPlanV1({
+        account: {
+          baseCurrency: strategyConfig.account.baseCurrency,
+          cash: Number(strategyConfig.account.cash) || 0,
+          investableCash: Number(strategyConfig.account.investableCash) || 0,
+          frozenCash: Number(strategyConfig.account.frozenCash) || 0,
+          totalEquity: strategyConfig.account.totalEquity ?? undefined,
+        },
+        constraints: {
+          maxPositionPct: Number(strategyConfig.constraints.maxPositionPct) || 1,
+          minNotional: Number(strategyConfig.constraints.minNotional) || 0,
+          maxOrderPctOfNav: Number(strategyConfig.constraints.maxOrderPctOfNav) || 0.1,
+        },
+        policy: {
+          baseDriftTriggerPct: Number(strategyConfig.policy.baseDriftTriggerPct) || 0.05,
+          strongTrendDriftTriggerPct: Number(strategyConfig.policy.strongTrendDriftTriggerPct) || 0.1,
+          riskOffConsensusPct: Number(strategyConfig.policy.riskOffConsensusPct) || 0.6,
+          riskOffScalePct: Number(strategyConfig.policy.riskOffScalePct) || 0.7,
+          valueTrapThesisDriftPct: Number(strategyConfig.policy.valueTrapThesisDriftPct) || 0.12,
+          sbIsolationScorePct: Number(strategyConfig.policy.sbIsolationScorePct) || 0.35,
+        },
+        risk: {
+          maxDrawdownPct: Number(strategyConfig.risk.maxDrawdownPct) || 0.15,
+          perAssetStopLossPct: Number(strategyConfig.risk.perAssetStopLossPct) || 0.2,
+          maxConcentrationPct: Number(strategyConfig.risk.maxConcentrationPct) || 0.3,
+          correlationCapPct: Number(strategyConfig.risk.correlationCapPct) || 0.6,
+          maxTotalRiskExposurePct: Number(strategyConfig.risk.maxTotalRiskExposurePct) || 0.7,
+        },
+        targetWeights: strategyConfig.targetWeights,
+        positions: positionsList,
+        fxRates: (fxRates ?? []).map((rate) => ({
+          baseCcy: String(rate.baseCcy || "").toUpperCase(),
+          quoteCcy: String(rate.quoteCcy || "").toUpperCase(),
+          rate: Number(rate.rate) || 0,
+          source: String(rate.source || "manual"),
+          asOfTs: rate.asOfTs,
+        })),
+        humanSignals,
+      });
+    } catch {
+      return null;
+    }
+  }, [fxRates, positionsList, signalBatch, strategyConfig]);
+
   const decisions: Array<{
     symbol: string;
     tier: "elite" | "steady" | "watch" | "isolated";
     weightedScorePct: number;
     reasons: string[];
-  }> = result?.layers?.humanFactor?.assetDecisions ?? [];
+  }> = previewPlan?.layers?.humanFactor?.assetDecisions ?? [];
 
-  const defensiveConsensusPct = Number(result?.layers?.humanFactor?.defensiveConsensusPct ?? 0);
+  const defensiveConsensusPct = Number(previewPlan?.layers?.humanFactor?.defensiveConsensusPct ?? 0);
   const signalCount = signalBatch?.signals?.length ?? 0;
   const latestGeneratedAtText = formatDateTimeText(signalBatch?.generatedAt);
 
@@ -286,7 +325,7 @@ export default function HumanFactorPage() {
     setSourceError("");
 
     try {
-      await requestDataV1<{ summary: unknown; batch: HumanSignalBatch }>("/api/daa/hf/ingest/run", {
+      const data = await requestDataV1<{ summary: unknown; batch: HumanSignalBatch }>("/api/daa/hf/ingest/run", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
@@ -294,15 +333,26 @@ export default function HumanFactorPage() {
           fundCodes: enabledFundCodes,
         }),
       });
-
-      await loadSignalBatch();
+      const batch = data.batch;
+      setSignalBatch({
+        generatedAt: String(batch?.generatedAt ?? ""),
+        asOfDate: String(batch?.asOfDate ?? ""),
+        mode: String(batch?.mode ?? ""),
+        sourceStatus: batch?.sourceStatus === "live" || batch?.sourceStatus === "fallback_seed" ? batch.sourceStatus : "unknown",
+        diagnostics: Array.isArray(batch?.diagnostics) ? batch.diagnostics : [],
+        marketScope: Array.isArray(batch?.marketScope) ? batch.marketScope : [],
+        actorCount: Number(batch?.actorCount ?? 0),
+        holdingCount: Number(batch?.holdingCount ?? 0),
+        signals: Array.isArray(batch?.signals) ? batch.signals : [],
+        sources: Array.isArray(batch?.sources) ? batch.sources : [],
+      });
     } catch (e) {
       setSourceError(getApiErrorMessageV1(e));
     } finally {
       setIngesting(false);
       window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
     }
-  }, [enabledFundCodes, loadSignalBatch]);
+  }, [enabledFundCodes]);
 
   useEffect(() => {
     function onRefresh() {
@@ -376,7 +426,7 @@ export default function HumanFactorPage() {
               <Button
                 size="sm"
                 onClick={() => void runIngest()}
-                disabled={refreshing || ingesting || enabledFundCodes.length === 0}
+                disabled={ingesting || enabledFundCodes.length === 0}
               >
                 <ShieldCheck className={`mr-1.5 h-3.5 w-3.5 ${ingesting ? "animate-spin" : ""}`} />
                 运行采集
@@ -389,6 +439,13 @@ export default function HumanFactorPage() {
             <Alert variant="destructive" className="py-2">
               <AlertCircle className="h-3.5 w-3.5" />
               <AlertDescription className="text-xs">{sourceError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {enabledFundCodes.length === 0 ? (
+            <Alert className="py-2">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <AlertDescription className="text-xs">当前没有启用基金，先在下方基金池至少启用 1 个基金后才能运行采集。</AlertDescription>
             </Alert>
           ) : null}
 
@@ -681,8 +738,8 @@ export default function HumanFactorPage() {
       {decisions.length ? (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">上次运行的人因决策结果</CardTitle>
-            <CardDescription>来自统一再平衡引擎，可与采集信号对照校验。</CardDescription>
+            <CardTitle className="text-base">当前采集批次的人因决策预览</CardTitle>
+            <CardDescription>基于当前持仓/策略配置 + 最新采集信号实时计算（未落库）。</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-h-[420px] overflow-auto rounded-lg border">
@@ -708,6 +765,13 @@ export default function HumanFactorPage() {
               </Table>
             </div>
           </CardContent>
+        </Card>
+      ) : signalBatch?.signals?.length ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">当前采集批次的人因决策预览</CardTitle>
+            <CardDescription>已采集到信号，但当前策略目标权重为空，暂无法生成资产分层决策。</CardDescription>
+          </CardHeader>
         </Card>
       ) : null}
     </div>

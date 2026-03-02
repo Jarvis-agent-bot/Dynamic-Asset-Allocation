@@ -30,6 +30,11 @@ export async function GET(req: Request) {
 
     const start = url.searchParams.get("start")?.trim() || undefined;
     const end = url.searchParams.get("end")?.trim() || undefined;
+    const adjustedRaw = url.searchParams.get("adjusted")?.trim();
+    const useAdjustedClose = !(
+      adjustedRaw === "0" ||
+      adjustedRaw?.toLowerCase() === "false"
+    );
 
     if (start !== undefined) assertIsoDateString(start, "start");
     if (end !== undefined) assertIsoDateString(end, "end");
@@ -47,7 +52,7 @@ export async function GET(req: Request) {
 
     const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
     upstream.searchParams.set("interval", "1d");
-    upstream.searchParams.set("events", "div%7Csplit");
+    upstream.searchParams.set("events", "div|split");
     if (start) upstream.searchParams.set("period1", String(period1));
     if (endExclusiveIso) upstream.searchParams.set("period2", String(period2));
 
@@ -97,11 +102,13 @@ export async function GET(req: Request) {
     const result0 = payload?.chart?.result?.[0];
     const ts: unknown[] = Array.isArray(result0?.timestamp) ? result0.timestamp : [];
     const closes: unknown[] = Array.isArray(result0?.indicators?.quote?.[0]?.close) ? result0.indicators.quote[0].close : [];
+    const adjCloses: unknown[] = Array.isArray(result0?.indicators?.adjclose?.[0]?.adjclose) ? result0.indicators.adjclose[0].adjclose : [];
 
     const rows = ts.map((t, i) => {
       const d = new Date(Number(t) * 1000);
       const iso = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : "";
-      return { date: iso, close: closes[i] };
+      const selectedClose = useAdjustedClose ? (adjCloses[i] ?? closes[i]) : (closes[i] ?? adjCloses[i]);
+      return { date: iso, close: selectedClose };
     });
 
     const normalized = normalizeYfinanceHistoricalQuotes(rows, { start, end });
@@ -109,6 +116,8 @@ export async function GET(req: Request) {
     return json({
       ok: true,
       source: "yfinance",
+      interval: "1d",
+      priceMode: useAdjustedClose ? "adjclose" : "close",
       symbol: symbolRaw,
       normalizedSymbol: symbol,
       upstream: upstream.toString(),

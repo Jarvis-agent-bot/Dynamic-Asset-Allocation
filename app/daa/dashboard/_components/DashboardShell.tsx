@@ -46,7 +46,7 @@ export default function DashboardShell({ children }: Props) {
             >
               Dynamic Asset Allocation
             </Link>
-            <div className="text-sm text-muted-foreground">配置 → 采集 → 运行 → 执行</div>
+            <div className="text-sm text-muted-foreground">资产配置与执行中心</div>
             <DaaDashboardRefreshIndicator />
           </div>
 

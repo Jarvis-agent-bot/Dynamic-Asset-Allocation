@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { Briefcase, Cpu, LineChart, Menu, PlayCircle, Settings, ShieldAlert, SlidersHorizontal, Target, Users } from "lucide-react";
+import { Briefcase, LineChart, Menu, Settings, SlidersHorizontal, Target, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -11,7 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-type NavKey = "console" | "positions" | "watchlist" | "strategy" | "execution" | "risk" | "humanFactor" | "backtest" | "settings";
+type NavKey =
+  | "assets"
+  | "positions"
+  | "watchlist"
+  | "strategy"
+  | "humanFactor"
+  | "backtest"
+  | "settings";
 
 type IconType = ComponentType<{ className?: string }>;
 
@@ -21,25 +28,20 @@ function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
   if (pathname.startsWith("/daa/dashboard/positions")) return "positions";
   if (pathname.startsWith("/daa/dashboard/watchlist")) return "watchlist";
-  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "backtest";
   if (pathname.startsWith("/daa/dashboard/strategy")) return "strategy";
-  if (pathname.startsWith("/daa/dashboard/execution")) return "execution";
-  if (pathname.startsWith("/daa/dashboard/risk")) return "risk";
   if (pathname.startsWith("/daa/dashboard/human-factor")) return "humanFactor";
   if (pathname.startsWith("/daa/dashboard/backtest")) return "backtest";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
-  return "console";
+  return "assets";
 }
 
 function useNavItems(): NavItem[] {
   return useMemo(
     () => [
-      { key: "console" as const, href: "/daa/dashboard", label: "控制台", Icon: Cpu },
+      { key: "assets" as const, href: "/daa/dashboard", label: "资产首页", Icon: Wallet },
       { key: "positions" as const, href: "/daa/dashboard/positions", label: "持仓配置", Icon: Briefcase },
       { key: "watchlist" as const, href: "/daa/dashboard/watchlist", label: "候选池", Icon: Target },
       { key: "strategy" as const, href: "/daa/dashboard/strategy", label: "策略配置", Icon: SlidersHorizontal },
-      { key: "execution" as const, href: "/daa/dashboard/execution", label: "执行回填", Icon: PlayCircle },
-      { key: "risk" as const, href: "/daa/dashboard/risk", label: "风控审计", Icon: ShieldAlert },
       { key: "humanFactor" as const, href: "/daa/dashboard/human-factor", label: "人因中心", Icon: Users },
       { key: "backtest" as const, href: "/daa/dashboard/backtest", label: "回测与优化", Icon: LineChart },
       { key: "settings" as const, href: "/daa/dashboard/settings", label: "系统设置", Icon: Settings },
