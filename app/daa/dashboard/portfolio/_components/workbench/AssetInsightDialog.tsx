@@ -1,6 +1,6 @@
 "use client";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { WorkbenchAssetInsightResponseV1 } from "@/src/daa/modules/workbench/workbenchTypesV1";
 
@@ -22,6 +22,7 @@ export default function AssetInsightDialog(props: {
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>资产洞察 {props.symbol ? `· ${props.symbol}` : ""}</DialogTitle>
+          <DialogDescription>查看新闻、技术指标、风险提示与大模型分析摘要。</DialogDescription>
         </DialogHeader>
 
         {props.loading ? (
