@@ -7,12 +7,10 @@ import type {
   WorkbenchExecutionAddItemInputV1,
   WorkbenchExecutionAddItemResultV1,
   WorkbenchExecutionCommitResultV1,
-  WorkbenchExecutionLogFiltersV1,
   WorkbenchMarketOrderPreviewResultV1,
   WorkbenchRecommendationsResultV1,
   WorkbenchSearchAssetResultV1,
 } from "./workbenchTypesV1";
-import type { TradeTicketV1 } from "@/src/daa/modules/trade/tradeTypesV1";
 
 export async function getWorkbenchBootstrapV1(): Promise<WorkbenchBootstrapV1> {
   return requestDataV1<WorkbenchBootstrapV1>("/api/daa/workbench/bootstrap", {
@@ -57,18 +55,6 @@ export async function commitWorkbenchExecutionV1(): Promise<WorkbenchExecutionCo
   });
 }
 
-export async function listWorkbenchExecutionLogsV1(opts: WorkbenchExecutionLogFiltersV1 = {}): Promise<TradeTicketV1[]> {
-  const qs = new URLSearchParams();
-  if (opts.limit != null) qs.set("limit", String(Math.max(1, Math.trunc(opts.limit))));
-  if (opts.status) qs.set("status", opts.status);
-  if (opts.source) qs.set("source", opts.source);
-  const data = await requestDataV1<{ logs: TradeTicketV1[] }>(`/api/daa/workbench/execution/logs${qs.toString() ? `?${qs.toString()}` : ""}`, {
-    method: "GET",
-    cache: "no-store",
-  });
-  return Array.isArray(data.logs) ? data.logs : [];
-}
-
 export async function searchWorkbenchAssetsV1(input: {
   q: string;
   market?: string;
@@ -106,26 +92,6 @@ export async function upsertWorkbenchAssetV1(input: {
 }): Promise<AssetUniverseViewV1> {
   const data = await requestDataV1<{ row: AssetUniverseViewV1 }>("/api/daa/workbench/assets/upsert", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  return data.row;
-}
-
-export async function patchWorkbenchAssetV1(assetKey: string, input: {
-  watchEnabled?: boolean;
-  watchTags?: string[];
-  targetWeightHint?: number;
-  notes?: string | null;
-  assetClass?: string;
-  region?: string;
-  exchange?: string;
-  instrumentType?: string;
-  marketGroup?: string;
-  lastPrice?: number;
-}): Promise<AssetUniverseViewV1> {
-  const data = await requestDataV1<{ row: AssetUniverseViewV1 }>(`/api/daa/workbench/assets/${encodeURIComponent(assetKey)}`, {
-    method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });

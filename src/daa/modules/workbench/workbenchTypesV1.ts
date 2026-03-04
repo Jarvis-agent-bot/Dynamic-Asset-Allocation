@@ -157,12 +157,6 @@ export type WorkbenchExecutionCommitResultV1 = {
   logs: TradeTicketV1[];
 };
 
-export type WorkbenchExecutionLogFiltersV1 = {
-  limit?: number;
-  status?: "ready" | "executed" | "canceled" | "rejected";
-  source?: "manual" | "decision";
-};
-
 export type WorkbenchSearchAssetResultV1 = {
   symbol: string;
   market: string;
