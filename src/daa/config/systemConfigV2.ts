@@ -188,11 +188,11 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
     },
     llmAnalysis: {
       id: "llm_analysis.default",
-      enabled: false,
+      enabled: true,
       provider: "codex",
       model: "gpt-5-codex",
       timeoutMs: 8000,
-      enabledInDecision: false,
+      enabledInDecision: true,
     },
   },
   notification: {
