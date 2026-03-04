@@ -5,13 +5,13 @@ import {
   type DaaAnalystRow,
   type DaaAssetViewRow,
   type DaaCashLedgerEntry,
+  type DaaCandidateAssetRow,
   type DaaEquitySnapshot,
   type DaaHfFundTrackRow,
   type DaaFxRateRow,
   type DaaPositionRow,
   type DaaRunHistoryEntry,
   type DaaStrategyConfig,
-  type DaaWatchlistCandidateRow,
   DAA_RUNTIME_DATA_EVENT_V1,
   DEFAULT_STRATEGY_CONFIG,
   readUnifiedInputSliceV1,
@@ -29,22 +29,28 @@ import {
   listFxRatesV1,
   listEquitySnapshotsV1,
   listOpLogV1,
-  listPositionsV1,
   patchSystemConfigV2,
   listRunHistoryV1,
-  listWatchlistCandidatesV1,
-  replaceWatchlistCandidatesV1,
-  replacePositionsV1,
+  listCandidateAssetsV1,
+  replaceCandidateAssetsV1,
   upsertFxRatesV1,
   type StoreSystemConfigEnvelopeV2,
   type StoreSystemConfigPatchV2,
 } from "@/src/daa/modules/store/storeApiV1";
+import { getWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchApiV1";
+import type { AssetUniverseViewV1 } from "@/src/daa/modules/workbench/workbenchTypesV1";
 import type { DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
 import {
   applySystemConfigPatchesV2,
   DEFAULT_SYSTEM_CONFIG_V2,
   normalizeSystemConfigV2,
 } from "@/src/daa/config/systemConfigV2";
+import {
+  buildDaaAssetKeyV1,
+  normalizeDaaMarketV1,
+  normalizeDaaSymbolV1,
+  parseDaaAssetKeyV1,
+} from "@/src/daa/assetKeyV1";
 
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
 const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
@@ -337,16 +343,48 @@ export function useDaaSlice<T>(key: UnifiedInputSliceKeyV1): [T | null, (v: T | 
   return [value, set];
 }
 
-export function usePositions() {
+function mapWorkbenchAssetUniverseToPositionsV1(rows: AssetUniverseViewV1[]): DaaPositionRow[] {
+  return rows
+    .filter((row) => Number(row.holdingQty) > 0)
+    .map((row) => {
+      const costBasisRaw = Number(row.costBasis);
+      return {
+        id: `${row.symbol}__${row.market}`,
+        assetKey: row.assetKey,
+        symbol: row.symbol,
+        market: row.market,
+        currency: row.currency,
+        qty: Math.max(0, Number(row.holdingQty) || 0),
+        price: Number(row.lastPrice) > 0 ? Number(row.lastPrice) : Math.max(0, Number(row.holdingPrice) || 0),
+        costBasis: Number.isFinite(costBasisRaw) ? costBasisRaw : undefined,
+        tags: Array.isArray(row.holdingTags) ? row.holdingTags.map((tag) => String(tag || "").trim()).filter(Boolean) : [],
+      } satisfies DaaPositionRow;
+    })
+    .sort((a, b) => {
+      const symbolCmp = a.symbol.localeCompare(b.symbol);
+      if (symbolCmp !== 0) return symbolCmp;
+      return a.market.localeCompare(b.market);
+    });
+}
+
+export function useWorkbenchPositionsV1() {
   const [value, setValue] = useDaaSlice<DaaPositionRow[]>("positions");
+
+  const load = useCallback(async () => {
+    const bootstrap = await getWorkbenchBootstrapV1();
+    const mapped = mapWorkbenchAssetUniverseToPositionsV1(bootstrap.assetUniverse ?? []);
+    setValue(mapped);
+    emitDashboardDataUpdatedV1();
+    return mapped;
+  }, [setValue]);
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    async function runLoad() {
       try {
-        const rows = await listPositionsV1();
+        const bootstrap = await getWorkbenchBootstrapV1();
         if (cancelled) return;
-        setValue(rows as DaaPositionRow[]);
+        setValue(mapWorkbenchAssetUniverseToPositionsV1(bootstrap.assetUniverse ?? []));
         emitDashboardDataUpdatedV1();
       } catch {
         // ignore
@@ -354,10 +392,10 @@ export function usePositions() {
     }
 
     function onRefresh() {
-      void load();
+      void runLoad();
     }
 
-    void load();
+    void runLoad();
     window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
     return () => {
       cancelled = true;
@@ -365,20 +403,7 @@ export function usePositions() {
     };
   }, [setValue]);
 
-  const set = useCallback((rows: DaaPositionRow[] | null) => {
-    const previous = readUnifiedInputSliceV1<DaaPositionRow[]>("positions");
-    setValue(rows);
-    void replacePositionsV1((rows ?? []) as any[])
-      .then(() => {
-        emitDashboardDataUpdatedV1();
-      })
-      .catch((error) => {
-        setValue(previous ?? null);
-        emitDashboardPersistErrorV1(`保存持仓失败：${getApiErrorMessageV1(error)}`);
-      });
-  }, [setValue]);
-
-  return [value, set] as const;
+  return [value, load] as const;
 }
 
 export function useAnalysts() {
@@ -417,16 +442,16 @@ export function useHfFundRegistry() {
   return [value, set] as const;
 }
 
-export function useWatchlistCandidates() {
-  const [value, setValue] = useDaaSlice<DaaWatchlistCandidateRow[]>("watchlistCandidates");
+export function useCandidateAssets() {
+  const [value, setValue] = useDaaSlice<DaaCandidateAssetRow[]>("candidateAssets");
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const rows = await listWatchlistCandidatesV1();
+        const rows = await listCandidateAssetsV1();
         if (cancelled) return;
-        setValue(rows as DaaWatchlistCandidateRow[]);
+        setValue(rows as DaaCandidateAssetRow[]);
         emitDashboardDataUpdatedV1();
       } catch {
         // ignore
@@ -443,16 +468,16 @@ export function useWatchlistCandidates() {
     };
   }, [setValue]);
 
-  const set = useCallback((rows: DaaWatchlistCandidateRow[] | null) => {
-    const previous = readUnifiedInputSliceV1<DaaWatchlistCandidateRow[]>("watchlistCandidates");
+  const set = useCallback((rows: DaaCandidateAssetRow[] | null) => {
+    const previous = readUnifiedInputSliceV1<DaaCandidateAssetRow[]>("candidateAssets");
     setValue(rows);
-    void replaceWatchlistCandidatesV1((rows ?? []) as any[])
+    void replaceCandidateAssetsV1((rows ?? []) as any[])
       .then(() => {
         emitDashboardDataUpdatedV1();
       })
       .catch((error) => {
         setValue(previous ?? null);
-        emitDashboardPersistErrorV1(`保存候选池失败：${getApiErrorMessageV1(error)}`);
+        emitDashboardPersistErrorV1(`保存候选资产失败：${getApiErrorMessageV1(error)}`);
       });
   }, [setValue]);
 
@@ -731,6 +756,73 @@ export function toUserErrorMessage(error: unknown): string {
   return getApiErrorMessageV1(error);
 }
 
+function buildUnifiedTargetWeightsV1(
+  configTargetWeights: Record<string, number>,
+  candidateAssets: DaaCandidateAssetRow[],
+): Record<string, number> {
+  const weights: Record<string, number> = {};
+  const candidatesBySymbol = new Map<string, Array<{ assetKey: string; hint: number }>>();
+
+  for (const candidate of candidateAssets) {
+    const symbol = normalizeDaaSymbolV1(candidate.symbol);
+    if (!symbol) continue;
+    const market = normalizeDaaMarketV1(candidate.market, "US");
+    const assetKey = buildDaaAssetKeyV1(symbol, market);
+    if (!assetKey) continue;
+    const hintRaw = Number(candidate.targetWeightHint);
+    const hint = Number.isFinite(hintRaw) && hintRaw > 0 ? hintRaw : 0;
+    const list = candidatesBySymbol.get(symbol) ?? [];
+    const existed = list.find((item) => item.assetKey === assetKey);
+    if (existed) {
+      existed.hint = Math.max(existed.hint, hint);
+    } else {
+      list.push({ assetKey, hint });
+    }
+    candidatesBySymbol.set(symbol, list);
+  }
+
+  for (const [rawKey, rawValue] of Object.entries(configTargetWeights ?? {})) {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    const keyText = String(rawKey || "").trim().toUpperCase();
+    if (!keyText) continue;
+
+    const parsedAssetKey = parseDaaAssetKeyV1(keyText);
+    if (parsedAssetKey) {
+      const assetKey = buildDaaAssetKeyV1(parsedAssetKey.symbol, parsedAssetKey.market);
+      if (!assetKey) continue;
+      weights[assetKey] = (weights[assetKey] ?? 0) + value;
+      continue;
+    }
+
+    const symbol = normalizeDaaSymbolV1(keyText);
+    if (!symbol) continue;
+    const symbolCandidates = candidatesBySymbol.get(symbol) ?? [];
+    if (symbolCandidates.length === 1) {
+      const [candidate] = symbolCandidates;
+      weights[candidate.assetKey] = (weights[candidate.assetKey] ?? 0) + value;
+      continue;
+    }
+    if (symbolCandidates.length > 1) {
+      const hintedCandidates = symbolCandidates.filter((item) => item.hint > 0);
+      const hintedSum = hintedCandidates.reduce((sum, item) => sum + item.hint, 0);
+      if (hintedSum > 0) {
+        for (const candidate of hintedCandidates) {
+          const allocated = value * (candidate.hint / hintedSum);
+          if (allocated <= 0) continue;
+          weights[candidate.assetKey] = (weights[candidate.assetKey] ?? 0) + allocated;
+        }
+        continue;
+      }
+    }
+
+    // 无法安全判定市场时保留 symbol 键，交由统一引擎做兜底映射并给出告警。
+    weights[symbol] = (weights[symbol] ?? 0) + value;
+  }
+
+  return weights;
+}
+
 export function buildUnifiedRequest(
   positions: DaaPositionRow[],
   analysts: DaaAnalystRow[],
@@ -738,7 +830,7 @@ export function buildUnifiedRequest(
   config: DaaStrategyConfig,
 ): DaaUnifiedRequestV1 {
   const snapshots = readUnifiedInputSliceV1<DaaEquitySnapshot[]>("equitySnapshots") ?? [];
-  const watchlistCandidates = readUnifiedInputSliceV1<DaaWatchlistCandidateRow[]>("watchlistCandidates") ?? [];
+  const candidateAssets = readUnifiedInputSliceV1<DaaCandidateAssetRow[]>("candidateAssets") ?? [];
   const fxRates = readUnifiedInputSliceV1<DaaFxRateRow[]>("fxRates") ?? [];
   const equityPeak = snapshots.reduce((max, row) => Math.max(max, Number(row.equity) || 0), 0);
   const cash = Math.max(0, Number(config.account.cash) || 0);
@@ -771,7 +863,7 @@ export function buildUnifiedRequest(
       valueTrapThesisDriftPct: config.policy.valueTrapThesisDriftPct,
       sbIsolationScorePct: config.policy.sbIsolationScorePct,
     },
-    targetWeights: { ...config.targetWeights },
+    targetWeights: buildUnifiedTargetWeightsV1(config.targetWeights, candidateAssets),
     positions: positions.map((p) => ({
       symbol: p.symbol,
       market: p.market,
@@ -781,7 +873,7 @@ export function buildUnifiedRequest(
       costBasis: p.costBasis,
       tags: p.tags,
     })),
-    watchlistCandidates: watchlistCandidates.map((item) => ({
+    candidateAssets: candidateAssets.map((item) => ({
       symbol: item.symbol,
       market: item.market,
       currency: item.currency,

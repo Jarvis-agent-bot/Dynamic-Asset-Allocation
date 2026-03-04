@@ -6,7 +6,7 @@ import {
   type DanjuanFundRegistryItemV1,
   type DanjuanHoldingRowV1,
 } from "@/src/daa/hf/danjuanFundSourceV1";
-import { getDaaHumanIngestStateV1, listDaaDataSourcesV1, saveDaaHumanIngestStateV1 } from "@/src/daa/store/daaStorePgV1";
+import { getDaaHumanIngestStateV1, getDaaSystemConfigV2, saveDaaHumanIngestStateV1 } from "@/src/daa/store/daaStorePgV1";
 import { HF_DEFAULT_MARKET_SCOPE_V1, HF_SEED_ACTORS_V1, HF_SEED_HOLDINGS_V1 } from "@/src/daa/hf/hfSeedDataV1";
 import type {
   DaaActorHoldingSnapshotV1,
@@ -504,20 +504,23 @@ async function fetchDanjuanRows(opts: {
 }> {
   let resolvedRegistry = resolveDanjuanFundRegistryV1().filter((item) => item.enabled);
   try {
-    const sources = await listDaaDataSourcesV1("hf_fund");
-    const fundsFromDb = sources
-      .filter((source) => source.enabled)
-      .flatMap((source) => {
-        const funds = Array.isArray((source.configJson as any)?.funds) ? (source.configJson as any).funds : [];
-        return funds
-          .map((item: any) => ({
-            fundCode: String(item?.fundCode || "").trim(),
-            label: String(item?.label || "").trim() || `基金 ${String(item?.fundCode || "").trim()}`,
-            kind: item?.kind === "qdii" || item?.kind === "balanced" ? item.kind : "equity",
-            enabled: item?.enabled !== false,
-          }))
-          .filter((item: DanjuanFundRegistryItemV1) => item.fundCode && item.enabled);
-      });
+    const system = await getDaaSystemConfigV2();
+    const hfSource = system.config.dataSources.hfFund;
+    const fundsFromDb = hfSource.enabled
+      ? (hfSource.funds ?? [])
+          .map((item): DanjuanFundRegistryItemV1 => {
+            const kind: DanjuanFundRegistryItemV1["kind"] =
+              item?.kind === "qdii" || item?.kind === "balanced" ? item.kind : "equity";
+            const fundCode = String(item?.fundCode || "").trim();
+            return {
+              fundCode,
+              label: String(item?.label || "").trim() || `基金 ${fundCode}`,
+              kind,
+              enabled: item?.enabled !== false,
+            };
+          })
+          .filter((item) => item.fundCode.length > 0 && item.enabled)
+      : [];
     if (fundsFromDb.length > 0) {
       resolvedRegistry = fundsFromDb;
     }

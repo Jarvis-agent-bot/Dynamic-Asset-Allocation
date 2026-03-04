@@ -1,4 +1,4 @@
-import { listDaaDataSourcesV1 } from "@/src/daa/store/daaStorePgV1";
+import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
 
 export type DaaLlmAnalysisStatusV1 = "skipped" | "ok" | "error";
@@ -56,30 +56,23 @@ function toFinite(value: unknown, fallback: number): number {
 }
 
 async function resolveLlmRuntimeConfigV1(): Promise<LlmRuntimeConfigV1> {
-  const sources = await listDaaDataSourcesV1("llm_analysis");
-  const source = sources.find((item) => item.enabled) ?? sources[0] ?? null;
-  const config = source?.configJson && typeof source.configJson === "object" ? source.configJson : {};
+  const system = await getDaaSystemConfigV2();
+  const config = system.config.dataSources.llmAnalysis;
+  const provider = normalizeText(config.provider, "codex").toLowerCase();
+  const envModel = normalizeText(process.env.DAA_LLM_MODEL || process.env.OPENAI_MODEL);
+  const model = normalizeText(envModel, normalizeText(config.model, provider === "packycode" ? "packycode-default" : "gpt-5-codex"));
+  const timeoutMs = Math.max(2000, Math.min(20000, Math.trunc(toFinite(config.timeoutMs, 8000))));
 
-  const provider = normalizeText((config as any).provider, "codex").toLowerCase();
-  const model = normalizeText((config as any).model, provider === "packycode" ? "packycode-default" : "gpt-5-codex");
-  const timeoutMs = Math.max(2000, Math.min(20000, Math.trunc(toFinite((config as any).timeoutMs, 8000))));
+  const endpoint = provider === "packycode"
+    ? normalizeText(process.env.PACKYCODE_ENDPOINT)
+    : normalizeText(process.env.DAA_LLM_ENDPOINT, "https://api.openai.com/v1/responses");
 
-  const endpoint = normalizeText(
-    (config as any).endpoint,
-    provider === "packycode"
-      ? normalizeText(process.env.PACKYCODE_ENDPOINT)
-      : normalizeText(process.env.DAA_LLM_ENDPOINT, "https://api.openai.com/v1/responses"),
-  );
+  const apiKey = provider === "packycode"
+    ? normalizeText(process.env.PACKYCODE_API_KEY)
+    : normalizeText(process.env.OPENAI_API_KEY);
 
-  const apiKey = normalizeText(
-    (config as any).apiKey,
-    provider === "packycode"
-      ? normalizeText(process.env.PACKYCODE_API_KEY)
-      : normalizeText(process.env.OPENAI_API_KEY),
-  );
-
-  const enabled = Boolean(source?.enabled);
-  const enabledInDecision = (config as any).enabledInDecision !== false;
+  const enabled = Boolean(config.enabled);
+  const enabledInDecision = config.enabledInDecision !== false;
 
   return {
     enabled,

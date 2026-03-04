@@ -26,11 +26,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import StatCard from "../../_components/StatCard";
 import { formatCurrency, formatPercent } from "../../_components/daaFormatters";
-import { usePositions, useRunHistory, useStrategyConfig, useSystemConfigV2 } from "../../_components/useDaaStore";
+import { useWorkbenchPositionsV1, useRunHistory, useStrategyConfig, useSystemConfigV2 } from "../../_components/useDaaStore";
 import { useMarketDataClient } from "../../../useMarketDataClient";
 
 import { computeBacktestAttribution } from "@/src/core/backtest/attribution";
 import { backtestDriftRebalance, type DriftRebalanceBacktestResult } from "@/src/core/backtestDriftRebalance";
+import {
+  buildDaaAssetKeyV1,
+  parseDaaAssetKeyV1,
+} from "@/src/daa/assetKeyV1";
 import {
   buildTargetWeightDiffRowsV1,
   prepareAlignedSeriesBySymbolWithDiagnosticsV1,
@@ -40,13 +44,14 @@ import {
   type SeriesAlignmentModeV1,
 } from "@/src/daa/modules/strategyLab/strategyLabEngineV1";
 import type { StrategyLabEnsembleConfigV1, StrategyLabRunResultV1 } from "@/src/daa/modules/strategyLab/strategyLabTypesV1";
+import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
 
 type BacktestState = {
   running: boolean;
   error: string;
   result: DriftRebalanceBacktestResult | null;
   seriesBySymbol: Record<string, Array<{ date: string; close: number }>>;
-  ignoredSymbols: string[];
+  ignoredAssetKeys: string[];
   rangeLabel: string;
   dataDiagnostics: BacktestDataDiagnostics | null;
 };
@@ -56,7 +61,7 @@ type StrategyLabState = {
   error: string;
   success: string;
   result: StrategyLabRunResultV1 | null;
-  ignoredSymbols: string[];
+  ignoredAssetKeys: string[];
   rangeLabel: string;
 };
 
@@ -73,14 +78,24 @@ type BacktestDataDiagnostics = {
   executionTiming: BacktestExecutionTiming;
   feeBps: number;
   slippageBps: number;
-  perSymbol: Array<{
+  perAsset: Array<{
+    assetKey: string;
     symbol: string;
+    market: string;
+    yfinanceSymbol: string;
     status: "ok" | "ignored";
     rawCount: number;
     normalizedCount: number;
     issues: string[];
     error?: string;
   }>;
+};
+
+type StrategyLabAssetV1 = {
+  assetKey: string;
+  symbol: string;
+  market: string;
+  yfinanceSymbol: string;
 };
 
 const DEFAULT_ENSEMBLE_CONFIG_V1: StrategyLabEnsembleConfigV1 = {
@@ -107,8 +122,26 @@ function toRangeLabel(start: string, end: string): string {
   return `${start} ~ ${end}`;
 }
 
+function normalizeAssetKeyFromInputV1(input: {
+  assetKey?: string | null;
+  symbol?: string | null;
+  market?: string | null;
+}): { assetKey: string; symbol: string; market: string } | null {
+  const parsed = parseDaaAssetKeyV1(input.assetKey);
+  if (!parsed) return null;
+  const assetKey = buildDaaAssetKeyV1(parsed.symbol, parsed.market);
+  if (!assetKey) return null;
+  return { assetKey, symbol: parsed.symbol, market: parsed.market };
+}
+
+function buildAssetLabelV1(assetKey: string): string {
+  const parsed = parseDaaAssetKeyV1(assetKey);
+  if (!parsed) return assetKey;
+  return `${parsed.symbol} (${parsed.market})`;
+}
+
 export default function BacktestOptimizationPanel() {
-  const [positions] = usePositions();
+  const [positions] = useWorkbenchPositionsV1();
   const [config, setConfig] = useStrategyConfig();
   const { envelope: systemConfigEnvelope } = useSystemConfigV2();
   const [runHistoryData] = useRunHistory();
@@ -129,7 +162,7 @@ export default function BacktestOptimizationPanel() {
     error: "",
     result: null,
     seriesBySymbol: {},
-    ignoredSymbols: [],
+    ignoredAssetKeys: [],
     rangeLabel: "-",
     dataDiagnostics: null,
   });
@@ -139,46 +172,112 @@ export default function BacktestOptimizationPanel() {
     error: "",
     success: "",
     result: null,
-    ignoredSymbols: [],
+    ignoredAssetKeys: [],
     rangeLabel: "-",
   });
 
-  const symbols = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of positionsList) s.add(String(p.symbol || "").trim().toUpperCase());
-    for (const sym of Object.keys(config.targetWeights || {})) s.add(String(sym || "").trim().toUpperCase());
-    return Array.from(s).filter(Boolean).sort();
-  }, [positionsList, config.targetWeights]);
+  const positionAssetMap = useMemo(() => {
+    const map = new Map<string, StrategyLabAssetV1>();
+    for (const position of positionsList) {
+      const normalized = normalizeAssetKeyFromInputV1({
+        assetKey: position.assetKey,
+        symbol: position.symbol,
+        market: position.market,
+      });
+      if (!normalized) continue;
+      map.set(normalized.assetKey, {
+        assetKey: normalized.assetKey,
+        symbol: normalized.symbol,
+        market: normalized.market,
+        yfinanceSymbol: toYfinanceSymbolByMarketV1(normalized.symbol, normalized.market),
+      });
+    }
+    return map;
+  }, [positionsList]);
 
-  function buildInitialHoldings(symbolPool: string[]): Record<string, number> | undefined {
-    const allowed = new Set(symbolPool);
+  const targetWeightsByAssetKey = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const p of positionsList) {
-      const symbol = String(p.symbol || "").trim().toUpperCase();
-      if (!allowed.has(symbol)) continue;
-      const qty = Number(p.qty);
+
+    for (const [rawKey, rawValue] of Object.entries(config.targetWeights || {})) {
+      const value = Number(rawValue);
+      if (!(Number.isFinite(value) && value > 0)) continue;
+
+      const parsed = parseDaaAssetKeyV1(rawKey);
+      if (!parsed) continue;
+      const assetKey = buildDaaAssetKeyV1(parsed.symbol, parsed.market);
+      if (!assetKey) continue;
+      out[assetKey] = (out[assetKey] ?? 0) + value;
+    }
+    return out;
+  }, [config.targetWeights]);
+
+  const strategyLabAssets = useMemo(() => {
+    const map = new Map<string, StrategyLabAssetV1>(positionAssetMap);
+    for (const assetKey of Object.keys(targetWeightsByAssetKey)) {
+      if (map.has(assetKey)) continue;
+      const parsed = parseDaaAssetKeyV1(assetKey);
+      if (!parsed) continue;
+      map.set(assetKey, {
+        assetKey,
+        symbol: parsed.symbol,
+        market: parsed.market,
+        yfinanceSymbol: toYfinanceSymbolByMarketV1(parsed.symbol, parsed.market),
+      });
+    }
+
+    return [...map.values()].sort((a, b) => a.symbol.localeCompare(b.symbol) || a.market.localeCompare(b.market));
+  }, [positionAssetMap, targetWeightsByAssetKey]);
+
+  const strategyLabAssetKeys = useMemo(() => strategyLabAssets.map((asset) => asset.assetKey), [strategyLabAssets]);
+  const assetLabelByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const asset of strategyLabAssets) {
+      map.set(asset.assetKey, `${asset.symbol} (${asset.market})`);
+    }
+    return map;
+  }, [strategyLabAssets]);
+  const strategyLabAssetLabels = useMemo(() => strategyLabAssets.map((asset) => `${asset.symbol} (${asset.market})`), [strategyLabAssets]);
+  const toAssetLabel = (assetKey: string) => assetLabelByKey.get(assetKey) ?? buildAssetLabelV1(assetKey);
+
+  function buildInitialHoldings(assetKeyPool: string[]): Record<string, number> | undefined {
+    const allowed = new Set(assetKeyPool);
+    const out: Record<string, number> = {};
+    for (const position of positionsList) {
+      const normalized = normalizeAssetKeyFromInputV1({
+        assetKey: position.assetKey,
+        symbol: position.symbol,
+        market: position.market,
+      });
+      if (!normalized) continue;
+      if (!allowed.has(normalized.assetKey)) continue;
+      const qty = Number(position.qty);
       if (!Number.isFinite(qty) || qty <= 0) continue;
-      out[symbol] = (out[symbol] || 0) + qty;
+      out[normalized.assetKey] = (out[normalized.assetKey] || 0) + qty;
     }
     return Object.keys(out).length ? out : undefined;
   }
 
-  async function fetchRawSeries(symbolList: string[], start: string, end: string): Promise<{
-    rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>;
-    ignoredSymbols: string[];
-    diagnostics: Pick<BacktestDataDiagnostics, "source" | "interval" | "priceMode" | "perSymbol">;
+  async function fetchRawSeries(assets: StrategyLabAssetV1[], start: string, end: string): Promise<{
+    rawSeriesByAssetKey: Record<string, Array<{ date: string; close: number }>>;
+    ignoredAssetKeys: string[];
+    diagnostics: Pick<BacktestDataDiagnostics, "source" | "interval" | "priceMode" | "perAsset">;
   }> {
-    const rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>> = {};
-    const ignoredSymbols: string[] = [];
-    const perSymbol: BacktestDataDiagnostics["perSymbol"] = [];
+    const rawSeriesByAssetKey: Record<string, Array<{ date: string; close: number }>> = {};
+    const ignoredAssetKeys: string[] = [];
+    const perAsset: BacktestDataDiagnostics["perAsset"] = [];
     let source = "yfinance";
     let interval = "1d";
     let priceMode: "adjclose" | "close" = useAdjustedClose ? "adjclose" : "close";
 
     await Promise.all(
-      symbolList.map(async (symbol) => {
+      assets.map(async (asset) => {
         try {
-          const payload = await marketData.yfinance.priceSeries({ symbol, start, end, adjusted: useAdjustedClose });
+          const payload = await marketData.yfinance.priceSeries({
+            symbol: asset.yfinanceSymbol,
+            start,
+            end,
+            adjusted: useAdjustedClose,
+          });
           if (!payload?.ok) {
             const msg = payload?.error || payload?.message || "price-series route failed";
             throw new Error(msg);
@@ -197,9 +296,12 @@ export default function BacktestOptimizationPanel() {
             .filter((bar) => Boolean(bar.date) && Number.isFinite(bar.close) && bar.close > 0);
 
           if (mapped.length >= 2) {
-            rawSeriesBySymbol[symbol] = mapped;
-            perSymbol.push({
-              symbol,
+            rawSeriesByAssetKey[asset.assetKey] = mapped;
+            perAsset.push({
+              assetKey: asset.assetKey,
+              symbol: asset.symbol,
+              market: asset.market,
+              yfinanceSymbol: asset.yfinanceSymbol,
               status: "ok",
               rawCount: Number(payload.rawCount) || mapped.length,
               normalizedCount: mapped.length,
@@ -207,8 +309,11 @@ export default function BacktestOptimizationPanel() {
             });
             return;
           }
-          perSymbol.push({
-            symbol,
+          perAsset.push({
+            assetKey: asset.assetKey,
+            symbol: asset.symbol,
+            market: asset.market,
+            yfinanceSymbol: asset.yfinanceSymbol,
             status: "ignored",
             rawCount: Number(payload.rawCount) || mapped.length,
             normalizedCount: mapped.length,
@@ -217,8 +322,11 @@ export default function BacktestOptimizationPanel() {
           });
         } catch (error) {
           // ignore per-symbol failures
-          perSymbol.push({
-            symbol,
+          perAsset.push({
+            assetKey: asset.assetKey,
+            symbol: asset.symbol,
+            market: asset.market,
+            yfinanceSymbol: asset.yfinanceSymbol,
             status: "ignored",
             rawCount: 0,
             normalizedCount: 0,
@@ -226,39 +334,39 @@ export default function BacktestOptimizationPanel() {
             error: error instanceof Error ? error.message : "拉取失败",
           });
         }
-        ignoredSymbols.push(symbol);
+        ignoredAssetKeys.push(asset.assetKey);
       }),
     );
 
-    perSymbol.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    perAsset.sort((a, b) => a.symbol.localeCompare(b.symbol) || a.market.localeCompare(b.market));
     return {
-      rawSeriesBySymbol,
-      ignoredSymbols: ignoredSymbols.sort(),
+      rawSeriesByAssetKey,
+      ignoredAssetKeys: ignoredAssetKeys.sort(),
       diagnostics: {
         source,
         interval,
         priceMode,
-        perSymbol,
+        perAsset,
       },
     };
   }
 
   async function runBacktest() {
     if (bt.running) return;
-    if (!symbols.length) {
+    if (!strategyLabAssetKeys.length) {
       setBt({
         running: false,
         error: "暂无可回测标的，请先新增持仓或配置目标权重。",
         result: null,
         seriesBySymbol: {},
-        ignoredSymbols: [],
+        ignoredAssetKeys: [],
         rangeLabel: "-",
         dataDiagnostics: null,
       });
-      setLab((prev) => ({ ...prev, running: false, error: "", success: "", result: null, ignoredSymbols: [], rangeLabel: "-" }));
+      setLab((prev) => ({ ...prev, running: false, error: "", success: "", result: null, ignoredAssetKeys: [], rangeLabel: "-" }));
       return;
     }
-    setBt({ running: true, error: "", result: null, seriesBySymbol: {}, ignoredSymbols: [], rangeLabel: "-", dataDiagnostics: null });
+    setBt({ running: true, error: "", result: null, seriesBySymbol: {}, ignoredAssetKeys: [], rangeLabel: "-", dataDiagnostics: null });
     setLab((prev) => ({ ...prev, running: true, error: "", success: "" }));
 
     try {
@@ -267,8 +375,8 @@ export default function BacktestOptimizationPanel() {
       const end = today.toISOString().slice(0, 10);
       const rangeLabel = toRangeLabel(start, end);
 
-      const { rawSeriesBySymbol, ignoredSymbols, diagnostics } = await fetchRawSeries(symbols, start, end);
-      const prepared = prepareAlignedSeriesBySymbolWithDiagnosticsV1(rawSeriesBySymbol, { mode: alignmentMode, minBars: 2 });
+      const { rawSeriesByAssetKey, ignoredAssetKeys, diagnostics } = await fetchRawSeries(strategyLabAssets, start, end);
+      const prepared = prepareAlignedSeriesBySymbolWithDiagnosticsV1(rawSeriesByAssetKey, { mode: alignmentMode, minBars: 2 });
       const seriesBySymbol = prepared.seriesBySymbol;
       const dataDiagnostics: BacktestDataDiagnostics = {
         source: diagnostics.source,
@@ -281,17 +389,17 @@ export default function BacktestOptimizationPanel() {
         executionTiming,
         feeBps: Math.max(0, Number(feeBps) || 0),
         slippageBps: Math.max(0, Number(slippageBps) || 0),
-        perSymbol: diagnostics.perSymbol,
+        perAsset: diagnostics.perAsset,
       };
-      const availableSymbols = Object.keys(seriesBySymbol);
+      const availableAssetKeys = Object.keys(seriesBySymbol);
 
-      if (availableSymbols.length < 1) {
+      if (availableAssetKeys.length < 1) {
         setBt({
           running: false,
           error: "无法获取可对齐的历史数据，请减少标的或扩大回测区间。",
           result: null,
           seriesBySymbol: {},
-          ignoredSymbols,
+          ignoredAssetKeys,
           rangeLabel,
           dataDiagnostics,
         });
@@ -301,20 +409,22 @@ export default function BacktestOptimizationPanel() {
           error: "可对齐历史数据不足，未生成优化结果。",
           success: "",
           result: null,
-          ignoredSymbols,
+          ignoredAssetKeys,
           rangeLabel,
         }));
         return;
       }
 
       const tw: Record<string, number> = {};
-      for (const sym of availableSymbols) tw[sym] = Number(config.targetWeights[sym] || 0);
+      for (const assetKey of availableAssetKeys) {
+        tw[assetKey] = Number(targetWeightsByAssetKey[assetKey] || 0);
+      }
       const twSum = Object.values(tw).reduce((s, v) => s + v, 0);
       if (twSum <= 0) {
-        for (const sym of availableSymbols) tw[sym] = 1 / availableSymbols.length;
+        for (const assetKey of availableAssetKeys) tw[assetKey] = 1 / availableAssetKeys.length;
       }
 
-      const initialHoldings = buildInitialHoldings(availableSymbols);
+      const initialHoldings = buildInitialHoldings(availableAssetKeys);
       const executionConfig = {
         timing: executionTiming,
         feeRatePct: Math.max(0, Number(feeBps) || 0) / 10000,
@@ -340,15 +450,15 @@ export default function BacktestOptimizationPanel() {
         includeTimeline: true,
       });
 
-      setBt({ running: false, error: "", result, seriesBySymbol, ignoredSymbols, rangeLabel, dataDiagnostics });
-      runStrategyLabWithSeries(rawSeriesBySymbol, rangeLabel, ignoredSymbols);
+      setBt({ running: false, error: "", result, seriesBySymbol, ignoredAssetKeys, rangeLabel, dataDiagnostics });
+      runStrategyLabWithSeries(rawSeriesByAssetKey, rangeLabel, ignoredAssetKeys);
     } catch (e) {
       setBt({
         running: false,
         error: e instanceof Error ? e.message : String(e),
         result: null,
         seriesBySymbol: {},
-        ignoredSymbols: [],
+        ignoredAssetKeys: [],
         rangeLabel: "-",
         dataDiagnostics: null,
       });
@@ -357,21 +467,21 @@ export default function BacktestOptimizationPanel() {
   }
 
   function runStrategyLabWithSeries(
-    rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>,
+    rawSeriesByAssetKey: Record<string, Array<{ date: string; close: number }>>,
     rangeLabel: string,
-    ignoredSymbols: string[],
+    ignoredAssetKeys: string[],
   ) {
-    const alignedSeriesBySymbol = prepareAlignedSeriesBySymbolV1(rawSeriesBySymbol, { mode: alignmentMode, minBars: 2 });
-    const alignedSymbols = Object.keys(alignedSeriesBySymbol);
+    const alignedSeriesByAssetKey = prepareAlignedSeriesBySymbolV1(rawSeriesByAssetKey, { mode: alignmentMode, minBars: 2 });
+    const alignedAssetKeys = Object.keys(alignedSeriesByAssetKey);
 
-    if (!alignedSymbols.length) {
+    if (!alignedAssetKeys.length) {
       setLab((prev) => ({
         ...prev,
         running: false,
         error: "可对齐的历史数据不足（至少需要 2 个共同交易日），请减少标的或扩大回测区间。",
         success: "",
         result: null,
-        ignoredSymbols,
+        ignoredAssetKeys,
         rangeLabel,
       }));
       return;
@@ -379,10 +489,10 @@ export default function BacktestOptimizationPanel() {
 
     try {
       const result = runStrategyLabBacktestsV1({
-        seriesBySymbol: alignedSeriesBySymbol,
-        baselineTargetWeights: config.targetWeights,
+        seriesBySymbol: alignedSeriesByAssetKey,
+        baselineTargetWeights: targetWeightsByAssetKey,
         ensembleConfig,
-        initialHoldings: buildInitialHoldings(alignedSymbols),
+        initialHoldings: buildInitialHoldings(alignedAssetKeys),
         initialCash: Number(config.account.cash) || 0,
         initialEquity: 10000,
         constraints: {
@@ -406,7 +516,7 @@ export default function BacktestOptimizationPanel() {
         error: "",
         success: "真实回测完成。",
         result,
-        ignoredSymbols,
+        ignoredAssetKeys,
         rangeLabel,
       }));
     } catch (error) {
@@ -416,7 +526,7 @@ export default function BacktestOptimizationPanel() {
         error: error instanceof Error ? error.message : String(error),
         success: "",
         result: null,
-        ignoredSymbols,
+        ignoredAssetKeys,
         rangeLabel,
       }));
     }
@@ -424,14 +534,14 @@ export default function BacktestOptimizationPanel() {
 
   useEffect(() => {
     if (!bt.result) return;
-    const rawSeriesBySymbol = Object.fromEntries(
-      Object.entries(bt.seriesBySymbol).map(([symbol, series]) => [
-        symbol,
+    const rawSeriesByAssetKey = Object.fromEntries(
+      Object.entries(bt.seriesBySymbol).map(([assetKey, series]) => [
+        assetKey,
         series.map((bar) => ({ date: bar.date, close: bar.close })),
       ]),
     );
-    runStrategyLabWithSeries(rawSeriesBySymbol, bt.rangeLabel, bt.ignoredSymbols);
-  }, [alignmentMode, bt.ignoredSymbols, bt.rangeLabel, bt.result, bt.seriesBySymbol, ensembleConfig, executionTiming, feeBps, slippageBps]);
+    runStrategyLabWithSeries(rawSeriesByAssetKey, bt.rangeLabel, bt.ignoredAssetKeys);
+  }, [alignmentMode, bt.ignoredAssetKeys, bt.rangeLabel, bt.result, bt.seriesBySymbol, ensembleConfig, executionTiming, feeBps, slippageBps, targetWeightsByAssetKey]);
 
   function applyEnsembleToConfig() {
     if (!lab.result) return;
@@ -480,11 +590,11 @@ export default function BacktestOptimizationPanel() {
     if (!bt.result) return null;
     return computeBacktestAttribution({
       backtest: bt.result,
-      targetWeights: config.targetWeights,
+      targetWeights: targetWeightsByAssetKey,
       seriesBySymbol: bt.seriesBySymbol,
       benchmarkSymbol,
     });
-  }, [benchmarkSymbol, bt.result, bt.seriesBySymbol, config.targetWeights]);
+  }, [benchmarkSymbol, bt.result, bt.seriesBySymbol, targetWeightsByAssetKey]);
 
   const baseline = useMemo(() => lab.result?.candidates.find((candidate) => candidate.id === "baseline") || null, [lab.result]);
   const ensemble = useMemo(() => lab.result?.candidates.find((candidate) => candidate.id === "ensemble") || null, [lab.result]);
@@ -512,8 +622,8 @@ export default function BacktestOptimizationPanel() {
 
   const diffRows = useMemo(() => {
     if (!lab.result) return [];
-    return buildTargetWeightDiffRowsV1(config.targetWeights, lab.result.weightsByCandidate.ensemble);
-  }, [config.targetWeights, lab.result]);
+    return buildTargetWeightDiffRowsV1(targetWeightsByAssetKey, lab.result.weightsByCandidate.ensemble);
+  }, [lab.result, targetWeightsByAssetKey]);
 
   const ensembleAlphaSum = useMemo(
     () => Object.values(ensembleConfig).reduce((sum, value) => sum + (Number(value) || 0), 0),
@@ -527,7 +637,7 @@ export default function BacktestOptimizationPanel() {
           <CardTitle className="text-base">漂移回测</CardTitle>
           <CardDescription>
             拉取 yfinance 历史数据，使用当前策略参数运行 backtestDriftRebalance（基准 {benchmarkSymbol}）。
-            {symbols.length ? ` 标的: ${symbols.join(", ")}` : " (无标的)"}
+            {strategyLabAssetLabels.length ? ` 标的: ${strategyLabAssetLabels.join(", ")}` : " (无标的)"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -606,7 +716,7 @@ export default function BacktestOptimizationPanel() {
             </div>
           </div>
 
-          {!symbols.length ? (
+          {!strategyLabAssetKeys.length ? (
             <div className="text-xs text-muted-foreground">当前无可回测标的，先在“持仓配置”新增标的或设置目标权重。</div>
           ) : null}
 
@@ -687,7 +797,7 @@ export default function BacktestOptimizationPanel() {
                         <TableRow key={`ev-${i}`}>
                           <TableCell className="text-xs">{ev.date}</TableCell>
                           <TableCell className="text-xs">
-                            {ev.executed.map((o) => `${o.side} ${o.symbol}`).join(", ") || "-"}
+                            {ev.executed.map((o) => `${o.side} ${toAssetLabel(String(o.symbol || ""))}`).join(", ") || "-"}
                           </TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(ev.turnoverNotional)}</TableCell>
                           <TableCell className="text-right text-xs">{formatCurrency(ev.feeNotional)}</TableCell>
@@ -727,17 +837,18 @@ export default function BacktestOptimizationPanel() {
                   <div>手续费：{bt.dataDiagnostics.feeBps.toFixed(2)} bps</div>
                   <div>滑点：{bt.dataDiagnostics.slippageBps.toFixed(2)} bps</div>
                   <div>对齐策略：{bt.dataDiagnostics.alignmentMode === "ffill_union" ? "并集 + 前值填充" : "严格交集"}</div>
-                  <div>输入标的：{bt.dataDiagnostics.perSymbol.length}</div>
+                  <div>输入标的：{bt.dataDiagnostics.perAsset.length}</div>
                   <div>对齐后标的：{bt.dataDiagnostics.alignment?.outputSymbolCount ?? 0}</div>
                   <div>共同K线：{bt.dataDiagnostics.alignment?.commonDateCount ?? 0}</div>
-                  <div>忽略标的：{bt.ignoredSymbols.length}</div>
+                  <div>忽略标的：{bt.ignoredAssetKeys.length}</div>
                 </div>
 
                 <div className="overflow-auto rounded-lg border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Symbol</TableHead>
+                        <TableHead>资产</TableHead>
+                        <TableHead>行情代码</TableHead>
                         <TableHead>状态</TableHead>
                         <TableHead className="text-right">Raw Bars</TableHead>
                         <TableHead className="text-right">Normalized</TableHead>
@@ -747,11 +858,12 @@ export default function BacktestOptimizationPanel() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {bt.dataDiagnostics.perSymbol.map((row) => {
-                        const aligned = bt.dataDiagnostics?.alignment?.barsBySymbol?.[row.symbol];
+                      {bt.dataDiagnostics.perAsset.map((row) => {
+                        const aligned = bt.dataDiagnostics?.alignment?.barsBySymbol?.[row.assetKey];
                         return (
-                          <TableRow key={`diag-${row.symbol}`}>
-                            <TableCell className="font-medium">{row.symbol}</TableCell>
+                          <TableRow key={`diag-${row.assetKey}`}>
+                            <TableCell className="font-medium">{toAssetLabel(row.assetKey)}</TableCell>
+                            <TableCell className="font-mono text-xs">{row.yfinanceSymbol}</TableCell>
                             <TableCell>{row.status === "ok" ? "可用" : "忽略"}</TableCell>
                             <TableCell className="text-right">{row.rawCount}</TableCell>
                             <TableCell className="text-right">{row.normalizedCount}</TableCell>
@@ -803,7 +915,7 @@ export default function BacktestOptimizationPanel() {
                     <TableBody>
                       {attribution.perAsset.map((row) => (
                         <TableRow key={`attr-${row.symbol}`}>
-                          <TableCell className="font-medium">{row.symbol}</TableCell>
+                          <TableCell className="font-medium">{toAssetLabel(row.symbol)}</TableCell>
                           <TableCell className="text-right">{formatPercent(row.avgWeight * 100)}</TableCell>
                           <TableCell className="text-right">{formatPercent(row.assetReturn * 100)}</TableCell>
                           <TableCell className="text-right">{formatPercent(row.contributionToReturn * 100)}</TableCell>
@@ -898,9 +1010,9 @@ export default function BacktestOptimizationPanel() {
             <Button type="button" variant="outline" onClick={() => setEnsembleConfig(DEFAULT_ENSEMBLE_CONFIG_V1)}>恢复默认占比</Button>
           </div>
 
-          {lab.ignoredSymbols.length ? (
+          {lab.ignoredAssetKeys.length ? (
             <div className="rounded-md border border-amber-200 bg-amber-50/30 p-2 text-xs text-amber-800">
-              以下标的因历史数据不足被忽略：{lab.ignoredSymbols.join(", ")}
+              以下标的因历史数据不足被忽略：{lab.ignoredAssetKeys.map((item) => toAssetLabel(item)).join(", ")}
             </div>
           ) : null}
         </CardContent>
@@ -999,7 +1111,7 @@ export default function BacktestOptimizationPanel() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Symbol</TableHead>
+                        <TableHead>资产</TableHead>
                         <TableHead className="text-right">当前权重</TableHead>
                         <TableHead className="text-right">优化后</TableHead>
                         <TableHead className="text-right">变化</TableHead>
@@ -1008,7 +1120,7 @@ export default function BacktestOptimizationPanel() {
                     <TableBody>
                       {diffRows.map((row) => (
                         <TableRow key={row.symbol}>
-                          <TableCell className="font-medium">{row.symbol}</TableCell>
+                          <TableCell className="font-medium">{toAssetLabel(row.symbol)}</TableCell>
                           <TableCell className="text-right">{formatPercent(row.currentWeight * 100)}</TableCell>
                           <TableCell className="text-right">{formatPercent(row.nextWeight * 100)}</TableCell>
                           <TableCell className={`text-right ${row.deltaWeight >= 0 ? "text-emerald-600" : "text-red-600"}`}>

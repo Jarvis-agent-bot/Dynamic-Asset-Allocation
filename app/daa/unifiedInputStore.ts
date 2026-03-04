@@ -5,6 +5,8 @@ import { DEFAULT_SYSTEM_CONFIG_V2 } from "@/src/daa/config/systemConfigV2";
 export const DAA_RUNTIME_DATA_EVENT_V1 = "daa:data:updated";
 
 export type DaaPositionRow = {
+  id?: string;
+  assetKey?: string;
   symbol: string;
   market: string;
   currency: string;
@@ -39,7 +41,7 @@ export type DaaHfFundTrackRow = {
   enabled: boolean;
 };
 
-export type DaaWatchlistCandidateRow = {
+export type DaaCandidateAssetRow = {
   id?: string;
   symbol: string;
   name?: string | null;
@@ -125,7 +127,7 @@ export type UnifiedInputStateV1 = {
   analysts: DaaAnalystRow[] | null;
   assetViews: DaaAssetViewRow[] | null;
   hfFundRegistry: DaaHfFundTrackRow[] | null;
-  watchlistCandidates: DaaWatchlistCandidateRow[] | null;
+  candidateAssets: DaaCandidateAssetRow[] | null;
   fxRates: DaaFxRateRow[] | null;
   strategyConfig: DaaStrategyConfig | null;
   lastRunResult: unknown | null;
@@ -158,7 +160,7 @@ function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
     analysts: null,
     assetViews: null,
     hfFundRegistry: null,
-    watchlistCandidates: null,
+    candidateAssets: null,
     fxRates: null,
     strategyConfig: null,
     lastRunResult: null,
@@ -184,6 +186,11 @@ function getMutableStateV1(): UnifiedInputStateV1 {
   const g = globalThis as any;
   if (!g[GLOBAL_STATE_KEY_V1]) {
     g[GLOBAL_STATE_KEY_V1] = defaultUnifiedInputStateV1();
+  } else {
+    const current = g[GLOBAL_STATE_KEY_V1] as Partial<UnifiedInputStateV1>;
+    if (current.candidateAssets === undefined) {
+      current.candidateAssets = null;
+    }
   }
   return g[GLOBAL_STATE_KEY_V1] as UnifiedInputStateV1;
 }

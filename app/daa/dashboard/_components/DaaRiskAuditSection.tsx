@@ -4,16 +4,12 @@ import { useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   ShieldAlert,
 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import type { DaaUnifiedResponseV1 } from "@/src/daa/unifiedRebalanceV1";
 
 import StatCard from "../_components/StatCard";
@@ -152,14 +148,6 @@ function extractPlan(payload: unknown): ExtractPlanResult {
   return { plan: value.plan, error: null };
 }
 
-function prettyJson(v: unknown): string {
-  try {
-    return JSON.stringify(v, null, 2);
-  } catch {
-    return "{}";
-  }
-}
-
 function warningTone(warning: string): "high" | "medium" {
   const value = String(warning || "").toLowerCase();
   if (
@@ -175,8 +163,6 @@ export function DaaRiskAuditSection() {
   const [lastRun] = useLastRunResult();
   const [runHistoryData] = useRunHistory();
   const [selectedRunId, setSelectedRunId] = useState<string>("latest");
-  const [showRawRequest, setShowRawRequest] = useState(false);
-  const [showRawResponse, setShowRawResponse] = useState(false);
 
   const runHistory = runHistoryData ?? [];
   const selectedHistory = selectedRunId === "latest" ? null : runHistory.find((item) => item.id === selectedRunId) ?? null;
@@ -184,7 +170,6 @@ export function DaaRiskAuditSection() {
   const selectedPayload = selectedHistory?.response ?? lastRun;
   const extracted = useMemo(() => extractPlan(selectedPayload), [selectedPayload]);
   const result = extracted.plan;
-  const requestPayload = selectedHistory?.request ?? null;
 
   const auditRows = useMemo(() => {
     const executable = (result?.executableOrders ?? []).map((order) => ({
@@ -373,35 +358,35 @@ export function DaaRiskAuditSection() {
             </Card>
           </div>
 
-          <div className="space-y-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowRawRequest(!showRawRequest)} className="text-xs text-muted-foreground">
-              {showRawRequest ? <ChevronUp className="mr-1 h-3.5 w-3.5" /> : <ChevronDown className="mr-1 h-3.5 w-3.5" />}
-              请求 JSON
-            </Button>
-            {showRawRequest ? (
-              <Card>
-                <CardContent className="pt-4">
-                  <Textarea readOnly className="min-h-[180px] font-mono text-xs leading-5" value={requestPayload ? prettyJson(requestPayload) : "仅历史运行包含请求快照。"} />
-                </CardContent>
-              </Card>
-            ) : null}
-
-            <Button variant="ghost" size="sm" onClick={() => setShowRawResponse(!showRawResponse)} className="text-xs text-muted-foreground">
-              {showRawResponse ? <ChevronUp className="mr-1 h-3.5 w-3.5" /> : <ChevronDown className="mr-1 h-3.5 w-3.5" />}
-              响应 JSON
-            </Button>
-            {showRawResponse ? (
-              <Card>
-                <CardContent className="pt-4">
-                  <Textarea
-                    readOnly
-                    className="min-h-[180px] font-mono text-xs leading-5"
-                    value={prettyJson(selectedPayload)}
-                  />
-                </CardContent>
-              </Card>
-            ) : null}
-          </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">运行上下文</CardTitle>
+              <CardDescription>仅展示结构化摘要，默认不暴露原始 JSON。</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-md border px-2 py-1.5">
+                <div className="text-muted-foreground">数据来源</div>
+                <div className="mt-0.5 font-medium">{selectedRunId === "latest" ? "最新运行缓存" : "历史快照"}</div>
+              </div>
+              <div className="rounded-md border px-2 py-1.5">
+                <div className="text-muted-foreground">运行时间</div>
+                <div className="mt-0.5 font-medium">{new Date(result.generatedAt).toLocaleString()}</div>
+              </div>
+              <div className="rounded-md border px-2 py-1.5">
+                <div className="text-muted-foreground">快照记录时间</div>
+                <div className="mt-0.5 font-medium">
+                  {selectedHistory ? new Date(selectedHistory.ts).toLocaleString() : "仅最新结果"}
+                </div>
+              </div>
+              <div className="rounded-md border px-2 py-1.5">
+                <div className="text-muted-foreground">FX 覆盖率</div>
+                <div className="mt-0.5 font-medium">
+                  {Number(result.layers?.sensory?.fxCoveragePct ?? 0).toFixed(1)}% /
+                  新鲜度 {Number(result.layers?.sensory?.fxFreshCoveragePct ?? 0).toFixed(1)}%
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

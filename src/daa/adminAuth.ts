@@ -4,31 +4,28 @@ import { getDaaAuthContextFromRequestV0 } from "./auth/daaAuthRequestV0";
 
 export type DaaAdminRole = "viewer" | "editor";
 
-export type DaaAdminTokenKindV0 = "legacy" | "viewer" | "editor" | "unknown" | "none";
+export type DaaAdminTokenKindV0 = "viewer" | "editor" | "unknown" | "none";
 
 function normalizeToken(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
 function getAdminTokens() {
-  // Keep token introspection helpers for diagnostics and legacy tooling visibility.
-  const legacy = normalizeToken(process.env.DAA_ADMIN_TOKEN);
   const viewer = normalizeToken(process.env.DAA_ADMIN_VIEWER_TOKEN);
   const editor = normalizeToken(process.env.DAA_ADMIN_EDITOR_TOKEN);
-  return { legacy, viewer, editor };
+  return { viewer, editor };
 }
 
 export function getDaaAdminTokensConfiguredV0() {
-  const { legacy, viewer, editor } = getAdminTokens();
-  return { legacy: Boolean(legacy), viewer: Boolean(viewer), editor: Boolean(editor) };
+  const { viewer, editor } = getAdminTokens();
+  return { viewer: Boolean(viewer), editor: Boolean(editor) };
 }
 
 export function inferDaaAdminTokenKindV0(providedToken: string | null | undefined): DaaAdminTokenKindV0 {
   const t = normalizeToken(providedToken);
   if (!t) return "none";
 
-  const { legacy, viewer, editor } = getAdminTokens();
-  if (legacy && t === legacy) return "legacy";
+  const { viewer, editor } = getAdminTokens();
   if (editor && t === editor) return "editor";
   if (viewer && t === viewer) return "viewer";
   return "unknown";
@@ -37,7 +34,7 @@ export function inferDaaAdminTokenKindV0(providedToken: string | null | undefine
 export function inferDaaAdminRoleForTokenV0(providedToken: string | null | undefined): DaaAdminRole | null {
   const kind = inferDaaAdminTokenKindV0(providedToken);
   if (kind === "viewer") return "viewer";
-  if (kind === "editor" || kind === "legacy") return "editor";
+  if (kind === "editor") return "editor";
   return null;
 }
 
@@ -54,16 +51,15 @@ function unauthorized() {
   );
 }
 
-export type DaaAdminActorUserIdV0 = "viewer-token" | "editor-token" | "legacy-token" | "unknown-token";
+export type DaaAdminActorUserIdV0 = "viewer-token" | "editor-token" | "unknown-token";
 
 export function inferDaaAdminActorUserIdV0(providedToken: string | null | undefined): DaaAdminActorUserIdV0 {
   const t = normalizeToken(providedToken);
   if (!t) return "unknown-token";
 
-  const { legacy, viewer, editor } = getAdminTokens();
+  const { viewer, editor } = getAdminTokens();
   if (viewer && t === viewer) return "viewer-token";
   if (editor && t === editor) return "editor-token";
-  if (legacy && t === legacy) return "legacy-token";
   return "unknown-token";
 }
 
@@ -105,9 +101,4 @@ export async function requireDaaAdminViewerAuth(req: Request): Promise<NextRespo
 
 export async function requireDaaAdminEditorAuth(req: Request): Promise<NextResponse | null> {
   return requireDaaAdminRole(req, "editor");
-}
-
-// Back-compat alias: historically all admin endpoints were effectively editor-level.
-export async function requireDaaAdminAuth(req: Request): Promise<NextResponse | null> {
-  return requireDaaAdminEditorAuth(req);
 }

@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { Bot, Briefcase, FlaskConical, Menu, Settings, Users, Wallet } from "lucide-react";
+import { Briefcase, FlaskConical, Menu, Settings, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 type NavKey =
   | "assets"
   | "portfolio"
-  | "console"
   | "strategyLab"
   | "humanFactor"
   | "settings";
@@ -26,12 +25,7 @@ type NavItem = { key: NavKey; href: string; label: string; Icon: IconType };
 function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
   if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
-  if (pathname.startsWith("/daa/dashboard/positions")) return "portfolio";
-  if (pathname.startsWith("/daa/dashboard/watchlist")) return "portfolio";
-  if (pathname.startsWith("/daa/dashboard/console")) return "console";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategyLab";
-  if (pathname.startsWith("/daa/dashboard/strategy")) return "strategyLab";
-  if (pathname.startsWith("/daa/dashboard/backtest")) return "strategyLab";
   if (pathname.startsWith("/daa/dashboard/human-factor")) return "humanFactor";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
   return "assets";
@@ -41,8 +35,7 @@ function useNavItems(): NavItem[] {
   return useMemo(
     () => [
       { key: "assets" as const, href: "/daa/dashboard", label: "资产首页", Icon: Wallet },
-      { key: "portfolio" as const, href: "/daa/dashboard/portfolio", label: "持仓与候选", Icon: Briefcase },
-      { key: "console" as const, href: "/daa/dashboard/console", label: "决策台", Icon: Bot },
+      { key: "portfolio" as const, href: "/daa/dashboard/portfolio", label: "工作台", Icon: Briefcase },
       { key: "strategyLab" as const, href: "/daa/dashboard/strategy-lab", label: "策略实验室", Icon: FlaskConical },
       { key: "humanFactor" as const, href: "/daa/dashboard/human-factor", label: "人因中心", Icon: Users },
       { key: "settings" as const, href: "/daa/dashboard/settings", label: "系统设置", Icon: Settings },

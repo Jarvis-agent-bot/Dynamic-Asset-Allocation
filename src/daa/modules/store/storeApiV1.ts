@@ -1,23 +1,9 @@
 import { requestDataV1 } from "@/src/daa/api/clientV1";
-import { normalizeCurrencyAliasV2 } from "@/src/daa/config/currencyV2";
 import {
   normalizeSystemConfigV2,
   type DaaSystemConfigPatchV2,
   type DaaSystemConfigV2,
 } from "@/src/daa/config/systemConfigV2";
-
-export type StorePositionV1 = {
-  id?: string;
-  symbol: string;
-  market: string;
-  currency: string;
-  qty: number;
-  price: number;
-  costBasis?: number | null;
-  tags: string[];
-};
-
-export type StoreStrategyConfigV1 = Record<string, unknown>;
 
 export type StoreEquitySnapshotV1 = {
   ts: string;
@@ -25,24 +11,6 @@ export type StoreEquitySnapshotV1 = {
   holdingsValue: number;
   cash: number;
   source: string;
-};
-
-export type StoreDataSourceKindV1 = "hf_fund" | "price_feed" | "news_feed" | "fx_feed" | "llm_analysis";
-
-export type StoreDataSourceV1 = {
-  id: string;
-  kind: StoreDataSourceKindV1;
-  configJson: Record<string, unknown>;
-  enabled: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export type StoreNotificationConfigV1 = {
-  enabled: boolean;
-  notifyOnDrift: boolean;
-  notifyOnRebalance: boolean;
-  notifyOnPriceAlert: boolean;
 };
 
 export type StoreRunHistoryEntryV1 = {
@@ -62,7 +30,7 @@ export type StoreOpLogEntryV1 = {
   contextJson: Record<string, unknown>;
 };
 
-export type StoreWatchlistCandidateV1 = {
+export type StoreCandidateAssetV1 = {
   id?: string;
   symbol: string;
   market: string;
@@ -131,116 +99,14 @@ export type StoreSystemConfigEnvelopeV2 = {
 
 export type StoreSystemConfigPatchV2 = DaaSystemConfigPatchV2;
 
-function toPlainObject(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
-function toText(value: unknown, fallback = ""): string {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
-
-function toPositiveInt(value: unknown, fallback: number): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.max(1, Math.trunc(parsed));
-}
-
-function toSymbolList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const set = new Set<string>();
-  for (const item of value) {
-    const symbol = String(item ?? "").trim().toUpperCase();
-    if (symbol) set.add(symbol);
-  }
-  return [...set];
-}
-
-function toFxPairList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const set = new Set<string>();
-  for (const item of value) {
-    const token = String(item ?? "")
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, "")
-      .replace(/-/g, "/");
-    if (!/^[A-Z]{3}\/[A-Z]{3}$/.test(token)) continue;
-    const [base, quote] = token.split("/");
-    set.add(`${normalizeCurrencyAliasV2(base)}/${normalizeCurrencyAliasV2(quote)}`);
-  }
-  return [...set];
-}
-
-function mapSystemConfigToLegacyDataSources(config: DaaSystemConfigV2): StoreDataSourceV1[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: config.dataSources.hfFund.id,
-      kind: "hf_fund",
-      enabled: config.dataSources.hfFund.enabled,
-      configJson: {
-        funds: config.dataSources.hfFund.funds,
-        marketScope: config.dataSources.hfFund.marketScope,
-      },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: config.dataSources.priceFeed.id,
-      kind: "price_feed",
-      enabled: config.dataSources.priceFeed.enabled,
-      configJson: {
-        provider: config.dataSources.priceFeed.provider,
-        intervalMinutes: config.dataSources.priceFeed.intervalMinutes,
-        symbols: config.dataSources.priceFeed.symbols,
-      },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: config.dataSources.newsFeed.id,
-      kind: "news_feed",
-      enabled: config.dataSources.newsFeed.enabled,
-      configJson: {
-        provider: config.dataSources.newsFeed.provider,
-        query: config.dataSources.newsFeed.query,
-        symbols: config.dataSources.newsFeed.symbols,
-        fusionWeights: config.dataSources.newsFeed.fusionWeights,
-      },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: config.dataSources.fxFeed.id,
-      kind: "fx_feed",
-      enabled: config.dataSources.fxFeed.enabled,
-      configJson: {
-        provider: config.dataSources.fxFeed.provider,
-        baseCurrency: config.dataSources.fxFeed.baseCurrency,
-        pairs: config.dataSources.fxFeed.pairs,
-      },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: config.dataSources.llmAnalysis.id,
-      kind: "llm_analysis",
-      enabled: config.dataSources.llmAnalysis.enabled,
-      configJson: {
-        provider: config.dataSources.llmAnalysis.provider,
-        model: config.dataSources.llmAnalysis.model,
-        timeoutMs: config.dataSources.llmAnalysis.timeoutMs,
-        enabledInDecision: config.dataSources.llmAnalysis.enabledInDecision,
-      },
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
-}
+export type StoreLlmEnvStatusV1 = {
+  provider: string;
+  endpointConfigured: boolean;
+  apiKeyConfigured: boolean;
+  modelConfigured: boolean;
+  endpointHint: string;
+  model: string;
+};
 
 export async function getSystemConfigV2(): Promise<StoreSystemConfigEnvelopeV2> {
   const data = await requestDataV1<{ version?: unknown; updatedAt?: unknown; config?: unknown }>("/api/daa/store/system-config", {
@@ -253,6 +119,13 @@ export async function getSystemConfigV2(): Promise<StoreSystemConfigEnvelopeV2> 
     updatedAt: String(data.updatedAt || new Date().toISOString()),
     config: normalizeSystemConfigV2(data.config ?? {}),
   };
+}
+
+export async function getLlmEnvStatusV1(): Promise<StoreLlmEnvStatusV1> {
+  return requestDataV1<StoreLlmEnvStatusV1>("/api/daa/workbench/llm/env-status", {
+    method: "GET",
+    cache: "no-store",
+  });
 }
 
 export async function patchSystemConfigV2(input: {
@@ -295,37 +168,6 @@ export async function saveSystemConfigV2(input: {
   };
 }
 
-export async function listPositionsV1(): Promise<StorePositionV1[]> {
-  const data = await requestDataV1<{ positions: StorePositionV1[] }>("/api/daa/store/positions", {
-    method: "GET",
-    cache: "no-store",
-  });
-  return Array.isArray(data.positions) ? data.positions : [];
-}
-
-export async function replacePositionsV1(positions: StorePositionV1[]): Promise<StorePositionV1[]> {
-  const data = await requestDataV1<{ positions: StorePositionV1[] }>("/api/daa/store/positions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ positions }),
-  });
-  return Array.isArray(data.positions) ? data.positions : [];
-}
-
-export async function getStrategyConfigV1(): Promise<StoreStrategyConfigV1> {
-  const envelope = await getSystemConfigV2();
-  return toPlainObject(envelope.config.strategy);
-}
-
-export async function saveStrategyConfigV1(config: StoreStrategyConfigV1): Promise<StoreStrategyConfigV1> {
-  const current = await getSystemConfigV2();
-  const saved = await patchSystemConfigV2({
-    baseVersion: current.version,
-    patches: [{ path: "/strategy", value: toPlainObject(config) }],
-  });
-  return toPlainObject(saved.config.strategy);
-}
-
 export async function listEquitySnapshotsV1(limit = 200): Promise<StoreEquitySnapshotV1[]> {
   const data = await requestDataV1<{ snapshots: StoreEquitySnapshotV1[] }>(
     `/api/daa/store/equity-snapshots?limit=${Math.max(1, Math.trunc(limit))}`,
@@ -341,106 +183,6 @@ export async function appendEquitySnapshotV1(snapshot: Partial<StoreEquitySnapsh
     body: JSON.stringify({ snapshot }),
   });
   return data.snapshot;
-}
-
-export async function listDataSourcesV1(kind?: StoreDataSourceKindV1): Promise<StoreDataSourceV1[]> {
-  const envelope = await getSystemConfigV2();
-  const all = mapSystemConfigToLegacyDataSources(envelope.config);
-  if (!kind) return all;
-  return all.filter((row) => row.kind === kind);
-}
-
-export async function replaceDataSourcesV1(dataSources: StoreDataSourceV1[]): Promise<StoreDataSourceV1[]> {
-  const current = await getSystemConfigV2();
-  const next = normalizeSystemConfigV2(current.config);
-
-  for (const source of dataSources) {
-    const configJson = toPlainObject(source.configJson);
-    if (source.kind === "hf_fund") {
-      next.dataSources.hfFund.id = toText(source.id, next.dataSources.hfFund.id);
-      next.dataSources.hfFund.enabled = Boolean(source.enabled);
-      if (Array.isArray(configJson.funds)) {
-        next.dataSources.hfFund.funds = configJson.funds as DaaSystemConfigV2["dataSources"]["hfFund"]["funds"];
-      }
-      if (Array.isArray(configJson.marketScope)) {
-        next.dataSources.hfFund.marketScope = toSymbolList(configJson.marketScope);
-      }
-      continue;
-    }
-
-    if (source.kind === "price_feed") {
-      next.dataSources.priceFeed.id = toText(source.id, next.dataSources.priceFeed.id);
-      next.dataSources.priceFeed.enabled = Boolean(source.enabled);
-      next.dataSources.priceFeed.provider = toText(configJson.provider, next.dataSources.priceFeed.provider);
-      next.dataSources.priceFeed.intervalMinutes = toPositiveInt(configJson.intervalMinutes, next.dataSources.priceFeed.intervalMinutes);
-      const symbols = toSymbolList(configJson.symbols);
-      if (symbols.length) next.dataSources.priceFeed.symbols = symbols;
-      continue;
-    }
-
-    if (source.kind === "news_feed") {
-      next.dataSources.newsFeed.id = toText(source.id, next.dataSources.newsFeed.id);
-      next.dataSources.newsFeed.enabled = Boolean(source.enabled);
-      next.dataSources.newsFeed.provider = toText(configJson.provider, next.dataSources.newsFeed.provider);
-      next.dataSources.newsFeed.query = toText(configJson.query, next.dataSources.newsFeed.query);
-      next.dataSources.newsFeed.symbols = toSymbolList(configJson.symbols);
-      if (configJson.fusionWeights && typeof configJson.fusionWeights === "object" && !Array.isArray(configJson.fusionWeights)) {
-        const weights = configJson.fusionWeights as Record<string, unknown>;
-        next.dataSources.newsFeed.fusionWeights = {
-          human: Number(weights.human ?? next.dataSources.newsFeed.fusionWeights.human) || next.dataSources.newsFeed.fusionWeights.human,
-          news: Number(weights.news ?? next.dataSources.newsFeed.fusionWeights.news) || next.dataSources.newsFeed.fusionWeights.news,
-          technical: Number(weights.technical ?? next.dataSources.newsFeed.fusionWeights.technical) || next.dataSources.newsFeed.fusionWeights.technical,
-        };
-      }
-      continue;
-    }
-
-    if (source.kind === "fx_feed") {
-      next.dataSources.fxFeed.id = toText(source.id, next.dataSources.fxFeed.id);
-      next.dataSources.fxFeed.enabled = Boolean(source.enabled);
-      next.dataSources.fxFeed.provider = toText(configJson.provider, next.dataSources.fxFeed.provider);
-      next.dataSources.fxFeed.baseCurrency = normalizeCurrencyAliasV2(configJson.baseCurrency, next.dataSources.fxFeed.baseCurrency) as DaaSystemConfigV2["dataSources"]["fxFeed"]["baseCurrency"];
-      const pairs = toFxPairList(configJson.pairs);
-      if (pairs.length) next.dataSources.fxFeed.pairs = pairs;
-      continue;
-    }
-
-    if (source.kind === "llm_analysis") {
-      next.dataSources.llmAnalysis.id = toText(source.id, next.dataSources.llmAnalysis.id);
-      next.dataSources.llmAnalysis.enabled = Boolean(source.enabled);
-      next.dataSources.llmAnalysis.provider = toText(configJson.provider, next.dataSources.llmAnalysis.provider);
-      next.dataSources.llmAnalysis.model = toText(configJson.model, next.dataSources.llmAnalysis.model);
-      next.dataSources.llmAnalysis.timeoutMs = toPositiveInt(configJson.timeoutMs, next.dataSources.llmAnalysis.timeoutMs);
-      next.dataSources.llmAnalysis.enabledInDecision = Boolean(configJson.enabledInDecision);
-    }
-  }
-
-  const saved = await saveSystemConfigV2({ config: next, baseVersion: current.version });
-  return mapSystemConfigToLegacyDataSources(saved.config);
-}
-
-export async function getNotificationConfigV1(): Promise<StoreNotificationConfigV1> {
-  const envelope = await getSystemConfigV2();
-  return {
-    enabled: Boolean(envelope.config.notification.enabled),
-    notifyOnDrift: envelope.config.notification.notifyOnDrift !== false,
-    notifyOnRebalance: envelope.config.notification.notifyOnRebalance !== false,
-    notifyOnPriceAlert: Boolean(envelope.config.notification.notifyOnPriceAlert),
-  };
-}
-
-export async function saveNotificationConfigV1(config: StoreNotificationConfigV1): Promise<StoreNotificationConfigV1> {
-  const current = await getSystemConfigV2();
-  const saved = await patchSystemConfigV2({
-    baseVersion: current.version,
-    patches: [{ path: "/notification", value: config }],
-  });
-  return {
-    enabled: Boolean(saved.config.notification.enabled),
-    notifyOnDrift: saved.config.notification.notifyOnDrift !== false,
-    notifyOnRebalance: saved.config.notification.notifyOnRebalance !== false,
-    notifyOnPriceAlert: Boolean(saved.config.notification.notifyOnPriceAlert),
-  };
 }
 
 export async function listRunHistoryV1(limit = 50): Promise<StoreRunHistoryEntryV1[]> {
@@ -486,16 +228,16 @@ export async function appendOpLogV1(input: {
   return data.entry;
 }
 
-export async function listWatchlistCandidatesV1(): Promise<StoreWatchlistCandidateV1[]> {
-  const data = await requestDataV1<{ candidates: StoreWatchlistCandidateV1[] }>("/api/daa/store/watchlist-candidates", {
+export async function listCandidateAssetsV1(): Promise<StoreCandidateAssetV1[]> {
+  const data = await requestDataV1<{ candidates: StoreCandidateAssetV1[] }>("/api/daa/store/candidate-assets", {
     method: "GET",
     cache: "no-store",
   });
   return Array.isArray(data.candidates) ? data.candidates : [];
 }
 
-export async function replaceWatchlistCandidatesV1(candidates: StoreWatchlistCandidateV1[]): Promise<StoreWatchlistCandidateV1[]> {
-  const data = await requestDataV1<{ candidates: StoreWatchlistCandidateV1[] }>("/api/daa/store/watchlist-candidates", {
+export async function replaceCandidateAssetsV1(candidates: StoreCandidateAssetV1[]): Promise<StoreCandidateAssetV1[]> {
+  const data = await requestDataV1<{ candidates: StoreCandidateAssetV1[] }>("/api/daa/store/candidate-assets", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ candidates }),

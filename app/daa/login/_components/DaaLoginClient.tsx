@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { appendNoticeParamV0, normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
+import { fetchDaaAuthSessionV1, type DaaAuthMeResponseV1 } from "@/app/daa/_components/daaAuthSessionClientV1";
 
 type Props = {
   returnTo: string;
@@ -19,18 +20,10 @@ type Props = {
   notice?: string;
 };
 
-type MeResponse =
-  | {
-      ok: true;
-      account: { accountId: string; username: string; roles: string[]; status: string };
-      session: { sessionId: string; createdAt: string; expiresAt: string; revokedAt: string | null; lastSeenAt: string | null };
-    }
-  | { ok: false; error: string };
-
 type SessionModel =
   | { kind: "checking" }
   | { kind: "signedOut" }
-  | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
+  | { kind: "signedIn"; me: Extract<DaaAuthMeResponseV1, { ok: true }> };
 
 function parseApiError(json: any, fallback: string): string {
   const msg = typeof json?.error === "string" ? json.error.trim() : "";
@@ -64,7 +57,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("admin123");
   const [busy, setBusy] = useState(false);
-  const [redirectingToConsole, setRedirectingToConsole] = useState(false);
+  const [redirectingToDashboard, setRedirectingToDashboard] = useState(false);
   const [refreshingSession, setRefreshingSession] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -82,37 +75,14 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     let cancelled = false;
 
     async function run() {
-      try {
-        const res = await fetch("/api/daa/auth/me", { method: "GET", cache: "no-store", headers: { accept: "application/json" } });
-        const text = await res.text();
-        let json: any = null;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          json = null;
-        }
-
-        if (cancelled) return;
-
-        if (!res.ok) {
-          if (res.status === 401) {
-            setSession({ kind: "signedOut" });
-            return;
-          }
-          // 登录页不阻断：后端短暂异常时仍允许用户直接提交账号密码。
-          setSession({ kind: "signedOut" });
-          return;
-        }
-
-        if (json?.ok) {
-          setSession({ kind: "signedIn", me: json });
-        } else {
-          setSession({ kind: "signedOut" });
-        }
-      } catch (e) {
-        if (cancelled) return;
-        setSession({ kind: "signedOut" });
+      const result = await fetchDaaAuthSessionV1({ silent: true });
+      if (cancelled) return;
+      if (result.kind === "signedIn") {
+        setSession({ kind: "signedIn", me: result.me });
+        return;
       }
+      // 登录页不阻断：后端短暂异常时仍允许用户直接提交账号密码。
+      setSession({ kind: "signedOut" });
     }
 
     void run();
@@ -141,7 +111,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   useEffect(() => {
     if (session.kind !== "signedIn") return;
-    setRedirectingToConsole(true);
+    setRedirectingToDashboard(true);
     const timer = window.setTimeout(() => {
       window.location.assign(safeReturnTo);
     }, 60);
@@ -197,32 +167,18 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (refreshingSession) return;
     setRefreshingSession(true);
     try {
-      const res = await fetch("/api/daa/auth/me", { method: "GET", cache: "no-store", headers: { accept: "application/json" } });
-      const text = await res.text();
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
-      }
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          setSession({ kind: "signedOut" });
-          toast.error("会话已过期，请重新登录。");
-          return;
-        }
-        throw new Error(parseApiError(json, "HTTP " + res.status));
-      }
-
-      if (json?.ok) {
-        setSession({ kind: "signedIn", me: json });
+      const result = await fetchDaaAuthSessionV1({ silent: true, force: true, cacheTtlMs: 0 });
+      if (result.kind === "signedIn") {
+        setSession({ kind: "signedIn", me: result.me });
         toast.success("会话已刷新。");
         return;
       }
-
-      setSession({ kind: "signedOut" });
-      toast.error("会话不可用，请重新登录。");
+      if (result.kind === "signedOut") {
+        setSession({ kind: "signedOut" });
+        toast.error("会话已过期，请重新登录。");
+        return;
+      }
+      throw new Error(result.message || "会话刷新失败");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -260,7 +216,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           </CardHeader>
           <CardContent className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button type="button" className="w-full sm:w-auto" onClick={() => window.location.assign(safeReturnTo)}>
-              {redirectingToConsole ? "正在进入资产首页..." : "进入资产首页"}
+              {redirectingToDashboard ? "正在进入资产首页..." : "进入资产首页"}
             </Button>
             <Button type="button" className="w-full sm:w-auto" variant="secondary" onClick={() => void refreshSession()} disabled={refreshingSession}>
               {refreshingSession ? "刷新中..." : "刷新会话"}
@@ -282,7 +238,14 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
           <CardDescription>使用 DAA 管理员账号登录。当前仅保留账号密码模式。</CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void login();
+            }}
+          >
           {session.kind === "checking" ? (
             <div className="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" aria-live="polite">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -326,12 +289,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 setPassword(e.target.value);
                 setAuthError(null);
               }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void login();
-                }
-              }}
             />
           </div>
 
@@ -342,7 +299,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             </Alert>
           ) : null}
 
-          <Button type="button" className="w-full" onClick={() => void login()} disabled={busy || session.kind === "checking"}>
+          <Button type="submit" className="w-full" disabled={busy || session.kind === "checking"}>
             {busy ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -369,6 +326,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               <Link className="underline underline-offset-2" href="/support">联系支持</Link>
             </AlertDescription>
           </Alert>
+          </form>
         </CardContent>
       </Card>
     </div>

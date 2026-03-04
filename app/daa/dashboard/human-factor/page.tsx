@@ -18,7 +18,7 @@ import MetricGauge from "../_components/MetricGauge";
 import TierBadge from "../_components/TierBadge";
 import {
   useHfFundRegistry,
-  usePositions,
+  useWorkbenchPositionsV1,
   useStrategyConfig,
   useFxRates,
   useSystemConfigV2,
@@ -179,7 +179,7 @@ function FundFormDialog({
 
 export default function HumanFactorPage() {
   const [storedRegistry, setStoredRegistry] = useHfFundRegistry();
-  const [positions] = usePositions();
+  const [positions] = useWorkbenchPositionsV1();
   const [strategyConfig] = useStrategyConfig();
   const [fxRates] = useFxRates();
   const { envelope: systemConfigEnvelope } = useSystemConfigV2();

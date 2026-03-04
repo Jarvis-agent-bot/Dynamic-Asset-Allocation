@@ -102,12 +102,6 @@ body {
   color: var(--text);
 }
 
-.legacy-container {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
 .glass {
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   border: 1px solid var(--border);
@@ -134,21 +128,6 @@ body {
 
 .muted {
   color: var(--muted);
-}
-
-.legacy-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 16px;
-}
-
-.legacy-col-12 { grid-column: span 12; }
-.legacy-col-6 { grid-column: span 6; }
-.legacy-col-4 { grid-column: span 4; }
-.legacy-col-3 { grid-column: span 3; }
-
-@media (max-width: 1024px) {
-  .legacy-col-6, .legacy-col-4, .legacy-col-3 { grid-column: span 12; }
 }
 
 .navbar {

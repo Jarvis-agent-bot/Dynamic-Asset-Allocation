@@ -11,10 +11,12 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { ApiClientErrorV1, getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
 import {
+  getLlmEnvStatusV1,
   getSystemConfigV2,
   listFxRatesV1,
   patchSystemConfigV2,
   pullDailyFxSnapshotV1,
+  type StoreLlmEnvStatusV1,
   type StoreFxRateV1,
   upsertFxRatesV1,
 } from "@/src/daa/modules/store/storeApiV1";
@@ -170,6 +172,7 @@ export default function SettingsPage() {
   const [llmModel, setLlmModel] = useState("gpt-5-codex");
   const [llmTimeoutMs, setLlmTimeoutMs] = useState(8000);
   const [llmEnabledInDecision, setLlmEnabledInDecision] = useState(false);
+  const [llmEnvStatus, setLlmEnvStatus] = useState<StoreLlmEnvStatusV1 | null>(null);
   const [benchmarkSymbol, setBenchmarkSymbol] = useState("SPY");
 
   const [notificationConfig, setNotificationConfig] = useState<NotificationConfig>({
@@ -285,7 +288,7 @@ export default function SettingsPage() {
     setError("");
     hydratingRef.current = true;
     try {
-      const [system, rates] = await Promise.all([getSystemConfigV2(), listFxRatesV1()]);
+      const [system, rates, envStatus] = await Promise.all([getSystemConfigV2(), listFxRatesV1(), getLlmEnvStatusV1()]);
       systemVersionRef.current = system.version;
       setSystemVersion(system.version);
       setFxRates(rates);
@@ -371,6 +374,7 @@ export default function SettingsPage() {
       setLlmModel(llmPayload.model);
       setLlmTimeoutMs(llmPayload.timeoutMs);
       setLlmEnabledInDecision(llmPayload.enabledInDecision);
+      setLlmEnvStatus(envStatus);
       setBenchmarkSymbol(backtestPayload.benchmarkSymbol);
 
       setNotificationConfig(notificationPayload);
@@ -769,6 +773,13 @@ export default function SettingsPage() {
                   运行决策时启用二次分析
                 </label>
               </div>
+              <div className="mt-3 rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground">
+                <div>密钥管理策略：仅环境变量（不在页面录入，不入库）。</div>
+                <div>必填：`OPENAI_API_KEY`、`DAA_LLM_ENDPOINT`、`DAA_LLM_MODEL`（可选）。</div>
+                <div>
+                  当前状态：API Key {llmEnvStatus?.apiKeyConfigured ? "已配置" : "未配置"} · Endpoint {llmEnvStatus?.endpointConfigured ? "已配置" : "未配置"} · Model {llmEnvStatus?.model || "-"}
+                </div>
+              </div>
             </div>
 
             <div className="rounded-md border p-3">
@@ -788,14 +799,17 @@ export default function SettingsPage() {
 
             <div className="rounded-md border p-3">
               <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-medium">汇率快照（手工维护）</div>
+                <div className="text-sm font-medium">汇率快照（自动日更 + 手工修正）</div>
                 <span className="text-xs text-muted-foreground">{formatStatusText(sectionStates.fxRates)}</span>
               </div>
               <div className="mb-2 flex items-center gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => void pullTodayFxSnapshot()} disabled={pullingFxSnapshot || loading}>
-                  {pullingFxSnapshot ? "拉取中..." : "手动拉取今日快照"}
+                  {pullingFxSnapshot ? "拉取中..." : "手动立即拉取"}
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={addFxRateRow}>新增汇率</Button>
+              </div>
+              <div className="mb-2 text-xs text-muted-foreground">
+                系统会在定时任务中每日自动补齐当日 FX 快照；此处仅用于立即补拉或人工修正。
               </div>
               {fxSnapshotHint ? <div className="mb-2 text-xs text-muted-foreground">{fxSnapshotHint}</div> : null}
               <div className="space-y-2">

@@ -6,8 +6,22 @@ import { ensureDevDefaultDaaAuthAccountV0, refreshDaaAuthSessionV0 } from "@/src
 
 export const runtime = "nodejs";
 
-function unauthenticatedResponse() {
-  const res = NextResponse.json({ ok: false, error: "not_authenticated" }, { status: 401 });
+function isSilentMode(req: Request): boolean {
+  try {
+    const value = new URL(req.url).searchParams.get("silent");
+    if (!value) return false;
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "yes";
+  } catch {
+    return false;
+  }
+}
+
+function unauthenticatedResponse(opts?: { silent?: boolean }) {
+  const silent = Boolean(opts?.silent);
+  const res = silent
+    ? NextResponse.json({ ok: false, error: "not_authenticated" }, { status: 200 })
+    : NextResponse.json({ ok: false, error: "not_authenticated" }, { status: 401 });
   res.cookies.set({
     name: DAA_AUTH_SESSION_COOKIE_V0,
     value: "",
@@ -23,10 +37,11 @@ function unauthenticatedResponse() {
 export async function GET(req: Request) {
   try {
     await ensureDevDefaultDaaAuthAccountV0().catch(() => null);
+    const silent = isSilentMode(req);
 
     const ctx = await getDaaAuthContextFromRequestV0(req, { touch: false });
     if (!ctx) {
-      return unauthenticatedResponse();
+      return unauthenticatedResponse({ silent });
     }
 
     const { account, session, token } = ctx;

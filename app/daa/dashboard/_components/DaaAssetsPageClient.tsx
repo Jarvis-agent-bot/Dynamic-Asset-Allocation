@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, DollarSign, PieChart, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart as RechartsPieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart as RechartsPieChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import {
   Breadcrumb,
@@ -15,48 +15,53 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getApiErrorMessageV1 } from "@/src/daa/api/clientV1";
-
-import { DaaUnifiedInputBootstrap } from "../../_components/DaaUnifiedInputBootstrap";
-import { formatCurrency } from "./daaFormatters";
+import { fetchDaaAuthSessionV1, type DaaAuthMeResponseV1 } from "@/app/daa/_components/daaAuthSessionClientV1";
+import { getWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchApiV1";
+import type { WorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchTypesV1";
 import {
-  appendCashLedgerEntry,
-  useCashLedger,
-  useEquitySnapshots,
-  usePositions,
-  useStrategyConfig,
-} from "./useDaaStore";
-
-type MeResponse =
-  | {
-      ok: true;
-      account: { accountId: string; username: string; roles: string[]; status: string };
-      session: {
-        sessionId: string;
-        createdAt: string;
-        expiresAt: string;
-        revokedAt: string | null;
-        lastSeenAt: string | null;
-      };
-    }
-  | { ok: false; error: string };
+  appendCashLedgerEntryV1,
+  listCashLedgerV1,
+  listEquitySnapshotsV1,
+  type StoreCashLedgerEntryV1,
+  type StoreEquitySnapshotV1,
+} from "@/src/daa/modules/store/storeApiV1";
+import { formatCurrency } from "./daaFormatters";
 
 type AuthModel =
   | { kind: "loading" }
   | { kind: "signedOut" }
   | { kind: "error"; message: string }
-  | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
+  | { kind: "signedIn"; me: Extract<DaaAuthMeResponseV1, { ok: true }> };
 
 const CASH_LEDGER_CURRENCY_OPTIONS = ["USD", "CNY", "HKD"] as const;
 const ASSET_CHART_COLORS = ["#8b5cf6", "#06b6d4", "#14b8a6", "#22c55e", "#f59e0b", "#ef4444", "#64748b"] as const;
+const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
+const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
+
+function emitDashboardDataUpdatedV1() {
+  try {
+    window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
+  } catch {
+    // ignore browser event failures
+  }
+}
+
+function normalizeCcyCode(value: unknown, fallback = "USD"): string {
+  const text = String(value || "").trim().toUpperCase();
+  if (!text) return fallback;
+  if (text === "RMB" || text === "CNH") return "CNY";
+  return text;
+}
 
 function DaaAssetsHeader() {
   return (
@@ -207,6 +212,9 @@ function CashFlowDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            {side === "deposit" ? "记录入金流水并同步更新现金余额与权益快照。" : "记录出金流水并同步更新现金余额与权益快照。"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3 py-1">
@@ -281,14 +289,40 @@ export default function DaaAssetsPageClient() {
   const [auth, setAuth] = useState<AuthModel>({ kind: "loading" });
   const [authRev, setAuthRev] = useState(0);
   const [cashSubmitting, setCashSubmitting] = useState<"idle" | "deposit" | "withdraw">("idle");
-
-  const [positions] = usePositions();
-  const [config] = useStrategyConfig();
-  const [equitySnapshots] = useEquitySnapshots();
-  const [cashLedger] = useCashLedger();
+  const [bootstrap, setBootstrap] = useState<WorkbenchBootstrapV1 | null>(null);
+  const [snapshots, setSnapshots] = useState<StoreEquitySnapshotV1[]>([]);
+  const [ledgerRows, setLedgerRows] = useState<StoreCashLedgerEntryV1[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataRefreshing, setDataRefreshing] = useState(false);
+  const [dataError, setDataError] = useState("");
+  const [equityChartWidth, setEquityChartWidth] = useState(0);
+  const [allocationChartWidth, setAllocationChartWidth] = useState(0);
 
   const authRefreshInFlightRef = useRef(false);
   const lastAuthRefreshAtRef = useRef(0);
+  const equityChartHostRef = useRef<HTMLDivElement | null>(null);
+  const allocationChartHostRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const compute = () => {
+      const equityWidth = Math.max(0, Math.floor(equityChartHostRef.current?.getBoundingClientRect().width ?? 0));
+      const allocationWidth = Math.max(0, Math.floor(allocationChartHostRef.current?.getBoundingClientRect().width ?? 0));
+      setEquityChartWidth(equityWidth);
+      setAllocationChartWidth(allocationWidth);
+    };
+
+    compute();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => compute());
+      if (equityChartHostRef.current) observer.observe(equityChartHostRef.current);
+      if (allocationChartHostRef.current) observer.observe(allocationChartHostRef.current);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
 
   useEffect(() => {
     function requestRefresh() {
@@ -331,33 +365,22 @@ export default function DaaAssetsPageClient() {
       lastAuthRefreshAtRef.current = Date.now();
 
       try {
-        const res = await fetch("/api/daa/auth/me", {
-          method: "GET",
-          headers: { accept: "application/json" },
-          cache: "no-store",
+        const result = await fetchDaaAuthSessionV1({
+          silent: true,
+          force: true,
+          cacheTtlMs: 0,
         });
-
-        const json = await res.json().catch(() => null);
-
         if (cancelled) return;
 
-        if (res.status === 401) {
+        if (result.kind === "signedOut") {
           setAuth({ kind: "signedOut" });
           return;
         }
-
-        if (!res.ok) {
-          setAuth({ kind: "error", message: String(json?.error ?? `HTTP ${res.status}`) });
+        if (result.kind === "error") {
+          setAuth({ kind: "error", message: result.message || "会话检查失败" });
           return;
         }
-
-        const payload = json as MeResponse;
-        if (!payload?.ok) {
-          setAuth({ kind: "signedOut" });
-          return;
-        }
-
-        setAuth({ kind: "signedIn", me: payload });
+        setAuth({ kind: "signedIn", me: result.me });
       } catch (e) {
         if (cancelled) return;
         setAuth({ kind: "error", message: e instanceof Error ? e.message : String(e) });
@@ -373,12 +396,55 @@ export default function DaaAssetsPageClient() {
     };
   }, [authRev]);
 
+  const loadRuntimeData = useMemo(
+    () =>
+      async (opts?: { silent?: boolean }) => {
+        const silent = Boolean(opts?.silent);
+        if (silent) setDataRefreshing(true);
+        else setDataLoading(true);
+        setDataError("");
+
+        try {
+          const [nextBootstrap, nextSnapshots, nextLedger] = await Promise.all([
+            getWorkbenchBootstrapV1(),
+            listEquitySnapshotsV1(200),
+            listCashLedgerV1(100),
+          ]);
+          setBootstrap(nextBootstrap);
+          setSnapshots(Array.isArray(nextSnapshots) ? nextSnapshots : []);
+          setLedgerRows(Array.isArray(nextLedger) ? nextLedger : []);
+          emitDashboardDataUpdatedV1();
+        } catch (error) {
+          setDataError(getApiErrorMessageV1(error));
+        } finally {
+          if (silent) setDataRefreshing(false);
+          else setDataLoading(false);
+        }
+      },
+    [],
+  );
+
+  useEffect(() => {
+    if (auth.kind !== "signedIn") return;
+    void loadRuntimeData({ silent: false });
+  }, [auth.kind, loadRuntimeData]);
+
+  useEffect(() => {
+    if (auth.kind !== "signedIn") return;
+    function onRefresh() {
+      void loadRuntimeData({ silent: true });
+    }
+    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    return () => {
+      window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_V1, onRefresh);
+    };
+  }, [auth.kind, loadRuntimeData]);
+
   const header = <DaaAssetsHeader />;
 
   if (auth.kind === "loading") {
     return (
       <div className="space-y-4">
-        <DaaUnifiedInputBootstrap />
         {header}
         <LoadingState />
       </div>
@@ -388,7 +454,6 @@ export default function DaaAssetsPageClient() {
   if (auth.kind === "signedOut") {
     return (
       <div className="space-y-4">
-        <DaaUnifiedInputBootstrap />
         {header}
         <SignedOutState returnTo={returnTo} />
       </div>
@@ -398,28 +463,34 @@ export default function DaaAssetsPageClient() {
   if (auth.kind === "error") {
     return (
       <div className="space-y-4">
-        <DaaUnifiedInputBootstrap />
         {header}
         <ErrorState message={auth.message} onRetry={() => setAuthRev((x) => x + 1)} />
       </div>
     );
   }
 
-  const positionsList = positions ?? [];
-  const snapshots = equitySnapshots ?? [];
-  const ledgerRows = cashLedger ?? [];
-  const holdingsValue = positionsList.reduce((sum, row) => sum + row.qty * row.price, 0);
-  const cash = Math.max(0, Number(config.account.cash) || 0);
-  const displayCurrency = String(config.account.baseCurrency || "USD").toUpperCase();
+  const assetRows = bootstrap?.assetUniverse ?? [];
+  const cash = Math.max(0, Number(bootstrap?.account.cash ?? 0));
+  const displayCurrency = normalizeCcyCode(bootstrap?.baseCurrency ?? "USD", "USD");
+  const positionValuations = assetRows
+    .filter((row) => row.holdingQty > 0)
+    .map((row) => ({
+      symbol: row.symbol,
+      market: row.market,
+      baseValue: row.valuationBase == null ? null : Math.max(0, Number(row.valuationBase) || 0),
+      fxMissing: Boolean(row.fxMissing),
+    }));
+  const holdingsValue = positionValuations.reduce((sum, row) => sum + (row.baseValue ?? 0), 0);
+  const unresolvedFxCount = positionValuations.filter((row) => row.fxMissing).length;
   const defaultCashLedgerCurrency: "USD" | "CNY" | "HKD" = displayCurrency === "HKD"
     ? "HKD"
     : displayCurrency === "CNY" || displayCurrency === "RMB"
       ? "CNY"
       : "USD";
-  const totalEquity = config.account.totalEquity ?? holdingsValue + cash;
+  const totalEquity = bootstrap?.account.totalEquity ?? holdingsValue + cash;
 
   const dayDelta = snapshots[0] && snapshots[1]
-    ? snapshots[0].equity - snapshots[1].equity
+    ? Number(snapshots[0].totalEquity || 0) - Number(snapshots[1].totalEquity || 0)
     : null;
 
   const equityTrendRows = (() => {
@@ -428,7 +499,7 @@ export default function DaaAssetsPageClient() {
       .reverse()
       .map((row) => ({
         ts: new Date(row.ts).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" }),
-        equity: Number(row.equity || 0),
+        equity: Number(row.totalEquity || 0),
         holdings: Number(row.holdingsValue || 0),
         cash: Number(row.cash || 0),
       }));
@@ -444,10 +515,10 @@ export default function DaaAssetsPageClient() {
   })();
 
   const allocationRows = (() => {
-    const rawRows = positionsList
+    const rawRows = positionValuations
       .map((row) => ({
-        name: row.symbol,
-        value: Math.max(0, row.qty * row.price),
+        name: `${row.symbol} (${row.market})`,
+        value: Math.max(0, row.baseValue ?? 0),
       }))
       .filter((row) => row.value > 0)
       .sort((a, b) => b.value - a.value);
@@ -472,14 +543,14 @@ export default function DaaAssetsPageClient() {
   ) {
     setCashSubmitting(side);
     try {
-      await appendCashLedgerEntry({
+      await appendCashLedgerEntryV1({
         side,
         amount: input.amount,
         baseCurrency: input.baseCurrency,
         note: input.note,
       });
       toast.success(side === "deposit" ? "入金记录成功" : "出金记录成功");
-      window.dispatchEvent(new CustomEvent("daa:dashboard:refresh"));
+      await loadRuntimeData({ silent: true });
     } catch (e) {
       toast.error(getApiErrorMessageV1(e));
       throw e;
@@ -490,10 +561,22 @@ export default function DaaAssetsPageClient() {
 
   return (
     <div className="space-y-4">
-      <DaaUnifiedInputBootstrap />
       {header}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {dataError ? (
+        <Alert variant="destructive">
+          <AlertTitle>资产数据加载失败</AlertTitle>
+          <AlertDescription>{dataError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {dataLoading && !bootstrap ? <LoadingState /> : null}
+
+      {dataRefreshing ? <div className="text-xs text-muted-foreground">资产数据刷新中...</div> : null}
+
+      {bootstrap ? (
+        <>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader className="pb-1">
             <CardTitle className="text-sm">总权益</CardTitle>
@@ -520,18 +603,27 @@ export default function DaaAssetsPageClient() {
             {dayDelta == null ? "-" : `${dayDelta >= 0 ? "+" : ""}${formatCurrency(dayDelta, displayCurrency)}`}
           </CardContent>
         </Card>
-      </div>
+          </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+          {unresolvedFxCount > 0 ? (
+            <Alert variant="destructive">
+              <AlertTitle>汇率缺失提示</AlertTitle>
+              <AlertDescription>
+                有 {unresolvedFxCount} 个持仓缺少汇率，当前持仓市值与资产占比仅统计可换算资产。请到系统设置补齐 FX 快照。
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4" />资产流水图</CardTitle>
             <CardDescription>展示权益、持仓市值与现金的时间变化。</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={equityTrendRows} margin={{ left: 4, right: 8, top: 4, bottom: 0 }}>
+            <div ref={equityChartHostRef} className="h-[220px] w-full min-h-[220px] min-w-0">
+              {equityChartWidth > 0 ? (
+                <AreaChart width={equityChartWidth} height={220} data={equityTrendRows} margin={{ left: 4, right: 8, top: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="ts" fontSize={11} />
                   <YAxis fontSize={11} width={46} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
@@ -546,7 +638,9 @@ export default function DaaAssetsPageClient() {
                   <Area type="monotone" dataKey="holdings" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.1} strokeWidth={1.2} />
                   <Area type="monotone" dataKey="cash" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={1.2} />
                 </AreaChart>
-              </ResponsiveContainer>
+              ) : (
+                <Skeleton className="h-full w-full" />
+              )}
             </div>
           </CardContent>
         </Card>
@@ -559,9 +653,9 @@ export default function DaaAssetsPageClient() {
           <CardContent>
             {allocationRows.length ? (
               <div className="grid gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
+                <div ref={allocationChartHostRef} className="h-[220px] w-full min-h-[220px] min-w-0">
+                  {allocationChartWidth > 0 ? (
+                    <RechartsPieChart width={allocationChartWidth} height={220}>
                       <Pie data={allocationRows} dataKey="value" nameKey="name" innerRadius={52} outerRadius={82} paddingAngle={2}>
                         {allocationRows.map((entry) => (
                           <Cell key={`asset-slice-${entry.name}`} fill={entry.color} />
@@ -569,7 +663,9 @@ export default function DaaAssetsPageClient() {
                       </Pie>
                       <Tooltip formatter={(value) => formatCurrency(Number(value || 0), displayCurrency)} />
                     </RechartsPieChart>
-                  </ResponsiveContainer>
+                  ) : (
+                    <Skeleton className="h-full w-full" />
+                  )}
                 </div>
                 <div className="space-y-1.5 text-xs">
                   {allocationRows.map((row) => (
@@ -590,9 +686,9 @@ export default function DaaAssetsPageClient() {
             )}
           </CardContent>
         </Card>
-      </div>
+          </div>
 
-      <Card>
+          <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">资金流水（模拟）</CardTitle>
           <CardDescription>按交易所入金/出金逻辑记录，自动更新账户现金与权益快照。</CardDescription>
@@ -616,10 +712,10 @@ export default function DaaAssetsPageClient() {
               onSubmit={(input) => handleCashChange("withdraw", input)}
             />
             <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard/portfolio?tab=positions">持仓与候选</Link>
+              <Link href="/daa/dashboard/portfolio?view=holdings">交易工作台（持仓）</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href="/daa/dashboard/strategy-lab?tab=strategy">策略实验室</Link>
+              <Link href="/daa/dashboard/strategy-lab">策略实验室</Link>
             </Button>
           </div>
 
@@ -652,16 +748,18 @@ export default function DaaAssetsPageClient() {
             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">暂无资金流水，建议先记录一笔入金。</div>
           )}
         </CardContent>
-      </Card>
+          </Card>
 
-      <Card>
+          <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base"><DollarSign className="h-4 w-4" />资产运营说明</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           资产首页聚焦“资金、仓位、结构图表、执行入口”，减少流程跳转与冗余配置，方便按交易所节奏做记录与复盘。
         </CardContent>
-      </Card>
+          </Card>
+        </>
+      ) : null}
     </div>
   );
 }
