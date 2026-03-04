@@ -49,10 +49,6 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function pickBoolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
-}
-
 function pickArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item ?? "").trim()).filter(Boolean);
@@ -638,14 +634,6 @@ export function normalizeExecutionLogFiltersV1(input: {
   return { status, source, limit };
 }
 
-export function normalizeBasketSourceV1(value: unknown): "manual" | "decision" | "mixed" | "migration" {
-  const source = normalizeText(value).toLowerCase();
-  if (source === "decision") return "decision";
-  if (source === "mixed") return "mixed";
-  if (source === "migration") return "migration";
-  return "manual";
-}
-
 export function normalizeTradeSideV1(value: unknown): "BUY" | "SELL" | null {
   const side = normalizeText(value).toUpperCase();
   if (side === "BUY" || side === "SELL") return side;
@@ -654,10 +642,6 @@ export function normalizeTradeSideV1(value: unknown): "BUY" | "SELL" | null {
 
 export function normalizeReasonTagsV1(value: unknown): string[] {
   return pickArray(value).map((item) => item.toLowerCase());
-}
-
-export function normalizeManualFlagsV1(value: unknown): boolean {
-  return pickBoolean(value, false);
 }
 
 export function mapOpportunityActionLabelZhV1(action: string): string {
