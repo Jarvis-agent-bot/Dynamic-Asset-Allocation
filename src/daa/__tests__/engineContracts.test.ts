@@ -29,5 +29,29 @@ describe("daa/engineContracts", () => {
 
     expect(isRebalanceSimulateRequest({ money_plan: {}, signals: {} })).toBe(false);
     expect(isRebalanceSimulateRequest({ money_plan: {}, signals: [] })).toBe(true);
+    expect(
+      isRebalanceSimulateRequest({
+        money_plan: {},
+        signals: [{ symbol: "AAA", action: "buy", score: 0.8 }],
+      }),
+    ).toBe(true);
+    expect(
+      isRebalanceSimulateRequest({
+        money_plan: {},
+        signals: [{ symbol: "AAA", action: "", score: 0.8 }],
+      }),
+    ).toBe(false);
+    expect(
+      isRebalanceSimulateRequest({
+        money_plan: {},
+        signals: [{ symbol: "", action: "buy", score: 0.8 }],
+      }),
+    ).toBe(false);
+    expect(
+      isRebalanceSimulateRequest({
+        money_plan: {},
+        signals: [{ symbol: "AAA", action: "buy", score: Number.NaN }],
+      }),
+    ).toBe(false);
   });
 });

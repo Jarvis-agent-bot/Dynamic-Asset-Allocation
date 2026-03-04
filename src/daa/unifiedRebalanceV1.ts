@@ -330,12 +330,46 @@ type DaaAssetMetaV1 = {
   tags: string[];
 };
 
+function normalizeAssetKeyTargetWeights(targetWeights: Record<string, number>): Record<string, number> {
+  const normalized: Record<string, number> = {};
+  for (const [rawKey, rawWeight] of Object.entries(targetWeights ?? {})) {
+    const keyText = String(rawKey ?? "").trim().toUpperCase();
+    if (!keyText) {
+      throw new Error("targetWeights key must not be empty");
+    }
+
+    const weight = Number(rawWeight);
+    if (!Number.isFinite(weight)) {
+      throw new Error(`targetWeights[${keyText}] must be a finite number`);
+    }
+    if (weight < 0) {
+      throw new Error(`targetWeights[${keyText}] must be non-negative`);
+    }
+    if (weight === 0) continue;
+
+    const parsed = parseDaaAssetKeyV1(keyText);
+    if (!parsed) {
+      throw new Error(`targetWeights key ${keyText} is invalid, expected MARKET::SYMBOL`);
+    }
+    const assetKey = buildDaaAssetKeyV1(parsed.symbol, parsed.market);
+    if (!assetKey) {
+      throw new Error(`targetWeights key ${keyText} cannot be normalized`);
+    }
+
+    normalized[assetKey] = (normalized[assetKey] ?? 0) + weight;
+  }
+
+  return normalizeTargetWeights(normalized);
+}
+
 function buildSymbolTargetWeightMap(targetWeights: Record<string, number>): Record<string, number> {
   const map: Record<string, number> = {};
-  for (const [rawKey, weight] of Object.entries(normalizeTargetWeights(targetWeights))) {
+  for (const [rawKey, weight] of Object.entries(normalizeAssetKeyTargetWeights(targetWeights))) {
     const parsed = parseDaaAssetKeyV1(rawKey);
-    const symbol = parsed ? parsed.symbol : normalizeSymbol(rawKey);
-    if (!symbol) continue;
+    if (!parsed) {
+      throw new Error(`targetWeights key ${rawKey} is invalid, expected MARKET::SYMBOL`);
+    }
+    const symbol = parsed.symbol;
     map[symbol] = (map[symbol] ?? 0) + weight;
   }
   return normalizeTargetWeights(map);
@@ -350,6 +384,14 @@ export function isDaaUnifiedRequestV1(x: unknown): x is DaaUnifiedRequestV1 {
   if (x.analysts !== undefined && !Array.isArray(x.analysts)) return false;
   if (x.assetViews !== undefined && !Array.isArray(x.assetViews)) return false;
   if (x.humanSignals !== undefined && !Array.isArray(x.humanSignals)) return false;
+  const targetWeights = x.targetWeights as Record<string, unknown>;
+  for (const [rawKey, rawWeight] of Object.entries(targetWeights)) {
+    const keyText = String(rawKey ?? "").trim().toUpperCase();
+    if (!keyText) return false;
+    if (!parseDaaAssetKeyV1(keyText)) return false;
+    const weight = Number(rawWeight);
+    if (!Number.isFinite(weight) || weight < 0) return false;
+  }
   return true;
 }
 
@@ -486,63 +528,19 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     });
   }
 
-  const ambiguousTargetSymbols = new Set<string>();
-  const resolveAssetMetaBySymbol = (symbol: string): DaaAssetMetaV1 | null => {
-    const keys = [...(assetKeysBySymbol.get(symbol) ?? [])].sort();
-    if (keys.length === 0) {
-      const fallbackAssetKey = buildDaaAssetKeyV1(symbol, "US");
-      return {
-        assetKey: fallbackAssetKey,
-        symbol,
-        market: "US",
-        currency: baseCurrency,
-        tags: [],
-      };
-    }
-    if (keys.length > 1 && !ambiguousTargetSymbols.has(symbol)) {
-      warnings.push(`symbol ${symbol} 存在多市场资产，权重将按输入占比映射到各市场`);
-      ambiguousTargetSymbols.add(symbol);
-    }
-    const picked = assetMetaByKey.get(keys[0]);
-    if (picked) return picked;
-    const parsed = parseDaaAssetKeyV1(keys[0]);
-    return {
-      assetKey: keys[0],
-      symbol,
-      market: parsed?.market ?? "US",
+  const inputTargetWeightsByAssetKey = normalizeAssetKeyTargetWeights(req.targetWeights ?? {});
+  for (const assetKey of Object.keys(inputTargetWeightsByAssetKey)) {
+    if (assetMetaByKey.has(assetKey)) continue;
+    const parsedAssetKey = parseDaaAssetKeyV1(assetKey);
+    if (!parsedAssetKey) continue;
+    appendAssetMeta({
+      assetKey,
+      symbol: parsedAssetKey.symbol,
+      market: parsedAssetKey.market,
       currency: baseCurrency,
       tags: [],
-    };
-  };
-
-  const inputTargetWeights = normalizeTargetWeights(req.targetWeights ?? {});
-  const inputTargetWeightsByAssetKeyRaw: Record<string, number> = {};
-  for (const [rawKey, weight] of Object.entries(inputTargetWeights)) {
-    if (!(weight > 0)) continue;
-    const parsedAssetKey = parseDaaAssetKeyV1(rawKey);
-    if (parsedAssetKey) {
-      const assetKey = buildDaaAssetKeyV1(parsedAssetKey.symbol, parsedAssetKey.market);
-      if (!assetKey) continue;
-      inputTargetWeightsByAssetKeyRaw[assetKey] = (inputTargetWeightsByAssetKeyRaw[assetKey] ?? 0) + weight;
-      if (!assetMetaByKey.has(assetKey)) {
-        appendAssetMeta({
-          assetKey,
-          symbol: parsedAssetKey.symbol,
-          market: parsedAssetKey.market,
-          currency: baseCurrency,
-          tags: [],
-        });
-      }
-      continue;
-    }
-    const symbol = normalizeSymbol(rawKey);
-    if (!symbol) continue;
-    const meta = resolveAssetMetaBySymbol(symbol);
-    if (!meta) continue;
-    inputTargetWeightsByAssetKeyRaw[meta.assetKey] = (inputTargetWeightsByAssetKeyRaw[meta.assetKey] ?? 0) + weight;
+    });
   }
-
-  const inputTargetWeightsByAssetKey = normalizeTargetWeights(inputTargetWeightsByAssetKeyRaw);
   const targetWeights = buildSymbolTargetWeightMap(inputTargetWeightsByAssetKey);
 
   const fxCoveragePct = fxNeededCount > 0 ? fxResolvedCount / fxNeededCount : 1;
@@ -841,16 +839,17 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
   for (const order of core.orders) {
     const rawAssetKey = normalizeSymbol(order.assetKey || order.symbol);
     const parsedOrderKey = parseDaaAssetKeyV1(rawAssetKey);
-    const fallbackSymbol = parsedOrderKey?.symbol ?? normalizeSymbol(order.symbol);
-    const fallbackMarket = parsedOrderKey?.market ?? normalizeDaaMarketV1(order.market, "US");
-    const fallbackAssetKey = buildDaaAssetKeyV1(fallbackSymbol, fallbackMarket);
-    const resolvedMeta = assetMetaByKey.get(fallbackAssetKey) ?? {
-      assetKey: fallbackAssetKey,
-      symbol: fallbackSymbol,
-      market: fallbackMarket,
-      currency: normalizeCcyCode(order.instrumentCurrency, baseCurrency),
-      tags: positionByAssetKey.get(fallbackAssetKey)?.tags ?? [],
-    };
+    if (!parsedOrderKey) {
+      throw new Error(`order assetKey is invalid: ${rawAssetKey}`);
+    }
+    const normalizedAssetKey = buildDaaAssetKeyV1(parsedOrderKey.symbol, parsedOrderKey.market);
+    if (!normalizedAssetKey) {
+      throw new Error(`order assetKey cannot be normalized: ${rawAssetKey}`);
+    }
+    const resolvedMeta = assetMetaByKey.get(normalizedAssetKey);
+    if (!resolvedMeta) {
+      throw new Error(`missing asset metadata for order assetKey: ${normalizedAssetKey}`);
+    }
     const symbol = resolvedMeta.symbol;
     const normalizedInstrumentCurrency = normalizeCcyCode(order.instrumentCurrency, resolvedMeta.currency);
     const orderPayload = {
@@ -978,10 +977,10 @@ export const DAA_UNIFIED_SAMPLE_REQUEST_V1: DaaUnifiedRequestV1 = {
     maxTotalRiskExposurePct: 0.7,
   },
   targetWeights: {
-    SPY: 0.4,
-    QQQ: 0.25,
-    BND: 0.2,
-    TSLA: 0.15,
+    "US::SPY": 0.4,
+    "US::QQQ": 0.25,
+    "US::BND": 0.2,
+    "US::TSLA": 0.15,
   },
   positions: [
     { symbol: "SPY", market: "US", currency: "USD", qty: 40, price: 545, costBasis: 520, tags: ["mid"] },

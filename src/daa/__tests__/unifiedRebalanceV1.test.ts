@@ -18,8 +18,8 @@ function baseRequest(): DaaUnifiedRequestV1 {
       riskOffScalePct: 0.7,
     },
     targetWeights: {
-      AAA: 0.6,
-      BBB: 0.4,
+      "US::AAA": 0.6,
+      "US::BBB": 0.4,
     },
     positions: [
       { symbol: "AAA", qty: 5, price: 100, tags: ["high"] },
@@ -71,7 +71,7 @@ describe("unified-rebalance-v1", () => {
     const req = baseRequest();
     req.account = { cash: 12000 };
     req.positions = [{ symbol: "AAA", qty: 0, price: 100, tags: ["high"] }];
-    req.targetWeights = { AAA: 1 };
+    req.targetWeights = { "US::AAA": 1 };
     req.assetViews = [{ symbol: "AAA", analystId: "a1", convictionPct: 90, thesisDriftPct: 1, momentumRegime: "strong" }];
 
     const result = buildDaaUnifiedPlanV1(req);
@@ -114,7 +114,7 @@ describe("unified-rebalance-v1", () => {
       investableCash: 0,
       frozenCash: 100,
     };
-    req.targetWeights = { AAA: 1 };
+    req.targetWeights = { "US::AAA": 1 };
     req.positions = [{ symbol: "AAA", qty: 0, price: 100, tags: ["mid"] }];
     req.analysts = [];
     req.assetViews = [];
@@ -139,7 +139,7 @@ describe("unified-rebalance-v1", () => {
       correlationCapPct: 1,
       maxTotalRiskExposurePct: 1,
     };
-    req.targetWeights = { USX: 1 };
+    req.targetWeights = { "US::USX": 1 };
     req.positions = [
       {
         symbol: "USX",
@@ -175,7 +175,7 @@ describe("unified-rebalance-v1", () => {
       cash: 1200,
       investableCash: 1200,
     };
-    req.targetWeights = { "0700.HK": 1 };
+    req.targetWeights = { "HK::0700.HK": 1 };
     req.positions = [
       {
         symbol: "0700.HK",
@@ -202,5 +202,12 @@ describe("unified-rebalance-v1", () => {
     const blocked = result.blockedOrders.find((item) => item.symbol === "0700.HK" && item.side === "BUY");
 
     expect(blocked?.blockedBy).toBe("fx_guardrail");
+  });
+
+  it("symbol 级 targetWeights 会抛错（必须使用 assetKey）", () => {
+    const req = baseRequest();
+    req.targetWeights = { AAA: 1 };
+
+    expect(() => buildDaaUnifiedPlanV1(req)).toThrow(/MARKET::SYMBOL/);
   });
 });

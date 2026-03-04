@@ -47,8 +47,6 @@ import {
 } from "@/src/daa/config/systemConfigV2";
 import {
   buildDaaAssetKeyV1,
-  normalizeDaaMarketV1,
-  normalizeDaaSymbolV1,
   parseDaaAssetKeyV1,
 } from "@/src/daa/assetKeyV1";
 
@@ -758,66 +756,32 @@ export function toUserErrorMessage(error: unknown): string {
 
 function buildUnifiedTargetWeightsV1(
   configTargetWeights: Record<string, number>,
-  candidateAssets: DaaCandidateAssetRow[],
 ): Record<string, number> {
   const weights: Record<string, number> = {};
-  const candidatesBySymbol = new Map<string, Array<{ assetKey: string; hint: number }>>();
-
-  for (const candidate of candidateAssets) {
-    const symbol = normalizeDaaSymbolV1(candidate.symbol);
-    if (!symbol) continue;
-    const market = normalizeDaaMarketV1(candidate.market, "US");
-    const assetKey = buildDaaAssetKeyV1(symbol, market);
-    if (!assetKey) continue;
-    const hintRaw = Number(candidate.targetWeightHint);
-    const hint = Number.isFinite(hintRaw) && hintRaw > 0 ? hintRaw : 0;
-    const list = candidatesBySymbol.get(symbol) ?? [];
-    const existed = list.find((item) => item.assetKey === assetKey);
-    if (existed) {
-      existed.hint = Math.max(existed.hint, hint);
-    } else {
-      list.push({ assetKey, hint });
-    }
-    candidatesBySymbol.set(symbol, list);
-  }
 
   for (const [rawKey, rawValue] of Object.entries(configTargetWeights ?? {})) {
     const value = Number(rawValue);
-    if (!Number.isFinite(value) || value <= 0) continue;
     const keyText = String(rawKey || "").trim().toUpperCase();
-    if (!keyText) continue;
+    if (!keyText) {
+      throw new Error("目标权重键不能为空，请使用 assetKey（如 US::SPY）");
+    }
+    if (!Number.isFinite(value)) {
+      throw new Error(`目标权重 ${keyText} 必须是有限数字`);
+    }
+    if (value < 0) {
+      throw new Error(`目标权重 ${keyText} 不能为负数`);
+    }
+    if (value === 0) continue;
 
     const parsedAssetKey = parseDaaAssetKeyV1(keyText);
-    if (parsedAssetKey) {
-      const assetKey = buildDaaAssetKeyV1(parsedAssetKey.symbol, parsedAssetKey.market);
-      if (!assetKey) continue;
-      weights[assetKey] = (weights[assetKey] ?? 0) + value;
-      continue;
+    if (!parsedAssetKey) {
+      throw new Error(`目标权重键 ${keyText} 不是合法 assetKey，请改为 MARKET::SYMBOL`);
     }
-
-    const symbol = normalizeDaaSymbolV1(keyText);
-    if (!symbol) continue;
-    const symbolCandidates = candidatesBySymbol.get(symbol) ?? [];
-    if (symbolCandidates.length === 1) {
-      const [candidate] = symbolCandidates;
-      weights[candidate.assetKey] = (weights[candidate.assetKey] ?? 0) + value;
-      continue;
+    const assetKey = buildDaaAssetKeyV1(parsedAssetKey.symbol, parsedAssetKey.market);
+    if (!assetKey) {
+      throw new Error(`目标权重键 ${keyText} 无法规范化为 assetKey`);
     }
-    if (symbolCandidates.length > 1) {
-      const hintedCandidates = symbolCandidates.filter((item) => item.hint > 0);
-      const hintedSum = hintedCandidates.reduce((sum, item) => sum + item.hint, 0);
-      if (hintedSum > 0) {
-        for (const candidate of hintedCandidates) {
-          const allocated = value * (candidate.hint / hintedSum);
-          if (allocated <= 0) continue;
-          weights[candidate.assetKey] = (weights[candidate.assetKey] ?? 0) + allocated;
-        }
-        continue;
-      }
-    }
-
-    // 无法安全判定市场时保留 symbol 键，交由统一引擎做兜底映射并给出告警。
-    weights[symbol] = (weights[symbol] ?? 0) + value;
+    weights[assetKey] = (weights[assetKey] ?? 0) + value;
   }
 
   return weights;
@@ -840,7 +804,6 @@ export function buildUnifiedRequest(
     ? Math.max(0, Math.min(cash, investableRaw))
     : Math.max(0, cash - frozenCash);
 
-  // analysts/assetViews 为兼容输入，主流程人因信号由基金池采集链路注入。
   return {
     account: {
       baseCurrency: config.account.baseCurrency || "USD",
@@ -863,7 +826,7 @@ export function buildUnifiedRequest(
       valueTrapThesisDriftPct: config.policy.valueTrapThesisDriftPct,
       sbIsolationScorePct: config.policy.sbIsolationScorePct,
     },
-    targetWeights: buildUnifiedTargetWeightsV1(config.targetWeights, candidateAssets),
+    targetWeights: buildUnifiedTargetWeightsV1(config.targetWeights),
     positions: positions.map((p) => ({
       symbol: p.symbol,
       market: p.market,

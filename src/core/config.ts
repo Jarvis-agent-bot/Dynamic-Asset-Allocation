@@ -15,9 +15,6 @@ export const DEFAULT_ENSEMBLE_WEIGHTS: Record<string, number> = {
 
 /**
  * Throw if any weight is negative (DAA contract).
- *
- * We intentionally validate separately from normalizeWeights(), which still clamps
- * negatives for backward-compatibility / callers that want forgiving behavior.
  */
 export function assertNonNegativeWeights(weights: Record<string, number> = {}): void {
   for (const [k, raw] of Object.entries(weights)) {
@@ -29,11 +26,13 @@ export function assertNonNegativeWeights(weights: Record<string, number> = {}): 
 
 /** Normalize weights into a new object. */
 export function normalizeWeights(weights: Record<string, number> = {}): Record<string, number> {
+  assertNonNegativeWeights(weights);
   const entries: Array<[string, number]> = Object.entries(weights).map(([k, raw]) => {
     const n = Number(raw);
-    // Forgiving behavior: treat NaN/Infinity as 0, and clamp negatives to 0.
-    const v = Number.isFinite(n) ? Math.max(0, n) : 0;
-    return [k, v];
+    if (!Number.isFinite(n)) {
+      throw new Error(`Weight for ${k} must be a finite number`);
+    }
+    return [k, n];
   });
   const sum = entries.reduce((acc, [, v]) => acc + v, 0);
   if (sum <= 0) return Object.fromEntries(entries.map(([k]) => [k, 0]));

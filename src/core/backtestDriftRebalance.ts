@@ -44,11 +44,10 @@ export type DriftRebalanceBacktestRequest = {
 
   /**
    * Execution assumptions for order fills.
-   * - same_bar_close: legacy behavior (signal and fill on same bar close)
    * - t_plus_1_close: signal on day D close, fill on D+1 close
    */
   execution?: {
-    timing?: "same_bar_close" | "t_plus_1_close";
+    timing?: "t_plus_1_close";
     feeRatePct?: number;
     slippageBps?: number;
   };
@@ -65,7 +64,7 @@ export type DriftRebalanceBacktestEvent = {
   date: string;
   kind: "init" | "rebalance";
   signalDate?: string;
-  executionTiming?: "same_bar_close" | "t_plus_1_close";
+  executionTiming?: "t_plus_1_close";
   trigger: RebalanceTriggerDecision;
   orders: SuggestedOrder[];
   executed: SuggestedOrder[];
@@ -313,8 +312,11 @@ function executeOrders(opts: {
 
 function normalizeExecutionConfig(
   input: DriftRebalanceBacktestRequest["execution"] | undefined,
-): { timing: "same_bar_close" | "t_plus_1_close"; feeRatePct: number; slippageBps: number } {
-  const timing = input?.timing === "t_plus_1_close" ? "t_plus_1_close" : "same_bar_close";
+): { timing: "t_plus_1_close"; feeRatePct: number; slippageBps: number } {
+  if (input?.timing && input.timing !== "t_plus_1_close") {
+    throw new Error(`unsupported execution timing: ${String(input.timing)}`);
+  }
+  const timing: "t_plus_1_close" = "t_plus_1_close";
   const feeRatePct = Math.max(0, toFiniteNumber(input?.feeRatePct, 0));
   const slippageBps = Math.max(0, toFiniteNumber(input?.slippageBps, 0));
   return { timing, feeRatePct, slippageBps };
@@ -421,7 +423,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     events.push({
       date: dates[0],
       signalDate: dates[0],
-      executionTiming: "same_bar_close",
+      executionTiming: execution.timing,
       kind: "init",
       trigger: res.trigger,
       orders: res.orders,
@@ -453,7 +455,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     const px = buildPricesAtIndex(req.seriesBySymbol, i, warnings);
     const now = isoToIsoDateTime(dates[i]);
 
-    if (execution.timing === "t_plus_1_close" && pendingFill?.orders?.length) {
+    if (pendingFill?.orders?.length) {
       const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
       const ex = executeOrders({
         holdings,
@@ -522,50 +524,14 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     }
 
     if (res.trigger.shouldRebalance) {
-      if (execution.timing === "t_plus_1_close") {
-        if (i >= dates.length - 1) {
-          warnings.push(`warning: rebalance signal on ${dates[i]} skipped because no next bar for T+1 execution`);
-        } else {
-          pendingFill = {
-            signalDate: dates[i],
-            trigger: res.trigger,
-            orders: res.orders,
-          };
-        }
+      if (i >= dates.length - 1) {
+        warnings.push(`warning: rebalance signal on ${dates[i]} skipped because no next bar for T+1 execution`);
       } else {
-        const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
-        const ex = executeOrders({
-          holdings,
-          cash,
-          prices: px,
-          orders: res.orders,
-          feeRatePct: execution.feeRatePct,
-          slippageBps: execution.slippageBps,
-          warnings,
-        });
-        const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
-
-        holdings = ex.holdings;
-        cash = ex.cash;
-        turnoverNotional += ex.turnoverNotional;
-        totalFeesAbs += ex.feeNotional;
-        rebalanceCount += 1;
-
-        events.push({
-          date: dates[i],
+        pendingFill = {
           signalDate: dates[i],
-          executionTiming: execution.timing,
-          kind: "rebalance",
           trigger: res.trigger,
           orders: res.orders,
-          executed: ex.executed,
-          turnoverNotional: ex.turnoverNotional,
-          feeNotional: ex.feeNotional,
-          before,
-          after,
-        });
-
-        lastRebalanceAt = now;
+        };
       }
     }
   }

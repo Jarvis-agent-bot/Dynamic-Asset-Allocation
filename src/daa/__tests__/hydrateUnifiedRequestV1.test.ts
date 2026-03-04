@@ -123,7 +123,7 @@ describe("hydrate-unified-request-v1", () => {
     expect(position?.price).toBe(123.45);
   });
 
-  it("symbol 级目标权重在多市场同代码下会按候选 hint 分摊到 assetKey", async () => {
+  it("symbol 级目标权重会被严格拒绝（必须使用 assetKey）", async () => {
     vi.mocked(buildOpportunityPanelV1).mockResolvedValueOnce(mockPanel("700", 10));
 
     const request: DaaUnifiedRequestV1 = {
@@ -153,16 +153,7 @@ describe("hydrate-unified-request-v1", () => {
       ],
     };
 
-    const result = await hydrateUnifiedRequestWithSignalsV1(request);
-
-    expect(result.request.targetWeights["HK::700"]).toBeCloseTo(0.08, 6);
-    expect(result.request.targetWeights["CN::700"]).toBeCloseTo(0.12, 6);
-
-    const positions = result.request.positions.filter((item) => item.symbol === "700");
-    const marketSet = new Set(positions.map((item) => item.market));
-    expect(marketSet.has("HK")).toBe(true);
-    expect(marketSet.has("CN")).toBe(true);
-    expect(positions.every((item) => item.price > 0)).toBe(true);
+    await expect(hydrateUnifiedRequestWithSignalsV1(request)).rejects.toThrow(/MARKET::SYMBOL/);
   });
 
   it("当传入 humanSignals 时保留用户输入并补齐默认信号", async () => {
@@ -172,7 +163,7 @@ describe("hydrate-unified-request-v1", () => {
         cash: 800,
         investableCash: 0,
       },
-      targetWeights: { AAA: 1 },
+      targetWeights: { "US::AAA": 1 },
       positions: [],
       humanSignals: [
         {

@@ -129,21 +129,6 @@ function normalizePosition(position: Partial<DaaUnifiedPositionV1>): DaaUnifiedP
   };
 }
 
-function inferMarketBySymbol(symbol: string): string {
-  const normalized = normalizeSymbol(symbol);
-  if (normalized.endsWith(".HK")) return "HK";
-  if (normalized.endsWith(".SS") || normalized.endsWith(".SZ")) return "CN";
-  if (normalized.includes("-USD")) return "CRYPTO";
-  return "US";
-}
-
-function inferCurrencyByMarket(market: string): string {
-  const normalized = String(market || "").trim().toUpperCase();
-  if (normalized === "HK") return "HKD";
-  if (normalized === "CN") return "CNY";
-  return "USD";
-}
-
 function buildTechPriceMap(signals: DaaTechnicalSignalV1[]): Map<string, number> {
   const map = new Map<string, number>();
   for (const signal of signals) {
@@ -196,79 +181,34 @@ function buildCandidateAssetIndex(candidates: DaaUnifiedCandidateAssetV1[]): {
   return { byAssetKey, assetKeysBySymbol };
 }
 
-function buildPositionAssetKeysBySymbol(positions: DaaUnifiedPositionV1[] | undefined): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  for (const raw of positions ?? []) {
-    const normalized = normalizePosition(raw);
-    if (!normalized) continue;
-    const assetKey = buildDaaAssetKeyV1(normalized.symbol, normalized.market || "US");
-    if (!assetKey) continue;
-    const list = out.get(normalized.symbol) ?? [];
-    if (!list.includes(assetKey)) list.push(assetKey);
-    out.set(normalized.symbol, list);
-  }
-  return out;
-}
-
 function normalizeTargetWeightsToAssetKeys(input: {
   targetWeights: Record<string, number>;
-  candidates: DaaUnifiedCandidateAssetV1[];
-  positions: DaaUnifiedPositionV1[] | undefined;
 }): Record<string, number> {
   const out: Record<string, number> = {};
-  const candidateIndex = buildCandidateAssetIndex(input.candidates);
-  const positionAssetKeysBySymbol = buildPositionAssetKeysBySymbol(input.positions);
 
   for (const [rawKey, rawWeight] of Object.entries(input.targetWeights || {})) {
     const weight = Number(rawWeight);
-    if (!Number.isFinite(weight) || weight <= 0) continue;
-
     const keyText = String(rawKey || "").trim().toUpperCase();
-    if (!keyText) continue;
+    if (!keyText) {
+      throw new Error("targetWeights key must not be empty");
+    }
+    if (!Number.isFinite(weight)) {
+      throw new Error(`targetWeights[${keyText}] must be a finite number`);
+    }
+    if (weight < 0) {
+      throw new Error(`targetWeights[${keyText}] must be non-negative`);
+    }
+    if (weight === 0) continue;
 
     const parsed = parseDaaAssetKeyV1(keyText);
-    if (parsed) {
-      const assetKey = buildDaaAssetKeyV1(parsed.symbol, parsed.market);
-      if (!assetKey) continue;
-      out[assetKey] = (out[assetKey] ?? 0) + weight;
-      continue;
+    if (!parsed) {
+      throw new Error(`targetWeights key ${keyText} is invalid, expected MARKET::SYMBOL`);
     }
-
-    const symbol = normalizeSymbol(keyText);
-    if (!symbol) continue;
-
-    const candidateKeys = candidateIndex.assetKeysBySymbol.get(symbol) ?? [];
-    const positionKeys = positionAssetKeysBySymbol.get(symbol) ?? [];
-    const keys = [...new Set([...candidateKeys, ...positionKeys])];
-
-    if (keys.length <= 0) {
-      const fallbackAssetKey = buildDaaAssetKeyV1(symbol, inferMarketBySymbol(symbol));
-      if (!fallbackAssetKey) continue;
-      out[fallbackAssetKey] = (out[fallbackAssetKey] ?? 0) + weight;
-      continue;
+    const assetKey = buildDaaAssetKeyV1(parsed.symbol, parsed.market);
+    if (!assetKey) {
+      throw new Error(`targetWeights key ${keyText} cannot be normalized`);
     }
-
-    if (keys.length === 1) {
-      out[keys[0]] = (out[keys[0]] ?? 0) + weight;
-      continue;
-    }
-
-    const hinted = keys
-      .map((assetKey) => ({ assetKey, hint: candidateIndex.byAssetKey.get(assetKey)?.targetWeightHint ?? 0 }))
-      .filter((item) => item.hint > 0);
-    const hintedSum = hinted.reduce((acc, item) => acc + item.hint, 0);
-
-    if (hintedSum > 0) {
-      for (const item of hinted) {
-        out[item.assetKey] = (out[item.assetKey] ?? 0) + (weight * (item.hint / hintedSum));
-      }
-      continue;
-    }
-
-    const each = weight / keys.length;
-    for (const assetKey of keys) {
-      out[assetKey] = (out[assetKey] ?? 0) + each;
-    }
+    out[assetKey] = (out[assetKey] ?? 0) + weight;
   }
 
   return normalizeWeightMap(out);
@@ -280,8 +220,10 @@ function buildSymbolWeightMap(weights: Record<string, number>): Map<string, numb
     const weight = Number(rawWeight);
     if (!Number.isFinite(weight) || weight <= 0) continue;
     const parsed = parseDaaAssetKeyV1(rawKey);
-    const symbol = parsed ? parsed.symbol : normalizeSymbol(rawKey);
-    if (!symbol) continue;
+    if (!parsed) {
+      throw new Error(`targetWeights key ${String(rawKey)} is invalid, expected MARKET::SYMBOL`);
+    }
+    const symbol = parsed.symbol;
     out.set(symbol, (out.get(symbol) ?? 0) + weight);
   }
   return out;
@@ -335,7 +277,6 @@ function enrichPositionsWithSignals(
 ): DaaUnifiedPositionV1[] {
   const out = new Map<string, DaaUnifiedPositionV1>();
   const candidateIndex = buildCandidateAssetIndex(candidates);
-  const positionAssetKeysBySymbol = new Map<string, string[]>();
   const techPriceMap = buildTechPriceMap(technicalSignals);
 
   for (const raw of positions ?? []) {
@@ -344,33 +285,27 @@ function enrichPositionsWithSignals(
     const assetKey = buildDaaAssetKeyV1(normalized.symbol, normalized.market || "US");
     if (!assetKey) continue;
     out.set(assetKey, normalized);
-
-    const list = positionAssetKeysBySymbol.get(normalized.symbol) ?? [];
-    if (!list.includes(assetKey)) list.push(assetKey);
-    positionAssetKeysBySymbol.set(normalized.symbol, list);
   }
 
   for (const rawKey of Object.keys(targetWeights ?? {})) {
     const parsed = parseDaaAssetKeyV1(rawKey);
-    const symbol = parsed ? parsed.symbol : normalizeSymbol(rawKey);
-    if (!symbol) continue;
+    if (!parsed) {
+      throw new Error(`targetWeights key ${rawKey} is invalid, expected MARKET::SYMBOL`);
+    }
+    const symbol = parsed.symbol;
 
     const signalPrice = techPriceMap.get(symbol);
     if (!(signalPrice && signalPrice > 0)) continue;
 
-    const explicitAssetKey = parsed ? buildDaaAssetKeyV1(parsed.symbol, parsed.market) : "";
-    const candidateKeys = candidateIndex.assetKeysBySymbol.get(symbol) ?? [];
-    const positionKeys = positionAssetKeysBySymbol.get(symbol) ?? [];
-    const fallbackKey = buildDaaAssetKeyV1(symbol, inferMarketBySymbol(symbol));
-    const targetAssetKeys = explicitAssetKey
-      ? [explicitAssetKey]
-      : [...new Set([...candidateKeys, ...positionKeys, ...(fallbackKey ? [fallbackKey] : [])])];
+    const explicitAssetKey = buildDaaAssetKeyV1(parsed.symbol, parsed.market);
+    if (!explicitAssetKey) continue;
+    const targetAssetKeys = [explicitAssetKey];
 
     for (const assetKey of targetAssetKeys) {
       const existing = out.get(assetKey);
       const candidate = candidateIndex.byAssetKey.get(assetKey);
-      const market = parsed?.market || existing?.market || candidate?.market || inferMarketBySymbol(symbol);
-      const currency = existing?.currency || candidate?.currency || inferCurrencyByMarket(market);
+      const market = parsed.market || existing?.market || candidate?.market || "US";
+      const currency = existing?.currency || candidate?.currency || "USD";
 
       if (existing) {
         if (existing.price > 0) continue;
@@ -527,16 +462,12 @@ function withCandidateTargetWeights(
     const hint = deriveTargetHint(firstCandidate?.targetWeightHint, opportunity.finalScorePct);
     const allocation = Math.min(headroom, hint);
     if (allocation <= 1e-9) continue;
-
-    const fallbackAssetKey = buildDaaAssetKeyV1(symbol, inferMarketBySymbol(symbol));
-    const targetAssetKeys = candidateKeys.length > 0
-      ? candidateKeys
-      : (fallbackAssetKey ? [fallbackAssetKey] : []);
+    if (candidateKeys.length <= 0) continue;
 
     allocateWeightToAssetKeys({
       nextWeights: next,
       totalWeight: allocation,
-      assetKeys: targetAssetKeys,
+      assetKeys: candidateKeys,
       candidateByAssetKey: candidateIndex.byAssetKey,
       addedTargets,
     });
@@ -553,14 +484,11 @@ function withCandidateTargetWeights(
         const symbol = normalizeSymbol(item.symbol);
         if (!symbol) continue;
         const candidateKeys = candidateIndex.assetKeysBySymbol.get(symbol) ?? [];
-        const fallbackAssetKey = buildDaaAssetKeyV1(symbol, inferMarketBySymbol(symbol));
-        const targetAssetKeys = candidateKeys.length > 0
-          ? candidateKeys
-          : (fallbackAssetKey ? [fallbackAssetKey] : []);
+        if (candidateKeys.length <= 0) continue;
         allocateWeightToAssetKeys({
           nextWeights: next,
           totalWeight: each,
-          assetKeys: targetAssetKeys,
+          assetKeys: candidateKeys,
           candidateByAssetKey: candidateIndex.byAssetKey,
           addedTargets,
         });
@@ -580,15 +508,15 @@ export async function hydrateUnifiedRequestWithSignalsV1(request: DaaUnifiedRequ
   const mergedCandidates = mergeCandidateAssets(request.candidateAssets, persistedCandidates);
   const normalizedTargetWeights = normalizeTargetWeightsToAssetKeys({
     targetWeights: request.targetWeights ?? {},
-    candidates: mergedCandidates,
-    positions: request.positions,
   });
 
   const symbols = new Set<string>();
   for (const rawKey of Object.keys(normalizedTargetWeights ?? {})) {
     const parsed = parseDaaAssetKeyV1(rawKey);
-    const symbol = parsed ? parsed.symbol : normalizeSymbol(rawKey);
-    if (symbol) symbols.add(symbol);
+    if (!parsed) {
+      throw new Error(`targetWeights key ${rawKey} is invalid, expected MARKET::SYMBOL`);
+    }
+    symbols.add(parsed.symbol);
   }
   for (const position of request.positions ?? []) {
     const key = normalizeSymbol(position.symbol);

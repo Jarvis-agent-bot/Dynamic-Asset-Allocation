@@ -65,7 +65,7 @@ type StrategyLabState = {
   rangeLabel: string;
 };
 
-type BacktestExecutionTiming = "same_bar_close" | "t_plus_1_close";
+type BacktestExecutionTiming = "t_plus_1_close";
 
 type BacktestDataDiagnostics = {
   source: string;
@@ -658,10 +658,9 @@ export default function BacktestOptimizationPanel() {
               <select
                 className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
                 value={executionTiming}
-                onChange={(e) => setExecutionTiming((e.target.value as BacktestExecutionTiming) || DEFAULT_EXECUTION_TIMING_V1)}
+                onChange={() => setExecutionTiming(DEFAULT_EXECUTION_TIMING_V1)}
               >
                 <option value="t_plus_1_close">T+1（D 日信号，D+1 收盘成交）</option>
-                <option value="same_bar_close">同 Bar（D 日收盘信号并成交）</option>
               </select>
             </div>
             <div className="space-y-1">
@@ -833,7 +832,7 @@ export default function BacktestOptimizationPanel() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                  <div>成交模型：{bt.dataDiagnostics.executionTiming === "t_plus_1_close" ? "T+1" : "同 Bar"}</div>
+                  <div>成交模型：T+1</div>
                   <div>手续费：{bt.dataDiagnostics.feeBps.toFixed(2)} bps</div>
                   <div>滑点：{bt.dataDiagnostics.slippageBps.toFixed(2)} bps</div>
                   <div>对齐策略：{bt.dataDiagnostics.alignmentMode === "ffill_union" ? "并集 + 前值填充" : "严格交集"}</div>

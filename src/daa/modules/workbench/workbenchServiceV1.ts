@@ -87,50 +87,34 @@ function buildTargetWeightsFromConfigV1(input: {
   const out: Record<string, number> = {};
   const watchRows = input.assetRows.filter((row) => row.watchEnabled);
 
-  const keysBySymbol = new Map<string, Array<{ assetKey: string; hint: number }>>();
-  for (const row of watchRows) {
-    const symbol = normalizeDaaSymbolV1(row.symbol);
-    if (!symbol || !row.assetKey) continue;
-    const list = keysBySymbol.get(symbol) ?? [];
-    list.push({ assetKey: row.assetKey, hint: toPositive(row.targetWeightHint, 0) });
-    keysBySymbol.set(symbol, list);
-  }
-
   for (const [rawKey, rawValue] of Object.entries(input.targetWeightsRaw || {})) {
-    const weight = toPositive(rawValue, 0);
-    if (weight <= 0) continue;
+    const weight = Number(rawValue);
     const keyText = normalizeText(rawKey).toUpperCase();
-    if (!keyText) continue;
+    if (!keyText) {
+      throw new Error("targetWeights key must not be empty");
+    }
+    if (!Number.isFinite(weight)) {
+      throw new Error(`targetWeights[${keyText}] must be a finite number`);
+    }
+    if (weight < 0) {
+      throw new Error(`targetWeights[${keyText}] must be non-negative`);
+    }
+    if (weight === 0) continue;
 
     const parsedAssetKey = parseDaaAssetKeyV1(keyText);
-    if (parsedAssetKey) {
-      out[keyText] = (out[keyText] ?? 0) + weight;
-      continue;
+    if (!parsedAssetKey) {
+      throw new Error(`targetWeights key ${keyText} is invalid, expected MARKET::SYMBOL`);
     }
-
-    const symbol = normalizeDaaSymbolV1(keyText);
-    const matches = keysBySymbol.get(symbol) ?? [];
-    if (matches.length === 1) {
-      out[matches[0].assetKey] = (out[matches[0].assetKey] ?? 0) + weight;
-      continue;
-    }
-    if (matches.length > 1) {
-      const hinted = matches.filter((item) => item.hint > 0);
-      const hintedSum = hinted.reduce((sum, item) => sum + item.hint, 0);
-      if (hintedSum > 0) {
-        for (const item of hinted) {
-          const allocated = weight * (item.hint / hintedSum);
-          if (allocated <= 0) continue;
-          out[item.assetKey] = (out[item.assetKey] ?? 0) + allocated;
-        }
-        continue;
-      }
-    }
-
-    out[symbol] = (out[symbol] ?? 0) + weight;
+    const assetKey = `${parsedAssetKey.market}::${parsedAssetKey.symbol}`;
+    out[assetKey] = (out[assetKey] ?? 0) + weight;
   }
 
   for (const row of watchRows) {
+    if (!row.assetKey) continue;
+    const parsedAssetKey = parseDaaAssetKeyV1(row.assetKey);
+    if (!parsedAssetKey) {
+      throw new Error(`asset universe row has invalid assetKey: ${row.assetKey}`);
+    }
     if (!(row.targetWeightHint > 0)) continue;
     if (out[row.assetKey] == null) {
       out[row.assetKey] = row.targetWeightHint;
@@ -635,12 +619,6 @@ export async function runWorkbenchRecommendationsV1(input: {
   };
 }
 
-export async function runWorkbenchDecisionV1(input: {
-  analysisFocus?: string;
-}): Promise<WorkbenchRecommendationsResultV1> {
-  return runWorkbenchRecommendationsV1(input);
-}
-
 export function normalizeExecutionLogFiltersV1(input: {
   status?: unknown;
   source?: unknown;
@@ -658,14 +636,6 @@ export function normalizeExecutionLogFiltersV1(input: {
   const limit = Math.max(1, Math.min(500, limitRaw || 200));
 
   return { status, source, limit };
-}
-
-export function normalizeReceiptFiltersV1(input: {
-  status?: unknown;
-  source?: unknown;
-  limit?: unknown;
-}): { status?: "ready" | "executed" | "canceled" | "rejected"; source?: "manual" | "decision"; limit: number } {
-  return normalizeExecutionLogFiltersV1(input);
 }
 
 export function normalizeBasketSourceV1(value: unknown): "manual" | "decision" | "mixed" | "migration" {
