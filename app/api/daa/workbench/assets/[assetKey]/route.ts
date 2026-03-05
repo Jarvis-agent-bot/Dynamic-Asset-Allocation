@@ -10,6 +10,9 @@ type Body = {
   watchEnabled?: unknown;
   watchTags?: unknown;
   targetWeightHint?: unknown;
+  holdingQty?: unknown;
+  holdingPrice?: unknown;
+  costBasis?: unknown;
   notes?: unknown;
   assetClass?: unknown;
   region?: unknown;
@@ -39,6 +42,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
       watchEnabled: body?.watchEnabled == null ? undefined : Boolean(body?.watchEnabled),
       watchTags: Array.isArray(body?.watchTags) ? body.watchTags.map(String) : undefined,
       targetWeightHint: body?.targetWeightHint == null ? undefined : Number(body.targetWeightHint),
+      holdingQty: body?.holdingQty == null ? undefined : Number(body.holdingQty),
+      holdingPrice: body?.holdingPrice == null ? undefined : Number(body.holdingPrice),
+      costBasis: body?.costBasis === undefined ? undefined : (body.costBasis == null ? null : Number(body.costBasis)),
       notes: body?.notes === undefined ? undefined : (body?.notes == null ? null : String(body.notes)),
       assetClass: body?.assetClass == null ? undefined : String(body.assetClass),
       region: body?.region == null ? undefined : String(body.region),

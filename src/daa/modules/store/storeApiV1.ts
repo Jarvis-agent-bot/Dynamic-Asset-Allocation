@@ -106,6 +106,10 @@ export type StoreLlmEnvStatusV1 = {
   modelConfigured: boolean;
   endpointHint: string;
   model: string;
+  reachable?: boolean;
+  healthCode?: number | null;
+  healthMessage?: string;
+  checkedAt?: string | null;
 };
 
 export async function getSystemConfigV2(): Promise<StoreSystemConfigEnvelopeV2> {

@@ -83,11 +83,15 @@ describe("workbench-asset-routes-v1", () => {
       account: { cash: 1000, investableCash: 1000, frozenCash: 0, totalEquity: 1000 },
       assetUniverse: [MOCK_ASSET_ROW],
       execution: {
-        queueId: null,
-        queueStatus: null,
-        queueSource: null,
-        queueItems: [],
         logs: [],
+      },
+      rebalance: {
+        mode: "manual",
+        autoAnalysisEnabled: false,
+        analysisTimeUtc: "00:20",
+        timezone: "Asia/Shanghai",
+        emailTo: "",
+        analysisFocus: "mock",
       },
       warnings: [],
     });

@@ -1,9 +1,9 @@
 import {
   normalizeBaseCurrencyCodeV2,
-  normalizeCurrencyAliasV2,
   normalizeCurrencyPairTokenV2,
   type CurrencyCodeV2,
 } from "@/src/daa/config/currencyV2";
+import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
 
 export type DaaFundKindV2 = "equity" | "qdii" | "balanced";
 
@@ -27,6 +27,7 @@ export type DaaSystemConfigV2 = {
       maxPositionPct: number;
       minNotional: number;
       maxOrderPctOfNav: number;
+      tradeFeeRateBps?: number;
     };
     policy: {
       baseDriftTriggerPct: number;
@@ -42,8 +43,27 @@ export type DaaSystemConfigV2 = {
       maxConcentrationPct: number;
       correlationCapPct: number;
       maxTotalRiskExposurePct: number;
+      enforceOnExecution: boolean;
     };
     targetWeights: Record<string, number>;
+  };
+  rebalanceStrategy: {
+    calendar: {
+      enabled: boolean;
+      frequency: "monthly" | "quarterly" | "semi_annual" | "annual";
+      dayOfMonth: number;
+    };
+    drift: {
+      enabled: boolean;
+      thresholdPct: number;
+      checkFrequency: "daily" | "weekly";
+    };
+    cooldownHours: number;
+    analysisTimeUtc: string;
+    timezone: string;
+    analysisFocus: string;
+    autoGenerateEnabled: boolean;
+    notifyEmailTo: string;
   };
   dataSources: {
     hfFund: {
@@ -88,13 +108,16 @@ export type DaaSystemConfigV2 = {
     };
   };
   notification: {
-    enabled: boolean;
-    notifyOnDrift: boolean;
-    notifyOnRebalance: boolean;
-    notifyOnPriceAlert: boolean;
-  };
-  backtest: {
-    benchmarkSymbol: string;
+    email: {
+      recipient: string;
+      onSuggestionGenerated: boolean;
+      dailyReport: boolean;
+    };
+    telegram: {
+      enabled: boolean;
+      onDriftTrigger: boolean;
+      onTradeExecuted: boolean;
+    };
   };
 };
 
@@ -132,9 +155,10 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
       totalEquity: null,
     },
     constraints: {
-      maxPositionPct: 1,
+      maxPositionPct: 0.3,
       minNotional: 200,
       maxOrderPctOfNav: 0.1,
+      tradeFeeRateBps: 5,
     },
     policy: {
       baseDriftTriggerPct: 0.05,
@@ -150,8 +174,27 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
       maxConcentrationPct: 0.3,
       correlationCapPct: 0.6,
       maxTotalRiskExposurePct: 0.7,
+      enforceOnExecution: true,
     },
     targetWeights: {},
+  },
+  rebalanceStrategy: {
+    calendar: {
+      enabled: true,
+      frequency: "monthly",
+      dayOfMonth: 1,
+    },
+    drift: {
+      enabled: true,
+      thresholdPct: 0.05,
+      checkFrequency: "daily",
+    },
+    cooldownHours: 72,
+    analysisTimeUtc: "00:20",
+    timezone: "Asia/Shanghai",
+    analysisFocus: DEFAULT_ANALYSIS_FOCUS_V1,
+    autoGenerateEnabled: false,
+    notifyEmailTo: "",
   },
   dataSources: {
     hfFund: {
@@ -196,13 +239,16 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
     },
   },
   notification: {
-    enabled: false,
-    notifyOnDrift: true,
-    notifyOnRebalance: true,
-    notifyOnPriceAlert: false,
-  },
-  backtest: {
-    benchmarkSymbol: "SPY",
+    email: {
+      recipient: "",
+      onSuggestionGenerated: false,
+      dailyReport: false,
+    },
+    telegram: {
+      enabled: false,
+      onDriftTrigger: false,
+      onTradeExecuted: false,
+    },
   },
 };
 
@@ -235,6 +281,10 @@ function toBool(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeSymbols(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   const out = new Set<string>();
@@ -249,24 +299,23 @@ function normalizeFundRows(input: unknown): DaaHfFundTrackV2[] {
   if (!Array.isArray(input)) return [];
   const out = new Map<string, DaaHfFundTrackV2>();
   for (const row of input) {
-    const fundCode = String((row as any)?.fundCode || "").trim();
+    const rec = isRecord(row) ? row : {};
+    const fundCode = String(rec.fundCode || "").trim();
     if (!fundCode) continue;
-    const kindRaw = String((row as any)?.kind || "equity").trim();
+    const kindRaw = String(rec.kind || "equity").trim();
     const kind: DaaFundKindV2 = kindRaw === "qdii" || kindRaw === "balanced" ? kindRaw : "equity";
     out.set(fundCode, {
       fundCode,
-      label: String((row as any)?.label || `基金 ${fundCode}`).trim() || `基金 ${fundCode}`,
+      label: String(rec.label || `基金 ${fundCode}`).trim() || `基金 ${fundCode}`,
       kind,
-      enabled: toBool((row as any)?.enabled, true),
+      enabled: toBool(rec.enabled, true),
     });
   }
   return [...out.values()];
 }
 
 function normalizeFusionWeights(input: unknown): DaaSystemConfigV2["dataSources"]["newsFeed"]["fusionWeights"] {
-  const source = input && typeof input === "object" && !Array.isArray(input)
-    ? input as Record<string, unknown>
-    : {};
+  const source = isRecord(input) ? input : {};
   return {
     human: Math.max(0, Number(source.human ?? 0.45) || 0.45),
     news: Math.max(0, Number(source.news ?? 0.25) || 0.25),
@@ -285,9 +334,7 @@ function normalizePairs(input: unknown): string[] {
 }
 
 function normalizeTargetWeights(input: unknown): Record<string, number> {
-  const source = input && typeof input === "object" && !Array.isArray(input)
-    ? input as Record<string, unknown>
-    : {};
+  const source = isRecord(input) ? input : {};
   const out: Record<string, number> = {};
   for (const [symbolRaw, weightRaw] of Object.entries(source)) {
     const symbol = String(symbolRaw || "").trim().toUpperCase();
@@ -299,53 +346,70 @@ function normalizeTargetWeights(input: unknown): Record<string, number> {
   return out;
 }
 
+function normalizeCalendarFrequency(
+  value: unknown,
+  fallback: DaaSystemConfigV2["rebalanceStrategy"]["calendar"]["frequency"],
+): DaaSystemConfigV2["rebalanceStrategy"]["calendar"]["frequency"] {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "quarterly") return "quarterly";
+  if (text === "semi_annual" || text === "semi-annual" || text === "semiannual") return "semi_annual";
+  if (text === "annual" || text === "yearly") return "annual";
+  if (text === "monthly") return "monthly";
+  return fallback;
+}
+
+function normalizeCheckFrequency(
+  value: unknown,
+  fallback: DaaSystemConfigV2["rebalanceStrategy"]["drift"]["checkFrequency"],
+): DaaSystemConfigV2["rebalanceStrategy"]["drift"]["checkFrequency"] {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "weekly") return "weekly";
+  if (text === "daily") return "daily";
+  return fallback;
+}
+
+function normalizeDayOfMonth(value: unknown, fallback: number): number {
+  const day = Number(value);
+  if (!Number.isFinite(day)) return fallback;
+  return Math.max(1, Math.min(28, Math.trunc(day)));
+}
+
+function normalizeAnalysisTimeUtc(value: unknown, fallback: string): string {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(text);
+  if (!matched) return fallback;
+  return `${matched[1]}:${matched[2]}`;
+}
+
 export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
   const fallback = clone(DEFAULT_SYSTEM_CONFIG_V2);
-  const source = raw && typeof raw === "object" && !Array.isArray(raw)
-    ? raw as Record<string, unknown>
-    : {};
+  const source = isRecord(raw) ? raw : {};
 
-  const strategy = source.strategy && typeof source.strategy === "object" && !Array.isArray(source.strategy)
-    ? source.strategy as Record<string, unknown>
-    : {};
-  const account = strategy.account && typeof strategy.account === "object" && !Array.isArray(strategy.account)
-    ? strategy.account as Record<string, unknown>
-    : {};
-  const constraints = strategy.constraints && typeof strategy.constraints === "object" && !Array.isArray(strategy.constraints)
-    ? strategy.constraints as Record<string, unknown>
-    : {};
-  const policy = strategy.policy && typeof strategy.policy === "object" && !Array.isArray(strategy.policy)
-    ? strategy.policy as Record<string, unknown>
-    : {};
-  const risk = strategy.risk && typeof strategy.risk === "object" && !Array.isArray(strategy.risk)
-    ? strategy.risk as Record<string, unknown>
-    : {};
+  const strategy = isRecord(source.strategy) ? source.strategy : {};
+  const account = isRecord(strategy.account) ? strategy.account : {};
+  const constraints = isRecord(strategy.constraints) ? strategy.constraints : {};
+  const policy = isRecord(strategy.policy) ? strategy.policy : {};
+  const risk = isRecord(strategy.risk) ? strategy.risk : {};
 
-  const dataSources = source.dataSources && typeof source.dataSources === "object" && !Array.isArray(source.dataSources)
-    ? source.dataSources as Record<string, unknown>
-    : {};
-  const hfFund = dataSources.hfFund && typeof dataSources.hfFund === "object" && !Array.isArray(dataSources.hfFund)
-    ? dataSources.hfFund as Record<string, unknown>
-    : {};
-  const priceFeed = dataSources.priceFeed && typeof dataSources.priceFeed === "object" && !Array.isArray(dataSources.priceFeed)
-    ? dataSources.priceFeed as Record<string, unknown>
-    : {};
-  const newsFeed = dataSources.newsFeed && typeof dataSources.newsFeed === "object" && !Array.isArray(dataSources.newsFeed)
-    ? dataSources.newsFeed as Record<string, unknown>
-    : {};
-  const fxFeed = dataSources.fxFeed && typeof dataSources.fxFeed === "object" && !Array.isArray(dataSources.fxFeed)
-    ? dataSources.fxFeed as Record<string, unknown>
-    : {};
-  const llmAnalysis = dataSources.llmAnalysis && typeof dataSources.llmAnalysis === "object" && !Array.isArray(dataSources.llmAnalysis)
-    ? dataSources.llmAnalysis as Record<string, unknown>
-    : {};
+  const rebalanceStrategy = isRecord(source.rebalanceStrategy) ? source.rebalanceStrategy : {};
+  const calendar = isRecord(rebalanceStrategy.calendar) ? rebalanceStrategy.calendar : {};
+  const drift = isRecord(rebalanceStrategy.drift) ? rebalanceStrategy.drift : {};
 
-  const notification = source.notification && typeof source.notification === "object" && !Array.isArray(source.notification)
-    ? source.notification as Record<string, unknown>
-    : {};
-  const backtest = source.backtest && typeof source.backtest === "object" && !Array.isArray(source.backtest)
-    ? source.backtest as Record<string, unknown>
-    : {};
+  const dataSources = isRecord(source.dataSources) ? source.dataSources : {};
+  const hfFund = isRecord(dataSources.hfFund) ? dataSources.hfFund : {};
+  const priceFeed = isRecord(dataSources.priceFeed) ? dataSources.priceFeed : {};
+  const newsFeed = isRecord(dataSources.newsFeed) ? dataSources.newsFeed : {};
+  const fxFeed = isRecord(dataSources.fxFeed) ? dataSources.fxFeed : {};
+  const llmAnalysis = isRecord(dataSources.llmAnalysis) ? dataSources.llmAnalysis : {};
+
+  const notification = isRecord(source.notification) ? source.notification : {};
+  const notificationEmail = isRecord(notification.email) ? notification.email : {};
+  const notificationTelegram = isRecord(notification.telegram) ? notification.telegram : {};
+
+  const legacyAutomation = isRecord(source.automation) ? source.automation : {};
+  const legacyDailyAnalysis = isRecord(legacyAutomation.dailyAnalysis) ? legacyAutomation.dailyAnalysis : {};
+  const legacyNotification = isRecord(source.notification) ? source.notification : {};
 
   const normalized: DaaSystemConfigV2 = {
     strategy: {
@@ -360,6 +424,13 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
         maxPositionPct: clamp(Number(constraints.maxPositionPct) || fallback.strategy.constraints.maxPositionPct, 0.01, 1),
         minNotional: toPositiveNumber(constraints.minNotional, fallback.strategy.constraints.minNotional),
         maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav) || fallback.strategy.constraints.maxOrderPctOfNav, 0.01, 1),
+        tradeFeeRateBps: clamp(
+          Number.isFinite(Number(constraints.tradeFeeRateBps))
+            ? Number(constraints.tradeFeeRateBps)
+            : Number(fallback.strategy.constraints.tradeFeeRateBps || 5),
+          0,
+          500,
+        ),
       },
       policy: {
         baseDriftTriggerPct: clamp(Number(policy.baseDriftTriggerPct) || fallback.strategy.policy.baseDriftTriggerPct, 0.01, 0.5),
@@ -375,8 +446,33 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
         maxConcentrationPct: clamp(Number(risk.maxConcentrationPct) || fallback.strategy.risk.maxConcentrationPct, 0.1, 1),
         correlationCapPct: clamp(Number(risk.correlationCapPct) || fallback.strategy.risk.correlationCapPct, 0.1, 1),
         maxTotalRiskExposurePct: clamp(Number(risk.maxTotalRiskExposurePct) || fallback.strategy.risk.maxTotalRiskExposurePct, 0.1, 1),
+        enforceOnExecution: toBool(risk.enforceOnExecution, fallback.strategy.risk.enforceOnExecution),
       },
       targetWeights: normalizeTargetWeights(strategy.targetWeights),
+    },
+    rebalanceStrategy: {
+      calendar: {
+        enabled: toBool(calendar.enabled, fallback.rebalanceStrategy.calendar.enabled),
+        frequency: normalizeCalendarFrequency(calendar.frequency, fallback.rebalanceStrategy.calendar.frequency),
+        dayOfMonth: normalizeDayOfMonth(calendar.dayOfMonth, fallback.rebalanceStrategy.calendar.dayOfMonth),
+      },
+      drift: {
+        enabled: toBool(drift.enabled, fallback.rebalanceStrategy.drift.enabled),
+        thresholdPct: clamp(Number(drift.thresholdPct) || fallback.rebalanceStrategy.drift.thresholdPct, 0.01, 0.5),
+        checkFrequency: normalizeCheckFrequency(drift.checkFrequency, fallback.rebalanceStrategy.drift.checkFrequency),
+      },
+      cooldownHours: Math.max(1, Math.trunc(Number(rebalanceStrategy.cooldownHours) || fallback.rebalanceStrategy.cooldownHours)),
+      analysisTimeUtc: normalizeAnalysisTimeUtc(
+        rebalanceStrategy.analysisTimeUtc ?? legacyDailyAnalysis.analysisTimeUtc,
+        fallback.rebalanceStrategy.analysisTimeUtc,
+      ),
+      timezone: String(rebalanceStrategy.timezone || legacyDailyAnalysis.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
+      analysisFocus: String(rebalanceStrategy.analysisFocus || legacyDailyAnalysis.analysisFocus || fallback.rebalanceStrategy.analysisFocus).trim() || fallback.rebalanceStrategy.analysisFocus,
+      autoGenerateEnabled: toBool(
+        rebalanceStrategy.autoGenerateEnabled,
+        toBool(legacyDailyAnalysis.enabled, fallback.rebalanceStrategy.autoGenerateEnabled),
+      ),
+      notifyEmailTo: String(rebalanceStrategy.notifyEmailTo || legacyDailyAnalysis.emailTo || fallback.rebalanceStrategy.notifyEmailTo).trim(),
     },
     dataSources: {
       hfFund: {
@@ -417,13 +513,28 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
       },
     },
     notification: {
-      enabled: toBool(notification.enabled, fallback.notification.enabled),
-      notifyOnDrift: toBool(notification.notifyOnDrift, fallback.notification.notifyOnDrift),
-      notifyOnRebalance: toBool(notification.notifyOnRebalance, fallback.notification.notifyOnRebalance),
-      notifyOnPriceAlert: toBool(notification.notifyOnPriceAlert, fallback.notification.notifyOnPriceAlert),
-    },
-    backtest: {
-      benchmarkSymbol: String(backtest.benchmarkSymbol || fallback.backtest.benchmarkSymbol).trim().toUpperCase() || fallback.backtest.benchmarkSymbol,
+      email: {
+        recipient: String(notificationEmail.recipient || rebalanceStrategy.notifyEmailTo || legacyDailyAnalysis.emailTo || "").trim(),
+        onSuggestionGenerated: toBool(
+          notificationEmail.onSuggestionGenerated,
+          toBool((legacyNotification as Record<string, unknown>).notifyOnRebalance, fallback.notification.email.onSuggestionGenerated),
+        ),
+        dailyReport: toBool(
+          notificationEmail.dailyReport,
+          toBool((legacyNotification as Record<string, unknown>).notifyOnDrift, fallback.notification.email.dailyReport),
+        ),
+      },
+      telegram: {
+        enabled: toBool(notificationTelegram.enabled, fallback.notification.telegram.enabled),
+        onDriftTrigger: toBool(
+          notificationTelegram.onDriftTrigger,
+          toBool((legacyNotification as Record<string, unknown>).notifyOnDrift, fallback.notification.telegram.onDriftTrigger),
+        ),
+        onTradeExecuted: toBool(
+          notificationTelegram.onTradeExecuted,
+          toBool((legacyNotification as Record<string, unknown>).notifyOnRebalance, fallback.notification.telegram.onTradeExecuted),
+        ),
+      },
     },
   };
 

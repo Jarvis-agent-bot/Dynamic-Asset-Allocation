@@ -106,6 +106,7 @@ export function buildAssetUniverseViewRowsV1(input: {
       actualWeightPct,
       targetWeightPct,
       gapPct,
+      hfSignal: null,
     } satisfies AssetUniverseViewV1;
   }).sort((a, b) => {
     const aHas = a.holdingQty > 0 ? 1 : 0;

@@ -80,6 +80,10 @@ fabric.properties
 /node_modules/
 /.next/
 /.next-check/
+/.next-check-v2/
+/.next-check-v3/
+/.next-check-v4/
+
 *.tsbuildinfo
 .venv*/
 

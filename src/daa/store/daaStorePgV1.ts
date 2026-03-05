@@ -64,6 +64,17 @@ function normalizeText(v: unknown, fallback = ""): string {
   return text || fallback;
 }
 
+function toBoolean(v: unknown, fallback = false): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const text = v.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(text)) return true;
+    if (["0", "false", "no", "off"].includes(text)) return false;
+  }
+  return fallback;
+}
+
 function isMissingRelationErrorV1(error: unknown, relation: string): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
   if (!message) return false;
@@ -323,6 +334,7 @@ export type DaaStoreTradeTicketV1 = {
   ticketId: string;
   basketId: string;
   assetKey: string;
+  cycleId: string | null;
   source: DaaStoreTradeTicketSourceV1;
   status: DaaStoreTradeTicketStatusV1;
   symbol: string;
@@ -356,6 +368,7 @@ export type DaaStoreTradeTicketV1 = {
 export type DaaStoreCreateTradeTicketInputV1 = {
   basketId?: string;
   assetKey?: string;
+  cycleId?: string | null;
   source?: DaaStoreTradeTicketSourceV1;
   side: DaaStoreTradeTicketSideV1;
   symbol: string;
@@ -395,6 +408,98 @@ export type DaaStoreExecuteTradeTicketsResultV1 = {
     totalEquity: number | null;
   };
   equitySnapshot: DaaStoreEquitySnapshotV1;
+};
+
+export type DaaStoreRiskRuleV1 =
+  | "max_position"
+  | "max_order_pct"
+  | "concentration"
+  | "stop_loss_breach"
+  | "total_weight";
+
+export type DaaStorePreTradeRiskCheckItemV1 = {
+  rule: DaaStoreRiskRuleV1;
+  status: "pass" | "warn" | "block";
+  current: number;
+  limit: number;
+  message: string;
+};
+
+export type DaaStorePreTradeRiskCheckV1 = {
+  overallStatus: "pass" | "warn" | "block";
+  items: DaaStorePreTradeRiskCheckItemV1[];
+};
+
+export type DaaStoreRebalanceCycleStatusV1 = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
+export type DaaStoreRebalanceTriggerSourceV1 = "calendar" | "drift" | "manual";
+
+export type DaaStoreRebalanceCycleV1 = {
+  cycleId: string;
+  status: DaaStoreRebalanceCycleStatusV1;
+  triggerSource: DaaStoreRebalanceTriggerSourceV1;
+  triggerReason: string;
+  snapshotAt: string;
+  equitySnapshot: number;
+  driftSnapshot: Array<{
+    assetKey: string;
+    symbol: string;
+    actualPct: number;
+    targetPct: number;
+    driftPct: number;
+  }>;
+  proposals: Array<{
+    assetKey: string;
+    symbol: string;
+    currency: string;
+    fxRateToBase: number | null;
+    side: "BUY" | "SELL";
+    suggestedQty: number;
+    suggestedNotional: number;
+    price: number;
+    reason: string;
+    selected: boolean;
+    hfContribution: string | null;
+  }>;
+  riskCheck: DaaStorePreTradeRiskCheckV1;
+  executedAt: string | null;
+  executedOrders: string[];
+  executionSummary: {
+    ordersExecuted: number;
+    ordersFailed: number;
+    totalNotional: number;
+    newMaxDriftPct: number;
+  } | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+export type DaaStoreCreateRebalanceCycleInputV1 = {
+  cycleId?: string;
+  status?: DaaStoreRebalanceCycleStatusV1;
+  triggerSource: DaaStoreRebalanceTriggerSourceV1;
+  triggerReason: string;
+  snapshotAt?: string;
+  equitySnapshot: number;
+  driftSnapshot: DaaStoreRebalanceCycleV1["driftSnapshot"];
+  proposals: DaaStoreRebalanceCycleV1["proposals"];
+  riskCheck: DaaStorePreTradeRiskCheckV1;
+  notes?: string | null;
+};
+
+export type DaaStorePatchRebalanceCycleInputV1 = {
+  cycleId: string;
+  status?: DaaStoreRebalanceCycleStatusV1;
+  triggerReason?: string;
+  riskCheck?: DaaStorePreTradeRiskCheckV1;
+  proposals?: DaaStoreRebalanceCycleV1["proposals"];
+  executedAt?: string | null;
+  executedOrders?: string[];
+  executionSummary?: DaaStoreRebalanceCycleV1["executionSummary"];
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  notes?: string | null;
 };
 
 export type DaaStoreHumanIngestStateV1 = {
@@ -637,6 +742,7 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
             ticket_id TEXT PRIMARY KEY,
             basket_id TEXT NOT NULL,
             asset_key TEXT NOT NULL,
+            cycle_id TEXT,
             source TEXT NOT NULL CHECK (source IN ('manual', 'decision')),
             status TEXT NOT NULL CHECK (status IN ('ready', 'executed', 'canceled', 'rejected')),
             symbol TEXT NOT NULL,
@@ -672,6 +778,34 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
 
           CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_status_created_desc
             ON daa_trade_tickets(status, created_at DESC);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc
+            ON daa_trade_tickets(cycle_id, created_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_rebalance_cycles (
+            cycle_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL DEFAULT 'generated',
+            trigger_source TEXT NOT NULL,
+            trigger_reason TEXT NOT NULL DEFAULT '',
+            snapshot_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            equity_snapshot NUMERIC NOT NULL DEFAULT 0,
+            drift_snapshot_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            proposals_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            risk_check_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            executed_at TIMESTAMPTZ,
+            executed_orders_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+            execution_summary_json JSONB,
+            cancelled_at TIMESTAMPTZ,
+            cancel_reason TEXT,
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_created_desc
+            ON daa_rebalance_cycles(created_at DESC);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_status_created_desc
+            ON daa_rebalance_cycles(status, created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_rebalance_decisions (
             id TEXT PRIMARY KEY,
@@ -813,11 +947,15 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
         );
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "basket_id", "TEXT");
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "asset_key", "TEXT");
+        await ensureTableColumnV1(query as any, "daa_trade_tickets", "cycle_id", "TEXT");
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "pricing_mode", "TEXT NOT NULL DEFAULT 'manual'");
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "price_source", "TEXT");
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "price_snapshot_at", "TIMESTAMPTZ");
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_basket_status_created_desc ON daa_trade_tickets(basket_id, status, created_at DESC)",
+        );
+        await query(
+          "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc ON daa_trade_tickets(cycle_id, created_at DESC)",
         );
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN basket_id DROP NOT NULL");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN asset_key DROP NOT NULL");
@@ -1119,6 +1257,9 @@ export async function patchDaaAssetUniverseRowV1(input: {
   marketGroup?: string;
   watchEnabled?: boolean;
   targetWeightHint?: number;
+  holdingQty?: number;
+  holdingPrice?: number;
+  costBasis?: number | null;
   watchTags?: string[];
   notes?: string | null;
   lastPrice?: number;
@@ -1146,6 +1287,9 @@ export async function patchDaaAssetUniverseRowV1(input: {
       marketGroup: normalizeText(input.marketGroup, current.marketGroup || inferMarketGroupV1({ market, assetClass })),
       watchEnabled: input.watchEnabled == null ? current.watchEnabled : Boolean(input.watchEnabled),
       targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFiniteNumber(input.targetWeightHint)),
+      holdingQty: input.holdingQty == null ? current.holdingQty : Math.max(0, toFiniteNumber(input.holdingQty)),
+      holdingPrice: input.holdingPrice == null ? current.holdingPrice : Math.max(0, toFiniteNumber(input.holdingPrice)),
+      costBasis: input.costBasis === undefined ? current.costBasis : (input.costBasis == null ? null : Math.max(0, toFiniteNumber(input.costBasis))),
       watchTags: input.watchTags == null ? current.watchTags : input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
       notes: input.notes === undefined ? current.notes : (input.notes == null ? null : normalizeText(input.notes) || null),
       lastPrice: input.lastPrice == null ? current.lastPrice : Math.max(0, toFiniteNumber(input.lastPrice)),
@@ -1163,10 +1307,13 @@ export async function patchDaaAssetUniverseRowV1(input: {
          market_group = $7,
          watch_enabled = $8,
          target_weight_hint = $9,
-         watch_tags = $10,
-         notes = $11,
-         last_price = $12,
-         price_updated_at = $13,
+         holding_qty = $10,
+         holding_price = $11,
+         cost_basis = $12,
+         watch_tags = $13,
+         notes = $14,
+         last_price = $15,
+         price_updated_at = $16,
          updated_at = NOW()
        WHERE asset_key = $1
        RETURNING ${ASSET_UNIVERSE_SELECT_COLUMNS_V1}`,
@@ -1180,6 +1327,9 @@ export async function patchDaaAssetUniverseRowV1(input: {
         next.marketGroup,
         next.watchEnabled,
         next.targetWeightHint,
+        next.holdingQty,
+        next.holdingPrice,
+        next.costBasis,
         next.watchTags,
         next.notes,
         next.lastPrice,
@@ -1755,6 +1905,7 @@ function mapTradeTicketRowV1(row: Record<string, unknown>): DaaStoreTradeTicketV
     ticketId: normalizeText(row.ticket_id),
     basketId: normalizeText(row.basket_id, "basket_migrated"),
     assetKey: normalizeText(row.asset_key, derivedAssetKey).toUpperCase(),
+    cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
     source: normalizeTradeTicketSourceV1(row.source),
     status: normalizeTradeTicketStatusV1(row.status),
     symbol,
@@ -1783,6 +1934,140 @@ function mapTradeTicketRowV1(row: Record<string, unknown>): DaaStoreTradeTicketV
     executedAt: row.executed_at == null ? null : toIsoString(row.executed_at),
     canceledAt: row.canceled_at == null ? null : toIsoString(row.canceled_at),
     updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function normalizeRebalanceCycleStatusV1(value: unknown): DaaStoreRebalanceCycleStatusV1 {
+  const text = normalizeText(value, "generated").toLowerCase();
+  if (text === "reviewing") return "reviewing";
+  if (text === "executing") return "executing";
+  if (text === "completed") return "completed";
+  if (text === "cancelled" || text === "canceled") return "cancelled";
+  return "generated";
+}
+
+function normalizeRebalanceTriggerSourceV1(value: unknown): DaaStoreRebalanceTriggerSourceV1 {
+  const text = normalizeText(value, "manual").toLowerCase();
+  if (text === "calendar") return "calendar";
+  if (text === "drift") return "drift";
+  return "manual";
+}
+
+function normalizeRiskRuleV1(value: unknown): DaaStoreRiskRuleV1 {
+  const text = normalizeText(value).toLowerCase();
+  if (text === "max_order_pct") return "max_order_pct";
+  if (text === "concentration") return "concentration";
+  if (text === "stop_loss_breach") return "stop_loss_breach";
+  if (text === "total_weight") return "total_weight";
+  return "max_position";
+}
+
+function normalizeRiskStatusV1(value: unknown): "pass" | "warn" | "block" {
+  const text = normalizeText(value, "pass").toLowerCase();
+  if (text === "warn") return "warn";
+  if (text === "block") return "block";
+  return "pass";
+}
+
+function normalizePreTradeRiskCheckV1(value: unknown): DaaStorePreTradeRiskCheckV1 {
+  const raw = parseJsonb<Record<string, unknown>>(value, {});
+  const itemsRaw = Array.isArray(raw.items) ? raw.items : [];
+  const items: DaaStorePreTradeRiskCheckItemV1[] = [];
+  for (const itemRaw of itemsRaw) {
+    const item = isRecordV1(itemRaw) ? itemRaw : {};
+    items.push({
+      rule: normalizeRiskRuleV1(item.rule),
+      status: normalizeRiskStatusV1(item.status),
+      current: toFiniteNumber(item.current, 0),
+      limit: toFiniteNumber(item.limit, 0),
+      message: normalizeText(item.message, ""),
+    });
+  }
+  const overallStatus = normalizeRiskStatusV1(raw.overallStatus);
+  return {
+    overallStatus,
+    items,
+  };
+}
+
+function normalizeDriftSnapshotV1(value: unknown): DaaStoreRebalanceCycleV1["driftSnapshot"] {
+  if (!Array.isArray(value)) return [];
+  const out: DaaStoreRebalanceCycleV1["driftSnapshot"] = [];
+  for (const rowRaw of value) {
+    const row = isRecordV1(rowRaw) ? rowRaw : {};
+    const symbol = normalizeText(row.symbol).toUpperCase();
+    const assetKey = normalizeText(row.assetKey, symbol ? `US::${symbol}` : "").toUpperCase();
+    if (!symbol || !assetKey) continue;
+    out.push({
+      assetKey,
+      symbol,
+      actualPct: toFiniteNumber(row.actualPct, 0),
+      targetPct: toFiniteNumber(row.targetPct, 0),
+      driftPct: toFiniteNumber(row.driftPct, 0),
+    });
+  }
+  return out;
+}
+
+function normalizeCycleProposalsV1(value: unknown): DaaStoreRebalanceCycleV1["proposals"] {
+  if (!Array.isArray(value)) return [];
+  const out: DaaStoreRebalanceCycleV1["proposals"] = [];
+  for (const rowRaw of value) {
+    const row = isRecordV1(rowRaw) ? rowRaw : {};
+    const symbol = normalizeText(row.symbol).toUpperCase();
+    const assetKey = normalizeText(row.assetKey, symbol ? `US::${symbol}` : "").toUpperCase();
+    if (!symbol || !assetKey) continue;
+    const side = normalizeText(row.side, "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+    out.push({
+      assetKey,
+      symbol,
+      currency: normalizeCcyCode(row.currency, "USD"),
+      fxRateToBase: row.fxRateToBase == null ? null : Math.max(0, toFiniteNumber(row.fxRateToBase, 0)),
+      side,
+      suggestedQty: Math.max(0, toFiniteNumber(row.suggestedQty, 0)),
+      suggestedNotional: Math.max(0, toFiniteNumber(row.suggestedNotional, 0)),
+      price: Math.max(0, toFiniteNumber(row.price, 0)),
+      reason: normalizeText(row.reason, ""),
+      selected: toBoolean(row.selected, true),
+      hfContribution: normalizeText(row.hfContribution, "") || null,
+    });
+  }
+  return out;
+}
+
+function mapRebalanceCycleRowV1(row: Record<string, unknown>): DaaStoreRebalanceCycleV1 {
+  const executionSummaryRaw = row.execution_summary_json == null ? null : parseJsonb<Record<string, unknown>>(row.execution_summary_json, {});
+  const executionSummary = executionSummaryRaw
+    ? {
+      ordersExecuted: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersExecuted, 0)),
+      ordersFailed: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFiniteNumber(executionSummaryRaw.totalNotional, 0)),
+      newMaxDriftPct: Math.max(0, toFiniteNumber(executionSummaryRaw.newMaxDriftPct, 0)),
+    }
+    : null;
+
+  const executedOrdersRaw = parseJsonb<unknown[]>(row.executed_orders_json, []);
+  const executedOrders = Array.isArray(executedOrdersRaw)
+    ? executedOrdersRaw.map((item) => normalizeText(item)).filter(Boolean)
+    : [];
+
+  return {
+    cycleId: normalizeText(row.cycle_id),
+    status: normalizeRebalanceCycleStatusV1(row.status),
+    triggerSource: normalizeRebalanceTriggerSourceV1(row.trigger_source),
+    triggerReason: normalizeText(row.trigger_reason),
+    snapshotAt: toIsoString(row.snapshot_at),
+    equitySnapshot: Math.max(0, toFiniteNumber(row.equity_snapshot, 0)),
+    driftSnapshot: normalizeDriftSnapshotV1(parseJsonb<unknown[]>(row.drift_snapshot_json, [])),
+    proposals: normalizeCycleProposalsV1(parseJsonb<unknown[]>(row.proposals_json, [])),
+    riskCheck: normalizePreTradeRiskCheckV1(row.risk_check_json),
+    executedAt: row.executed_at == null ? null : toIsoString(row.executed_at),
+    executedOrders,
+    executionSummary,
+    cancelledAt: row.cancelled_at == null ? null : toIsoString(row.cancelled_at),
+    cancelReason: row.cancel_reason == null ? null : normalizeText(row.cancel_reason) || null,
+    notes: row.notes == null ? null : normalizeText(row.notes) || null,
+    createdAt: toIsoString(row.created_at),
   };
 }
 
@@ -2080,6 +2365,7 @@ export async function listDaaTradeBasketsV1(opts: {
 
 export async function listDaaTradeTicketsV1(opts: {
   basketId?: string;
+  cycleId?: string;
   limit?: number;
   status?: DaaStoreTradeTicketStatusV1;
   source?: DaaStoreTradeTicketSourceV1;
@@ -2102,16 +2388,203 @@ export async function listDaaTradeTicketsV1(opts: {
       params.push(normalizeText(opts.basketId));
       where.push(`basket_id = $${params.length}`);
     }
+    if (opts.cycleId) {
+      params.push(normalizeText(opts.cycleId));
+      where.push(`cycle_id = $${params.length}`);
+    }
 
     params.push(limit);
     const sql = [
-      "SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at",
+      "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at",
       "FROM daa_trade_tickets",
       where.length ? `WHERE ${where.join(" AND ")}` : "",
       `ORDER BY created_at DESC LIMIT $${params.length}`,
     ].filter(Boolean).join(" ");
     const rows = await query(sql, params);
     return rows.rows.map((row) => mapTradeTicketRowV1(row as Record<string, unknown>));
+  });
+}
+
+const REBALANCE_CYCLE_SELECT_COLUMNS_V1 = [
+  "cycle_id",
+  "status",
+  "trigger_source",
+  "trigger_reason",
+  "snapshot_at",
+  "equity_snapshot",
+  "drift_snapshot_json",
+  "proposals_json",
+  "risk_check_json",
+  "executed_at",
+  "executed_orders_json",
+  "execution_summary_json",
+  "cancelled_at",
+  "cancel_reason",
+  "notes",
+  "created_at",
+].join(", ");
+
+export async function listDaaRebalanceCyclesV1(limit = 100): Promise<DaaStoreRebalanceCycleV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 100))));
+    const result = await query(
+      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_V1} FROM daa_rebalance_cycles ORDER BY created_at DESC LIMIT $1`,
+      [n],
+    );
+    return result.rows.map((row) => mapRebalanceCycleRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function getDaaRebalanceCycleV1(cycleIdRaw: string): Promise<DaaStoreRebalanceCycleV1 | null> {
+  await ensureDaaStoreSchemaPgV1();
+  const cycleId = normalizeText(cycleIdRaw);
+  if (!cycleId) return null;
+  return withDaaPgClientV0(async ({ query }) => {
+    const result = await query(
+      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_V1} FROM daa_rebalance_cycles WHERE cycle_id = $1 LIMIT 1`,
+      [cycleId],
+    );
+    if (!result.rows.length) return null;
+    return mapRebalanceCycleRowV1(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function createDaaRebalanceCycleV1(input: DaaStoreCreateRebalanceCycleInputV1): Promise<DaaStoreRebalanceCycleV1> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const cycleId = normalizeText(input.cycleId, "") || randomUUID();
+    const status = normalizeRebalanceCycleStatusV1(input.status);
+    const triggerSource = normalizeRebalanceTriggerSourceV1(input.triggerSource);
+    const triggerReason = normalizeText(input.triggerReason, "");
+    const snapshotAt = toIsoString(input.snapshotAt, new Date().toISOString());
+    const equitySnapshot = Math.max(0, toFiniteNumber(input.equitySnapshot, 0));
+    const driftSnapshot = normalizeDriftSnapshotV1(input.driftSnapshot);
+    const proposals = normalizeCycleProposalsV1(input.proposals);
+    const riskCheck = normalizePreTradeRiskCheckV1(input.riskCheck);
+    const notes = input.notes == null ? null : normalizeText(input.notes) || null;
+
+    const inserted = await query(
+      `INSERT INTO daa_rebalance_cycles (
+         cycle_id, status, trigger_source, trigger_reason, snapshot_at, equity_snapshot,
+         drift_snapshot_json, proposals_json, risk_check_json, notes, created_at
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,NOW()
+       )
+       ON CONFLICT (cycle_id) DO UPDATE
+       SET
+         status = EXCLUDED.status,
+         trigger_source = EXCLUDED.trigger_source,
+         trigger_reason = EXCLUDED.trigger_reason,
+         snapshot_at = EXCLUDED.snapshot_at,
+         equity_snapshot = EXCLUDED.equity_snapshot,
+         drift_snapshot_json = EXCLUDED.drift_snapshot_json,
+         proposals_json = EXCLUDED.proposals_json,
+         risk_check_json = EXCLUDED.risk_check_json,
+         notes = EXCLUDED.notes
+       RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_V1}`,
+      [
+        cycleId,
+        status,
+        triggerSource,
+        triggerReason,
+        snapshotAt,
+        equitySnapshot,
+        JSON.stringify(driftSnapshot),
+        JSON.stringify(proposals),
+        JSON.stringify(riskCheck),
+        notes,
+      ],
+    );
+    return mapRebalanceCycleRowV1(inserted.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function patchDaaRebalanceCycleV1(input: DaaStorePatchRebalanceCycleInputV1): Promise<DaaStoreRebalanceCycleV1> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const cycleId = normalizeText(input.cycleId);
+    if (!cycleId) throw new Error("cycleId is required");
+
+    await query("BEGIN");
+    try {
+      const currentRes = await query(
+        `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_V1} FROM daa_rebalance_cycles WHERE cycle_id = $1 LIMIT 1 FOR UPDATE`,
+        [cycleId],
+      );
+      if (!currentRes.rows.length) throw new Error(`cycle not found: ${cycleId}`);
+      const current = mapRebalanceCycleRowV1(currentRes.rows[0] as Record<string, unknown>);
+
+      const nextStatus = input.status == null ? current.status : normalizeRebalanceCycleStatusV1(input.status);
+      const nextTriggerReason = input.triggerReason == null ? current.triggerReason : normalizeText(input.triggerReason, "");
+      const nextRiskCheck = input.riskCheck == null ? current.riskCheck : normalizePreTradeRiskCheckV1(input.riskCheck);
+      const nextProposals = input.proposals == null ? current.proposals : normalizeCycleProposalsV1(input.proposals);
+      const nextExecutedAt = input.executedAt === undefined
+        ? current.executedAt
+        : (input.executedAt ? toIsoString(input.executedAt, new Date().toISOString()) : null);
+      const nextExecutedOrders = input.executedOrders == null
+        ? current.executedOrders
+        : input.executedOrders.map((item) => normalizeText(item)).filter(Boolean);
+      const nextExecutionSummary = input.executionSummary === undefined
+        ? current.executionSummary
+        : (input.executionSummary
+          ? {
+            ordersExecuted: Math.max(0, toFiniteNumber(input.executionSummary.ordersExecuted, 0)),
+            ordersFailed: Math.max(0, toFiniteNumber(input.executionSummary.ordersFailed, 0)),
+            totalNotional: Math.max(0, toFiniteNumber(input.executionSummary.totalNotional, 0)),
+            newMaxDriftPct: Math.max(0, toFiniteNumber(input.executionSummary.newMaxDriftPct, 0)),
+          }
+          : null);
+      const nextCancelledAt = input.cancelledAt === undefined
+        ? current.cancelledAt
+        : (input.cancelledAt ? toIsoString(input.cancelledAt, new Date().toISOString()) : null);
+      const nextCancelReason = input.cancelReason === undefined
+        ? current.cancelReason
+        : (input.cancelReason == null ? null : normalizeText(input.cancelReason) || null);
+      const nextNotes = input.notes === undefined
+        ? current.notes
+        : (input.notes == null ? null : normalizeText(input.notes) || null);
+
+      const updatedRes = await query(
+        `UPDATE daa_rebalance_cycles
+         SET
+           status = $2,
+           trigger_reason = $3,
+           proposals_json = $4::jsonb,
+           risk_check_json = $5::jsonb,
+           executed_at = $6,
+           executed_orders_json = $7::jsonb,
+           execution_summary_json = $8::jsonb,
+           cancelled_at = $9,
+           cancel_reason = $10,
+           notes = $11
+         WHERE cycle_id = $1
+         RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_V1}`,
+        [
+          cycleId,
+          nextStatus,
+          nextTriggerReason,
+          JSON.stringify(nextProposals),
+          JSON.stringify(nextRiskCheck),
+          nextExecutedAt,
+          JSON.stringify(nextExecutedOrders),
+          nextExecutionSummary == null ? null : JSON.stringify(nextExecutionSummary),
+          nextCancelledAt,
+          nextCancelReason,
+          nextNotes,
+        ],
+      );
+
+      await query("COMMIT");
+      return mapRebalanceCycleRowV1(updatedRes.rows[0] as Record<string, unknown>);
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
   });
 }
 
@@ -2144,7 +2617,7 @@ export async function updateDaaTradeTicketV1(input: {
     await query("BEGIN");
     try {
       const existingRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
+        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
         [ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
@@ -2172,7 +2645,7 @@ export async function updateDaaTradeTicketV1(input: {
       await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
 
       const updatedRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
         [ticketId],
       );
       await query("COMMIT");
@@ -2196,7 +2669,7 @@ export async function cancelDaaTradeTicketV1(ticketIdRaw: string): Promise<DaaSt
     await query("BEGIN");
     try {
       const existingRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
+        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
         [ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
@@ -2208,7 +2681,7 @@ export async function cancelDaaTradeTicketV1(ticketIdRaw: string): Promise<DaaSt
       );
       await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
       const updatedRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
         [ticketId],
       );
       await query("COMMIT");
@@ -2244,6 +2717,7 @@ export async function createDaaTradeTicketV1(input: DaaStoreCreateTradeTicketInp
     const price = Math.max(0, toFiniteNumber(input.price, 0));
     const fee = Math.max(0, toFiniteNumber(input.fee, 0));
     const basketIdInput = normalizeText(input.basketId);
+    const cycleId = normalizeText(input.cycleId, "") || null;
     const decisionRefId = normalizeText(input.decisionRefId, "") || null;
     const reasonText = normalizeText(input.reasonText, "") || null;
     const reasonTags = Array.isArray(input.reasonTags)
@@ -2324,12 +2798,23 @@ export async function createDaaTradeTicketV1(input: DaaStoreCreateTradeTicketInp
         positionQty,
       };
 
+      if (cycleId) {
+        const cycleRes = await query(
+          "SELECT cycle_id FROM daa_rebalance_cycles WHERE cycle_id = $1 LIMIT 1 FOR UPDATE",
+          [cycleId],
+        );
+        if (!cycleRes.rows.length) {
+          throw new Error(`cycle not found: ${cycleId}`);
+        }
+      }
+
       await query(
-        "INSERT INTO daa_trade_tickets (ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, pricing_mode, price_source, price_snapshot_at, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,'ready',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21,$22,$23,NOW(),NOW())",
+        "INSERT INTO daa_trade_tickets (ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, pricing_mode, price_source, price_snapshot_at, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,'ready',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,NOW(),NOW())",
         [
           ticketId,
           basketId,
           assetKey,
+          cycleId,
           source,
           symbol,
           market,
@@ -2358,7 +2843,7 @@ export async function createDaaTradeTicketV1(input: DaaStoreCreateTradeTicketInp
       );
 
       const inserted = await query(
-        "SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
         [ticketId],
       );
       await query("COMMIT");
@@ -2393,7 +2878,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
     try {
       const placeholders = ticketIds.map((_, idx) => `$${idx + 1}`).join(", ");
       const ticketRows = await query(
-        `SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) FOR UPDATE`,
+        `SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) FOR UPDATE`,
         ticketIds,
       );
       const ticketMap = new Map<string, DaaStoreTradeTicketV1>();
@@ -2718,7 +3203,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
       }
 
       const latestTicketRows = await query(
-        `SELECT ticket_id, basket_id, asset_key, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
+        `SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
         ticketIds,
       );
       const latestPositionsRows = await query(
@@ -2769,35 +3254,47 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
 
 export async function getDaaNotificationConfigV1(): Promise<DaaStoreNotificationConfigV1> {
   const system = await getDaaSystemConfigV2();
+  const email = system.config.notification.email;
+  const telegram = system.config.notification.telegram;
   return {
     id: "default",
-    enabled: system.config.notification.enabled,
-    notifyOnDrift: system.config.notification.notifyOnDrift,
-    notifyOnRebalance: system.config.notification.notifyOnRebalance,
-    notifyOnPriceAlert: system.config.notification.notifyOnPriceAlert,
+    enabled: Boolean(telegram.enabled || email.onSuggestionGenerated || email.dailyReport),
+    notifyOnDrift: Boolean(telegram.onDriftTrigger || email.dailyReport),
+    notifyOnRebalance: Boolean(email.onSuggestionGenerated || telegram.onTradeExecuted),
+    notifyOnPriceAlert: false,
     updatedAt: system.updatedAt,
   };
 }
 
 export async function saveDaaNotificationConfigV1(input: Partial<DaaStoreNotificationConfigV1>): Promise<DaaStoreNotificationConfigV1> {
   const current = await getDaaSystemConfigV2();
+  const currentEmail = current.config.notification.email;
+  const currentTelegram = current.config.notification.telegram;
   const next = normalizeSystemConfigV2({
     ...current.config,
     notification: {
-      ...current.config.notification,
-      enabled: input.enabled ?? current.config.notification.enabled,
-      notifyOnDrift: input.notifyOnDrift ?? current.config.notification.notifyOnDrift,
-      notifyOnRebalance: input.notifyOnRebalance ?? current.config.notification.notifyOnRebalance,
-      notifyOnPriceAlert: input.notifyOnPriceAlert ?? current.config.notification.notifyOnPriceAlert,
+      email: {
+        ...currentEmail,
+        onSuggestionGenerated: input.notifyOnRebalance ?? currentEmail.onSuggestionGenerated,
+        dailyReport: input.notifyOnDrift ?? currentEmail.dailyReport,
+      },
+      telegram: {
+        ...currentTelegram,
+        enabled: input.enabled ?? currentTelegram.enabled,
+        onDriftTrigger: input.notifyOnDrift ?? currentTelegram.onDriftTrigger,
+        onTradeExecuted: input.notifyOnRebalance ?? currentTelegram.onTradeExecuted,
+      },
     },
   });
   const saved = await saveDaaSystemConfigV2({ config: next, baseVersion: current.version });
+  const email = saved.config.notification.email;
+  const telegram = saved.config.notification.telegram;
   return {
     id: "default",
-    enabled: saved.config.notification.enabled,
-    notifyOnDrift: saved.config.notification.notifyOnDrift,
-    notifyOnRebalance: saved.config.notification.notifyOnRebalance,
-    notifyOnPriceAlert: saved.config.notification.notifyOnPriceAlert,
+    enabled: Boolean(telegram.enabled || email.onSuggestionGenerated || email.dailyReport),
+    notifyOnDrift: Boolean(telegram.onDriftTrigger || email.dailyReport),
+    notifyOnRebalance: Boolean(email.onSuggestionGenerated || telegram.onTradeExecuted),
+    notifyOnPriceAlert: false,
     updatedAt: saved.updatedAt,
   };
 }
