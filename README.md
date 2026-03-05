@@ -5,12 +5,12 @@ DAA 是一个面向单组合的动态资产配置系统，定位为 **发现 + �
 ## 项目目标
 
 - 用统一信号与风控引擎输出可解释的交易建议。
-- 以“执行队列”承接买卖动作，系统负责回执、归档与审计追踪。
+- 以“预览后直接执行”承接买卖动作，系统负责回执、归档与审计追踪。
 - 在风险约束下持续优化配置质量与复盘能力。
 
 ## 当前能力边界
 
-- 支持：资产搜索入池、资产洞察（技术+新闻+LLM）、市价预览、执行队列、回执追溯、账号密码鉴权。
+- 支持：资产搜索入池、资产洞察（技术+新闻+LLM）、市价预览、直接执行、回执追溯、账号密码鉴权。
 - 不支持：券商真实下单、组合托管、多组合管理。
 - 当前仅维护 Next.js 链路，不再保留旧兼容调用路径。
 
@@ -55,15 +55,14 @@ cp .env.example .env.local
 
 ## 核心 API（工作台）
 
-- `GET /api/daa/workbench/bootstrap`：加载工作台（含同步补价、执行队列、执行日志）。
+- `GET /api/daa/workbench/bootstrap`：加载工作台（含同步补价、执行日志）。
 - `GET /api/daa/workbench/search-assets`：全市场资产搜索（含 `yfinanceSymbol`）。
 - `POST /api/daa/workbench/assets/upsert`：加入资产宇宙。
 - `PATCH /api/daa/workbench/assets/{assetKey}`：更新资产标签/分组/备注。
 - `GET /api/daa/workbench/assets/{assetKey}/insights`：资产洞察（技术通用+特化、新闻+AI、机会中文解释）。
 - `POST /api/daa/workbench/recommendations`：生成交易建议（中文化动作与理由）。
 - `POST /api/daa/workbench/execution/preview`：市价预览（风险仅提示不阻断）。
-- `POST /api/daa/workbench/execution/items`：加入执行队列。
-- `POST /api/daa/workbench/execution/commit`：执行当前队列并返回回执。
+- `POST /api/daa/workbench/execution/execute`：执行单笔市价单并返回回执。
 - `GET /api/daa/workbench/execution/logs`：查询执行日志。
 
 ## 核心 API（配置与存储）

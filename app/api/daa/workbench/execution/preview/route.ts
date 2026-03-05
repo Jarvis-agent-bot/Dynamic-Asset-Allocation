@@ -3,7 +3,7 @@ import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } f
 import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
 import { buildFxLookupToBaseV1, resolveFxRateToBaseV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
 import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
-import { listDaaFxRatesV1, listDaaAssetUniverseV1, updateDaaAssetUniverseLastPriceV1 } from "@/src/daa/store/daaStorePgV1";
+import { getDaaSystemConfigV2, listDaaFxRatesV1, listDaaAssetUniverseV1, updateDaaAssetUniverseLastPriceV1 } from "@/src/daa/store/daaStorePgV1";
 import { fetchYfinanceLatestCloseV1 } from "@/src/market/yfinanceFetchV1";
 import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
 
@@ -20,6 +20,13 @@ type Body = {
 function toPositive(v: unknown): number {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return 0;
+  return n;
+}
+
+function toNonNegative(v: unknown): number | null {
+  if (v == null || String(v).trim() === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
 
@@ -41,13 +48,14 @@ export async function POST(req: Request) {
     const side = normalizeSide(body?.side);
     if (!side) return failV1("VALIDATION_FAILED", "side must be BUY or SELL", { status: 400 });
 
-    const feeRateBps = Math.max(0, toPositive(body?.feeRateBps || 5));
-
-    const [bootstrap, fxRows, universeRows] = await Promise.all([
+    const [bootstrap, fxRows, universeRows, systemRow] = await Promise.all([
       buildWorkbenchBootstrapV1({ syncPrices: false }),
       listDaaFxRatesV1(),
       listDaaAssetUniverseV1(),
+      getDaaSystemConfigV2(),
     ]);
+    const defaultFeeRateBps = Math.max(0, Number(systemRow.config.strategy.constraints.tradeFeeRateBps ?? 5));
+    const feeRateBps = toNonNegative(body?.feeRateBps) ?? defaultFeeRateBps;
 
     const assetKey = `${parsed.market}::${parsed.symbol}`;
     const row = universeRows.find((item) => item.assetKey === assetKey);
@@ -157,6 +165,7 @@ export async function POST(req: Request) {
       priceSource,
       priceSnapshotAt: priceSnapshotAt || new Date().toISOString(),
       warnings,
+      feeRateBps,
     });
   });
 }

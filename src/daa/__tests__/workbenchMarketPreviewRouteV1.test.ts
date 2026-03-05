@@ -9,6 +9,7 @@ vi.mock("@/src/daa/modules/workbench/workbenchServiceV1", () => ({
 }));
 
 vi.mock("@/src/daa/store/daaStorePgV1", () => ({
+  getDaaSystemConfigV2: vi.fn(),
   listDaaFxRatesV1: vi.fn(),
   listDaaAssetUniverseV1: vi.fn(),
   updateDaaAssetUniverseLastPriceV1: vi.fn(),
@@ -20,12 +21,21 @@ vi.mock("@/src/market/yfinanceFetchV1", () => ({
 
 import { POST } from "@/app/api/daa/workbench/execution/preview/route";
 import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
-import { listDaaAssetUniverseV1, listDaaFxRatesV1, updateDaaAssetUniverseLastPriceV1 } from "@/src/daa/store/daaStorePgV1";
+import { getDaaSystemConfigV2, listDaaAssetUniverseV1, listDaaFxRatesV1, updateDaaAssetUniverseLastPriceV1 } from "@/src/daa/store/daaStorePgV1";
 import { fetchYfinanceLatestCloseV1 } from "@/src/market/yfinanceFetchV1";
 
 describe("workbench-market-preview-route-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getDaaSystemConfigV2).mockResolvedValue({
+      config: {
+        strategy: {
+          constraints: {
+            tradeFeeRateBps: 5,
+          },
+        },
+      },
+    } as any);
   });
 
   it("高波动/价格过旧/集中度/现金不足仅提示不阻断", async () => {
@@ -60,11 +70,15 @@ describe("workbench-market-preview-route-v1", () => {
         gapPct: null,
       }],
       execution: {
-        queueId: null,
-        queueStatus: null,
-        queueSource: null,
-        queueItems: [],
         logs: [],
+      },
+      rebalance: {
+        mode: "manual",
+        autoAnalysisEnabled: false,
+        analysisTimeUtc: "00:20",
+        timezone: "Asia/Shanghai",
+        emailTo: "",
+        analysisFocus: "mock",
       },
       warnings: [],
     });
@@ -120,11 +134,15 @@ describe("workbench-market-preview-route-v1", () => {
       account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
       assetUniverse: [],
       execution: {
-        queueId: null,
-        queueStatus: null,
-        queueSource: null,
-        queueItems: [],
         logs: [],
+      },
+      rebalance: {
+        mode: "manual",
+        autoAnalysisEnabled: false,
+        analysisTimeUtc: "00:20",
+        timezone: "Asia/Shanghai",
+        emailTo: "",
+        analysisFocus: "mock",
       },
       warnings: [],
     });
@@ -176,11 +194,15 @@ describe("workbench-market-preview-route-v1", () => {
       account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
       assetUniverse: [],
       execution: {
-        queueId: null,
-        queueStatus: null,
-        queueSource: null,
-        queueItems: [],
         logs: [],
+      },
+      rebalance: {
+        mode: "manual",
+        autoAnalysisEnabled: false,
+        analysisTimeUtc: "00:20",
+        timezone: "Asia/Shanghai",
+        emailTo: "",
+        analysisFocus: "mock",
       },
       warnings: [],
     });

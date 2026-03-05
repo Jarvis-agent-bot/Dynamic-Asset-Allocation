@@ -26,27 +26,27 @@ describe("workbench-search-assets-route-v1", () => {
 
   it("按市场/资产类型/地区筛选并返回标准化字段", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      quotes: [
-        {
-          symbol: "0700.HK",
-          exchange: "HKG",
-          currency: "HKD",
-          regularMarketPrice: 320.5,
-          shortname: "Tencent",
-          quoteType: "EQUITY",
-          region: "HK",
-        },
-        {
-          symbol: "AAPL",
-          exchange: "NMS",
-          currency: "USD",
-          regularMarketPrice: 180.3,
-          shortname: "Apple",
-          quoteType: "EQUITY",
-          region: "US",
-        },
-      ],
-    }), { status: 200 }));
+        quotes: [
+          {
+            symbol: "0700.HK",
+            exchange: "HKG",
+            currency: "HKD",
+            regularMarketPrice: 320.5,
+            shortname: "Tencent",
+            quoteType: "EQUITY",
+            region: "HK",
+          },
+          {
+            symbol: "AAPL",
+            exchange: "NMS",
+            currency: "USD",
+            regularMarketPrice: 180.3,
+            shortname: "Apple",
+            quoteType: "EQUITY",
+            region: "US",
+          },
+        ],
+      }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await GET(new Request("http://localhost/api/daa/workbench/search-assets?q=tencent&market=HK&assetClass=EQUITY&region=HK&limit=10"));
@@ -60,6 +60,7 @@ describe("workbench-search-assets-route-v1", () => {
       symbol: "0700.HK",
       market: "HK",
       currency: "HKD",
+      name: "Tencent",
       assetClass: "EQUITY",
       region: "HK",
       yfinanceSymbol: "0700.HK",

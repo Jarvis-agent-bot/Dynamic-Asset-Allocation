@@ -6,6 +6,7 @@ export type TradeTicketV1 = {
   ticketId: string;
   basketId: string;
   assetKey: string;
+  cycleId: string | null;
   source: TradeTicketSourceV1;
   status: TradeTicketStatusV1;
   symbol: string;

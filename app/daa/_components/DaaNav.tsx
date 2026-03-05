@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { Briefcase, FlaskConical, Menu, Settings, Users, Wallet } from "lucide-react";
+import { Briefcase, ClipboardList, Menu, PieChart, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -12,10 +12,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { cn } from "@/lib/utils";
 
 type NavKey =
-  | "assets"
-  | "portfolio"
-  | "strategyLab"
-  | "humanFactor"
+  | "overview"
+  | "workbench"
+  | "trades"
   | "settings";
 
 type IconType = ComponentType<{ className?: string }>;
@@ -24,21 +23,21 @@ type NavItem = { key: NavKey; href: string; label: string; Icon: IconType };
 
 function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
-  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
-  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategyLab";
-  if (pathname.startsWith("/daa/dashboard/human-factor")) return "humanFactor";
+  if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench";
+  if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
-  return "assets";
+  // Also match legacy /portfolio route to workbench during transition
+  if (pathname.startsWith("/daa/dashboard/portfolio")) return "workbench";
+  return "overview";
 }
 
 function useNavItems(): NavItem[] {
   return useMemo(
     () => [
-      { key: "assets" as const, href: "/daa/dashboard", label: "资产首页", Icon: Wallet },
-      { key: "portfolio" as const, href: "/daa/dashboard/portfolio", label: "工作台", Icon: Briefcase },
-      { key: "strategyLab" as const, href: "/daa/dashboard/strategy-lab", label: "策略实验室", Icon: FlaskConical },
-      { key: "humanFactor" as const, href: "/daa/dashboard/human-factor", label: "人因中心", Icon: Users },
-      { key: "settings" as const, href: "/daa/dashboard/settings", label: "系统设置", Icon: Settings },
+      { key: "overview" as const, href: "/daa/dashboard", label: "总览", Icon: PieChart },
+      { key: "workbench" as const, href: "/daa/dashboard/workbench", label: "工作台", Icon: Briefcase },
+      { key: "trades" as const, href: "/daa/dashboard/trades", label: "交易记录", Icon: ClipboardList },
+      { key: "settings" as const, href: "/daa/dashboard/settings", label: "设置", Icon: Settings },
     ],
     [],
   );
@@ -46,10 +45,11 @@ function useNavItems(): NavItem[] {
 
 type NavListProps = {
   variant: "horizontal" | "vertical";
+  collapsed?: boolean;
   onNavigate?: () => void;
 };
 
-function DaaNavList({ variant, onNavigate }: NavListProps) {
+function DaaNavList({ variant, collapsed = false, onNavigate }: NavListProps) {
   const items = useNavItems();
   const active = useActiveNav();
 
@@ -89,11 +89,20 @@ function DaaNavList({ variant, onNavigate }: NavListProps) {
             key={it.key}
             asChild
             variant={isActive ? "secondary" : "ghost"}
-            className={cn("w-full justify-start", isActive && "font-medium")}
+            className={cn(
+              "w-full h-9",
+              collapsed ? "justify-center px-1.5" : "justify-start px-2",
+              isActive && "font-medium",
+            )}
           >
-            <Link href={it.href} aria-current={isActive ? "page" : undefined} onClick={onNavigate}>
+            <Link
+              href={it.href}
+              aria-current={isActive ? "page" : undefined}
+              onClick={onNavigate}
+              title={collapsed ? it.label : undefined}
+            >
               <it.Icon className="h-4 w-4" aria-hidden="true" />
-              <span>{it.label}</span>
+              <span className={collapsed ? "sr-only" : ""}>{it.label}</span>
             </Link>
           </Button>
         );
@@ -102,8 +111,8 @@ function DaaNavList({ variant, onNavigate }: NavListProps) {
   );
 }
 
-export function DaaSidebarNav() {
-  return <DaaNavList variant="vertical" />;
+export function DaaSidebarNav(props: { collapsed?: boolean }) {
+  return <DaaNavList variant="vertical" collapsed={props.collapsed} />;
 }
 
 export function DaaMobileNav() {
@@ -116,11 +125,11 @@ export function DaaMobileNav() {
           <Menu className="h-5 w-5" aria-hidden="true" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-80 px-4">
+      <SheetContent side="left" className="w-72 px-3">
         <SheetHeader className="pr-8">
           <SheetTitle>DAA</SheetTitle>
         </SheetHeader>
-        <div className="mt-6">
+        <div className="mt-4">
           <DaaNavList variant="vertical" onNavigate={() => setOpen(false)} />
         </div>
       </SheetContent>

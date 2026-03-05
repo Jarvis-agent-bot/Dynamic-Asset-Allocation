@@ -7,8 +7,7 @@ vi.mock("@/src/daa/adminAuth", () => ({
 
 import { GET as getWorkbenchBootstrap } from "@/app/api/daa/workbench/bootstrap/route";
 import { POST as upsertAsset } from "@/app/api/daa/workbench/assets/upsert/route";
-import { POST as addExecutionItem } from "@/app/api/daa/workbench/execution/items/route";
-import { POST as commitExecution } from "@/app/api/daa/workbench/execution/commit/route";
+import { POST as executeOrder } from "@/app/api/daa/workbench/execution/execute/route";
 import { POST as previewExecution } from "@/app/api/daa/workbench/execution/preview/route";
 import { getDaaSystemConfigV2, saveDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 
@@ -48,7 +47,7 @@ describe("workbench-trade-flow-route-v1", () => {
     });
   });
 
-  it("搜索新增资产 -> 市价预览 -> 加入执行队列 -> 执行 -> 持仓与现金更新", async () => {
+  it("搜索新增资产 -> 市价预览 -> 直接执行 -> 持仓与现金更新", async () => {
     const upsertResponse = await upsertAsset(new Request("http://localhost/api/daa/workbench/assets/upsert", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -86,7 +85,7 @@ describe("workbench-trade-flow-route-v1", () => {
     expect(previewJson.ok).toBe(true);
     expect(previewJson.data.canSubmit).toBe(true);
 
-    const addItemResponse = await addExecutionItem(new Request("http://localhost/api/daa/workbench/execution/items", {
+    const executeResponse = await executeOrder(new Request("http://localhost/api/daa/workbench/execution/execute", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -105,20 +104,11 @@ describe("workbench-trade-flow-route-v1", () => {
         reasonText: "集成链路测试",
       }),
     }));
-    const addItemJson = await addItemResponse.json();
-
-    expect(addItemResponse.status).toBe(200);
-    expect(addItemJson.ok).toBe(true);
-    expect(addItemJson.data.item.status).toBe("ready");
-    expect(addItemJson.data.item.pricingMode).toBe("market");
-
-    const executeResponse = await commitExecution(new Request("http://localhost/api/daa/workbench/execution/commit", {
-      method: "POST",
-    }));
     const executeJson = await executeResponse.json();
 
     expect(executeResponse.status).toBe(200);
     expect(executeJson.ok).toBe(true);
+    expect(executeJson.data.item.pricingMode).toBe("market");
     expect(executeJson.data.summary.executed).toBe(1);
     expect(executeJson.data.summary.rejected).toBe(0);
 

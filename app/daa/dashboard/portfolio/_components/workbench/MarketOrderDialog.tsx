@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Loader2, TriangleAlert } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -81,7 +80,7 @@ export default function MarketOrderDialog(props: {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{props.side === "BUY" ? "市价买入" : "市价卖出"} {props.row?.symbol || ""}</DialogTitle>
-          <DialogDescription>系统会自动使用后端最新价格预览，不做风险阻断，仅提示风险。</DialogDescription>
+          <DialogDescription>系统会自动使用后端最新价格预览，确认后将直接执行。</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3 py-1">
@@ -103,22 +102,27 @@ export default function MarketOrderDialog(props: {
 
         {preview ? (
           <div className="space-y-2 rounded-md border bg-muted/20 p-3 text-xs">
-            <div>价格：{preview.currency} {preview.price.toFixed(4)}（{preview.priceSource}）</div>
-            <div>数量：{preview.qty.toFixed(6)} · 名义金额：{preview.currency} {preview.grossNotional.toFixed(4)}</div>
-            <div>基准币金额：{preview.baseCurrency} {preview.notionalInBase.toFixed(4)} · 手续费：{preview.currency} {preview.fee.toFixed(4)}</div>
-            <div>价格时间：{new Date(preview.priceSnapshotAt).toLocaleString()}</div>
+            <div className="grid gap-1">
+              <div>价格：{preview.currency} {preview.price.toFixed(4)}（{preview.priceSource}）</div>
+              <div>数量：{preview.qty.toFixed(6)} · 名义金额：{preview.currency} {preview.grossNotional.toFixed(4)}</div>
+              <div>
+                基准币金额：{preview.baseCurrency} {preview.notionalInBase.toFixed(4)} · 手续费：{preview.currency} {preview.fee.toFixed(4)}
+                {preview.feeRateBps != null ? `（费率 ${preview.feeRateBps.toFixed(2)} bps）` : ""}
+              </div>
+              <div>价格时间：{new Date(preview.priceSnapshotAt).toLocaleString()}</div>
+            </div>
             {preview.warnings.length ? (
-              <Alert variant="destructive">
-                <TriangleAlert className="h-4 w-4" />
-                <AlertTitle>风险提示（不阻断）</AlertTitle>
-                <AlertDescription>
-                  <ul className="list-disc space-y-1 pl-4">
-                    {preview.warnings.map((item, idx) => (
-                      <li key={`w-${idx}`}>{item}</li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-amber-800">
+                  <TriangleAlert className="h-3.5 w-3.5" />
+                  风险提示（不阻断，执行前请确认）
+                </div>
+                <ul className="list-disc space-y-1 pl-4 text-xs text-amber-700">
+                  {preview.warnings.map((item, idx) => (
+                    <li key={`w-${idx}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -126,7 +130,7 @@ export default function MarketOrderDialog(props: {
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
           <Button onClick={() => void handleSubmit()} disabled={!preview || props.loading}>
-            {props.loading ? "提交中..." : "加入执行队列"}
+            {props.loading ? "执行中..." : "确认执行"}
           </Button>
         </div>
       </DialogContent>

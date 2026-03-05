@@ -13,6 +13,9 @@ export type DaaLlmAnalysisV1 = {
   opportunityNotes: string[];
   riskNotes: string[];
   latencyMs: number;
+  reasonCode?: string;
+  reasonMessage?: string;
+  failedAt?: string;
   reason?: string;
   raw?: unknown;
 };
@@ -44,6 +47,18 @@ type LlmRuntimeConfigV1 = {
   apiKey: string;
   timeoutMs: number;
 };
+
+class LlmRequestErrorV1 extends Error {
+  status: number;
+  reasonCode: string;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "LlmRequestErrorV1";
+    this.status = status;
+    this.reasonCode = `http_${status}`;
+  }
+}
 
 function normalizeText(value: unknown, fallback = ""): string {
   const text = String(value || "").trim();
@@ -150,6 +165,34 @@ function splitAnalysisTextV1(text: string): { summary: string; opportunityNotes:
   };
 }
 
+function resolveFailureV1(error: unknown): { reasonCode: string; reasonMessage: string } {
+  if (error instanceof LlmRequestErrorV1) {
+    return {
+      reasonCode: error.reasonCode,
+      reasonMessage: normalizeText(error.message, `HTTP ${error.status}`),
+    };
+  }
+  if (error instanceof Error && error.name === "AbortError") {
+    return {
+      reasonCode: "timeout",
+      reasonMessage: "请求超时",
+    };
+  }
+
+  const message = normalizeText(error instanceof Error ? error.message : String(error), "unknown error");
+  if (/fetch failed|network|econn|enotfound|socket|tls/i.test(message)) {
+    return {
+      reasonCode: "network_error",
+      reasonMessage: message,
+    };
+  }
+
+  return {
+    reasonCode: "unknown_error",
+    reasonMessage: message,
+  };
+}
+
 async function callOpenAiLikeV1(config: LlmRuntimeConfigV1, prompt: string): Promise<{ text: string; raw: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -171,7 +214,7 @@ async function callOpenAiLikeV1(config: LlmRuntimeConfigV1, prompt: string): Pro
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(String((payload as any)?.error?.message || (payload as any)?.message || `http ${response.status}`));
+      throw new LlmRequestErrorV1(response.status, String((payload as any)?.error?.message || (payload as any)?.message || `http ${response.status}`));
     }
 
     return {
@@ -204,7 +247,7 @@ async function callPackyCodeV1(config: LlmRuntimeConfigV1, prompt: string): Prom
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(String((payload as any)?.error || (payload as any)?.message || `http ${response.status}`));
+      throw new LlmRequestErrorV1(response.status, String((payload as any)?.error || (payload as any)?.message || `http ${response.status}`));
     }
 
     const text = normalizeText((payload as any)?.text)
@@ -222,17 +265,21 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
   const startedAt = Date.now();
   const config = await resolveLlmRuntimeConfigV1();
   const analysisFocus = normalizeText(input.analysisFocus);
+  const generatedAt = new Date().toISOString();
 
   if (!analysisFocus) {
     return {
       status: "error",
       provider: config.provider,
       model: config.model,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       summary: "LLM 二次分析失败：analysisFocus 不能为空。",
       opportunityNotes: [],
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
+      reasonCode: "analysis_focus_required",
+      reasonMessage: "analysisFocus 不能为空",
+      failedAt: generatedAt,
       reason: "analysisFocus is required",
     };
   }
@@ -242,11 +289,13 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       status: "skipped",
       provider: config.provider,
       model: config.model,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       summary: "LLM 二次分析未启用。",
       opportunityNotes: [],
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
+      reasonCode: "llm_disabled",
+      reasonMessage: "llm_analysis data source disabled",
       reason: "llm_analysis data source disabled",
     };
   }
@@ -256,11 +305,13 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       status: "skipped",
       provider: config.provider,
       model: config.model,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       summary: "LLM 二次分析在决策链路中未启用。",
       opportunityNotes: [],
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
+      reasonCode: "llm_disabled_in_decision",
+      reasonMessage: "llm_analysis disabled in decision context",
       reason: "llm_analysis disabled in decision context",
     };
   }
@@ -270,11 +321,13 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       status: "skipped",
       provider: config.provider,
       model: config.model,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       summary: "LLM 二次分析已启用但缺少 endpoint。",
       opportunityNotes: [],
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
+      reasonCode: "missing_endpoint",
+      reasonMessage: "missing endpoint",
       reason: "missing endpoint",
     };
   }
@@ -284,11 +337,13 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       status: "skipped",
       provider: config.provider,
       model: config.model,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       summary: "LLM 二次分析已启用但缺少 API Key。",
       opportunityNotes: [],
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
+      reasonCode: "missing_api_key",
+      reasonMessage: "missing api key",
       reason: "missing api key",
     };
   }
@@ -317,16 +372,21 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       raw: result.raw,
     };
   } catch (error) {
+    const failedAt = new Date().toISOString();
+    const failure = resolveFailureV1(error);
     return {
       status: "error",
       provider: config.provider,
       model: config.model,
-      generatedAt: new Date().toISOString(),
-      summary: "LLM 二次分析失败，已回退到规则引擎结果。",
+      generatedAt: failedAt,
+      summary: "LLM 二次分析失败（严格模式）。",
       opportunityNotes: [],
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
-      reason: error instanceof Error ? error.message : String(error),
+      reasonCode: failure.reasonCode,
+      reasonMessage: failure.reasonMessage,
+      failedAt,
+      reason: failure.reasonMessage,
     };
   }
 }

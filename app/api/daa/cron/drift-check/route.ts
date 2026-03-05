@@ -1,13 +1,8 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { hydrateUnifiedRequestWithSignalsV1 } from "@/src/daa/modules/decision/hydrateUnifiedRequestV1";
-import { buildUnifiedRequestFromStoreV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
+import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { sendTelegramByEnvV1 } from "@/src/daa/notify/telegramV1";
-import {
-  createDaaRebalanceDecisionV1,
-  getDaaNotificationConfigV1,
-} from "@/src/daa/store/daaStorePgV1";
-import { buildDaaUnifiedPlanV1 } from "@/src/daa/unifiedRebalanceV1";
+import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 
 export const runtime = "nodejs";
 
@@ -19,30 +14,45 @@ export async function POST(req: Request) {
       return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const { request } = await buildUnifiedRequestFromStoreV1();
-    const hydrated = await hydrateUnifiedRequestWithSignalsV1(request);
-    const plan = buildDaaUnifiedPlanV1(hydrated.request);
+    const system = await getDaaSystemConfigV2();
+    const strategy = system.config.rebalanceStrategy;
+    if (!strategy.autoGenerateEnabled) {
+      return okV1({
+        skipped: true,
+        reason: "auto generate disabled",
+        at: new Date().toISOString(),
+      });
+    }
 
-    const created = await createDaaRebalanceDecisionV1({
-      requestJson: hydrated.request as unknown as Record<string, unknown>,
-      responseJson: {
-        ...plan,
-        hydrationDiagnostics: hydrated.diagnostics,
-      } as unknown as Record<string, unknown>,
-      shouldRebalance: Boolean(plan.summary.shouldRebalance),
-      triggerSource: "cron_drift",
+    if (!strategy.drift.enabled) {
+      return okV1({
+        skipped: true,
+        reason: "drift trigger disabled",
+        at: new Date().toISOString(),
+      });
+    }
+
+    const generated = await generateWorkbenchRebalanceCycleV1({
+      triggerSource: "drift",
+      triggerReason: "偏移量阈值触发",
+      manual: false,
     });
 
+    const cycle = generated.cycle;
     try {
-      const notifyConfig = await getDaaNotificationConfigV1();
-      if (notifyConfig.enabled && notifyConfig.notifyOnDrift && plan.summary.shouldRebalance) {
+      if (
+        cycle
+        && generated.created
+        && system.config.notification.telegram.enabled
+        && system.config.notification.telegram.onDriftTrigger
+      ) {
         await sendTelegramByEnvV1(
           [
-            "*DAA 漂移检查触发再平衡*",
-            `Decision: ${created.decision.id}`,
-            `可执行订单: ${plan.summary.executableOrderCount}`,
-            `阻断订单: ${plan.summary.blockedOrderCount}`,
-            `阈值: ${(plan.summary.triggerThresholdPct * 100).toFixed(2)}%`,
+            "*DAA 偏移触发再平衡*",
+            `Cycle: ${cycle.cycleId}`,
+            `原因: ${cycle.triggerReason}`,
+            `建议数: ${cycle.proposals.length}`,
+            `风控: ${cycle.riskCheck.overallStatus}`,
           ].join("\n"),
         );
       }
@@ -51,11 +61,14 @@ export async function POST(req: Request) {
     }
 
     return okV1({
-      decisionId: created.decision.id,
-      shouldRebalance: plan.summary.shouldRebalance,
-      executableOrderCount: plan.summary.executableOrderCount,
-      blockedOrderCount: plan.summary.blockedOrderCount,
-      generatedAt: plan.generatedAt,
+      skipped: !generated.created,
+      created: generated.created,
+      skippedByCooldown: generated.skippedByCooldown,
+      cooldownUntil: generated.cooldownUntil,
+      message: generated.message,
+      cycleId: cycle?.cycleId || null,
+      proposalCount: cycle?.proposals.length || 0,
+      at: new Date().toISOString(),
     });
   });
 }

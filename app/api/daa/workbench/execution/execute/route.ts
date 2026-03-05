@@ -2,7 +2,7 @@ import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { normalizeDaaCurrencyCodeV1 } from "@/src/daa/assetKeyV1";
 import { normalizeReasonTagsV1, normalizeTradeSideV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
-import { createDaaTradeTicketV1, getActiveDaaTradeBasketV1, listDaaTradeTicketsV1 } from "@/src/daa/store/daaStorePgV1";
+import { createDaaTradeTicketV1, executeDaaTradeTicketsV1, listDaaTradeTicketsV1 } from "@/src/daa/store/daaStorePgV1";
 
 export const runtime = "nodejs";
 
@@ -11,6 +11,7 @@ type Body = {
   origin?: unknown;
   side?: unknown;
   assetKey?: unknown;
+  cycleId?: unknown;
   symbol?: unknown;
   market?: unknown;
   currency?: unknown;
@@ -28,8 +29,7 @@ type Body = {
 
 function normalizeSource(v: unknown): "manual" | "decision" {
   const source = String(v || "").trim().toLowerCase();
-  if (source === "decision") return "decision";
-  if (source === "recommendation") return "decision";
+  if (source === "decision" || source === "recommendation") return "decision";
   return "manual";
 }
 
@@ -63,10 +63,11 @@ export async function POST(req: Request) {
     }
 
     const source = normalizeSource(body?.source ?? body?.origin);
-    const ticket = await createDaaTradeTicketV1({
+    const item = await createDaaTradeTicketV1({
       source,
       side,
       assetKey: String(body?.assetKey || "").trim() || undefined,
+      cycleId: String(body?.cycleId || "").trim() || undefined,
       symbol,
       market,
       instrumentCurrency: normalizeDaaCurrencyCodeV1(body?.currency, "USD"),
@@ -82,22 +83,24 @@ export async function POST(req: Request) {
       createdBy: String(body?.createdBy || "").trim() || "admin",
     });
 
-    const basket = await getActiveDaaTradeBasketV1();
-    if (!basket) {
-      return failV1("NOT_FOUND", "active execution queue not found", { status: 404 });
-    }
-
-    const queueItems = await listDaaTradeTicketsV1({
-      basketId: basket.basketId,
-      status: "ready",
-      limit: 500,
-    });
+    const executed = await executeDaaTradeTicketsV1({ ticketIds: [item.ticketId] });
+    const result = executed.results[0] || {
+      ticketId: item.ticketId,
+      status: "rejected" as const,
+      rejectCode: "UNKNOWN",
+      rejectMessage: "execution result missing",
+    };
+    const logs = await listDaaTradeTicketsV1({ limit: 200 });
 
     return okV1({
-      queueId: basket.basketId,
-      queueStatus: basket.status,
-      item: ticket,
-      queueItems,
+      item: executed.tickets.find((ticket) => ticket.ticketId === item.ticketId) || item,
+      result,
+      summary: {
+        executed: executed.results.filter((row) => row.status === "executed").length,
+        rejected: executed.results.filter((row) => row.status === "rejected").length,
+        total: executed.results.length,
+      },
+      logs: logs.filter((row) => row.status !== "ready"),
     });
   });
 }
