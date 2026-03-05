@@ -1,6 +1,8 @@
-import { listDaaDataSourcesV1 } from "@/src/daa/store/daaStorePgV1";
+import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
+import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
 
 export type DaaLlmAnalysisStatusV1 = "skipped" | "ok" | "error";
+export type DaaLlmAnalysisContextV1 = "decision" | "insight" | "digest";
 
 export type DaaLlmAnalysisV1 = {
   status: DaaLlmAnalysisStatusV1;
@@ -16,8 +18,10 @@ export type DaaLlmAnalysisV1 = {
 };
 
 export type DaaLlmAnalysisInputV1 = {
+  analysisContext: DaaLlmAnalysisContextV1;
   baseCurrency: string;
   shouldRebalance: boolean;
+  analysisFocus: string;
   opportunities: Array<{
     symbol: string;
     finalScorePct: number;
@@ -29,8 +33,11 @@ export type DaaLlmAnalysisInputV1 = {
   warnings: string[];
 };
 
+export { DEFAULT_ANALYSIS_FOCUS_V1 };
+
 type LlmRuntimeConfigV1 = {
   enabled: boolean;
+  enabledInDecision: boolean;
   provider: string;
   model: string;
   endpoint: string;
@@ -49,32 +56,27 @@ function toFinite(value: unknown, fallback: number): number {
 }
 
 async function resolveLlmRuntimeConfigV1(): Promise<LlmRuntimeConfigV1> {
-  const sources = await listDaaDataSourcesV1("llm_analysis");
-  const source = sources.find((item) => item.enabled) ?? sources[0] ?? null;
-  const config = source?.configJson && typeof source.configJson === "object" ? source.configJson : {};
+  const system = await getDaaSystemConfigV2();
+  const config = system.config.dataSources.llmAnalysis;
+  const provider = normalizeText(config.provider, "codex").toLowerCase();
+  const envModel = normalizeText(process.env.DAA_LLM_MODEL || process.env.OPENAI_MODEL);
+  const model = normalizeText(envModel, normalizeText(config.model, provider === "packycode" ? "packycode-default" : "gpt-5-codex"));
+  const timeoutMs = Math.max(2000, Math.min(20000, Math.trunc(toFinite(config.timeoutMs, 8000))));
 
-  const provider = normalizeText((config as any).provider, "codex").toLowerCase();
-  const model = normalizeText((config as any).model, provider === "packycode" ? "packycode-default" : "gpt-5-codex");
-  const timeoutMs = Math.max(2000, Math.min(20000, Math.trunc(toFinite((config as any).timeoutMs, 8000))));
+  const endpoint = provider === "packycode"
+    ? normalizeText(process.env.PACKYCODE_ENDPOINT)
+    : normalizeText(process.env.DAA_LLM_ENDPOINT, "https://api.openai.com/v1/responses");
 
-  const endpoint = normalizeText(
-    (config as any).endpoint,
-    provider === "packycode"
-      ? normalizeText(process.env.PACKYCODE_ENDPOINT)
-      : normalizeText(process.env.DAA_LLM_ENDPOINT, "https://api.openai.com/v1/responses"),
-  );
+  const apiKey = provider === "packycode"
+    ? normalizeText(process.env.PACKYCODE_API_KEY)
+    : normalizeText(process.env.OPENAI_API_KEY);
 
-  const apiKey = normalizeText(
-    (config as any).apiKey,
-    provider === "packycode"
-      ? normalizeText(process.env.PACKYCODE_API_KEY)
-      : normalizeText(process.env.OPENAI_API_KEY),
-  );
-
-  const enabled = Boolean(source?.enabled) && ((config as any).enabledInDecision !== false);
+  const enabled = Boolean(config.enabled);
+  const enabledInDecision = config.enabledInDecision !== false;
 
   return {
     enabled,
+    enabledInDecision,
     provider,
     model,
     endpoint,
@@ -94,6 +96,7 @@ function buildPromptV1(input: DaaLlmAnalysisInputV1): string {
     "你是DAA投资风控分析助手，请仅输出结构化结论，不要给下单指令。",
     `基准币种: ${input.baseCurrency}`,
     `再平衡触发: ${input.shouldRebalance ? "是" : "否"}`,
+    `分析关注点: ${input.analysisFocus}`,
     `机会列表:\n${top || "无"}`,
     `系统告警: ${warningText}`,
     "请返回三段内容：",
@@ -218,6 +221,21 @@ async function callPackyCodeV1(config: LlmRuntimeConfigV1, prompt: string): Prom
 export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<DaaLlmAnalysisV1> {
   const startedAt = Date.now();
   const config = await resolveLlmRuntimeConfigV1();
+  const analysisFocus = normalizeText(input.analysisFocus);
+
+  if (!analysisFocus) {
+    return {
+      status: "error",
+      provider: config.provider,
+      model: config.model,
+      generatedAt: new Date().toISOString(),
+      summary: "LLM 二次分析失败：analysisFocus 不能为空。",
+      opportunityNotes: [],
+      riskNotes: [],
+      latencyMs: Date.now() - startedAt,
+      reason: "analysisFocus is required",
+    };
+  }
 
   if (!config.enabled) {
     return {
@@ -230,6 +248,20 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       riskNotes: [],
       latencyMs: Date.now() - startedAt,
       reason: "llm_analysis data source disabled",
+    };
+  }
+
+  if (input.analysisContext === "decision" && !config.enabledInDecision) {
+    return {
+      status: "skipped",
+      provider: config.provider,
+      model: config.model,
+      generatedAt: new Date().toISOString(),
+      summary: "LLM 二次分析在决策链路中未启用。",
+      opportunityNotes: [],
+      riskNotes: [],
+      latencyMs: Date.now() - startedAt,
+      reason: "llm_analysis disabled in decision context",
     };
   }
 
@@ -262,7 +294,10 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
   }
 
   try {
-    const prompt = buildPromptV1(input);
+    const prompt = buildPromptV1({
+      ...input,
+      analysisFocus,
+    });
 
     const result = config.provider === "packycode"
       ? await callPackyCodeV1(config, prompt)

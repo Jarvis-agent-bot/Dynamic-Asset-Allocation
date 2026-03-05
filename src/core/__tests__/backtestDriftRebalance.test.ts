@@ -130,7 +130,6 @@ describe("backtestDriftRebalance", () => {
       constraints: { maxIn: 1e9, maxOut: 1e9 },
       policy: { thresholdPct: 0.2, minTradeNotional: 0 },
       execution: {
-        timing: "same_bar_close",
         feeRatePct: 0.01,
         slippageBps: 100,
       },

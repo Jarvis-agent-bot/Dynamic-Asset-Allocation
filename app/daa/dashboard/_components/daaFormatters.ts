@@ -18,10 +18,3 @@ export function formatCurrency(v: number, currency = "USD"): string {
     return `${displayCurrency} ${Math.round(v).toLocaleString()}`;
   }
 }
-
-export function clampInput(min: number, value: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
-}

@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
+import { fetchDaaAuthSessionV1 } from "./daaAuthSessionClientV1";
+
 const SESSION_EXPIRED_NOTICE_AT_KEY = "daa_notice_session_expired_at_v0";
 const SESSION_EXPIRED_REDIRECT_DELAY_MS = 650;
 const DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1 = "daa:dashboard:persist-error";
@@ -33,15 +35,14 @@ export default function DaaSessionGuard() {
       if (cancelled || redirectingRef.current) return;
 
       try {
-        const res = await fetch("/api/daa/auth/me", {
-          method: "GET",
-          headers: { accept: "application/json" },
-          cache: "no-store",
+        const result = await fetchDaaAuthSessionV1({
+          silent: true,
+          force: true,
+          cacheTtlMs: 0,
         });
-
         if (cancelled) return;
 
-        if (res.status === 401) {
+        if (result.kind === "signedOut") {
           redirectingRef.current = true;
 
           let returnTo = pathname;

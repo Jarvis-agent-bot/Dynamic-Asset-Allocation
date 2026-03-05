@@ -90,7 +90,11 @@ export function daaPgPoolV0(): Pool {
     // Use createRequire() so this works in ESM (vitest) and CJS (Next server).
     const req = createRequire(import.meta.url);
     const { newDb } = req("pg-mem");
-    const db = newDb({ autoCreateForeignKeyIndices: true });
+    const db = newDb({
+      autoCreateForeignKeyIndices: true,
+      // pg-mem 3.x 默认会对未完全实现的 AST 抛错；本地开发放宽以兼容 CREATE TABLE 约束声明。
+      noAstCoverageCheck: true,
+    });
     const adapter = db.adapters.createPg();
     const pool = new adapter.Pool();
     st.pool = pool;

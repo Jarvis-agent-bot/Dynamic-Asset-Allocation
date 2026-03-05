@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   appendDaaAuthAuditEventV0,
@@ -27,6 +27,10 @@ function resetPgMem() {
 }
 
 describe("daa/auth store v0", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("hashes + verifies passwords", () => {
     const h = hashPasswordV0("pw-123");
     expect(typeof h).toBe("string");
@@ -89,7 +93,7 @@ describe("daa/auth store v0", () => {
   it("auto-bootstraps deterministic default admin in non-production", async () => {
     resetPgMem();
 
-    process.env.NODE_ENV = "test";
+    vi.stubEnv("NODE_ENV", "test");
     delete process.env.DAA_AUTH_DEV_DEFAULT_ACCOUNT;
     delete process.env.DAA_AUTH_DEV_DEFAULT_USERNAME;
     delete process.env.DAA_AUTH_DEV_DEFAULT_PASSWORD;

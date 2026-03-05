@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DaaOpportunityPanelV1 } from "@/src/daa/signals/opportunityServiceV1";
+import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
 import type { DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
 
 vi.mock("@/src/daa/signals/opportunityServiceV1", () => ({
@@ -8,21 +9,21 @@ vi.mock("@/src/daa/signals/opportunityServiceV1", () => ({
 }));
 
 vi.mock("@/src/daa/store/daaStorePgV1", () => ({
-  listDaaWatchlistCandidatesV1: vi.fn(),
+  listDaaCandidateAssetsV1: vi.fn(),
   listDaaFxRatesV1: vi.fn(),
 }));
 
 import { hydrateUnifiedRequestWithSignalsV1 } from "@/src/daa/modules/decision/hydrateUnifiedRequestV1";
 import { buildOpportunityPanelV1 } from "@/src/daa/signals/opportunityServiceV1";
-import { listDaaFxRatesV1, listDaaWatchlistCandidatesV1 } from "@/src/daa/store/daaStorePgV1";
+import { listDaaCandidateAssetsV1, listDaaFxRatesV1 } from "@/src/daa/store/daaStorePgV1";
 
-function mockPanel(): DaaOpportunityPanelV1 {
+function mockPanel(symbol = "AAA", close = 123.45): DaaOpportunityPanelV1 {
   return {
     generatedAt: new Date().toISOString(),
-    symbols: ["AAA"],
+    symbols: [symbol],
     opportunities: [
       {
-        symbol: "AAA",
+        symbol,
         finalScorePct: 79,
         confidencePct: 68,
         riskScorePct: 24,
@@ -34,12 +35,12 @@ function mockPanel(): DaaOpportunityPanelV1 {
         human: null,
         news: null,
         technical: {
-          symbol: "AAA",
+          symbol,
           scorePct: 75,
           confidencePct: 60,
           momentumRegime: "strong",
           metrics: {
-            close: 123.45,
+            close,
             sma20: 120,
             sma60: 110,
             rsi14: 58,
@@ -52,6 +53,8 @@ function mockPanel(): DaaOpportunityPanelV1 {
     ],
     diagnostics: {
       humanSignalCount: 0,
+      humanSourceStatus: "fallback_seed",
+      humanDiagnostics: [],
       newsSignalCount: 0,
       technicalSignalCount: 1,
       weights: { human: 0.45, news: 0.25, technical: 0.3 },
@@ -62,12 +65,12 @@ function mockPanel(): DaaOpportunityPanelV1 {
       newsSignals: [],
       technicalSignals: [
         {
-          symbol: "AAA",
+          symbol,
           scorePct: 75,
           confidencePct: 60,
           momentumRegime: "strong",
           metrics: {
-            close: 123.45,
+            close,
             sma20: 120,
             sma60: 110,
             rsi14: 58,
@@ -84,7 +87,7 @@ function mockPanel(): DaaOpportunityPanelV1 {
 describe("hydrate-unified-request-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(listDaaWatchlistCandidatesV1).mockResolvedValue([]);
+    vi.mocked(listDaaCandidateAssetsV1).mockResolvedValue([]);
     vi.mocked(listDaaFxRatesV1).mockResolvedValue([]);
     vi.mocked(buildOpportunityPanelV1).mockResolvedValue(mockPanel());
   });
@@ -97,7 +100,7 @@ describe("hydrate-unified-request-v1", () => {
       },
       targetWeights: {},
       positions: [],
-      watchlistCandidates: [
+      candidateAssets: [
         {
           symbol: "AAA",
           market: "US",
@@ -111,11 +114,46 @@ describe("hydrate-unified-request-v1", () => {
 
     const result = await hydrateUnifiedRequestWithSignalsV1(request);
     const position = result.request.positions.find((item) => item.symbol === "AAA");
+    const targetEntries = Object.entries(result.request.targetWeights)
+      .filter(([key]) => parseDaaAssetKeyV1(key)?.symbol === "AAA");
 
-    expect(result.request.targetWeights.AAA).toBeGreaterThan(0);
+    expect(targetEntries.length).toBeGreaterThan(0);
     expect(position).toBeTruthy();
     expect(position?.qty).toBe(0);
     expect(position?.price).toBe(123.45);
+  });
+
+  it("symbol 级目标权重会被严格拒绝（必须使用 assetKey）", async () => {
+    vi.mocked(buildOpportunityPanelV1).mockResolvedValueOnce(mockPanel("700", 10));
+
+    const request: DaaUnifiedRequestV1 = {
+      account: {
+        baseCurrency: "USD",
+        cash: 1000,
+      },
+      targetWeights: {
+        "700": 0.2,
+      },
+      positions: [],
+      candidateAssets: [
+        {
+          symbol: "700",
+          market: "HK",
+          currency: "HKD",
+          enabled: true,
+          targetWeightHint: 0.08,
+        },
+        {
+          symbol: "700",
+          market: "CN",
+          currency: "CNY",
+          enabled: true,
+          targetWeightHint: 0.12,
+        },
+      ],
+    };
+
+    await expect(hydrateUnifiedRequestWithSignalsV1(request)).rejects.toThrow(/MARKET::SYMBOL/);
   });
 
   it("当传入 humanSignals 时保留用户输入并补齐默认信号", async () => {
@@ -125,7 +163,7 @@ describe("hydrate-unified-request-v1", () => {
         cash: 800,
         investableCash: 0,
       },
-      targetWeights: { AAA: 1 },
+      targetWeights: { "US::AAA": 1 },
       positions: [],
       humanSignals: [
         {

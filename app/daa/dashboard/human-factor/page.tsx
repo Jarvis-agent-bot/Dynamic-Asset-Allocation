@@ -18,17 +18,17 @@ import MetricGauge from "../_components/MetricGauge";
 import TierBadge from "../_components/TierBadge";
 import {
   useHfFundRegistry,
-  usePositions,
+  useWorkbenchPositionsV1,
   useStrategyConfig,
   useFxRates,
+  useSystemConfigV2,
 } from "../_components/useDaaStore";
 import {
   DEFAULT_HF_FUND_REGISTRY,
   type DaaHfFundTrackRow,
 } from "../../unifiedInputStore";
 import { buildDaaUnifiedPlanV1, type DaaUnifiedHumanSignalV1 } from "@/src/daa/unifiedRebalanceV1";
-
-const DEFAULT_MARKET_SCOPE = ["US", "HK", "CN"];
+import { DEFAULT_SYSTEM_CONFIG_V2 } from "@/src/daa/config/systemConfigV2";
 const DAA_DASHBOARD_REFRESH_EVENT_V1 = "daa:dashboard:refresh";
 const DAA_DASHBOARD_DATA_UPDATED_EVENT_V1 = "daa:dashboard:data-updated";
 
@@ -105,8 +105,10 @@ function emptyFundRow(): DaaHfFundTrackRow {
 
 function FundFormDialog({
   onSave,
+  disabled = false,
 }: {
   onSave: (row: DaaHfFundTrackRow) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<DaaHfFundTrackRow>(emptyFundRow());
@@ -127,7 +129,7 @@ function FundFormDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button size="sm" disabled={disabled}>
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           添加基金
         </Button>
@@ -177,9 +179,10 @@ function FundFormDialog({
 
 export default function HumanFactorPage() {
   const [storedRegistry, setStoredRegistry] = useHfFundRegistry();
-  const [positions] = usePositions();
+  const [positions] = useWorkbenchPositionsV1();
   const [strategyConfig] = useStrategyConfig();
   const [fxRates] = useFxRates();
+  const { envelope: systemConfigEnvelope } = useSystemConfigV2();
 
   const [signalBatch, setSignalBatch] = useState<HumanSignalBatch | null>(null);
   const [sourceError, setSourceError] = useState("");
@@ -190,6 +193,14 @@ export default function HumanFactorPage() {
     () => dedupeRegistry(storedRegistry?.length ? storedRegistry : DEFAULT_HF_FUND_REGISTRY),
     [storedRegistry],
   );
+  const hfSourceEnabled = systemConfigEnvelope.config.dataSources.hfFund.enabled;
+  const marketScope = useMemo(() => {
+    const values = Array.isArray(systemConfigEnvelope.config.dataSources.hfFund.marketScope)
+      ? systemConfigEnvelope.config.dataSources.hfFund.marketScope
+      : [];
+    const normalized = values.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean);
+    return normalized.length ? normalized : [...DEFAULT_SYSTEM_CONFIG_V2.dataSources.hfFund.marketScope];
+  }, [systemConfigEnvelope.config.dataSources.hfFund.marketScope]);
 
   const enabledFundCodes = useMemo(
     () => registry.filter((item) => item.enabled).map((item) => item.fundCode),
@@ -288,7 +299,7 @@ export default function HumanFactorPage() {
     setSourceError("");
     try {
       const params = new URLSearchParams();
-      params.set("markets", DEFAULT_MARKET_SCOPE.join(","));
+      params.set("markets", marketScope.join(","));
       if (enabledFundCodes.length > 0) {
         params.set("fundCodes", enabledFundCodes.join(","));
       }
@@ -318,9 +329,13 @@ export default function HumanFactorPage() {
       setRefreshing(false);
       window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
     }
-  }, [enabledFundCodes]);
+  }, [enabledFundCodes, marketScope]);
 
   const runIngest = useCallback(async () => {
+    if (!hfSourceEnabled) {
+      setSourceError("hf_fund 数据源已在系统设置中关闭，当前页面为只读模式。");
+      return;
+    }
     setIngesting(true);
     setSourceError("");
 
@@ -329,7 +344,7 @@ export default function HumanFactorPage() {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({
-          marketScope: DEFAULT_MARKET_SCOPE,
+          marketScope,
           fundCodes: enabledFundCodes,
         }),
       });
@@ -352,7 +367,7 @@ export default function HumanFactorPage() {
       setIngesting(false);
       window.dispatchEvent(new CustomEvent(DAA_DASHBOARD_DATA_UPDATED_EVENT_V1, { detail: { ts: Date.now() } }));
     }
-  }, [enabledFundCodes]);
+  }, [enabledFundCodes, hfSourceEnabled, marketScope]);
 
   useEffect(() => {
     function onRefresh() {
@@ -364,6 +379,7 @@ export default function HumanFactorPage() {
   }, [loadSignalBatch]);
 
   function updateRegistry(next: DaaHfFundTrackRow[]) {
+    if (!hfSourceEnabled) return;
     setStoredRegistry(dedupeRegistry(next));
   }
 
@@ -379,7 +395,7 @@ export default function HumanFactorPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="人因中心" description="唯一入口：维护基金池、执行采集并查看人因信号。" />
+      <PageHeader title="人因中心" description="维护基金池、执行采集并查看人因信号（受系统设置中的 hf_fund 开关约束）。" />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
@@ -426,7 +442,7 @@ export default function HumanFactorPage() {
               <Button
                 size="sm"
                 onClick={() => void runIngest()}
-                disabled={ingesting || enabledFundCodes.length === 0}
+                disabled={ingesting || enabledFundCodes.length === 0 || !hfSourceEnabled}
               >
                 <ShieldCheck className={`mr-1.5 h-3.5 w-3.5 ${ingesting ? "animate-spin" : ""}`} />
                 运行采集
@@ -446,6 +462,15 @@ export default function HumanFactorPage() {
             <Alert className="py-2">
               <AlertCircle className="h-3.5 w-3.5" />
               <AlertDescription className="text-xs">当前没有启用基金，先在下方基金池至少启用 1 个基金后才能运行采集。</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {!hfSourceEnabled ? (
+            <Alert className="py-2">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <AlertDescription className="text-xs">
+                hf_fund 数据源已在系统设置关闭：当前页面仅可查看，不能采集或修改基金池。
+              </AlertDescription>
             </Alert>
           ) : null}
 
@@ -475,7 +500,7 @@ export default function HumanFactorPage() {
             </div>
             <div className="rounded-md border px-2 py-1.5">
               <span className="text-muted-foreground">市场范围</span>
-              <div className="font-medium">{signalBatch?.marketScope?.join(", ") || DEFAULT_MARKET_SCOPE.join(", ")}</div>
+              <div className="font-medium">{signalBatch?.marketScope?.join(", ") || marketScope.join(", ")}</div>
             </div>
             <div className="rounded-md border px-2 py-1.5">
               <span className="text-muted-foreground">启用基金数</span>
@@ -596,6 +621,7 @@ export default function HumanFactorPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <FundFormDialog
+                  disabled={!hfSourceEnabled}
                   onSave={(row) => {
                     updateRegistry([...registry, row]);
                   }}
@@ -604,7 +630,7 @@ export default function HumanFactorPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => updateRegistry(registry.map((item) => ({ ...item, enabled: true })))}
-                  disabled={!registry.length}
+                  disabled={!registry.length || !hfSourceEnabled}
                 >
                   全部启用
                 </Button>
@@ -612,7 +638,7 @@ export default function HumanFactorPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => updateRegistry(registry.map((item) => ({ ...item, enabled: false })))}
-                  disabled={!registry.length}
+                  disabled={!registry.length || !hfSourceEnabled}
                 >
                   全部暂停
                 </Button>
@@ -620,6 +646,7 @@ export default function HumanFactorPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setStoredRegistry(DEFAULT_HF_FUND_REGISTRY.map((item) => ({ ...item })))}
+                  disabled={!hfSourceEnabled}
                 >
                   恢复默认
                 </Button>
@@ -648,6 +675,7 @@ export default function HumanFactorPage() {
                             variant={fund.enabled ? "default" : "outline"}
                             className="h-7 px-2.5 text-xs"
                             onClick={() => toggleFundEnabled(index)}
+                            disabled={!hfSourceEnabled}
                           >
                             {fund.enabled ? "启用" : "暂停"}
                           </Button>
@@ -663,6 +691,7 @@ export default function HumanFactorPage() {
                             size="icon"
                             className="h-7 w-7 text-red-500"
                             onClick={() => removeFund(index)}
+                            disabled={!hfSourceEnabled}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>

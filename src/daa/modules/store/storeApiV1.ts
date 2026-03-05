@@ -1,17 +1,9 @@
 import { requestDataV1 } from "@/src/daa/api/clientV1";
-
-export type StorePositionV1 = {
-  id?: string;
-  symbol: string;
-  market: string;
-  currency: string;
-  qty: number;
-  price: number;
-  costBasis?: number | null;
-  tags: string[];
-};
-
-export type StoreStrategyConfigV1 = Record<string, unknown>;
+import {
+  normalizeSystemConfigV2,
+  type DaaSystemConfigPatchV2,
+  type DaaSystemConfigV2,
+} from "@/src/daa/config/systemConfigV2";
 
 export type StoreEquitySnapshotV1 = {
   ts: string;
@@ -19,24 +11,6 @@ export type StoreEquitySnapshotV1 = {
   holdingsValue: number;
   cash: number;
   source: string;
-};
-
-export type StoreDataSourceKindV1 = "hf_fund" | "price_feed" | "news_feed" | "fx_feed" | "llm_analysis";
-
-export type StoreDataSourceV1 = {
-  id: string;
-  kind: StoreDataSourceKindV1;
-  configJson: Record<string, unknown>;
-  enabled: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export type StoreNotificationConfigV1 = {
-  enabled: boolean;
-  notifyOnDrift: boolean;
-  notifyOnRebalance: boolean;
-  notifyOnPriceAlert: boolean;
 };
 
 export type StoreRunHistoryEntryV1 = {
@@ -56,7 +30,7 @@ export type StoreOpLogEntryV1 = {
   contextJson: Record<string, unknown>;
 };
 
-export type StoreWatchlistCandidateV1 = {
+export type StoreCandidateAssetV1 = {
   id?: string;
   symbol: string;
   market: string;
@@ -117,38 +91,81 @@ export type StoreCashLedgerApplyResultV1 = {
   equitySnapshot: StoreEquitySnapshotV1;
 };
 
-export async function listPositionsV1(): Promise<StorePositionV1[]> {
-  const data = await requestDataV1<{ positions: StorePositionV1[] }>("/api/daa/store/positions", {
+export type StoreSystemConfigEnvelopeV2 = {
+  version: number;
+  updatedAt: string;
+  config: DaaSystemConfigV2;
+};
+
+export type StoreSystemConfigPatchV2 = DaaSystemConfigPatchV2;
+
+export type StoreLlmEnvStatusV1 = {
+  provider: string;
+  endpointConfigured: boolean;
+  apiKeyConfigured: boolean;
+  modelConfigured: boolean;
+  endpointHint: string;
+  model: string;
+};
+
+export async function getSystemConfigV2(): Promise<StoreSystemConfigEnvelopeV2> {
+  const data = await requestDataV1<{ version?: unknown; updatedAt?: unknown; config?: unknown }>("/api/daa/store/system-config", {
     method: "GET",
     cache: "no-store",
   });
-  return Array.isArray(data.positions) ? data.positions : [];
+  const version = Number(data.version);
+  return {
+    version: Number.isFinite(version) && version > 0 ? Math.trunc(version) : 1,
+    updatedAt: String(data.updatedAt || new Date().toISOString()),
+    config: normalizeSystemConfigV2(data.config ?? {}),
+  };
 }
 
-export async function replacePositionsV1(positions: StorePositionV1[]): Promise<StorePositionV1[]> {
-  const data = await requestDataV1<{ positions: StorePositionV1[] }>("/api/daa/store/positions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ positions }),
-  });
-  return Array.isArray(data.positions) ? data.positions : [];
-}
-
-export async function getStrategyConfigV1(): Promise<StoreStrategyConfigV1> {
-  const data = await requestDataV1<{ config: StoreStrategyConfigV1 }>("/api/daa/store/strategy-config", {
+export async function getLlmEnvStatusV1(): Promise<StoreLlmEnvStatusV1> {
+  return requestDataV1<StoreLlmEnvStatusV1>("/api/daa/workbench/llm/env-status", {
     method: "GET",
     cache: "no-store",
   });
-  return data.config && typeof data.config === "object" ? data.config : {};
 }
 
-export async function saveStrategyConfigV1(config: StoreStrategyConfigV1): Promise<StoreStrategyConfigV1> {
-  const data = await requestDataV1<{ config: StoreStrategyConfigV1 }>("/api/daa/store/strategy-config", {
-    method: "POST",
+export async function patchSystemConfigV2(input: {
+  patches: StoreSystemConfigPatchV2[];
+  baseVersion?: number;
+}): Promise<StoreSystemConfigEnvelopeV2> {
+  const data = await requestDataV1<{ version?: unknown; updatedAt?: unknown; config?: unknown }>("/api/daa/store/system-config", {
+    method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ config }),
+    body: JSON.stringify({
+      baseVersion: input.baseVersion,
+      patches: input.patches,
+    }),
   });
-  return data.config && typeof data.config === "object" ? data.config : {};
+  const version = Number(data.version);
+  return {
+    version: Number.isFinite(version) && version > 0 ? Math.trunc(version) : 1,
+    updatedAt: String(data.updatedAt || new Date().toISOString()),
+    config: normalizeSystemConfigV2(data.config ?? {}),
+  };
+}
+
+export async function saveSystemConfigV2(input: {
+  config: DaaSystemConfigV2;
+  baseVersion?: number;
+}): Promise<StoreSystemConfigEnvelopeV2> {
+  const data = await requestDataV1<{ version?: unknown; updatedAt?: unknown; config?: unknown }>("/api/daa/store/system-config", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      baseVersion: input.baseVersion,
+      config: input.config,
+    }),
+  });
+  const version = Number(data.version);
+  return {
+    version: Number.isFinite(version) && version > 0 ? Math.trunc(version) : 1,
+    updatedAt: String(data.updatedAt || new Date().toISOString()),
+    config: normalizeSystemConfigV2(data.config ?? {}),
+  };
 }
 
 export async function listEquitySnapshotsV1(limit = 200): Promise<StoreEquitySnapshotV1[]> {
@@ -166,41 +183,6 @@ export async function appendEquitySnapshotV1(snapshot: Partial<StoreEquitySnapsh
     body: JSON.stringify({ snapshot }),
   });
   return data.snapshot;
-}
-
-export async function listDataSourcesV1(kind?: StoreDataSourceKindV1): Promise<StoreDataSourceV1[]> {
-  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : "";
-  const data = await requestDataV1<{ dataSources: StoreDataSourceV1[] }>(`/api/daa/store/data-sources${qs}`, {
-    method: "GET",
-    cache: "no-store",
-  });
-  return Array.isArray(data.dataSources) ? data.dataSources : [];
-}
-
-export async function replaceDataSourcesV1(dataSources: StoreDataSourceV1[]): Promise<StoreDataSourceV1[]> {
-  const data = await requestDataV1<{ dataSources: StoreDataSourceV1[] }>("/api/daa/store/data-sources", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ dataSources }),
-  });
-  return Array.isArray(data.dataSources) ? data.dataSources : [];
-}
-
-export async function getNotificationConfigV1(): Promise<StoreNotificationConfigV1> {
-  const data = await requestDataV1<{ config: StoreNotificationConfigV1 }>("/api/daa/store/notification-config", {
-    method: "GET",
-    cache: "no-store",
-  });
-  return data.config;
-}
-
-export async function saveNotificationConfigV1(config: StoreNotificationConfigV1): Promise<StoreNotificationConfigV1> {
-  const data = await requestDataV1<{ config: StoreNotificationConfigV1 }>("/api/daa/store/notification-config", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ config }),
-  });
-  return data.config;
 }
 
 export async function listRunHistoryV1(limit = 50): Promise<StoreRunHistoryEntryV1[]> {
@@ -246,16 +228,16 @@ export async function appendOpLogV1(input: {
   return data.entry;
 }
 
-export async function listWatchlistCandidatesV1(): Promise<StoreWatchlistCandidateV1[]> {
-  const data = await requestDataV1<{ candidates: StoreWatchlistCandidateV1[] }>("/api/daa/store/watchlist-candidates", {
+export async function listCandidateAssetsV1(): Promise<StoreCandidateAssetV1[]> {
+  const data = await requestDataV1<{ candidates: StoreCandidateAssetV1[] }>("/api/daa/store/candidate-assets", {
     method: "GET",
     cache: "no-store",
   });
   return Array.isArray(data.candidates) ? data.candidates : [];
 }
 
-export async function replaceWatchlistCandidatesV1(candidates: StoreWatchlistCandidateV1[]): Promise<StoreWatchlistCandidateV1[]> {
-  const data = await requestDataV1<{ candidates: StoreWatchlistCandidateV1[] }>("/api/daa/store/watchlist-candidates", {
+export async function replaceCandidateAssetsV1(candidates: StoreCandidateAssetV1[]): Promise<StoreCandidateAssetV1[]> {
+  const data = await requestDataV1<{ candidates: StoreCandidateAssetV1[] }>("/api/daa/store/candidate-assets", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ candidates }),

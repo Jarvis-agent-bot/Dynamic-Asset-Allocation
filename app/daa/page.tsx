@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 
-type DaaLegacyEntryProps = {
+type DaaEntryProps = {
   searchParams?: Record<string, string | string[] | undefined>;
 };
 
-export default function DaaLegacyEntry({ searchParams }: DaaLegacyEntryProps) {
+export default function DaaEntry({ searchParams }: DaaEntryProps) {
   // `/daa` 统一收敛到资产首页入口。
   const params = new URLSearchParams();
 

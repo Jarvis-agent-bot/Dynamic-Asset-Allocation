@@ -2,7 +2,7 @@ import { getLatestHumanSignalBatchV1 } from "@/src/daa/hf/hfServiceV1";
 import { buildFusedOpportunitiesV1, type DaaFusedOpportunityV1, type DaaFusionWeightsV1 } from "@/src/daa/signals/fusionV1";
 import { buildNewsSignalsV1, type DaaNewsSignalV1 } from "@/src/daa/signals/newsSignalV1";
 import { buildTechnicalSignalsV1, type DaaTechnicalSignalV1 } from "@/src/daa/signals/technicalSignalV1";
-import { listDaaDataSourcesV1 } from "@/src/daa/store/daaStorePgV1";
+import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 
 export type DaaOpportunityPanelV1 = {
   generatedAt: string;
@@ -65,19 +65,14 @@ export async function buildOpportunityPanelV1(input: {
 }): Promise<DaaOpportunityPanelV1> {
   const symbols = [...new Set((input.symbols ?? []).map((item) => normalizeSymbol(item)).filter(Boolean))];
 
-  const [newsSources, batch] = await Promise.all([
-    listDaaDataSourcesV1("news_feed"),
+  const [system, batch] = await Promise.all([
+    getDaaSystemConfigV2(),
     getLatestHumanSignalBatchV1({ symbols, fundCodes: input.fundCodes }),
   ]);
-
-  const newsSource = newsSources.find((item) => item.enabled) ?? newsSources[0] ?? null;
-  const newsConfig = newsSource?.configJson && typeof newsSource.configJson === "object"
-    ? newsSource.configJson
-    : {};
-
-  const newsProvider = String((newsConfig as any).provider || "yahoo_rss").trim() || "yahoo_rss";
-  const newsQuery = String((newsConfig as any).query || "").trim();
-  const newsSymbols = parseSymbolsFromConfig((newsConfig as any).symbols);
+  const newsConfig = system.config.dataSources.newsFeed;
+  const newsProvider = String(newsConfig.provider || "yahoo_rss").trim() || "yahoo_rss";
+  const newsQuery = String(newsConfig.query || "").trim();
+  const newsSymbols = parseSymbolsFromConfig(newsConfig.symbols);
   const finalNewsSymbols = [...new Set([...symbols, ...newsSymbols])];
 
   const [newsSignals, technicalSignals] = await Promise.all([
@@ -87,7 +82,7 @@ export async function buildOpportunityPanelV1(input: {
     buildTechnicalSignalsV1(symbols),
   ]);
 
-  const weights = resolveFusionWeights(newsConfig as Record<string, unknown>);
+  const weights = resolveFusionWeights(newsConfig as unknown as Record<string, unknown>);
 
   const opportunities = buildFusedOpportunitiesV1({
     symbols,

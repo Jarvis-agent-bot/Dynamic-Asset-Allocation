@@ -71,7 +71,10 @@ export type RebalanceCoreTargetWeight = {
 };
 
 export type SuggestedOrder = {
+  assetKey?: string;
   symbol: string;
+  market?: string;
+  instrumentCurrency?: string;
   side: "BUY" | "SELL";
   notional: number;
   reason: string;

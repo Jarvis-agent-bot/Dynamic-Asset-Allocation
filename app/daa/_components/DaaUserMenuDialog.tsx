@@ -26,26 +26,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { copyTextToClipboard } from "../copyToClipboard";
-
-type MeResponse =
-  | {
-      ok: true;
-      account: { accountId: string; username: string; roles: string[]; status: string };
-      session: {
-        sessionId: string;
-        createdAt: string;
-        expiresAt: string;
-        revokedAt: string | null;
-        lastSeenAt: string | null;
-      };
-    }
-  | { ok: false; error: string };
+import { fetchDaaAuthSessionV1, invalidateDaaAuthSessionCacheV1, type DaaAuthMeResponseV1 } from "./daaAuthSessionClientV1";
 
 type Model =
   | { kind: "loading" }
   | { kind: "signedOut" }
   | { kind: "error"; message: string }
-  | { kind: "signedIn"; me: Extract<MeResponse, { ok: true }> };
+  | { kind: "signedIn"; me: Extract<DaaAuthMeResponseV1, { ok: true }> };
 
 function formatRoles(roles: string[]): string {
   const xs = Array.isArray(roles) ? roles.filter(Boolean) : [];
@@ -71,43 +58,17 @@ export default function DaaUserMenuDialog() {
     let cancelled = false;
 
     async function run() {
-      try {
-        const res = await fetch("/api/daa/auth/me", {
-          method: "GET",
-          headers: { accept: "application/json" },
-        });
-
-        const text = await res.text();
-        let json: any = null;
-        try {
-          json = JSON.parse(text);
-        } catch {
-          json = null;
-        }
-
-        if (cancelled) return;
-
-        if (!res.ok) {
-          if (res.status === 401) {
-            setModel({ kind: "signedOut" });
-            return;
-          }
-          const msg = String(json?.error ?? `HTTP ${res.status}`);
-          setModel({ kind: "error", message: msg });
-          return;
-        }
-
-        const payload = json as MeResponse;
-        if (!payload?.ok) {
-          setModel({ kind: "signedOut" });
-          return;
-        }
-
-        setModel({ kind: "signedIn", me: payload });
-      } catch (e) {
-        if (cancelled) return;
-        setModel({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+      const result = await fetchDaaAuthSessionV1({ silent: true });
+      if (cancelled) return;
+      if (result.kind === "signedIn") {
+        setModel({ kind: "signedIn", me: result.me });
+        return;
       }
+      if (result.kind === "signedOut") {
+        setModel({ kind: "signedOut" });
+        return;
+      }
+      setModel({ kind: "error", message: result.message });
     }
 
     void run();
@@ -126,6 +87,7 @@ export default function DaaUserMenuDialog() {
       });
 
       if (res.ok) {
+        invalidateDaaAuthSessionCacheV1();
         window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}&notice=signed_out`;
         return;
       }

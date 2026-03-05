@@ -6,13 +6,15 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-// Keep these contracts intentionally loose for v0: the Python engine owns the details.
-// We still want stable top-level expectations to reduce UI/engine drift.
+export type RebalanceSimulateSignal = {
+  symbol: string;
+  action: string;
+  score: number;
+};
 
 export type RebalanceSimulateRequest = {
   money_plan: JsonValue;
-  // Engine 兼容格式：数组元素形如 { symbol, action, score, ... }。
-  signals: JsonValue;
+  signals: RebalanceSimulateSignal[];
 };
 
 export type EngineErrorResponse = {
@@ -37,11 +39,17 @@ export function isEngineErrorResponse(x: unknown): x is EngineErrorResponse {
 
 export function isRebalanceSimulateRequest(x: unknown): x is RebalanceSimulateRequest {
   if (!isPlainObject(x)) return false;
-  // v0: keep it shallow, but align with the Python engine contract.
   if (!("money_plan" in x) || !("signals" in x)) return false;
 
   const moneyPlan = (x as Record<string, unknown>).money_plan;
   const signals = (x as Record<string, unknown>).signals;
+  if (!isPlainObject(moneyPlan) || !Array.isArray(signals)) return false;
 
-  return isPlainObject(moneyPlan) && Array.isArray(signals);
+  return signals.every((item) => {
+    if (!isPlainObject(item)) return false;
+    const symbol = String(item.symbol || "").trim();
+    const action = String(item.action || "").trim();
+    const score = Number(item.score);
+    return symbol.length > 0 && action.length > 0 && Number.isFinite(score);
+  });
 }

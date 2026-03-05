@@ -20,17 +20,13 @@ describe("normalizeWeights", () => {
     expect(n.a + n.b).toBeCloseTo(1);
   });
 
-  it("clamps negatives to 0", () => {
-    const n = normalizeWeights({ a: -1, b: 3 });
-    expect(n.a).toBe(0);
-    expect(n.b).toBe(1);
+  it("throws on negative values", () => {
+    expect(() => normalizeWeights({ a: -1, b: 3 })).toThrow(/non-negative/);
   });
 
-  it("treats non-finite numbers as 0 (forgiving behavior)", () => {
-    const n = normalizeWeights({ a: Number.POSITIVE_INFINITY, b: 1, c: NaN as unknown as number });
-    expect(n.a).toBe(0);
-    expect(n.c).toBe(0);
-    expect(n.b).toBe(1);
+  it("throws on non-finite values", () => {
+    expect(() => normalizeWeights({ a: Number.POSITIVE_INFINITY, b: 1 })).toThrow(/finite number/);
+    expect(() => normalizeWeights({ a: NaN as unknown as number, b: 1 })).toThrow(/finite number/);
   });
 
   it("keeps shape of default config", () => {

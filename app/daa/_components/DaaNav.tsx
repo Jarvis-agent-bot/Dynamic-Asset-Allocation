@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { Briefcase, LineChart, Menu, Settings, SlidersHorizontal, Target, Users, Wallet } from "lucide-react";
+import { Briefcase, FlaskConical, Menu, Settings, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -13,11 +13,9 @@ import { cn } from "@/lib/utils";
 
 type NavKey =
   | "assets"
-  | "positions"
-  | "watchlist"
-  | "strategy"
+  | "portfolio"
+  | "strategyLab"
   | "humanFactor"
-  | "backtest"
   | "settings";
 
 type IconType = ComponentType<{ className?: string }>;
@@ -26,11 +24,9 @@ type NavItem = { key: NavKey; href: string; label: string; Icon: IconType };
 
 function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
-  if (pathname.startsWith("/daa/dashboard/positions")) return "positions";
-  if (pathname.startsWith("/daa/dashboard/watchlist")) return "watchlist";
-  if (pathname.startsWith("/daa/dashboard/strategy")) return "strategy";
+  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
+  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategyLab";
   if (pathname.startsWith("/daa/dashboard/human-factor")) return "humanFactor";
-  if (pathname.startsWith("/daa/dashboard/backtest")) return "backtest";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
   return "assets";
 }
@@ -39,11 +35,9 @@ function useNavItems(): NavItem[] {
   return useMemo(
     () => [
       { key: "assets" as const, href: "/daa/dashboard", label: "资产首页", Icon: Wallet },
-      { key: "positions" as const, href: "/daa/dashboard/positions", label: "持仓配置", Icon: Briefcase },
-      { key: "watchlist" as const, href: "/daa/dashboard/watchlist", label: "候选池", Icon: Target },
-      { key: "strategy" as const, href: "/daa/dashboard/strategy", label: "策略配置", Icon: SlidersHorizontal },
+      { key: "portfolio" as const, href: "/daa/dashboard/portfolio", label: "工作台", Icon: Briefcase },
+      { key: "strategyLab" as const, href: "/daa/dashboard/strategy-lab", label: "策略实验室", Icon: FlaskConical },
       { key: "humanFactor" as const, href: "/daa/dashboard/human-factor", label: "人因中心", Icon: Users },
-      { key: "backtest" as const, href: "/daa/dashboard/backtest", label: "回测与优化", Icon: LineChart },
       { key: "settings" as const, href: "/daa/dashboard/settings", label: "系统设置", Icon: Settings },
     ],
     [],
