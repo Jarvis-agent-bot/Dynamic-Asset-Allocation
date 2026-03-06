@@ -565,6 +565,9 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
           after,
         });
 
+        const eqAfterFill = portfolioValueAbs(holdings, cash, px, warnings);
+        equityAbsByDay[equityAbsByDay.length - 1] = eqAfterFill;
+
         lastRebalanceAt = now;
       }
     }

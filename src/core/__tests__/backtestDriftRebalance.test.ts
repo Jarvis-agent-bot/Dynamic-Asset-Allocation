@@ -116,6 +116,37 @@ describe("backtestDriftRebalance", () => {
     expect(rebalanceEvents[0].executionTiming).toBe("t_plus_1_close");
   });
 
+  it("applies same-bar rebalance fee impact on the signal day return", () => {
+    const res = backtestDriftRebalance({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 1 },
+          { date: "2026-01-02", close: 2 },
+          { date: "2026-01-03", close: 2 },
+        ],
+        BBB: [
+          { date: "2026-01-01", close: 1 },
+          { date: "2026-01-02", close: 1 },
+          { date: "2026-01-03", close: 1 },
+        ],
+      },
+      targetWeights: { AAA: 0.5, BBB: 0.5 },
+      initialHoldings: { AAA: 50, BBB: 50 },
+      initialCash: 0,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0.1, minTradeNotional: 0 },
+      execution: {
+        timing: "same_bar_close",
+        feeRatePct: 0.1,
+      },
+    });
+
+    expect(res.events.map((e) => e.kind)).toEqual(["rebalance"]);
+    expect(res.summary.totalFeesAbs).toBeCloseTo(4.5454545455, 8);
+    expect(res.dailyReturns[0]).toBeCloseTo(0.4545454545, 8);
+    expect(res.dailyReturns[1]).toBeCloseTo(0, 8);
+  });
+
   it("applies fee and slippage costs into turnover summary", () => {
     const res = backtestDriftRebalance({
       seriesBySymbol: {
