@@ -170,4 +170,27 @@ describe("backtestDriftRebalance", () => {
     expect(res.summary.totalFeesAbs).toBeGreaterThan(0);
     expect(res.summary.initialEquityAbs).toBeLessThan(100);
   });
+
+  it("deduplicates repeated missing-price warnings for the same holding", () => {
+    const res = backtestDriftRebalance({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 1 },
+          { date: "2026-01-02", close: 1 },
+          { date: "2026-01-03", close: 1 },
+        ],
+      },
+      targetWeights: { AAA: 1 },
+      initialHoldings: { AAA: 10, MISSING: 5 },
+      initialCash: 0,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0.1, minTradeNotional: 0 },
+    });
+
+    const missingPriceWarnings = res.warnings.filter((w) =>
+      w.includes("missing price for holding MISSING; excluded from valuation"),
+    );
+
+    expect(missingPriceWarnings).toHaveLength(1);
+  });
 });

@@ -118,6 +118,10 @@ function toFiniteNumber(x: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function pushUniqueWarning(warnings: string[], warning: string): void {
+  if (!warnings.includes(warning)) warnings.push(warning);
+}
+
 function isoToIsoDateTime(isoDate: string): string {
   // Accept YYYY-MM-DD for v0 and anchor to UTC midnight.
   if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return `${isoDate}T00:00:00.000Z`;
@@ -157,7 +161,7 @@ function buildPricesAtIndex(seriesBySymbol: Record<string, PriceBar[]>, i: numbe
     const bar = (series || [])[i];
     const close = toFiniteNumber(bar?.close, Number.NaN);
     if (!Number.isFinite(close) || close <= 0) {
-      warnings.push(`warning: invalid close for ${sym} at i=${i}; got ${String(bar?.close)}`);
+      pushUniqueWarning(warnings, `warning: invalid close for ${sym} at i=${i}; got ${String(bar?.close)}`);
       continue;
     }
     prices[sym] = close;
@@ -183,7 +187,7 @@ function portfolioValueAbs(holdings: Record<string, number>, cash: number, price
     if (!Number.isFinite(qty) || qty === 0) continue;
     const px = prices[sym];
     if (!Number.isFinite(px) || px <= 0) {
-      warnings.push(`warning: missing price for holding ${sym}; excluded from valuation`);
+      pushUniqueWarning(warnings, `warning: missing price for holding ${sym}; excluded from valuation`);
       continue;
     }
     const add = qty * px;
@@ -207,7 +211,7 @@ function computeWeightsSnapshot(opts: {
     if (!Number.isFinite(qty) || qty === 0) continue;
     const px = opts.prices[sym];
     if (!Number.isFinite(px) || px <= 0) {
-      opts.warnings.push(`warning: missing price for holding ${sym}; excluded from valuation`);
+      pushUniqueWarning(opts.warnings, `warning: missing price for holding ${sym}; excluded from valuation`);
       continue;
     }
     const v = qty * px;
@@ -260,7 +264,7 @@ function executeOrders(opts: {
 
     const px = opts.prices[sym];
     if (!Number.isFinite(px) || px <= 0) {
-      opts.warnings.push(`warning: cannot execute ${o.side} ${sym}: missing/invalid price`);
+      pushUniqueWarning(opts.warnings, `warning: cannot execute ${o.side} ${sym}: missing/invalid price`);
       continue;
     }
 
