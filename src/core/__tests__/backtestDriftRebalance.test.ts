@@ -193,4 +193,24 @@ describe("backtestDriftRebalance", () => {
 
     expect(missingPriceWarnings).toHaveLength(1);
   });
+
+  it("deduplicates repeated invalid-close warnings per symbol", () => {
+    const res = backtestDriftRebalance({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 0 },
+          { date: "2026-01-02", close: 0 },
+          { date: "2026-01-03", close: 0 },
+        ],
+      },
+      targetWeights: { AAA: 1 },
+      initialEquity: 100,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0.1, minTradeNotional: 0 },
+    });
+
+    const invalidCloseWarnings = res.warnings.filter((w) => w.includes("invalid close for AAA"));
+
+    expect(invalidCloseWarnings).toHaveLength(1);
+  });
 });

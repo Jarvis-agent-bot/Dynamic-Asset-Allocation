@@ -161,7 +161,7 @@ function buildPricesAtIndex(seriesBySymbol: Record<string, PriceBar[]>, i: numbe
     const bar = (series || [])[i];
     const close = toFiniteNumber(bar?.close, Number.NaN);
     if (!Number.isFinite(close) || close <= 0) {
-      pushUniqueWarning(warnings, `warning: invalid close for ${sym} at i=${i}; got ${String(bar?.close)}`);
+      pushUniqueWarning(warnings, `warning: invalid close for ${sym}; one or more bars were non-finite or <= 0 and were excluded from pricing`);
       continue;
     }
     prices[sym] = close;
