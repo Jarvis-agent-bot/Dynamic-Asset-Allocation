@@ -346,6 +346,166 @@ function computeTopAbsDriftsPct01(args: {
   return list.slice(0, Math.max(0, Math.floor(args.topN)));
 }
 
+type DriftRebalancePendingFill = {
+  signalDate: string;
+  trigger: RebalanceTriggerDecision;
+  orders: SuggestedOrder[];
+};
+
+type DriftRebalancePlanStageResult =
+  | { kind: "none" }
+  | { kind: "execute"; fill: DriftRebalancePendingFill }
+  | { kind: "queue"; pendingFill: DriftRebalancePendingFill }
+  | { kind: "skip"; warning: string };
+
+type DriftRebalanceSignalStageResult = ReturnType<typeof rebalanceCore>;
+
+function driftRebalanceSignalStage(args: {
+  holdings: Record<string, number>;
+  cash: number;
+  prices: Record<string, number>;
+  targetWeights: Record<string, number>;
+  constraints: RebalanceCoreConstraints | undefined;
+  policy: Omit<RebalanceTriggerPolicy, "lastRebalanceAt" | "now">;
+  lastRebalanceAt: string;
+  now: string;
+}): DriftRebalanceSignalStageResult {
+  return rebalanceCore({
+    account: { cash: args.cash },
+    holdings: args.holdings,
+    prices: args.prices,
+    targetWeights: args.targetWeights,
+    constraints: args.constraints,
+    policy: {
+      thresholdPct: args.policy.thresholdPct,
+      minTradeNotional: args.policy.minTradeNotional,
+      cooldownSeconds: args.policy.cooldownSeconds,
+      lastRebalanceAt: args.lastRebalanceAt,
+      now: args.now,
+    },
+  });
+}
+
+function driftRebalancePlanStage(args: {
+  decision: DriftRebalanceSignalStageResult;
+  signalDate: string;
+  dayIndex: number;
+  dayCount: number;
+  timing: "same_bar_close" | "t_plus_1_close";
+}): DriftRebalancePlanStageResult {
+  if (!args.decision.trigger.shouldRebalance) return { kind: "none" };
+
+  const fill: DriftRebalancePendingFill = {
+    signalDate: args.signalDate,
+    trigger: args.decision.trigger,
+    orders: args.decision.orders,
+  };
+
+  if (args.timing === "same_bar_close") {
+    return { kind: "execute", fill };
+  }
+
+  if (args.dayIndex >= args.dayCount - 1) {
+    return {
+      kind: "skip",
+      warning: `warning: rebalance signal on ${args.signalDate} skipped because no next bar for T+1 execution`,
+    };
+  }
+
+  return { kind: "queue", pendingFill: fill };
+}
+
+function driftRebalanceExecuteStage(args: {
+  fill: DriftRebalancePendingFill;
+  fillDate: string;
+  timing: "same_bar_close" | "t_plus_1_close";
+  holdings: Record<string, number>;
+  cash: number;
+  prices: Record<string, number>;
+  includeEventStates: boolean;
+  feeRatePct: number;
+  slippageBps: number;
+  warnings: string[];
+}): {
+  holdings: Record<string, number>;
+  cash: number;
+  event: DriftRebalanceBacktestEvent;
+  turnoverNotional: number;
+  feeNotional: number;
+} {
+  const before = args.includeEventStates
+    ? computeWeightsSnapshot({ holdings: args.holdings, cash: args.cash, prices: args.prices, warnings: args.warnings })
+    : undefined;
+
+  const ex = executeOrders({
+    holdings: args.holdings,
+    cash: args.cash,
+    prices: args.prices,
+    orders: args.fill.orders,
+    feeRatePct: args.feeRatePct,
+    slippageBps: args.slippageBps,
+    warnings: args.warnings,
+  });
+
+  const after = args.includeEventStates
+    ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: args.prices, warnings: args.warnings })
+    : undefined;
+
+  return {
+    holdings: ex.holdings,
+    cash: ex.cash,
+    turnoverNotional: ex.turnoverNotional,
+    feeNotional: ex.feeNotional,
+    event: {
+      date: args.fillDate,
+      signalDate: args.fill.signalDate,
+      executionTiming: args.timing,
+      kind: "rebalance",
+      trigger: args.fill.trigger,
+      orders: args.fill.orders,
+      executed: ex.executed,
+      turnoverNotional: ex.turnoverNotional,
+      feeNotional: ex.feeNotional,
+      before,
+      after,
+    },
+  };
+}
+
+function driftRebalanceLedgerRecordStage(args: {
+  equityAbsByDay: number[];
+  holdings: Record<string, number>;
+  cash: number;
+  prices: Record<string, number>;
+  warnings: string[];
+}): number {
+  const eq = portfolioValueAbs(args.holdings, args.cash, args.prices, args.warnings);
+  args.equityAbsByDay.push(eq);
+  return eq;
+}
+
+function driftRebalanceLedgerReplaceLatestStage(args: {
+  equityAbsByDay: number[];
+  holdings: Record<string, number>;
+  cash: number;
+  prices: Record<string, number>;
+  warnings: string[];
+}): number {
+  const eq = portfolioValueAbs(args.holdings, args.cash, args.prices, args.warnings);
+  if (args.equityAbsByDay.length) {
+    args.equityAbsByDay[args.equityAbsByDay.length - 1] = eq;
+  }
+  return eq;
+}
+
+export const driftRebalanceStages = {
+  signal: driftRebalanceSignalStage,
+  plan: driftRebalancePlanStage,
+  execute: driftRebalanceExecuteStage,
+  ledgerRecord: driftRebalanceLedgerRecordStage,
+  ledgerReplaceLatest: driftRebalanceLedgerReplaceLatestStage,
+} as const;
+
 export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): DriftRebalanceBacktestResult {
   const warnings: string[] = [];
 
@@ -445,78 +605,61 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   let turnoverNotional = events.reduce((acc, e) => acc + e.turnoverNotional, 0);
   let totalFeesAbs = events.reduce((acc, e) => acc + e.feeNotional, 0);
   let rebalanceCount = 0;
-  let pendingFill:
-    | {
-        signalDate: string;
-        trigger: RebalanceTriggerDecision;
-        orders: SuggestedOrder[];
-      }
-    | undefined;
+  let pendingFill: DriftRebalancePendingFill | undefined;
 
   for (let i = 0; i < dates.length; i++) {
     const px = buildPricesAtIndex(req.seriesBySymbol, i, warnings);
     const now = isoToIsoDateTime(dates[i]);
 
     if (execution.timing === "t_plus_1_close" && pendingFill?.orders?.length) {
-      const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
-      const ex = executeOrders({
+      const executed = driftRebalanceExecuteStage({
+        fill: pendingFill,
+        fillDate: dates[i],
+        timing: execution.timing,
         holdings,
         cash,
         prices: px,
-        orders: pendingFill.orders,
+        includeEventStates,
         feeRatePct: execution.feeRatePct,
         slippageBps: execution.slippageBps,
         warnings,
       });
-      const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
 
-      holdings = ex.holdings;
-      cash = ex.cash;
-      turnoverNotional += ex.turnoverNotional;
-      totalFeesAbs += ex.feeNotional;
+      holdings = executed.holdings;
+      cash = executed.cash;
+      turnoverNotional += executed.turnoverNotional;
+      totalFeesAbs += executed.feeNotional;
       rebalanceCount += 1;
-
-      events.push({
-        date: dates[i],
-        signalDate: pendingFill.signalDate,
-        executionTiming: execution.timing,
-        kind: "rebalance",
-        trigger: pendingFill.trigger,
-        orders: pendingFill.orders,
-        executed: ex.executed,
-        turnoverNotional: ex.turnoverNotional,
-        feeNotional: ex.feeNotional,
-        before,
-        after,
-      });
+      events.push(executed.event);
 
       lastRebalanceAt = now;
       pendingFill = undefined;
     }
 
-    const eq = portfolioValueAbs(holdings, cash, px, warnings);
-    equityAbsByDay.push(eq);
-
-    const res = rebalanceCore({
-      account: { cash },
+    driftRebalanceLedgerRecordStage({
+      equityAbsByDay,
       holdings,
+      cash,
+      prices: px,
+      warnings,
+    });
+
+    const res = driftRebalanceSignalStage({
+      holdings,
+      cash,
       prices: px,
       targetWeights: req.targetWeights,
       constraints,
-      policy: {
-        thresholdPct: policy.thresholdPct,
-        minTradeNotional: policy.minTradeNotional,
-        cooldownSeconds: policy.cooldownSeconds,
-        lastRebalanceAt,
-        now,
-      },
+      policy,
+      lastRebalanceAt,
+      now,
     });
 
     appendUniqueWarnings(res.warnings);
 
     if (includeTimeline) {
-      const deltas: Record<string, number> = (res as any).explain?.deltas ?? {};
-      const equity = toFiniteNumber((res as any).explain?.equity, res.trigger.stats.equity);
+      const deltas = res.explain?.deltas ?? {};
+      const equity = toFiniteNumber(res.explain?.equity, res.trigger.stats.equity);
 
       timeline.push({
         date: dates[i],
@@ -525,55 +668,54 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       });
     }
 
-    if (res.trigger.shouldRebalance) {
-      if (execution.timing === "t_plus_1_close") {
-        if (i >= dates.length - 1) {
-          warnings.push(`warning: rebalance signal on ${dates[i]} skipped because no next bar for T+1 execution`);
-        } else {
-          pendingFill = {
-            signalDate: dates[i],
-            trigger: res.trigger,
-            orders: res.orders,
-          };
-        }
-      } else {
-        const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
-        const ex = executeOrders({
-          holdings,
-          cash,
-          prices: px,
-          orders: res.orders,
-          feeRatePct: execution.feeRatePct,
-          slippageBps: execution.slippageBps,
-          warnings,
-        });
-        const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
+    const plan = driftRebalancePlanStage({
+      decision: res,
+      signalDate: dates[i],
+      dayIndex: i,
+      dayCount: dates.length,
+      timing: execution.timing,
+    });
 
-        holdings = ex.holdings;
-        cash = ex.cash;
-        turnoverNotional += ex.turnoverNotional;
-        totalFeesAbs += ex.feeNotional;
-        rebalanceCount += 1;
+    if (plan.kind === "queue") {
+      pendingFill = plan.pendingFill;
+      continue;
+    }
 
-        events.push({
-          date: dates[i],
-          signalDate: dates[i],
-          executionTiming: execution.timing,
-          kind: "rebalance",
-          trigger: res.trigger,
-          orders: res.orders,
-          executed: ex.executed,
-          turnoverNotional: ex.turnoverNotional,
-          feeNotional: ex.feeNotional,
-          before,
-          after,
-        });
+    if (plan.kind === "skip") {
+      warnings.push(plan.warning);
+      continue;
+    }
 
-        const eqAfterFill = portfolioValueAbs(holdings, cash, px, warnings);
-        equityAbsByDay[equityAbsByDay.length - 1] = eqAfterFill;
+    if (plan.kind === "execute") {
+      const executed = driftRebalanceExecuteStage({
+        fill: plan.fill,
+        fillDate: dates[i],
+        timing: execution.timing,
+        holdings,
+        cash,
+        prices: px,
+        includeEventStates,
+        feeRatePct: execution.feeRatePct,
+        slippageBps: execution.slippageBps,
+        warnings,
+      });
 
-        lastRebalanceAt = now;
-      }
+      holdings = executed.holdings;
+      cash = executed.cash;
+      turnoverNotional += executed.turnoverNotional;
+      totalFeesAbs += executed.feeNotional;
+      rebalanceCount += 1;
+      events.push(executed.event);
+
+      driftRebalanceLedgerReplaceLatestStage({
+        equityAbsByDay,
+        holdings,
+        cash,
+        prices: px,
+        warnings,
+      });
+
+      lastRebalanceAt = now;
     }
   }
 
