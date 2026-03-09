@@ -1,13 +1,15 @@
-import { NextResponse } from "next/server";
+import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
 
 import { clampLimitV0, fetchTextWithTimeoutV0, getProviderErrorStatusV0, mustGetEnvV0 } from "../../_lib/providerAdaptersV0";
 
-function json(data: unknown, init?: ResponseInit) {
-  return NextResponse.json(data, init);
+function parseJsonBestEffortV1(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
 }
 
-// Fetch tweets (or tweets+replies) for a user via pro.twitterdata.com.
-// Token MUST stay server-side (env) to avoid leaking to the browser.
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -17,7 +19,7 @@ export async function GET(req: Request) {
     const limit = clampLimitV0(url.searchParams.get("limit"));
 
     if (!restId) {
-      return json({ error: "missing restId" }, { status: 400 });
+      return failV1("VALIDATION_FAILED", "missing restId", { status: 400 });
     }
 
     const token = mustGetEnvV0("TWITTERDATA_TOKEN");
@@ -28,40 +30,36 @@ export async function GET(req: Request) {
     if (cursor) upstream.searchParams.set("cursor", cursor);
     upstream.searchParams.set("limit", String(limit));
 
-    const r = await fetchTextWithTimeoutV0(upstream, {
+    const response = await fetchTextWithTimeoutV0(upstream, {
       method: "GET",
       headers: {
         accept: "application/json",
       },
     });
 
-    if (!r.ok) {
-      return json(
-        {
-          error: "twitterdata upstream error",
-          status: r.status,
+    const text = await response.text();
+    if (!response.ok) {
+      return failV1("INTERNAL_ERROR", "twitterdata upstream error", {
+        status: 502,
+        details: {
+          status: response.status,
         },
-        { status: 502 },
-      );
+      });
     }
 
-    const text = await r.text();
-
-    let payload: unknown;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = { raw: text };
-    }
-
-    return json({ ok: true, source: "twitterdata", restId, includeReplies, cursor: cursor || null, payload });
-  } catch (e) {
-    return json(
-      {
-        error: "twitter user tweets fetch failed",
-        message: e instanceof Error ? e.message : String(e),
+    return okV1({
+      source: "twitterdata",
+      restId,
+      includeReplies,
+      cursor: cursor || null,
+      payload: parseJsonBestEffortV1(text),
+    });
+  } catch (error) {
+    return failV1("INTERNAL_ERROR", "twitter user tweets fetch failed", {
+      status: getProviderErrorStatusV0(error),
+      details: {
+        message: error instanceof Error ? error.message : String(error),
       },
-      { status: getProviderErrorStatusV0(e) },
-    );
+    });
   }
 }

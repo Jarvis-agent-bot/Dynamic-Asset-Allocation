@@ -1,5 +1,3 @@
-import { NextResponse } from "next/server";
-
 import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
 import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
 import {
@@ -8,6 +6,7 @@ import {
   createDaaAuthSessionV0,
   ensureDevDefaultDaaAuthAccountV0,
 } from "@/src/daa/auth/daaAuthStoreV0";
+import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
 import { appendNoticeParamV0, normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
 
 export const runtime = "nodejs";
@@ -37,7 +36,7 @@ export async function POST(req: Request) {
   const ip = getClientIpFromRequestV0(req) || null;
 
   if (!username || !password) {
-    return NextResponse.json({ ok: false, error: "invalid_credentials" }, { status: 401 });
+    return failV1("UNAUTHORIZED", "invalid_credentials", { status: 401 });
   }
 
   try {
@@ -51,7 +50,7 @@ export async function POST(req: Request) {
         payload: { username, returnTo, userAgent, ip },
       }).catch(() => null);
 
-      return NextResponse.json({ ok: false, error: "invalid_credentials" }, { status: 401 });
+      return failV1("UNAUTHORIZED", "invalid_credentials", { status: 401 });
     }
 
     const { session, token } = await createDaaAuthSessionV0({
@@ -70,8 +69,7 @@ export async function POST(req: Request) {
 
     const redirectTo = appendNoticeParamV0(returnTo, "signed_in");
 
-    const res = NextResponse.json({
-      ok: true,
+    const res = okV1({
       redirectTo,
       account: {
         accountId: account.accountId,
@@ -91,14 +89,12 @@ export async function POST(req: Request) {
     });
 
     return res;
-  } catch (e) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "auth_backend_unavailable",
-        message: e instanceof Error ? e.message : String(e),
+  } catch (error) {
+    return failV1("INTERNAL_ERROR", "auth_backend_unavailable", {
+      status: 503,
+      details: {
+        message: error instanceof Error ? error.message : String(error),
       },
-      { status: 503 },
-    );
+    });
   }
 }

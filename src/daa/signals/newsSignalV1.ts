@@ -1,4 +1,11 @@
-import { fetchYahooRssItemsBySymbolV1, parseSymbolsFromNewsQueryV1 } from "@/src/market/yahooRssFetchV1";
+import { fetchYahooRssFeedBySymbolV1, parseSymbolsFromNewsQueryV1 } from "@/src/market/yahooRssFetchV1";
+import {
+  appendDaaExternalPayloadRawV1,
+  getDaaNewsSignalSnapshotBySymbolV1,
+  listDaaNewsItemsBySymbolV1,
+  upsertDaaNewsItemSnapshotsV1,
+  upsertDaaNewsSignalSnapshotsV1,
+} from "@/src/daa/store/daaStorePgV1";
 
 export type DaaNewsSignalItemV1 = {
   symbol: string;
@@ -18,6 +25,9 @@ export type DaaNewsSignalV1 = {
   reasons: string[];
   items: DaaNewsSignalItemV1[];
 };
+
+const NEWS_SIGNAL_CACHE_MAX_AGE_MS_V1 = 30 * 60 * 1000;
+const NEWS_RAW_RETENTION_DAYS_V1 = 90;
 
 function clamp(v: number, lo: number, hi: number): number {
   if (!Number.isFinite(v)) return lo;
@@ -124,7 +134,64 @@ export async function buildNewsSignalForSymbolV1(symbol: string): Promise<DaaNew
   const normalized = String(symbol || "").trim().toUpperCase();
   if (!normalized) return null;
 
-  const rssItems = await fetchYahooRssItemsBySymbolV1(normalized, 25);
+  try {
+    const [cachedSignal, cachedItems] = await Promise.all([
+      getDaaNewsSignalSnapshotBySymbolV1({ provider: "yahoo_rss", symbol: normalized }),
+      listDaaNewsItemsBySymbolV1({ provider: "yahoo_rss", symbol: normalized, limit: 20 }),
+    ]);
+    if (cachedSignal) {
+      const ageMs = Date.now() - Date.parse(cachedSignal.generatedAt);
+      if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= NEWS_SIGNAL_CACHE_MAX_AGE_MS_V1) {
+        return {
+          symbol: normalized,
+          scorePct: Number(cachedSignal.scorePct.toFixed(2)),
+          confidencePct: Number(cachedSignal.confidencePct.toFixed(2)),
+          evidenceCount: cachedSignal.evidenceCount,
+          reasons: cachedSignal.reasonsJson,
+          items: cachedItems.map((item) => ({
+            symbol: normalized,
+            title: item.title,
+            link: item.link || null,
+            ts: item.publishedAt || item.fetchedAt,
+            sentimentScore: item.sentimentScore,
+            sourceCredibility: item.sourceCredibility,
+            freshness: item.freshness,
+          })),
+        };
+      }
+    }
+  } catch {
+    // ignore cache errors and continue to fetch upstream
+  }
+
+  const feedResult = await fetchYahooRssFeedBySymbolV1(normalized, 25);
+  const rssItems = feedResult.items;
+  const fetchedAt = new Date().toISOString();
+  let rawRefId: string | null = null;
+  if (feedResult.requestUrl || feedResult.payloadText) {
+    try {
+      const raw = await appendDaaExternalPayloadRawV1({
+        provider: "yahoo_rss",
+        resource: "yahoo_rss.headline",
+        subjectKey: normalized,
+        requestUrl: feedResult.requestUrl,
+        requestJson: {
+          symbol: normalized,
+          limit: 25,
+        },
+        responseStatus: feedResult.status,
+        responseHeadersJson: feedResult.responseHeaders,
+        payloadText: feedResult.payloadText || null,
+        payloadJson: null,
+        fetchedAt,
+        expireAt: new Date(Date.now() + NEWS_RAW_RETENTION_DAYS_V1 * 24 * 3600 * 1000).toISOString(),
+      });
+      rawRefId = raw.id;
+    } catch {
+      rawRefId = null;
+    }
+  }
+
   if (!rssItems.length) {
     return {
       symbol: normalized,
@@ -174,7 +241,7 @@ export async function buildNewsSignalForSymbolV1(symbol: string): Promise<DaaNew
   else reasons.push("新闻情绪中性");
   reasons.push(`采样${items.length}条资讯`);
 
-  return {
+  const signal: DaaNewsSignalV1 = {
     symbol: normalized,
     scorePct: Number(clamp(scorePct, 0, 100).toFixed(2)),
     confidencePct: Number(confidencePct.toFixed(2)),
@@ -184,7 +251,37 @@ export async function buildNewsSignalForSymbolV1(symbol: string): Promise<DaaNew
       .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
       .slice(0, 12),
   };
+
+  try {
+    await upsertDaaNewsSignalSnapshotsV1([{
+      provider: "yahoo_rss",
+      symbol: normalized,
+      scorePct: signal.scorePct,
+      confidencePct: signal.confidencePct,
+      evidenceCount: signal.evidenceCount,
+      reasonsJson: signal.reasons,
+      generatedAt: fetchedAt,
+    }]);
+    await upsertDaaNewsItemSnapshotsV1(signal.items.map((item) => ({
+      provider: "yahoo_rss",
+      symbol: normalized,
+      title: item.title,
+      link: item.link,
+      publishedAt: item.ts,
+      fetchedAt,
+      sentimentScore: item.sentimentScore,
+      sourceCredibility: item.sourceCredibility,
+      freshness: item.freshness,
+      rawRefId,
+    })));
+  } catch {
+    // ignore persist errors to keep signal path robust
+  }
+
+  return signal;
 }
+
+const NEWS_SIGNALS_CONCURRENCY_V1 = 4;
 
 export async function buildNewsSignalsV1(opts: {
   symbols?: string[];
@@ -198,9 +295,12 @@ export async function buildNewsSignalsV1(opts: {
   if (!symbols.length) return [];
 
   const out: DaaNewsSignalV1[] = [];
-  for (const symbol of symbols) {
-    const signal = await buildNewsSignalForSymbolV1(symbol);
-    if (signal) out.push(signal);
+  for (let i = 0; i < symbols.length; i += NEWS_SIGNALS_CONCURRENCY_V1) {
+    const chunk = symbols.slice(i, i + NEWS_SIGNALS_CONCURRENCY_V1);
+    const results = await Promise.allSettled(chunk.map((s) => buildNewsSignalForSymbolV1(s)));
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) out.push(result.value);
+    }
   }
   return out;
 }

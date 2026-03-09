@@ -37,15 +37,34 @@ pnpm dev
 
 ### 环境变量
 
-| 变量 | 必填 | 说明 |
-|------|------|------|
-| `OPENAI_API_KEY` | ✅ | LLM API Key |
-| `DAA_LLM_ENDPOINT` | - | 默认 `https://api.openai.com/v1/responses` |
-| `DAA_LLM_MODEL` | - | 默认 `gpt-5-codex` |
-| `DAA_DB_URL` | - | Postgres 连接串（未配置时自动回退 pg-mem） |
-| `DATABASE_URL` | - | 通用 DB 连接串（回退） |
+| 变量               | 必填 | 说明                                       |
+| ------------------ | ---- | ------------------------------------------ |
+| `OPENAI_API_KEY`   | ✅    | LLM API Key                                |
+| `DAA_LLM_ENDPOINT` | -    | 默认 `https://api.openai.com/v1/responses` |
+| `DAA_LLM_MODEL`    | -    | 默认 `gpt-5-codex`                         |
+| `DAA_DB_URL`       | -    | Postgres 连接串（未配置时自动回退 pg-mem） |
+| `DATABASE_URL`     | -    | 通用 DB 连接串（回退）                     |
 
----
+### 避免“重启后数据清空”
+
+如果你在 `pnpm dev` 下发现“改代码后重新登录，观察列表/执行记录都没了”，通常是因为当前运行在 `pg-mem`（内存数据库），而不是持久化 Postgres。
+
+建议本地固定配置：
+
+```bash
+# 1) 确认本机 Postgres 可用（示例端口 5432）
+pg_isready -h 127.0.0.1 -p 5432
+
+# 2) 创建业务库（首次）
+createdb -h 127.0.0.1 -p 5432 daa
+
+# 3) 在 .env.local 中配置连接（按你的系统用户调整）
+DAA_DB_URL=postgresql://<your_user>@127.0.0.1:5432/daa
+```
+
+然后重启 `pnpm dev`。此后数据会落到真实 Postgres，服务重启不会丢失。
+
+## LLM 环境变量
 
 ## 架构概览
 
@@ -67,26 +86,27 @@ Next.js 14 App Router
 
 ## 核心 API
 
-| 端点 | 说明 |
-|------|------|
-| `GET /api/daa/workbench/bootstrap` | 加载工作台（持仓、价格、日志） |
-| `GET /api/daa/workbench/search-assets` | 全市场资产搜索 |
-| `POST /api/daa/workbench/assets/upsert` | 加入资产池 |
-| `GET /api/daa/workbench/assets/:key/insights` | 资产洞察（技术 + 新闻 + AI） |
-| `POST /api/daa/workbench/recommendations` | 生成交易建议 |
-| `POST /api/daa/workbench/execution/preview` | 市价预览 |
-| `POST /api/daa/workbench/execution/execute` | 执行并返回回执 |
-| `GET /api/daa/workbench/execution/logs` | 执行日志 |
-| `GET/PATCH /api/daa/store/system-config` | 系统配置（含乐观并发） |
+| 端点                                          | 说明                           |
+| --------------------------------------------- | ------------------------------ |
+| `GET /api/daa/workbench/bootstrap`            | 加载工作台（持仓、价格、日志） |
+| `GET /api/daa/workbench/search-assets`        | 全市场资产搜索                 |
+| `POST /api/daa/workbench/assets/upsert`       | 加入资产池                     |
+| `GET /api/daa/workbench/assets/:key/insights` | 资产洞察（技术 + 新闻 + AI）   |
+| `POST /api/daa/workbench/recommendations`     | 生成交易建议                   |
+| `POST /api/daa/workbench/execution/preview`   | 市价预览                       |
+| `POST /api/daa/workbench/execution/execute`   | 执行并返回回执                 |
+| `GET /api/daa/workbench/execution/logs`       | 执行日志                       |
+| `GET/PATCH /api/daa/store/system-config`      | 系统配置（含乐观并发）         |
 
 ---
 
 ## 开发验证
 
 ```bash
-pnpm test             # 单元测试
-pnpm run typecheck    # TypeScript 检查
-pnpm run build:check  # 构建验证（不输出产物）
+pnpm test               # 单元测试
+pnpm run typecheck      # 全量 TypeScript 检查
+pnpm run typecheck:core # 仅 core 算法层 TypeScript 检查
+pnpm run build:check    # 构建验证（不输出产物）
 
 # 三项合一：
 pnpm run gates

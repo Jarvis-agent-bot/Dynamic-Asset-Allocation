@@ -49,20 +49,24 @@ describe("strategyLabEngineV1", () => {
     expect(aligned.BBB.map((x) => x.close)).toEqual([50, 50, 55, 56]);
   });
 
-  it("runs real backtest candidates with baseline + ensemble", () => {
+  it("builds strict walk-forward target weights without using future bars", () => {
     const result = runStrategyLabBacktestsV1({
       seriesBySymbol: {
         AAA: [
           { date: "2026-01-01", close: 100 },
-          { date: "2026-01-02", close: 102 },
-          { date: "2026-01-03", close: 104 },
-          { date: "2026-01-04", close: 106 },
+          { date: "2026-01-02", close: 110 },
+          { date: "2026-01-03", close: 120 },
+          { date: "2026-01-04", close: 130 },
+          { date: "2026-01-05", close: 130 },
+          { date: "2026-01-06", close: 130 },
         ],
         BBB: [
           { date: "2026-01-01", close: 100 },
-          { date: "2026-01-02", close: 99 },
-          { date: "2026-01-03", close: 98 },
-          { date: "2026-01-04", close: 97 },
+          { date: "2026-01-02", close: 100 },
+          { date: "2026-01-03", close: 100 },
+          { date: "2026-01-04", close: 100 },
+          { date: "2026-01-05", close: 300 },
+          { date: "2026-01-06", close: 300 },
         ],
       },
       baselineTargetWeights: { AAA: 0.7, BBB: 0.3 },
@@ -72,27 +76,66 @@ describe("strategyLabEngineV1", () => {
         minVariance: 0.15,
         equalWeight: 0.2,
       },
+      lookbackBars: 2,
       initialEquity: 10000,
-      constraints: { maxIn: 1e9, maxOut: 1e9, minNotional: 0 },
+      constraints: { maxOrderPctOfNav: 1, minNotional: 0 },
       policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
     });
 
-    expect(result.candidates.map((x) => x.id)).toEqual([
-      "baseline",
-      "momentum",
-      "riskParity",
-      "minVariance",
-      "equalWeight",
-      "ensemble",
-    ]);
-
+    const momentum = result.candidates.find((x) => x.id === "momentum");
     const baseline = result.candidates.find((x) => x.id === "baseline");
+    const equalWeight = result.candidates.find((x) => x.id === "equalWeight");
     const ensemble = result.candidates.find((x) => x.id === "ensemble");
+
+    expect(momentum).toBeTruthy();
     expect(baseline).toBeTruthy();
+    expect(equalWeight).toBeTruthy();
     expect(ensemble).toBeTruthy();
 
-    expect(Number.isFinite(baseline?.backtest.metrics.totalReturn)).toBe(true);
-    expect(Number.isFinite(ensemble?.backtest.metrics.sharpe)).toBe(true);
+    expect(momentum?.targetWeightsByDate["2026-01-01"]).toEqual({});
+    expect(momentum?.targetWeightsByDate["2026-01-02"]).toEqual({});
+    expect(momentum?.targetWeightsByDate["2026-01-04"].AAA || 0).toBeGreaterThan(momentum?.targetWeightsByDate["2026-01-04"].BBB || 0);
+    expect(momentum?.targetWeightsByDate["2026-01-05"].AAA || 0).toBeGreaterThan(momentum?.targetWeightsByDate["2026-01-05"].BBB || 0);
+    expect(momentum?.targetWeightsByDate["2026-01-06"].BBB || 0).toBeGreaterThan(momentum?.targetWeightsByDate["2026-01-06"].AAA || 0);
+
+    expect(baseline?.targetWeightsByDate["2026-01-04"]).toEqual({ AAA: 0.7, BBB: 0.3 });
+    expect(equalWeight?.targetWeightsByDate["2026-01-04"]).toEqual({ AAA: 0.5, BBB: 0.5 });
+    expect(ensemble?.targetWeightsByDate["2026-01-04"]).toBeTruthy();
+  });
+
+  it("keeps the portfolio in cash during warm-up and waits for T+1 close to build the first position", () => {
+    const result = runStrategyLabBacktestsV1({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 101 },
+          { date: "2026-01-03", close: 102 },
+          { date: "2026-01-04", close: 103 },
+        ],
+        BBB: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 100 },
+          { date: "2026-01-03", close: 100 },
+          { date: "2026-01-04", close: 100 },
+        ],
+      },
+      baselineTargetWeights: { AAA: 0.6, BBB: 0.4 },
+      ensembleConfig: {
+        momentum: 0.4,
+        riskParity: 0.25,
+        minVariance: 0.15,
+        equalWeight: 0.2,
+      },
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0, minTradeNotional: 0, cooldownSeconds: 0 },
+    });
+
+    const baseline = result.candidates.find((item) => item.id === "baseline");
+    expect(baseline?.backtest.events.map((event) => event.kind)).toEqual(["rebalance"]);
+    expect(baseline?.backtest.events[0].signalDate).toBe("2026-01-03");
+    expect(baseline?.backtest.events[0].date).toBe("2026-01-04");
   });
 
   it("builds sorted write-back diffs", () => {

@@ -36,22 +36,24 @@ describe("/api/daa/auth regression pack (Postgres-backed contracts)", () => {
     const meRoute = readRoute("app/api/daa/auth/me/route.ts");
     const logoutRoute = readRoute("app/api/daa/auth/logout/route.ts");
 
-    expect(bootstrapRoute).toContain('status: 500');
-    expect(bootstrapRoute).toContain('status: 401');
-    expect(bootstrapRoute).toContain('error: "unauthorized"');
+    expect(bootstrapRoute).toContain('failV1("INTERNAL_ERROR"');
+    expect(bootstrapRoute).toContain('failV1("UNAUTHORIZED", "unauthorized"');
     expect(bootstrapRoute).toContain('"www-authenticate": "DaaBootstrap"');
+    expect(bootstrapRoute).toContain('okV1({');
 
-    expect(loginRoute).toContain('error: "invalid_credentials"');
+    expect(loginRoute).toContain('failV1("UNAUTHORIZED", "invalid_credentials"');
     expect(loginRoute).toContain("ensureDevDefaultDaaAuthAccountV0");
-    expect(loginRoute).toContain('error: "auth_backend_unavailable"');
+    expect(loginRoute).toContain('failV1("INTERNAL_ERROR", "auth_backend_unavailable"');
+    expect(loginRoute).toContain('okV1({');
 
     expect(meRoute).toContain("ensureDevDefaultDaaAuthAccountV0");
-    expect(meRoute).toContain('error: "not_authenticated"');
-    expect(meRoute).toContain('status: 401');
+    expect(meRoute).toContain('failV1("UNAUTHORIZED", "not_authenticated"');
+    expect(meRoute).toContain('status: silent ? 200 : 401');
     expect(meRoute).toContain("name: DAA_AUTH_SESSION_COOKIE_V0");
+    expect(meRoute).toContain('okV1({');
 
     expect(logoutRoute).toContain('maxAge: 0');
-    expect(logoutRoute).toContain('NextResponse.json({ ok: true })');
+    expect(logoutRoute).toContain('okV1({ signedOut: true })');
   });
 
   it("keeps bootstrap -> login-context -> revoke flow stable on Postgres mem state", async () => {

@@ -1,5 +1,6 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
+import { refreshMarketIndicatorsV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
 import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { sendEmailByEnvV1 } from "@/src/daa/notify/emailV1";
 import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
@@ -49,6 +50,17 @@ export async function POST(req: Request) {
       });
     }
 
+    let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
+    try {
+      const refreshed = await refreshMarketIndicatorsV1();
+      marketRefresh = { ok: true, refreshedCount: refreshed.refreshedCount };
+    } catch (error) {
+      marketRefresh = {
+        ok: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+
     const generated = await generateWorkbenchRebalanceCycleV1({
       triggerSource: "calendar",
       triggerReason: "定期再平衡触发",
@@ -92,6 +104,7 @@ export async function POST(req: Request) {
       cycleId: cycle?.cycleId || null,
       proposalCount: cycle?.proposals.length || 0,
       email: emailResult,
+      marketRefresh,
       at: new Date().toISOString(),
     });
   });

@@ -74,8 +74,8 @@ export function computeBacktestAttribution(input: {
     })
     .sort((a, b) => Math.abs(b.contributionToReturn) - Math.abs(a.contributionToReturn) || a.symbol.localeCompare(b.symbol));
 
-  const months = input.backtest.dailyReturns.length > 0 ? input.backtest.dailyReturns : [0];
-  const winRate = months.filter((x) => x > 0).length / months.length;
+  const returnSeries = input.backtest.dailyReturns.length > 0 ? input.backtest.dailyReturns : [0];
+  const winRate = returnSeries.filter((x) => x > 0).length / returnSeries.length;
   const volatility = annualizedVolatility(input.backtest.dailyReturns);
   const maxDrawdown = toNum(input.backtest.metrics.maxDrawdown);
   const calmar = maxDrawdown > 1e-9 ? totalReturn / maxDrawdown : 0;

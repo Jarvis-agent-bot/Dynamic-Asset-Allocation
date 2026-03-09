@@ -1,29 +1,30 @@
-import { NextResponse } from "next/server";
+import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
 
 import { fetchTextWithTimeoutV0, getProviderErrorStatusV0, mustGetEnvV0, parseXueqiuCookieV0 } from "../../_lib/providerAdaptersV0";
 
-function json(data: unknown, init?: ResponseInit) {
-  return NextResponse.json(data, init);
+function parseJsonBestEffortV1(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
 }
 
-// Fetch realtime quote from Xueqiu v5 quotec endpoint.
-// Auth is provided via a minimal cookie string (xq_a_token + u) in env.
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const symbol = url.searchParams.get("symbol")?.trim();
     if (!symbol) {
-      return json({ error: "missing symbol" }, { status: 400 });
+      return failV1("VALIDATION_FAILED", "missing symbol", { status: 400 });
     }
 
-    // Expected format: "xq_a_token=...;u=..." (pysnowball-compatible)
     const cookie = parseXueqiuCookieV0(mustGetEnvV0("XUEQIU_TOKEN"));
 
     const upstream = new URL("https://stock.xueqiu.com/v5/stock/realtime/quotec.json");
     upstream.searchParams.set("symbol", symbol);
     upstream.searchParams.set("_", String(Date.now()));
 
-    const r = await fetchTextWithTimeoutV0(upstream, {
+    const response = await fetchTextWithTimeoutV0(upstream, {
       method: "GET",
       headers: {
         accept: "application/json, text/plain, */*",
@@ -34,32 +35,27 @@ export async function GET(req: Request) {
       },
     });
 
-    const text = await r.text();
-    if (!r.ok) {
-      return json(
-        {
-          error: "xueqiu upstream error",
-          status: r.status,
+    const text = await response.text();
+    if (!response.ok) {
+      return failV1("INTERNAL_ERROR", "xueqiu upstream error", {
+        status: 502,
+        details: {
+          status: response.status,
         },
-        { status: 502 },
-      );
+      });
     }
 
-    let payload: unknown;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = { raw: text };
-    }
-
-    return json({ ok: true, source: "xueqiu", symbol, payload });
-  } catch (e) {
-    return json(
-      {
-        error: "xueqiu quotec fetch failed",
-        message: e instanceof Error ? e.message : String(e),
+    return okV1({
+      source: "xueqiu",
+      symbol,
+      payload: parseJsonBestEffortV1(text),
+    });
+  } catch (error) {
+    return failV1("INTERNAL_ERROR", "xueqiu quotec fetch failed", {
+      status: getProviderErrorStatusV0(error),
+      details: {
+        message: error instanceof Error ? error.message : String(error),
       },
-      { status: getProviderErrorStatusV0(e) },
-    );
+    });
   }
 }

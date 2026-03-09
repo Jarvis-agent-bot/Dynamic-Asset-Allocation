@@ -17,6 +17,15 @@ export type DaaPositionLikeV1 = {
   price?: unknown;
 };
 
+export type DaaMarkToMarketPositionLikeV1 = {
+  symbol?: unknown;
+  market?: unknown;
+  currency?: unknown;
+  qty?: unknown;
+  lastPrice?: unknown;
+  holdingPrice?: unknown;
+};
+
 export type DaaPositionValuationRowV1 = {
   assetKey: string;
   symbol: string;
@@ -25,6 +34,11 @@ export type DaaPositionValuationRowV1 = {
   localValue: number;
   baseValue: number | null;
   fxMissing: boolean;
+};
+
+export type DaaMarkToMarketValuationRowV1 = DaaPositionValuationRowV1 & {
+  markPrice: number;
+  markPriceSource: "last_price" | "holding_price" | "missing";
 };
 
 export function buildFxLookupToBaseV1(rows: DaaFxRateLikeV1[]): Map<string, number> {
@@ -76,6 +90,75 @@ export function buildPositionValuationRowsV1(
       fxMissing: localValue > 0 && baseValue == null,
     };
   });
+}
+
+export function resolveMarkToMarketPriceV1(input: {
+  lastPrice?: unknown;
+  holdingPrice?: unknown;
+}): number {
+  const lastPrice = Number(input.lastPrice);
+  if (Number.isFinite(lastPrice) && lastPrice > 0) return lastPrice;
+  const holdingPrice = Number(input.holdingPrice);
+  if (Number.isFinite(holdingPrice) && holdingPrice > 0) return holdingPrice;
+  return 0;
+}
+
+export function buildMarkToMarketValuationRowsV1(
+  positions: DaaMarkToMarketPositionLikeV1[],
+  baseCurrency: string,
+  fxLookup: Map<string, number>,
+): DaaMarkToMarketValuationRowV1[] {
+  return positions.map((position) => {
+    const markPrice = resolveMarkToMarketPriceV1({
+      lastPrice: position.lastPrice,
+      holdingPrice: position.holdingPrice,
+    });
+    const baseRow = buildPositionValuationRowsV1([
+      {
+        symbol: position.symbol,
+        market: position.market,
+        currency: position.currency,
+        qty: position.qty,
+        price: markPrice,
+      },
+    ], baseCurrency, fxLookup)[0];
+
+    const hasLastPrice = Number(position.lastPrice) > 0;
+    const hasHoldingPrice = Number(position.holdingPrice) > 0;
+    return {
+      ...(baseRow ?? {
+        assetKey: buildDaaAssetKeyV1(position.symbol, position.market),
+        symbol: String(position.symbol || "").trim().toUpperCase(),
+        market: String(position.market || "US").trim().toUpperCase() || "US",
+        currency: normalizeDaaCurrencyCodeV1(position.currency, baseCurrency),
+        localValue: 0,
+        baseValue: null,
+        fxMissing: false,
+      }),
+      markPrice,
+      markPriceSource: hasLastPrice ? "last_price" : (hasHoldingPrice ? "holding_price" : "missing"),
+    };
+  });
+}
+
+export function summarizeMarkToMarketPortfolioV1(input: {
+  positions: DaaMarkToMarketPositionLikeV1[];
+  baseCurrency: string;
+  cash?: unknown;
+  fxLookup: Map<string, number>;
+}): {
+  rows: DaaMarkToMarketValuationRowV1[];
+  holdingsValue: number;
+  totalEquity: number;
+} {
+  const rows = buildMarkToMarketValuationRowsV1(input.positions, input.baseCurrency, input.fxLookup);
+  const holdingsValue = rows.reduce((sum, row) => sum + (row.baseValue ?? 0), 0);
+  const cash = Math.max(0, Number(input.cash) || 0);
+  return {
+    rows,
+    holdingsValue,
+    totalEquity: holdingsValue + cash,
+  };
 }
 
 export function buildActualWeightMapV1(

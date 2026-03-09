@@ -28,12 +28,12 @@ export const STRATEGY_LAB_CANDIDATE_ORDER_V1: StrategyLabCandidateIdV1[] = [
 ];
 
 const STRATEGY_LABELS_V1: Record<StrategyLabCandidateIdV1, string> = {
-  baseline: "当前配置（Baseline）",
-  momentum: "Momentum",
-  riskParity: "Risk Parity",
-  minVariance: "Min Variance",
-  equalWeight: "Equal Weight",
-  ensemble: "Ensemble",
+  baseline: "当前配置",
+  momentum: "趋势进攻",
+  riskParity: "风险平衡",
+  minVariance: "低波防守",
+  equalWeight: "均衡基线",
+  ensemble: "组合候选",
 };
 
 function toPositiveFiniteNumberV1(value: unknown, fallback = 0): number {
@@ -79,7 +79,7 @@ function covarianceV1(left: number[], right: number[]): number {
   const leftAvg = meanV1(left);
   const rightAvg = meanV1(right);
   let sum = 0;
-  for (let i = 0; i < left.length; i++) {
+  for (let i = 0; i < left.length; i += 1) {
     sum += (left[i] - leftAvg) * (right[i] - rightAvg);
   }
   return sum / left.length;
@@ -87,7 +87,7 @@ function covarianceV1(left: number[], right: number[]): number {
 
 function computeDailyReturnsV1(series: PriceBar[]): number[] {
   const out: number[] = [];
-  for (let i = 1; i < series.length; i++) {
+  for (let i = 1; i < series.length; i += 1) {
     const prev = Number(series[i - 1]?.close);
     const next = Number(series[i]?.close);
     if (!(Number.isFinite(prev) && Number.isFinite(next) && prev > 0 && next > 0)) {
@@ -165,7 +165,7 @@ export function buildEnsembleWeightsV1(
   return normalizeWeightsV1(out);
 }
 
-function buildWeightsByCandidateV1(input: {
+function buildWeightsByCandidateForWindowV1(input: {
   symbols: string[];
   baselineTargetWeights: Record<string, number>;
   periodReturnsBySymbol: Record<string, number>;
@@ -193,7 +193,7 @@ function buildWeightsByCandidateV1(input: {
   const ensemble = buildEnsembleWeightsV1(normalizedSingles, input.ensembleConfig);
 
   return {
-    baseline: Object.keys(baseline).length ? baseline : equalWeight,
+    baseline: baseline,
     momentum: normalizedSingles.momentum,
     riskParity: normalizedSingles.riskParity,
     minVariance: normalizedSingles.minVariance,
@@ -214,6 +214,127 @@ function buildInitialHoldingsV1(holdings: Record<string, number> | undefined, sy
     filtered[symbol] = qty;
   }
   return Object.keys(filtered).length ? filtered : undefined;
+}
+
+function sliceSeriesWindowV1(
+  seriesBySymbol: Record<string, PriceBar[]>,
+  startIndex: number,
+  endIndexExclusive: number,
+): Record<string, PriceBar[]> {
+  const out: Record<string, PriceBar[]> = {};
+  for (const [symbol, series] of Object.entries(seriesBySymbol || {})) {
+    out[symbol] = (series || []).slice(startIndex, endIndexExclusive);
+  }
+  return out;
+}
+
+function buildZeroCandidateTimelineV1(dates: string[]): Record<StrategyLabCandidateIdV1, Record<string, Record<string, number>>> {
+  const out = {} as Record<StrategyLabCandidateIdV1, Record<string, Record<string, number>>>;
+  for (const candidateId of STRATEGY_LAB_CANDIDATE_ORDER_V1) {
+    out[candidateId] = {};
+    for (const date of dates) out[candidateId][date] = {};
+  }
+  return out;
+}
+
+function computeAverageWeightsV1(input: {
+  dates: string[];
+  timeline: Record<string, Record<string, number>>;
+  symbols: string[];
+}): Record<string, number> {
+  if (!input.dates.length) return {};
+
+  const totals: Record<string, number> = {};
+  for (const date of input.dates) {
+    const weights = input.timeline[date] || {};
+    for (const symbol of input.symbols) {
+      totals[symbol] = (totals[symbol] || 0) + Math.max(0, Number(weights[symbol]) || 0);
+    }
+  }
+
+  const averaged: Record<string, number> = {};
+  for (const symbol of input.symbols) {
+    const avg = (totals[symbol] || 0) / input.dates.length;
+    if (avg > 0) averaged[symbol] = avg;
+  }
+  return averaged;
+}
+
+function pickLastNonEmptyWeightsV1(input: {
+  dates: string[];
+  timeline: Record<string, Record<string, number>>;
+  fallback: Record<string, number>;
+}): Record<string, number> {
+  for (let i = input.dates.length - 1; i >= 0; i -= 1) {
+    const weights = normalizeWeightsV1(input.timeline[input.dates[i]] || {});
+    if (Object.keys(weights).length > 0) return weights;
+  }
+  return normalizeWeightsV1(input.fallback);
+}
+
+function buildCandidateTimelinesV1(input: {
+  dates: string[];
+  symbols: string[];
+  seriesBySymbol: Record<string, PriceBar[]>;
+  baselineTargetWeights: Record<string, number>;
+  ensembleConfig: StrategyLabEnsembleConfigV1;
+  lookbackBars: number;
+}): {
+  targetWeightsByCandidateByDate: Record<StrategyLabCandidateIdV1, Record<string, Record<string, number>>>;
+  weightsByCandidate: Record<StrategyLabCandidateIdV1, Record<string, number>>;
+  averageWeightsByCandidate: Record<StrategyLabCandidateIdV1, Record<string, number>>;
+} {
+  const targetWeightsByCandidateByDate = buildZeroCandidateTimelineV1(input.dates);
+  const staticFallbacks = buildWeightsByCandidateForWindowV1({
+    symbols: input.symbols,
+    baselineTargetWeights: input.baselineTargetWeights,
+    periodReturnsBySymbol: {},
+    volBySymbol: {},
+    covMatrixBySymbol: {},
+    ensembleConfig: input.ensembleConfig,
+  });
+
+  for (let i = input.lookbackBars; i < input.dates.length; i += 1) {
+    const decisionDate = input.dates[i];
+    const windowSeries = sliceSeriesWindowV1(input.seriesBySymbol, i - input.lookbackBars, i);
+    const stats = computeSeriesStatsV1(windowSeries);
+    const candidateWeights = buildWeightsByCandidateForWindowV1({
+      symbols: input.symbols,
+      baselineTargetWeights: input.baselineTargetWeights,
+      periodReturnsBySymbol: stats.periodReturnsBySymbol,
+      volBySymbol: stats.volBySymbol,
+      covMatrixBySymbol: stats.covMatrixBySymbol,
+      ensembleConfig: input.ensembleConfig,
+    });
+
+    for (const candidateId of STRATEGY_LAB_CANDIDATE_ORDER_V1) {
+      targetWeightsByCandidateByDate[candidateId][decisionDate] = candidateWeights[candidateId] || {};
+    }
+  }
+
+  const weightsByCandidate = {} as Record<StrategyLabCandidateIdV1, Record<string, number>>;
+  const averageWeightsByCandidate = {} as Record<StrategyLabCandidateIdV1, Record<string, number>>;
+  for (const candidateId of STRATEGY_LAB_CANDIDATE_ORDER_V1) {
+    const fallback = candidateId === "baseline" || candidateId === "equalWeight"
+      ? staticFallbacks[candidateId]
+      : {};
+    weightsByCandidate[candidateId] = pickLastNonEmptyWeightsV1({
+      dates: input.dates,
+      timeline: targetWeightsByCandidateByDate[candidateId],
+      fallback,
+    });
+    averageWeightsByCandidate[candidateId] = computeAverageWeightsV1({
+      dates: input.dates,
+      timeline: targetWeightsByCandidateByDate[candidateId],
+      symbols: input.symbols,
+    });
+  }
+
+  return {
+    targetWeightsByCandidateByDate,
+    weightsByCandidate,
+    averageWeightsByCandidate,
+  };
 }
 
 export type SeriesAlignmentModeV1 = "intersection" | "ffill_union";
@@ -400,6 +521,7 @@ export function runStrategyLabBacktestsV1(input: {
   seriesBySymbol: Record<string, PriceBar[]>;
   baselineTargetWeights: Record<string, number>;
   ensembleConfig: StrategyLabEnsembleConfigV1;
+  lookbackBars?: number;
   initialHoldings?: Record<string, number>;
   initialCash?: number;
   initialEquity?: number;
@@ -413,14 +535,14 @@ export function runStrategyLabBacktestsV1(input: {
   const dates = input.seriesBySymbol[symbols[0]].map((bar) => bar.date);
   if (dates.length < 2) throw new Error("at least 2 bars are required");
 
-  const stats = computeSeriesStatsV1(input.seriesBySymbol);
-  const weightsByCandidate = buildWeightsByCandidateV1({
+  const lookbackBars = Math.max(2, Math.trunc(Number(input.lookbackBars) || 252));
+  const candidateTimelines = buildCandidateTimelinesV1({
+    dates,
     symbols,
+    seriesBySymbol: input.seriesBySymbol,
     baselineTargetWeights: input.baselineTargetWeights,
-    periodReturnsBySymbol: stats.periodReturnsBySymbol,
-    volBySymbol: stats.volBySymbol,
-    covMatrixBySymbol: stats.covMatrixBySymbol,
     ensembleConfig: input.ensembleConfig,
+    lookbackBars,
   });
 
   const initialHoldings = buildInitialHoldingsV1(input.initialHoldings, symbols);
@@ -429,13 +551,15 @@ export function runStrategyLabBacktestsV1(input: {
   for (const candidateId of STRATEGY_LAB_CANDIDATE_ORDER_V1) {
     const backtest: DriftRebalanceBacktestResult = backtestDriftRebalance({
       seriesBySymbol: input.seriesBySymbol,
-      targetWeights: weightsByCandidate[candidateId],
+      targetWeights: candidateTimelines.weightsByCandidate[candidateId],
+      targetWeightsByDate: candidateTimelines.targetWeightsByCandidateByDate[candidateId],
       initialHoldings,
       initialCash: input.initialCash,
       initialEquity: initialHoldings ? undefined : input.initialEquity,
       constraints: input.constraints,
       policy: input.policy,
       execution: input.execution,
+      bootstrapToTarget: false,
       includeEventStates: true,
       includeTimeline: true,
     });
@@ -443,7 +567,9 @@ export function runStrategyLabBacktestsV1(input: {
     candidates.push({
       id: candidateId,
       label: STRATEGY_LABELS_V1[candidateId],
-      targetWeights: weightsByCandidate[candidateId],
+      targetWeights: candidateTimelines.weightsByCandidate[candidateId],
+      targetWeightsByDate: candidateTimelines.targetWeightsByCandidateByDate[candidateId],
+      averageTargetWeights: candidateTimelines.averageWeightsByCandidate[candidateId],
       backtest,
     });
   }
@@ -452,7 +578,7 @@ export function runStrategyLabBacktestsV1(input: {
     symbols,
     dates,
     seriesBySymbol: input.seriesBySymbol,
-    weightsByCandidate,
+    weightsByCandidate: candidateTimelines.weightsByCandidate,
     candidates,
   };
 }

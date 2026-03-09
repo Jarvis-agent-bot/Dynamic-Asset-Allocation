@@ -17,7 +17,10 @@ export type DaaUnifiedPositionV1 = {
   currency?: string;
   qty: number;
   price: number;
+  /** 兼容旧字段：单价口径的成本价（本币） */
   costBasis?: number;
+  /** 推荐字段：单价口径的成本价（本币） */
+  costBasisPerUnit?: number;
   tags?: string[];
 };
 
@@ -423,7 +426,7 @@ export function buildDaaUnifiedPlanV1(req: DaaUnifiedRequestV1): DaaUnifiedRespo
     const market = normalizeDaaMarketV1(p.market, "US");
     const currency = normalizeCcyCode(p.currency, baseCurrency);
     const localPrice = Math.max(0, toFiniteNumber(p.price, 0));
-    const localCostBasis = Math.max(0, toFiniteNumber(p.costBasis, 0));
+    const localCostBasis = Math.max(0, toFiniteNumber(p.costBasisPerUnit ?? p.costBasis, 0));
     const fxResolved = resolveLocalToBaseRate(fxMap, currency, baseCurrency);
     const fxRate = fxResolved?.rate ?? null;
     const priceInBase = fxRate != null ? localPrice * fxRate : 0;

@@ -11,6 +11,8 @@ export type StrategyLabCandidateResultV1 = {
   id: StrategyLabCandidateIdV1;
   label: string;
   targetWeights: Record<string, number>;
+  targetWeightsByDate: Record<string, Record<string, number>>;
+  averageTargetWeights: Record<string, number>;
   backtest: DriftRebalanceBacktestResult;
 };
 

@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
-import { daaPgPoolV0, isDaaPgMemRuntimeV0, withDaaPgClientV0 } from "@/src/daa/pg/daaPgV0";
+import { daaPgPoolV0, withDaaPgClientV0 } from "@/src/daa/pg/daaPgV0";
 import { normalizeCurrencyAliasV2 } from "@/src/daa/config/currencyV2";
 import { buildDaaAssetKeyV1, parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
 import {
@@ -18,9 +18,18 @@ import {
   type DaaSystemConfigPatchV2,
   type DaaSystemConfigV2,
 } from "@/src/daa/config/systemConfigV2";
+import type {
+  DaaMarketContextV1,
+  DaaMarketIndicatorKeyV1,
+  DaaMarketIndicatorSnapshotV1,
+  DaaMarketRegimeV1,
+} from "@/src/daa/modules/marketContext/marketContextTypesV1";
+import { buildFxLookupToBaseV1, summarizeMarkToMarketPortfolioV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
+import type { ProposalDecisionContextV1 } from "@/src/daa/modules/workbench/workbenchTypesV1";
 
 type DaaStoreStateV1 = {
   schemaInit: Promise<void> | null;
+  marketCacheSchemaInit: Promise<void> | null;
 };
 
 const STORE_GLOBAL_KEY_V1 = "__daa_store_pg_state_v0__";
@@ -28,7 +37,9 @@ const STORE_GLOBAL_KEY_V1 = "__daa_store_pg_state_v0__";
 function getStoreStateV1(): DaaStoreStateV1 {
   const g = globalThis as any;
   if (!g[STORE_GLOBAL_KEY_V1]) {
-    g[STORE_GLOBAL_KEY_V1] = { schemaInit: null } satisfies DaaStoreStateV1;
+    g[STORE_GLOBAL_KEY_V1] = { schemaInit: null, marketCacheSchemaInit: null } satisfies DaaStoreStateV1;
+  } else if (!("marketCacheSchemaInit" in g[STORE_GLOBAL_KEY_V1])) {
+    g[STORE_GLOBAL_KEY_V1].marketCacheSchemaInit = null;
   }
   return g[STORE_GLOBAL_KEY_V1] as DaaStoreStateV1;
 }
@@ -38,7 +49,14 @@ function toFiniteNumber(v: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function toIsoString(v: unknown, fallback = new Date().toISOString()): string {
+function toIsoString(v: unknown, fallback = "1970-01-01T00:00:00.000Z"): string {
+  if (v instanceof Date) {
+    const ms = v.getTime();
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : fallback;
+  }
+  if (typeof v === "number") {
+    return Number.isFinite(v) ? new Date(v).toISOString() : fallback;
+  }
   const text = typeof v === "string" ? v.trim() : "";
   if (!text) return fallback;
   const ms = Date.parse(text);
@@ -122,10 +140,20 @@ async function isStoreSchemaReadyV1(): Promise<boolean> {
       daa_trade_tickets: [
         "ticket_id",
         "basket_id",
+        "cycle_id",
         "asset_key",
         "pricing_mode",
         "price_source",
         "price_snapshot_at",
+      ],
+      daa_cash_ledger: [
+        "entry_kind",
+        "account_base_currency",
+        "amount_in_account_base",
+        "fx_rate_to_account",
+        "ticket_id",
+        "cycle_id",
+        "settlement_ts",
       ],
     } as const;
 
@@ -294,7 +322,156 @@ export type DaaStoreFxRateV1 = {
   updatedAt: string;
 };
 
+export type DaaStoreMarketPriceStatusV1 = "fresh" | "stale" | "missing" | "error" | "unsupported";
+export type DaaStoreFxRateHistoryStatusV1 = "fresh" | "stale" | "missing" | "error";
+export type DaaStoreIngestJobStatusV1 = "ok" | "partial" | "failed";
+
+export type DaaStoreMarketPriceSnapshotV1 = {
+  provider: string;
+  market: string;
+  symbol: string;
+  normalizedSymbol: string;
+  currency: string;
+  price: number;
+  status: DaaStoreMarketPriceStatusV1;
+  priceUpdatedAt: string | null;
+  source: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  rawRefId: string | null;
+  updatedAt: string;
+};
+
+export type DaaStoreMarketPriceHistoryV1 = {
+  provider: string;
+  market: string;
+  symbol: string;
+  ts: string;
+  price: number;
+  currency: string;
+  source: string;
+  rawRefId: string | null;
+};
+
+export type DaaStoreFxRateHistoryV1 = {
+  provider: string;
+  baseCcy: string;
+  quoteCcy: string;
+  asOfTs: string;
+  rate: number;
+  status: DaaStoreFxRateHistoryStatusV1;
+  fetchedAt: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  rawRefId: string | null;
+};
+
+export type DaaStoreNewsItemSnapshotV1 = {
+  provider: string;
+  symbol: string;
+  itemHash: string;
+  title: string;
+  link: string | null;
+  publishedAt: string | null;
+  fetchedAt: string;
+  sentimentScore: number;
+  sourceCredibility: number;
+  freshness: number;
+  rawRefId: string | null;
+};
+
+export type DaaStoreNewsSignalSnapshotV1 = {
+  provider: string;
+  symbol: string;
+  scorePct: number;
+  confidencePct: number;
+  evidenceCount: number;
+  reasonsJson: string[];
+  generatedAt: string;
+  updatedAt: string;
+};
+
+export type DaaStoreMarketIndicatorSnapshotV1 = {
+  id: string;
+  key: DaaMarketIndicatorKeyV1;
+  scope: string;
+  subjectKey: string;
+  stance: DaaMarketRegimeV1 | "neutral";
+  riskOffScorePct: number;
+  confidencePct: number;
+  rawValue: number | null;
+  unit: string | null;
+  percentile252: number | null;
+  zscore60: number | null;
+  trend1dPct: number | null;
+  trend7dPct: number | null;
+  trend30dPct: number | null;
+  source: string;
+  reasonsJson: string[];
+  componentsJson: Record<string, unknown>;
+  generatedAt: string;
+  expireAt: string | null;
+  createdAt: string;
+};
+
+export type DaaStoreHfHoldingSnapshotV1 = {
+  provider: string;
+  fundCode: string;
+  reportDate: string;
+  symbol: string;
+  market: string;
+  weightPct: number;
+  prevWeightPct: number;
+  disclosedAt: string | null;
+  confidencePct: number;
+  sourceRef: string | null;
+  fetchedAt: string;
+  rawRefId: string | null;
+};
+
+export type DaaStoreHfSignalSnapshotV1 = {
+  provider: string;
+  symbol: string;
+  aggregatedScorePct: number;
+  convictionPct: number;
+  thesisDriftPct: number;
+  fundCount: number;
+  fundsJson: Array<Record<string, unknown>>;
+  generatedAt: string;
+  updatedAt: string;
+};
+
+export type DaaStoreExternalPayloadRawV1 = {
+  id: string;
+  provider: string;
+  resource: string;
+  subjectKey: string;
+  requestUrl: string;
+  requestJson: Record<string, unknown>;
+  responseStatus: number;
+  responseHeadersJson: Record<string, unknown>;
+  payloadJson: Record<string, unknown> | null;
+  payloadText: string | null;
+  fetchedAt: string;
+  expireAt: string;
+  createdAt: string;
+};
+
+export type DaaStoreIngestJobLogV1 = {
+  jobId: string;
+  jobType: string;
+  triggerSource: string;
+  status: DaaStoreIngestJobStatusV1;
+  startedAt: string;
+  finishedAt: string;
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  diagnosticsJson: Record<string, unknown>;
+};
+
 export type DaaStoreCashLedgerSideV1 = "deposit" | "withdraw";
+export type DaaStoreCashLedgerEntryKindV1 = "manual" | "trade_execution";
 
 export type DaaStoreCashLedgerEntryV1 = {
   id: string;
@@ -302,6 +479,13 @@ export type DaaStoreCashLedgerEntryV1 = {
   side: DaaStoreCashLedgerSideV1;
   amount: number;
   baseCurrency: string;
+  entryKind: DaaStoreCashLedgerEntryKindV1 | null;
+  accountBaseCurrency: string | null;
+  amountInAccountBase: number | null;
+  fxRateToAccount: number | null;
+  ticketId: string | null;
+  cycleId: string | null;
+  settlementTs: string | null;
   note: string | null;
   createdAt: string;
 };
@@ -311,6 +495,13 @@ export type DaaStoreCashLedgerApplyInputV1 = {
   amount: number;
   baseCurrency?: string;
   note?: string;
+  entryKind?: DaaStoreCashLedgerEntryKindV1;
+  accountBaseCurrency?: string;
+  amountInAccountBase?: number;
+  fxRateToAccount?: number;
+  ticketId?: string | null;
+  cycleId?: string | null;
+  settlementTs?: string | null;
 };
 
 export type DaaStoreTradeTicketSourceV1 = "manual" | "decision";
@@ -431,7 +622,7 @@ export type DaaStorePreTradeRiskCheckV1 = {
 };
 
 export type DaaStoreRebalanceCycleStatusV1 = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
-export type DaaStoreRebalanceTriggerSourceV1 = "calendar" | "drift" | "manual";
+export type DaaStoreRebalanceTriggerSourceV1 = "calendar" | "drift" | "manual" | "risk" | "cash_idle";
 
 export type DaaStoreRebalanceCycleV1 = {
   cycleId: string;
@@ -459,6 +650,7 @@ export type DaaStoreRebalanceCycleV1 = {
     reason: string;
     selected: boolean;
     hfContribution: string | null;
+    decisionContext?: ProposalDecisionContextV1 | null;
   }>;
   riskCheck: DaaStorePreTradeRiskCheckV1;
   executedAt: string | null;
@@ -472,6 +664,81 @@ export type DaaStoreRebalanceCycleV1 = {
   cancelledAt: string | null;
   cancelReason: string | null;
   notes: string | null;
+  marketContext?: DaaMarketContextV1 | null;
+  createdAt: string;
+};
+
+export type DaaStoreCycleReportV1 = {
+  cycleId: string;
+  triggerSource: DaaStoreRebalanceTriggerSourceV1;
+  cycleStatus: DaaStoreRebalanceCycleStatusV1;
+  cycleCreatedAt: string;
+  reportCreatedAt: string;
+  executionSummary: DaaStoreRebalanceCycleV1["executionSummary"];
+  beforeSnapshot: {
+    totalEquity: number;
+    holdingsValue: number;
+    cash: number;
+    hhiPct: number;
+    maxWeightPct: number;
+    maxDriftPct: number;
+    maxDrawdownPct: number;
+  };
+  afterSnapshot: {
+    totalEquity: number;
+    holdingsValue: number;
+    cash: number;
+    hhiPct: number;
+    maxWeightPct: number;
+    maxDriftPct: number;
+    maxDrawdownPct: number;
+  };
+  executionStats: {
+    ordersExecuted: number;
+    ordersFailed: number;
+    totalNotional: number;
+    feeTotal: number;
+  };
+  pnlAttribution: {
+    realizedPnl: number;
+    unrealizedPnl: number;
+    feeTotal: number;
+    fxImpact: number;
+    topContributors: Array<{
+      symbol: string;
+      pnl: number;
+      side: "BUY" | "SELL" | "HOLD";
+    }>;
+  };
+  riskDelta: {
+    maxDrawdownBefore: number;
+    maxDrawdownAfter: number;
+    hhiBefore: number;
+    hhiAfter: number;
+    maxWeightBefore: number;
+    maxWeightAfter: number;
+    maxDriftBefore: number;
+    maxDriftAfter: number;
+  };
+};
+
+export type DaaStoreTriggerEventV1 = {
+  eventId: string;
+  idempotencyKey: string;
+  triggerSource: DaaStoreRebalanceTriggerSourceV1;
+  triggerReason: string;
+  cycleId: string | null;
+  status: "accepted" | "skipped" | "conflict";
+  detailsJson: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type DaaStoreLlmFeedbackV1 = {
+  id: string;
+  contextId: string;
+  type: "insight" | "decision";
+  score: "up" | "down";
+  comment: string | null;
   createdAt: string;
 };
 
@@ -486,6 +753,7 @@ export type DaaStoreCreateRebalanceCycleInputV1 = {
   proposals: DaaStoreRebalanceCycleV1["proposals"];
   riskCheck: DaaStorePreTradeRiskCheckV1;
   notes?: string | null;
+  marketContext?: DaaMarketContextV1 | null;
 };
 
 export type DaaStorePatchRebalanceCycleInputV1 = {
@@ -500,6 +768,7 @@ export type DaaStorePatchRebalanceCycleInputV1 = {
   cancelledAt?: string | null;
   cancelReason?: string | null;
   notes?: string | null;
+  marketContext?: DaaMarketContextV1 | null;
 };
 
 export type DaaStoreHumanIngestStateV1 = {
@@ -532,30 +801,30 @@ function mapSystemConfigRowV2(row: Record<string, unknown>): DaaStoreSystemConfi
 async function ensureSystemConfigRowInTxV2(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
 ): Promise<DaaStoreSystemConfigRowV2> {
-  if (isDaaPgMemRuntimeV0()) {
-    await query(`
-      CREATE TABLE IF NOT EXISTS daa_system_config_v2 (
-        id TEXT,
-        version BIGINT,
-        config_json JSONB,
-        updated_at TIMESTAMPTZ
-      )
-    `);
-  } else {
-    await query(`
-      CREATE TABLE IF NOT EXISTS daa_system_config_v2 (
-        id TEXT PRIMARY KEY,
-        version BIGINT NOT NULL DEFAULT 1,
-        config_json JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-  }
+  await query(`
+    CREATE TABLE IF NOT EXISTS daa_system_config_v2 (
+      id TEXT PRIMARY KEY,
+      version BIGINT NOT NULL DEFAULT 1,
+      config_json JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   const existing = await query(
-    "SELECT id, version, config_json, updated_at FROM daa_system_config_v2 WHERE id='default' LIMIT 1",
+    "SELECT id, version, config_json, updated_at FROM daa_system_config_v2 WHERE id='default' ORDER BY version DESC, updated_at DESC",
   );
+  if (existing.rows.length > 1) {
+    const latest = mapSystemConfigRowV2(existing.rows[0]);
+    await query("DELETE FROM daa_system_config_v2 WHERE id = 'default'");
+    const restored = await query(
+      "INSERT INTO daa_system_config_v2 (id, version, config_json, updated_at) VALUES ('default', $1, $2::jsonb, $3) RETURNING id, version, config_json, updated_at",
+      [Math.max(1, Math.trunc(latest.version)), JSON.stringify(latest.config), latest.updatedAt],
+    );
+    await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_system_config_v2_id ON daa_system_config_v2(id)");
+    return mapSystemConfigRowV2(restored.rows[0]);
+  }
   if (existing.rows.length > 0) {
+    await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_system_config_v2_id ON daa_system_config_v2(id)");
     return mapSystemConfigRowV2(existing.rows[0]);
   }
 
@@ -563,7 +832,38 @@ async function ensureSystemConfigRowInTxV2(
     "INSERT INTO daa_system_config_v2 (id, version, config_json, updated_at) VALUES ('default', 1, $1::jsonb, NOW()) RETURNING id, version, config_json, updated_at",
     [JSON.stringify(DEFAULT_SYSTEM_CONFIG_V2)],
   );
+  await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_system_config_v2_id ON daa_system_config_v2(id)");
   return mapSystemConfigRowV2(result.rows[0]);
+}
+
+async function getSystemConfigRowForUpdateInTxV2(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+): Promise<DaaStoreSystemConfigRowV2> {
+  await ensureSystemConfigRowInTxV2(query);
+  const locked = await query(
+    "SELECT id, version, config_json, updated_at FROM daa_system_config_v2 WHERE id='default' ORDER BY version DESC, updated_at DESC LIMIT 1 FOR UPDATE",
+  );
+  if (locked.rows.length > 0) {
+    return mapSystemConfigRowV2(locked.rows[0]);
+  }
+  return ensureSystemConfigRowInTxV2(query);
+}
+
+async function writeSystemConfigCasInTxV2(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  nextConfigRaw: unknown,
+  expectedVersion: number,
+): Promise<DaaStoreSystemConfigRowV2> {
+  const nextConfig = normalizeSystemConfigV2(nextConfigRaw);
+  const updated = await query(
+    "UPDATE daa_system_config_v2 SET version = version + 1, config_json = $2::jsonb, updated_at = NOW() WHERE id = 'default' AND version = $1 RETURNING id, version, config_json, updated_at",
+    [Math.max(1, Math.trunc(expectedVersion)), JSON.stringify(nextConfig)],
+  );
+  if (updated.rows.length > 0) {
+    return mapSystemConfigRowV2(updated.rows[0]);
+  }
+  const latest = await ensureSystemConfigRowInTxV2(query);
+  throw new Error(`system_config_version_conflict:${latest.version}`);
 }
 
 async function saveSystemConfigInTxV2(
@@ -572,17 +872,8 @@ async function saveSystemConfigInTxV2(
   baseVersion?: number,
 ): Promise<DaaStoreSystemConfigRowV2> {
   const current = await ensureSystemConfigRowInTxV2(query);
-  if (baseVersion != null && current.version !== Math.trunc(baseVersion)) {
-    throw new Error(`system_config_version_conflict:${current.version}`);
-  }
-
-  const nextConfig = normalizeSystemConfigV2(nextConfigRaw);
-  const nextVersion = current.version + 1;
-  const updated = await query(
-    "UPDATE daa_system_config_v2 SET version = $1, config_json = $2::jsonb, updated_at = NOW() WHERE id = 'default' RETURNING id, version, config_json, updated_at",
-    [nextVersion, JSON.stringify(nextConfig)],
-  );
-  return mapSystemConfigRowV2(updated.rows[0]);
+  const expectedVersion = baseVersion != null ? Math.trunc(baseVersion) : current.version;
+  return writeSystemConfigCasInTxV2(query, nextConfigRaw, expectedVersion);
 }
 
 export async function getDaaSystemConfigV2(): Promise<DaaStoreSystemConfigRowV2> {
@@ -621,11 +912,8 @@ export async function patchDaaSystemConfigV2(input: {
     await query("BEGIN");
     try {
       const current = await ensureSystemConfigRowInTxV2(query as any);
-      if (input.baseVersion != null && current.version !== Math.trunc(input.baseVersion)) {
-        throw new Error(`system_config_version_conflict:${current.version}`);
-      }
       const nextConfig = applySystemConfigPatchesV2(current.config, Array.isArray(input.patches) ? input.patches : []);
-      const saved = await saveSystemConfigInTxV2(query as any, nextConfig, current.version);
+      const saved = await saveSystemConfigInTxV2(query as any, nextConfig, input.baseVersion ?? current.version);
       await query("COMMIT");
       return saved;
     } catch (error) {
@@ -798,6 +1086,7 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
             cancelled_at TIMESTAMPTZ,
             cancel_reason TEXT,
             notes TEXT,
+            market_context_json JSONB NOT NULL DEFAULT '{}'::jsonb,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
@@ -806,6 +1095,36 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
 
           CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_status_created_desc
             ON daa_rebalance_cycles(status, created_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_cycle_reports (
+            cycle_id TEXT PRIMARY KEY REFERENCES daa_rebalance_cycles(cycle_id) ON DELETE CASCADE,
+            before_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            after_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            execution_stats_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            pnl_attribution_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            risk_delta_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_cycle_reports_created_desc
+            ON daa_cycle_reports(created_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_trigger_events (
+            event_id TEXT PRIMARY KEY,
+            idempotency_key TEXT NOT NULL UNIQUE,
+            trigger_source TEXT NOT NULL,
+            trigger_reason TEXT NOT NULL DEFAULT '',
+            cycle_id TEXT REFERENCES daa_rebalance_cycles(cycle_id) ON DELETE SET NULL,
+            status TEXT NOT NULL DEFAULT 'accepted',
+            details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_trigger_events_created_desc
+            ON daa_trigger_events(created_at DESC);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_trigger_events_source_created_desc
+            ON daa_trigger_events(trigger_source, created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_rebalance_decisions (
             id TEXT PRIMARY KEY,
@@ -871,12 +1190,20 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
             side TEXT NOT NULL CHECK (side IN ('deposit', 'withdraw')),
             amount NUMERIC NOT NULL CHECK (amount > 0),
             base_currency TEXT NOT NULL DEFAULT 'USD',
+            entry_kind TEXT,
+            account_base_currency TEXT,
+            amount_in_account_base NUMERIC,
+            fx_rate_to_account NUMERIC,
+            ticket_id TEXT,
+            cycle_id TEXT,
+            settlement_ts TIMESTAMPTZ,
             note TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
           CREATE INDEX IF NOT EXISTS idx_daa_cash_ledger_ts_desc
             ON daa_cash_ledger(ts DESC);
+
 
           CREATE TABLE IF NOT EXISTS daa_run_history (
             id TEXT PRIMARY KEY,
@@ -923,6 +1250,21 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
 
           CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_fx_rates_pair
             ON daa_fx_rates(base_ccy, quote_ccy);
+
+          CREATE TABLE IF NOT EXISTS daa_llm_feedback (
+            id TEXT PRIMARY KEY,
+            context_id TEXT NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('insight', 'decision')),
+            score TEXT NOT NULL CHECK (score IN ('up', 'down')),
+            comment TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_llm_feedback_created_desc
+            ON daa_llm_feedback(created_at DESC);
+
+          CREATE INDEX IF NOT EXISTS idx_daa_llm_feedback_context_created_desc
+            ON daa_llm_feedback(context_id, created_at DESC);
         `);
 
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ");
@@ -932,8 +1274,49 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
         await query("ALTER TABLE daa_trade_journal ADD COLUMN IF NOT EXISTS execution_order_id TEXT");
         await query("DROP INDEX IF EXISTS idx_daa_trade_journal_execution_order_unique");
         await query("ALTER TABLE daa_positions DROP COLUMN IF EXISTS liquidity_notional_24h");
-        await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS channel");
-        await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS reference_id");
+        const cashLedgerRequiredColumns = [
+          "entry_kind",
+          "account_base_currency",
+          "amount_in_account_base",
+          "fx_rate_to_account",
+          "ticket_id",
+          "cycle_id",
+          "settlement_ts",
+        ];
+        const cashLedgerMissingColumns = [] as string[];
+        for (const columnName of cashLedgerRequiredColumns) {
+          if (!(await hasTableColumnV1(query as any, "daa_cash_ledger", columnName))) {
+            cashLedgerMissingColumns.push(columnName);
+          }
+        }
+        if (cashLedgerMissingColumns.length > 0) {
+          await query("DROP INDEX IF EXISTS idx_daa_cash_ledger_ticket_unique");
+          await query("DROP TABLE IF EXISTS daa_cash_ledger CASCADE");
+          await query("DROP INDEX IF EXISTS daa_cash_ledger_pkey");
+          await query(`
+            CREATE TABLE daa_cash_ledger (
+              id TEXT PRIMARY KEY,
+              ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              side TEXT NOT NULL CHECK (side IN ('deposit', 'withdraw')),
+              amount NUMERIC NOT NULL CHECK (amount > 0),
+              base_currency TEXT NOT NULL DEFAULT 'USD',
+              entry_kind TEXT,
+              account_base_currency TEXT,
+              amount_in_account_base NUMERIC,
+              fx_rate_to_account NUMERIC,
+              ticket_id TEXT,
+              cycle_id TEXT,
+              settlement_ts TIMESTAMPTZ,
+              note TEXT,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+          `);
+          await query("CREATE INDEX IF NOT EXISTS idx_daa_cash_ledger_ts_desc ON daa_cash_ledger(ts DESC)");
+        } else {
+          await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS channel");
+          await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS reference_id");
+        }
+        await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_cash_ledger_ticket_unique ON daa_cash_ledger(ticket_id)");
         await ensureTableColumnV1(query as any, "daa_asset_universe", "asset_class", "TEXT NOT NULL DEFAULT 'EQUITY'");
         await ensureTableColumnV1(query as any, "daa_asset_universe", "region", "TEXT NOT NULL DEFAULT 'GLOBAL'");
         await ensureTableColumnV1(query as any, "daa_asset_universe", "exchange", "TEXT NOT NULL DEFAULT ''");
@@ -951,6 +1334,7 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "pricing_mode", "TEXT NOT NULL DEFAULT 'manual'");
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "price_source", "TEXT");
         await ensureTableColumnV1(query as any, "daa_trade_tickets", "price_snapshot_at", "TIMESTAMPTZ");
+        await ensureTableColumnV1(query as any, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_basket_status_created_desc ON daa_trade_tickets(basket_id, status, created_at DESC)",
         );
@@ -1496,6 +1880,7 @@ function resolveInvestableCashV1(cash: number, frozenCash: number, investableCas
 function applyAccountCashDeltaToConfigV1(
   configJson: Record<string, unknown>,
   nextCash: number,
+  nextTotalEquity?: number | null,
 ): {
   configJson: Record<string, unknown>;
   account: {
@@ -1515,7 +1900,7 @@ function applyAccountCashDeltaToConfigV1(
   const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, 0));
   const delta = normalizedNextCash - previousCash;
   const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
-  const totalEquityRaw = toFiniteNumber(accountRaw.totalEquity, Number.NaN);
+  const totalEquityRaw = nextTotalEquity == null ? Number.NaN : toFiniteNumber(nextTotalEquity, Number.NaN);
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 
   const account = {
@@ -1544,6 +1929,9 @@ type DaaTxQueryFnV1 = (sql: string, params?: unknown[]) => Promise<DaaQueryRowRe
 async function syncStrategyAccountCashInTxV1(
   query: DaaTxQueryFnV1,
   nextCash: number,
+  opts: {
+    totalEquity?: number | null;
+  } = {},
 ): Promise<{
   baseCurrency: string;
   cash: number;
@@ -1551,20 +1939,16 @@ async function syncStrategyAccountCashInTxV1(
   frozenCash: number;
   totalEquity: number | null;
 }> {
-  const currentSystem = await ensureSystemConfigRowInTxV2(query as any);
-  const patched = applyAccountCashDeltaToConfigV1(currentSystem.config.strategy as unknown as Record<string, unknown>, nextCash);
+  const currentSystem = await getSystemConfigRowForUpdateInTxV2(query as any);
+  const patched = applyAccountCashDeltaToConfigV1(currentSystem.config.strategy as unknown as Record<string, unknown>, nextCash, opts.totalEquity);
 
-  await query(
-    "UPDATE daa_system_config_v2 SET version = $1, config_json = $2::jsonb, updated_at = NOW() WHERE id = 'default'",
-    [
-      currentSystem.version + 1,
-      JSON.stringify(
-        normalizeSystemConfigV2({
-          ...currentSystem.config,
-          strategy: patched.configJson,
-        }),
-      ),
-    ],
+  await writeSystemConfigCasInTxV2(
+    query as any,
+    {
+      ...currentSystem.config,
+      strategy: patched.configJson,
+    },
+    currentSystem.version,
   );
   return {
     ...patched.account,
@@ -1826,6 +2210,37 @@ function resolveFxRateToBaseV1(
   return null;
 }
 
+async function buildPortfolioSnapshotFromAssetUniverseInTxV1(
+  query: DaaTxQueryFnV1,
+  input: { baseCurrency: string; cash: number },
+): Promise<{ holdingsValue: number; totalEquity: number }> {
+  const [holdingsRes, fxRes] = await Promise.all([
+    query("SELECT symbol, market, currency, holding_qty, holding_price, last_price FROM daa_asset_universe WHERE holding_qty > 0"),
+    query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates"),
+  ]);
+  const summary = summarizeMarkToMarketPortfolioV1({
+    positions: holdingsRes.rows.map((row) => ({
+      symbol: normalizeText(row.symbol).toUpperCase(),
+      market: normalizeText(row.market, "US").toUpperCase(),
+      currency: normalizeCcyCode(row.currency, input.baseCurrency),
+      qty: Math.max(0, toFiniteNumber(row.holding_qty, 0)),
+      holdingPrice: Math.max(0, toFiniteNumber(row.holding_price, 0)),
+      lastPrice: Math.max(0, toFiniteNumber(row.last_price, 0)),
+    })),
+    baseCurrency: input.baseCurrency,
+    cash: input.cash,
+    fxLookup: buildFxLookupToBaseV1((fxRes.rows as Array<Record<string, unknown>>).map((row) => ({
+      baseCcy: row.base_ccy,
+      quoteCcy: row.quote_ccy,
+      rate: row.rate,
+    }))),
+  });
+  return {
+    holdingsValue: summary.holdingsValue,
+    totalEquity: summary.totalEquity,
+  };
+}
+
 function normalizeTradeTicketSourceV1(value: unknown): DaaStoreTradeTicketSourceV1 {
   const text = normalizeText(value, "manual").toLowerCase();
   return text === "decision" ? "decision" : "manual";
@@ -1950,6 +2365,8 @@ function normalizeRebalanceTriggerSourceV1(value: unknown): DaaStoreRebalanceTri
   const text = normalizeText(value, "manual").toLowerCase();
   if (text === "calendar") return "calendar";
   if (text === "drift") return "drift";
+  if (text === "risk") return "risk";
+  if (text === "cash_idle") return "cash_idle";
   return "manual";
 }
 
@@ -1967,6 +2384,148 @@ function normalizeRiskStatusV1(value: unknown): "pass" | "warn" | "block" {
   if (text === "warn") return "warn";
   if (text === "block") return "block";
   return "pass";
+}
+
+function normalizeMarketIndicatorKeyV1(value: unknown): DaaMarketIndicatorKeyV1 | null {
+  const text = normalizeText(value, "").toLowerCase();
+  if (text === "vix") return "vix";
+  if (text === "qqq_spy_ratio") return "qqq_spy_ratio";
+  if (text === "fxi_volatility") return "fxi_volatility";
+  if (text === "kweb_fxi_ratio") return "kweb_fxi_ratio";
+  if (text === "btc_eth_ratio") return "btc_eth_ratio";
+  if (text === "btc_volatility") return "btc_volatility";
+  if (text === "gold_silver_ratio") return "gold_silver_ratio";
+  return null;
+}
+
+function normalizeMarketRegimeV1Store(value: unknown): DaaMarketRegimeV1 | "neutral" {
+  const text = normalizeText(value, "neutral").toLowerCase();
+  if (text === "risk_on") return "risk_on";
+  if (text === "risk_off") return "risk_off";
+  if (text === "transitional") return "transitional";
+  return "neutral";
+}
+
+function normalizeStringArrayV1(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => normalizeText(item)).filter(Boolean);
+}
+
+function normalizeProposalDecisionContextV1(value: unknown): ProposalDecisionContextV1 | null {
+  if (!isRecordV1(value)) return null;
+  return {
+    driftReason: normalizeText(value.driftReason, ""),
+    signalAction: value.signalAction === "open_or_add" || value.signalAction === "watch" || value.signalAction === "reduce_or_avoid"
+      ? value.signalAction
+      : null,
+    signalScore: value.signalScore == null ? null : clampNumberV1(toFiniteNumber(value.signalScore, 0), 0, 100),
+    signalConfidence: value.signalConfidence == null ? null : clampNumberV1(toFiniteNumber(value.signalConfidence, 0), 0, 100),
+    signalConflict: toBoolean(value.signalConflict, false),
+    llmAdjustment: value.llmAdjustment === "execute" || value.llmAdjustment === "reduce_size" || value.llmAdjustment === "skip" || value.llmAdjustment === "increase_priority"
+      ? value.llmAdjustment
+      : null,
+    llmConfidence: value.llmConfidence == null ? null : clampNumberV1(toFiniteNumber(value.llmConfidence, 0), 0, 100),
+    llmRationale: value.llmRationale == null ? null : normalizeText(value.llmRationale) || null,
+    marketRegime: normalizeMarketRegimeV1Store(value.marketRegime || value.effectiveMarketRegime) === "neutral"
+      ? null
+      : (normalizeMarketRegimeV1Store(value.marketRegime || value.effectiveMarketRegime) as DaaMarketRegimeV1),
+    ruleBasedMarketRegime: normalizeMarketRegimeV1Store(value.ruleBasedMarketRegime) === "neutral"
+      ? null
+      : (normalizeMarketRegimeV1Store(value.ruleBasedMarketRegime) as DaaMarketRegimeV1),
+    llmMarketRegime: normalizeMarketRegimeV1Store(value.llmMarketRegime) === "neutral"
+      ? null
+      : (normalizeMarketRegimeV1Store(value.llmMarketRegime) as DaaMarketRegimeV1),
+    effectiveMarketRegime: normalizeMarketRegimeV1Store(value.effectiveMarketRegime) === "neutral"
+      ? null
+      : (normalizeMarketRegimeV1Store(value.effectiveMarketRegime) as DaaMarketRegimeV1),
+    marketIndicatorFlags: normalizeStringArrayV1(value.marketIndicatorFlags),
+    conflictFlags: normalizeStringArrayV1(value.conflictFlags),
+    finalQtyMultiplier: clampNumberV1(toFiniteNumber(value.finalQtyMultiplier, 1), 0, 1),
+  };
+}
+
+function normalizeMarketIndicatorScopeV1Store(value: unknown): DaaMarketIndicatorSnapshotV1["scope"] {
+  const text = normalizeText(value, "us_equity").toLowerCase();
+  if (text === "hk_cn_equity") return "hk_cn_equity";
+  if (text === "crypto") return "crypto";
+  if (text === "macro_defensive") return "macro_defensive";
+  return "us_equity";
+}
+
+function normalizeMarketIndicatorSnapshotJsonV1(value: unknown): DaaMarketIndicatorSnapshotV1 | null {
+  if (!isRecordV1(value)) return null;
+  const key = normalizeMarketIndicatorKeyV1(value.key);
+  if (!key) return null;
+  return {
+    key,
+    label: normalizeText(value.label, "市场指标"),
+    category: value.category === "relative_value" || value.category === "sentiment" ? value.category : "volatility",
+    scope: normalizeMarketIndicatorScopeV1Store(value.scope),
+    stance: normalizeMarketRegimeV1Store(value.stance),
+    riskOffScorePct: clampNumberV1(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumberV1(toFiniteNumber(value.confidencePct, 40), 0, 100),
+    rawValue: value.rawValue == null ? null : toFiniteNumber(value.rawValue, 0),
+    unit: value.unit == null ? undefined : normalizeText(value.unit) || undefined,
+    percentile252: value.percentile252 == null ? null : toFiniteNumber(value.percentile252, 0),
+    zscore60: value.zscore60 == null ? null : toFiniteNumber(value.zscore60, 0),
+    trend1dPct: value.trend1dPct == null ? null : toFiniteNumber(value.trend1dPct, 0),
+    trend7dPct: value.trend7dPct == null ? null : toFiniteNumber(value.trend7dPct, 0),
+    trend30dPct: value.trend30dPct == null ? null : toFiniteNumber(value.trend30dPct, 0),
+    reason: normalizeText(value.reason, ""),
+    source: normalizeText(value.source, "market_cache"),
+    generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
+  };
+}
+
+function normalizeMarketScopeContextJsonV1(value: unknown): DaaMarketContextV1["scopes"][number] | null {
+  if (!isRecordV1(value)) return null;
+  const indicators = (Array.isArray(value.indicators) ? value.indicators : [])
+    .map((item) => normalizeMarketIndicatorSnapshotJsonV1(item))
+    .filter((item): item is DaaMarketIndicatorSnapshotV1 => Boolean(item));
+  const scope = normalizeMarketIndicatorScopeV1Store(value.scope);
+  if (!indicators.length && value.regime == null && value.generatedAt == null) return null;
+  return {
+    scope,
+    label: normalizeText(value.label, scope),
+    generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
+    regime: normalizeMarketRegimeV1Store(value.regime) === "neutral" ? "transitional" : (normalizeMarketRegimeV1Store(value.regime) as DaaMarketRegimeV1),
+    riskOffScorePct: clampNumberV1(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumberV1(toFiniteNumber(value.confidencePct, 40), 0, 100),
+    buyScale: clampNumberV1(toFiniteNumber(value.buyScale, 1), 0, 1),
+    highRiskBuyScale: clampNumberV1(toFiniteNumber(value.highRiskBuyScale, 0.95), 0, 1),
+    reasons: normalizeStringArrayV1(value.reasons),
+    indicators,
+  };
+}
+
+function normalizeMarketContextJsonV1(value: unknown): DaaMarketContextV1 | null {
+  if (!isRecordV1(value)) return null;
+  const indicatorsRaw = Array.isArray(value.indicators) ? value.indicators : [];
+  const indicators = indicatorsRaw
+    .map((item) => normalizeMarketIndicatorSnapshotJsonV1(item))
+    .filter((item): item is DaaMarketIndicatorSnapshotV1 => Boolean(item));
+  const scopesRaw = Array.isArray(value.scopes) ? value.scopes : [];
+  const scopes = scopesRaw
+    .map((item) => normalizeMarketScopeContextJsonV1(item))
+    .filter((item): item is DaaMarketContextV1["scopes"][number] => Boolean(item));
+  const reasons = normalizeStringArrayV1(value.reasons);
+  const hasPayload = indicators.length > 0
+    || scopes.length > 0
+    || reasons.length > 0
+    || value.regime != null
+    || value.generatedAt != null;
+  if (!hasPayload) return null;
+  return {
+    generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
+    regime: normalizeMarketRegimeV1Store(value.regime) === "neutral" ? "transitional" : (normalizeMarketRegimeV1Store(value.regime) as DaaMarketRegimeV1),
+    riskOffScorePct: clampNumberV1(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumberV1(toFiniteNumber(value.confidencePct, 40), 0, 100),
+    buyScale: clampNumberV1(toFiniteNumber(value.buyScale, 1), 0, 1),
+    highRiskBuyScale: clampNumberV1(toFiniteNumber(value.highRiskBuyScale, 0.95), 0, 1),
+    reasons,
+    indicators,
+    scopes,
+  };
 }
 
 function normalizePreTradeRiskCheckV1(value: unknown): DaaStorePreTradeRiskCheckV1 {
@@ -2030,6 +2589,7 @@ function normalizeCycleProposalsV1(value: unknown): DaaStoreRebalanceCycleV1["pr
       reason: normalizeText(row.reason, ""),
       selected: toBoolean(row.selected, true),
       hfContribution: normalizeText(row.hfContribution, "") || null,
+      decisionContext: normalizeProposalDecisionContextV1(row.decisionContext),
     });
   }
   return out;
@@ -2067,6 +2627,110 @@ function mapRebalanceCycleRowV1(row: Record<string, unknown>): DaaStoreRebalance
     cancelledAt: row.cancelled_at == null ? null : toIsoString(row.cancelled_at),
     cancelReason: row.cancel_reason == null ? null : normalizeText(row.cancel_reason) || null,
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
+    marketContext: row.market_context_json == null ? null : normalizeMarketContextJsonV1(parseJsonb<Record<string, unknown>>(row.market_context_json, {})),
+    createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapCycleReportRowV1(row: Record<string, unknown>): DaaStoreCycleReportV1 {
+  const before = parseJsonb<Record<string, unknown>>(row.before_snapshot_json, {});
+  const after = parseJsonb<Record<string, unknown>>(row.after_snapshot_json, {});
+  const executionStats = parseJsonb<Record<string, unknown>>(row.execution_stats_json, {});
+  const pnl = parseJsonb<Record<string, unknown>>(row.pnl_attribution_json, {});
+  const riskDelta = parseJsonb<Record<string, unknown>>(row.risk_delta_json, {});
+  const topContributorsRaw = Array.isArray(pnl.topContributors) ? pnl.topContributors : [];
+
+  const topContributors = topContributorsRaw.map((itemRaw) => {
+    const item = isRecordV1(itemRaw) ? itemRaw : {};
+    const sideRaw = normalizeText(item.side, "HOLD").toUpperCase();
+    const side = sideRaw === "BUY" || sideRaw === "SELL" ? sideRaw : "HOLD";
+    return {
+      symbol: normalizeText(item.symbol, "UNKNOWN").toUpperCase(),
+      pnl: toFiniteNumber(item.pnl, 0),
+      side: side as "BUY" | "SELL" | "HOLD",
+    };
+  });
+
+  return {
+    cycleId: normalizeText(row.cycle_id),
+    triggerSource: normalizeRebalanceTriggerSourceV1(row.trigger_source),
+    cycleStatus: normalizeRebalanceCycleStatusV1(row.cycle_status),
+    cycleCreatedAt: toIsoString(row.cycle_created_at),
+    reportCreatedAt: toIsoString(row.created_at),
+    executionSummary: {
+      ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
+      ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
+      newMaxDriftPct: Math.max(0, toFiniteNumber(executionStats.newMaxDriftPct, 0)),
+    },
+    beforeSnapshot: {
+      totalEquity: Math.max(0, toFiniteNumber(before.totalEquity, 0)),
+      holdingsValue: Math.max(0, toFiniteNumber(before.holdingsValue, 0)),
+      cash: Math.max(0, toFiniteNumber(before.cash, 0)),
+      hhiPct: Math.max(0, toFiniteNumber(before.hhiPct, 0)),
+      maxWeightPct: Math.max(0, toFiniteNumber(before.maxWeightPct, 0)),
+      maxDriftPct: Math.max(0, toFiniteNumber(before.maxDriftPct, 0)),
+      maxDrawdownPct: Math.max(0, toFiniteNumber(before.maxDrawdownPct, 0)),
+    },
+    afterSnapshot: {
+      totalEquity: Math.max(0, toFiniteNumber(after.totalEquity, 0)),
+      holdingsValue: Math.max(0, toFiniteNumber(after.holdingsValue, 0)),
+      cash: Math.max(0, toFiniteNumber(after.cash, 0)),
+      hhiPct: Math.max(0, toFiniteNumber(after.hhiPct, 0)),
+      maxWeightPct: Math.max(0, toFiniteNumber(after.maxWeightPct, 0)),
+      maxDriftPct: Math.max(0, toFiniteNumber(after.maxDriftPct, 0)),
+      maxDrawdownPct: Math.max(0, toFiniteNumber(after.maxDrawdownPct, 0)),
+    },
+    executionStats: {
+      ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
+      ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
+      feeTotal: Math.max(0, toFiniteNumber(executionStats.feeTotal, 0)),
+    },
+    pnlAttribution: {
+      realizedPnl: toFiniteNumber(pnl.realizedPnl, 0),
+      unrealizedPnl: toFiniteNumber(pnl.unrealizedPnl, 0),
+      feeTotal: Math.max(0, toFiniteNumber(pnl.feeTotal, 0)),
+      fxImpact: toFiniteNumber(pnl.fxImpact, 0),
+      topContributors,
+    },
+    riskDelta: {
+      maxDrawdownBefore: Math.max(0, toFiniteNumber(riskDelta.maxDrawdownBefore, 0)),
+      maxDrawdownAfter: Math.max(0, toFiniteNumber(riskDelta.maxDrawdownAfter, 0)),
+      hhiBefore: Math.max(0, toFiniteNumber(riskDelta.hhiBefore, 0)),
+      hhiAfter: Math.max(0, toFiniteNumber(riskDelta.hhiAfter, 0)),
+      maxWeightBefore: Math.max(0, toFiniteNumber(riskDelta.maxWeightBefore, 0)),
+      maxWeightAfter: Math.max(0, toFiniteNumber(riskDelta.maxWeightAfter, 0)),
+      maxDriftBefore: Math.max(0, toFiniteNumber(riskDelta.maxDriftBefore, 0)),
+      maxDriftAfter: Math.max(0, toFiniteNumber(riskDelta.maxDriftAfter, 0)),
+    },
+  };
+}
+
+function mapTriggerEventRowV1(row: Record<string, unknown>): DaaStoreTriggerEventV1 {
+  const statusRaw = normalizeText(row.status, "accepted").toLowerCase();
+  const status = statusRaw === "skipped" || statusRaw === "conflict" ? statusRaw : "accepted";
+  return {
+    eventId: normalizeText(row.event_id),
+    idempotencyKey: normalizeText(row.idempotency_key),
+    triggerSource: normalizeRebalanceTriggerSourceV1(row.trigger_source),
+    triggerReason: normalizeText(row.trigger_reason),
+    cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
+    status: status as "accepted" | "skipped" | "conflict",
+    detailsJson: parseJsonb<Record<string, unknown>>(row.details_json, {}),
+    createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapLlmFeedbackRowV1(row: Record<string, unknown>): DaaStoreLlmFeedbackV1 {
+  const typeRaw = normalizeText(row.type, "insight").toLowerCase();
+  const scoreRaw = normalizeText(row.score, "up").toLowerCase();
+  return {
+    id: normalizeText(row.id),
+    contextId: normalizeText(row.context_id),
+    type: typeRaw === "decision" ? "decision" : "insight",
+    score: scoreRaw === "down" ? "down" : "up",
+    comment: row.comment == null ? null : normalizeText(row.comment) || null,
     createdAt: toIsoString(row.created_at),
   };
 }
@@ -2172,12 +2836,23 @@ export async function upsertDaaFxRatesV1(rows: Array<Partial<DaaStoreFxRateV1>>)
 function mapCashLedgerRowV1(row: Record<string, unknown>): DaaStoreCashLedgerEntryV1 {
   const normalizedSide = normalizeText(row.side, "deposit").toLowerCase();
   const side: DaaStoreCashLedgerSideV1 = normalizedSide === "withdraw" ? "withdraw" : "deposit";
+  const normalizedEntryKind = normalizeText(row.entry_kind).toLowerCase();
+  const entryKind: DaaStoreCashLedgerEntryKindV1 | null = normalizedEntryKind === "trade_execution"
+    ? "trade_execution"
+    : (normalizedEntryKind === "manual" ? "manual" : null);
   return {
     id: normalizeText(row.id),
     ts: toIsoString(row.ts),
     side,
     amount: Math.max(0, toFiniteNumber(row.amount)),
     baseCurrency: normalizeCcyCode(row.base_currency, "USD"),
+    entryKind,
+    accountBaseCurrency: row.account_base_currency == null ? null : normalizeCcyCode(row.account_base_currency, "USD"),
+    amountInAccountBase: row.amount_in_account_base == null ? null : Math.max(0, toFiniteNumber(row.amount_in_account_base)),
+    fxRateToAccount: row.fx_rate_to_account == null ? null : Math.max(0, toFiniteNumber(row.fx_rate_to_account)),
+    ticketId: row.ticket_id == null ? null : normalizeText(row.ticket_id) || null,
+    cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
+    settlementTs: row.settlement_ts == null ? null : toIsoString(row.settlement_ts),
     note: row.note == null ? null : String(row.note),
     createdAt: toIsoString(row.created_at),
   };
@@ -2188,7 +2863,7 @@ export async function listDaaCashLedgerEntriesV1(limit = 100): Promise<DaaStoreC
   const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
   return withDaaPgClientV0(async ({ query }) => {
     const result = await query(
-      "SELECT id, ts, side, amount, base_currency, note, created_at FROM daa_cash_ledger ORDER BY ts DESC LIMIT $1",
+      "SELECT id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at FROM daa_cash_ledger ORDER BY ts DESC LIMIT $1",
       [n],
     );
     return result.rows.map((row) => mapCashLedgerRowV1(row as Record<string, unknown>));
@@ -2213,40 +2888,80 @@ export async function appendDaaCashLedgerEntryV1(input: DaaStoreCashLedgerApplyI
     const amount = Math.max(0, toFiniteNumber(input.amount));
     if (amount <= 0) throw new Error("cash ledger amount must be greater than 0");
 
+    const rawEntryKind = normalizeText(input.entryKind, "manual").toLowerCase();
+    const entryKind: DaaStoreCashLedgerEntryKindV1 = rawEntryKind === "trade_execution" ? "trade_execution" : "manual";
     const note = normalizeText(input.note, "");
     const entryId = randomUUID();
 
     await query("BEGIN");
     try {
-      const systemRow = await ensureSystemConfigRowInTxV2(query as any);
+      const systemRow = await getSystemConfigRowForUpdateInTxV2(query as any);
       const currentConfig = systemRow.config.strategy as unknown as Record<string, unknown>;
       const accountRaw = isRecordV1(currentConfig.account) ? currentConfig.account : {};
       const currentCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
-      const nextCash = side === "deposit" ? currentCash + amount : currentCash - amount;
-      if (nextCash < -1e-9) {
-        throw new Error(`insufficient cash for withdraw: ${amount.toFixed(2)} > ${currentCash.toFixed(2)}`);
-      }
-      const normalizedNextCash = Math.max(0, nextCash);
-      const account = await syncStrategyAccountCashInTxV1(query as DaaTxQueryFnV1, normalizedNextCash);
-      const baseCurrency = normalizeCcyCode(input.baseCurrency, account.baseCurrency);
+      const accountBaseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
+      const entryCurrency = normalizeCcyCode(input.baseCurrency, accountBaseCurrency);
+      const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
+      const fxMap = buildFxLookupMapV1(fxRes.rows as Array<Record<string, unknown>>);
 
-      const ts = new Date().toISOString();
+      let fxRateToAccount = input.fxRateToAccount != null ? Math.max(0, toFiniteNumber(input.fxRateToAccount, 0)) : 0;
+      if (!(fxRateToAccount > 0)) {
+        fxRateToAccount = resolveFxRateToBaseV1(accountBaseCurrency, entryCurrency, fxMap) ?? 0;
+      }
+      if (!(fxRateToAccount > 0) && entryCurrency === "USDC" && accountBaseCurrency === "USD") {
+        fxRateToAccount = 1;
+      }
+      if (!(fxRateToAccount > 0)) {
+        throw new Error(`missing fx rate for cash-ledger: ${entryCurrency}/${accountBaseCurrency}`);
+      }
+
+      const amountInAccountBase = input.amountInAccountBase != null && toFiniteNumber(input.amountInAccountBase, 0) > 0
+        ? Math.max(0, toFiniteNumber(input.amountInAccountBase, 0))
+        : amount * fxRateToAccount;
+      const nextCash = side === "deposit" ? currentCash + amountInAccountBase : currentCash - amountInAccountBase;
+      if (nextCash < -1e-9) {
+        throw new Error(
+          `insufficient cash for withdraw: ${amount.toFixed(2)} ${entryCurrency} (约 ${amountInAccountBase.toFixed(2)} ${accountBaseCurrency}) > ${currentCash.toFixed(2)} ${accountBaseCurrency}`,
+        );
+      }
+
+      const normalizedNextCash = Math.max(0, nextCash);
+      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTxV1(query as DaaTxQueryFnV1, {
+        baseCurrency: accountBaseCurrency,
+        cash: normalizedNextCash,
+      });
+      const account = await syncStrategyAccountCashInTxV1(query as DaaTxQueryFnV1, normalizedNextCash, {
+        totalEquity: valuation.totalEquity,
+      });
+      const ts = input.settlementTs ? toIsoString(input.settlementTs, new Date().toISOString()) : new Date().toISOString();
+      const settlementTs = input.settlementTs ? toIsoString(input.settlementTs, ts) : null;
       await query(
-        "INSERT INTO daa_cash_ledger (id, ts, side, amount, base_currency, note, created_at) VALUES ($1,$2,$3,$4,$5,$6,NOW())",
-        [entryId, ts, side, amount, baseCurrency, note || null],
+        "INSERT INTO daa_cash_ledger (id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())",
+        [
+          entryId,
+          ts,
+          side,
+          amount,
+          entryCurrency,
+          entryKind,
+          account.baseCurrency,
+          amountInAccountBase,
+          fxRateToAccount,
+          input.ticketId ? normalizeText(input.ticketId) || null : null,
+          input.cycleId ? normalizeText(input.cycleId) || null : null,
+          settlementTs,
+          note || null,
+        ],
       );
 
-      const holdingsRes = await query("SELECT COALESCE(SUM(holding_qty * holding_price), 0) AS holdings_value FROM daa_asset_universe");
-      const holdingsValue = Math.max(0, toFiniteNumber((holdingsRes.rows[0] as Record<string, unknown> | undefined)?.holdings_value));
-      const totalEquity = holdingsValue + account.cash;
       await query(
         "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
-        [ts, totalEquity, holdingsValue, account.cash, "cash_ledger"],
+        [ts, valuation.totalEquity, valuation.holdingsValue, account.cash, "cash_ledger"],
       );
 
       const opLogMessage = side === "deposit"
-        ? `资金入金 ${amount.toFixed(2)} ${baseCurrency}（余额 ${account.cash.toFixed(2)}）`
-        : `资金出金 ${amount.toFixed(2)} ${baseCurrency}（余额 ${account.cash.toFixed(2)}）`;
+        ? `资金入金 ${amount.toFixed(2)} ${entryCurrency}（折算 ${amountInAccountBase.toFixed(2)} ${account.baseCurrency}，余额 ${account.cash.toFixed(2)} ${account.baseCurrency}）`
+        : `资金出金 ${amount.toFixed(2)} ${entryCurrency}（折算 ${amountInAccountBase.toFixed(2)} ${account.baseCurrency}，余额 ${account.cash.toFixed(2)} ${account.baseCurrency}）`;
       await query(
         "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'info', $2, $3)",
         [
@@ -2255,7 +2970,13 @@ export async function appendDaaCashLedgerEntryV1(input: DaaStoreCashLedgerApplyI
           JSON.stringify({
             side,
             amount,
-            baseCurrency,
+            baseCurrency: entryCurrency,
+            entryKind,
+            amountInAccountBase,
+            accountBaseCurrency: account.baseCurrency,
+            fxRateToAccount,
+            ticketId: input.ticketId ? normalizeText(input.ticketId) || null : null,
+            cycleId: input.cycleId ? normalizeText(input.cycleId) || null : null,
             note: note || null,
           }),
         ],
@@ -2264,17 +2985,20 @@ export async function appendDaaCashLedgerEntryV1(input: DaaStoreCashLedgerApplyI
       await query("COMMIT");
 
       const entryRes = await query(
-        "SELECT id, ts, side, amount, base_currency, note, created_at FROM daa_cash_ledger WHERE id = $1 LIMIT 1",
+        "SELECT id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at FROM daa_cash_ledger WHERE id = $1 LIMIT 1",
         [entryId],
       );
 
       return {
         entry: mapCashLedgerRowV1(entryRes.rows[0] as Record<string, unknown>),
-        account,
+        account: {
+          ...account,
+          totalEquity: valuation.totalEquity,
+        },
         equitySnapshot: {
           ts,
-          totalEquity,
-          holdingsValue,
+          totalEquity: valuation.totalEquity,
+          holdingsValue: valuation.holdingsValue,
           cash: account.cash,
           source: "cash_ledger",
         },
@@ -2421,6 +3145,7 @@ const REBALANCE_CYCLE_SELECT_COLUMNS_V1 = [
   "cancelled_at",
   "cancel_reason",
   "notes",
+  "market_context_json",
   "created_at",
 ].join(", ");
 
@@ -2463,13 +3188,14 @@ export async function createDaaRebalanceCycleV1(input: DaaStoreCreateRebalanceCy
     const proposals = normalizeCycleProposalsV1(input.proposals);
     const riskCheck = normalizePreTradeRiskCheckV1(input.riskCheck);
     const notes = input.notes == null ? null : normalizeText(input.notes) || null;
+    const marketContext = input.marketContext == null ? null : normalizeMarketContextJsonV1(input.marketContext);
 
     const inserted = await query(
       `INSERT INTO daa_rebalance_cycles (
          cycle_id, status, trigger_source, trigger_reason, snapshot_at, equity_snapshot,
-         drift_snapshot_json, proposals_json, risk_check_json, notes, created_at
+         drift_snapshot_json, proposals_json, risk_check_json, notes, market_context_json, created_at
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,NOW()
+         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11::jsonb,NOW()
        )
        ON CONFLICT (cycle_id) DO UPDATE
        SET
@@ -2481,7 +3207,8 @@ export async function createDaaRebalanceCycleV1(input: DaaStoreCreateRebalanceCy
          drift_snapshot_json = EXCLUDED.drift_snapshot_json,
          proposals_json = EXCLUDED.proposals_json,
          risk_check_json = EXCLUDED.risk_check_json,
-         notes = EXCLUDED.notes
+         notes = EXCLUDED.notes,
+         market_context_json = EXCLUDED.market_context_json
        RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_V1}`,
       [
         cycleId,
@@ -2494,6 +3221,7 @@ export async function createDaaRebalanceCycleV1(input: DaaStoreCreateRebalanceCy
         JSON.stringify(proposals),
         JSON.stringify(riskCheck),
         notes,
+        marketContext == null ? JSON.stringify({}) : JSON.stringify(marketContext),
       ],
     );
     return mapRebalanceCycleRowV1(inserted.rows[0] as Record<string, unknown>);
@@ -2544,6 +3272,9 @@ export async function patchDaaRebalanceCycleV1(input: DaaStorePatchRebalanceCycl
       const nextNotes = input.notes === undefined
         ? current.notes
         : (input.notes == null ? null : normalizeText(input.notes) || null);
+      const nextMarketContext = input.marketContext === undefined
+        ? current.marketContext
+        : (input.marketContext == null ? null : normalizeMarketContextJsonV1(input.marketContext));
 
       const updatedRes = await query(
         `UPDATE daa_rebalance_cycles
@@ -2557,7 +3288,8 @@ export async function patchDaaRebalanceCycleV1(input: DaaStorePatchRebalanceCycl
            execution_summary_json = $8::jsonb,
            cancelled_at = $9,
            cancel_reason = $10,
-           notes = $11
+           notes = $11,
+           market_context_json = $12::jsonb
          WHERE cycle_id = $1
          RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_V1}`,
         [
@@ -2572,6 +3304,7 @@ export async function patchDaaRebalanceCycleV1(input: DaaStorePatchRebalanceCycl
           nextCancelledAt,
           nextCancelReason,
           nextNotes,
+          nextMarketContext == null ? JSON.stringify({}) : JSON.stringify(nextMarketContext),
         ],
       );
 
@@ -2585,6 +3318,197 @@ export async function patchDaaRebalanceCycleV1(input: DaaStorePatchRebalanceCycl
       }
       throw error;
     }
+  });
+}
+
+const CYCLE_REPORT_SELECT_COLUMNS_V1 = [
+  "r.cycle_id",
+  "r.before_snapshot_json",
+  "r.after_snapshot_json",
+  "r.execution_stats_json",
+  "r.pnl_attribution_json",
+  "r.risk_delta_json",
+  "r.created_at",
+  "c.trigger_source",
+  "c.status AS cycle_status",
+  "c.created_at AS cycle_created_at",
+].join(", ");
+
+export async function upsertDaaCycleReportV1(input: {
+  cycleId: string;
+  beforeSnapshot: Record<string, unknown>;
+  afterSnapshot: Record<string, unknown>;
+  executionStats: Record<string, unknown>;
+  pnlAttribution: Record<string, unknown>;
+  riskDelta: Record<string, unknown>;
+}): Promise<DaaStoreCycleReportV1> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const cycleId = normalizeText(input.cycleId);
+    if (!cycleId) throw new Error("cycleId is required");
+    const inserted = await query(
+      `
+      INSERT INTO daa_cycle_reports (
+        cycle_id, before_snapshot_json, after_snapshot_json, execution_stats_json, pnl_attribution_json, risk_delta_json, created_at
+      ) VALUES (
+        $1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, NOW()
+      )
+      ON CONFLICT (cycle_id) DO UPDATE
+      SET
+        before_snapshot_json = EXCLUDED.before_snapshot_json,
+        after_snapshot_json = EXCLUDED.after_snapshot_json,
+        execution_stats_json = EXCLUDED.execution_stats_json,
+        pnl_attribution_json = EXCLUDED.pnl_attribution_json,
+        risk_delta_json = EXCLUDED.risk_delta_json,
+        created_at = NOW()
+      RETURNING cycle_id
+      `,
+      [
+        cycleId,
+        JSON.stringify(input.beforeSnapshot || {}),
+        JSON.stringify(input.afterSnapshot || {}),
+        JSON.stringify(input.executionStats || {}),
+        JSON.stringify(input.pnlAttribution || {}),
+        JSON.stringify(input.riskDelta || {}),
+      ],
+    );
+    const hit = await query(
+      `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_V1}
+       FROM daa_cycle_reports r
+       JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
+       WHERE r.cycle_id = $1
+       LIMIT 1`,
+      [normalizeText((inserted.rows[0] as Record<string, unknown> | undefined)?.cycle_id, cycleId)],
+    );
+    if (!hit.rows.length) throw new Error("cycle report upsert failed");
+    return mapCycleReportRowV1(hit.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function getDaaCycleReportV1(cycleIdRaw: string): Promise<DaaStoreCycleReportV1 | null> {
+  await ensureDaaStoreSchemaPgV1();
+  const cycleId = normalizeText(cycleIdRaw);
+  if (!cycleId) return null;
+  return withDaaPgClientV0(async ({ query }) => {
+    const result = await query(
+      `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_V1}
+       FROM daa_cycle_reports r
+       JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
+       WHERE r.cycle_id = $1
+       LIMIT 1`,
+      [cycleId],
+    );
+    if (!result.rows.length) return null;
+    return mapCycleReportRowV1(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function listDaaCycleReportsV1(limit = 50): Promise<DaaStoreCycleReportV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const n = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(limit, 50))));
+    const result = await query(
+      `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_V1}
+       FROM daa_cycle_reports r
+       JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
+       ORDER BY r.created_at DESC
+       LIMIT $1`,
+      [n],
+    );
+    return result.rows.map((row) => mapCycleReportRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function appendDaaTriggerEventV1(input: {
+  idempotencyKey: string;
+  triggerSource: DaaStoreRebalanceTriggerSourceV1;
+  triggerReason: string;
+  cycleId?: string | null;
+  status?: "accepted" | "skipped" | "conflict";
+  detailsJson?: Record<string, unknown>;
+}): Promise<DaaStoreTriggerEventV1> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const idempotencyKey = normalizeText(input.idempotencyKey);
+    if (!idempotencyKey) throw new Error("idempotencyKey is required");
+    const triggerSource = normalizeRebalanceTriggerSourceV1(input.triggerSource);
+    const triggerReason = normalizeText(input.triggerReason, "");
+    const cycleId = input.cycleId == null ? null : normalizeText(input.cycleId) || null;
+    const statusRaw = normalizeText(input.status, "accepted").toLowerCase();
+    const status = statusRaw === "skipped" || statusRaw === "conflict" ? statusRaw : "accepted";
+    const detailsJson = input.detailsJson || {};
+    const eventId = randomUUID();
+
+    const result = await query(
+      `
+      INSERT INTO daa_trigger_events (
+        event_id, idempotency_key, trigger_source, trigger_reason, cycle_id, status, details_json, created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7::jsonb, NOW()
+      )
+      ON CONFLICT (idempotency_key) DO UPDATE
+      SET
+        trigger_source = EXCLUDED.trigger_source,
+        trigger_reason = EXCLUDED.trigger_reason,
+        cycle_id = EXCLUDED.cycle_id,
+        status = EXCLUDED.status,
+        details_json = EXCLUDED.details_json
+      RETURNING event_id, idempotency_key, trigger_source, trigger_reason, cycle_id, status, details_json, created_at
+      `,
+      [eventId, idempotencyKey, triggerSource, triggerReason, cycleId, status, JSON.stringify(detailsJson)],
+    );
+    return mapTriggerEventRowV1(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function appendDaaLlmFeedbackV1(input: {
+  contextId: string;
+  type: "insight" | "decision";
+  score: "up" | "down";
+  comment?: string;
+}): Promise<DaaStoreLlmFeedbackV1> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const contextId = normalizeText(input.contextId);
+    if (!contextId) throw new Error("contextId is required");
+    const type = input.type === "decision" ? "decision" : "insight";
+    const score = input.score === "down" ? "down" : "up";
+    const comment = normalizeText(input.comment, "") || null;
+    const id = randomUUID();
+    const inserted = await query(
+      `
+      INSERT INTO daa_llm_feedback (id, context_id, type, score, comment, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      RETURNING id, context_id, type, score, comment, created_at
+      `,
+      [id, contextId, type, score, comment],
+    );
+    return mapLlmFeedbackRowV1(inserted.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function listDaaLlmFeedbackV1(input: {
+  type?: "insight" | "decision";
+  limit?: number;
+} = {}): Promise<DaaStoreLlmFeedbackV1[]> {
+  await ensureDaaStoreSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
+    const params: unknown[] = [];
+    const where: string[] = [];
+    if (input.type) {
+      params.push(input.type === "decision" ? "decision" : "insight");
+      where.push(`type = $${params.length}`);
+    }
+    params.push(limit);
+    const sql = [
+      "SELECT id, context_id, type, score, comment, created_at",
+      "FROM daa_llm_feedback",
+      where.length ? `WHERE ${where.join(" AND ")}` : "",
+      `ORDER BY created_at DESC LIMIT $${params.length}`,
+    ].filter(Boolean).join(" ");
+    const result = await query(sql, params);
+    return result.rows.map((row) => mapLlmFeedbackRowV1(row as Record<string, unknown>));
   });
 }
 
@@ -2906,7 +3830,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
         positionsMap.set(buildPositionKeyV1(pos.symbol, pos.market), pos);
       }
 
-      const systemRow = await ensureSystemConfigRowInTxV2(query as any);
+      const systemRow = await getSystemConfigRowForUpdateInTxV2(query as any);
       const strategyRaw = (isRecordV1(systemRow.config.strategy) ? systemRow.config.strategy : {}) as Record<string, unknown>;
       const accountRaw = (isRecordV1(strategyRaw.account) ? strategyRaw.account : {}) as Record<string, unknown>;
       const baseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
@@ -2949,7 +3873,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
           currency: ticket.instrumentCurrency,
           qty: 0,
           price: ticket.price,
-          costBasis: ticket.price,
+          costBasis: 0,
           tags: [],
           updatedAt: nowIso,
         };
@@ -2996,8 +3920,10 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
           accountCash = Math.max(0, accountCash - cashOut);
           const prevQty = Math.max(0, existingPosition.qty);
           const nextQty = prevQty + ticket.qty;
-          const prevCostBasis = Math.max(0, toFiniteNumber(existingPosition.costBasis, existingPosition.price));
-          const nextCostBasis = nextQty > 0 ? ((prevQty * prevCostBasis) + (ticket.qty * ticket.price)) / nextQty : ticket.price;
+          const prevCostBasis = prevQty > 0
+            ? Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)))
+            : 0;
+          const nextCostBasis = prevCostBasis + grossNotional;
           positionsMap.set(positionKey, {
             ...existingPosition,
             qty: nextQty,
@@ -3027,10 +3953,13 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
           if (nextQty <= 0) {
             positionsMap.delete(positionKey);
           } else {
+            const prevCostBasis = Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)));
+            const costPerUnit = prevQty > 0 ? prevCostBasis / prevQty : 0;
             positionsMap.set(positionKey, {
               ...existingPosition,
               qty: nextQty,
               price: ticket.price,
+              costBasis: Math.max(0, costPerUnit * nextQty),
               updatedAt: nowIso,
             });
           }
@@ -3059,6 +3988,34 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
         await query(
           "UPDATE daa_trade_tickets SET status = 'executed', reject_code = NULL, reject_message = NULL, fx_rate_to_base = $1, gross_notional = $2, notional_in_base = $3, snapshot_after_json = $4::jsonb, executed_at = $5, updated_at = NOW() WHERE ticket_id = $6",
           [fxRate, grossNotional, notionalInBase, JSON.stringify(snapshotAfter), nowIso, ticket.ticketId],
+        );
+
+        const ledgerSide: DaaStoreCashLedgerSideV1 = ticket.side === "BUY" ? "withdraw" : "deposit";
+        const ledgerAmountInBase = ticket.side === "BUY"
+          ? (notionalInBase + feeInBase)
+          : Math.max(0, notionalInBase - feeInBase);
+        await query(
+          `INSERT INTO daa_cash_ledger (
+             id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW()
+           )
+           ON CONFLICT (ticket_id) DO NOTHING`,
+          [
+            randomUUID(),
+            nowIso,
+            ledgerSide,
+            ledgerAmountInBase,
+            baseCurrency,
+            "trade_execution",
+            baseCurrency,
+            ledgerAmountInBase,
+            1,
+            ticket.ticketId,
+            ticket.cycleId,
+            nowIso,
+            `${ticket.side} ${ticket.symbol} ${ticket.qty.toFixed(6)} @ ${ticket.price.toFixed(4)}`,
+          ],
         );
 
         results.push({
@@ -3116,15 +4073,19 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
       }
       await query("DELETE FROM daa_asset_universe WHERE watch_enabled = FALSE AND holding_qty <= 0");
 
-      const account = await syncStrategyAccountCashInTxV1(query as DaaTxQueryFnV1, accountCash);
-      const holdingsValue = [...positionsMap.values()].reduce((sum, p) => {
-        const notional = Math.max(0, p.qty * p.price);
-        if (notional <= 0) return sum;
-        const fxRate = resolveFxRateToBaseV1(baseCurrency, p.currency, fxMap);
-        if (!fxRate || fxRate <= 0) return sum;
-        return sum + (notional * fxRate);
-      }, 0);
-      const totalEquity = holdingsValue + account.cash;
+      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTxV1(query as DaaTxQueryFnV1, {
+        baseCurrency,
+        cash: accountCash,
+      });
+      const account = await syncStrategyAccountCashInTxV1(query as DaaTxQueryFnV1, accountCash, {
+        totalEquity: valuation.totalEquity,
+      });
+      const holdingsValue = valuation.holdingsValue;
+      const totalEquity = valuation.totalEquity;
+      const accountWithEquity = {
+        ...account,
+        totalEquity,
+      };
       const snapshotTs = new Date().toISOString();
       await query(
         "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
@@ -3139,7 +4100,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
           JSON.stringify({
             ticketIds,
             results,
-            account,
+            account: accountWithEquity,
           }),
         ],
       );
@@ -3232,7 +4193,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
             updatedAt: toIsoString(item.updated_at),
           } satisfies DaaStorePositionV1;
         }),
-        account,
+        account: accountWithEquity,
         equitySnapshot: {
           ts: snapshotTs,
           totalEquity,
@@ -3401,7 +4362,7 @@ export async function listDaaOpLogV1(limit = 100): Promise<DaaStoreOpLogEntryV1[
   });
 }
 
-export async function appendPriceHistoryRowsV1(rows: Array<{ symbol: string; ts?: string; price: number; source?: string }>): Promise<number> {
+export async function appendAssetPriceHistoryRowsV1(rows: Array<{ assetKey: string; ts?: string; price: number; source?: string }>): Promise<number> {
   if (!rows.length) return 0;
   await ensureDaaStoreSchemaPgV1();
   return withDaaPgClientV0(async ({ query }) => {
@@ -3409,15 +4370,19 @@ export async function appendPriceHistoryRowsV1(rows: Array<{ symbol: string; ts?
     await query("BEGIN");
     try {
       for (const row of rows) {
-        const symbol = normalizeText(row.symbol).toUpperCase();
+        const parsedAssetKey = parseDaaAssetKeyV1(row.assetKey);
+        if (!parsedAssetKey) {
+          throw new Error(`price history assetKey invalid: ${normalizeText(row.assetKey) || "unknown"}`);
+        }
+        const assetKey = buildDaaAssetKeyV1(parsedAssetKey.symbol, parsedAssetKey.market);
         const price = Math.max(0, toFiniteNumber(row.price));
-        if (!symbol || price <= 0) continue;
+        if (!assetKey || price <= 0) continue;
         const ts = toIsoString(row.ts, new Date().toISOString());
         const source = normalizeText(row.source, "yfinance");
 
         await query(
           "INSERT INTO daa_price_history (symbol, ts, price, source) VALUES ($1,$2,$3,$4) ON CONFLICT (symbol, ts) DO UPDATE SET price = EXCLUDED.price, source = EXCLUDED.source",
-          [symbol, ts, price, source],
+          [assetKey, ts, price, source],
         );
         inserted += 1;
       }
@@ -3432,26 +4397,6 @@ export async function appendPriceHistoryRowsV1(rows: Array<{ symbol: string; ts?
     }
 
     return inserted;
-  });
-}
-
-export async function latestPriceBySymbolsV1(symbols: string[]): Promise<Record<string, number>> {
-  await ensureDaaStoreSchemaPgV1();
-  const uniq = [...new Set(symbols.map((x) => normalizeText(x).toUpperCase()).filter(Boolean))];
-  if (!uniq.length) return {};
-  return withDaaPgClientV0(async ({ query }) => {
-    const result = await query(
-      "SELECT DISTINCT ON (symbol) symbol, price FROM daa_price_history WHERE symbol = ANY($1) ORDER BY symbol, ts DESC",
-      [uniq],
-    );
-
-    const out: Record<string, number> = {};
-    for (const row of result.rows as Array<Record<string, unknown>>) {
-      const symbol = normalizeText(row.symbol).toUpperCase();
-      const price = toFiniteNumber(row.price);
-      if (symbol && price > 0) out[symbol] = price;
-    }
-    return out;
   });
 }
 
@@ -3557,6 +4502,1300 @@ export async function listDaaRebalanceDecisionsV1(opts?: {
       ...decision,
       orders: [],
     }));
+  });
+}
+
+const MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_V1 = [
+  "provider",
+  "market",
+  "symbol",
+  "normalized_symbol",
+  "currency",
+  "price",
+  "status",
+  "as_of_ts",
+  "fetched_at",
+  "source",
+  "error_code",
+  "error_message",
+  "raw_ref_id",
+  "updated_at",
+].join(", ");
+
+const NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_V1 = [
+  "provider",
+  "symbol",
+  "item_hash",
+  "title",
+  "link",
+  "published_at",
+  "fetched_at",
+  "sentiment_score",
+  "source_credibility",
+  "freshness",
+  "raw_ref_id",
+].join(", ");
+
+const NEWS_SIGNAL_SNAPSHOT_SELECT_COLUMNS_V1 = [
+  "provider",
+  "symbol",
+  "score_pct",
+  "confidence_pct",
+  "evidence_count",
+  "reasons_json",
+  "generated_at",
+  "updated_at",
+].join(", ");
+
+const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_V1 = [
+  "id",
+  "indicator_key",
+  "scope",
+  "subject_key",
+  "stance",
+  "risk_off_score_pct",
+  "confidence_pct",
+  "raw_value",
+  "unit",
+  "percentile_252",
+  "zscore_60",
+  "trend_1d_pct",
+  "trend_7d_pct",
+  "trend_30d_pct",
+  "source",
+  "reasons_json",
+  "components_json",
+  "generated_at",
+  "expire_at",
+  "created_at",
+].join(", ");
+
+const HF_HOLDING_SNAPSHOT_SELECT_COLUMNS_V1 = [
+  "provider",
+  "fund_code",
+  "report_date",
+  "symbol",
+  "market",
+  "weight_pct",
+  "prev_weight_pct",
+  "disclosed_at",
+  "confidence_pct",
+  "source_ref",
+  "fetched_at",
+  "raw_ref_id",
+].join(", ");
+
+const HF_SIGNAL_SNAPSHOT_SELECT_COLUMNS_V1 = [
+  "provider",
+  "symbol",
+  "aggregated_score_pct",
+  "conviction_pct",
+  "thesis_drift_pct",
+  "fund_count",
+  "funds_json",
+  "generated_at",
+  "updated_at",
+].join(", ");
+
+const RAW_PAYLOAD_SELECT_COLUMNS_V1 = [
+  "id",
+  "provider",
+  "resource",
+  "subject_key",
+  "request_url",
+  "request_json",
+  "response_status",
+  "response_headers_json",
+  "payload_json",
+  "payload_text",
+  "fetched_at",
+  "expire_at",
+  "created_at",
+].join(", ");
+
+const INGEST_JOB_LOG_SELECT_COLUMNS_V1 = [
+  "job_id",
+  "job_type",
+  "trigger_source",
+  "status",
+  "started_at",
+  "finished_at",
+  "total_count",
+  "success_count",
+  "failure_count",
+  "diagnostics_json",
+].join(", ");
+
+function normalizeUpperV1(value: unknown, fallback = ""): string {
+  return normalizeText(value, fallback).toUpperCase();
+}
+
+async function withPgTransactionV1<T>(
+  query: (sql: string, params?: unknown[]) => Promise<unknown>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await query("BEGIN");
+  try {
+    const result = await fn();
+    await query("COMMIT");
+    return result;
+  } catch (error) {
+    try {
+      await query("ROLLBACK");
+    } catch {
+      // ignore
+    }
+    throw error;
+  }
+}
+
+function normalizeMarketPriceStatusV1(value: unknown, fallback: DaaStoreMarketPriceStatusV1 = "missing"): DaaStoreMarketPriceStatusV1 {
+  const status = normalizeText(value, fallback).toLowerCase();
+  if (status === "fresh" || status === "stale" || status === "missing" || status === "error" || status === "unsupported") {
+    return status;
+  }
+  return fallback;
+}
+
+function normalizeFxHistoryStatusV1(value: unknown, fallback: DaaStoreFxRateHistoryStatusV1 = "fresh"): DaaStoreFxRateHistoryStatusV1 {
+  const status = normalizeText(value, fallback).toLowerCase();
+  if (status === "fresh" || status === "stale" || status === "missing" || status === "error") return status;
+  return fallback;
+}
+
+function normalizeIngestJobStatusV1(value: unknown, fallback: DaaStoreIngestJobStatusV1 = "ok"): DaaStoreIngestJobStatusV1 {
+  const status = normalizeText(value, fallback).toLowerCase();
+  if (status === "ok" || status === "partial" || status === "failed") return status;
+  return fallback;
+}
+
+function hashTokenV1(value: string): string {
+  return createHash("sha1").update(value).digest("hex");
+}
+
+function mapMarketPriceSnapshotRowV1(row: Record<string, unknown>): DaaStoreMarketPriceSnapshotV1 {
+  const price = Math.max(0, toFiniteNumber(row.price, 0));
+  const status = normalizeMarketPriceStatusV1(row.status, "missing");
+  const semanticUpdatedAt = row.as_of_ts == null ? null : toIsoString(row.as_of_ts, new Date().toISOString());
+  const persistedFetchedAt = row.fetched_at == null ? null : toIsoString(row.fetched_at, new Date().toISOString());
+  const priceUpdatedAt = price > 0 && status !== "missing" && status !== "error" && status !== "unsupported"
+    ? (semanticUpdatedAt || (status === "fresh" ? persistedFetchedAt : null))
+    : null;
+  return {
+    provider: normalizeText(row.provider, "yfinance"),
+    market: normalizeUpperV1(row.market, "US"),
+    symbol: normalizeUpperV1(row.symbol),
+    normalizedSymbol: normalizeUpperV1(row.normalized_symbol || row.symbol),
+    currency: normalizeUpperV1(row.currency, "USD"),
+    price,
+    status,
+    priceUpdatedAt,
+    source: normalizeText(row.source, "market_cache"),
+    errorCode: row.error_code == null ? null : normalizeText(row.error_code) || null,
+    errorMessage: row.error_message == null ? null : normalizeText(row.error_message) || null,
+    rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
+  };
+}
+
+function mapMarketPriceHistoryRowV1(row: Record<string, unknown>): DaaStoreMarketPriceHistoryV1 {
+  return {
+    provider: normalizeText(row.provider, "yfinance"),
+    market: normalizeUpperV1(row.market, "US"),
+    symbol: normalizeUpperV1(row.symbol),
+    ts: toIsoString(row.as_of_ts, new Date().toISOString()),
+    price: Math.max(0, toFiniteNumber(row.price, 0)),
+    currency: normalizeUpperV1(row.currency, "USD"),
+    source: normalizeText(row.source, "market_cache"),
+    rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
+  };
+}
+
+function mapNewsItemSnapshotRowV1(row: Record<string, unknown>): DaaStoreNewsItemSnapshotV1 {
+  return {
+    provider: normalizeText(row.provider, "yahoo_rss"),
+    symbol: normalizeUpperV1(row.symbol),
+    itemHash: normalizeText(row.item_hash),
+    title: normalizeText(row.title),
+    link: row.link == null ? null : normalizeText(row.link) || null,
+    publishedAt: row.published_at == null ? null : toIsoString(row.published_at, new Date().toISOString()),
+    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
+    sentimentScore: toFiniteNumber(row.sentiment_score, 0),
+    sourceCredibility: clampNumberV1(toFiniteNumber(row.source_credibility, 0), 0, 1),
+    freshness: clampNumberV1(toFiniteNumber(row.freshness, 0), 0, 1),
+    rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
+  };
+}
+
+function mapNewsSignalSnapshotRowV1(row: Record<string, unknown>): DaaStoreNewsSignalSnapshotV1 {
+  return {
+    provider: normalizeText(row.provider, "yahoo_rss"),
+    symbol: normalizeUpperV1(row.symbol),
+    scorePct: clampNumberV1(toFiniteNumber(row.score_pct, 50), 0, 100),
+    confidencePct: clampNumberV1(toFiniteNumber(row.confidence_pct, 0), 0, 100),
+    evidenceCount: Math.max(0, Math.trunc(toFiniteNumber(row.evidence_count, 0))),
+    reasonsJson: parseJsonb<string[]>(row.reasons_json, []).map((item) => String(item || "").trim()).filter(Boolean),
+    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
+  };
+}
+
+function mapMarketIndicatorSnapshotRowV1(row: Record<string, unknown>): DaaStoreMarketIndicatorSnapshotV1 {
+  return {
+    id: normalizeText(row.id),
+    key: normalizeMarketIndicatorKeyV1(row.indicator_key) || "vix",
+    scope: normalizeText(row.scope, "us_equity"),
+    subjectKey: normalizeText(row.subject_key, "GLOBAL"),
+    stance: normalizeMarketRegimeV1Store(row.stance),
+    riskOffScorePct: clampNumberV1(toFiniteNumber(row.risk_off_score_pct, 50), 0, 100),
+    confidencePct: clampNumberV1(toFiniteNumber(row.confidence_pct, 40), 0, 100),
+    rawValue: row.raw_value == null ? null : toFiniteNumber(row.raw_value, 0),
+    unit: row.unit == null ? null : normalizeText(row.unit) || null,
+    percentile252: row.percentile_252 == null ? null : toFiniteNumber(row.percentile_252, 0),
+    zscore60: row.zscore_60 == null ? null : toFiniteNumber(row.zscore_60, 0),
+    trend1dPct: row.trend_1d_pct == null ? null : toFiniteNumber(row.trend_1d_pct, 0),
+    trend7dPct: row.trend_7d_pct == null ? null : toFiniteNumber(row.trend_7d_pct, 0),
+    trend30dPct: row.trend_30d_pct == null ? null : toFiniteNumber(row.trend_30d_pct, 0),
+    source: normalizeText(row.source, "market_cache"),
+    reasonsJson: normalizeStringArrayV1(parseJsonb<unknown[]>(row.reasons_json, [])),
+    componentsJson: parseJsonb<Record<string, unknown>>(row.components_json, {}),
+    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
+    expireAt: row.expire_at == null ? null : toIsoString(row.expire_at, new Date().toISOString()),
+    createdAt: toIsoString(row.created_at, new Date().toISOString()),
+  };
+}
+
+function mapHfHoldingSnapshotRowV1(row: Record<string, unknown>): DaaStoreHfHoldingSnapshotV1 {
+  const reportDate = String(row.report_date || "").trim();
+  return {
+    provider: normalizeText(row.provider, "danjuan"),
+    fundCode: normalizeText(row.fund_code),
+    reportDate: /^\d{4}-\d{2}-\d{2}$/.test(reportDate) ? reportDate : toIsoString(row.report_date, new Date().toISOString()).slice(0, 10),
+    symbol: normalizeUpperV1(row.symbol),
+    market: normalizeUpperV1(row.market, "UNKNOWN"),
+    weightPct: Math.max(0, toFiniteNumber(row.weight_pct, 0)),
+    prevWeightPct: Math.max(0, toFiniteNumber(row.prev_weight_pct, 0)),
+    disclosedAt: row.disclosed_at == null ? null : toIsoString(row.disclosed_at, new Date().toISOString()),
+    confidencePct: clampNumberV1(toFiniteNumber(row.confidence_pct, 0), 0, 100),
+    sourceRef: row.source_ref == null ? null : normalizeText(row.source_ref) || null,
+    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
+    rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
+  };
+}
+
+function mapHfSignalSnapshotRowV1(row: Record<string, unknown>): DaaStoreHfSignalSnapshotV1 {
+  return {
+    provider: normalizeText(row.provider, "human_signal"),
+    symbol: normalizeUpperV1(row.symbol),
+    aggregatedScorePct: clampNumberV1(toFiniteNumber(row.aggregated_score_pct, 0), 0, 100),
+    convictionPct: clampNumberV1(toFiniteNumber(row.conviction_pct, 0), 0, 100),
+    thesisDriftPct: clampNumberV1(toFiniteNumber(row.thesis_drift_pct, 0), 0, 100),
+    fundCount: Math.max(0, Math.trunc(toFiniteNumber(row.fund_count, 0))),
+    fundsJson: parseJsonb<Array<Record<string, unknown>>>(row.funds_json, []),
+    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
+    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
+  };
+}
+
+function mapExternalPayloadRawRowV1(row: Record<string, unknown>): DaaStoreExternalPayloadRawV1 {
+  return {
+    id: normalizeText(row.id),
+    provider: normalizeText(row.provider),
+    resource: normalizeText(row.resource),
+    subjectKey: normalizeText(row.subject_key),
+    requestUrl: normalizeText(row.request_url),
+    requestJson: parseJsonb<Record<string, unknown>>(row.request_json, {}),
+    responseStatus: Math.max(0, Math.trunc(toFiniteNumber(row.response_status, 0))),
+    responseHeadersJson: parseJsonb<Record<string, unknown>>(row.response_headers_json, {}),
+    payloadJson: row.payload_json == null ? null : parseJsonb<Record<string, unknown>>(row.payload_json, {}),
+    payloadText: row.payload_text == null ? null : String(row.payload_text),
+    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
+    expireAt: toIsoString(row.expire_at, new Date().toISOString()),
+    createdAt: toIsoString(row.created_at, new Date().toISOString()),
+  };
+}
+
+function mapIngestJobLogRowV1(row: Record<string, unknown>): DaaStoreIngestJobLogV1 {
+  return {
+    jobId: normalizeText(row.job_id),
+    jobType: normalizeText(row.job_type),
+    triggerSource: normalizeText(row.trigger_source, "manual"),
+    status: normalizeIngestJobStatusV1(row.status, "ok"),
+    startedAt: toIsoString(row.started_at, new Date().toISOString()),
+    finishedAt: toIsoString(row.finished_at, new Date().toISOString()),
+    totalCount: Math.max(0, Math.trunc(toFiniteNumber(row.total_count, 0))),
+    successCount: Math.max(0, Math.trunc(toFiniteNumber(row.success_count, 0))),
+    failureCount: Math.max(0, Math.trunc(toFiniteNumber(row.failure_count, 0))),
+    diagnosticsJson: parseJsonb<Record<string, unknown>>(row.diagnostics_json, {}),
+  };
+}
+
+function clampNumberV1(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  if (value <= min) return min;
+  if (value >= max) return max;
+  return value;
+}
+
+export async function ensureDaaMarketCacheSchemaPgV1(): Promise<void> {
+  const st = getStoreStateV1();
+  if (st.marketCacheSchemaInit) {
+    await st.marketCacheSchemaInit;
+    return;
+  }
+  st.marketCacheSchemaInit = withDaaPgClientV0(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_market_price_snapshot (
+          provider TEXT NOT NULL,
+          market TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          normalized_symbol TEXT NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'USD',
+          price NUMERIC NOT NULL DEFAULT 0,
+          status TEXT NOT NULL CHECK (status IN ('fresh','stale','missing','error','unsupported')),
+          as_of_ts TIMESTAMPTZ,
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          source TEXT NOT NULL DEFAULT 'market_cache',
+          error_code TEXT,
+          error_message TEXT,
+          raw_ref_id TEXT,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, market, symbol)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_daa_market_price_snapshot_status_fetched_desc
+          ON daa_market_price_snapshot(status, fetched_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_market_price_snapshot_market_symbol
+          ON daa_market_price_snapshot(market, symbol);
+
+        CREATE TABLE IF NOT EXISTS daa_market_price_history_v1 (
+          provider TEXT NOT NULL,
+          market TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          as_of_ts TIMESTAMPTZ NOT NULL,
+          price NUMERIC NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'USD',
+          source TEXT NOT NULL DEFAULT 'market_cache',
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          raw_ref_id TEXT,
+          PRIMARY KEY (provider, market, symbol, as_of_ts)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_symbol_asof_desc
+          ON daa_market_price_history_v1(symbol, as_of_ts DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_fx_rate_history_v1 (
+          provider TEXT NOT NULL,
+          base_ccy TEXT NOT NULL,
+          quote_ccy TEXT NOT NULL,
+          as_of_ts TIMESTAMPTZ NOT NULL,
+          rate NUMERIC NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('fresh','stale','missing','error')),
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          error_code TEXT,
+          error_message TEXT,
+          raw_ref_id TEXT,
+          PRIMARY KEY (provider, base_ccy, quote_ccy, as_of_ts)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_fx_rate_history_v1_pair_asof_desc
+          ON daa_fx_rate_history_v1(base_ccy, quote_ccy, as_of_ts DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_news_item_snapshot_v1 (
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          item_hash TEXT NOT NULL,
+          title TEXT NOT NULL,
+          link TEXT,
+          published_at TIMESTAMPTZ,
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          sentiment_score NUMERIC NOT NULL DEFAULT 0,
+          source_credibility NUMERIC NOT NULL DEFAULT 0,
+          freshness NUMERIC NOT NULL DEFAULT 0,
+          raw_ref_id TEXT,
+          PRIMARY KEY (provider, symbol, item_hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_news_item_snapshot_v1_symbol_published_desc
+          ON daa_news_item_snapshot_v1(symbol, published_at DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_news_signal_snapshot_v1 (
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          score_pct NUMERIC NOT NULL DEFAULT 50,
+          confidence_pct NUMERIC NOT NULL DEFAULT 0,
+          evidence_count INTEGER NOT NULL DEFAULT 0,
+          reasons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, symbol)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_news_signal_snapshot_v1_generated_desc
+          ON daa_news_signal_snapshot_v1(generated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_market_indicator_snapshot_v1 (
+          id TEXT PRIMARY KEY,
+          indicator_key TEXT NOT NULL,
+          scope TEXT NOT NULL DEFAULT 'portfolio',
+          subject_key TEXT NOT NULL DEFAULT 'GLOBAL',
+          stance TEXT NOT NULL DEFAULT 'neutral',
+          risk_off_score_pct NUMERIC NOT NULL DEFAULT 50,
+          confidence_pct NUMERIC NOT NULL DEFAULT 40,
+          raw_value NUMERIC,
+          unit TEXT,
+          percentile_252 NUMERIC,
+          zscore_60 NUMERIC,
+          trend_1d_pct NUMERIC,
+          trend_7d_pct NUMERIC,
+          trend_30d_pct NUMERIC,
+          source TEXT NOT NULL,
+          reasons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          components_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          generated_at TIMESTAMPTZ NOT NULL,
+          expire_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_market_indicator_snapshot_v1_key_generated_desc
+          ON daa_market_indicator_snapshot_v1(indicator_key, generated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_hf_holding_snapshot_v1 (
+          provider TEXT NOT NULL,
+          fund_code TEXT NOT NULL,
+          report_date DATE NOT NULL,
+          symbol TEXT NOT NULL,
+          market TEXT NOT NULL,
+          weight_pct NUMERIC NOT NULL DEFAULT 0,
+          prev_weight_pct NUMERIC NOT NULL DEFAULT 0,
+          disclosed_at TIMESTAMPTZ,
+          confidence_pct NUMERIC NOT NULL DEFAULT 0,
+          source_ref TEXT,
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          raw_ref_id TEXT,
+          PRIMARY KEY (provider, fund_code, report_date, symbol)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_hf_holding_snapshot_v1_symbol_report_desc
+          ON daa_hf_holding_snapshot_v1(symbol, report_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_hf_holding_snapshot_v1_fund_report_desc
+          ON daa_hf_holding_snapshot_v1(fund_code, report_date DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_hf_signal_snapshot_v1 (
+          provider TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          aggregated_score_pct NUMERIC NOT NULL DEFAULT 0,
+          conviction_pct NUMERIC NOT NULL DEFAULT 0,
+          thesis_drift_pct NUMERIC NOT NULL DEFAULT 0,
+          fund_count INTEGER NOT NULL DEFAULT 0,
+          funds_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (provider, symbol)
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_hf_signal_snapshot_v1_generated_desc
+          ON daa_hf_signal_snapshot_v1(generated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS daa_external_payload_raw_v1 (
+          id TEXT PRIMARY KEY,
+          provider TEXT NOT NULL,
+          resource TEXT NOT NULL,
+          subject_key TEXT NOT NULL DEFAULT '',
+          request_url TEXT NOT NULL DEFAULT '',
+          request_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          response_status INTEGER NOT NULL DEFAULT 0,
+          response_headers_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          payload_json JSONB,
+          payload_text TEXT,
+          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expire_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_external_payload_raw_v1_provider_resource_subject_fetched
+          ON daa_external_payload_raw_v1(provider, resource, subject_key, fetched_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_daa_external_payload_raw_v1_expire_at
+          ON daa_external_payload_raw_v1(expire_at);
+
+        CREATE TABLE IF NOT EXISTS daa_ingest_job_log_v1 (
+          job_id TEXT PRIMARY KEY,
+          job_type TEXT NOT NULL,
+          trigger_source TEXT NOT NULL DEFAULT 'manual',
+          status TEXT NOT NULL CHECK (status IN ('ok','partial','failed')),
+          started_at TIMESTAMPTZ NOT NULL,
+          finished_at TIMESTAMPTZ NOT NULL,
+          total_count INTEGER NOT NULL DEFAULT 0,
+          success_count INTEGER NOT NULL DEFAULT 0,
+          failure_count INTEGER NOT NULL DEFAULT 0,
+          diagnostics_json JSONB NOT NULL DEFAULT '{}'::jsonb
+        );
+        CREATE INDEX IF NOT EXISTS idx_daa_ingest_job_log_v1_job_type_started_desc
+          ON daa_ingest_job_log_v1(job_type, started_at DESC);
+      `);
+      await query("COMMIT");
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
+  try {
+    await st.marketCacheSchemaInit;
+  } catch (error) {
+    st.marketCacheSchemaInit = null;
+    throw error;
+  }
+}
+
+export async function appendDaaExternalPayloadRawV1(input: {
+  provider: string;
+  resource: string;
+  subjectKey?: string;
+  requestUrl?: string;
+  requestJson?: Record<string, unknown>;
+  responseStatus?: number;
+  responseHeadersJson?: Record<string, unknown>;
+  payloadJson?: Record<string, unknown> | null;
+  payloadText?: string | null;
+  fetchedAt?: string;
+  expireAt?: string;
+}): Promise<DaaStoreExternalPayloadRawV1> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const id = randomUUID();
+    const provider = normalizeText(input.provider, "unknown");
+    const resource = normalizeText(input.resource, "unknown");
+    const subjectKey = normalizeText(input.subjectKey, "");
+    const requestUrl = normalizeText(input.requestUrl, "");
+    const requestJson = input.requestJson && typeof input.requestJson === "object" ? input.requestJson : {};
+    const responseStatus = Math.max(0, Math.trunc(toFiniteNumber(input.responseStatus, 0)));
+    const responseHeadersJson = input.responseHeadersJson && typeof input.responseHeadersJson === "object" ? input.responseHeadersJson : {};
+    const payloadJson = input.payloadJson && typeof input.payloadJson === "object" ? input.payloadJson : null;
+    const payloadText = input.payloadText == null ? null : String(input.payloadText);
+    const fetchedAt = toIsoString(input.fetchedAt, new Date().toISOString());
+    const expireAt = toIsoString(input.expireAt, new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString());
+
+    await query(
+      `INSERT INTO daa_external_payload_raw_v1
+        (id, provider, resource, subject_key, request_url, request_json, response_status, response_headers_json, payload_json, payload_text, fetched_at, expire_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9::jsonb,$10,$11,$12,NOW())`,
+      [id, provider, resource, subjectKey, requestUrl, JSON.stringify(requestJson), responseStatus, JSON.stringify(responseHeadersJson), payloadJson == null ? null : JSON.stringify(payloadJson), payloadText, fetchedAt, expireAt],
+    );
+    const res = await query(
+      `SELECT ${RAW_PAYLOAD_SELECT_COLUMNS_V1} FROM daa_external_payload_raw_v1 WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    return mapExternalPayloadRawRowV1(res.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function deleteExpiredDaaExternalPayloadRawV1(nowIso = new Date().toISOString()): Promise<number> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const result = await query(
+      "DELETE FROM daa_external_payload_raw_v1 WHERE expire_at <= $1",
+      [toIsoString(nowIso, new Date().toISOString())],
+    );
+    return Math.max(0, Math.trunc(toFiniteNumber(result.rowCount, 0)));
+  });
+}
+
+export async function upsertDaaMarketPriceSnapshotsV1(rows: Array<Partial<DaaStoreMarketPriceSnapshotV1>>): Promise<DaaStoreMarketPriceSnapshotV1[]> {
+  if (!rows.length) return [];
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const out: DaaStoreMarketPriceSnapshotV1[] = [];
+    await withPgTransactionV1(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "yfinance");
+        const market = normalizeUpperV1(row.market, "US");
+        const symbol = normalizeUpperV1(row.symbol);
+        if (!symbol) continue;
+        const normalizedSymbol = normalizeUpperV1(row.normalizedSymbol, symbol);
+        const currency = normalizeUpperV1(row.currency, "USD");
+        const price = Math.max(0, toFiniteNumber(row.price, 0));
+        const status = normalizeMarketPriceStatusV1(row.status, price > 0 ? "fresh" : "missing");
+        const priceUpdatedAt = row.priceUpdatedAt ? toIsoString(row.priceUpdatedAt, new Date().toISOString()) : (price > 0 ? new Date().toISOString() : null);
+        const persistedFetchedAt = priceUpdatedAt || new Date().toISOString();
+        const source = normalizeText(row.source, "market_cache");
+        const errorCode = row.errorCode == null ? null : normalizeText(row.errorCode) || null;
+        const errorMessage = row.errorMessage == null ? null : normalizeText(row.errorMessage) || null;
+        const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
+
+        const result = await query(
+          `INSERT INTO daa_market_price_snapshot
+            (provider, market, symbol, normalized_symbol, currency, price, status, as_of_ts, fetched_at, source, error_code, error_message, raw_ref_id, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+           ON CONFLICT (provider, market, symbol)
+           DO UPDATE SET
+             normalized_symbol = EXCLUDED.normalized_symbol,
+             currency = EXCLUDED.currency,
+             price = EXCLUDED.price,
+             status = EXCLUDED.status,
+             as_of_ts = EXCLUDED.as_of_ts,
+             fetched_at = EXCLUDED.fetched_at,
+             source = EXCLUDED.source,
+             error_code = EXCLUDED.error_code,
+             error_message = EXCLUDED.error_message,
+             raw_ref_id = EXCLUDED.raw_ref_id,
+             updated_at = NOW()
+           RETURNING ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_V1}`,
+          [provider, market, symbol, normalizedSymbol, currency, price, status, priceUpdatedAt, persistedFetchedAt, source, errorCode, errorMessage, rawRefId],
+        );
+        if (result.rows.length > 0) {
+          out.push(mapMarketPriceSnapshotRowV1(result.rows[0] as Record<string, unknown>));
+        }
+      }
+    });
+    return out;
+  });
+}
+
+export async function getDaaMarketPriceSnapshotV1(input: {
+  provider?: string;
+  market: string;
+  symbol: string;
+}): Promise<DaaStoreMarketPriceSnapshotV1 | null> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const provider = normalizeText(input.provider, "yfinance");
+    const market = normalizeUpperV1(input.market, "US");
+    const symbol = normalizeUpperV1(input.symbol);
+    if (!symbol) return null;
+    const result = await query(
+      `SELECT ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_V1}
+       FROM daa_market_price_snapshot
+       WHERE provider = $1 AND market = $2 AND symbol = $3
+       LIMIT 1`,
+      [provider, market, symbol],
+    );
+    if (!result.rows.length) return null;
+    return mapMarketPriceSnapshotRowV1(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function listDaaMarketPriceSnapshotsV1(input: {
+  provider?: string;
+  markets?: string[];
+  symbols?: string[];
+  limit?: number;
+} = {}): Promise<DaaStoreMarketPriceSnapshotV1[]> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (input.provider) {
+      params.push(normalizeText(input.provider));
+      where.push(`provider = $${params.length}`);
+    }
+    const markets = Array.isArray(input.markets)
+      ? [...new Set(input.markets.map((item) => normalizeUpperV1(item)).filter(Boolean))]
+      : [];
+    if (markets.length > 0) {
+      params.push(markets);
+      where.push(`market = ANY($${params.length})`);
+    }
+    const symbols = Array.isArray(input.symbols)
+      ? [...new Set(input.symbols.map((item) => normalizeUpperV1(item)).filter(Boolean))]
+      : [];
+    if (symbols.length > 0) {
+      params.push(symbols);
+      where.push(`symbol = ANY($${params.length})`);
+    }
+    const limit = Math.max(1, Math.min(5000, Math.trunc(toFiniteNumber(input.limit, 2000))));
+    params.push(limit);
+    const result = await query(
+      `SELECT ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_V1}
+       FROM daa_market_price_snapshot
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY fetched_at DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows.map((row) => mapMarketPriceSnapshotRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function listLatestDaaMarketPriceHistoryRowsV1(input: {
+  provider?: string;
+  markets?: string[];
+  symbols?: string[];
+  limit?: number;
+} = {}): Promise<DaaStoreMarketPriceHistoryV1[]> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const where: string[] = ["price > 0"];
+    const params: unknown[] = [];
+    if (input.provider) {
+      params.push(normalizeText(input.provider));
+      where.push(`provider = $${params.length}`);
+    }
+    const markets = Array.isArray(input.markets)
+      ? [...new Set(input.markets.map((item) => normalizeUpperV1(item)).filter(Boolean))]
+      : [];
+    if (markets.length > 0) {
+      params.push(markets);
+      where.push(`market = ANY($${params.length})`);
+    }
+    const symbols = Array.isArray(input.symbols)
+      ? [...new Set(input.symbols.map((item) => normalizeUpperV1(item)).filter(Boolean))]
+      : [];
+    if (symbols.length > 0) {
+      params.push(symbols);
+      where.push(`symbol = ANY($${params.length})`);
+    }
+    const limit = Math.max(1, Math.min(5000, Math.trunc(toFiniteNumber(input.limit, 2000))));
+    params.push(limit);
+    const result = await query(
+      `SELECT provider, market, symbol, as_of_ts, price, currency, source, raw_ref_id
+       FROM (
+         SELECT DISTINCT ON (provider, market, symbol)
+           provider, market, symbol, as_of_ts, price, currency, source, raw_ref_id
+         FROM daa_market_price_history_v1
+         WHERE ${where.join(" AND ")}
+         ORDER BY provider, market, symbol, as_of_ts DESC
+       ) latest
+       ORDER BY as_of_ts DESC
+       LIMIT $${params.length}`,
+      params,
+    );
+    return result.rows.map((row) => mapMarketPriceHistoryRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function appendDaaMarketPriceHistoryRowsV1(rows: Array<Partial<DaaStoreMarketPriceHistoryV1>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    let inserted = 0;
+    await withPgTransactionV1(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "yfinance");
+        const market = normalizeUpperV1(row.market, "US");
+        const symbol = normalizeUpperV1(row.symbol);
+        const price = Math.max(0, toFiniteNumber(row.price, 0));
+        if (!symbol || !(price > 0)) continue;
+        const ts = toIsoString(row.ts, new Date().toISOString());
+        const currency = normalizeUpperV1(row.currency, "USD");
+        const source = normalizeText(row.source, "market_cache");
+        const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
+        await query(
+          `INSERT INTO daa_market_price_history_v1
+            (provider, market, symbol, as_of_ts, price, currency, source, fetched_at, raw_ref_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (provider, market, symbol, as_of_ts)
+           DO UPDATE SET
+             price = EXCLUDED.price,
+             currency = EXCLUDED.currency,
+             source = EXCLUDED.source,
+             fetched_at = EXCLUDED.fetched_at,
+             raw_ref_id = EXCLUDED.raw_ref_id`,
+          [provider, market, symbol, ts, price, currency, source, ts, rawRefId],
+        );
+        inserted += 1;
+      }
+    });
+    return inserted;
+  });
+}
+
+export async function appendDaaFxRateHistoryRowsV1(rows: Array<Partial<DaaStoreFxRateHistoryV1>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    let inserted = 0;
+    await withPgTransactionV1(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "yfinance");
+        const baseCcy = normalizeUpperV1(row.baseCcy, "USD");
+        const quoteCcy = normalizeUpperV1(row.quoteCcy, "USD");
+        const status = normalizeFxHistoryStatusV1(row.status, "fresh");
+        const rate = Math.max(0, toFiniteNumber(row.rate, 0));
+        if (!baseCcy || !quoteCcy) continue;
+        if (!(rate > 0) && status !== "error" && status !== "missing") continue;
+        const asOfTs = toIsoString(row.asOfTs, new Date().toISOString());
+        const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
+        const errorCode = row.errorCode == null ? null : normalizeText(row.errorCode) || null;
+        const errorMessage = row.errorMessage == null ? null : normalizeText(row.errorMessage) || null;
+        const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
+
+        await query(
+          `INSERT INTO daa_fx_rate_history_v1
+            (provider, base_ccy, quote_ccy, as_of_ts, rate, status, fetched_at, error_code, error_message, raw_ref_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (provider, base_ccy, quote_ccy, as_of_ts)
+           DO UPDATE SET
+             rate = EXCLUDED.rate,
+             status = EXCLUDED.status,
+             fetched_at = EXCLUDED.fetched_at,
+             error_code = EXCLUDED.error_code,
+             error_message = EXCLUDED.error_message,
+             raw_ref_id = EXCLUDED.raw_ref_id`,
+          [provider, baseCcy, quoteCcy, asOfTs, rate, status, fetchedAt, errorCode, errorMessage, rawRefId],
+        );
+        inserted += 1;
+      }
+    });
+    return inserted;
+  });
+}
+
+export async function upsertDaaNewsItemSnapshotsV1(rows: Array<Partial<DaaStoreNewsItemSnapshotV1>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    let touched = 0;
+    await withPgTransactionV1(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "yahoo_rss");
+        const symbol = normalizeUpperV1(row.symbol);
+        const title = normalizeText(row.title);
+        if (!symbol || !title) continue;
+        const link = row.link == null ? null : normalizeText(row.link) || null;
+        const publishedAt = row.publishedAt ? toIsoString(row.publishedAt, new Date().toISOString()) : null;
+        const itemHash = normalizeText(row.itemHash) || hashTokenV1(`${symbol}::${title}::${link || ""}::${publishedAt || ""}`);
+        const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
+        const sentimentScore = toFiniteNumber(row.sentimentScore, 0);
+        const sourceCredibility = clampNumberV1(toFiniteNumber(row.sourceCredibility, 0), 0, 1);
+        const freshness = clampNumberV1(toFiniteNumber(row.freshness, 0), 0, 1);
+        const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
+        await query(
+          `INSERT INTO daa_news_item_snapshot_v1
+            (provider, symbol, item_hash, title, link, published_at, fetched_at, sentiment_score, source_credibility, freshness, raw_ref_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+           ON CONFLICT (provider, symbol, item_hash)
+           DO UPDATE SET
+             title = EXCLUDED.title,
+             link = EXCLUDED.link,
+             published_at = EXCLUDED.published_at,
+             fetched_at = EXCLUDED.fetched_at,
+             sentiment_score = EXCLUDED.sentiment_score,
+             source_credibility = EXCLUDED.source_credibility,
+             freshness = EXCLUDED.freshness,
+             raw_ref_id = EXCLUDED.raw_ref_id`,
+          [provider, symbol, itemHash, title, link, publishedAt, fetchedAt, sentimentScore, sourceCredibility, freshness, rawRefId],
+        );
+        touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function listDaaNewsItemsBySymbolV1(input: {
+  provider?: string;
+  symbol: string;
+  limit?: number;
+}): Promise<DaaStoreNewsItemSnapshotV1[]> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const provider = normalizeText(input.provider, "yahoo_rss");
+    const symbol = normalizeUpperV1(input.symbol);
+    if (!symbol) return [];
+    const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(input.limit, 20))));
+    const result = await query(
+      `SELECT ${NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_V1}
+       FROM daa_news_item_snapshot_v1
+       WHERE provider = $1 AND symbol = $2
+       ORDER BY COALESCE(published_at, fetched_at) DESC
+       LIMIT $3`,
+      [provider, symbol, limit],
+    );
+    return result.rows.map((row) => mapNewsItemSnapshotRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertDaaNewsSignalSnapshotsV1(rows: Array<Partial<DaaStoreNewsSignalSnapshotV1>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    let touched = 0;
+    await withPgTransactionV1(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "yahoo_rss");
+        const symbol = normalizeUpperV1(row.symbol);
+        if (!symbol) continue;
+        const scorePct = clampNumberV1(toFiniteNumber(row.scorePct, 50), 0, 100);
+        const confidencePct = clampNumberV1(toFiniteNumber(row.confidencePct, 0), 0, 100);
+        const evidenceCount = Math.max(0, Math.trunc(toFiniteNumber(row.evidenceCount, 0)));
+        const reasonsJson = Array.isArray(row.reasonsJson) ? row.reasonsJson.map((item) => String(item || "").trim()).filter(Boolean) : [];
+        const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
+        const result = await query(
+          `INSERT INTO daa_news_signal_snapshot_v1
+            (provider, symbol, score_pct, confidence_pct, evidence_count, reasons_json, generated_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,NOW())
+           ON CONFLICT (provider, symbol)
+           DO UPDATE SET
+             score_pct = EXCLUDED.score_pct,
+             confidence_pct = EXCLUDED.confidence_pct,
+             evidence_count = EXCLUDED.evidence_count,
+             reasons_json = EXCLUDED.reasons_json,
+             generated_at = EXCLUDED.generated_at,
+             updated_at = NOW()
+           RETURNING provider`,
+          [provider, symbol, scorePct, confidencePct, evidenceCount, JSON.stringify(reasonsJson), generatedAt],
+        );
+        if (result.rows.length > 0) touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function getDaaNewsSignalSnapshotBySymbolV1(input: {
+  provider?: string;
+  symbol: string;
+}): Promise<DaaStoreNewsSignalSnapshotV1 | null> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const provider = normalizeText(input.provider, "yahoo_rss");
+    const symbol = normalizeUpperV1(input.symbol);
+    if (!symbol) return null;
+    const result = await query(
+      `SELECT ${NEWS_SIGNAL_SNAPSHOT_SELECT_COLUMNS_V1}
+       FROM daa_news_signal_snapshot_v1
+       WHERE provider = $1 AND symbol = $2
+       LIMIT 1`,
+      [provider, symbol],
+    );
+    if (!result.rows.length) return null;
+    return mapNewsSignalSnapshotRowV1(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function upsertDaaMarketIndicatorSnapshotsV1(rows: Array<Partial<DaaStoreMarketIndicatorSnapshotV1> & Record<string, unknown>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    let touched = 0;
+    await withPgTransactionV1(query, async () => {
+      for (const row of rows) {
+        const indicatorKey = normalizeMarketIndicatorKeyV1(row.indicatorKey ?? row.key);
+        if (!indicatorKey) continue;
+        const scope = normalizeText(row.scope, "us_equity");
+        const subjectKey = normalizeText(row.subjectKey, "GLOBAL").toUpperCase();
+        const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
+        const id = normalizeText(row.id, "") || hashTokenV1(`${indicatorKey}::${scope}::${subjectKey}::${generatedAt}`);
+        const stance = normalizeMarketRegimeV1Store(row.stance);
+        const riskOffScorePct = clampNumberV1(toFiniteNumber(row.riskOffScorePct, 50), 0, 100);
+        const confidencePct = clampNumberV1(toFiniteNumber(row.confidencePct, 40), 0, 100);
+        const rawValue = row.rawValue == null ? null : toFiniteNumber(row.rawValue, 0);
+        const unit = row.unit == null ? null : normalizeText(row.unit) || null;
+        const percentile252 = row.percentile252 == null ? null : toFiniteNumber(row.percentile252, 0);
+        const zscore60 = row.zscore60 == null ? null : toFiniteNumber(row.zscore60, 0);
+        const trend1dPct = row.trend1dPct == null ? null : toFiniteNumber(row.trend1dPct, 0);
+        const trend7dPct = row.trend7dPct == null ? null : toFiniteNumber(row.trend7dPct, 0);
+        const trend30dPct = row.trend30dPct == null ? null : toFiniteNumber(row.trend30dPct, 0);
+        const source = normalizeText(row.source, "market_cache");
+        const reasonsJson = normalizeStringArrayV1(Array.isArray(row.reasonsJson) ? row.reasonsJson : []);
+        const componentsJson = row.componentsJson && typeof row.componentsJson === "object" ? row.componentsJson as Record<string, unknown> : {};
+        const expireAt = row.expireAt == null ? null : toIsoString(row.expireAt, new Date().toISOString());
+        const result = await query(
+          `INSERT INTO daa_market_indicator_snapshot_v1
+            (id, indicator_key, scope, subject_key, stance, risk_off_score_pct, confidence_pct, raw_value, unit, percentile_252, zscore_60, trend_1d_pct, trend_7d_pct, trend_30d_pct, source, reasons_json, components_json, generated_at, expire_at, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18,$19,NOW())
+           ON CONFLICT (id)
+           DO UPDATE SET
+             stance = EXCLUDED.stance,
+             risk_off_score_pct = EXCLUDED.risk_off_score_pct,
+             confidence_pct = EXCLUDED.confidence_pct,
+             raw_value = EXCLUDED.raw_value,
+             unit = EXCLUDED.unit,
+             percentile_252 = EXCLUDED.percentile_252,
+             zscore_60 = EXCLUDED.zscore_60,
+             trend_1d_pct = EXCLUDED.trend_1d_pct,
+             trend_7d_pct = EXCLUDED.trend_7d_pct,
+             trend_30d_pct = EXCLUDED.trend_30d_pct,
+             source = EXCLUDED.source,
+             reasons_json = EXCLUDED.reasons_json,
+             components_json = EXCLUDED.components_json,
+             generated_at = EXCLUDED.generated_at,
+             expire_at = EXCLUDED.expire_at
+           RETURNING id`,
+          [
+            id,
+            indicatorKey,
+            scope,
+            subjectKey,
+            stance,
+            riskOffScorePct,
+            confidencePct,
+            rawValue,
+            unit,
+            percentile252,
+            zscore60,
+            trend1dPct,
+            trend7dPct,
+            trend30dPct,
+            source,
+            JSON.stringify(reasonsJson),
+            JSON.stringify(componentsJson),
+            generatedAt,
+            expireAt,
+          ],
+        );
+        if (result.rows.length > 0) touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function listLatestDaaMarketIndicatorSnapshotsV1(): Promise<DaaStoreMarketIndicatorSnapshotV1[]> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const supportedKeys = ["vix", "qqq_spy_ratio", "fxi_volatility", "kweb_fxi_ratio", "btc_eth_ratio", "btc_volatility", "gold_silver_ratio"];
+    const result = await query(
+      `SELECT DISTINCT ON (indicator_key) ${MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_V1}
+       FROM daa_market_indicator_snapshot_v1
+       WHERE indicator_key = ANY($1::text[])
+       ORDER BY indicator_key, generated_at DESC`,
+      [supportedKeys],
+    );
+    return result.rows.map((row) => mapMarketIndicatorSnapshotRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function listDaaMarketIndicatorHistoryV1(input: {
+  keys: DaaMarketIndicatorKeyV1[];
+  days: number;
+  scope?: string | null;
+}): Promise<DaaStoreMarketIndicatorSnapshotV1[]> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const keys = [...new Set((input.keys || []).map((item) => normalizeMarketIndicatorKeyV1(item)).filter(Boolean))] as DaaMarketIndicatorKeyV1[];
+    if (!keys.length) return [];
+    const days = Math.max(1, Math.min(365, Math.trunc(toFiniteNumber(input.days, 90))));
+    const since = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
+    const scope = normalizeText(input.scope, "");
+    const result = scope
+      ? await query(
+        `SELECT ${MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_V1}
+         FROM daa_market_indicator_snapshot_v1
+         WHERE indicator_key = ANY($1::text[])
+           AND scope = $2
+           AND generated_at >= $3
+         ORDER BY indicator_key ASC, generated_at ASC`,
+        [keys, scope, since],
+      )
+      : await query(
+        `SELECT ${MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_V1}
+         FROM daa_market_indicator_snapshot_v1
+         WHERE indicator_key = ANY($1::text[])
+           AND generated_at >= $2
+         ORDER BY indicator_key ASC, generated_at ASC`,
+        [keys, since],
+      );
+    return result.rows.map((row) => mapMarketIndicatorSnapshotRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function replaceDaaHfHoldingSnapshotsV1(rows: Array<Partial<DaaStoreHfHoldingSnapshotV1>>, provider = "danjuan"): Promise<number> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    let touched = 0;
+    await withPgTransactionV1(query, async () => {
+      await query("DELETE FROM daa_hf_holding_snapshot_v1 WHERE provider = $1", [normalizeText(provider, "danjuan")]);
+      for (const row of rows) {
+        const providerFinal = normalizeText(row.provider, provider);
+        const fundCode = normalizeText(row.fundCode);
+        const symbol = normalizeUpperV1(row.symbol);
+        if (!fundCode || !symbol) continue;
+        const reportDate = normalizeText(row.reportDate);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) continue;
+        const market = normalizeUpperV1(row.market, "UNKNOWN");
+        const weightPct = Math.max(0, toFiniteNumber(row.weightPct, 0));
+        const prevWeightPct = Math.max(0, toFiniteNumber(row.prevWeightPct, 0));
+        const disclosedAt = row.disclosedAt ? toIsoString(row.disclosedAt, new Date().toISOString()) : null;
+        const confidencePct = clampNumberV1(toFiniteNumber(row.confidencePct, 0), 0, 100);
+        const sourceRef = row.sourceRef == null ? null : normalizeText(row.sourceRef) || null;
+        const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
+        const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
+        await query(
+          `INSERT INTO daa_hf_holding_snapshot_v1
+            (provider, fund_code, report_date, symbol, market, weight_pct, prev_weight_pct, disclosed_at, confidence_pct, source_ref, fetched_at, raw_ref_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           ON CONFLICT (provider, fund_code, report_date, symbol)
+           DO UPDATE SET
+             market = EXCLUDED.market,
+             weight_pct = EXCLUDED.weight_pct,
+             prev_weight_pct = EXCLUDED.prev_weight_pct,
+             disclosed_at = EXCLUDED.disclosed_at,
+             confidence_pct = EXCLUDED.confidence_pct,
+             source_ref = EXCLUDED.source_ref,
+             fetched_at = EXCLUDED.fetched_at,
+             raw_ref_id = EXCLUDED.raw_ref_id`,
+          [providerFinal, fundCode, reportDate, symbol, market, weightPct, prevWeightPct, disclosedAt, confidencePct, sourceRef, fetchedAt, rawRefId],
+        );
+        touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function upsertDaaHfSignalSnapshotsV1(rows: Array<Partial<DaaStoreHfSignalSnapshotV1>>): Promise<number> {
+  if (!rows.length) return 0;
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    let touched = 0;
+    await withPgTransactionV1(query, async () => {
+      for (const row of rows) {
+        const provider = normalizeText(row.provider, "human_signal");
+        const symbol = normalizeUpperV1(row.symbol);
+        if (!symbol) continue;
+        const aggregatedScorePct = clampNumberV1(toFiniteNumber(row.aggregatedScorePct, 0), 0, 100);
+        const convictionPct = clampNumberV1(toFiniteNumber(row.convictionPct, 0), 0, 100);
+        const thesisDriftPct = clampNumberV1(toFiniteNumber(row.thesisDriftPct, 0), 0, 100);
+        const fundCount = Math.max(0, Math.trunc(toFiniteNumber(row.fundCount, 0)));
+        const fundsJson = Array.isArray(row.fundsJson) ? row.fundsJson : [];
+        const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
+        await query(
+          `INSERT INTO daa_hf_signal_snapshot_v1
+            (provider, symbol, aggregated_score_pct, conviction_pct, thesis_drift_pct, fund_count, funds_json, generated_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,NOW())
+           ON CONFLICT (provider, symbol)
+           DO UPDATE SET
+             aggregated_score_pct = EXCLUDED.aggregated_score_pct,
+             conviction_pct = EXCLUDED.conviction_pct,
+             thesis_drift_pct = EXCLUDED.thesis_drift_pct,
+             fund_count = EXCLUDED.fund_count,
+             funds_json = EXCLUDED.funds_json,
+             generated_at = EXCLUDED.generated_at,
+             updated_at = NOW()`,
+          [provider, symbol, aggregatedScorePct, convictionPct, thesisDriftPct, fundCount, JSON.stringify(fundsJson), generatedAt],
+        );
+        touched += 1;
+      }
+    });
+    return touched;
+  });
+}
+
+export async function appendDaaIngestJobLogV1(input: {
+  jobType: string;
+  triggerSource?: string;
+  status?: DaaStoreIngestJobStatusV1;
+  startedAt?: string;
+  finishedAt?: string;
+  totalCount?: number;
+  successCount?: number;
+  failureCount?: number;
+  diagnosticsJson?: Record<string, unknown>;
+}): Promise<DaaStoreIngestJobLogV1> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const jobId = randomUUID();
+    const jobType = normalizeText(input.jobType, "unknown");
+    const triggerSource = normalizeText(input.triggerSource, "manual");
+    const status = normalizeIngestJobStatusV1(input.status, "ok");
+    const startedAt = toIsoString(input.startedAt, new Date().toISOString());
+    const finishedAt = toIsoString(input.finishedAt, new Date().toISOString());
+    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(input.totalCount, 0)));
+    const successCount = Math.max(0, Math.trunc(toFiniteNumber(input.successCount, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(input.failureCount, 0)));
+    const diagnosticsJson = input.diagnosticsJson && typeof input.diagnosticsJson === "object" ? input.diagnosticsJson : {};
+    await query(
+      `INSERT INTO daa_ingest_job_log_v1
+        (job_id, job_type, trigger_source, status, started_at, finished_at, total_count, success_count, failure_count, diagnostics_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)`,
+      [jobId, jobType, triggerSource, status, startedAt, finishedAt, totalCount, successCount, failureCount, JSON.stringify(diagnosticsJson)],
+    );
+    const result = await query(
+      `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_V1}
+       FROM daa_ingest_job_log_v1
+       WHERE job_id = $1
+       LIMIT 1`,
+      [jobId],
+    );
+    return mapIngestJobLogRowV1(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function listDaaIngestJobLogsV1(input: {
+  jobType?: string;
+  limit?: number;
+} = {}): Promise<DaaStoreIngestJobLogV1[]> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
+    if (input.jobType) {
+      const result = await query(
+        `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_V1}
+         FROM daa_ingest_job_log_v1
+         WHERE job_type = $1
+         ORDER BY started_at DESC
+         LIMIT $2`,
+        [normalizeText(input.jobType), limit],
+      );
+      return result.rows.map((row) => mapIngestJobLogRowV1(row as Record<string, unknown>));
+    }
+    const result = await query(
+      `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_V1}
+       FROM daa_ingest_job_log_v1
+       ORDER BY started_at DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return result.rows.map((row) => mapIngestJobLogRowV1(row as Record<string, unknown>));
+  });
+}
+
+export async function getDaaMarketCacheHealthStatsV1(provider = "yfinance"): Promise<{
+  provider: string;
+  totalSnapshots: number;
+  freshCount: number;
+  staleCount: number;
+  missingCount: number;
+  errorCount: number;
+  unsupportedCount: number;
+  recentJobSuccessRatePct: number;
+  recentJobFailureRatePct: number;
+}> {
+  await ensureDaaMarketCacheSchemaPgV1();
+  return withDaaPgClientV0(async ({ query }) => {
+    const providerNormalized = normalizeText(provider, "yfinance");
+    const summaryRes = await query(
+      `SELECT
+         COUNT(*)::INT AS total_count,
+         SUM(CASE WHEN status='fresh' THEN 1 ELSE 0 END)::INT AS fresh_count,
+         SUM(CASE WHEN status='stale' THEN 1 ELSE 0 END)::INT AS stale_count,
+         SUM(CASE WHEN status='missing' THEN 1 ELSE 0 END)::INT AS missing_count,
+         SUM(CASE WHEN status='error' THEN 1 ELSE 0 END)::INT AS error_count,
+         SUM(CASE WHEN status='unsupported' THEN 1 ELSE 0 END)::INT AS unsupported_count
+       FROM daa_market_price_snapshot
+       WHERE provider = $1`,
+      [providerNormalized],
+    );
+    const summary = summaryRes.rows[0] as Record<string, unknown> | undefined;
+
+    const jobsRes = await query(
+      `SELECT
+         SUM(total_count)::INT AS total_count,
+         SUM(success_count)::INT AS success_count,
+         SUM(failure_count)::INT AS failure_count
+       FROM daa_ingest_job_log_v1
+       WHERE job_type IN ('market_cache_refresh', 'cron_price_refresh')
+         AND started_at >= NOW() - INTERVAL '24 hours'`,
+      [],
+    );
+    const jobs = jobsRes.rows[0] as Record<string, unknown> | undefined;
+    const successCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.success_count, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.failure_count, 0)));
+    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.total_count, successCount + failureCount)));
+    const safeDenominator = totalCount > 0 ? totalCount : Math.max(1, successCount + failureCount);
+    const successRate = safeDenominator > 0 ? (successCount / safeDenominator) * 100 : 100;
+    const failureRate = safeDenominator > 0 ? (failureCount / safeDenominator) * 100 : 0;
+
+    return {
+      provider: providerNormalized,
+      totalSnapshots: Math.max(0, Math.trunc(toFiniteNumber(summary?.total_count, 0))),
+      freshCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.fresh_count, 0))),
+      staleCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.stale_count, 0))),
+      missingCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.missing_count, 0))),
+      errorCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.error_count, 0))),
+      unsupportedCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.unsupported_count, 0))),
+      recentJobSuccessRatePct: Number(successRate.toFixed(2)),
+      recentJobFailureRatePct: Number(failureRate.toFixed(2)),
+    };
   });
 }
 

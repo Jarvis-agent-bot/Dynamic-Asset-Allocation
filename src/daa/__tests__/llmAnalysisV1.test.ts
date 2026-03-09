@@ -10,7 +10,7 @@ import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 
 function mockSystemConfigV1(configPatch?: Partial<(typeof DEFAULT_SYSTEM_CONFIG_V2)["dataSources"]["llmAnalysis"]>) {
   return {
-    id: "default",
+    id: "default" as const,
     version: 1,
     updatedAt: "2026-03-01T00:00:00.000Z",
     config: {

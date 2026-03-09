@@ -28,7 +28,7 @@ type CashLedgerBodyV1 = {
   note?: unknown;
 };
 
-const SUPPORTED_CASH_CURRENCIES = new Set(["USD", "CNY", "HKD"]);
+const SUPPORTED_CASH_CURRENCIES = new Set(["USD", "CNY", "HKD", "EUR", "USDC"]);
 
 function normalizeBaseCurrency(value: unknown): string {
   const raw = String(value || "").trim().toUpperCase();
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
     const baseCurrency = normalizeBaseCurrency(body?.baseCurrency);
     if (!SUPPORTED_CASH_CURRENCIES.has(baseCurrency)) {
-      return failV1("VALIDATION_FAILED", "baseCurrency must be one of USD/CNY/HKD", { status: 400 });
+      return failV1("VALIDATION_FAILED", "baseCurrency must be one of USD/CNY/HKD/EUR/USDC", { status: 400 });
     }
 
     const result = await appendDaaCashLedgerEntryV1({

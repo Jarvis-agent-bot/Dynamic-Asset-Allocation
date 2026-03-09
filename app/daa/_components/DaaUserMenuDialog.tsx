@@ -26,13 +26,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { copyTextToClipboard } from "../copyToClipboard";
-import { fetchDaaAuthSessionV1, invalidateDaaAuthSessionCacheV1, type DaaAuthMeResponseV1 } from "./daaAuthSessionClientV1";
+import { fetchDaaAuthSessionV1, invalidateDaaAuthSessionCacheV1, type DaaAuthMePayloadV1 } from "./daaAuthSessionClientV1";
 
 type Model =
   | { kind: "loading" }
   | { kind: "signedOut" }
   | { kind: "error"; message: string }
-  | { kind: "signedIn"; me: Extract<DaaAuthMeResponseV1, { ok: true }> };
+  | { kind: "signedIn"; me: DaaAuthMePayloadV1 };
 
 function formatRoles(roles: string[]): string {
   const xs = Array.isArray(roles) ? roles.filter(Boolean) : [];

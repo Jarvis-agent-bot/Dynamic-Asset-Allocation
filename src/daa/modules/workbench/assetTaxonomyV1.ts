@@ -48,6 +48,8 @@ export function inferAssetClassByQuoteTypeV1(input: { quoteType?: unknown; symbo
   const symbol = String(input.symbol || "").trim().toUpperCase();
   const market = String(input.market || "").trim().toUpperCase();
 
+  if (quoteType === "COMMODITY") return "COMMODITY";
+  if (/GC=F|SI=F|CL=F|BZ=F|HG=F|NG=F|XAU|XAG/.test(symbol)) return "COMMODITY";
   if (quoteType === "ETF") return "ETF";
   if (quoteType === "MUTUALFUND") return "FUND";
   if (quoteType === "INDEX") return "INDEX";

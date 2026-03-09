@@ -1,20 +1,22 @@
-import { NextResponse } from "next/server";
+import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
 
 import { fetchTextWithTimeoutV0, getProviderErrorStatusV0, mustGetEnvV0 } from "../../_lib/providerAdaptersV0";
 
-function json(data: unknown, init?: ResponseInit) {
-  return NextResponse.json(data, init);
+function parseJsonBestEffortV1(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
 }
 
-// Resolve a Twitter user by screen name via pro.twitterdata.com.
-// Token MUST stay server-side (env) to avoid leaking to the browser.
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const screenName = url.searchParams.get("screenName")?.trim();
 
     if (!screenName) {
-      return json({ error: "missing screenName" }, { status: 400 });
+      return failV1("VALIDATION_FAILED", "missing screenName", { status: 400 });
     }
 
     const token = mustGetEnvV0("TWITTERDATA_TOKEN");
@@ -22,40 +24,34 @@ export async function GET(req: Request) {
     upstream.searchParams.set("screenName", screenName);
     upstream.searchParams.set("token", token);
 
-    const r = await fetchTextWithTimeoutV0(upstream, {
+    const response = await fetchTextWithTimeoutV0(upstream, {
       method: "GET",
       headers: {
         accept: "application/json",
       },
     });
 
-    if (!r.ok) {
-      return json(
-        {
-          error: "twitterdata upstream error",
-          status: r.status,
+    const text = await response.text();
+    if (!response.ok) {
+      return failV1("INTERNAL_ERROR", "twitterdata upstream error", {
+        status: 502,
+        details: {
+          status: response.status,
         },
-        { status: 502 },
-      );
+      });
     }
 
-    const text = await r.text();
-
-    let payload: unknown;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = { raw: text };
-    }
-
-    return json({ ok: true, source: "twitterdata", screenName, payload });
-  } catch (e) {
-    return json(
-      {
-        error: "twitter user resolve failed",
-        message: e instanceof Error ? e.message : String(e),
+    return okV1({
+      source: "twitterdata",
+      screenName,
+      payload: parseJsonBestEffortV1(text),
+    });
+  } catch (error) {
+    return failV1("INTERNAL_ERROR", "twitter user resolve failed", {
+      status: getProviderErrorStatusV0(error),
+      details: {
+        message: error instanceof Error ? error.message : String(error),
       },
-      { status: getProviderErrorStatusV0(e) },
-    );
+    });
   }
 }

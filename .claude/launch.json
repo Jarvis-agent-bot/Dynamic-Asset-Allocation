@@ -2,10 +2,14 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "DAA Dev",
+      "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "runtimeArgs": ["run", "dev:mem"],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "DAA_PG_MEM": "1"
+      }
     }
   ]
 }

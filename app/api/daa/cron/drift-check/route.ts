@@ -1,6 +1,6 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
+import { buildWorkbenchBootstrapV1, generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { sendTelegramByEnvV1 } from "@/src/daa/notify/telegramV1";
 import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 
@@ -31,6 +31,8 @@ export async function POST(req: Request) {
         at: new Date().toISOString(),
       });
     }
+
+    await buildWorkbenchBootstrapV1({ syncPrices: false, autoRiskCycle: true });
 
     const generated = await generateWorkbenchRebalanceCycleV1({
       triggerSource: "drift",

@@ -11,43 +11,38 @@ import {
 import { assertValidSeriesDates } from "./seriesContracts";
 
 export type DriftRebalanceBacktestRequest = {
-  /**
-   * Historical close series per symbol. v0 requires all series share the same dates.
-   *
-   * Example:
-   * { AAA: [{date:"2026-01-01", close: 10}, ...], BBB: [...] }
-   */
+  /** Historical close series per symbol. All series must share the same dates. */
   seriesBySymbol: Record<string, PriceBar[]>;
 
-  /** Target weights, 0..1. Sum may be < 1 (remainder is cash) or > 1 (normalized). */
-  targetWeights: Record<string, number>;
+  /** Static target weights. Sum may be < 1 (cash left) or > 1 (normalized by rebalanceCore). */
+  targetWeights?: Record<string, number>;
+
+  /** Optional daily target-weight timeline keyed by decision date. */
+  targetWeightsByDate?: Record<string, Record<string, number>>;
 
   /** Starting state. If both holdings and cash are empty, initialEquity is used as cash. */
   initialHoldings?: Record<string, number>;
   initialCash?: number;
   initialEquity?: number;
 
-  /** Rebalance constraints (maxIn/maxOut/minNotional, etc). */
+  /** Rebalance constraints. */
   constraints?: RebalanceCoreConstraints;
 
   /** Trigger policy. lastRebalanceAt/now are managed by the simulator. */
   policy?: Omit<RebalanceTriggerPolicy, "lastRebalanceAt" | "now">;
 
-  /** When starting from cash-only, buy into target weights on day 0. Default: true. */
+  /** When starting from cash-only, buy into day-0 target weights. Default: true. */
   bootstrapToTarget?: boolean;
 
-  /** When enabled, include before/after portfolio weight snapshots on each event (for UI "plan diff"). */
+  /** When enabled, include before/after portfolio weight snapshots on each event. */
   includeEventStates?: boolean;
 
-  /** When enabled, include per-day drift/trigger decisions (for UI "timeline"). Default: true. */
+  /** When enabled, include per-day drift/trigger decisions. Default: true. */
   includeTimeline?: boolean;
 
-  /**
-   * Execution assumptions for order fills.
-   * - t_plus_1_close: signal on day D close, fill on D+1 close
-   */
   execution?: {
     timing?: "t_plus_1_close";
+    feeRateBps?: number;
     feeRatePct?: number;
     slippageBps?: number;
   };
@@ -70,8 +65,6 @@ export type DriftRebalanceBacktestEvent = {
   executed: SuggestedOrder[];
   turnoverNotional: number;
   feeNotional: number;
-
-  // Optional: used by UI to render a before/after weight diff for each planned action.
   before?: PortfolioWeightsSnapshotV0;
   after?: PortfolioWeightsSnapshotV0;
 };
@@ -84,13 +77,10 @@ export type DriftRebalanceBacktestTimelinePointV0 = {
 
 export type DriftRebalanceBacktestResult = {
   schemaVersion: 1;
-
-  /** Dates aligned with dailyReturns/equity (i.e. transitions day[i-1] -> day[i]). */
   dates: string[];
   equity: number[];
   dailyReturns: number[];
   metrics: BacktestMetrics;
-
   summary: {
     initialEquityAbs: number;
     finalEquityAbs: number;
@@ -98,14 +88,9 @@ export type DriftRebalanceBacktestResult = {
     turnoverNotional: number;
     totalFeesAbs: number;
   };
-
   events: DriftRebalanceBacktestEvent[];
   warnings: string[];
-
-  /** Optional: per-day drift/trigger decisions, used by the Funds Hub UI to show a preview timeline. */
   timeline?: DriftRebalanceBacktestTimelinePointV0[];
-
-  // Optional: overall before/after snapshots (useful for showing a top-level preview diff).
   states?: {
     initial: PortfolioWeightsSnapshotV0;
     final: PortfolioWeightsSnapshotV0;
@@ -118,7 +103,6 @@ function toFiniteNumber(x: unknown, fallback: number): number {
 }
 
 function isoToIsoDateTime(isoDate: string): string {
-  // Accept YYYY-MM-DD for v0 and anchor to UTC midnight.
   if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return `${isoDate}T00:00:00.000Z`;
   return isoDate;
 }
@@ -132,17 +116,17 @@ function assertAlignedSeries(seriesBySymbol: Record<string, PriceBar[]>): { symb
   if (ref.length < 2) throw new Error(`series too short for ${refSym}`);
 
   assertValidSeriesDates(ref);
-  const dates = ref.map((b) => String(b.date));
+  const dates = ref.map((bar) => String(bar.date));
 
   for (const sym of symbols.slice(1)) {
-    const s = seriesBySymbol[sym] || [];
-    if (s.length !== ref.length) {
-      throw new Error(`series length mismatch: ${sym} expected=${ref.length} got=${s.length}`);
+    const series = seriesBySymbol[sym] || [];
+    if (series.length !== ref.length) {
+      throw new Error(`series length mismatch: ${sym} expected=${ref.length} got=${series.length}`);
     }
-    assertValidSeriesDates(s);
-    for (let i = 0; i < s.length; i++) {
-      if (String(s[i].date) !== dates[i]) {
-        throw new Error(`series date mismatch: ${sym} at i=${i} expected=${dates[i]} got=${String(s[i].date)}`);
+    assertValidSeriesDates(series);
+    for (let i = 0; i < series.length; i += 1) {
+      if (String(series[i].date) !== dates[i]) {
+        throw new Error(`series date mismatch: ${sym} at i=${i} expected=${dates[i]} got=${String(series[i].date)}`);
       }
     }
   }
@@ -176,7 +160,7 @@ function cloneHoldings(h: Record<string, number>): Record<string, number> {
 }
 
 function portfolioValueAbs(holdings: Record<string, number>, cash: number, prices: Record<string, number>, warnings: string[]): number {
-  let v = Math.max(0, toFiniteNumber(cash, 0));
+  let value = Math.max(0, toFiniteNumber(cash, 0));
   for (const [sym, qtyRaw] of Object.entries(holdings || {})) {
     const qty = toFiniteNumber(qtyRaw, 0);
     if (!Number.isFinite(qty) || qty === 0) continue;
@@ -186,9 +170,9 @@ function portfolioValueAbs(holdings: Record<string, number>, cash: number, price
       continue;
     }
     const add = qty * px;
-    if (Number.isFinite(add)) v += add;
+    if (Number.isFinite(add)) value += add;
   }
-  return v;
+  return value;
 }
 
 function computeWeightsSnapshot(opts: {
@@ -209,16 +193,16 @@ function computeWeightsSnapshot(opts: {
       opts.warnings.push(`warning: missing price for holding ${sym}; excluded from valuation`);
       continue;
     }
-    const v = qty * px;
-    if (!Number.isFinite(v)) continue;
-    valuesBySymbol[sym] = v;
-    equityAbs += v;
+    const positionValue = qty * px;
+    if (!Number.isFinite(positionValue)) continue;
+    valuesBySymbol[sym] = positionValue;
+    equityAbs += positionValue;
   }
 
   const denom = equityAbs > 0 ? equityAbs : 1;
   const weightsBySymbolPct01: Record<string, number> = {};
-  for (const [sym, v] of Object.entries(valuesBySymbol)) {
-    weightsBySymbolPct01[sym] = v / denom;
+  for (const [sym, positionValue] of Object.entries(valuesBySymbol)) {
+    weightsBySymbolPct01[sym] = positionValue / denom;
   }
 
   return {
@@ -234,7 +218,7 @@ function executeOrders(opts: {
   cash: number;
   prices: Record<string, number>;
   orders: SuggestedOrder[];
-  feeRatePct: number;
+  feeRateBps: number;
   slippageBps: number;
   warnings: string[];
 }): {
@@ -250,23 +234,23 @@ function executeOrders(opts: {
   const executed: SuggestedOrder[] = [];
   let turnoverNotional = 0;
   let feeNotional = 0;
-  const feeRatePct = Math.max(0, toFiniteNumber(opts.feeRatePct, 0));
+  const feeRate = Math.max(0, toFiniteNumber(opts.feeRateBps, 0) / 10000);
   const slippageRate = Math.max(0, toFiniteNumber(opts.slippageBps, 0) / 10000);
 
-  for (const o of opts.orders || []) {
-    const sym = String(o.symbol || "").trim();
+  for (const order of opts.orders || []) {
+    const sym = String(order.symbol || "").trim();
     if (!sym) continue;
 
     const px = opts.prices[sym];
     if (!Number.isFinite(px) || px <= 0) {
-      opts.warnings.push(`warning: cannot execute ${o.side} ${sym}: missing/invalid price`);
+      opts.warnings.push(`warning: cannot execute ${order.side} ${sym}: missing/invalid price`);
       continue;
     }
 
-    const notional = toFiniteNumber(o.notional, 0);
+    const notional = toFiniteNumber(order.notional, 0);
     if (!(Number.isFinite(notional) && notional > 0)) continue;
 
-    if (o.side === "SELL") {
+    if (order.side === "SELL") {
       const held = toFiniteNumber(holdings[sym], 0);
       const executionPrice = px * (1 - slippageRate);
       if (!(Number.isFinite(executionPrice) && executionPrice > 0)) continue;
@@ -275,36 +259,35 @@ function executeOrders(opts: {
       if (!(actualNotional > 0)) continue;
 
       const qty = actualNotional / executionPrice;
-      const fee = actualNotional * feeRatePct;
+      const fee = actualNotional * feeRate;
       holdings[sym] = held - qty;
       cash += actualNotional - fee;
       turnoverNotional += actualNotional;
       feeNotional += fee;
 
-      executed.push({ ...o, notional: actualNotional });
+      executed.push({ ...order, notional: actualNotional });
       continue;
     }
 
-    if (o.side === "BUY") {
+    if (order.side === "BUY") {
       const executionPrice = px * (1 + slippageRate);
       if (!(Number.isFinite(executionPrice) && executionPrice > 0)) continue;
-      const maxBuyNotionalByCash = cash / (1 + feeRatePct);
+      const maxBuyNotionalByCash = cash / (1 + feeRate);
       const actualNotional = Math.min(notional, maxBuyNotionalByCash);
       if (!(actualNotional > 0)) continue;
 
-      const fee = actualNotional * feeRatePct;
+      const fee = actualNotional * feeRate;
       const qty = actualNotional / executionPrice;
       holdings[sym] = toFiniteNumber(holdings[sym], 0) + qty;
       cash -= actualNotional + fee;
       turnoverNotional += actualNotional;
       feeNotional += fee;
 
-      executed.push({ ...o, notional: actualNotional });
+      executed.push({ ...order, notional: actualNotional });
       continue;
     }
   }
 
-  // Normalize tiny negative cash from floating point.
   if (cash < 0 && cash > -1e-9) cash = 0;
 
   return { holdings, cash, executed, turnoverNotional, feeNotional };
@@ -312,14 +295,18 @@ function executeOrders(opts: {
 
 function normalizeExecutionConfig(
   input: DriftRebalanceBacktestRequest["execution"] | undefined,
-): { timing: "t_plus_1_close"; feeRatePct: number; slippageBps: number } {
+): { timing: "t_plus_1_close"; feeRateBps: number; slippageBps: number } {
   if (input?.timing && input.timing !== "t_plus_1_close") {
     throw new Error(`unsupported execution timing: ${String(input.timing)}`);
   }
-  const timing: "t_plus_1_close" = "t_plus_1_close";
-  const feeRatePct = Math.max(0, toFiniteNumber(input?.feeRatePct, 0));
-  const slippageBps = Math.max(0, toFiniteNumber(input?.slippageBps, 0));
-  return { timing, feeRatePct, slippageBps };
+  const feeRateBpsRaw = Number.isFinite(Number(input?.feeRateBps))
+    ? Number(input?.feeRateBps)
+    : (Number.isFinite(Number(input?.feeRatePct)) ? Number(input?.feeRatePct) * 10000 : 0);
+  return {
+    timing: "t_plus_1_close",
+    feeRateBps: Math.max(0, toFiniteNumber(feeRateBpsRaw, 0)),
+    slippageBps: Math.max(0, toFiniteNumber(input?.slippageBps, 0)),
+  };
 }
 
 function computeTopAbsDriftsPct01(args: {
@@ -344,21 +331,62 @@ function computeTopAbsDriftsPct01(args: {
   return list.slice(0, Math.max(0, Math.floor(args.topN)));
 }
 
+function normalizeWeightMap(weights: Record<string, number> | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [symbolRaw, weightRaw] of Object.entries(weights || {})) {
+    const symbol = String(symbolRaw || "").trim();
+    const weight = toFiniteNumber(weightRaw, 0);
+    if (!symbol || !(weight > 0)) continue;
+    out[symbol] = weight;
+  }
+  return out;
+}
+
+function resolveTargetWeightsForDate(req: DriftRebalanceBacktestRequest, date: string): Record<string, number> {
+  if (req.targetWeightsByDate && Object.prototype.hasOwnProperty.call(req.targetWeightsByDate, date)) {
+    return normalizeWeightMap(req.targetWeightsByDate[date]);
+  }
+  return normalizeWeightMap(req.targetWeights);
+}
+
+function normalizeConstraintCap(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return Number.POSITIVE_INFINITY;
+  return Math.max(0, num);
+}
+
+function buildRuntimeConstraintsForEquity(
+  constraints: DriftRebalanceBacktestRequest["constraints"],
+  equity: number,
+): DriftRebalanceBacktestRequest["constraints"] {
+  if (!constraints) return undefined;
+
+  const hasNavCap = Number.isFinite(Number(constraints.maxOrderPctOfNav)) && Number(constraints.maxOrderPctOfNav) > 0;
+  if (!hasNavCap) return constraints;
+
+  const navCapAbs = Math.max(0, equity) * Number(constraints.maxOrderPctOfNav);
+  const existingMaxIn = normalizeConstraintCap(constraints.maxIn);
+  const existingMaxOut = normalizeConstraintCap(constraints.maxOut);
+
+  return {
+    ...constraints,
+    maxIn: Math.min(existingMaxIn, navCapAbs),
+    maxOut: Math.min(existingMaxOut, navCapAbs),
+  };
+}
+
 export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): DriftRebalanceBacktestResult {
   const warnings: string[] = [];
 
-  // backtestDriftRebalance is the SoT for the auto-plan UI. Surface core warnings
-  // (e.g. minTradeNotional/maxOut blockers) so the UI/markdown plan can show them.
   function appendUniqueWarnings(more: string[] | undefined) {
     if (!more?.length) return;
-    for (const w of more) {
-      if (!warnings.includes(w)) warnings.push(w);
+    for (const warning of more) {
+      if (!warnings.includes(warning)) warnings.push(warning);
     }
   }
 
   const { dates } = assertAlignedSeries(req.seriesBySymbol);
 
-  const constraints = req.constraints;
   const policy = req.policy || {};
   const bootstrapToTarget = req.bootstrapToTarget !== false;
   const includeEventStates = req.includeEventStates === true;
@@ -375,7 +403,6 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   const events: DriftRebalanceBacktestEvent[] = [];
   const timeline: DriftRebalanceBacktestTimelinePointV0[] = [];
 
-  // Establish day-0 prices and equity.
   const prices0 = buildPricesAtIndex(req.seriesBySymbol, 0, warnings);
   let equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
   if (!(Number.isFinite(equity0) && equity0 > 0)) {
@@ -383,65 +410,66 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   }
 
   const initialState = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : null;
-
   let lastRebalanceAt = "";
 
-  // Optional bootstrap into the target weights when starting from cash-only.
   if (bootstrapToTarget && !Object.keys(req.initialHoldings || {}).length) {
-    const res = rebalanceCore({
-      account: { cash: equity0 },
-      holdings: {},
-      prices: prices0,
-      targetWeights: req.targetWeights,
-      constraints,
-      policy: {
-        thresholdPct: 0,
-        minTradeNotional: 0,
-        cooldownSeconds: 0,
-      },
-    });
+    const initialTargetWeights = resolveTargetWeightsForDate(req, dates[0]);
+    if (Object.keys(initialTargetWeights).length > 0) {
+      const bootstrapConstraints = buildRuntimeConstraintsForEquity(req.constraints, equity0);
+      const res = rebalanceCore({
+        account: { cash: equity0 },
+        holdings: {},
+        prices: prices0,
+        targetWeights: initialTargetWeights,
+        constraints: bootstrapConstraints,
+        policy: {
+          thresholdPct: 0,
+          minTradeNotional: 0,
+          cooldownSeconds: 0,
+        },
+      });
 
-    appendUniqueWarnings(res.warnings);
+      appendUniqueWarnings(res.warnings);
 
-    const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : undefined;
+      if (res.orders.length > 0) {
+        const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : undefined;
+        const ex = executeOrders({
+          holdings: {},
+          cash: equity0,
+          prices: prices0,
+          orders: res.orders,
+          feeRateBps: execution.feeRateBps,
+          slippageBps: execution.slippageBps,
+          warnings,
+        });
+        const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: prices0, warnings }) : undefined;
 
-    const ex = executeOrders({
-      holdings: {},
-      cash: equity0,
-      prices: prices0,
-      orders: res.orders,
-      feeRatePct: execution.feeRatePct,
-      slippageBps: execution.slippageBps,
-      warnings,
-    });
-    const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: prices0, warnings }) : undefined;
+        holdings = ex.holdings;
+        cash = ex.cash;
+        equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
 
-    holdings = ex.holdings;
-    cash = ex.cash;
-    equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
+        events.push({
+          date: dates[0],
+          signalDate: dates[0],
+          executionTiming: execution.timing,
+          kind: "init",
+          trigger: res.trigger,
+          orders: res.orders,
+          executed: ex.executed,
+          turnoverNotional: ex.turnoverNotional,
+          feeNotional: ex.feeNotional,
+          before,
+          after,
+        });
 
-    events.push({
-      date: dates[0],
-      signalDate: dates[0],
-      executionTiming: execution.timing,
-      kind: "init",
-      trigger: res.trigger,
-      orders: res.orders,
-      executed: ex.executed,
-      turnoverNotional: ex.turnoverNotional,
-      feeNotional: ex.feeNotional,
-      before,
-      after,
-    });
-
-    lastRebalanceAt = isoToIsoDateTime(dates[0]);
+        lastRebalanceAt = isoToIsoDateTime(dates[0]);
+      }
+    }
   }
 
-  // Simulate close-to-close equity.
   const equityAbsByDay: number[] = [];
-
-  let turnoverNotional = events.reduce((acc, e) => acc + e.turnoverNotional, 0);
-  let totalFeesAbs = events.reduce((acc, e) => acc + e.feeNotional, 0);
+  let turnoverNotional = events.reduce((sum, event) => sum + event.turnoverNotional, 0);
+  let totalFeesAbs = events.reduce((sum, event) => sum + event.feeNotional, 0);
   let rebalanceCount = 0;
   let pendingFill:
     | {
@@ -451,22 +479,22 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       }
     | undefined;
 
-  for (let i = 0; i < dates.length; i++) {
-    const px = buildPricesAtIndex(req.seriesBySymbol, i, warnings);
+  for (let i = 0; i < dates.length; i += 1) {
+    const prices = buildPricesAtIndex(req.seriesBySymbol, i, warnings);
     const now = isoToIsoDateTime(dates[i]);
 
     if (pendingFill?.orders?.length) {
-      const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: px, warnings }) : undefined;
+      const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices, warnings }) : undefined;
       const ex = executeOrders({
         holdings,
         cash,
-        prices: px,
+        prices,
         orders: pendingFill.orders,
-        feeRatePct: execution.feeRatePct,
+        feeRateBps: execution.feeRateBps,
         slippageBps: execution.slippageBps,
         warnings,
       });
-      const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: px, warnings }) : undefined;
+      const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices, warnings }) : undefined;
 
       holdings = ex.holdings;
       cash = ex.cash;
@@ -492,15 +520,17 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       pendingFill = undefined;
     }
 
-    const eq = portfolioValueAbs(holdings, cash, px, warnings);
-    equityAbsByDay.push(eq);
+    const equity = portfolioValueAbs(holdings, cash, prices, warnings);
+    equityAbsByDay.push(equity);
 
+    const targetWeights = resolveTargetWeightsForDate(req, dates[i]);
+    const runtimeConstraints = buildRuntimeConstraintsForEquity(req.constraints, equity);
     const res = rebalanceCore({
       account: { cash },
       holdings,
-      prices: px,
-      targetWeights: req.targetWeights,
-      constraints,
+      prices,
+      targetWeights,
+      constraints: runtimeConstraints,
       policy: {
         thresholdPct: policy.thresholdPct,
         minTradeNotional: policy.minTradeNotional,
@@ -513,13 +543,13 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     appendUniqueWarnings(res.warnings);
 
     if (includeTimeline) {
-      const deltas: Record<string, number> = (res as any).explain?.deltas ?? {};
-      const equity = toFiniteNumber((res as any).explain?.equity, res.trigger.stats.equity);
-
+      const deltas: Record<string, number> = (res as { explain?: { deltas?: Record<string, number>; equity?: number } }).explain?.deltas ?? {};
+      const explainEquity = (res as { explain?: { equity?: number } }).explain?.equity;
+      const driftEquity = toFiniteNumber(explainEquity, res.trigger.stats.equity);
       timeline.push({
         date: dates[i],
         trigger: res.trigger,
-        topAbsDriftsPct01: computeTopAbsDriftsPct01({ deltas, equity, topN: 5 }),
+        topAbsDriftsPct01: computeTopAbsDriftsPct01({ deltas, equity: driftEquity, topN: 5 }),
       });
     }
 
@@ -540,17 +570,16 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     warnings.push(`warning: pending rebalance signal on ${pendingFill.signalDate} was not executed due to missing next bar`);
   }
 
-  // Convert equityAbs to daily returns and normalize to 1.
   const dailyReturns: number[] = [];
-  for (let i = 0; i < equityAbsByDay.length - 1; i++) {
-    const a = equityAbsByDay[i];
-    const b = equityAbsByDay[i + 1];
-    if (!(Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0)) {
+  for (let i = 0; i < equityAbsByDay.length - 1; i += 1) {
+    const prev = equityAbsByDay[i];
+    const next = equityAbsByDay[i + 1];
+    if (!(Number.isFinite(prev) && prev > 0 && Number.isFinite(next) && next > 0)) {
       dailyReturns.push(0);
       continue;
     }
-    const r = b / a - 1;
-    dailyReturns.push(Number.isFinite(r) ? r : 0);
+    const ret = next / prev - 1;
+    dailyReturns.push(Number.isFinite(ret) ? ret : 0);
   }
 
   const equity = cumulativeProduct(dailyReturns, 1);

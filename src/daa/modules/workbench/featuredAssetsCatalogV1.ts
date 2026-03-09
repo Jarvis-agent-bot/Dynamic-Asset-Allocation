@@ -1,5 +1,5 @@
 export type WorkbenchFeaturedMarketV1 = "US" | "HK" | "CN" | "CRYPTO";
-export type WorkbenchFeaturedAssetClassV1 = "EQUITY" | "ETF" | "BOND" | "CRYPTO";
+export type WorkbenchFeaturedAssetClassV1 = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CRYPTO";
 
 export type WorkbenchFeaturedCatalogItemV1 = {
   symbol: string;
@@ -47,6 +47,19 @@ export const WORKBENCH_FEATURED_ASSETS_CATALOG_V1: WorkbenchFeaturedCatalogItemV
   { symbol: "2823.HK", market: "HK", assetClass: "ETF", name: "安硕A50中国", currency: "HKD", exchange: "HKEX", thesisTagZh: "A50大盘敞口" },
   { symbol: "510300.SS", market: "CN", assetClass: "ETF", name: "沪深300ETF", currency: "CNY", exchange: "SSE", thesisTagZh: "A股核心宽基" },
   { symbol: "159915.SZ", market: "CN", assetClass: "ETF", name: "创业板ETF", currency: "CNY", exchange: "SZSE", thesisTagZh: "成长风格增强" },
+  { symbol: "EFA", market: "US", assetClass: "ETF", name: "iShares MSCI EAFE ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "发达市场ex-US" },
+  { symbol: "EEM", market: "US", assetClass: "ETF", name: "iShares MSCI Emerging Markets ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "全球新兴市场" },
+  { symbol: "INDA", market: "US", assetClass: "ETF", name: "iShares MSCI India ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "印度增长红利" },
+  { symbol: "EWJ", market: "US", assetClass: "ETF", name: "iShares MSCI Japan ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "日本股市代理" },
+  { symbol: "VNQ", market: "US", assetClass: "ETF", name: "Vanguard Real Estate ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "美国REITs地产" },
+
+  { symbol: "GLD", market: "US", assetClass: "COMMODITY", name: "SPDR Gold Shares", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "黄金现货代理" },
+  { symbol: "IAU", market: "US", assetClass: "COMMODITY", name: "iShares Gold Trust", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "黄金低费率配置" },
+  { symbol: "SLV", market: "US", assetClass: "COMMODITY", name: "iShares Silver Trust", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "白银波动弹性" },
+  { symbol: "USO", market: "US", assetClass: "COMMODITY", name: "United States Oil Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "原油价格代理" },
+  { symbol: "BNO", market: "US", assetClass: "COMMODITY", name: "United States Brent Oil Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "布油敞口补充" },
+  { symbol: "DBC", market: "US", assetClass: "COMMODITY", name: "Invesco DB Commodity Index Tracking Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "综合商品指数" },
+  { symbol: "DBA", market: "US", assetClass: "COMMODITY", name: "Invesco DB Agriculture Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "农业商品敞口" },
 
   { symbol: "BND", market: "US", assetClass: "BOND", name: "Vanguard Total Bond Market ETF", currency: "USD", exchange: "NASDAQ", thesisTagZh: "债券底仓配置" },
   { symbol: "TLT", market: "US", assetClass: "BOND", name: "iShares 20+ Year Treasury Bond ETF", currency: "USD", exchange: "NASDAQ", thesisTagZh: "久期弹性工具" },
@@ -54,15 +67,12 @@ export const WORKBENCH_FEATURED_ASSETS_CATALOG_V1: WorkbenchFeaturedCatalogItemV
   { symbol: "LQD", market: "US", assetClass: "BOND", name: "iShares iBoxx $ Investment Grade Corporate Bond ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "投资级信用债" },
   { symbol: "511010.SS", market: "CN", assetClass: "BOND", name: "国债ETF", currency: "CNY", exchange: "SSE", thesisTagZh: "利率债防守" },
   { symbol: "511260.SS", market: "CN", assetClass: "BOND", name: "十年国债ETF", currency: "CNY", exchange: "SSE", thesisTagZh: "中长端久期" },
+  { symbol: "TIP", market: "US", assetClass: "BOND", name: "iShares TIPS Bond ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "通胀保护工具" },
+  { symbol: "SGOV", market: "US", assetClass: "BOND", name: "iShares 0-3 Month Treasury Bond ETF", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "超短债现金替代" },
   { symbol: "3141.HK", market: "HK", assetClass: "BOND", name: "安硕亚洲高息债券ETF", currency: "HKD", exchange: "HKEX", thesisTagZh: "亚洲债券收益" },
   { symbol: "2819.HK", market: "HK", assetClass: "BOND", name: "安硕美元债ETF", currency: "HKD", exchange: "HKEX", thesisTagZh: "美元债配置补充" },
 
   { symbol: "BTC-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Bitcoin", currency: "USD", exchange: "CRYPTO", thesisTagZh: "加密市场锚资产" },
   { symbol: "ETH-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Ethereum", currency: "USD", exchange: "CRYPTO", thesisTagZh: "智能合约核心" },
   { symbol: "SOL-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Solana", currency: "USD", exchange: "CRYPTO", thesisTagZh: "高性能公链" },
-  { symbol: "BNB-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "BNB", currency: "USD", exchange: "CRYPTO", thesisTagZh: "交易生态代币" },
-  { symbol: "XRP-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "XRP", currency: "USD", exchange: "CRYPTO", thesisTagZh: "跨境支付叙事" },
-  { symbol: "DOGE-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Dogecoin", currency: "USD", exchange: "CRYPTO", thesisTagZh: "高波动情绪资产" },
-  { symbol: "ADA-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Cardano", currency: "USD", exchange: "CRYPTO", thesisTagZh: "公链生态备选" },
-  { symbol: "LTC-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Litecoin", currency: "USD", exchange: "CRYPTO", thesisTagZh: "支付场景补充" },
 ];

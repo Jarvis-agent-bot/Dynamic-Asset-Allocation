@@ -8,9 +8,10 @@ import {
   normalizeAssetClassV1,
   normalizeRegionV1,
 } from "@/src/daa/modules/workbench/assetTaxonomyV1";
+import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
 import { normalizeDaaCurrencyCodeV1 } from "@/src/daa/assetKeyV1";
+import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
-import { fetchYfinanceLatestCloseV1 } from "@/src/market/yfinanceFetchV1";
 
 type LookupMarket = "US" | "HK" | "CN" | "CRYPTO" | "OTHER";
 
@@ -19,6 +20,10 @@ type SearchAssetItemV1 = {
   market: LookupMarket;
   currency: string;
   price: number;
+  priceStatus?: "fresh" | "stale" | "missing";
+  priceUpdatedAt?: string | null;
+  priceSource?: string;
+  priceAgeSec?: number | null;
   name: string;
   shortName: string;
   longName: string;
@@ -62,28 +67,42 @@ function shouldSkipQuoteTypeV1(quoteTypeRaw: unknown): boolean {
   return false;
 }
 
-async function enrichMissingPriceV1(items: SearchAssetItemV1[], maxFetch = 10): Promise<SearchAssetItemV1[]> {
-  const targets = items.filter((item) => !(item.price > 0)).slice(0, Math.max(1, Math.min(20, Math.trunc(maxFetch))));
-  if (targets.length <= 0) return items;
+async function enrichPreferredPriceV1(
+  items: SearchAssetItemV1[],
+  maxFetch = 10,
+  opts: { freshSec: number; serveStaleSec: number; rawRetentionDays: number },
+): Promise<SearchAssetItemV1[]> {
+  if (items.length <= 0) return items;
+  const refreshTargets = items.filter((item) => item.yfinanceSymbol).slice(0, Math.max(1, Math.trunc(maxFetch)));
+  if (refreshTargets.length <= 0) return items;
 
-  const priceBySymbol = new Map<string, number>();
-  await Promise.all(targets.map(async (item) => {
-    const yfinanceSymbol = normalizeText(item.yfinanceSymbol || item.symbol).toUpperCase();
-    if (!yfinanceSymbol) return;
-    const latest = await fetchYfinanceLatestCloseV1(yfinanceSymbol);
-    if (latest && latest.price > 0) {
-      priceBySymbol.set(yfinanceSymbol, latest.price);
-    }
-  }));
+  const priced = await getMarketPricesWithCacheV1({
+    assets: refreshTargets.map((item) => ({
+      symbol: item.symbol,
+      market: item.market,
+      currency: item.currency,
+    })),
+    allowRefresh: true,
+    forceRefresh: true,
+    refreshBudget: refreshTargets.length,
+    timeoutMs: 2300,
+    source: "search_assets",
+    freshSec: opts.freshSec,
+    serveStaleSec: opts.serveStaleSec,
+    rawRetentionDays: opts.rawRetentionDays,
+  });
 
   return items.map((item) => {
-    if (item.price > 0) return item;
-    const yfinanceSymbol = normalizeText(item.yfinanceSymbol || item.symbol).toUpperCase();
-    const price = priceBySymbol.get(yfinanceSymbol);
-    if (!(price && price > 0)) return item;
+    const key = `${item.market}::${item.symbol}`.toUpperCase();
+    const priceRow = priced[key];
+    if (!priceRow || !(priceRow.price > 0)) return item;
     return {
       ...item,
-      price,
+      price: priceRow.price,
+      priceStatus: priceRow.priceStatus,
+      priceUpdatedAt: priceRow.priceUpdatedAt,
+      priceSource: priceRow.priceSource,
+      priceAgeSec: priceRow.priceAgeSec,
     };
   });
 }
@@ -97,6 +116,31 @@ function inferMarket(symbolRaw: unknown, exchangeRaw: unknown): LookupMarket {
   if (exchange.includes("NYSE") || exchange.includes("NASDAQ") || exchange.includes("AMEX") || exchange.includes("ARCA") || exchange.includes("NMS")) return "US";
   if (/^[A-Z][A-Z0-9.\-]{0,9}$/.test(symbol) && !symbol.includes(".")) return "US";
   return "OTHER";
+}
+
+const COMMODITY_ETF_SYMBOLS_V1 = new Set(["GLD", "IAU", "SLV", "USO", "BNO", "DBC", "DBA"]);
+
+function shouldTreatAsCommodityV1(input: {
+  symbol: string;
+  quoteType: string;
+  name: string;
+  shortName: string;
+  longName: string;
+  typeDisp: string;
+}): boolean {
+  const symbol = normalizeText(input.symbol).toUpperCase();
+  const quoteType = normalizeText(input.quoteType).toUpperCase();
+  const text = [
+    input.name,
+    input.shortName,
+    input.longName,
+    input.typeDisp,
+  ].map((item) => normalizeText(item).toUpperCase()).join(" ");
+
+  if (quoteType === "COMMODITY") return true;
+  if (COMMODITY_ETF_SYMBOLS_V1.has(symbol)) return true;
+  if (quoteType !== "ETF" && quoteType !== "EQUITY") return false;
+  return /GOLD|SILVER|OIL|CRUDE|BRENT|COMMODITY|METALS|AGRICULTURE|ENERGY/.test(text);
 }
 
 function matchFilter(row: SearchAssetItemV1, filter: { market: string; assetClass: string; region: string }): boolean {
@@ -121,6 +165,12 @@ export async function GET(req: Request) {
     const marketFilter = normalizeText(url.searchParams.get("market")).toUpperCase() || "ALL";
     const assetClassFilter = normalizeText(url.searchParams.get("assetClass")).toUpperCase() || "ALL";
     const regionFilter = normalizeText(url.searchParams.get("region")).toUpperCase() || "ALL";
+    const system = await getDaaSystemConfigV2();
+    const cacheConfig = system.config.dataSources?.priceFeed?.marketCache || {
+      freshMinutes: 15,
+      serveStaleHours: 48,
+      rawRetentionDays: 90,
+    };
 
     const upstream = new URL("https://query1.finance.yahoo.com/v1/finance/search");
     upstream.searchParams.set("q", q);
@@ -158,24 +208,36 @@ export async function GET(req: Request) {
       const market = inferMarket(symbol, exchange);
       const dedupKey = `${market}::${symbol}`;
       if (!symbol || dedup.has(dedupKey)) continue;
-      const assetClass = inferAssetClassByQuoteTypeV1({
+      const inferredAssetClass = inferAssetClassByQuoteTypeV1({
         quoteType: (row as any)?.quoteType,
         symbol,
         market,
       });
+      const name = normalizeText((row as any)?.shortname || (row as any)?.longname || symbol) || symbol;
+      const shortName = normalizeText((row as any)?.shortname || symbol);
+      const longName = normalizeText((row as any)?.longname || (row as any)?.shortname || symbol);
+      const typeDisp = normalizeText((row as any)?.typeDisp || (row as any)?.quoteType || "");
+      const assetClass = shouldTreatAsCommodityV1({
+        symbol,
+        quoteType: normalizeText((row as any)?.quoteType || ""),
+        name,
+        shortName,
+        longName,
+        typeDisp,
+      }) ? "COMMODITY" : inferredAssetClass;
       const region = normalizeRegionV1((row as any)?.region, inferRegionByMarketV1(market));
       const item: SearchAssetItemV1 = {
         symbol,
         market,
         currency: normalizeDaaCurrencyCodeV1((row as any)?.currency, market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD"),
         price: toPositive((row as any)?.regularMarketPrice, (row as any)?.postMarketPrice, (row as any)?.bid, (row as any)?.ask),
-        name: normalizeText((row as any)?.shortname || (row as any)?.longname || symbol) || symbol,
-        shortName: normalizeText((row as any)?.shortname || symbol),
-        longName: normalizeText((row as any)?.longname || (row as any)?.shortname || symbol),
+        name,
+        shortName,
+        longName,
         exchange,
         exchangeDisp: normalizeText((row as any)?.exchDisp || exchange || market),
         quoteType: normalizeText((row as any)?.quoteType || ""),
-        typeDisp: normalizeText((row as any)?.typeDisp || (row as any)?.quoteType || ""),
+        typeDisp,
         assetClass,
         region,
         instrumentType: inferInstrumentTypeByAssetClassV1(assetClass),
@@ -198,7 +260,11 @@ export async function GET(req: Request) {
 
     let items = out;
     try {
-      items = await enrichMissingPriceV1(out, Math.min(limit, 12));
+      items = await enrichPreferredPriceV1(out, limit, {
+        freshSec: Math.max(60, cacheConfig.freshMinutes * 60),
+        serveStaleSec: Math.max(3600, cacheConfig.serveStaleHours * 3600),
+        rawRetentionDays: cacheConfig.rawRetentionDays,
+      });
     } catch {
       items = out;
     }

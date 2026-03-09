@@ -89,6 +89,7 @@ export type DaaStrategyConfig = {
   risk: {
     maxDrawdownPct: number;
     perAssetStopLossPct: number;
+    perAssetTakeProfitPct: number;
     maxConcentrationPct: number;
     correlationCapPct: number;
     maxTotalRiskExposurePct: number;
