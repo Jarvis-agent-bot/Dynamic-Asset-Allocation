@@ -1,6 +1,7 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { normalizeDaaCurrencyCodeV1 } from "@/src/daa/assetKeyV1";
 import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
+import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 import {
   inferInstrumentTypeByAssetClassV1,
   inferMarketGroupV1,
@@ -16,7 +17,7 @@ import {
   type WorkbenchFeaturedAssetClassV1,
   type WorkbenchFeaturedMarketV1,
 } from "@/src/daa/modules/workbench/featuredAssetsCatalogV1";
-import { fetchYfinanceLatestCloseV1 } from "@/src/market/yfinanceFetchV1";
+import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
 import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
 
 type FeaturedMarketFilterV1 = WorkbenchFeaturedMarketV1 | "ALL";
@@ -50,14 +51,14 @@ function normalizeAssetClassFilterV1(value: unknown): FeaturedAssetClassFilterV1
   const text = normalizeTextV1(value).toUpperCase();
   if (text === "ALL") return "ALL";
   const normalized = normalizeAssetClassV1(text, "EQUITY");
-  if (normalized === "EQUITY" || normalized === "ETF" || normalized === "BOND" || normalized === "CRYPTO") {
+  if (normalized === "EQUITY" || normalized === "ETF" || normalized === "BOND" || normalized === "COMMODITY" || normalized === "CRYPTO") {
     return normalized;
   }
   return "EQUITY";
 }
 
 function quoteTypeV1(assetClass: WorkbenchFeaturedAssetClassV1): string {
-  if (assetClass === "ETF") return "ETF";
+  if (assetClass === "ETF" || assetClass === "COMMODITY") return "ETF";
   if (assetClass === "BOND") return "BOND";
   if (assetClass === "CRYPTO") return "CRYPTOCURRENCY";
   return "EQUITY";
@@ -66,6 +67,7 @@ function quoteTypeV1(assetClass: WorkbenchFeaturedAssetClassV1): string {
 function typeDispV1(assetClass: WorkbenchFeaturedAssetClassV1): string {
   if (assetClass === "ETF") return "ETF";
   if (assetClass === "BOND") return "债券";
+  if (assetClass === "COMMODITY") return "商品";
   if (assetClass === "CRYPTO") return "加密资产";
   return "股票";
 }
@@ -108,30 +110,51 @@ function toFeaturedItemV1(input: {
   };
 }
 
-async function enrichPricesV1(items: WorkbenchFeaturedAssetItemV1[]): Promise<WorkbenchFeaturedAssetItemV1[]> {
+async function enrichPricesV1(
+  items: WorkbenchFeaturedAssetItemV1[],
+  opts: { freshSec: number; serveStaleSec: number; rawRetentionDays: number },
+): Promise<WorkbenchFeaturedAssetItemV1[]> {
   if (!items.length) return items;
-  const priceByAssetKey = new Map<string, number>();
+  const refreshTargets = items.filter((item) => item.yfinanceSymbol);
+  if (!refreshTargets.length) return items;
 
-  await Promise.all(items.map(async (item) => {
-    const key = `${item.market}::${item.symbol}`;
-    const yfinanceSymbol = normalizeTextV1(item.yfinanceSymbol || item.symbol).toUpperCase();
-    if (!yfinanceSymbol) {
-      priceByAssetKey.set(key, 0);
-      return;
-    }
-    try {
-      const latest = await fetchYfinanceLatestCloseV1(yfinanceSymbol);
-      priceByAssetKey.set(key, latest && latest.price > 0 ? latest.price : 0);
-    } catch {
-      priceByAssetKey.set(key, 0);
-    }
-  }));
+  const priced = await getMarketPricesWithCacheV1({
+    assets: refreshTargets.map((item) => ({
+      symbol: item.symbol,
+      market: item.market,
+      currency: item.currency,
+    })),
+    allowRefresh: true,
+    forceRefresh: true,
+    refreshBudget: refreshTargets.length,
+    timeoutMs: 2400,
+    source: "featured_assets",
+    freshSec: opts.freshSec,
+    serveStaleSec: opts.serveStaleSec,
+    rawRetentionDays: opts.rawRetentionDays,
+  });
 
   return items.map((item) => {
     const key = `${item.market}::${item.symbol}`;
-    const price = priceByAssetKey.get(key);
-    if (!(price && price > 0)) return { ...item, price: 0 };
-    return { ...item, price };
+    const priceRow = priced[key];
+    if (!priceRow || !(priceRow.price > 0)) {
+      return {
+        ...item,
+        price: 0,
+        priceStatus: "missing",
+        priceUpdatedAt: priceRow?.priceUpdatedAt || null,
+        priceSource: priceRow?.priceSource || "featured_assets",
+        priceAgeSec: priceRow?.priceAgeSec ?? null,
+      };
+    }
+    return {
+      ...item,
+      price: priceRow.price,
+      priceStatus: priceRow.priceStatus,
+      priceUpdatedAt: priceRow.priceUpdatedAt,
+      priceSource: priceRow.priceSource,
+      priceAgeSec: priceRow.priceAgeSec,
+    };
   });
 }
 
@@ -178,13 +201,23 @@ export async function GET(req: Request) {
     const marketFilter = normalizeMarketFilterV1(url.searchParams.get("market"));
     const assetClassFilter = normalizeAssetClassFilterV1(url.searchParams.get("assetClass"));
     const limitPerMarket = clampLimitPerMarketV1(url.searchParams.get("limitPerMarket"));
+    const system = await getDaaSystemConfigV2();
+    const cacheConfig = system.config.dataSources?.priceFeed?.marketCache || {
+      freshMinutes: 15,
+      serveStaleHours: 48,
+      rawRetentionDays: 90,
+    };
 
     const groups = buildGroupRowsV1({ marketFilter, assetClassFilter, limitPerMarket });
     const pricedGroups: WorkbenchFeaturedAssetGroupV1[] = await Promise.all(
       groups.map(async (group) => ({
         market: group.market,
         marketLabelZh: MARKET_LABEL_ZH_V1[group.market],
-        items: await enrichPricesV1(group.rows),
+        items: await enrichPricesV1(group.rows, {
+          freshSec: Math.max(60, cacheConfig.freshMinutes * 60),
+          serveStaleSec: Math.max(3600, cacheConfig.serveStaleHours * 3600),
+          rawRetentionDays: cacheConfig.rawRetentionDays,
+        }),
       })),
     );
 

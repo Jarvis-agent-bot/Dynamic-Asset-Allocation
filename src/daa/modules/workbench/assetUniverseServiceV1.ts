@@ -1,8 +1,8 @@
 import {
   buildActualWeightMapV1,
   buildFxLookupToBaseV1,
-  buildPositionValuationRowsV1,
   resolveFxRateToBaseV1,
+  summarizeMarkToMarketPortfolioV1,
 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
 import type { DaaStoreAssetUniverseRowV1, DaaStoreFxRateV1 } from "@/src/daa/store/daaStorePgV1";
 import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
@@ -47,16 +47,21 @@ export function buildAssetUniverseViewRowsV1(input: {
   const baseCurrency = String(input.baseCurrency || "USD").trim().toUpperCase() || "USD";
   const fxLookup = buildFxLookupToBaseV1(input.fxRates || []);
 
-  const holdingRows = rows.map((row) => ({
-    symbol: row.symbol,
-    market: row.market,
-    currency: row.currency,
-    qty: row.holdingQty,
-    price: row.holdingPrice > 0 ? row.holdingPrice : row.lastPrice,
-  }));
-
-  const valuationRows = buildPositionValuationRowsV1(holdingRows, baseCurrency, fxLookup);
-  const holdingsValue = valuationRows.reduce((sum, row) => sum + (row.baseValue ?? 0), 0);
+  const valuation = summarizeMarkToMarketPortfolioV1({
+    positions: rows.map((row) => ({
+      symbol: row.symbol,
+      market: row.market,
+      currency: row.currency,
+      qty: row.holdingQty,
+      lastPrice: row.lastPrice,
+      holdingPrice: row.holdingPrice,
+    })),
+    baseCurrency,
+    cash: input.cash,
+    fxLookup,
+  });
+  const valuationRows = valuation.rows;
+  const holdingsValue = valuation.holdingsValue;
   const portfolioBase = holdingsValue + Math.max(0, toFinite(input.cash));
   const actualWeightMap = buildActualWeightMapV1(valuationRows, portfolioBase);
 
@@ -97,7 +102,6 @@ export function buildAssetUniverseViewRowsV1(input: {
       lastPrice: row.lastPrice,
       priceUpdatedAt: row.priceUpdatedAt,
       priceStatus,
-      priceAsOf: row.priceUpdatedAt,
       priceSource: yfinanceSymbol ? `yfinance:${yfinanceSymbol}` : "asset_universe",
       priceAgeSec,
       valuationBase: valuation?.baseValue ?? null,

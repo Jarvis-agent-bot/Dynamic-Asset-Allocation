@@ -1,5 +1,6 @@
 import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
+import type { DaaMarketContextV1, DaaMarketRegimeV1 } from "@/src/daa/modules/marketContext/marketContextTypesV1";
 
 export type DaaLlmAnalysisStatusV1 = "skipped" | "ok" | "error";
 export type DaaLlmAnalysisContextV1 = "decision" | "insight" | "digest";
@@ -18,6 +19,8 @@ export type DaaLlmAnalysisV1 = {
   failedAt?: string;
   reason?: string;
   raw?: unknown;
+  marketRegime?: DaaMarketRegimeV1 | null;
+  marketFacts?: string[];
 };
 
 export type DaaLlmAnalysisInputV1 = {
@@ -34,6 +37,7 @@ export type DaaLlmAnalysisInputV1 = {
     reasons: string[];
   }>;
   warnings: string[];
+  marketContext?: DaaMarketContextV1 | null;
 };
 
 export { DEFAULT_ANALYSIS_FOCUS_V1 };
@@ -100,20 +104,39 @@ async function resolveLlmRuntimeConfigV1(): Promise<LlmRuntimeConfigV1> {
   };
 }
 
+function formatMarketContextForPromptV1(marketContext: DaaMarketContextV1 | null | undefined): string {
+  if (!marketContext) return "市场状态层未启用或暂无可用快照";
+  const reasons = marketContext.reasons.slice(0, 3).join("; ") || "无";
+  const indicators = marketContext.indicators.slice(0, 4).map((item) => (
+    `${item.label}:值=${item.rawValue == null ? "N/A" : item.rawValue}${item.unit || ""},分位=${item.percentile252 == null ? "N/A" : item.percentile252.toFixed(1)}%,说明=${item.reason}`
+  )).join(" | ");
+  return `regime=${marketContext.regime}, riskOffScore=${marketContext.riskOffScorePct.toFixed(1)}, buyScale=${marketContext.buyScale.toFixed(2)}, highRiskBuyScale=${marketContext.highRiskBuyScale.toFixed(2)}, reasons=${reasons}, indicators=${indicators}`;
+}
+
+function buildMarketFactsFromContextV1(marketContext: DaaMarketContextV1 | null | undefined): string[] {
+  if (!marketContext) return [];
+  const indicatorFacts = marketContext.indicators.slice(0, 3).map((item) => `${item.label}: ${item.reason}`);
+  if (indicatorFacts.length > 0) return indicatorFacts;
+  return marketContext.reasons.slice(0, 3);
+}
+
 function buildPromptV1(input: DaaLlmAnalysisInputV1): string {
   const top = input.opportunities.slice(0, 8).map((item, index) => (
     `${index + 1}. ${item.symbol} | score=${item.finalScorePct.toFixed(1)} | confidence=${item.confidencePct.toFixed(1)} | risk=${item.riskScorePct.toFixed(1)} | action=${item.action} | reasons=${item.reasons.slice(0, 3).join(";")}`
   )).join("\n");
 
   const warningText = input.warnings.slice(0, 8).join("; ") || "无";
+  const marketText = formatMarketContextForPromptV1(input.marketContext);
 
   return [
     "你是DAA投资风控分析助手，请仅输出结构化结论，不要给下单指令。",
     `基准币种: ${input.baseCurrency}`,
     `再平衡触发: ${input.shouldRebalance ? "是" : "否"}`,
     `分析关注点: ${input.analysisFocus}`,
-    `机会列表:\n${top || "无"}`,
+    `机会列表:
+${top || "无"}`,
     `系统告警: ${warningText}`,
+    `当前市场环境: ${marketText}`,
     "请返回三段内容：",
     "1) summary：一句总体判断",
     "2) opportunity_notes：3-5条机会说明",
@@ -266,6 +289,10 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
   const config = await resolveLlmRuntimeConfigV1();
   const analysisFocus = normalizeText(input.analysisFocus);
   const generatedAt = new Date().toISOString();
+  const sharedMarketMeta = {
+    marketRegime: input.marketContext?.regime || null,
+    marketFacts: buildMarketFactsFromContextV1(input.marketContext),
+  };
 
   if (!analysisFocus) {
     return {
@@ -281,6 +308,7 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       reasonMessage: "analysisFocus 不能为空",
       failedAt: generatedAt,
       reason: "analysisFocus is required",
+      ...sharedMarketMeta,
     };
   }
 
@@ -297,6 +325,7 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       reasonCode: "llm_disabled",
       reasonMessage: "llm_analysis data source disabled",
       reason: "llm_analysis data source disabled",
+      ...sharedMarketMeta,
     };
   }
 
@@ -313,6 +342,7 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       reasonCode: "llm_disabled_in_decision",
       reasonMessage: "llm_analysis disabled in decision context",
       reason: "llm_analysis disabled in decision context",
+      ...sharedMarketMeta,
     };
   }
 
@@ -329,6 +359,7 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       reasonCode: "missing_endpoint",
       reasonMessage: "missing endpoint",
       reason: "missing endpoint",
+      ...sharedMarketMeta,
     };
   }
 
@@ -345,6 +376,7 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       reasonCode: "missing_api_key",
       reasonMessage: "missing api key",
       reason: "missing api key",
+      ...sharedMarketMeta,
     };
   }
 
@@ -370,6 +402,7 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       riskNotes: parsed.riskNotes,
       latencyMs: Date.now() - startedAt,
       raw: result.raw,
+      ...sharedMarketMeta,
     };
   } catch (error) {
     const failedAt = new Date().toISOString();
@@ -387,6 +420,7 @@ export async function runLlmAnalysisV1(input: DaaLlmAnalysisInputV1): Promise<Da
       reasonMessage: failure.reasonMessage,
       failedAt,
       reason: failure.reasonMessage,
+      ...sharedMarketMeta,
     };
   }
 }

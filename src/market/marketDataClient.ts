@@ -1,3 +1,5 @@
+import { isApiResponseV1 } from "@/src/daa/api/contractsV1";
+
 import type { PriceBar } from "../core/domain";
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -26,15 +28,13 @@ export type MarketDataClient = {
 };
 
 export type YfinancePriceSeriesApiResponse = {
-  ok?: boolean;
-  error?: string;
-  message?: string;
   source?: string;
   interval?: string;
   priceMode?: "adjclose" | "close";
   rawCount?: number;
   symbol?: string;
   normalizedSymbol?: string;
+  upstream?: string;
   series?: PriceBar[];
   issues?: string[];
 };
@@ -59,6 +59,25 @@ async function readJsonBestEffort(text: string): Promise<unknown> {
   }
 }
 
+function toErrorMessage(payload: any, status: number): string {
+  const apiMessage = typeof payload?.error?.message === "string" ? payload.error.message.trim() : "";
+  if (apiMessage) return apiMessage;
+
+  const apiDetailMessage = typeof payload?.error?.details?.message === "string"
+    ? payload.error.details.message.trim()
+    : "";
+  if (apiDetailMessage) return apiDetailMessage;
+
+  const legacyError = typeof payload?.error === "string" ? payload.error.trim() : "";
+  if (legacyError) return legacyError;
+
+  const legacyMessage = typeof payload?.message === "string" ? payload.message.trim() : "";
+  if (legacyMessage) return legacyMessage;
+
+  const raw = typeof payload?._raw === "string" ? payload._raw.trim() : "";
+  return raw || `http ${status}`;
+}
+
 export function createMarketDataClient(opts: { endpointBase?: string; fetch?: FetchLike } = {}): MarketDataClient {
   const base = normalizeBase(opts.endpointBase ?? "");
   const fetchFn: FetchLike = opts.fetch ?? fetch;
@@ -66,17 +85,23 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
   async function getJson<T>(path: string, qs?: URLSearchParams, init?: RequestInit): Promise<T> {
     const url = `${base}${path}${qs && qs.toString() ? `?${qs.toString()}` : ""}`;
 
-    const r = await fetchFn(url, {
+    const response = await fetchFn(url, {
       method: "GET",
       ...init,
     });
 
-    const text = await r.text();
-    const payload = (await readJsonBestEffort(text)) as any;
+    const text = await response.text();
+    const payload = await readJsonBestEffort(text);
 
-    if (!r.ok) {
-      const msg = payload?.error || payload?.message || payload?._raw || `http ${r.status}`;
-      throw new Error(String(msg));
+    if (!response.ok) {
+      throw new Error(toErrorMessage(payload, response.status));
+    }
+
+    if (isApiResponseV1(payload)) {
+      if (!payload.ok) {
+        throw new Error(toErrorMessage(payload, response.status));
+      }
+      return payload.data as T;
     }
 
     return payload as T;
@@ -160,11 +185,6 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
       },
       async priceSeriesBars(params) {
         const payload = await client.yfinance.priceSeries(params);
-
-        if (!payload?.ok) {
-          const msg = payload?.error || payload?.message || "unknown error";
-          throw new Error(`yfinance price-series route failed: ${msg}`);
-        }
 
         const series = Array.isArray(payload.series) ? payload.series : [];
         if (!series.length) {

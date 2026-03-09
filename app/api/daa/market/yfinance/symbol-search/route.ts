@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
 
 export const runtime = "nodejs";
 
@@ -28,10 +28,6 @@ type QuoteSnapshot = {
   currency: string;
   exchange: string;
 };
-
-function json(data: unknown, init?: ResponseInit) {
-  return NextResponse.json(data, init);
-}
 
 function clampLimit(value: string | null): number {
   const raw = Number(value || 10);
@@ -120,27 +116,19 @@ function buildMarketHintSymbols(query: string, filter: MarketFilter): string[] {
   if (!q) return [];
 
   const out = new Set<string>();
-  const digits = q.replace(/\D+/g, "");
-
-  if (filter === "HK") {
-    if (/^\d{1,5}$/.test(digits)) {
-      out.add(`${digits.padStart(4, "0")}.HK`);
-    }
-    if (/^[A-Z0-9]{2,8}\.HK$/.test(q)) {
-      out.add(q);
-    }
+  if ((filter === "ALL" || filter === "HK") && /^\d{1,5}$/.test(q)) {
+    out.add(`${q.padStart(4, "0")}.HK`);
   }
-
-  if (filter === "CN") {
-    if (/^\d{6}$/.test(digits)) {
-      const suffix = digits.startsWith("6") ? "SS" : "SZ";
-      out.add(`${digits}.${suffix}`);
-    }
-    if (/^[A-Z0-9]{2,8}\.(SS|SZ)$/.test(q)) {
-      out.add(q);
-    }
+  if ((filter === "ALL" || filter === "CN") && /^\d{6}$/.test(q)) {
+    out.add(`${q}.SS`);
+    out.add(`${q}.SZ`);
   }
-
+  if ((filter === "ALL" || filter === "CRYPTO") && /^[A-Z0-9]{2,10}$/.test(q)) {
+    out.add(`${q}-USD`);
+  }
+  if (filter === "US" || filter === "ALL") {
+    out.add(q);
+  }
   if (filter === "CRYPTO") {
     if (/^[A-Z0-9]{2,10}$/.test(q)) {
       out.add(`${q}-USD`);
@@ -218,7 +206,7 @@ export async function GET(req: Request) {
     const marketFilter = normalizeMarketFilter(url.searchParams.get("market"));
 
     if (!q) {
-      return json({ ok: false, error: "missing q" }, { status: 400 });
+      return failV1("VALIDATION_FAILED", "missing q", { status: 400 });
     }
 
     const upstream = new URL("https://query1.finance.yahoo.com/v1/finance/search");
@@ -238,15 +226,13 @@ export async function GET(req: Request) {
 
     const text = await response.text();
     if (!response.ok) {
-      return json(
-        {
-          ok: false,
-          error: "yfinance search upstream error",
+      return failV1("INTERNAL_ERROR", "yfinance search upstream error", {
+        status: 502,
+        details: {
           status: response.status,
           body: text.slice(0, 1600),
         },
-        { status: 502 },
-      );
+      });
     }
 
     const payload = JSON.parse(text) as Record<string, unknown>;
@@ -355,15 +341,18 @@ export async function GET(req: Request) {
       if (items.length >= limit) break;
     }
 
-    return json({
-      ok: true,
+    return okV1({
       source: "yfinance-search",
       query: q,
       marketFilter,
       items,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return json({ ok: false, error: "symbol search failed", message }, { status: 502 });
+    return failV1("INTERNAL_ERROR", "symbol search failed", {
+      status: 502,
+      details: {
+        message: error instanceof Error ? error.message : String(error),
+      },
+    });
   }
 }

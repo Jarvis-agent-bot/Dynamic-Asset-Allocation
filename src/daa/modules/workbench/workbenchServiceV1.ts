@@ -1,41 +1,57 @@
 import { normalizeDaaCurrencyCodeV1, normalizeDaaSymbolV1, parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
+import type { DaaMarketContextV1, DaaMarketRegimeV1 } from "@/src/daa/modules/marketContext/marketContextTypesV1";
+import { getStrategyExecutionConfigV2 } from "@/src/daa/config/systemConfigV2";
 import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
+import { runLlmDecisionV2 } from "@/src/daa/llm/llmDecisionV2";
 import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
 import { hydrateUnifiedRequestWithSignalsV1 } from "@/src/daa/modules/decision/hydrateUnifiedRequestV1";
 import type { UnifiedDecisionResultV2 } from "@/src/daa/modules/decision/decisionResultTypesV2";
 import {
+  buildMarketContextAttributionV1,
+  getCurrentMarketContextV1,
+  marketRegimeLabelZhV1,
+} from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
+import { classifyCashV2 } from "./cashClassificationV2";
+import { fuseDecisionV2 } from "./decisionFusionV2";
+import {
+  appendDaaTriggerEventV1,
   appendDaaRunHistoryV1,
-  appendPriceHistoryRowsV1,
+  appendAssetPriceHistoryRowsV1,
   createDaaRebalanceCycleV1,
   createDaaRebalanceDecisionV1,
   createDaaTradeTicketV1,
   executeDaaTradeTicketsV1,
+  getDaaCycleReportV1,
   getDaaHumanIngestStateV1,
   getDaaRebalanceCycleV1,
   getDaaSystemConfigV2,
+  getDaaMarketCacheHealthStatsV1,
   listDaaAssetUniverseV1,
+  listDaaCycleReportsV1,
   listDaaEquitySnapshotsV1,
   listDaaFxRatesV1,
   listDaaRebalanceCyclesV1,
   listDaaTradeTicketsV1,
   patchDaaRebalanceCycleV1,
+  upsertDaaCycleReportV1,
   updateDaaAssetUniverseLastPriceV1,
   type DaaStoreRebalanceCycleV1,
 } from "@/src/daa/store/daaStorePgV1";
 import { buildDaaUnifiedPlanV1, type DaaUnifiedRequestV1 } from "@/src/daa/unifiedRebalanceV1";
 import {
   buildFxLookupToBaseV1,
-  buildPositionValuationRowsV1,
+  summarizeMarkToMarketPortfolioV1,
 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
-import { fetchYfinanceLatestCloseV1 } from "@/src/market/yfinanceFetchV1";
-import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
+import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
 
 import { buildAssetUniverseViewRowsV1 } from "./assetUniverseServiceV1";
 import type {
+  ExecuteRebalanceSummaryV1,
   ExecuteRebalanceCycleResultV1,
   GenerateRebalanceCycleInputV1,
   GenerateRebalanceCycleResultV1,
   HfSignalSummaryV1,
+  PortfolioHealthyInsightV1,
   PreTradeRiskCheckItemV1,
   PreTradeRiskCheckV1,
   RebalanceCycleV1,
@@ -43,6 +59,7 @@ import type {
   RebalanceTriggerSourceV1,
   UpdateRebalanceCycleInputV1,
   WorkbenchBootstrapV1,
+  WorkbenchRebalanceCycleReportV1,
   WorkbenchRecommendationV1,
   WorkbenchRecommendationsResultV1,
   WorkbenchTradeRecordsV1,
@@ -53,6 +70,32 @@ const PRICE_SYNC_CONCURRENCY = 4;
 const PRICE_SYNC_MAX_TARGETS = 30;
 const PRICE_STALE_SEC = 6 * 60 * 60;
 const PRICE_REFRESH_FRESH_SKIP_SEC = 120;
+
+export type WorkbenchDomainErrorCodeV1 =
+  | "CYCLE_NOT_EXECUTABLE"
+  | "CYCLE_IMMUTABLE"
+  | "CYCLE_ALREADY_COMPLETED";
+
+export class WorkbenchDomainErrorV1 extends Error {
+  readonly code: WorkbenchDomainErrorCodeV1;
+  readonly status: number;
+  readonly details: Record<string, unknown>;
+
+  constructor(
+    code: WorkbenchDomainErrorCodeV1,
+    message: string,
+    options: {
+      status?: number;
+      details?: Record<string, unknown>;
+    } = {},
+  ) {
+    super(message);
+    this.name = "WorkbenchDomainErrorV1";
+    this.code = code;
+    this.status = options.status ?? 409;
+    this.details = options.details ?? {};
+  }
+}
 
 function toFinite(value: unknown, fallback = 0): number {
   const n = Number(value);
@@ -300,6 +343,51 @@ function computeHhiPctV1(weightsPct: number[]): number {
   return weightsPct.reduce((sum, weight) => sum + ((weight / 100) ** 2), 0) * 100;
 }
 
+function isCycleTerminalV1(status: RebalanceCycleV1["status"] | DaaStoreRebalanceCycleV1["status"]): boolean {
+  return status === "completed" || status === "cancelled";
+}
+
+export function isCycleExecutableV1(status: RebalanceCycleV1["status"] | DaaStoreRebalanceCycleV1["status"]): boolean {
+  return status === "generated" || status === "reviewing";
+}
+
+export function assertCycleMutableV1(cycle: { cycleId: string; status: RebalanceCycleV1["status"] | DaaStoreRebalanceCycleV1["status"] }) {
+  if (!isCycleTerminalV1(cycle.status)) return;
+  throw new WorkbenchDomainErrorV1(
+    "CYCLE_IMMUTABLE",
+    "该周期已终态，请生成新周期继续调仓。",
+    {
+      details: {
+        cycleId: cycle.cycleId,
+        cycleStatus: cycle.status,
+      },
+    },
+  );
+}
+
+export function assertCycleExecutableV1(
+  cycle: { cycleId: string; status: RebalanceCycleV1["status"] | DaaStoreRebalanceCycleV1["status"] },
+  actionLabel: "execute" | "summary",
+) {
+  if (isCycleExecutableV1(cycle.status)) return;
+  const code: WorkbenchDomainErrorCodeV1 = actionLabel === "execute" && cycle.status === "completed"
+    ? "CYCLE_ALREADY_COMPLETED"
+    : "CYCLE_NOT_EXECUTABLE";
+  const message = actionLabel === "execute"
+    ? "该周期不可执行，请生成新周期继续调仓。"
+    : "该周期不可生成执行摘要，请生成新周期继续调仓。";
+  throw new WorkbenchDomainErrorV1(
+    code,
+    message,
+    {
+      details: {
+        cycleId: cycle.cycleId,
+        cycleStatus: cycle.status,
+      },
+    },
+  );
+}
+
 function buildPreTradeRiskCheckV1(input: {
   assetUniverse: WorkbenchBootstrapV1["assetUniverse"];
   proposals: RebalanceProposalV1[];
@@ -369,10 +457,155 @@ function buildPreTradeRiskCheckV1(input: {
   });
 
   const worstDrawdown = input.assetUniverse.reduce((worst, row) => {
-    if (!(row.holdingQty > 0) || !(row.costBasis && row.costBasis > 0)) return worst;
+    const costPerUnit = calcHoldingCostPerUnitV1(row);
+    if (!(row.holdingQty > 0) || !(costPerUnit > 0)) return worst;
     const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
     if (!(price > 0)) return worst;
-    const drawdownPct = ((row.costBasis - price) / row.costBasis) * 100;
+    const drawdownPct = ((costPerUnit - price) / costPerUnit) * 100;
+    return Math.max(worst, drawdownPct);
+  }, 0);
+  items.push({
+    rule: "stop_loss_breach",
+    status: worstDrawdown > stopLossPct ? "warn" : "pass",
+    current: worstDrawdown,
+    limit: stopLossPct,
+    message: worstDrawdown > stopLossPct
+      ? `存在持仓浮亏 ${worstDrawdown.toFixed(2)}%，超过止损线 ${stopLossPct.toFixed(2)}%`
+      : `持仓止损检查通过（最大浮亏 ${worstDrawdown.toFixed(2)}%）`,
+  });
+
+  const hasBlock = items.some((item) => item.status === "block");
+  const hasWarn = items.some((item) => item.status === "warn");
+  return {
+    overallStatus: hasBlock ? "block" : (hasWarn ? "warn" : "pass"),
+    items,
+  };
+}
+
+function buildPreTradeRiskCheckFromBootstrapV1(input: {
+  bootstrap: WorkbenchBootstrapV1;
+  systemConfig: Awaited<ReturnType<typeof getDaaSystemConfigV2>>["config"];
+  proposals: RebalanceProposalV1[];
+}): PreTradeRiskCheckV1 {
+  return buildPreTradeRiskCheckV1({
+    assetUniverse: input.bootstrap.assetUniverse,
+    proposals: input.proposals,
+    totalEquity: Math.max(0, toFinite(input.bootstrap.account.totalEquity, 0)),
+    constraints: {
+      maxPositionPct: input.systemConfig.strategy.constraints.maxPositionPct,
+      maxOrderPctOfNav: input.systemConfig.strategy.constraints.maxOrderPctOfNav,
+    },
+    risk: {
+      perAssetStopLossPct: input.systemConfig.strategy.risk.perAssetStopLossPct,
+      maxConcentrationPct: input.systemConfig.strategy.risk.maxConcentrationPct,
+    },
+  });
+}
+
+function buildManualPreTradeRiskCheckV1(input: {
+  assetUniverse: WorkbenchBootstrapV1["assetUniverse"];
+  proposal: RebalanceProposalV1;
+  totalEquity: number;
+  constraints: {
+    maxPositionPct: number;
+    maxOrderPctOfNav: number;
+  };
+  risk: {
+    perAssetStopLossPct: number;
+    maxConcentrationPct: number;
+  };
+}): PreTradeRiskCheckV1 {
+  const items: PreTradeRiskCheckItemV1[] = [];
+  const currentTotalEquity = Math.max(0, input.totalEquity);
+  const maxPositionLimitPct = Math.max(0, input.constraints.maxPositionPct) * 100;
+  const maxOrderPctOfNav = Math.max(0, input.constraints.maxOrderPctOfNav) * 100;
+  const maxConcentrationPct = Math.max(0, input.risk.maxConcentrationPct) * 100;
+  const stopLossPct = Math.max(0, input.risk.perAssetStopLossPct) * 100;
+
+  const currentValueByAssetKey = new Map<string, number>();
+  for (const row of input.assetUniverse) {
+    currentValueByAssetKey.set(row.assetKey, Math.max(0, toFinite(row.valuationBase, 0)));
+  }
+
+  const currentProposalValue = currentValueByAssetKey.get(input.proposal.assetKey) || 0;
+  const proposalNotional = Math.max(0, toFinite(input.proposal.suggestedNotional, 0));
+  const proposalDelta = input.proposal.side === "BUY"
+    ? proposalNotional
+    : -proposalNotional;
+  const nextProposalValue = Math.max(0, currentProposalValue + proposalDelta);
+
+  const projectedAssetTotal = input.assetUniverse.reduce((sum, row) => {
+    const currentValue = currentValueByAssetKey.get(row.assetKey) || 0;
+    const nextValue = row.assetKey === input.proposal.assetKey ? nextProposalValue : currentValue;
+    return sum + Math.max(0, nextValue);
+  }, 0);
+  const riskNavBase = currentTotalEquity > 0
+    ? currentTotalEquity
+    : Math.max(projectedAssetTotal, nextProposalValue, proposalNotional, 1e-9);
+
+  const projectedWeights = input.assetUniverse
+    .map((row) => {
+      const currentValue = currentValueByAssetKey.get(row.assetKey) || 0;
+      const nextValue = row.assetKey === input.proposal.assetKey ? nextProposalValue : currentValue;
+      return {
+        assetKey: row.assetKey,
+        symbol: row.symbol,
+        nextValue,
+        weightPct: riskNavBase > 0 ? (nextValue / riskNavBase) * 100 : 0,
+      };
+    })
+    .filter((row) => row.nextValue > 0);
+
+  const projectedWeightPct = riskNavBase > 0 ? (nextProposalValue / riskNavBase) * 100 : 0;
+  items.push({
+    rule: "max_position",
+    status: projectedWeightPct > maxPositionLimitPct ? "block" : "pass",
+    current: projectedWeightPct,
+    limit: maxPositionLimitPct,
+    message: projectedWeightPct > maxPositionLimitPct
+      ? `${input.proposal.symbol} 交易后仓位 ${projectedWeightPct.toFixed(2)}% 超过上限 ${maxPositionLimitPct.toFixed(2)}%`
+      : `${input.proposal.symbol} 交易后仓位 ${projectedWeightPct.toFixed(2)}%`,
+  });
+
+  const investedWeightPct = projectedWeights.reduce((sum, row) => sum + row.weightPct, 0);
+  items.push({
+    rule: "total_weight",
+    status: investedWeightPct > 100.0001 ? "block" : "pass",
+    current: investedWeightPct,
+    limit: 100,
+    message: investedWeightPct > 100.0001
+      ? `交易后持仓权重总和 ${investedWeightPct.toFixed(2)}% 超过 100%`
+      : `交易后已投资仓位 ${investedWeightPct.toFixed(2)}%`,
+  });
+
+  const orderPctOfNav = riskNavBase > 0 ? (proposalNotional / riskNavBase) * 100 : 0;
+  items.push({
+    rule: "max_order_pct",
+    status: orderPctOfNav > maxOrderPctOfNav ? "warn" : "pass",
+    current: orderPctOfNav,
+    limit: maxOrderPctOfNav,
+    message: orderPctOfNav > maxOrderPctOfNav
+      ? `单日交易占比 ${orderPctOfNav.toFixed(2)}% 超过阈值 ${maxOrderPctOfNav.toFixed(2)}%`
+      : `单日交易占比 ${orderPctOfNav.toFixed(2)}%`,
+  });
+
+  const hhi = computeHhiPctV1(projectedWeights.map((row) => row.weightPct));
+  items.push({
+    rule: "concentration",
+    status: hhi > maxConcentrationPct ? "warn" : "pass",
+    current: hhi,
+    limit: maxConcentrationPct,
+    message: hhi > maxConcentrationPct
+      ? `交易后组合集中度(HHI) ${hhi.toFixed(2)} 超过警戒 ${maxConcentrationPct.toFixed(2)}`
+      : `交易后组合集中度(HHI) ${hhi.toFixed(2)}`,
+  });
+
+  const worstDrawdown = input.assetUniverse.reduce((worst, row) => {
+    const costPerUnit = calcHoldingCostPerUnitV1(row);
+    if (!(row.holdingQty > 0) || !(costPerUnit > 0)) return worst;
+    const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
+    if (!(price > 0)) return worst;
+    const drawdownPct = ((costPerUnit - price) / costPerUnit) * 100;
     return Math.max(worst, drawdownPct);
   }, 0);
   items.push({
@@ -411,7 +644,47 @@ function mapStoreCycleToViewV1(cycle: DaaStoreRebalanceCycleV1 | null): Rebalanc
     cancelledAt: cycle.cancelledAt,
     cancelReason: cycle.cancelReason,
     notes: cycle.notes,
+    marketContext: cycle.marketContext || null,
     createdAt: cycle.createdAt,
+  };
+}
+
+function buildMarketFactsV1(marketContext: DaaMarketContextV1 | null | undefined): string[] {
+  if (!marketContext) return [];
+  return marketContext.scopes.slice(0, 4).map((scope) => {
+    const lead = scope.indicators[0] || null;
+    const value = lead?.rawValue == null ? "N/A" : `${lead.rawValue}${lead.unit || ""}`;
+    const percentile = lead?.percentile252 == null ? "N/A" : `${lead.percentile252.toFixed(1)}%`;
+    return `${scope.label} ${marketRegimeLabelZhV1(scope.regime)} / 买入 ${Math.round(scope.buyScale * 100)}% / ${lead?.label || "指标"} ${value} / 近一年位置 ${percentile}`;
+  });
+}
+
+function pickCycleMarketRegimesV1(cycle: RebalanceCycleV1 | null, fallback: DaaMarketContextV1 | null): {
+  ruleBasedMarketRegime: DaaMarketRegimeV1 | null;
+  llmMarketRegime: DaaMarketRegimeV1 | null;
+  effectiveMarketRegime: DaaMarketRegimeV1 | null;
+} {
+  const firstDecision = cycle?.proposals.find((item) => item.decisionContext)?.decisionContext || null;
+  return {
+    ruleBasedMarketRegime: firstDecision?.ruleBasedMarketRegime || cycle?.marketContext?.regime || fallback?.regime || null,
+    llmMarketRegime: firstDecision?.llmMarketRegime || null,
+    effectiveMarketRegime: firstDecision?.effectiveMarketRegime || firstDecision?.marketRegime || cycle?.marketContext?.regime || fallback?.regime || null,
+  };
+}
+
+function mapStoreCycleReportToViewV1(report: Awaited<ReturnType<typeof getDaaCycleReportV1>>): WorkbenchRebalanceCycleReportV1 | null {
+  if (!report) return null;
+  return {
+    cycleId: report.cycleId,
+    triggerSource: report.triggerSource,
+    status: report.cycleStatus,
+    createdAt: report.cycleCreatedAt,
+    reportCreatedAt: report.reportCreatedAt,
+    executionSummary: report.executionSummary,
+    beforeSnapshot: report.beforeSnapshot,
+    afterSnapshot: report.afterSnapshot,
+    pnlAttribution: report.pnlAttribution,
+    riskDelta: report.riskDelta,
   };
 }
 
@@ -469,41 +742,20 @@ function computeTotalEquityV1(input: {
   baseCurrency: string;
   cash: number;
 }): number {
-  const holdingRows = input.rows.map((row) => ({
-    symbol: row.symbol,
-    market: row.market,
-    currency: row.currency,
-    qty: toPositive(row.holdingQty, 0),
-    price: row.holdingPrice > 0 ? row.holdingPrice : row.lastPrice,
-  }));
   const fxLookup = buildFxLookupToBaseV1(input.fxRates);
-  const valuationRows = buildPositionValuationRowsV1(holdingRows, input.baseCurrency, fxLookup);
-  const holdingsValue = valuationRows.reduce((sum, row) => sum + (row.baseValue ?? 0), 0);
-  return holdingsValue + Math.max(0, toFinite(input.cash, 0));
-}
-
-async function withTimeoutV1<T>(job: Promise<T>, timeoutMs: number): Promise<T | null> {
-  const timeout = Math.max(500, Math.trunc(timeoutMs));
-  return new Promise((resolve) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve(null);
-    }, timeout);
-
-    job.then((value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(value);
-    }).catch(() => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(null);
-    });
-  });
+  return summarizeMarkToMarketPortfolioV1({
+    positions: input.rows.map((row) => ({
+      symbol: row.symbol,
+      market: row.market,
+      currency: row.currency,
+      qty: toPositive(row.holdingQty, 0),
+      lastPrice: row.lastPrice,
+      holdingPrice: row.holdingPrice,
+    })),
+    baseCurrency: input.baseCurrency,
+    cash: input.cash,
+    fxLookup,
+  }).totalEquity;
 }
 
 function priceAgeSecV1(ts: string | null): number | null {
@@ -518,62 +770,77 @@ export async function syncWorkbenchPricesV1(opts: {
   maxTargets?: number;
   timeoutMs?: number;
   concurrency?: number;
+  forceRefreshAll?: boolean;
 } = {}): Promise<{ updated: number; attempted: number; skipped: number }> {
-  const rows = await listDaaAssetUniverseV1();
-  const maxTargets = Math.max(1, Math.min(100, Math.trunc(opts.maxTargets ?? PRICE_SYNC_MAX_TARGETS)));
+  const [rows, system] = await Promise.all([
+    listDaaAssetUniverseV1(),
+    getDaaSystemConfigV2(),
+  ]);
+  const forceRefreshAll = opts.forceRefreshAll === true;
+  const defaultMaxTargets = forceRefreshAll ? rows.length : PRICE_SYNC_MAX_TARGETS;
+  const maxTargets = Math.max(1, Math.min(100, Math.trunc(opts.maxTargets ?? defaultMaxTargets)));
   const timeoutMs = Math.max(600, Math.min(8000, Math.trunc(opts.timeoutMs ?? PRICE_SYNC_TIMEOUT_MS)));
   const concurrency = Math.max(1, Math.min(12, Math.trunc(opts.concurrency ?? PRICE_SYNC_CONCURRENCY)));
+  const marketCache = system.config.dataSources.priceFeed.marketCache;
 
-  const targets = rows.filter((row) => {
-    const yfinanceSymbol = toYfinanceSymbolByMarketV1(row.symbol, row.market);
-    if (!yfinanceSymbol) return false;
-    if (!(row.lastPrice > 0)) return true;
-    const ageSec = priceAgeSecV1(row.priceUpdatedAt);
-    if (ageSec == null) return true;
-    if (ageSec <= PRICE_REFRESH_FRESH_SKIP_SEC) return false;
-    return ageSec >= PRICE_STALE_SEC;
-  }).slice(0, maxTargets);
+  const targets = (forceRefreshAll
+    ? rows
+    : rows.filter((row) => {
+      if (!(row.lastPrice > 0)) return true;
+      const ageSec = priceAgeSecV1(row.priceUpdatedAt);
+      if (ageSec == null) return true;
+      if (ageSec <= PRICE_REFRESH_FRESH_SKIP_SEC) return false;
+      return ageSec >= PRICE_STALE_SEC;
+    })
+  ).slice(0, maxTargets);
 
   if (!targets.length) {
     return { updated: 0, attempted: 0, skipped: rows.length };
   }
 
-  let cursor = 0;
+  const priced = await getMarketPricesWithCacheV1({
+    assets: targets.map((row) => ({
+      symbol: row.symbol,
+      market: row.market,
+      currency: row.currency,
+    })),
+    allowRefresh: true,
+    forceRefresh: true,
+    refreshBudget: targets.length,
+    timeoutMs,
+    source: "workbench_bootstrap",
+    concurrency,
+    freshSec: Math.max(60, marketCache.freshMinutes * 60),
+    serveStaleSec: Math.max(3600, marketCache.serveStaleHours * 3600),
+    rawRetentionDays: marketCache.rawRetentionDays,
+  });
+
   let updated = 0;
-  const historyRows: Array<{ symbol: string; price: number; ts: string; source: string }> = [];
+  const historyRows: Array<{ assetKey: string; price: number; ts: string; source: string }> = [];
 
-  async function worker() {
-    for (;;) {
-      const current = targets[cursor];
-      cursor += 1;
-      if (!current) break;
-      const yfinanceSymbol = toYfinanceSymbolByMarketV1(current.symbol, current.market);
-      if (!yfinanceSymbol) continue;
-
-      const latest = await withTimeoutV1(fetchYfinanceLatestCloseV1(yfinanceSymbol), timeoutMs);
-      if (!latest || !(latest.price > 0)) continue;
-
-      const saved = await updateDaaAssetUniverseLastPriceV1({
-        assetKey: current.assetKey,
-        lastPrice: latest.price,
-        priceUpdatedAt: latest.ts,
-      });
-      if (!saved) continue;
-      updated += 1;
-      historyRows.push({
-        symbol: yfinanceSymbol,
-        price: latest.price,
-        ts: latest.ts,
-        source: "workbench_bootstrap",
-      });
-    }
+  for (const current of targets) {
+    const key = `${String(current.market || "").toUpperCase()}::${String(current.symbol || "").toUpperCase()}`;
+    const priceRow = priced[key];
+    if (!priceRow || !(priceRow.price > 0) || !priceRow.priceUpdatedAt) continue;
+    const updatedAt = priceRow.priceUpdatedAt;
+    const saved = await updateDaaAssetUniverseLastPriceV1({
+      assetKey: current.assetKey,
+      lastPrice: priceRow.price,
+      priceUpdatedAt: updatedAt,
+    });
+    if (!saved) continue;
+    updated += 1;
+    historyRows.push({
+      assetKey: current.assetKey,
+      price: priceRow.price,
+      ts: updatedAt,
+      source: "workbench_bootstrap",
+    });
   }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => worker()));
 
   if (historyRows.length > 0) {
     try {
-      await appendPriceHistoryRowsV1(historyRows);
+      await appendAssetPriceHistoryRowsV1(historyRows);
     } catch {
       // 行情历史附加失败不影响主流程
     }
@@ -608,14 +875,12 @@ export async function buildUnifiedRequestFromStoreV1(): Promise<{
     ? Math.max(0, Math.min(cash, investableCashRaw))
     : Math.max(0, cash - frozenCash);
 
-  const totalEquityRaw = toFinite(accountRaw.totalEquity, Number.NaN);
-  const computedEquity = computeTotalEquityV1({
+  const totalEquity = computeTotalEquityV1({
     rows: assetRows,
     fxRates,
     baseCurrency,
     cash,
   });
-  const totalEquity = Number.isFinite(totalEquityRaw) && totalEquityRaw > 0 ? totalEquityRaw : computedEquity;
   const equityPeakFromSnapshots = snapshots.reduce((max, row) => Math.max(max, toPositive(row.totalEquity, 0)), 0);
   const equityPeak = Math.max(totalEquity, equityPeakFromSnapshots);
 
@@ -666,8 +931,8 @@ export async function buildUnifiedRequestFromStoreV1(): Promise<{
         market: row.market,
         currency: row.currency,
         qty: row.holdingQty,
-        price: row.holdingPrice > 0 ? row.holdingPrice : row.lastPrice,
-        costBasis: row.costBasis ?? undefined,
+        price: row.lastPrice > 0 ? row.lastPrice : row.holdingPrice,
+        costBasisPerUnit: calcHoldingCostPerUnitV1(row) ?? undefined,
         tags: row.holdingTags,
       })),
     candidateAssets: assetRows
@@ -757,27 +1022,79 @@ function buildBlockedReasonsV1(result: UnifiedDecisionResultV2): string[] {
   return [...byReason.entries()].map(([reason, count]) => `${reason} (${count})`);
 }
 
+function buildWorkbenchMarketDataHealthV1(input: {
+  cacheReadFailed: boolean;
+  stats: Awaited<ReturnType<typeof getDaaMarketCacheHealthStatsV1>>;
+}): NonNullable<WorkbenchBootstrapV1["marketDataHealth"]> {
+  const totalTracked = Math.max(0, input.stats.freshCount + input.stats.staleCount + input.stats.missingCount);
+  const staleRatio = totalTracked > 0 ? input.stats.staleCount / totalTracked : 0;
+  const missingRatio = totalTracked > 0 ? input.stats.missingCount / totalTracked : 0;
+
+  let status: NonNullable<WorkbenchBootstrapV1["marketDataHealth"]>["status"] = "ok";
+  if (
+    input.cacheReadFailed
+    || input.stats.recentJobFailureRatePct >= 80
+    || (totalTracked > 0 && input.stats.freshCount === 0 && (input.stats.missingCount > 0 || input.stats.staleCount > 0))
+  ) {
+    status = "down";
+  } else if (
+    input.stats.recentJobFailureRatePct >= 20
+    || input.stats.missingCount > 0
+    || staleRatio >= 0.4
+    || missingRatio >= 0.2
+  ) {
+    status = "degraded";
+  }
+
+  let message = "市场数据缓存正常。";
+  if (status === "down") {
+    message = input.cacheReadFailed
+      ? "市场数据缓存读取失败，工作台已回退到本地快照，价格可能偏旧。"
+      : `市场数据服务不可用：近 24 小时失败率 ${input.stats.recentJobFailureRatePct.toFixed(1)}%，fresh ${input.stats.freshCount} / stale ${input.stats.staleCount} / missing ${input.stats.missingCount}。`;
+  } else if (status === "degraded") {
+    message = `市场数据部分降级：fresh ${input.stats.freshCount} / stale ${input.stats.staleCount} / missing ${input.stats.missingCount}，近 24 小时失败率 ${input.stats.recentJobFailureRatePct.toFixed(1)}%。`;
+  }
+
+  return {
+    status,
+    freshCount: input.stats.freshCount,
+    staleCount: input.stats.staleCount,
+    missingCount: input.stats.missingCount,
+    recentJobFailureRatePct: input.stats.recentJobFailureRatePct,
+    message,
+  };
+}
+
 export async function buildWorkbenchBootstrapV1(opts: {
   syncPrices?: boolean;
+  autoRiskCycle?: boolean;
+  forceRefreshAllPrices?: boolean;
+  maxSyncTargets?: number;
 } = {}): Promise<WorkbenchBootstrapV1> {
   const shouldSyncPrices = opts.syncPrices !== false;
+  const shouldAutoRiskCycle = opts.autoRiskCycle === true;
 
   if (shouldSyncPrices) {
     try {
-      await syncWorkbenchPricesV1();
+      await syncWorkbenchPricesV1({
+        forceRefreshAll: opts.forceRefreshAllPrices === true,
+        maxTargets: opts.maxSyncTargets,
+      });
     } catch {
       // 行情同步失败不阻塞工作台加载
     }
   }
 
-  const [systemRow, rows, fxRates, allTickets, hfSignalMap, rebalanceCycles] = await Promise.all([
+  const [systemRow, rows, fxRates, allTickets, hfSignalMap, rebalanceCyclesRaw, marketCacheStats] = await Promise.all([
     getDaaSystemConfigV2(),
     listDaaAssetUniverseV1(),
     listDaaFxRatesV1(),
     listDaaTradeTicketsV1({ limit: 500 }),
     buildHfSignalMapV1(),
     listDaaRebalanceCyclesV1(100),
+    getDaaMarketCacheHealthStatsV1(),
   ]);
+  let rebalanceCycles = [...rebalanceCyclesRaw];
 
   const strategy = systemRow.config.strategy;
   const accountRaw = strategy.account || {};
@@ -789,6 +1106,27 @@ export async function buildWorkbenchBootstrapV1(opts: {
     ? Math.max(0, Math.min(cash, investableCashRaw))
     : Math.max(0, cash - frozenCash);
 
+  const marketCache = systemRow.config.dataSources.priceFeed.marketCache;
+  let priceContextByKey: Record<string, Awaited<ReturnType<typeof getMarketPricesWithCacheV1>>[string]> = {};
+  let marketCacheReadFailed = false;
+  try {
+    priceContextByKey = await getMarketPricesWithCacheV1({
+      assets: rows.map((row) => ({
+        symbol: row.symbol,
+        market: row.market,
+        currency: row.currency,
+      })),
+      allowRefresh: false,
+      freshSec: Math.max(60, marketCache.freshMinutes * 60),
+      serveStaleSec: Math.max(3600, marketCache.serveStaleHours * 3600),
+      rawRetentionDays: marketCache.rawRetentionDays,
+      source: "workbench_bootstrap_context",
+    });
+  } catch {
+    marketCacheReadFailed = true;
+    priceContextByKey = {};
+  }
+
   const targetWeights = buildTargetWeightsFromConfigV1({
     targetWeightsRaw: (strategy.targetWeights || {}) as Record<string, unknown>,
     assetRows: rows.map((row) => ({
@@ -799,27 +1137,44 @@ export async function buildWorkbenchBootstrapV1(opts: {
     })),
   });
 
-  const assetUniverseRaw = buildAssetUniverseViewRowsV1({
-    rows,
+  const rowsWithPriceContext = rows.map((row) => {
+    const key = `${String(row.market || "").toUpperCase()}::${String(row.symbol || "").toUpperCase()}`;
+    const priceContext = priceContextByKey[key];
+    return {
+      ...row,
+      lastPrice: priceContext && priceContext.price > 0 ? priceContext.price : row.lastPrice,
+      priceUpdatedAt: priceContext?.priceUpdatedAt || row.priceUpdatedAt,
+    };
+  });
+
+  const assetUniverseBase = buildAssetUniverseViewRowsV1({
+    rows: rowsWithPriceContext,
     fxRates,
     baseCurrency,
     cash,
     targetWeights,
   });
-  const assetUniverse = assetUniverseRaw.map((row) => ({
-    ...row,
-    hfSignal: hfSignalMap.get(row.symbol) || null,
-  }));
+  const assetUniverse = assetUniverseBase.map((row) => {
+    const key = `${String(row.market || "").toUpperCase()}::${String(row.symbol || "").toUpperCase()}`;
+    const priceContext = priceContextByKey[key];
+    const nextStatus = priceContext
+      ? (priceContext.price > 0
+        ? priceContext.priceStatus
+        : (row.priceStatus === "unsupported" ? row.priceStatus : priceContext.priceStatus))
+      : row.priceStatus;
+    return {
+      ...row,
+      priceStatus: nextStatus,
+      priceSource: priceContext?.priceSource || row.priceSource,
+      priceAgeSec: priceContext?.priceAgeSec ?? row.priceAgeSec,
+      hfSignal: hfSignalMap.get(row.symbol) || null,
+    };
+  });
 
-  const totalEquityRaw = toFinite(accountRaw.totalEquity, Number.NaN);
-  const totalEquity = Number.isFinite(totalEquityRaw) && totalEquityRaw > 0
-    ? totalEquityRaw
-    : computeTotalEquityV1({
-      rows,
-      fxRates,
-      baseCurrency,
-      cash,
-    });
+  const holdingsValue = assetUniverse
+    .filter((row) => row.holdingQty > 0)
+    .reduce((sum, row) => sum + Math.max(0, toFinite(row.valuationBase, 0)), 0);
+  const totalEquity = holdingsValue + cash;
 
   const logs = allTickets
     .filter((ticket) => ticket.status !== "ready")
@@ -827,6 +1182,13 @@ export async function buildWorkbenchBootstrapV1(opts: {
     .slice(0, 200);
 
   const warnings: string[] = [];
+  const marketDataHealth = buildWorkbenchMarketDataHealthV1({
+    cacheReadFailed: marketCacheReadFailed,
+    stats: marketCacheStats,
+  });
+  if (marketCacheReadFailed) {
+    warnings.push("市场缓存读取失败，工作台已回退到库内快照，当前价格可能偏旧。");
+  }
   const fxMissingCount = assetUniverse.filter((row) => row.fxMissing).length;
   if (fxMissingCount > 0) {
     warnings.push(`存在 ${fxMissingCount} 个资产缺少汇率，权重和估值已按可用数据计算。`);
@@ -835,13 +1197,119 @@ export async function buildWorkbenchBootstrapV1(opts: {
   const staleCount = assetUniverse.filter((row) => row.priceStatus === "stale").length;
   const missingCount = assetUniverse.filter((row) => row.priceStatus === "missing").length;
   if (staleCount > 0) {
-    warnings.push(`存在 ${staleCount} 个资产价格超过 ${Math.floor(PRICE_STALE_SEC / 3600)} 小时。`);
+    warnings.push(`存在 ${staleCount} 个资产行情抓取时间超过 ${Math.floor(PRICE_STALE_SEC / 3600)} 小时。`);
   }
   if (missingCount > 0) {
     warnings.push(`存在 ${missingCount} 个资产暂时无可用价格，相关标的暂不可执行市价单。`);
   }
+  if (marketDataHealth.status !== "ok" && !warnings.includes(marketDataHealth.message)) {
+    warnings.push(marketDataHealth.message);
+  }
+
+  let marketContext: DaaMarketContextV1 | null = null;
+  try {
+    marketContext = await getCurrentMarketContextV1({ allowStale: true });
+  } catch {
+    marketContext = null;
+  }
 
   const rebalanceStrategy = systemRow.config.rebalanceStrategy;
+  if (shouldAutoRiskCycle) {
+    const riskDraft = buildRiskCycleDraftV1({
+      bootstrap: {
+        baseCurrency,
+        account: {
+          cash,
+          investableCash,
+          frozenCash,
+          totalEquity,
+        },
+        assetUniverse,
+        execution: { logs: [] },
+        rebalance: {
+          mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",
+          autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
+          analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
+          timezone: rebalanceStrategy.timezone,
+          emailTo: rebalanceStrategy.notifyEmailTo,
+          analysisFocus: rebalanceStrategy.analysisFocus,
+        },
+        rebalanceStrategy,
+        overviewAlerts: [],
+        latestCycle: null,
+        marketContext,
+        warnings: [],
+        marketDataHealth,
+      },
+      perAssetStopLossPct: systemRow.config.strategy.risk.perAssetStopLossPct,
+      perAssetTakeProfitPct: systemRow.config.strategy.risk.perAssetTakeProfitPct,
+    });
+    if (riskDraft) {
+      const cooldownMs = Math.max(1, rebalanceStrategy.cooldownHours) * 60 * 60 * 1000;
+      const nowMs = Date.now();
+      const draftSymbols = new Set(riskDraft.proposals.map((row) => row.symbol.toUpperCase()));
+      const inCooldownConflict = rebalanceCycles.some((cycle) => {
+        if (cycle.triggerSource !== "risk") return false;
+        const createdMs = Date.parse(cycle.createdAt || cycle.snapshotAt);
+        if (!Number.isFinite(createdMs) || createdMs + cooldownMs <= nowMs) return false;
+        const cycleSymbols = new Set(cycle.proposals.map((row) => row.symbol.toUpperCase()));
+        for (const symbol of draftSymbols) {
+          if (cycleSymbols.has(symbol)) return true;
+        }
+        return false;
+      });
+
+      if (!inCooldownConflict) {
+        const riskCheck = buildPreTradeRiskCheckV1({
+          assetUniverse,
+          proposals: riskDraft.proposals,
+          totalEquity: Math.max(0, toFinite(totalEquity, 0)),
+          constraints: {
+            maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
+            maxOrderPctOfNav: systemRow.config.strategy.constraints.maxOrderPctOfNav,
+          },
+          risk: {
+            perAssetStopLossPct: systemRow.config.strategy.risk.perAssetStopLossPct,
+            maxConcentrationPct: systemRow.config.strategy.risk.maxConcentrationPct,
+          },
+        });
+        try {
+          const createdRiskCycle = await createDaaRebalanceCycleV1({
+            triggerSource: "risk",
+            triggerReason: riskDraft.triggerReason,
+            snapshotAt: new Date().toISOString(),
+            equitySnapshot: Math.max(0, toFinite(totalEquity, 0)),
+            driftSnapshot: riskDraft.driftSnapshot,
+            proposals: riskDraft.proposals,
+            riskCheck,
+            marketContext,
+          });
+          await appendTriggerEventSafeV1({
+            triggerSource: "risk",
+            triggerReason: riskDraft.triggerReason,
+            cycleId: createdRiskCycle.cycleId,
+            status: "accepted",
+            detailsJson: {
+              hitSymbols: riskDraft.riskHits.map((item) => item.symbol),
+            },
+          });
+          rebalanceCycles = [createdRiskCycle, ...rebalanceCycles.filter((row) => row.cycleId !== createdRiskCycle.cycleId)];
+        } catch {
+          // 风险触发写入失败不阻塞工作台加载
+        }
+      } else {
+        await appendTriggerEventSafeV1({
+          triggerSource: "risk",
+          triggerReason: riskDraft.triggerReason,
+          status: "skipped",
+          detailsJson: {
+            reason: "cooldown_conflict",
+            hitSymbols: riskDraft.riskHits.map((item) => item.symbol),
+          },
+        });
+      }
+    }
+  }
   const latestCycle = mapStoreCycleToViewV1(rebalanceCycles[0] || null);
 
   const overviewAlerts: WorkbenchBootstrapV1["overviewAlerts"] = [];
@@ -883,6 +1351,17 @@ export async function buildWorkbenchBootstrapV1(opts: {
     });
   }
 
+  for (const scope of marketContext?.scopes || []) {
+    if (scope.regime !== "risk_off") continue;
+    overviewAlerts.push({
+      id: `market-${scope.scope}`,
+      kind: "market",
+      level: "warn",
+      text: `${scope.label}进入 ${marketRegimeLabelZhV1(scope.regime)}，普通买入执行 ${Math.round(scope.buyScale * 100)}%，高波动买入执行 ${Math.round(scope.highRiskBuyScale * 100)}%`,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
   return {
     baseCurrency,
     account: {
@@ -915,7 +1394,9 @@ export async function buildWorkbenchBootstrapV1(opts: {
     },
     overviewAlerts,
     latestCycle,
+    marketContext,
     warnings,
+    marketDataHealth,
   };
 }
 
@@ -928,6 +1409,12 @@ export async function runWorkbenchRecommendationsV1(input: {
   const { request, assetRows } = await buildUnifiedRequestFromStoreV1();
   const hydrated = await hydrateUnifiedRequestWithSignalsV1(request);
   const plan = buildDaaUnifiedPlanV1(hydrated.request);
+  let marketContext: DaaMarketContextV1 | null = null;
+  try {
+    marketContext = await getCurrentMarketContextV1({ allowStale: true });
+  } catch {
+    marketContext = null;
+  }
 
   const llmAnalysis = await runLlmAnalysisV1({
     analysisContext: "decision",
@@ -943,6 +1430,7 @@ export async function runWorkbenchRecommendationsV1(input: {
       reasons: item.reasons,
     })),
     warnings: plan.warnings,
+    marketContext,
   });
 
   const decisionResult: UnifiedDecisionResultV2 = {
@@ -976,6 +1464,7 @@ export async function runWorkbenchRecommendationsV1(input: {
         ...(plan.summary as unknown as Record<string, unknown>),
         decisionId,
         decisionStatus,
+        fusionWeights: hydrated.opportunityPanel.diagnostics.weights,
       },
       triggerSource,
     });
@@ -1015,6 +1504,7 @@ export async function runWorkbenchRecommendationsV1(input: {
       warnings: [...plan.warnings],
       blockedReasons: buildBlockedReasonsV1(decisionResult),
     },
+    marketContext,
   };
 }
 
@@ -1091,6 +1581,172 @@ function buildCycleDraftFromBootstrapV1(input: {
   };
 }
 
+function buildTriggerEventIdempotencyKeyV1(input: {
+  triggerSource: RebalanceTriggerSourceV1;
+  triggerReason: string;
+  cycleId?: string | null;
+}): string {
+  const source = normalizeText(input.triggerSource).toLowerCase() || "manual";
+  const reason = normalizeText(input.triggerReason).toLowerCase().replace(/\s+/g, "_").slice(0, 80) || "na";
+  if (input.cycleId) return `cycle:${normalizeText(input.cycleId)}`;
+  const hourSlot = new Date().toISOString().slice(0, 13);
+  return `evt:${source}:${reason}:${hourSlot}`;
+}
+
+async function appendTriggerEventSafeV1(input: {
+  triggerSource: RebalanceTriggerSourceV1;
+  triggerReason: string;
+  cycleId?: string | null;
+  status: "accepted" | "skipped" | "conflict";
+  detailsJson?: Record<string, unknown>;
+}) {
+  try {
+    await appendDaaTriggerEventV1({
+      idempotencyKey: buildTriggerEventIdempotencyKeyV1({
+        triggerSource: input.triggerSource,
+        triggerReason: input.triggerReason,
+        cycleId: input.cycleId,
+      }),
+      triggerSource: input.triggerSource,
+      triggerReason: input.triggerReason,
+      cycleId: input.cycleId,
+      status: input.status,
+      detailsJson: input.detailsJson || {},
+    });
+  } catch {
+    // 触发日志失败不阻塞主流程
+  }
+}
+
+function calcHoldingCostPerUnitV1(row: Pick<WorkbenchBootstrapV1["assetUniverse"][number], "holdingQty" | "costBasis" | "holdingPrice">): number {
+  if (row.holdingQty > 0 && row.costBasis != null && row.costBasis > 0) {
+    return row.costBasis / row.holdingQty;
+  }
+  if (row.holdingPrice > 0) return row.holdingPrice;
+  return 0;
+}
+
+function buildRiskCycleDraftV1(input: {
+  bootstrap: WorkbenchBootstrapV1;
+  perAssetStopLossPct: number;
+  perAssetTakeProfitPct: number;
+}): {
+  triggerReason: string;
+  proposals: RebalanceProposalV1[];
+  driftSnapshot: RebalanceCycleV1["driftSnapshot"];
+  riskHits: Array<{ symbol: string; kind: "stop_loss" | "take_profit"; pnlPct: number }>;
+} | null {
+  const stopLossPct = Math.max(0, input.perAssetStopLossPct) * 100;
+  const takeProfitPct = Math.max(0, input.perAssetTakeProfitPct) * 100;
+  const proposals: RebalanceProposalV1[] = [];
+  const riskHits: Array<{ symbol: string; kind: "stop_loss" | "take_profit"; pnlPct: number }> = [];
+  const driftSnapshot: RebalanceCycleV1["driftSnapshot"] = [];
+
+  for (const row of input.bootstrap.assetUniverse) {
+    if (!(row.watchEnabled || row.holdingQty > 0)) continue;
+    driftSnapshot.push({
+      assetKey: row.assetKey,
+      symbol: row.symbol,
+      actualPct: (row.actualWeightPct || 0) / 100,
+      targetPct: (row.targetWeightPct || 0) / 100,
+      driftPct: ((row.actualWeightPct || 0) - (row.targetWeightPct || 0)) / 100,
+    });
+    if (!(row.holdingQty > 0) || !(row.valuationBase && row.valuationBase > 0)) continue;
+    const px = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
+    if (!(px > 0)) continue;
+    const costPerUnit = calcHoldingCostPerUnitV1(row);
+    if (!(costPerUnit > 0)) continue;
+    const pnlPct = ((px - costPerUnit) / costPerUnit) * 100;
+    const isStopLoss = stopLossPct > 0 && pnlPct <= -stopLossPct;
+    const isTakeProfit = takeProfitPct > 0 && pnlPct >= takeProfitPct;
+    if (!isStopLoss && !isTakeProfit) continue;
+
+    const sellRatio = isStopLoss ? 1 : 0.5;
+    const suggestedNotional = Math.max(0, (row.valuationBase || 0) * sellRatio);
+    if (!(suggestedNotional > 0)) continue;
+    const localNotional = row.fxRateToBase && row.fxRateToBase > 0 ? (suggestedNotional / row.fxRateToBase) : suggestedNotional;
+    const suggestedQty = Math.min(row.holdingQty, localNotional / px);
+    if (!(suggestedQty > 0)) continue;
+
+    proposals.push({
+      assetKey: row.assetKey,
+      symbol: row.symbol,
+      currency: row.currency,
+      fxRateToBase: row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : null,
+      side: "SELL",
+      suggestedQty,
+      suggestedNotional,
+      price: px,
+      reason: isStopLoss
+        ? `触发止损阈值：浮亏 ${Math.abs(pnlPct).toFixed(2)}%`
+        : `触发止盈阈值：浮盈 ${pnlPct.toFixed(2)}%`,
+      selected: true,
+      hfContribution: row.hfSignal ? `${row.hfSignal.icon} ${row.hfSignal.label}` : null,
+    });
+    riskHits.push({
+      symbol: row.symbol,
+      kind: isStopLoss ? "stop_loss" : "take_profit",
+      pnlPct,
+    });
+  }
+
+  if (!proposals.length || !riskHits.length) return null;
+  const top = riskHits[0];
+  const triggerReason = top.kind === "stop_loss"
+    ? `${top.symbol} 触发止损(${Math.abs(top.pnlPct).toFixed(2)}%)`
+    : `${top.symbol} 触发止盈(${top.pnlPct.toFixed(2)}%)`;
+  return {
+    triggerReason,
+    proposals,
+    driftSnapshot,
+    riskHits,
+  };
+}
+
+function calcPortfolioHhiPctV1(rows: WorkbenchBootstrapV1["assetUniverse"]): number {
+  const weights = rows
+    .filter((row) => row.holdingQty > 0 && (row.actualWeightPct || 0) > 0)
+    .map((row) => Math.max(0, row.actualWeightPct || 0));
+  if (!weights.length) return 0;
+  return weights.reduce((sum, weightPct) => sum + ((weightPct / 100) ** 2), 0) * 100;
+}
+
+function calcMaxWeightPctV1(rows: WorkbenchBootstrapV1["assetUniverse"]): number {
+  return rows.reduce((max, row) => Math.max(max, Math.max(0, toFinite(row.actualWeightPct, 0))), 0);
+}
+
+function calcMaxDriftPctV1(rows: WorkbenchBootstrapV1["assetUniverse"]): number {
+  return rows.reduce((max, row) => Math.max(max, Math.abs(toFinite(row.gapPct, 0))), 0);
+}
+
+function calcMaxDrawdownPctV1(rows: WorkbenchBootstrapV1["assetUniverse"]): number {
+  let worst = 0;
+  for (const row of rows) {
+    if (!(row.holdingQty > 0)) continue;
+    const px = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
+    const costPerUnit = calcHoldingCostPerUnitV1(row);
+    if (!(px > 0) || !(costPerUnit > 0)) continue;
+    const drawdown = ((costPerUnit - px) / costPerUnit) * 100;
+    worst = Math.max(worst, drawdown);
+  }
+  return Math.max(0, worst);
+}
+
+function toCycleReportSnapshotV1(bootstrap: WorkbenchBootstrapV1) {
+  const holdingsValue = bootstrap.assetUniverse
+    .filter((row) => row.holdingQty > 0)
+    .reduce((sum, row) => sum + Math.max(0, toFinite(row.valuationBase, 0)), 0);
+  return {
+    totalEquity: Math.max(0, toFinite(bootstrap.account.totalEquity, 0)),
+    holdingsValue,
+    cash: Math.max(0, toFinite(bootstrap.account.cash, 0)),
+    hhiPct: calcPortfolioHhiPctV1(bootstrap.assetUniverse),
+    maxWeightPct: calcMaxWeightPctV1(bootstrap.assetUniverse),
+    maxDriftPct: calcMaxDriftPctV1(bootstrap.assetUniverse),
+    maxDrawdownPct: calcMaxDrawdownPctV1(bootstrap.assetUniverse),
+  };
+}
+
 export async function runWorkbenchRiskCheckV1(input?: {
   cycleId?: string;
   selectedSymbols?: string[];
@@ -1109,9 +1765,60 @@ export async function runWorkbenchRiskCheckV1(input?: {
     })
     : buildCycleDraftFromBootstrapV1({ bootstrap }).proposals;
 
-  return buildPreTradeRiskCheckV1({
-    assetUniverse: bootstrap.assetUniverse,
+  return buildPreTradeRiskCheckFromBootstrapV1({
+    bootstrap,
+    systemConfig: systemRow.config,
     proposals,
+  });
+}
+
+export async function validateExecutionRiskV1(input: {
+  cycleId?: string;
+  selectedSymbols?: string[];
+  manualProposal?: {
+    assetKey: string;
+    symbol: string;
+    currency: string;
+    side: "BUY" | "SELL";
+    suggestedQty: number;
+    suggestedNotional: number;
+    price: number;
+    reason?: string;
+  };
+}): Promise<PreTradeRiskCheckV1> {
+  if (input.cycleId) {
+    return runWorkbenchRiskCheckV1({
+      cycleId: input.cycleId,
+      selectedSymbols: input.selectedSymbols,
+    });
+  }
+  const manualProposal = input.manualProposal;
+  if (!manualProposal) {
+    return runWorkbenchRiskCheckV1();
+  }
+
+  const [bootstrap, systemRow] = await Promise.all([
+    buildWorkbenchBootstrapV1({ syncPrices: false }),
+    getDaaSystemConfigV2(),
+  ]);
+
+  const proposal: RebalanceProposalV1 = {
+    assetKey: manualProposal.assetKey,
+    symbol: manualProposal.symbol,
+    currency: manualProposal.currency,
+    fxRateToBase: bootstrap.assetUniverse.find((row) => row.assetKey === manualProposal.assetKey)?.fxRateToBase ?? null,
+    side: manualProposal.side,
+    suggestedQty: Math.max(0, toFinite(manualProposal.suggestedQty, 0)),
+    suggestedNotional: Math.max(0, toFinite(manualProposal.suggestedNotional, 0)),
+    price: Math.max(0, toFinite(manualProposal.price, 0)),
+    reason: normalizeText(manualProposal.reason) || "manual_execution",
+    selected: true,
+    hfContribution: null,
+  };
+
+  return buildManualPreTradeRiskCheckV1({
+    assetUniverse: bootstrap.assetUniverse,
+    proposal,
     totalEquity: Math.max(0, toFinite(bootstrap.account.totalEquity, 0)),
     constraints: {
       maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
@@ -1122,6 +1829,69 @@ export async function runWorkbenchRiskCheckV1(input?: {
       maxConcentrationPct: systemRow.config.strategy.risk.maxConcentrationPct,
     },
   });
+}
+
+export async function buildWorkbenchExecuteSummaryV1(input: {
+  cycleId: string;
+  executeMode: "selected" | "all";
+}): Promise<ExecuteRebalanceSummaryV1> {
+  const cycle = await getDaaRebalanceCycleV1(input.cycleId);
+  if (!cycle) throw new Error(`cycle not found: ${input.cycleId}`);
+  assertCycleExecutableV1(cycle, "summary");
+  const [bootstrap, systemRow] = await Promise.all([
+    buildWorkbenchBootstrapV1({ syncPrices: false }),
+    getDaaSystemConfigV2(),
+  ]);
+  const rows = cycle.proposals.filter((row) => input.executeMode === "all" || row.selected);
+  const feeRateBps = getStrategyExecutionConfigV2(systemRow.config).feeRateBps;
+  const feeRate = feeRateBps / 10000;
+  const buyNotional = rows.filter((row) => row.side === "BUY").reduce((sum, row) => sum + row.suggestedNotional, 0);
+  const sellNotional = rows.filter((row) => row.side === "SELL").reduce((sum, row) => sum + row.suggestedNotional, 0);
+  const estimatedFees = rows.reduce((sum, row) => sum + (row.suggestedQty * row.price * feeRate), 0);
+  const netCashImpact = sellNotional - buyNotional - estimatedFees;
+
+  const totalEquity = Math.max(1e-9, toFinite(bootstrap.account.totalEquity, 0));
+  const valuationBySymbol = new Map<string, number>();
+  for (const row of bootstrap.assetUniverse) {
+    valuationBySymbol.set(row.symbol.toUpperCase(), Math.max(0, toFinite(row.valuationBase, 0)));
+  }
+  const touched = new Set(rows.map((row) => row.symbol.toUpperCase()));
+  const topWeightChanges = [...touched].map((symbol) => {
+    const currentValue = valuationBySymbol.get(symbol) || 0;
+    const delta = rows
+      .filter((row) => row.symbol.toUpperCase() === symbol)
+      .reduce((sum, row) => sum + (row.side === "BUY" ? row.suggestedNotional : -row.suggestedNotional), 0);
+    const projectedValue = Math.max(0, currentValue + delta);
+    const currentWeightPct = (currentValue / totalEquity) * 100;
+    const projectedWeightPct = (projectedValue / totalEquity) * 100;
+    return {
+      symbol,
+      currentWeightPct,
+      projectedWeightPct,
+      changePct: projectedWeightPct - currentWeightPct,
+    };
+  }).sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct)).slice(0, 5);
+
+  const riskCheck = await validateExecutionRiskV1({
+    cycleId: cycle.cycleId,
+    selectedSymbols: rows.map((row) => row.symbol),
+  });
+  const riskWarnings = riskCheck.items
+    .filter((item) => item.status !== "pass")
+    .map((item) => item.message);
+
+  return {
+    cycleId: cycle.cycleId,
+    executeMode: input.executeMode,
+    orderCount: rows.length,
+    buyNotional,
+    sellNotional,
+    estimatedFees,
+    netCashImpact,
+    topWeightChanges,
+    riskWarnings,
+    riskOverallStatus: riskCheck.overallStatus,
+  };
 }
 
 export async function generateWorkbenchRebalanceCycleV1(
@@ -1138,18 +1908,36 @@ export async function generateWorkbenchRebalanceCycleV1(
 
   const latestCycle = recentCycles[0] || null;
   const strategy = systemRow.config.rebalanceStrategy;
+  const marketContext = bootstrap.marketContext || null;
   const now = new Date();
+  let cooldownReferenceCycle: DaaStoreRebalanceCycleV1 | null = latestCycle;
   const skipWithLatest = (message: string, options: {
     skippedByCooldown?: boolean;
     cooldownUntil?: string | null;
     attachLatestCycle?: boolean;
-  } = {}): GenerateRebalanceCycleResultV1 => ({
-    cycle: options.attachLatestCycle ? mapStoreCycleToViewV1(latestCycle) : null,
-    created: false,
-    skippedByCooldown: options.skippedByCooldown === true,
-    cooldownUntil: options.cooldownUntil || null,
-    message,
-  });
+  } = {}): GenerateRebalanceCycleResultV1 => {
+    const attachedCycle = options.attachLatestCycle ? (cooldownReferenceCycle || latestCycle) : null;
+    void appendTriggerEventSafeV1({
+      triggerSource,
+      triggerReason: message,
+      cycleId: attachedCycle?.cycleId || null,
+      status: options.skippedByCooldown ? "conflict" : "skipped",
+      detailsJson: {
+        skippedByCooldown: options.skippedByCooldown === true,
+        cooldownUntil: options.cooldownUntil || null,
+      },
+    });
+    return {
+      cycle: attachedCycle ? mapStoreCycleToViewV1(attachedCycle) : null,
+      created: false,
+      skippedByCooldown: options.skippedByCooldown === true,
+      cooldownUntil: options.cooldownUntil || null,
+      message,
+      portfolioStatus: "skipped",
+      marketRegime: (attachedCycle ? mapStoreCycleToViewV1(attachedCycle)?.marketContext?.regime : null) || marketContext?.regime || null,
+      llmSummary: null,
+    };
+  };
 
   if (!manual && triggerSource === "calendar") {
     if (!strategy.calendar.enabled) {
@@ -1213,8 +2001,15 @@ export async function generateWorkbenchRebalanceCycleV1(
 
   const cooldownHours = Math.max(1, systemRow.config.rebalanceStrategy.cooldownHours);
   const cooldownMs = cooldownHours * 60 * 60 * 1000;
-  if (!manual && latestCycle) {
-    const lastMs = Date.parse(latestCycle.createdAt || latestCycle.snapshotAt);
+  const cooldownScopedTriggerSource = !manual && (triggerSource === "drift" || triggerSource === "calendar")
+    ? triggerSource
+    : null;
+  const latestAutoComparableCycle = cooldownScopedTriggerSource
+    ? (recentCycles.find((row) => row.triggerSource === cooldownScopedTriggerSource) || null)
+    : null;
+  cooldownReferenceCycle = latestAutoComparableCycle || latestCycle;
+  if (cooldownScopedTriggerSource && latestAutoComparableCycle) {
+    const lastMs = Date.parse(latestAutoComparableCycle.createdAt || latestAutoComparableCycle.snapshotAt);
     if (Number.isFinite(lastMs) && lastMs + cooldownMs > Date.now()) {
       return skipWithLatest(
         `冷静期生效中，${cooldownHours} 小时内不重复自动触发`,
@@ -1223,11 +2018,13 @@ export async function generateWorkbenchRebalanceCycleV1(
     }
   }
 
+  // ── Step A: 计算 drift draft（纯数学，保持不变）─────────────────────
   const draft = buildCycleDraftFromBootstrapV1({
     bootstrap,
     triggerReason: input.triggerReason,
   });
 
+  // ── drift 触发的阈值守卫（仅自动触发需要）────────────────────────
   if (!manual && triggerSource === "drift") {
     const thresholdPct = Math.max(0, strategy.drift.thresholdPct * 100);
     if (!(draft.maxAbsDriftPct > thresholdPct)) {
@@ -1237,9 +2034,199 @@ export async function generateWorkbenchRebalanceCycleV1(
     }
   }
 
-  const riskCheck = await runWorkbenchRiskCheckV1({
-    selectedSymbols: draft.proposals.map((row) => row.symbol),
+  // ── Step B: 现金三层分类 ─────────────────────────────────────────
+  // P1-2: strategy.cash 已在 RebalanceStrategyConfigV1 中定义，无需 as any
+  const cashConfig = strategy.cash ?? {};
+  const cashClassification = classifyCashV2({
+    totalCash: bootstrap.account.cash,
+    frozenCash: bootstrap.account.frozenCash,
+    totalEquity: bootstrap.account.totalEquity ?? 0,
+    assetUniverse: bootstrap.assetUniverse.map((row) => ({
+      holdingQty: row.holdingQty,
+      valuationBase: row.valuationBase,
+      targetWeightPct: row.targetWeightPct,
+      holdingTags: row.holdingTags ?? [],
+    })),
+    config: {
+      operationalReservePct: toFinite(cashConfig.operationalReservePct, 0),
+      idleThresholdPct: toFinite(cashConfig.idleThresholdPct, 0.1),
+      idleCooldownDays: toFinite(cashConfig.idleCooldownDays, 7),
+    },
+    lastDepositAt: cashConfig.lastDepositAt ?? null,
   });
+
+  // ── 手动触发 + 无 proposals → 组合健康，返回洞察快照 ─────────────
+  // 自动触发场景下（calendar/drift/cash_idle）不返回 healthy，因为空 proposals
+  // 意味着已被上面的阈值守卫拦截或通过其他逻辑处理。
+  if (draft.proposals.length === 0 && manual) {
+    const hasTargetAssets = bootstrap.assetUniverse.some((row) => row.watchEnabled && row.targetWeightPct > 0);
+    const hasMeaningfulDrift = draft.maxAbsDriftPct > 0.001;
+    const totalEquity = Math.max(0, bootstrap.account.totalEquity ?? 0);
+    const hasExecutableTargetPricing = bootstrap.assetUniverse.some((row) => (
+      row.watchEnabled
+      && row.targetWeightPct > 0
+      && !row.fxMissing
+      && (row.lastPrice > 0 || row.holdingPrice > 0)
+    ));
+
+    if (hasMeaningfulDrift && hasTargetAssets && totalEquity <= 0) {
+      return skipWithLatest("当前组合尚未建立可计算权益，请先入金或校准持仓后再生成建议。");
+    }
+
+    if (hasMeaningfulDrift && hasTargetAssets && !hasExecutableTargetPricing) {
+      return skipWithLatest("目标资产缺少可执行价格或汇率，请先刷新行情 / FX 后再生成建议。");
+    }
+
+    // 尝试获取信号洞察（非阻断，失败则返回空快照）
+    let healthyInsight: PortfolioHealthyInsightV1 = {
+      maxDriftPct: draft.maxAbsDriftPct,
+      topOpportunities: [],
+      llmSummary: null,
+      cashIdleWarning: cashClassification.cashIdleWarning,
+      cashIdlePct: cashClassification.investableIdlePct,
+      generatedAt: new Date().toISOString(),
+    };
+
+    try {
+      const { request: unifiedRequest } = await buildUnifiedRequestFromStoreV1();
+      const hydrated = await hydrateUnifiedRequestWithSignalsV1(unifiedRequest);
+      const analysisFocus = normalizeText(input.analysisFocus)
+        || strategy.analysisFocus
+        || DEFAULT_ANALYSIS_FOCUS_V1;
+
+      // 简化 LLM 调用：仅获取 summary，不做 per-asset 调整
+      const llmResult = await runLlmDecisionV2({
+        baseCurrency: bootstrap.baseCurrency,
+        totalEquity: bootstrap.account.totalEquity ?? 0,
+        cashClassification,
+        draftProposals: [],
+        fusedOpportunities: hydrated.opportunityPanel.opportunities,
+        warnings: bootstrap.warnings,
+        analysisFocus,
+        marketContext,
+      });
+
+      healthyInsight = {
+        maxDriftPct: draft.maxAbsDriftPct,
+        topOpportunities: hydrated.opportunityPanel.opportunities.slice(0, 5).map((opp) => ({
+          symbol: opp.symbol,
+          action: opp.action,
+          finalScorePct: opp.finalScorePct,
+          confidencePct: opp.confidencePct,
+        })),
+        llmSummary: llmResult.status === "ok" ? llmResult.summary : null,
+        cashIdleWarning: cashClassification.cashIdleWarning,
+        cashIdlePct: cashClassification.investableIdlePct,
+        generatedAt: new Date().toISOString(),
+      };
+    } catch {
+      // 洞察加载失败不影响主流程
+    }
+
+    void appendTriggerEventSafeV1({
+      triggerSource,
+      triggerReason: `组合已接近目标，最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}%，无需调仓`,
+      cycleId: null,
+      status: "skipped",
+      detailsJson: { reason: "portfolio_healthy", maxDriftPct: draft.maxAbsDriftPct },
+    });
+
+    return {
+      cycle: null,
+      created: false,
+      skippedByCooldown: false,
+      cooldownUntil: null,
+      message: `组合已处于目标配置，最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}%，无需调仓`,
+      portfolioStatus: "healthy",
+      healthyInsight,
+      marketRegime: marketContext?.regime || null,
+      llmSummary: healthyInsight.llmSummary,
+    };
+  }
+
+  // ── Step C: 信号富化（四路信号融合）────────────────────────────────
+  // 对 draft proposals 中涉及的资产，获取 fused opportunities
+  let fusedOpportunities: Awaited<ReturnType<typeof hydrateUnifiedRequestWithSignalsV1>>["opportunityPanel"]["opportunities"] = [];
+  try {
+    const { request: unifiedRequest } = await buildUnifiedRequestFromStoreV1();
+    const hydrated = await hydrateUnifiedRequestWithSignalsV1(unifiedRequest);
+    fusedOpportunities = hydrated.opportunityPanel.opportunities;
+  } catch {
+    // 信号加载失败不阻断再平衡，降级为纯 drift 模式
+    bootstrap.warnings.push("信号加载失败，当前再平衡建议仅基于漂移计算，未融合多路信号。");
+  }
+
+  // ── Step D: LLM 结构化决策分析 ──────────────────────────────────
+  const analysisFocus = normalizeText(input.analysisFocus)
+    || strategy.analysisFocus
+    || DEFAULT_ANALYSIS_FOCUS_V1;
+
+  const llmDecision = await runLlmDecisionV2({
+    baseCurrency: bootstrap.baseCurrency,
+    totalEquity: bootstrap.account.totalEquity ?? 0,
+    cashClassification,
+    draftProposals: draft.proposals.map((p) => ({
+      symbol: p.symbol,
+      side: p.side,
+      // P0-3: driftPct 需要带符号：BUY=负（低配），SELL=正（超配）
+      // suggestedNotional 始终为正值，需根据 side 还原方向
+      driftPct: (p.side === "SELL" ? 1 : -1) * p.suggestedNotional / Math.max(1, bootstrap.account.totalEquity ?? 1),
+      suggestedNotional: p.suggestedNotional,
+    })),
+    fusedOpportunities,
+    warnings: bootstrap.warnings,
+    analysisFocus,
+    marketContext,
+  });
+
+  // ── Step E: 三层决策融合（drift × signal × LLM）──────────────────
+  const assetMetaBySymbol = Object.fromEntries(
+    bootstrap.assetUniverse.map((row) => [row.symbol.toUpperCase(), {
+      market: row.market,
+      assetClass: row.assetClass,
+      marketGroup: row.marketGroup,
+      instrumentType: row.instrumentType,
+      region: row.region,
+      exchange: row.exchange,
+      holdingTags: row.holdingTags,
+      watchTags: row.watchTags,
+    }]),
+  );
+  const fusionResult = fuseDecisionV2({
+    draftProposals: draft.proposals,
+    fusedOpportunities,
+    llmDecision,
+    marketContext,
+    marketConfig: systemRow.config.dataSources.marketIndicators,
+    assetMetaBySymbol,
+  });
+
+  // 将融合警告追加到系统 warnings
+  const allWarnings = [...bootstrap.warnings, ...fusionResult.fusionWarnings];
+
+  // ── Step F: 风险检查（使用融合后的建议）──────────────────────────
+  const riskCheck = buildPreTradeRiskCheckFromBootstrapV1({
+    bootstrap,
+    systemConfig: systemRow.config,
+    proposals: fusionResult.proposals.filter((p) => p.selected),
+  });
+
+  // ── Step G: 创建 Cycle（proposals 已含 decisionContext）──────────
+  // 构建 notes：记录 LLM 状态和融合摘要，供审计追踪
+  const cycleNotes = [
+    `LLM状态: ${llmDecision.status}`,
+    marketContext ? `规则市场环境: ${marketRegimeLabelZhV1(marketContext.regime)} / 风险分 ${marketContext.riskOffScorePct.toFixed(1)}` : null,
+    llmDecision.status === "ok" ? `AI 市场环境: ${marketRegimeLabelZhV1(llmDecision.marketRegime)}` : null,
+    fusionResult.marketRegime ? `最终生效市场环境: ${marketRegimeLabelZhV1(fusionResult.marketRegime)}` : null,
+    marketContext ? `关键市场指标摘要: ${buildMarketFactsV1(marketContext).slice(0, 3).join(" | ")}` : null,
+    llmDecision.status === "ok" ? `AI总结: ${llmDecision.summary.slice(0, 80)}` : null,
+    fusionResult.fusionWarnings.length > 0
+      ? `融合警告: ${fusionResult.fusionWarnings.slice(0, 2).join(" | ")}`
+      : null,
+    cashClassification.cashIdleWarning
+      ? `现金提示: 闲置资金 ${(cashClassification.investableIdlePct * 100).toFixed(1)}%（已${cashClassification.cashIdleDays}天）`
+      : null,
+  ].filter(Boolean).join("\n");
 
   const created = await createDaaRebalanceCycleV1({
     triggerSource,
@@ -1247,8 +2234,26 @@ export async function generateWorkbenchRebalanceCycleV1(
     snapshotAt: new Date().toISOString(),
     equitySnapshot: Math.max(0, toFinite(bootstrap.account.totalEquity, 0)),
     driftSnapshot: draft.driftSnapshot,
-    proposals: draft.proposals,
+    proposals: fusionResult.proposals,
     riskCheck,
+    notes: cycleNotes || null,
+    marketContext,
+  });
+
+  await appendTriggerEventSafeV1({
+    triggerSource,
+    triggerReason: draft.triggerReason,
+    cycleId: created.cycleId,
+    status: "accepted",
+    detailsJson: {
+      proposalCount: fusionResult.proposals.length,
+      riskOverallStatus: riskCheck.overallStatus,
+      llmStatus: llmDecision.status,
+      ruleBasedMarketRegime: marketContext?.regime || null,
+      marketRegime: fusionResult.marketRegime,
+      fusionWarningCount: fusionResult.fusionWarnings.length,
+      cashIdleWarning: cashClassification.cashIdleWarning,
+    },
   });
 
   return {
@@ -1257,6 +2262,9 @@ export async function generateWorkbenchRebalanceCycleV1(
     skippedByCooldown: false,
     cooldownUntil: null,
     message: `已生成再平衡周期 ${created.cycleId}`,
+    portfolioStatus: "needs_rebalance",
+    marketRegime: fusionResult.marketRegime || marketContext?.regime || null,
+    llmSummary: llmDecision.status === "ok" ? llmDecision.summary : null,
   };
 }
 
@@ -1271,25 +2279,48 @@ export async function listWorkbenchTradeRecordsV1(limit = 120): Promise<Workbenc
   };
 }
 
+export async function listWorkbenchRebalanceReportsV1(limit = 50): Promise<WorkbenchRebalanceCycleReportV1[]> {
+  const reports = await listDaaCycleReportsV1(limit);
+  return reports.map((item) => mapStoreCycleReportToViewV1(item)).filter(Boolean) as WorkbenchRebalanceCycleReportV1[];
+}
+
+export async function getWorkbenchRebalanceCycleReportV1(cycleId: string): Promise<WorkbenchRebalanceCycleReportV1 | null> {
+  const report = await getDaaCycleReportV1(cycleId);
+  return mapStoreCycleReportToViewV1(report);
+}
+
 export async function updateWorkbenchRebalanceCycleV1(
   cycleId: string,
   input: UpdateRebalanceCycleInputV1,
 ): Promise<RebalanceCycleV1> {
   const current = await getDaaRebalanceCycleV1(cycleId);
   if (!current) throw new Error(`cycle not found: ${cycleId}`);
+  assertCycleMutableV1(current);
 
   let proposals = current.proposals;
+  let nextRiskCheck = current.riskCheck;
   if (Array.isArray(input.selectedSymbols)) {
     const selectedSet = new Set(input.selectedSymbols.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean));
     proposals = proposals.map((row) => ({
       ...row,
       selected: selectedSet.has(row.symbol.toUpperCase()),
     }));
+
+    const [bootstrap, systemRow] = await Promise.all([
+      buildWorkbenchBootstrapV1({ syncPrices: false }),
+      getDaaSystemConfigV2(),
+    ]);
+    nextRiskCheck = buildPreTradeRiskCheckFromBootstrapV1({
+      bootstrap,
+      systemConfig: systemRow.config,
+      proposals: proposals.filter((row) => row.selected),
+    });
   }
 
   const patchInput: Parameters<typeof patchDaaRebalanceCycleV1>[0] = {
     cycleId,
     proposals,
+    riskCheck: nextRiskCheck,
     notes: input.notes === undefined ? current.notes : input.notes,
   };
   if (input.status === "reviewing") {
@@ -1313,8 +2344,7 @@ export async function executeWorkbenchRebalanceCycleV1(input: {
 }): Promise<ExecuteRebalanceCycleResultV1> {
   const cycle = await getDaaRebalanceCycleV1(input.cycleId);
   if (!cycle) throw new Error(`cycle not found: ${input.cycleId}`);
-  if (cycle.status === "cancelled") throw new Error("cycle already cancelled");
-  if (cycle.status === "completed") throw new Error("cycle already completed");
+  assertCycleExecutableV1(cycle, "execute");
 
   const toExecute = cycle.proposals.filter((row) => input.executeMode === "all" || row.selected);
   if (!toExecute.length) {
@@ -1328,15 +2358,16 @@ export async function executeWorkbenchRebalanceCycleV1(input: {
     };
   }
 
-  const [preTradeRiskCheck, systemRow] = await Promise.all([
-    runWorkbenchRiskCheckV1({
+  const [preTradeRiskCheck, systemRow, beforeBootstrap] = await Promise.all([
+    validateExecutionRiskV1({
       cycleId: input.cycleId,
       selectedSymbols: toExecute.map((row) => row.symbol),
     }),
     getDaaSystemConfigV2(),
+    buildWorkbenchBootstrapV1({ syncPrices: false }),
   ]);
   const enforceOnExecution = systemRow.config.strategy.risk.enforceOnExecution !== false;
-  const feeRateBps = Math.max(0, toFinite(systemRow.config.strategy.constraints.tradeFeeRateBps, 0));
+  const feeRateBps = getStrategyExecutionConfigV2(systemRow.config).feeRateBps;
   const feeRate = feeRateBps / 10000;
   if (enforceOnExecution && preTradeRiskCheck.overallStatus === "block") {
     await patchDaaRebalanceCycleV1({
@@ -1345,7 +2376,13 @@ export async function executeWorkbenchRebalanceCycleV1(input: {
       riskCheck: preTradeRiskCheck,
     });
     const blockedItem = preTradeRiskCheck.items.find((item) => item.status === "block");
-    throw new Error(`RISK_BLOCKED:${blockedItem?.message || "执行前风控阻断"}`);
+    throw new Error(`RISK_BLOCKED:${JSON.stringify({
+      code: "RISK_BLOCKED",
+      rule: blockedItem?.rule || "unknown",
+      message: blockedItem?.message || "执行前风控阻断",
+      current: blockedItem?.current ?? null,
+      limit: blockedItem?.limit ?? null,
+    })}`);
   }
 
   await patchDaaRebalanceCycleV1({
@@ -1406,7 +2443,77 @@ export async function executeWorkbenchRebalanceCycleV1(input: {
     },
   });
 
-  const logs = await listDaaTradeTicketsV1({ limit: 300 });
+  const [logs, afterBootstrap] = await Promise.all([
+    listDaaTradeTicketsV1({ limit: 300 }),
+    buildWorkbenchBootstrapV1({ syncPrices: false }),
+  ]);
+
+  try {
+    const beforeSnapshot = toCycleReportSnapshotV1(beforeBootstrap);
+    const afterSnapshot = toCycleReportSnapshotV1(afterBootstrap);
+    const cycleLogs = logs.filter((row) => createdTicketIds.includes(row.ticketId));
+    const feeTotal = cycleLogs
+      .filter((row) => row.status === "executed")
+      .reduce((sum, row) => sum + Math.max(0, row.fee), 0);
+
+    const beforeBySymbol = new Map(beforeBootstrap.assetUniverse.map((row) => [row.symbol.toUpperCase(), row]));
+    const realizedBySymbol = new Map<string, number>();
+    for (const row of cycleLogs) {
+      if (row.status !== "executed" || row.side !== "SELL") continue;
+      const before = beforeBySymbol.get(row.symbol.toUpperCase());
+      if (!before) continue;
+      const costPerUnit = calcHoldingCostPerUnitV1(before);
+      const fx = before.fxRateToBase && before.fxRateToBase > 0 ? before.fxRateToBase : 1;
+      const pnl = (row.price - costPerUnit) * row.qty * fx;
+      realizedBySymbol.set(row.symbol, (realizedBySymbol.get(row.symbol) || 0) + pnl);
+    }
+    let unrealizedPnl = 0;
+    for (const row of afterBootstrap.assetUniverse) {
+      if (!(row.holdingQty > 0)) continue;
+      const px = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
+      const costPerUnit = calcHoldingCostPerUnitV1(row);
+      const fx = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : 1;
+      unrealizedPnl += (px - costPerUnit) * row.holdingQty * fx;
+    }
+    const topContributors = [...realizedBySymbol.entries()]
+      .map(([symbol, pnl]) => ({ symbol, pnl, side: "SELL" as const }))
+      .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
+      .slice(0, 5);
+    const realizedPnl = [...realizedBySymbol.values()].reduce((sum, value) => sum + value, 0);
+
+    await upsertDaaCycleReportV1({
+      cycleId: input.cycleId,
+      beforeSnapshot,
+      afterSnapshot,
+      executionStats: {
+        ordersExecuted: executedCount,
+        ordersFailed: failedCount,
+        totalNotional,
+        newMaxDriftPct,
+        feeTotal,
+      },
+      pnlAttribution: {
+        realizedPnl,
+        unrealizedPnl,
+        feeTotal,
+        fxImpact: 0,
+        topContributors,
+      },
+      riskDelta: {
+        maxDrawdownBefore: beforeSnapshot.maxDrawdownPct,
+        maxDrawdownAfter: afterSnapshot.maxDrawdownPct,
+        hhiBefore: beforeSnapshot.hhiPct,
+        hhiAfter: afterSnapshot.hhiPct,
+        maxWeightBefore: beforeSnapshot.maxWeightPct,
+        maxWeightAfter: afterSnapshot.maxWeightPct,
+        maxDriftBefore: beforeSnapshot.maxDriftPct,
+        maxDriftAfter: afterSnapshot.maxDriftPct,
+      },
+    });
+  } catch {
+    // 复盘报告生成失败不阻塞交易主流程
+  }
+
   return {
     cycle: mapStoreCycleToViewV1(completed)!,
     logs: logs.filter((row) => row.status !== "ready").slice(0, 200),

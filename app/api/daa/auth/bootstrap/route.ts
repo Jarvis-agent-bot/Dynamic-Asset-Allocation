@@ -1,8 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { NextResponse } from "next/server";
-
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
+import { failV1, mapDeniedResponseV1, okV1 } from "@/src/daa/api/routeHelpersV1";
 import {
   bootstrapCreateFirstDaaAuthAccountV0,
   createDaaAuthAccountV0,
@@ -33,11 +32,14 @@ function secureEqual(aRaw: unknown, bRaw: unknown): boolean {
 }
 
 function misconfigured(message: string) {
-  return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  return failV1("INTERNAL_ERROR", message, { status: 500 });
 }
 
 function unauthorized() {
-  return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401, headers: { "www-authenticate": "DaaBootstrap" } });
+  return failV1("UNAUTHORIZED", "unauthorized", {
+    status: 401,
+    headers: { "www-authenticate": "DaaBootstrap" },
+  });
 }
 
 export async function POST(req: Request) {
@@ -55,21 +57,25 @@ export async function POST(req: Request) {
   const anyAccounts = await hasAnyDaaAuthAccountsV0();
 
   if (anyAccounts) {
-    // Admin-only: require an existing cookie-backed session.
-    const denied = await requireDaaAdminEditorAuth(req);
-    if (denied) return denied;
+    const mapped = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+    if (mapped) return mapped;
 
     try {
       const account = await createDaaAuthAccountV0({ username, password, roles });
-      return NextResponse.json({ ok: true, account: { accountId: account.accountId, username: account.username, roles: account.roles } });
-    } catch (e: any) {
-      const msg = String(e?.message ?? e ?? "error");
+      return okV1({
+        account: {
+          accountId: account.accountId,
+          username: account.username,
+          roles: account.roles,
+        },
+      });
+    } catch (error: any) {
+      const msg = String(error?.message ?? error ?? "error");
       const status = /unique/i.test(msg) ? 409 : 400;
-      return NextResponse.json({ ok: false, error: msg }, { status });
+      return failV1("VALIDATION_FAILED", msg, { status });
     }
   }
 
-  // First-admin bootstrap (one-time): allowed only when there are no accounts yet.
   const expected = normalizeToken(process.env.DAA_AUTH_BOOTSTRAP_TOKEN);
   if (!expected) {
     return process.env.NODE_ENV === "production"
@@ -77,7 +83,6 @@ export async function POST(req: Request) {
       : misconfigured("missing DAA_AUTH_BOOTSTRAP_TOKEN (required for first-admin bootstrap)");
   }
 
-  // Allow passing the bootstrap token either via header (preferred), or JSON body.
   const provided =
     normalizeToken(req.headers.get("x-daa-bootstrap-token")) ||
     normalizeToken(body?.bootstrapToken) ||
@@ -89,15 +94,22 @@ export async function POST(req: Request) {
 
   try {
     const account = await bootstrapCreateFirstDaaAuthAccountV0({ username, password, roles });
-    return NextResponse.json({ ok: true, account: { accountId: account.accountId, username: account.username, roles: account.roles }, bootstrapped: true });
-  } catch (e: any) {
-    const msg = String(e?.message ?? e ?? "error");
+    return okV1({
+      account: {
+        accountId: account.accountId,
+        username: account.username,
+        roles: account.roles,
+      },
+      bootstrapped: true,
+    });
+  } catch (error: any) {
+    const msg = String(error?.message ?? error ?? "error");
 
     if (/accounts already exist/i.test(msg) || /bootstrap not allowed/i.test(msg)) {
-      return NextResponse.json({ ok: false, error: "bootstrap not allowed" }, { status: 409 });
+      return failV1("VALIDATION_FAILED", "bootstrap not allowed", { status: 409 });
     }
 
     const status = /unique/i.test(msg) ? 409 : 400;
-    return NextResponse.json({ ok: false, error: msg }, { status });
+    return failV1("VALIDATION_FAILED", msg, { status });
   }
 }

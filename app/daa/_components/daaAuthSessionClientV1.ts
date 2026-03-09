@@ -1,21 +1,22 @@
 "use client";
 
-export type DaaAuthMeResponseV1 =
-  | {
-      ok: true;
-      account: { accountId: string; username: string; roles: string[]; status: string };
-      session: {
-        sessionId: string;
-        createdAt: string;
-        expiresAt: string;
-        revokedAt: string | null;
-        lastSeenAt: string | null;
-      };
-    }
-  | { ok: false; error: string };
+import { isApiResponseV1, type ApiResponseV1 } from "@/src/daa/api/contractsV1";
+
+export type DaaAuthMePayloadV1 = {
+  account: { accountId: string; username: string; roles: string[]; status: string };
+  session: {
+    sessionId: string;
+    createdAt: string;
+    expiresAt: string;
+    revokedAt: string | null;
+    lastSeenAt: string | null;
+  };
+};
+
+export type DaaAuthMeResponseV1 = ApiResponseV1<DaaAuthMePayloadV1>;
 
 export type DaaAuthSessionResultV1 =
-  | { kind: "signedIn"; me: Extract<DaaAuthMeResponseV1, { ok: true }> }
+  | { kind: "signedIn"; me: DaaAuthMePayloadV1 }
   | { kind: "signedOut" }
   | { kind: "error"; message: string };
 
@@ -45,6 +46,12 @@ function getRuntimeV1(): RuntimeStateV1 {
 }
 
 function toErrorMessageV1(value: unknown, fallback: string): string {
+  if (value && typeof value === "object") {
+    const message = typeof (value as { message?: unknown }).message === "string"
+      ? (value as { message: string }).message.trim()
+      : "";
+    if (message) return message;
+  }
   const text = typeof value === "string" ? value.trim() : "";
   return text || fallback;
 }
@@ -57,12 +64,27 @@ async function requestAuthSessionV1(silent: boolean): Promise<DaaAuthSessionResu
       headers: { accept: "application/json" },
       cache: "no-store",
     });
-    const json = await res.json().catch(() => null);
+    const raw = await res.json().catch(() => null);
 
     if (res.status === 401) return { kind: "signedOut" };
-    if (!res.ok) return { kind: "error", message: toErrorMessageV1(json?.error, `HTTP ${res.status}`) };
-    if (json?.ok) return { kind: "signedIn", me: json as Extract<DaaAuthMeResponseV1, { ok: true }> };
-    return { kind: "signedOut" };
+    if (!isApiResponseV1(raw)) {
+      return { kind: "error", message: `HTTP ${res.status}` };
+    }
+
+    const json = raw as DaaAuthMeResponseV1;
+    if (!json.ok && json.error.message === "not_authenticated") {
+      return { kind: "signedOut" };
+    }
+    if (!res.ok) {
+      if (!json.ok) {
+        return { kind: "error", message: toErrorMessageV1(json.error, `HTTP ${res.status}`) };
+      }
+      return { kind: "error", message: `HTTP ${res.status}` };
+    }
+    if (json.ok) {
+      return { kind: "signedIn", me: json.data };
+    }
+    return { kind: "error", message: toErrorMessageV1(json.error, "auth session unavailable") };
   } catch (error) {
     return { kind: "error", message: error instanceof Error ? error.message : String(error) };
   }

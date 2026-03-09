@@ -78,13 +78,8 @@ export function daaPgPoolV0(): Pool {
   if (st.pool) return st.pool;
 
   assertPgMemAllowedV0();
-  const url = getDaaPgUrlV0();
-  if (url) {
-    const pool = new Pool({ connectionString: url });
-    st.pool = pool;
-    return pool;
-  }
 
+  // DAA_PG_MEM=1 显式声明时优先使用 pg-mem，即使 DAA_DB_URL 也已配置（预览/测试场景）。
   if (isDaaPgMemEnabledV0()) {
     // Unit-test helper: create an in-memory Postgres-compatible pool via pg-mem.
     // Use createRequire() so this works in ESM (vitest) and CJS (Next server).
@@ -97,6 +92,13 @@ export function daaPgPoolV0(): Pool {
     });
     const adapter = db.adapters.createPg();
     const pool = new adapter.Pool();
+    st.pool = pool;
+    return pool;
+  }
+
+  const url = getDaaPgUrlV0();
+  if (url) {
+    const pool = new Pool({ connectionString: url });
     st.pool = pool;
     return pool;
   }

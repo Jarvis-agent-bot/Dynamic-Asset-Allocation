@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
+import { preferAssetRowPriceV1 } from "@/src/daa/modules/workbench/preferAssetRowPriceV1";
 import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { patchDaaAssetUniverseRowV1 } from "@/src/daa/store/daaStorePgV1";
 import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
@@ -59,6 +60,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!row) {
       return failV1("NOT_FOUND", `asset not found after patch: ${saved.assetKey}`, { status: 404 });
     }
-    return okV1({ row });
+
+    let resolvedRow = row;
+    try {
+      resolvedRow = await preferAssetRowPriceV1(row, "asset_patch");
+    } catch {
+      resolvedRow = row;
+    }
+    return okV1({ row: resolvedRow });
   });
 }

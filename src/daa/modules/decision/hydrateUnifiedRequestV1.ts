@@ -118,13 +118,15 @@ function mergeCandidateAssets(
 function normalizePosition(position: Partial<DaaUnifiedPositionV1>): DaaUnifiedPositionV1 | null {
   const symbol = normalizeSymbol(position.symbol);
   if (!symbol) return null;
+  const costBasisPerUnit = Math.max(0, Number(position.costBasisPerUnit ?? position.costBasis) || 0);
   return {
     symbol,
     market: normalizeMarket(position.market, "US"),
     currency: normalizeCurrency(position.currency, "USD"),
     qty: Math.max(0, Number(position.qty) || 0),
     price: Math.max(0, Number(position.price) || 0),
-    costBasis: Math.max(0, Number(position.costBasis) || 0),
+    costBasis: costBasisPerUnit,
+    costBasisPerUnit,
     tags: Array.isArray(position.tags) ? position.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
   };
 }

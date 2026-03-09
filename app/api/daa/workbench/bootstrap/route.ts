@@ -9,7 +9,10 @@ export async function GET(req: Request) {
     const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const data = await buildWorkbenchBootstrapV1();
+    const data = await buildWorkbenchBootstrapV1({
+      syncPrices: false,
+      autoRiskCycle: false,
+    });
     return okV1(data);
   });
 }

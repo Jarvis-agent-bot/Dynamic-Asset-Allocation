@@ -1,0 +1,2197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAA System — UI Redesign Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ====================================================
+   DESIGN TOKENS — Deep Ledger System
+   ==================================================== */
+:root {
+  --bg-base:       #080C14;
+  --bg-surface:    #0D1320;
+  --bg-elevated:   #131C2E;
+  --bg-card:       #182236;
+  --bg-hover:      #1D2B42;
+
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-muted:  rgba(255,255,255,0.10);
+  --border-active: rgba(255,255,255,0.20);
+
+  --text-primary:  #EDF2F7;
+  --text-secondary:#94A3B8;
+  --text-muted:    #566477;
+  --text-accent:   #F6AD55;
+
+  --cyan:          #38BDF8;
+  --cyan-dim:      rgba(56,189,248,0.12);
+  --amber:         #F6AD55;
+  --amber-dim:     rgba(246,173,85,0.12);
+  --green:         #34D399;
+  --green-dim:     rgba(52,211,153,0.10);
+  --red:           #F87171;
+  --red-dim:       rgba(248,113,113,0.10);
+  --indigo:        #818CF8;
+
+  --font-display:  'DM Serif Display', 'Noto Serif SC', serif;
+  --font-body:     'Sora', sans-serif;
+  --font-mono:     'JetBrains Mono', monospace;
+
+  --radius-sm:     4px;
+  --radius-md:     8px;
+  --radius-lg:     12px;
+  --radius-xl:     16px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* DOT GRID BACKGROUND */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(56,189,248,0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ====================================================
+   NAVIGATION
+   ==================================================== */
+.page-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(8,12,20,0.9);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 24px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-nav-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.nav-pill {
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.nav-pill:hover, .nav-pill.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
+/* ====================================================
+   SECTION WRAPPERS
+   ==================================================== */
+.screen {
+  min-height: 100vh;
+  padding-top: 48px;
+}
+
+.section-label {
+  padding: 32px 40px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+}
+
+/* ====================================================
+   LOGIN SCREEN
+   ==================================================== */
+#screen-login {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+}
+
+.login-left {
+  width: 55%;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 64px;
+}
+
+.login-left::before {
+  content: '';
+  position: absolute;
+  top: -200px; left: -200px;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(56,189,248,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.login-left::after {
+  content: '';
+  position: absolute;
+  bottom: -100px; right: -100px;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(246,173,85,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.brand-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--cyan), var(--indigo));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.brand-name span {
+  color: var(--cyan);
+}
+
+.login-hero {
+  position: relative;
+  z-index: 1;
+}
+
+.login-hero-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--amber);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.login-hero-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 24px; height: 1px;
+  background: var(--amber);
+}
+
+.login-hero h1 {
+  font-family: var(--font-display);
+  font-size: 52px;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.login-hero h1 em {
+  font-style: italic;
+  color: var(--cyan);
+}
+
+.login-hero p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 380px;
+}
+
+.stat-row {
+  display: flex;
+  gap: 40px;
+  position: relative;
+  z-index: 1;
+  padding-top: 32px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stat-item {}
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* RIGHT: Login Form */
+.login-right {
+  width: 45%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 72px;
+  background: var(--bg-base);
+  position: relative;
+}
+
+.login-right::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(56,189,248,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.login-form-wrap {
+  width: 100%;
+  max-width: 360px;
+  position: relative;
+  z-index: 1;
+}
+
+.form-header {
+  margin-bottom: 40px;
+}
+
+.form-header h2 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+
+.form-header p {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.form-input {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
+  padding: 11px 14px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.form-input:focus {
+  border-color: var(--cyan);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.10);
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-input-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+.btn-primary {
+  width: 100%;
+  background: var(--cyan);
+  color: #080C14;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 12px 24px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+  letter-spacing: 0.02em;
+}
+.btn-primary:hover {
+  background: #7DD3FC;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(56,189,248,0.30);
+}
+
+.form-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.form-divider::before, .form-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.login-footer {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ====================================================
+   DASHBOARD SHELL
+   ==================================================== */
+.shell {
+  display: flex;
+  min-height: 100vh;
+  padding-top: 0;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: 220px;
+  min-height: 100vh;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-brand {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-brand-icon {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--cyan), var(--indigo));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-text {
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-section {
+  padding: 16px 12px 8px;
+}
+
+.sidebar-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  padding: 0 8px;
+  margin-bottom: 6px;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.sidebar-item:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.sidebar-item.active {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+}
+
+.sidebar-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 2px; height: 60%;
+  background: var(--cyan);
+  border-radius: 0 2px 2px 0;
+}
+
+.sidebar-icon {
+  width: 16px; height: 16px;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.sidebar-spacer {
+  flex: 1;
+}
+
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.user-card:hover { background: var(--bg-elevated); }
+
+.user-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--amber), #E07B39);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.user-info {}
+.user-name { font-size: 12px; font-weight: 500; line-height: 1.2; }
+.user-role { font-size: 10px; color: var(--text-muted); }
+
+/* MAIN CONTENT */
+.main-content {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-base);
+}
+
+/* TOPBAR */
+.topbar {
+  height: 52px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.topbar-breadcrumb {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.topbar-breadcrumb span { color: var(--text-primary); font-weight: 500; }
+
+.topbar-spacer { flex: 1; }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  width: 32px; height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.icon-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-muted);
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.status-badge.online {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid rgba(52,211,153,0.2);
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* PAGE CONTENT */
+.page-content {
+  padding: 24px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ====================================================
+   METRIC CARDS (KPI ROW)
+   ==================================================== */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+.metric-card:hover {
+  border-color: var(--border-muted);
+  transform: translateY(-1px);
+}
+
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--card-accent, var(--border-subtle));
+}
+
+.metric-card.accent-cyan  { --card-accent: var(--cyan); }
+.metric-card.accent-amber { --card-accent: var(--amber); }
+.metric-card.accent-green { --card-accent: var(--green); }
+.metric-card.accent-indigo { --card-accent: var(--indigo); }
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.metric-change {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.metric-change.pos { color: var(--green); }
+.metric-change.neg { color: var(--red); }
+
+.metric-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ====================================================
+   CHARTS & CARDS
+   ==================================================== */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.content-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+}
+
+.panel-action {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s;
+  background: none;
+  border: none;
+  font-family: var(--font-body);
+}
+.panel-action:hover { color: var(--cyan); }
+
+.panel-body {
+  padding: 20px;
+}
+
+/* CHART AREA */
+.chart-area {
+  height: 220px;
+  position: relative;
+  overflow: hidden;
+}
+
+.chart-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+/* SVG Chart */
+.chart-svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ALLOCATION DONUT PLACEHOLDER */
+.donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 20px;
+}
+
+.donut-svg {
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+}
+
+.donut-legend {
+  flex: 1;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  gap: 8px;
+}
+.legend-item:last-child { border-bottom: none; }
+
+.legend-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.legend-pct {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* DATA TABLE */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding: 10px 20px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 11px 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.data-table tr:last-child td { border-bottom: none; }
+
+.data-table tr:hover td {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.data-table .mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.data-table .pos { color: var(--green); }
+.data-table .neg { color: var(--red); }
+.data-table .neutral { color: var(--text-primary); }
+
+.asset-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.asset-icon {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.asset-name { font-weight: 500; color: var(--text-primary); font-size: 13px; }
+.asset-ticker { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+
+/* PROGRESS BAR */
+.progress-bar {
+  height: 3px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--cyan), var(--indigo));
+}
+
+/* TAG / BADGE */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tag.bullish { background: var(--green-dim); color: var(--green); }
+.tag.bearish { background: var(--red-dim); color: var(--red); }
+.tag.neutral { background: var(--amber-dim); color: var(--amber); }
+.tag.done   { background: var(--cyan-dim); color: var(--cyan); }
+
+/* ====================================================
+   WORKBENCH TABS
+   ==================================================== */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.tab-item {
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.tab-item:hover { color: var(--text-secondary); }
+.tab-item.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+}
+
+/* ====================================================
+   WORKBENCH CONTENT
+   ==================================================== */
+.workbench-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 0;
+  min-height: calc(100vh - 52px - 52px);
+}
+
+.workbench-main {
+  border-right: 1px solid var(--border-subtle);
+}
+
+.workbench-sidebar {
+  background: var(--bg-surface);
+}
+
+.ws-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ws-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.signal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.signal-item:last-child { border-bottom: none; }
+.signal-name { color: var(--text-secondary); }
+.signal-bar-wrap { flex: 1; margin: 0 12px; }
+.signal-bar-bg { height: 3px; background: var(--border-subtle); border-radius: 2px; }
+.signal-bar-fill { height: 3px; border-radius: 2px; }
+
+.risk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.risk-row:last-child { border-bottom: none; }
+.risk-label { color: var(--text-muted); }
+.risk-value { font-family: var(--font-mono); color: var(--text-primary); font-size: 11px; }
+
+/* ====================================================
+   SETTINGS PAGE
+   ==================================================== */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 0;
+  min-height: calc(100vh - 52px);
+}
+
+.settings-nav {
+  border-right: 1px solid var(--border-subtle);
+  padding: 20px 0;
+  background: var(--bg-surface);
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.settings-nav-item:hover { color: var(--text-primary); background: var(--bg-elevated); }
+.settings-nav-item.active { color: var(--cyan); background: var(--cyan-dim); }
+
+.settings-content {
+  padding: 28px;
+}
+
+.settings-section {
+  margin-bottom: 32px;
+}
+
+.settings-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 20px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.setting-row:last-child { border-bottom: none; }
+
+.setting-info {}
+.setting-name { font-size: 13px; color: var(--text-primary); margin-bottom: 3px; font-weight: 500; }
+.setting-desc { font-size: 12px; color: var(--text-muted); }
+
+.setting-control {}
+
+.input-sm {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  width: 120px;
+  text-align: right;
+  outline: none;
+}
+.input-sm:focus { border-color: var(--cyan); }
+
+.toggle {
+  width: 36px; height: 20px;
+  border-radius: 10px;
+  background: var(--cyan);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: white;
+  top: 3px; right: 3px;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.toggle.off { background: var(--border-muted); }
+.toggle.off::after { right: auto; left: 3px; }
+
+/* TRADES PAGE */
+.cycle-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.cycle-item:hover { background: var(--bg-elevated); }
+
+.cycle-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cycle-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--cyan);
+  flex-shrink: 0;
+}
+
+.cycle-line {
+  width: 1px;
+  height: 24px;
+  background: var(--border-muted);
+}
+
+.cycle-info { flex: 1; }
+.cycle-title { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+.cycle-meta { font-size: 11px; color: var(--text-muted); }
+
+.cycle-stats {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* REBALANCE CARD */
+.rebalance-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin: 16px;
+}
+
+.rebalance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.rebalance-title { font-size: 14px; font-weight: 600; }
+
+.rebalance-steps {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.step-pill {
+  flex: 1;
+  text-align: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+}
+.step-pill.done { background: var(--cyan-dim); color: var(--cyan); border-color: rgba(56,189,248,0.2); }
+.step-pill.current { background: var(--amber-dim); color: var(--amber); border-color: rgba(246,173,85,0.2); }
+.step-pill.pending { color: var(--text-muted); }
+
+/* ====================================================
+   SVG MOCKUP CHARTS
+   ==================================================== */
+.equity-line {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+}
+.equity-area {
+  fill: url(#areaGrad);
+}
+.equity-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--text-muted);
+}
+
+/* ====================================================
+   UTILITY
+   ==================================================== */
+.flex { display: flex; }
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.items-center { align-items: center; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.flex-1 { flex: 1; }
+.text-right { text-align: right; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mb-4 { margin-bottom: 16px; }
+.ml-auto { margin-left: auto; }
+.hidden { display: none; }
+
+.btn-sm {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-muted);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  transition: all 0.15s;
+}
+.btn-sm:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.btn-sm.cyan {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 16px 0;
+}
+
+.text-mono { font-family: var(--font-mono); }
+.text-xs { font-size: 11px; }
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+.text-cyan { color: var(--cyan); }
+.text-amber { color: var(--amber); }
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }
+.font-500 { font-weight: 500; }
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-muted); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ================================================
+     TOP NAVIGATION (for preview only)
+     ================================================ -->
+<nav class="page-nav">
+  <span class="page-nav-label">UI Preview</span>
+  <a class="nav-pill active" href="#screen-login" onclick="show('login')">登录页</a>
+  <a class="nav-pill" href="#screen-dashboard" onclick="show('dashboard')">总览</a>
+  <a class="nav-pill" href="#screen-workbench" onclick="show('workbench')">工作台</a>
+  <a class="nav-pill" href="#screen-trades" onclick="show('trades')">交易记录</a>
+  <a class="nav-pill" href="#screen-settings" onclick="show('settings')">设置</a>
+</nav>
+
+<!-- ================================================
+     SCREEN 1 — LOGIN
+     ================================================ -->
+<div id="screen-login" class="screen">
+  <div id="screen-login-inner" style="display:flex; min-height:100vh;">
+    <div class="login-left dot-grid">
+      <!-- Brand -->
+      <div class="brand-mark">
+        <div class="brand-icon">D</div>
+        <div class="brand-name">Deep<span>Ledger</span></div>
+      </div>
+
+      <!-- Hero -->
+      <div class="login-hero">
+        <div class="login-hero-eyebrow">动态资产配置系统</div>
+        <h1>智能<em>配置，</em><br>精准<em>决策。</em></h1>
+        <p>基于多信号融合与量化模型，实现资产组合的动态再平衡与风险管理。</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="stat-value">¥2.34M</div>
+          <div class="stat-label">资产规模</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">+18.6%</div>
+          <div class="stat-label">年化收益</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">0.92</div>
+          <div class="stat-label">夏普比率</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="login-right">
+      <div class="login-form-wrap">
+        <div class="form-header">
+          <h2>欢迎回来</h2>
+          <p>登录以访问您的投资组合管理中心</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">用户名</label>
+          <input class="form-input" type="text" placeholder="请输入用户名" value="admin">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">访问密码</label>
+          <input class="form-input form-input-mono" type="password" placeholder="••••••••" value="admin123">
+        </div>
+
+        <button class="btn-primary">登录系统 →</button>
+
+        <div class="form-divider">系统信息</div>
+
+        <div style="background:var(--bg-elevated);border-radius:var(--radius-md);padding:14px 16px;border:1px solid var(--border-subtle);">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;">系统状态</div>
+          <div class="risk-row">
+            <span class="risk-label">数据引擎</span>
+            <span class="risk-value text-green">● 运行中</span>
+          </div>
+          <div class="risk-row">
+            <span class="risk-label">行情接入</span>
+            <span class="risk-value text-green">● 实时</span>
+          </div>
+          <div class="risk-row" style="border:none;">
+            <span class="risk-label">上次同步</span>
+            <span class="risk-value">09:31:05</span>
+          </div>
+        </div>
+
+        <div class="login-footer">
+          <span>DAA System v2.0</span>
+          <span>© 2025</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
+     SCREEN 2 — DASHBOARD OVERVIEW
+     ================================================ -->
+<div id="screen-dashboard" class="screen" style="display:none;">
+  <div class="shell">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">D</div>
+        <div class="sidebar-brand-text">DeepLedger</div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">主菜单</div>
+        <div class="sidebar-item active">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M1 9L8 2l7 7"/>
+            <rect x="3" y="9" width="4" height="6"/>
+            <rect x="9" y="7" width="4" height="8"/>
+          </svg>
+          总览
+        </div>
+        <div class="sidebar-item">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="1" y="3" width="14" height="10" rx="1"/>
+            <path d="M4 8h2m2-2h2m2 4h-2"/>
+          </svg>
+          工作台
+        </div>
+        <div class="sidebar-item">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M1 4h14M1 8h14M1 12h8"/>
+          </svg>
+          交易记录
+        </div>
+        <div class="sidebar-item">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="6"/>
+            <path d="M8 5v3l2 2"/>
+          </svg>
+          设置
+        </div>
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="user-avatar">A</div>
+          <div class="user-info">
+            <div class="user-name">admin</div>
+            <div class="user-role">系统管理员</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-breadcrumb">
+          DeepLedger <span style="color:var(--text-muted);margin:0 4px">/</span> <span>总览</span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-actions">
+          <div class="status-badge online">
+            <div class="status-dot"></div>
+            数据实时
+          </div>
+          <button class="icon-btn" title="刷新">↺</button>
+          <button class="icon-btn" title="主题">◑</button>
+        </div>
+      </div>
+
+      <div class="page-content">
+        <div class="page-header">
+          <div class="page-title">投资组合总览</div>
+          <div class="page-subtitle">2026年3月7日 · 09:31 更新</div>
+        </div>
+
+        <!-- KPI ROW -->
+        <div class="metrics-grid">
+          <div class="metric-card accent-cyan">
+            <div class="metric-label">总资产净值</div>
+            <div class="metric-value">¥2,341,560</div>
+            <div class="metric-change pos">▲ +1.24% 今日</div>
+            <div class="metric-sub">较昨日 +28,700</div>
+          </div>
+          <div class="metric-card accent-green">
+            <div class="metric-label">累计收益</div>
+            <div class="metric-value">+¥341,560</div>
+            <div class="metric-change pos">▲ 年化 18.6%</div>
+            <div class="metric-sub">运行 487 天</div>
+          </div>
+          <div class="metric-card accent-amber">
+            <div class="metric-label">可用现金</div>
+            <div class="metric-value">¥128,400</div>
+            <div class="metric-change neutral">── 5.49% 仓位</div>
+            <div class="metric-sub">安全边际充足</div>
+          </div>
+          <div class="metric-card accent-indigo">
+            <div class="metric-label">夏普比率</div>
+            <div class="metric-value">0.924</div>
+            <div class="metric-change pos">▲ 优于基准</div>
+            <div class="metric-sub">最大回撤 -8.3%</div>
+          </div>
+        </div>
+
+        <!-- CHARTS ROW -->
+        <div class="content-grid">
+          <!-- EQUITY TREND -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-title-dot"></div>
+                净值走势 · 90天
+              </div>
+              <button class="panel-action">查看全部 →</button>
+            </div>
+            <div class="panel-body" style="padding:0;">
+              <div class="chart-area">
+                <svg class="chart-svg" viewBox="0 0 600 220" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.15"/>
+                      <stop offset="100%" stop-color="#38BDF8" stop-opacity="0"/>
+                    </linearGradient>
+                    <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stop-color="#818CF8"/>
+                      <stop offset="100%" stop-color="#38BDF8"/>
+                    </linearGradient>
+                  </defs>
+                  <!-- Grid lines -->
+                  <line x1="0" y1="50" x2="600" y2="50" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+                  <line x1="0" y1="110" x2="600" y2="110" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+                  <line x1="0" y1="170" x2="600" y2="170" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+                  <!-- Y labels -->
+                  <text x="8" y="48" class="equity-label">250万</text>
+                  <text x="8" y="108" class="equity-label">230万</text>
+                  <text x="8" y="168" class="equity-label">210万</text>
+                  <!-- Area fill -->
+                  <path class="equity-area" d="M0,180 C30,170 60,165 90,160 C120,155 130,158 160,148 C190,138 210,142 240,130 C270,118 290,122 320,108 C350,94 360,98 390,82 C420,66 440,72 470,58 C500,44 530,50 560,38 C580,30 590,28 600,25 L600,220 L0,220 Z"/>
+                  <!-- Line -->
+                  <path class="equity-line" stroke="url(#lineGrad)" d="M0,180 C30,170 60,165 90,160 C120,155 130,158 160,148 C190,138 210,142 240,130 C270,118 290,122 320,108 C350,94 360,98 390,82 C420,66 440,72 470,58 C500,44 530,50 560,38 C580,30 590,28 600,25"/>
+                  <!-- Current point -->
+                  <circle cx="600" cy="25" r="4" fill="#38BDF8" stroke="var(--bg-surface)" stroke-width="2"/>
+                  <!-- X labels -->
+                  <text x="0" y="215" class="equity-label">12月</text>
+                  <text x="185" y="215" class="equity-label">1月</text>
+                  <text x="385" y="215" class="equity-label">2月</text>
+                  <text x="565" y="215" class="equity-label">现在</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- ALLOCATION PIE -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">
+                <div class="panel-title-dot" style="background:var(--amber)"></div>
+                资产配置
+              </div>
+            </div>
+            <div class="donut-wrap">
+              <svg class="donut-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <!-- Donut segments - approximate for visual only -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#182236" stroke-width="18"/>
+                <!-- Segment 1: 35% cyan -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#38BDF8" stroke-width="18"
+                  stroke-dasharray="83 156" stroke-dashoffset="39" transform="rotate(-90 50 50)"/>
+                <!-- Segment 2: 25% indigo -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#818CF8" stroke-width="18"
+                  stroke-dasharray="59 180" stroke-dashoffset="-44" transform="rotate(-90 50 50)"/>
+                <!-- Segment 3: 20% amber -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#F6AD55" stroke-width="18"
+                  stroke-dasharray="47 192" stroke-dashoffset="-103" transform="rotate(-90 50 50)"/>
+                <!-- Segment 4: 15% green -->
+                <circle cx="50" cy="50" r="38" fill="none" stroke="#34D399" stroke-width="18"
+                  stroke-dasharray="35 204" stroke-dashoffset="-150" transform="rotate(-90 50 50)"/>
+                <!-- Center text -->
+                <text x="50" y="46" text-anchor="middle" fill="#94A3B8" font-size="8" font-family="Sora">总计</text>
+                <text x="50" y="58" text-anchor="middle" fill="#EDF2F7" font-size="11" font-weight="600" font-family="JetBrains Mono">4类</text>
+              </svg>
+              <div class="donut-legend">
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#38BDF8"></div>
+                  <span class="legend-name">A股指数</span>
+                  <span class="legend-pct">35%</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#818CF8"></div>
+                  <span class="legend-name">债券基金</span>
+                  <span class="legend-pct">25%</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#F6AD55"></div>
+                  <span class="legend-name">海外权益</span>
+                  <span class="legend-pct">20%</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#34D399"></div>
+                  <span class="legend-name">黄金/商品</span>
+                  <span class="legend-pct">15%</span>
+                </div>
+                <div class="legend-item">
+                  <div class="legend-dot" style="background:#566477"></div>
+                  <span class="legend-name">现金</span>
+                  <span class="legend-pct">5%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POSITIONS TABLE -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-title-dot" style="background:var(--green)"></div>
+              当前持仓
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-sm">导出</button>
+              <button class="btn-sm cyan">+ 新增</button>
+            </div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>资产名称</th>
+                <th>代码</th>
+                <th style="text-align:right">持仓成本</th>
+                <th style="text-align:right">当前市值</th>
+                <th style="text-align:right">收益率</th>
+                <th style="text-align:right">仓位</th>
+                <th>信号</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="asset-cell">
+                    <div class="asset-icon" style="border-color:rgba(56,189,248,0.3)">沪</div>
+                    <div>
+                      <div class="asset-name">沪深300ETF</div>
+                      <div class="asset-ticker">510300.SH</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="mono">CSI300</td>
+                <td class="mono text-right">¥723,400</td>
+                <td class="mono text-right">¥819,600</td>
+                <td class="mono text-right pos">+13.3%</td>
+                <td class="text-right">
+                  <div class="mono" style="font-size:12px;color:var(--text-primary)">35.0%</div>
+                  <div class="progress-bar" style="width:80px;margin-left:auto">
+                    <div class="progress-fill" style="width:35%"></div>
+                  </div>
+                </td>
+                <td><span class="tag bullish">看多</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="asset-cell">
+                    <div class="asset-icon" style="border-color:rgba(129,140,248,0.3)">债</div>
+                    <div>
+                      <div class="asset-name">中证国债ETF</div>
+                      <div class="asset-ticker">511010.SH</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="mono">BOND</td>
+                <td class="mono text-right">¥578,200</td>
+                <td class="mono text-right">¥585,390</td>
+                <td class="mono text-right pos">+1.2%</td>
+                <td class="text-right">
+                  <div class="mono" style="font-size:12px;color:var(--text-primary)">25.0%</div>
+                  <div class="progress-bar" style="width:80px;margin-left:auto">
+                    <div class="progress-fill" style="width:25%;background:linear-gradient(90deg,var(--indigo),#A5B4FC)"></div>
+                  </div>
+                </td>
+                <td><span class="tag neutral">持有</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="asset-cell">
+                    <div class="asset-icon" style="border-color:rgba(246,173,85,0.3)">纳</div>
+                    <div>
+                      <div class="asset-name">纳斯达克100</div>
+                      <div class="asset-ticker">513100.SH</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="mono">QQQ-CN</td>
+                <td class="mono text-right">¥445,800</td>
+                <td class="mono text-right">¥468,312</td>
+                <td class="mono text-right pos">+5.1%</td>
+                <td class="text-right">
+                  <div class="mono" style="font-size:12px;color:var(--text-primary)">20.0%</div>
+                  <div class="progress-bar" style="width:80px;margin-left:auto">
+                    <div class="progress-fill" style="width:20%;background:linear-gradient(90deg,var(--amber),#FBBF24)"></div>
+                  </div>
+                </td>
+                <td><span class="tag bullish">看多</span></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="asset-cell">
+                    <div class="asset-icon" style="border-color:rgba(52,211,153,0.3)">金</div>
+                    <div>
+                      <div class="asset-name">黄金ETF</div>
+                      <div class="asset-ticker">518880.SH</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="mono">GOLD</td>
+                <td class="mono text-right">¥328,900</td>
+                <td class="mono text-right">¥339,858</td>
+                <td class="mono text-right pos">+3.3%</td>
+                <td class="text-right">
+                  <div class="mono" style="font-size:12px;color:var(--text-primary)">14.5%</div>
+                  <div class="progress-bar" style="width:80px;margin-left:auto">
+                    <div class="progress-fill" style="width:15%;background:linear-gradient(90deg,var(--green),#6EE7B7)"></div>
+                  </div>
+                </td>
+                <td><span class="tag neutral">持有</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div><!-- /page-content -->
+    </div><!-- /main-content -->
+  </div><!-- /shell -->
+</div>
+
+
+<!-- ================================================
+     SCREEN 3 — WORKBENCH
+     ================================================ -->
+<div id="screen-workbench" class="screen" style="display:none;">
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">D</div>
+        <div class="sidebar-brand-text">DeepLedger</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">主菜单</div>
+        <div class="sidebar-item">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 9L8 2l7 7"/><rect x="3" y="9" width="4" height="6"/><rect x="9" y="7" width="4" height="8"/></svg>
+          总览
+        </div>
+        <div class="sidebar-item active">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1"/><path d="M4 8h2m2-2h2m2 4h-2"/></svg>
+          工作台
+        </div>
+        <div class="sidebar-item">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4h14M1 8h14M1 12h8"/></svg>
+          交易记录
+        </div>
+        <div class="sidebar-item">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+          设置
+        </div>
+      </div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="user-avatar">A</div>
+          <div class="user-info">
+            <div class="user-name">admin</div>
+            <div class="user-role">系统管理员</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-breadcrumb">
+          DeepLedger <span style="color:var(--text-muted);margin:0 4px">/</span> <span>工作台</span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-actions">
+          <button class="btn-sm">风险检查</button>
+          <button class="btn-sm cyan">生成再平衡</button>
+        </div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tab-bar">
+        <div class="tab-item active">持仓管理</div>
+        <div class="tab-item">自选池</div>
+        <div class="tab-item">资产发现</div>
+        <div class="tab-item">再平衡周期</div>
+      </div>
+
+      <div class="workbench-layout">
+        <!-- MAIN TABLE -->
+        <div class="workbench-main">
+          <div style="padding:16px 20px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;gap:12px;">
+            <input class="form-input" style="width:220px;padding:7px 12px;" placeholder="搜索资产名称 / 代码...">
+            <button class="btn-sm">全部类型</button>
+            <button class="btn-sm">排序</button>
+            <div class="ml-auto text-xs text-muted">共 8 项持仓</div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>资产</th>
+                <th style="text-align:right">当前比例</th>
+                <th style="text-align:right">目标比例</th>
+                <th style="text-align:right">偏差</th>
+                <th style="text-align:right">市值</th>
+                <th style="text-align:right">日涨跌</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="asset-cell"><div class="asset-icon" style="border-color:rgba(56,189,248,0.3)">沪</div><div><div class="asset-name">沪深300ETF</div><div class="asset-ticker">510300.SH · 股票</div></div></div></td>
+                <td class="mono text-right">35.0%</td>
+                <td class="mono text-right text-muted">35.0%</td>
+                <td class="mono text-right" style="color:var(--text-muted)">0.0%</td>
+                <td class="mono text-right">¥819,600</td>
+                <td class="mono text-right pos">+1.84%</td>
+                <td><button class="btn-sm cyan">交易</button></td>
+              </tr>
+              <tr>
+                <td><div class="asset-cell"><div class="asset-icon" style="border-color:rgba(129,140,248,0.3)">债</div><div><div class="asset-name">中证国债ETF</div><div class="asset-ticker">511010.SH · 债券</div></div></div></td>
+                <td class="mono text-right">28.3%</td>
+                <td class="mono text-right text-muted">25.0%</td>
+                <td class="mono text-right neg">+3.3%</td>
+                <td class="mono text-right">¥585,390</td>
+                <td class="mono text-right neg">-0.12%</td>
+                <td><button class="btn-sm">交易</button></td>
+              </tr>
+              <tr>
+                <td><div class="asset-cell"><div class="asset-icon" style="border-color:rgba(246,173,85,0.3)">纳</div><div><div class="asset-name">纳斯达克100</div><div class="asset-ticker">513100.SH · 海外</div></div></div></td>
+                <td class="mono text-right">17.8%</td>
+                <td class="mono text-right text-muted">20.0%</td>
+                <td class="mono text-right pos">-2.2%</td>
+                <td class="mono text-right">¥468,312</td>
+                <td class="mono text-right pos">+0.93%</td>
+                <td><button class="btn-sm cyan">交易</button></td>
+              </tr>
+              <tr>
+                <td><div class="asset-cell"><div class="asset-icon" style="border-color:rgba(52,211,153,0.3)">金</div><div><div class="asset-name">黄金ETF</div><div class="asset-ticker">518880.SH · 商品</div></div></div></td>
+                <td class="mono text-right">14.5%</td>
+                <td class="mono text-right text-muted">15.0%</td>
+                <td class="mono text-right" style="color:var(--text-muted)">-0.5%</td>
+                <td class="mono text-right">¥339,858</td>
+                <td class="mono text-right pos">+0.44%</td>
+                <td><button class="btn-sm">交易</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="workbench-sidebar">
+          <!-- Risk Monitor -->
+          <div class="ws-section">
+            <div class="ws-section-title">
+              风险监控
+              <span class="tag done">通过</span>
+            </div>
+            <div class="risk-row">
+              <span class="risk-label">最大单一仓位</span>
+              <span class="risk-value text-green">35% ✓</span>
+            </div>
+            <div class="risk-row">
+              <span class="risk-label">股票总仓位</span>
+              <span class="risk-value text-green">52.8% ✓</span>
+            </div>
+            <div class="risk-row">
+              <span class="risk-label">现金缓冲</span>
+              <span class="risk-value text-green">5.49% ✓</span>
+            </div>
+            <div class="risk-row">
+              <span class="risk-label">偏差阈值</span>
+              <span class="risk-value text-amber">需关注</span>
+            </div>
+          </div>
+
+          <!-- Signal Fusion -->
+          <div class="ws-section">
+            <div class="ws-section-title">信号融合</div>
+            <div class="signal-item">
+              <span class="signal-name">估值信号</span>
+              <div class="signal-bar-wrap">
+                <div class="signal-bar-bg">
+                  <div class="signal-bar-fill" style="width:72%;background:var(--green)"></div>
+                </div>
+              </div>
+              <span class="text-mono text-xs text-green">0.72</span>
+            </div>
+            <div class="signal-item">
+              <span class="signal-name">动量信号</span>
+              <div class="signal-bar-wrap">
+                <div class="signal-bar-bg">
+                  <div class="signal-bar-fill" style="width:58%;background:var(--cyan)"></div>
+                </div>
+              </div>
+              <span class="text-mono text-xs text-cyan">0.58</span>
+            </div>
+            <div class="signal-item">
+              <span class="signal-name">新闻情绪</span>
+              <div class="signal-bar-wrap">
+                <div class="signal-bar-bg">
+                  <div class="signal-bar-fill" style="width:44%;background:var(--amber)"></div>
+                </div>
+              </div>
+              <span class="text-mono text-xs text-amber">0.44</span>
+            </div>
+            <div class="signal-item">
+              <span class="signal-name">宏观因子</span>
+              <div class="signal-bar-wrap">
+                <div class="signal-bar-bg">
+                  <div class="signal-bar-fill" style="width:31%;background:var(--red)"></div>
+                </div>
+              </div>
+              <span class="text-mono text-xs text-red">0.31</span>
+            </div>
+          </div>
+
+          <!-- Rebalance Status -->
+          <div class="ws-section">
+            <div class="ws-section-title">最新再平衡</div>
+            <div class="rebalance-card">
+              <div class="rebalance-header">
+                <div class="rebalance-title">RB-2026-031</div>
+                <span class="tag done">已完成</span>
+              </div>
+              <div class="rebalance-steps">
+                <div class="step-pill done">生成</div>
+                <div class="step-pill done">审核</div>
+                <div class="step-pill done">执行</div>
+                <div class="step-pill done">结算</div>
+              </div>
+              <div class="risk-row">
+                <span class="risk-label">执行日期</span>
+                <span class="risk-value">2026-03-01</span>
+              </div>
+              <div class="risk-row">
+                <span class="risk-label">成交金额</span>
+                <span class="risk-value">¥124,500</span>
+              </div>
+              <div class="risk-row" style="border:none">
+                <span class="risk-label">调仓笔数</span>
+                <span class="risk-value">3 笔</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
+     SCREEN 4 — TRADES
+     ================================================ -->
+<div id="screen-trades" class="screen" style="display:none;">
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="sidebar-brand-icon">D</div><div class="sidebar-brand-text">DeepLedger</div></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">主菜单</div>
+        <div class="sidebar-item"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 9L8 2l7 7"/><rect x="3" y="9" width="4" height="6"/><rect x="9" y="7" width="4" height="8"/></svg>总览</div>
+        <div class="sidebar-item"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1"/><path d="M4 8h2m2-2h2m2 4h-2"/></svg>工作台</div>
+        <div class="sidebar-item active"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4h14M1 8h14M1 12h8"/></svg>交易记录</div>
+        <div class="sidebar-item"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>设置</div>
+      </div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-footer"><div class="user-card"><div class="user-avatar">A</div><div class="user-info"><div class="user-name">admin</div><div class="user-role">系统管理员</div></div></div></div>
+    </aside>
+
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-breadcrumb">DeepLedger <span style="color:var(--text-muted);margin:0 4px">/</span> <span>交易记录</span></div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-actions">
+          <button class="btn-sm">导出报告</button>
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <div class="tab-item active">再平衡周期</div>
+        <div class="tab-item">委托记录</div>
+        <div class="tab-item">执行报告</div>
+      </div>
+
+      <div class="page-content">
+        <div class="content-grid-3" style="margin-bottom:20px;">
+          <div class="metric-card accent-cyan">
+            <div class="metric-label">历史周期数</div>
+            <div class="metric-value" style="font-size:36px;">24</div>
+            <div class="metric-sub">自 2024年9月</div>
+          </div>
+          <div class="metric-card accent-green">
+            <div class="metric-label">总成交金额</div>
+            <div class="metric-value" style="font-size:22px;">¥2,341,890</div>
+            <div class="metric-sub">含手续费 ¥1,240</div>
+          </div>
+          <div class="metric-card accent-amber">
+            <div class="metric-label">平均调仓间隔</div>
+            <div class="metric-value" style="font-size:22px;">23 天</div>
+            <div class="metric-sub">最长 45 天</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title"><div class="panel-title-dot"></div>再平衡周期历史</div>
+            <div class="flex gap-2">
+              <button class="btn-sm">筛选</button>
+              <button class="btn-sm">全部年份</button>
+            </div>
+          </div>
+          <div>
+            <div class="cycle-item">
+              <div class="cycle-step"><div class="cycle-dot"></div><div class="cycle-line"></div></div>
+              <div class="cycle-info">
+                <div class="cycle-title">RB-2026-031 · 季度再平衡</div>
+                <div class="cycle-meta">2026-03-01 · 已执行 3 笔委托</div>
+              </div>
+              <div class="cycle-stats">
+                <div class="mono" style="font-size:13px;color:var(--text-primary)">¥124,500</div>
+                <div style="margin-top:4px;"><span class="tag done">完成</span></div>
+              </div>
+            </div>
+            <div class="cycle-item">
+              <div class="cycle-step"><div class="cycle-dot" style="background:var(--amber)"></div><div class="cycle-line"></div></div>
+              <div class="cycle-info">
+                <div class="cycle-title">RB-2026-028 · 信号触发再平衡</div>
+                <div class="cycle-meta">2026-02-14 · 已执行 2 笔委托</div>
+              </div>
+              <div class="cycle-stats">
+                <div class="mono" style="font-size:13px;color:var(--text-primary)">¥86,200</div>
+                <div style="margin-top:4px;"><span class="tag done">完成</span></div>
+              </div>
+            </div>
+            <div class="cycle-item">
+              <div class="cycle-step"><div class="cycle-dot" style="background:var(--indigo)"></div><div class="cycle-line"></div></div>
+              <div class="cycle-info">
+                <div class="cycle-title">RB-2026-021 · 阈值漂移再平衡</div>
+                <div class="cycle-meta">2026-01-28 · 已执行 4 笔委托</div>
+              </div>
+              <div class="cycle-stats">
+                <div class="mono" style="font-size:13px;color:var(--text-primary)">¥198,400</div>
+                <div style="margin-top:4px;"><span class="tag done">完成</span></div>
+              </div>
+            </div>
+            <div class="cycle-item">
+              <div class="cycle-step"><div class="cycle-dot" style="background:var(--text-muted)"></div></div>
+              <div class="cycle-info">
+                <div class="cycle-title">RB-2025-087 · 季度再平衡</div>
+                <div class="cycle-meta">2025-12-15 · 已执行 5 笔委托</div>
+              </div>
+              <div class="cycle-stats">
+                <div class="mono" style="font-size:13px;color:var(--text-primary)">¥312,800</div>
+                <div style="margin-top:4px;"><span class="tag done">完成</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
+     SCREEN 5 — SETTINGS
+     ================================================ -->
+<div id="screen-settings" class="screen" style="display:none;">
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="sidebar-brand-icon">D</div><div class="sidebar-brand-text">DeepLedger</div></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">主菜单</div>
+        <div class="sidebar-item"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 9L8 2l7 7"/><rect x="3" y="9" width="4" height="6"/><rect x="9" y="7" width="4" height="8"/></svg>总览</div>
+        <div class="sidebar-item"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="10" rx="1"/><path d="M4 8h2m2-2h2m2 4h-2"/></svg>工作台</div>
+        <div class="sidebar-item"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4h14M1 8h14M1 12h8"/></svg>交易记录</div>
+        <div class="sidebar-item active"><svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>设置</div>
+      </div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-footer"><div class="user-card"><div class="user-avatar">A</div><div class="user-info"><div class="user-name">admin</div><div class="user-role">系统管理员</div></div></div></div>
+    </aside>
+
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-breadcrumb">DeepLedger <span style="color:var(--text-muted);margin:0 4px">/</span> <span>系统设置</span></div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-actions"><button class="btn-sm cyan">保存变更</button></div>
+      </div>
+
+      <div class="settings-grid">
+        <!-- Settings Nav -->
+        <div class="settings-nav">
+          <div class="settings-nav-item active">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1v14M1 8h14"/></svg>
+            再平衡策略
+          </div>
+          <div class="settings-nav-item">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/></svg>
+            风险控制
+          </div>
+          <div class="settings-nav-item">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/></svg>
+            信号权重
+          </div>
+          <div class="settings-nav-item">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 14H2V2h12v12h-2M6 14v-4h4v4"/></svg>
+            数据源
+          </div>
+          <div class="settings-nav-item">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v4l3 3m-7 4h8"/></svg>
+            通知告警
+          </div>
+        </div>
+
+        <!-- Settings Content -->
+        <div class="settings-content">
+          <div class="page-header" style="margin-bottom:28px;">
+            <div class="page-title" style="font-size:22px;">再平衡策略</div>
+            <div class="page-subtitle">配置触发条件与执行参数</div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">触发条件</div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">定期再平衡</div>
+                <div class="setting-desc">按固定周期自动生成再平衡计划</div>
+              </div>
+              <div class="toggle"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">再平衡周期（天）</div>
+                <div class="setting-desc">最短间隔，防止过度交易</div>
+              </div>
+              <input class="input-sm" type="number" value="30">
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">漂移触发阈值</div>
+                <div class="setting-desc">仓位偏差超过此值时触发再平衡</div>
+              </div>
+              <input class="input-sm" type="number" value="5" style="width:80px">
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">信号触发</div>
+                <div class="setting-desc">信号融合评分超阈值时触发</div>
+              </div>
+              <div class="toggle"></div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">执行参数</div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">单笔最大交易额</div>
+                <div class="setting-desc">限制单笔委托金额上限</div>
+              </div>
+              <input class="input-sm" type="number" value="200000">
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">忽略小额交易（元）</div>
+                <div class="setting-desc">低于此金额的调仓将被跳过</div>
+              </div>
+              <input class="input-sm" type="number" value="1000">
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">需人工审核</div>
+                <div class="setting-desc">执行前需手动确认再平衡方案</div>
+              </div>
+              <div class="toggle"></div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;padding-top:8px;">
+            <button class="btn-sm cyan" style="padding:8px 20px;font-size:13px;">保存设置</button>
+            <button class="btn-sm" style="padding:8px 20px;font-size:13px;">重置默认</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(screen) {
+  const screens = ['login','dashboard','workbench','trades','settings'];
+  screens.forEach(s => {
+    const el = document.getElementById('screen-' + s);
+    if (el) el.style.display = s === screen ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-pill').forEach((p, i) => {
+    p.classList.toggle('active', screens[i] === screen);
+  });
+}
+</script>
+</body>
+</html>

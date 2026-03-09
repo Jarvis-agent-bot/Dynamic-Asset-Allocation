@@ -4,6 +4,12 @@ import {
   type DaaSystemConfigPatchV2,
   type DaaSystemConfigV2,
 } from "@/src/daa/config/systemConfigV2";
+import type {
+  DaaMarketContextV1,
+  DaaMarketIndicatorKeyV1,
+  DaaMarketIndicatorScopeV1,
+  DaaMarketIndicatorSnapshotV1,
+} from "@/src/daa/modules/marketContext/marketContextTypesV1";
 
 export type StoreEquitySnapshotV1 = {
   ts: string;
@@ -62,12 +68,54 @@ export type PullDailyFxSnapshotResultV1 = {
   rates: StoreFxRateV1[];
 };
 
+export type StoreMarketCacheHealthV1 = {
+  provider: string;
+  totalSnapshots: number;
+  freshCount: number;
+  staleCount: number;
+  missingCount: number;
+  errorCount: number;
+  unsupportedCount: number;
+  recentJobSuccessRatePct: number;
+  recentJobFailureRatePct: number;
+};
+
+export type StoreMarketCacheRefreshResultV1 = {
+  requested: number;
+  refreshed: number;
+  stale: number;
+  missing: number;
+  at: string;
+};
+
+export type StoreMarketIndicatorRefreshResultV1 = {
+  marketContext: DaaMarketContextV1 | null;
+  indicators: DaaMarketIndicatorSnapshotV1[];
+  refreshedCount: number;
+  at: string;
+};
+
+export type StoreMarketIndicatorHistoryResultV1 = {
+  keys: DaaMarketIndicatorKeyV1[];
+  days: number;
+  scope?: DaaMarketIndicatorScopeV1 | null;
+  history: Record<DaaMarketIndicatorKeyV1, DaaMarketIndicatorSnapshotV1[]>;
+  at: string;
+};
+
 export type StoreCashLedgerEntryV1 = {
   id: string;
   ts: string;
   side: "deposit" | "withdraw";
   amount: number;
   baseCurrency: string;
+  entryKind?: string | null;
+  accountBaseCurrency?: string | null;
+  amountInAccountBase?: number | null;
+  fxRateToAccount?: number | null;
+  ticketId?: string | null;
+  cycleId?: string | null;
+  settlementTs?: string | null;
   note?: string | null;
   createdAt?: string;
 };
@@ -277,6 +325,26 @@ export async function pullDailyFxSnapshotV1(input: {
   });
 }
 
+export async function getMarketCacheHealthV1(provider = "yfinance"): Promise<StoreMarketCacheHealthV1> {
+  return requestDataV1<StoreMarketCacheHealthV1>(`/api/daa/store/market-cache/health?provider=${encodeURIComponent(provider)}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
+export async function refreshMarketCacheV1(input: {
+  assets?: Array<{ symbol: string; market?: string; currency?: string }>;
+  timeoutMs?: number;
+  concurrency?: number;
+  includeFeatured?: boolean;
+} = {}): Promise<StoreMarketCacheRefreshResultV1> {
+  return requestDataV1<StoreMarketCacheRefreshResultV1>("/api/daa/store/market-cache/refresh", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
 export async function listCashLedgerV1(limit = 100): Promise<StoreCashLedgerEntryV1[]> {
   const data = await requestDataV1<{ entries: StoreCashLedgerEntryV1[] }>(
     `/api/daa/store/cash-ledger?limit=${Math.max(1, Math.trunc(limit))}`,
@@ -290,5 +358,27 @@ export async function appendCashLedgerEntryV1(input: StoreCashLedgerApplyInputV1
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
+  });
+}
+
+export async function refreshMarketIndicatorsV1(): Promise<StoreMarketIndicatorRefreshResultV1> {
+  return requestDataV1<StoreMarketIndicatorRefreshResultV1>("/api/daa/store/market-indicators/refresh", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+  });
+}
+
+export async function listMarketIndicatorHistoryV1(input: {
+  keys: DaaMarketIndicatorKeyV1[];
+  days?: number;
+  scope?: DaaMarketIndicatorScopeV1;
+}): Promise<StoreMarketIndicatorHistoryResultV1> {
+  const qs = new URLSearchParams();
+  qs.set("keys", input.keys.join(","));
+  qs.set("days", String(Math.max(1, Math.min(365, Math.trunc(input.days || 90)))));
+  if (input.scope) qs.set("scope", input.scope);
+  return requestDataV1<StoreMarketIndicatorHistoryResultV1>(`/api/daa/store/market-indicators/history?${qs.toString()}`, {
+    method: "GET",
+    cache: "no-store",
   });
 }

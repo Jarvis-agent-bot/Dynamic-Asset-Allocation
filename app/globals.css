@@ -2,89 +2,90 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Deep Ledger — Dark-only design system
+   Palette: deep navy bg + cyan primary + amber accent
+   ============================================================ */
 :root {
-  /* App theme tokens (existing; keep as source of truth). */
-  --bg: #f8fafc;
-  --card: #ffffff;
-  --text: #0f172a;
-  --muted: #64748b;
-  --primary: #0ea5e9;
-  --accent: #2563eb;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --border: #e2e8f0;
+  /* ── App hex tokens ── */
+  --bg:      #080C14;
+  --surface: #0D1320;
+  --card:    #131C2E;
+  --elevated:#182236;
+  --hover:   #1D2B42;
+  --panel:   rgba(24,34,54,0.92);
+  --text:    #EDF2F7;
+  --muted:   #94A3B8;
+  --faint:   #566477;
+  --primary: #38BDF8;
+  --amber:   #F6AD55;
+  --success: #34D399;
+  --danger:  #F87171;
+  --indigo:  #818CF8;
+  --border:  rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.13);
+  --grid-dot: rgba(56,189,248,0.08);
+  --shell-shadow: 0 24px 70px rgba(0,0,0,0.34);
+  --radius-panel: 20px;
 
-  /* shadcn/ui tokens (HSL) aligned to the palette above.
-     We keep these separate to avoid breaking existing CSS that expects hex vars. */
-  --shadcn-background: 0 0% 100%;
-  --shadcn-foreground: 222 47% 11%;
+  /* ── shadcn/ui HSL tokens (deep navy dark palette) ── */
+  --shadcn-background: 222 47% 5%;
+  --shadcn-foreground: 210 40% 95%;
 
-  --shadcn-card: 0 0% 100%;
-  --shadcn-card-foreground: 222 47% 11%;
+  --shadcn-card: 220 48% 9%;
+  --shadcn-card-foreground: 210 40% 95%;
 
-  --shadcn-popover: 0 0% 100%;
-  --shadcn-popover-foreground: 222 47% 11%;
+  --shadcn-popover: 220 46% 12%;
+  --shadcn-popover-foreground: 210 40% 95%;
 
-  --shadcn-primary: 191 91% 42%;
-  --shadcn-primary-foreground: 0 0% 100%;
+  --shadcn-primary: 199 95% 60%;
+  --shadcn-primary-foreground: 222 47% 5%;
 
-  --shadcn-secondary: 210 40% 96%;
-  --shadcn-secondary-foreground: 222 47% 11%;
+  --shadcn-secondary: 218 44% 15%;
+  --shadcn-secondary-foreground: 210 40% 95%;
 
-  --shadcn-muted: 210 40% 96%;
-  --shadcn-muted-foreground: 215 16% 47%;
+  --shadcn-muted: 218 44% 15%;
+  --shadcn-muted-foreground: 215 19% 65%;
 
-  --shadcn-accent: 217 91% 60%;
-  --shadcn-accent-foreground: 222 47% 11%;
-
-  --shadcn-destructive: 0 84% 60%;
-  --shadcn-destructive-foreground: 0 0% 100%;
-
-  --shadcn-border: 214 32% 91%;
-  --shadcn-input: 214 32% 91%;
-  --shadcn-ring: 191 91% 42%;
-
-  --shadcn-radius: 0.75rem;
-}
-
-.dark {
-  --bg: #0f172a;
-  --card: #111827;
-  --text: #e5e7eb;
-  --muted: #9ca3af;
-  --primary: #22d3ee;
-  --accent: #60a5fa;
-  --success: #34d399;
-  --danger: #f87171;
-  --border: #1f2937;
-
-  --shadcn-background: 222 47% 11%;
-  --shadcn-foreground: 220 13% 91%;
-
-  --shadcn-card: 221 39% 11%;
-  --shadcn-card-foreground: 220 13% 91%;
-
-  --shadcn-popover: 221 39% 11%;
-  --shadcn-popover-foreground: 220 13% 91%;
-
-  --shadcn-primary: 191 91% 56%;
-  --shadcn-primary-foreground: 198 100% 12%;
-
-  --shadcn-secondary: 215 28% 17%;
-  --shadcn-secondary-foreground: 220 13% 91%;
-
-  --shadcn-muted: 215 28% 17%;
-  --shadcn-muted-foreground: 215 20% 65%;
-
-  --shadcn-accent: 217 91% 67%;
-  --shadcn-accent-foreground: 222 47% 11%;
+  --shadcn-accent: 218 40% 18%;
+  --shadcn-accent-foreground: 210 40% 95%;
 
   --shadcn-destructive: 0 91% 71%;
-  --shadcn-destructive-foreground: 222 47% 11%;
+  --shadcn-destructive-foreground: 222 47% 5%;
 
-  --shadcn-border: 215 28% 17%;
-  --shadcn-input: 215 28% 17%;
-  --shadcn-ring: 191 91% 56%;
+  --shadcn-border: 220 30% 14%;
+  --shadcn-input: 220 30% 14%;
+  --shadcn-ring: 199 95% 60%;
+
+  --shadcn-radius: 0.625rem;
+
+  /* ── Font families ── */
+  --font-display: var(--font-dm-serif), var(--font-noto-serif-sc), 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
+  --font-body:    var(--font-sora), var(--font-noto-sans-sc), 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono:    var(--font-jetbrains), 'SFMono-Regular', 'Menlo', monospace;
+}
+
+/* Always active dark class (dark-only system) */
+.dark {
+  --shadcn-background: 222 47% 5%;
+  --shadcn-foreground: 210 40% 95%;
+  --shadcn-card: 220 48% 9%;
+  --shadcn-card-foreground: 210 40% 95%;
+  --shadcn-popover: 220 46% 12%;
+  --shadcn-popover-foreground: 210 40% 95%;
+  --shadcn-primary: 199 95% 60%;
+  --shadcn-primary-foreground: 222 47% 5%;
+  --shadcn-secondary: 218 44% 15%;
+  --shadcn-secondary-foreground: 210 40% 95%;
+  --shadcn-muted: 218 44% 15%;
+  --shadcn-muted-foreground: 215 19% 65%;
+  --shadcn-accent: 218 40% 18%;
+  --shadcn-accent-foreground: 210 40% 95%;
+  --shadcn-destructive: 0 91% 71%;
+  --shadcn-destructive-foreground: 222 47% 5%;
+  --shadcn-border: 220 30% 14%;
+  --shadcn-input: 220 30% 14%;
+  --shadcn-ring: 199 95% 60%;
 }
 
 * {
@@ -95,13 +96,82 @@ html, body {
   height: 100%;
 }
 
+html {
+  font-size: 13px;
+}
+
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  background: radial-gradient(1200px 600px at 10% -10%, rgba(96,165,250,0.15), transparent 40%) , radial-gradient(1000px 500px at 90% 0%, rgba(34,211,238,0.12), transparent 45%), var(--bg);
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(56,189,248,0.08), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(246,173,85,0.06), transparent 28%),
+    var(--bg);
   color: var(--text);
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
+
+::selection {
+  background: rgba(56,189,248,0.28);
+  color: var(--text);
+}
+
+a, button, input, select, textarea {
+  font: inherit;
+}
+
+button {
+  letter-spacing: 0.01em;
+}
+
+@keyframes daa-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.92); }
+}
+
+@keyframes daa-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.daa-dot-grid {
+  background-image: radial-gradient(circle, var(--grid-dot) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.daa-shell-surface {
+  background: linear-gradient(180deg, rgba(13,19,32,0.94), rgba(8,12,20,0.98));
+  box-shadow: var(--shell-shadow);
+}
+
+.daa-section-animate {
+  animation: daa-rise 0.38s ease-out both;
+}
+
+.daa-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,0.24) transparent;
+}
+
+.daa-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.daa-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.daa-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 
 .glass {
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
@@ -191,7 +261,7 @@ body {
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 .input:focus {
-  border-color: var(--accent);
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(96,165,250,0.2);
 }
 
@@ -463,7 +533,7 @@ input[type="number"] {
 .icon-button:hover {
   color: var(--text);
   transform: translateY(-1px);
-  border-color: var(--accent);
+  border-color: var(--primary);
 }
 .icon-button:active {
   transform: translateY(0);
@@ -720,7 +790,7 @@ input[type="number"] {
   animation: spin 0.8s linear infinite;
 }
 .icon-button[aria-busy="true"] {
-  border-color: var(--accent);
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(96,165,250,0.15);
   cursor: default;
 }

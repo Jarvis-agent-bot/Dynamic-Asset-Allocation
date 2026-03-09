@@ -4,6 +4,7 @@ import type {
   AssetUniverseViewV1,
   ExecuteRebalanceCycleInputV1,
   ExecuteRebalanceCycleResultV1,
+  ExecuteRebalanceSummaryV1,
   GenerateRebalanceCycleInputV1,
   GenerateRebalanceCycleResultV1,
   PreTradeRiskCheckV1,
@@ -11,8 +12,12 @@ import type {
   UpdateRebalanceCycleInputV1,
   WorkbenchAssetInsightResponseV1,
   WorkbenchBootstrapV1,
+  WorkbenchRebalanceCycleReportV1,
   WorkbenchExecutionExecuteInputV1,
   WorkbenchFeaturedAssetsResultV1,
+  WorkbenchLlmFeedbackRowV1,
+  WorkbenchLlmFeedbackScoreV1,
+  WorkbenchLlmFeedbackTypeV1,
   WorkbenchExecutionExecuteResultV1,
   WorkbenchMarketOrderPreviewResultV1,
   WorkbenchRebalanceConfigV1,
@@ -215,6 +220,52 @@ export async function executeWorkbenchRebalanceCycleV1(
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+export async function summarizeWorkbenchRebalanceExecutionV1(
+  input: ExecuteRebalanceCycleInputV1,
+): Promise<ExecuteRebalanceSummaryV1> {
+  return requestDataV1<ExecuteRebalanceSummaryV1>("/api/daa/workbench/rebalance/execute-summary", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getWorkbenchRebalanceCycleReportV1(cycleId: string): Promise<WorkbenchRebalanceCycleReportV1 | null> {
+  const payload = await requestDataV1<{ report: WorkbenchRebalanceCycleReportV1 | null }>(
+    `/api/daa/workbench/rebalance/cycles/${encodeURIComponent(cycleId)}/report`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+  return payload.report || null;
+}
+
+export async function listWorkbenchRebalanceReportsV1(limit = 50): Promise<WorkbenchRebalanceCycleReportV1[]> {
+  const payload = await requestDataV1<{ reports: WorkbenchRebalanceCycleReportV1[] }>(
+    `/api/daa/workbench/rebalance/reports?limit=${Math.max(1, Math.min(200, Math.trunc(limit || 50)))}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+  return Array.isArray(payload.reports) ? payload.reports : [];
+}
+
+export async function submitWorkbenchLlmFeedbackV1(input: {
+  contextId: string;
+  type: WorkbenchLlmFeedbackTypeV1;
+  score: WorkbenchLlmFeedbackScoreV1;
+  comment?: string;
+}): Promise<WorkbenchLlmFeedbackRowV1> {
+  const payload = await requestDataV1<{ row: WorkbenchLlmFeedbackRowV1 }>("/api/daa/workbench/llm-feedback", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return payload.row;
 }
 
 export async function runWorkbenchRiskCheckV1(input: {

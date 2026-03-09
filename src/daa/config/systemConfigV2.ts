@@ -7,11 +7,38 @@ import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1
 
 export type DaaFundKindV2 = "equity" | "qdii" | "balanced";
 
+export type DaaStrategyExecutionTimingV2 = "t_plus_1_close";
+
+export type DaaStrategyExecutionConfigV2 = {
+  feeRateBps: number;
+  slippageBps: number;
+  timing: DaaStrategyExecutionTimingV2;
+};
+
 export type DaaHfFundTrackV2 = {
   fundCode: string;
   label: string;
   kind: DaaFundKindV2;
   enabled: boolean;
+};
+
+export type DaaMarketIndicatorConfigKeyV2 = "vix" | "qqqSpyRatio" | "fxiVolatility" | "kwebFxiRatio" | "btcEthRatio" | "btcVolatility" | "goldSilverRatio";
+
+export type DaaMarketIndicatorConfigItemV2 = {
+  enabled: boolean;
+  weight: number;
+};
+
+export type DaaMarketIndicatorsConfigV2 = {
+  id: string;
+  enabled: boolean;
+  refreshIntervalMinutes: number;
+  indicators: Record<DaaMarketIndicatorConfigKeyV2, DaaMarketIndicatorConfigItemV2>;
+  overlays: {
+    transitionalBuyScale: number;
+    riskOffBuyScale: number;
+    highRiskBuyScale: number;
+  };
 };
 
 export type DaaSystemConfigV2 = {
@@ -29,6 +56,7 @@ export type DaaSystemConfigV2 = {
       maxOrderPctOfNav: number;
       tradeFeeRateBps?: number;
     };
+    execution: DaaStrategyExecutionConfigV2;
     policy: {
       baseDriftTriggerPct: number;
       strongTrendDriftTriggerPct: number;
@@ -40,6 +68,7 @@ export type DaaSystemConfigV2 = {
     risk: {
       maxDrawdownPct: number;
       perAssetStopLossPct: number;
+      perAssetTakeProfitPct: number;
       maxConcentrationPct: number;
       correlationCapPct: number;
       maxTotalRiskExposurePct: number;
@@ -64,6 +93,13 @@ export type DaaSystemConfigV2 = {
     analysisFocus: string;
     autoGenerateEnabled: boolean;
     notifyEmailTo: string;
+    /** P1-2: 现金分类配置（对应 classifyCashV2 参数）*/
+    cash?: {
+      operationalReservePct?: number;
+      idleThresholdPct?: number;
+      idleCooldownDays?: number;
+      lastDepositAt?: string | null;
+    };
   };
   dataSources: {
     hfFund: {
@@ -78,6 +114,11 @@ export type DaaSystemConfigV2 = {
       provider: string;
       intervalMinutes: number;
       symbols: string[];
+      marketCache: {
+        freshMinutes: number;
+        serveStaleHours: number;
+        rawRetentionDays: number;
+      };
     };
     newsFeed: {
       id: string;
@@ -85,10 +126,12 @@ export type DaaSystemConfigV2 = {
       provider: string;
       query: string;
       symbols: string[];
+      valuationEnabled: boolean;
       fusionWeights: {
         human: number;
         news: number;
         technical: number;
+        valuation: number;
       };
     };
     fxFeed: {
@@ -106,6 +149,7 @@ export type DaaSystemConfigV2 = {
       timeoutMs: number;
       enabledInDecision: boolean;
     };
+    marketIndicators: DaaMarketIndicatorsConfigV2;
   };
   notification: {
     email: {
@@ -160,6 +204,11 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
       maxOrderPctOfNav: 0.1,
       tradeFeeRateBps: 5,
     },
+    execution: {
+      feeRateBps: 5,
+      slippageBps: 0,
+      timing: "t_plus_1_close",
+    },
     policy: {
       baseDriftTriggerPct: 0.05,
       strongTrendDriftTriggerPct: 0.1,
@@ -171,6 +220,7 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
     risk: {
       maxDrawdownPct: 0.15,
       perAssetStopLossPct: 0.2,
+      perAssetTakeProfitPct: 0.25,
       maxConcentrationPct: 0.3,
       correlationCapPct: 0.6,
       maxTotalRiskExposurePct: 0.7,
@@ -209,6 +259,11 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
       provider: "yfinance",
       intervalMinutes: 5,
       symbols: ["SPY", "QQQ", "BND", "TSLA"],
+      marketCache: {
+        freshMinutes: 15,
+        serveStaleHours: 48,
+        rawRetentionDays: 90,
+      },
     },
     newsFeed: {
       id: "news_feed.default",
@@ -216,10 +271,12 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
       provider: "yahoo_rss",
       query: "SPY OR QQQ OR TSLA",
       symbols: [],
+      valuationEnabled: true,
       fusionWeights: {
-        human: 0.45,
-        news: 0.25,
-        technical: 0.3,
+        human: 0.35,
+        news: 0.2,
+        technical: 0.25,
+        valuation: 0.2,
       },
     },
     fxFeed: {
@@ -236,6 +293,25 @@ export const DEFAULT_SYSTEM_CONFIG_V2: DaaSystemConfigV2 = {
       model: "gpt-5-codex",
       timeoutMs: 8000,
       enabledInDecision: true,
+    },
+    marketIndicators: {
+      id: "market_indicators.default",
+      enabled: true,
+      refreshIntervalMinutes: 30,
+      indicators: {
+        vix: { enabled: true, weight: 0.55 },
+        qqqSpyRatio: { enabled: true, weight: 0.45 },
+        fxiVolatility: { enabled: true, weight: 0.55 },
+        kwebFxiRatio: { enabled: true, weight: 0.45 },
+        btcEthRatio: { enabled: true, weight: 0.5 },
+        btcVolatility: { enabled: true, weight: 0.5 },
+        goldSilverRatio: { enabled: true, weight: 1 },
+      },
+      overlays: {
+        transitionalBuyScale: 0.85,
+        riskOffBuyScale: 0.7,
+        highRiskBuyScale: 0.55,
+      },
     },
   },
   notification: {
@@ -316,10 +392,97 @@ function normalizeFundRows(input: unknown): DaaHfFundTrackV2[] {
 
 function normalizeFusionWeights(input: unknown): DaaSystemConfigV2["dataSources"]["newsFeed"]["fusionWeights"] {
   const source = isRecord(input) ? input : {};
+  const defaultWeights = { human: 0.35, news: 0.2, technical: 0.25, valuation: 0.2 };
+  const human = Math.max(0, Number(source.human ?? defaultWeights.human) || 0);
+  const news = Math.max(0, Number(source.news ?? defaultWeights.news) || 0);
+  const technical = Math.max(0, Number(source.technical ?? defaultWeights.technical) || 0);
+  const valuationRaw = Number(source.valuation);
+  const hasValuation = Number.isFinite(valuationRaw);
+  const valuation = hasValuation ? Math.max(0, valuationRaw) : Number.NaN;
+
+  if (hasValuation) {
+    const sum = human + news + technical + valuation;
+    if (!(sum > 0)) return defaultWeights;
+    return {
+      human: human / sum,
+      news: news / sum,
+      technical: technical / sum,
+      valuation: valuation / sum,
+    };
+  }
+
+  const legacySum = human + news + technical;
+  if (!(legacySum > 0)) return defaultWeights;
   return {
-    human: Math.max(0, Number(source.human ?? 0.45) || 0.45),
-    news: Math.max(0, Number(source.news ?? 0.25) || 0.25),
-    technical: Math.max(0, Number(source.technical ?? 0.3) || 0.3),
+    human: (human / legacySum) * 0.85,
+    news: (news / legacySum) * 0.85,
+    technical: (technical / legacySum) * 0.85,
+    valuation: 0.15,
+  };
+}
+
+const MARKET_INDICATOR_CONFIG_KEYS_V2: DaaMarketIndicatorConfigKeyV2[] = [
+  "vix",
+  "qqqSpyRatio",
+  "fxiVolatility",
+  "kwebFxiRatio",
+  "btcEthRatio",
+  "btcVolatility",
+  "goldSilverRatio",
+];
+
+function normalizeMarketIndicatorWeights(
+  input: unknown,
+  fallback: DaaMarketIndicatorsConfigV2["indicators"],
+): DaaMarketIndicatorsConfigV2["indicators"] {
+  const source = isRecord(input) ? input : {};
+  const out = {} as DaaMarketIndicatorsConfigV2["indicators"];
+  let positiveWeightCount = 0;
+  for (const key of MARKET_INDICATOR_CONFIG_KEYS_V2) {
+    const row = isRecord(source[key]) ? source[key] : {};
+    const fallbackRow = fallback[key];
+    const weight = Math.max(0, Number(row.weight ?? fallbackRow.weight) || 0);
+    if (weight > 0) positiveWeightCount += 1;
+    out[key] = {
+      enabled: toBool(row.enabled, fallbackRow.enabled),
+      weight,
+    };
+  }
+  if (positiveWeightCount > 0) return out;
+  return clone(fallback);
+}
+
+function normalizeMarketIndicatorConfig(
+  input: unknown,
+  fallback: DaaMarketIndicatorsConfigV2,
+): DaaMarketIndicatorsConfigV2 {
+  const source = isRecord(input) ? input : {};
+  const overlays = isRecord(source.overlays) ? source.overlays : {};
+  return {
+    id: String(source.id || fallback.id).trim() || fallback.id,
+    enabled: toBool(source.enabled, fallback.enabled),
+    refreshIntervalMinutes: Math.max(
+      5,
+      Math.min(1440, Math.trunc(Number(source.refreshIntervalMinutes) || fallback.refreshIntervalMinutes)),
+    ),
+    indicators: normalizeMarketIndicatorWeights(source.indicators, fallback.indicators),
+    overlays: {
+      transitionalBuyScale: clamp(
+        Number(overlays.transitionalBuyScale) || fallback.overlays.transitionalBuyScale,
+        0.2,
+        1,
+      ),
+      riskOffBuyScale: clamp(
+        Number(overlays.riskOffBuyScale) || fallback.overlays.riskOffBuyScale,
+        0.2,
+        1,
+      ),
+      highRiskBuyScale: clamp(
+        Number(overlays.highRiskBuyScale) || fallback.overlays.highRiskBuyScale,
+        0.1,
+        1,
+      ),
+    },
   };
 }
 
@@ -382,6 +545,33 @@ function normalizeAnalysisTimeUtc(value: unknown, fallback: string): string {
   return `${matched[1]}:${matched[2]}`;
 }
 
+function normalizeStrategyExecutionTimingV2(value: unknown, fallback: DaaStrategyExecutionTimingV2 = "t_plus_1_close"): DaaStrategyExecutionTimingV2 {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "t_plus_1_close") return "t_plus_1_close";
+  return fallback;
+}
+
+export function getStrategyExecutionConfigV2(config: Pick<DaaSystemConfigV2, "strategy">): DaaStrategyExecutionConfigV2 & {
+  maxOrderPctOfNav: number;
+} {
+  const fallback = DEFAULT_SYSTEM_CONFIG_V2.strategy;
+  const execution = config.strategy.execution || fallback.execution;
+  const constraints = config.strategy.constraints || fallback.constraints;
+  const feeRateBpsRaw = Number(execution.feeRateBps);
+  const legacyFeeRateBpsRaw = Number(constraints.tradeFeeRateBps);
+
+  return {
+    maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav), 0.01, 1),
+    feeRateBps: clamp(
+      Number.isFinite(feeRateBpsRaw) ? feeRateBpsRaw : (Number.isFinite(legacyFeeRateBpsRaw) ? legacyFeeRateBpsRaw : fallback.execution.feeRateBps),
+      0,
+      500,
+    ),
+    slippageBps: clamp(Number(execution.slippageBps), 0, 500),
+    timing: normalizeStrategyExecutionTimingV2(execution.timing, fallback.execution.timing),
+  };
+}
+
 export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
   const fallback = clone(DEFAULT_SYSTEM_CONFIG_V2);
   const source = isRecord(raw) ? raw : {};
@@ -389,6 +579,7 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
   const strategy = isRecord(source.strategy) ? source.strategy : {};
   const account = isRecord(strategy.account) ? strategy.account : {};
   const constraints = isRecord(strategy.constraints) ? strategy.constraints : {};
+  const execution = isRecord(strategy.execution) ? strategy.execution : {};
   const policy = isRecord(strategy.policy) ? strategy.policy : {};
   const risk = isRecord(strategy.risk) ? strategy.risk : {};
 
@@ -399,9 +590,11 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
   const dataSources = isRecord(source.dataSources) ? source.dataSources : {};
   const hfFund = isRecord(dataSources.hfFund) ? dataSources.hfFund : {};
   const priceFeed = isRecord(dataSources.priceFeed) ? dataSources.priceFeed : {};
+  const priceFeedMarketCache = isRecord(priceFeed.marketCache) ? priceFeed.marketCache : {};
   const newsFeed = isRecord(dataSources.newsFeed) ? dataSources.newsFeed : {};
   const fxFeed = isRecord(dataSources.fxFeed) ? dataSources.fxFeed : {};
   const llmAnalysis = isRecord(dataSources.llmAnalysis) ? dataSources.llmAnalysis : {};
+  const marketIndicators = isRecord(dataSources.marketIndicators) ? dataSources.marketIndicators : {};
 
   const notification = isRecord(source.notification) ? source.notification : {};
   const notificationEmail = isRecord(notification.email) ? notification.email : {};
@@ -432,6 +625,21 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
           500,
         ),
       },
+      execution: {
+        feeRateBps: clamp(
+          Number.isFinite(Number(execution.feeRateBps))
+            ? Number(execution.feeRateBps)
+            : (
+              Number.isFinite(Number(constraints.tradeFeeRateBps))
+                ? Number(constraints.tradeFeeRateBps)
+                : fallback.strategy.execution.feeRateBps
+            ),
+          0,
+          500,
+        ),
+        slippageBps: clamp(Number(execution.slippageBps) || fallback.strategy.execution.slippageBps, 0, 500),
+        timing: normalizeStrategyExecutionTimingV2(execution.timing, fallback.strategy.execution.timing),
+      },
       policy: {
         baseDriftTriggerPct: clamp(Number(policy.baseDriftTriggerPct) || fallback.strategy.policy.baseDriftTriggerPct, 0.01, 0.5),
         strongTrendDriftTriggerPct: clamp(Number(policy.strongTrendDriftTriggerPct) || fallback.strategy.policy.strongTrendDriftTriggerPct, 0.01, 0.5),
@@ -443,6 +651,11 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
       risk: {
         maxDrawdownPct: clamp(Number(risk.maxDrawdownPct) || fallback.strategy.risk.maxDrawdownPct, 0.05, 0.5),
         perAssetStopLossPct: clamp(Number(risk.perAssetStopLossPct) || fallback.strategy.risk.perAssetStopLossPct, 0.05, 0.5),
+        perAssetTakeProfitPct: clamp(
+          Number(risk.perAssetTakeProfitPct) || fallback.strategy.risk.perAssetTakeProfitPct,
+          0.05,
+          1.5,
+        ),
         maxConcentrationPct: clamp(Number(risk.maxConcentrationPct) || fallback.strategy.risk.maxConcentrationPct, 0.1, 1),
         correlationCapPct: clamp(Number(risk.correlationCapPct) || fallback.strategy.risk.correlationCapPct, 0.1, 1),
         maxTotalRiskExposurePct: clamp(Number(risk.maxTotalRiskExposurePct) || fallback.strategy.risk.maxTotalRiskExposurePct, 0.1, 1),
@@ -487,6 +700,20 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
         provider: String(priceFeed.provider || fallback.dataSources.priceFeed.provider).trim() || fallback.dataSources.priceFeed.provider,
         intervalMinutes: Math.max(1, Math.trunc(Number(priceFeed.intervalMinutes) || fallback.dataSources.priceFeed.intervalMinutes)),
         symbols: normalizeSymbols(priceFeed.symbols).length ? normalizeSymbols(priceFeed.symbols) : clone(fallback.dataSources.priceFeed.symbols),
+        marketCache: {
+          freshMinutes: Math.max(
+            1,
+            Math.min(180, Math.trunc(Number(priceFeedMarketCache.freshMinutes) || fallback.dataSources.priceFeed.marketCache.freshMinutes)),
+          ),
+          serveStaleHours: Math.max(
+            1,
+            Math.min(168, Math.trunc(Number(priceFeedMarketCache.serveStaleHours) || fallback.dataSources.priceFeed.marketCache.serveStaleHours)),
+          ),
+          rawRetentionDays: Math.max(
+            7,
+            Math.min(365, Math.trunc(Number(priceFeedMarketCache.rawRetentionDays) || fallback.dataSources.priceFeed.marketCache.rawRetentionDays)),
+          ),
+        },
       },
       newsFeed: {
         id: String(newsFeed.id || fallback.dataSources.newsFeed.id).trim() || fallback.dataSources.newsFeed.id,
@@ -494,6 +721,7 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
         provider: String(newsFeed.provider || fallback.dataSources.newsFeed.provider).trim() || fallback.dataSources.newsFeed.provider,
         query: String(newsFeed.query || fallback.dataSources.newsFeed.query).trim(),
         symbols: normalizeSymbols(newsFeed.symbols),
+        valuationEnabled: toBool(newsFeed.valuationEnabled, fallback.dataSources.newsFeed.valuationEnabled),
         fusionWeights: normalizeFusionWeights(newsFeed.fusionWeights),
       },
       fxFeed: {
@@ -511,6 +739,7 @@ export function normalizeSystemConfigV2(raw: unknown): DaaSystemConfigV2 {
         timeoutMs: Math.max(2000, Math.trunc(Number(llmAnalysis.timeoutMs) || fallback.dataSources.llmAnalysis.timeoutMs)),
         enabledInDecision: toBool(llmAnalysis.enabledInDecision, fallback.dataSources.llmAnalysis.enabledInDecision),
       },
+      marketIndicators: normalizeMarketIndicatorConfig(marketIndicators, fallback.dataSources.marketIndicators),
     },
     notification: {
       email: {

@@ -1,9 +1,36 @@
 {
   "crons": [
-    { "path": "/api/daa/cron/price-refresh", "schedule": "0 */4 * * *" },
-    { "path": "/api/daa/cron/fx-refresh", "schedule": "5 0 * * *" },
-    { "path": "/api/daa/cron/daily-analysis", "schedule": "* * * * *" },
-    { "path": "/api/daa/cron/drift-check", "schedule": "0 9,21 * * *" },
-    { "path": "/api/daa/cron/hf-ingest", "schedule": "0 8 * * *" }
+    {
+      "path": "/api/daa/cron/price-refresh",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/daa/cron/fx-refresh",
+      "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/daa/cron/news-refresh",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/daa/cron/market-indicators-refresh",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/daa/cron/cache-cleanup",
+      "schedule": "20 0 * * *"
+    },
+    {
+      "path": "/api/daa/cron/daily-analysis",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/daa/cron/drift-check",
+      "schedule": "0 9,21 * * *"
+    },
+    {
+      "path": "/api/daa/cron/hf-ingest",
+      "schedule": "0 8 * * *"
+    }
   ]
 }

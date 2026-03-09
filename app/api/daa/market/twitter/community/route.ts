@@ -1,16 +1,15 @@
-import { NextResponse } from "next/server";
+import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
 
 import { clampLimitV0, fetchTextWithTimeoutV0, getProviderErrorStatusV0, mustGetEnvV0 } from "../../_lib/providerAdaptersV0";
 
-function json(data: unknown, init?: ResponseInit) {
-  return NextResponse.json(data, init);
+function parseJsonBestEffortV1(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
 }
 
-// Fetch tweets from a Twitter Community timeline via pro.twitterdata.com.
-// Token MUST stay server-side (env) to avoid leaking to the browser.
-//
-// Note: twitterdata's community timeline API is cursor-paginated.
-// We intentionally keep the upstream response raw and let the Step2 UI normalize.
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -19,13 +18,10 @@ export async function GET(req: Request) {
     const limit = clampLimitV0(url.searchParams.get("limit"));
 
     if (!communityId) {
-      return json({ error: "missing communityId" }, { status: 400 });
+      return failV1("VALIDATION_FAILED", "missing communityId", { status: 400 });
     }
 
     const token = mustGetEnvV0("TWITTERDATA_TOKEN");
-
-    // twitterdata doesn't publicly document all endpoints in one place.
-    // Allow overriding the endpoint name for quick fixes without code changes.
     const endpoint = (process.env.TWITTERDATA_COMMUNITY_ENDPOINT || "CommunityTweetsTimeline").trim();
     const upstream = new URL(`https://pro.twitterdata.com/${endpoint}`);
 
@@ -34,39 +30,35 @@ export async function GET(req: Request) {
     if (cursor) upstream.searchParams.set("cursor", cursor);
     upstream.searchParams.set("limit", String(limit));
 
-    const r = await fetchTextWithTimeoutV0(upstream, {
+    const response = await fetchTextWithTimeoutV0(upstream, {
       method: "GET",
       headers: {
         accept: "application/json",
       },
     });
 
-    const text = await r.text();
-    if (!r.ok) {
-      return json(
-        {
-          error: "twitterdata upstream error",
-          status: r.status,
+    const text = await response.text();
+    if (!response.ok) {
+      return failV1("INTERNAL_ERROR", "twitterdata upstream error", {
+        status: 502,
+        details: {
+          status: response.status,
         },
-        { status: 502 },
-      );
+      });
     }
 
-    let payload: unknown;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = { raw: text };
-    }
-
-    return json({ ok: true, source: "twitterdata", communityId, cursor: cursor || null, payload });
-  } catch (e) {
-    return json(
-      {
-        error: "twitter community fetch failed",
-        message: e instanceof Error ? e.message : String(e),
+    return okV1({
+      source: "twitterdata",
+      communityId,
+      cursor: cursor || null,
+      payload: parseJsonBestEffortV1(text),
+    });
+  } catch (error) {
+    return failV1("INTERNAL_ERROR", "twitter community fetch failed", {
+      status: getProviderErrorStatusV0(error),
+      details: {
+        message: error instanceof Error ? error.message : String(error),
       },
-      { status: getProviderErrorStatusV0(e) },
-    );
+    });
   }
 }

@@ -11,6 +11,8 @@ export type RebalanceCoreConstraints = {
   // Per-order notional caps (v0 heuristic, aligned with existing engine simulate behavior).
   maxIn?: number;
   maxOut?: number;
+  // Optional NAV-based cap. Higher-level simulators can derive maxIn/maxOut from this value per day.
+  maxOrderPctOfNav?: number;
   // Ignore tiny computed orders below this threshold.
   minNotional?: number;
 
@@ -377,6 +379,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     maxPositionPct: clamp01(toFiniteNumber(req?.constraints?.maxPositionPct, 1)),
     maxIn: Math.max(0, toFiniteNumber(req?.constraints?.maxIn, Number.POSITIVE_INFINITY)),
     maxOut: Math.max(0, toFiniteNumber(req?.constraints?.maxOut, Number.POSITIVE_INFINITY)),
+    maxOrderPctOfNav: Math.max(0, toFiniteNumber(req?.constraints?.maxOrderPctOfNav, 1)),
     minNotional: Math.max(0, toFiniteNumber(req?.constraints?.minNotional, 1e-6)),
     assetBlacklist,
   };

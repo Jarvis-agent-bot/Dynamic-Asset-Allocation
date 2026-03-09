@@ -1,12 +1,20 @@
 import {
-  fetchDanjuanFundAssetPercentV1,
+  fetchDanjuanFundAssetPercentWithRawV1,
   isDanjuanSourceEnabledV1,
   resolveDanjuanFundRegistryV1,
   resolveDanjuanReportDatesV1,
   type DanjuanFundRegistryItemV1,
+  type DanjuanFundFetchRawV1,
   type DanjuanHoldingRowV1,
 } from "@/src/daa/hf/danjuanFundSourceV1";
-import { getDaaHumanIngestStateV1, getDaaSystemConfigV2, saveDaaHumanIngestStateV1 } from "@/src/daa/store/daaStorePgV1";
+import {
+  appendDaaExternalPayloadRawV1,
+  getDaaHumanIngestStateV1,
+  getDaaSystemConfigV2,
+  replaceDaaHfHoldingSnapshotsV1,
+  saveDaaHumanIngestStateV1,
+  upsertDaaHfSignalSnapshotsV1,
+} from "@/src/daa/store/daaStorePgV1";
 import { HF_DEFAULT_MARKET_SCOPE_V1, HF_SEED_ACTORS_V1, HF_SEED_HOLDINGS_V1 } from "@/src/daa/hf/hfSeedDataV1";
 import type {
   DaaActorHoldingSnapshotV1,
@@ -16,6 +24,8 @@ import type {
   DaaHumanSignalSourceSummaryV1,
   DaaHumanSignalV1,
 } from "@/src/daa/hf/humanSignalsV1";
+
+const HF_RAW_RETENTION_DAYS_V1 = 90;
 
 function clampPct(v: number, fallback = 0): number {
   if (!Number.isFinite(v)) return fallback;
@@ -495,6 +505,11 @@ async function fetchDanjuanRows(opts: {
   fundCodes?: string[];
 }): Promise<{
   rows: DanjuanHoldingRowV1[];
+  rawPayloads: Array<{
+    fundCode: string;
+    reportDate: string;
+    raw: DanjuanFundFetchRawV1;
+  }>;
   registry: DanjuanFundRegistryItemV1[];
   diagnostics: {
     requestPairs: number;
@@ -506,24 +521,27 @@ async function fetchDanjuanRows(opts: {
   try {
     const system = await getDaaSystemConfigV2();
     const hfSource = system.config.dataSources.hfFund;
-    const fundsFromDb = hfSource.enabled
-      ? (hfSource.funds ?? [])
-          .map((item): DanjuanFundRegistryItemV1 => {
-            const kind: DanjuanFundRegistryItemV1["kind"] =
-              item?.kind === "qdii" || item?.kind === "balanced" ? item.kind : "equity";
-            const fundCode = String(item?.fundCode || "").trim();
-            return {
-              fundCode,
-              label: String(item?.label || "").trim() || `基金 ${fundCode}`,
-              kind,
-              enabled: item?.enabled !== false,
-            };
-          })
-          .filter((item) => item.fundCode.length > 0 && item.enabled)
-      : [];
-    if (fundsFromDb.length > 0) {
-      resolvedRegistry = fundsFromDb;
+    if (hfSource.enabled === false) {
+      return {
+        rows: [],
+        rawPayloads: [],
+        registry: [],
+        diagnostics: { requestPairs: 0, nonEmptyPairs: 0, concurrency: resolveDanjuanConcurrencyV1() },
+      };
     }
+    resolvedRegistry = (hfSource.funds ?? [])
+      .map((item): DanjuanFundRegistryItemV1 => {
+        const kind: DanjuanFundRegistryItemV1["kind"] =
+          item?.kind === "qdii" || item?.kind === "balanced" ? item.kind : "equity";
+        const fundCode = String(item?.fundCode || "").trim();
+        return {
+          fundCode,
+          label: String(item?.label || "").trim() || `基金 ${fundCode}`,
+          kind,
+          enabled: item?.enabled !== false,
+        };
+      })
+      .filter((item) => item.fundCode.length > 0 && item.enabled);
   } catch {
     // 数据源读取失败时回退到本地默认配置，避免采集中断。
   }
@@ -545,6 +563,7 @@ async function fetchDanjuanRows(opts: {
   if (!registry.length) {
     return {
       rows: [],
+      rawPayloads: [],
       registry: [],
       diagnostics: { requestPairs: 0, nonEmptyPairs: 0, concurrency: resolveDanjuanConcurrencyV1() },
     };
@@ -559,20 +578,33 @@ async function fetchDanjuanRows(opts: {
   );
   const concurrency = resolveDanjuanConcurrencyV1();
   const fetched = await runTasksWithConcurrencyV1(tasks, concurrency, async (task) => {
-    const rows = await fetchDanjuanFundAssetPercentV1({
+    const fetchedRows = await fetchDanjuanFundAssetPercentWithRawV1({
       fundCode: task.fundCode,
       reportDate: task.reportDate,
     });
     return {
       fundCode: task.fundCode,
       reportDate: task.reportDate,
-      rows,
+      rows: fetchedRows.rows,
+      raw: fetchedRows.raw,
     };
   });
 
   const results: DanjuanHoldingRowV1[] = [];
+  const rawPayloads: Array<{
+    fundCode: string;
+    reportDate: string;
+    raw: DanjuanFundFetchRawV1;
+  }> = [];
   let nonEmptyPairs = 0;
   for (const item of fetched) {
+    if (item.raw) {
+      rawPayloads.push({
+        fundCode: item.fundCode,
+        reportDate: item.reportDate,
+        raw: item.raw,
+      });
+    }
     if (!item.rows.length) continue;
     nonEmptyPairs += 1;
     results.push(...item.rows);
@@ -586,6 +618,7 @@ async function fetchDanjuanRows(opts: {
 
   return {
     rows: [...dedup.values()],
+    rawPayloads,
     registry,
     diagnostics: {
       requestPairs: tasks.length,
@@ -794,6 +827,11 @@ async function buildDanjuanSignalBatch(opts: {
   batch: DaaHumanSignalBatchV1;
   actors: DaaHumanActorV1[];
   holdings: DaaActorHoldingSnapshotV1[];
+  rawPayloads: Array<{
+    fundCode: string;
+    reportDate: string;
+    raw: DanjuanFundFetchRawV1;
+  }>;
   diagnostics: {
     requestPairs: number;
     nonEmptyPairs: number;
@@ -802,7 +840,7 @@ async function buildDanjuanSignalBatch(opts: {
 } | null> {
   if (!isDanjuanSourceEnabledV1()) return null;
 
-  const { rows, registry, diagnostics } = await fetchDanjuanRows({
+  const { rows, rawPayloads, registry, diagnostics } = await fetchDanjuanRows({
     reportDates: opts.reportDates,
     fundCodes: opts.fundCodes,
   });
@@ -823,6 +861,7 @@ async function buildDanjuanSignalBatch(opts: {
     batch,
     actors,
     holdings,
+    rawPayloads,
     diagnostics,
   };
 }
@@ -982,6 +1021,73 @@ export async function runHumanIngestV1(opts: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     diagnostics.push(`store_persist_failed:${message}`);
+  }
+
+  try {
+    const rawRefByFundReport = new Map<string, string>();
+    const ingestFetchedAt = runtimeStateV1.lastIngestAt || new Date().toISOString();
+    if (danjuan?.rawPayloads?.length) {
+      for (const payload of danjuan.rawPayloads) {
+        try {
+          const raw = await appendDaaExternalPayloadRawV1({
+            provider: "danjuan",
+            resource: "danjuan.fund.asset.percent",
+            subjectKey: `${payload.fundCode}::${payload.reportDate}`,
+            requestUrl: payload.raw.requestUrl,
+            requestJson: {
+              fundCode: payload.fundCode,
+              reportDate: payload.reportDate,
+            },
+            responseStatus: payload.raw.responseStatus,
+            responseHeadersJson: payload.raw.responseHeadersJson,
+            payloadJson: payload.raw.payloadJson,
+            payloadText: payload.raw.payloadText || null,
+            fetchedAt: ingestFetchedAt,
+            expireAt: new Date(Date.now() + HF_RAW_RETENTION_DAYS_V1 * 24 * 3600 * 1000).toISOString(),
+          });
+          rawRefByFundReport.set(`${payload.fundCode}::${payload.reportDate}`, raw.id);
+        } catch {
+          // ignore raw persist errors
+        }
+      }
+    }
+
+    await replaceDaaHfHoldingSnapshotsV1(
+      runtimeStateV1.latestHoldings.map((row) => {
+        const fundCode = extractDanjuanFundCode(row.actorId) || row.actorId;
+        const reportDate = String(row.disclosedAt || "").slice(0, 10);
+        return {
+          provider: "danjuan",
+          fundCode,
+          reportDate,
+          symbol: normalizeSymbol(row.symbol),
+          market: normalizeSymbol(row.market),
+          weightPct: Number(row.weightPct || 0),
+          prevWeightPct: Number(row.prevWeightPct || 0),
+          disclosedAt: row.disclosedAt,
+          confidencePct: Number(row.confidencePct || 0),
+          sourceRef: row.sourceRef,
+          fetchedAt: ingestFetchedAt,
+          rawRefId: rawRefByFundReport.get(`${fundCode}::${reportDate}`) || null,
+        };
+      }),
+      "danjuan",
+    );
+    await upsertDaaHfSignalSnapshotsV1(
+      batchWithSource.signals.map((signal) => ({
+        provider: "human_signal",
+        symbol: signal.symbol,
+        aggregatedScorePct: signal.aggregatedScorePct,
+        convictionPct: signal.convictionPct,
+        thesisDriftPct: signal.thesisDriftPct,
+        fundCount: signal.evidenceCount,
+        fundsJson: signal.actorIds.map((actorId) => ({ actorId })),
+        generatedAt: batchWithSource.generatedAt,
+      })),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    diagnostics.push(`hf_snapshot_persist_failed:${message}`);
   }
 
   return {

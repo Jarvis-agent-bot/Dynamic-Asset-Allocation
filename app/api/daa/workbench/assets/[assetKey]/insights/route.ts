@@ -2,8 +2,11 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
 import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
+import { buildMarketContextAttributionV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
+import { preferAssetRowPriceV1 } from "@/src/daa/modules/workbench/preferAssetRowPriceV1";
 import { buildOpportunityPanelV1 } from "@/src/daa/signals/opportunityServiceV1";
 import {
+  buildWorkbenchBootstrapV1,
   mapOpportunityActionLabelZhV1,
   summarizeOpportunityReasonZhV1,
   summarizeOpportunityRiskZhV1,
@@ -78,6 +81,33 @@ function toMetricArray(technical: any): InsightMetricV1[] {
   return common;
 }
 
+function valuationTemperatureLabelV1(value: "cheap" | "neutral" | "expensive"): string {
+  if (value === "cheap") return "偏便宜";
+  if (value === "expensive") return "偏贵";
+  return "中性";
+}
+
+function toPriceSnapshotV1(row: {
+  lastPrice: number;
+  holdingPrice: number;
+  currency: string;
+  priceStatus: "fresh" | "stale" | "missing" | "unsupported";
+  priceSource: string;
+  priceUpdatedAt: string | null;
+  priceAgeSec: number | null;
+} | null) {
+  if (!row) return null;
+  const price = Number(row.lastPrice || row.holdingPrice || 0);
+  return {
+    price,
+    currency: row.currency,
+    priceStatus: row.priceStatus,
+    priceSource: row.priceSource,
+    priceUpdatedAt: row.priceUpdatedAt,
+    priceAgeSec: row.priceAgeSec,
+  };
+}
+
 export async function GET(req: Request, ctx: Ctx) {
   return withApiHandlerV1(async () => {
     const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
@@ -92,10 +122,39 @@ export async function GET(req: Request, ctx: Ctx) {
     const includeLlm = parseBool(url.searchParams.get("includeLlm"), false);
     const analysisFocus = String(url.searchParams.get("analysisFocus") || "评估该资产的机会与风险").trim() || "评估该资产的机会与风险";
 
-    const panel = await buildOpportunityPanelV1({ symbols: [parsed.symbol] });
-    const opp = panel.opportunities.find((item) => item.symbol === parsed.symbol) || null;
-    const technical = panel.raw.technicalSignals.find((item) => item.symbol === parsed.symbol) || null;
-    const news = panel.raw.newsSignals.find((item) => item.symbol === parsed.symbol) || null;
+    const [bootstrap, panel] = await Promise.all([
+      buildWorkbenchBootstrapV1({ syncPrices: false }),
+      buildOpportunityPanelV1({ symbols: [parsed.symbol] }),
+    ]);
+    const bootstrapRow = bootstrap.assetUniverse.find((item) => item.assetKey === `${parsed.market}::${parsed.symbol}`) || null;
+    let resolvedAssetRow = bootstrapRow;
+    if (bootstrapRow) {
+      try {
+        resolvedAssetRow = await preferAssetRowPriceV1(bootstrapRow, "asset_insights");
+      } catch {
+        resolvedAssetRow = bootstrapRow;
+      }
+    }
+    const priceSnapshot = toPriceSnapshotV1(resolvedAssetRow);
+    const marketContext = bootstrap.marketContext || null;
+    const marketAttribution = buildMarketContextAttributionV1({
+      symbol: parsed.symbol,
+      assetClass: resolvedAssetRow?.assetClass,
+      marketGroup: resolvedAssetRow?.marketGroup,
+      instrumentType: resolvedAssetRow?.instrumentType,
+      holdingTags: resolvedAssetRow?.holdingTags,
+      watchTags: resolvedAssetRow?.watchTags,
+      marketContext,
+    });
+
+    const opportunities = Array.isArray(panel?.opportunities) ? panel.opportunities : [];
+    const technicalSignals = Array.isArray((panel as any)?.raw?.technicalSignals) ? (panel as any).raw.technicalSignals : [];
+    const newsSignals = Array.isArray((panel as any)?.raw?.newsSignals) ? (panel as any).raw.newsSignals : [];
+    const valuationSignals = Array.isArray((panel as any)?.raw?.valuationSignals) ? (panel as any).raw.valuationSignals : [];
+    const opp = opportunities.find((item: any) => item.symbol === parsed.symbol) || null;
+    const technical = technicalSignals.find((item: any) => item.symbol === parsed.symbol) || null;
+    const news = newsSignals.find((item: any) => item.symbol === parsed.symbol) || null;
+    const valuation = valuationSignals.find((item: any) => item.symbol === parsed.symbol) || null;
 
     const riskHints: string[] = [];
     if (opp) {
@@ -109,6 +168,12 @@ export async function GET(req: Request, ctx: Ctx) {
     }
     if (technical && Number(technical.metrics?.annualizedVolPct || 0) >= 35) {
       riskHints.push(`技术面显示年化波动 ${Number(technical.metrics?.annualizedVolPct || 0).toFixed(2)}% 偏高`);
+    }
+    if (priceSnapshot?.priceStatus === "stale") {
+      riskHints.push("当前行情来自较旧缓存，建议结合最新市场状态判断");
+    }
+    if (priceSnapshot?.priceStatus === "missing") {
+      riskHints.push("当前暂无可用行情快照，部分信号可能滞后");
     }
 
     const llmAnalysis = includeLlm && opp
@@ -126,6 +191,7 @@ export async function GET(req: Request, ctx: Ctx) {
           reasons: opp.reasons,
         }],
         warnings: riskHints,
+        marketContext,
       })
       : null;
 
@@ -147,6 +213,7 @@ export async function GET(req: Request, ctx: Ctx) {
       assetKey: `${parsed.market}::${parsed.symbol}`,
       symbol: parsed.symbol,
       generatedAt: new Date().toISOString(),
+      priceSnapshot,
       opportunity: opp ? {
         action: opp.action,
         actionLabelZh: mapOpportunityActionLabelZhV1(opp.action),
@@ -156,6 +223,7 @@ export async function GET(req: Request, ctx: Ctx) {
         reasons: opp.reasons,
         reasonZh: summarizeOpportunityReasonZhV1(opp.reasons),
         riskZh: summarizeOpportunityRiskZhV1(opp.riskScorePct, opp.reasons),
+        scores: opp.scores,
       } : null,
       technical: technical ? {
         scorePct: technical.scorePct,
@@ -170,7 +238,7 @@ export async function GET(req: Request, ctx: Ctx) {
         confidencePct: news.confidencePct,
         evidenceCount: news.evidenceCount,
         reasons: news.reasons,
-        items: news.items.slice(0, 8).map((item) => ({
+        items: news.items.slice(0, 8).map((item: any) => ({
           title: item.title,
           link: item.link || "",
           ts: item.ts,
@@ -179,6 +247,47 @@ export async function GET(req: Request, ctx: Ctx) {
         })),
         aiSummary,
       } : null,
+      valuation: valuation ? {
+        scorePct: valuation.scorePct,
+        confidencePct: valuation.confidencePct,
+        temperature: valuation.temperature,
+        reasons: valuation.reasons,
+        common: [
+          {
+            key: "valuation_temperature",
+            label: "估值温度",
+            value: valuationTemperatureLabelV1(valuation.temperature),
+            status: valuation.temperature === "cheap" ? "bullish" : (valuation.temperature === "expensive" ? "bearish" : "neutral"),
+          },
+          {
+            key: "valuation_percentile_90",
+            label: "90日价格分位",
+            value: valuation.metrics.percentile90,
+            unit: "%",
+            status: valuation.metrics.percentile90 <= 25 ? "bullish" : (valuation.metrics.percentile90 >= 75 ? "bearish" : "neutral"),
+          },
+          {
+            key: "valuation_percentile_252",
+            label: "252日价格分位",
+            value: valuation.metrics.percentile252,
+            unit: "%",
+            status: valuation.metrics.percentile252 <= 30 ? "bullish" : (valuation.metrics.percentile252 >= 70 ? "bearish" : "neutral"),
+          },
+          {
+            key: "valuation_zscore_60",
+            label: "60日Z-Score",
+            value: valuation.metrics.zscore60,
+            status: valuation.metrics.zscore60 <= -1 ? "bullish" : (valuation.metrics.zscore60 >= 1 ? "bearish" : "neutral"),
+          },
+        ],
+        specific: valuation.specific,
+        relative: valuation.relative ? {
+          ...valuation.relative,
+          description: valuation.relative.description,
+        } : null,
+      } : null,
+      marketContext,
+      marketAttribution,
       llmAnalysis,
       riskHints,
     });

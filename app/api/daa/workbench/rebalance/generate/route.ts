@@ -11,11 +11,12 @@ type Body = {
   manual?: unknown;
 };
 
-function toTriggerSource(value: unknown): "calendar" | "drift" | "manual" | undefined {
+function toTriggerSource(value: unknown): "calendar" | "drift" | "manual" | "risk" | undefined {
   const text = String(value || "").trim().toLowerCase();
   if (text === "calendar") return "calendar";
   if (text === "drift") return "drift";
   if (text === "manual") return "manual";
+  if (text === "risk") return "risk";
   return undefined;
 }
 

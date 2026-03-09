@@ -19,6 +19,19 @@ export type DanjuanHoldingRowV1 = {
   sourceRef: string;
 };
 
+export type DanjuanFundFetchRawV1 = {
+  requestUrl: string;
+  responseStatus: number;
+  responseHeadersJson: Record<string, string>;
+  payloadJson: Record<string, unknown> | null;
+  payloadText: string;
+};
+
+export type DanjuanFundAssetPercentFetchResultV1 = {
+  rows: DanjuanHoldingRowV1[];
+  raw: DanjuanFundFetchRawV1 | null;
+};
+
 const DEFAULT_REGISTRY: DanjuanFundRegistryItemV1[] = [
   { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
   { fundCode: "100055", label: "富国全球科技互联网", kind: "qdii", enabled: true },
@@ -43,6 +56,14 @@ function clampPct(value: unknown): number {
   if (n <= 0) return 0;
   if (n >= 100) return 100;
   return Number(n.toFixed(4));
+}
+
+function extractHeadersV1(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
 }
 
 function normalizeReportDate(raw: string): string {
@@ -128,14 +149,14 @@ export function isDanjuanSourceEnabledV1(): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-export async function fetchDanjuanFundAssetPercentV1(params: {
+export async function fetchDanjuanFundAssetPercentWithRawV1(params: {
   fundCode: string;
   reportDate: string;
   timeoutMs?: number;
-}): Promise<DanjuanHoldingRowV1[]> {
+}): Promise<DanjuanFundAssetPercentFetchResultV1> {
   const fundCode = normalizeFundCode(params.fundCode);
   const reportDate = normalizeReportDate(params.reportDate);
-  if (!fundCode || !reportDate) return [];
+  if (!fundCode || !reportDate) return { rows: [], raw: null };
 
   const url = new URL("https://danjuanfunds.com/djapi/fundx/base/fund/record/asset/percent");
   url.searchParams.set("fund_code", fundCode);
@@ -157,8 +178,6 @@ export async function fetchDanjuanFundAssetPercentV1(params: {
       },
     });
 
-    if (!response.ok) return [];
-
     const text = await response.text();
     let payload: any = null;
     try {
@@ -167,49 +186,80 @@ export async function fetchDanjuanFundAssetPercentV1(params: {
       payload = null;
     }
 
+    const raw: DanjuanFundFetchRawV1 = {
+      requestUrl: url.toString(),
+      responseStatus: response.status,
+      responseHeadersJson: extractHeadersV1(response.headers),
+      payloadJson: payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null,
+      payloadText: text,
+    };
+
+    if (!response.ok) return { rows: [], raw };
+
     const data = payload?.data;
     const rows = Array.isArray(data?.stock_list) ? data.stock_list : [];
     const sourceMark = normalizeReportDate(String(data?.source || data?.source_mark || reportDate));
     const cashPercent = clampPct(data?.cash_percent);
     const stockPercent = clampPct(data?.stock_percent);
 
-    return rows
-      .map((row: any) => {
-        const symbolRaw = String(row?.code || "").trim();
-        const symbol = toNormalizedSymbol(symbolRaw);
-        if (!symbol) return null;
-        const assetName = String(row?.name || symbolRaw || symbol).trim();
-        return {
-          fundCode,
-          fundName: String(data?.fund_name || "").trim() || `基金 ${fundCode}`,
-          reportDate: sourceMark || reportDate,
-          cashPercent,
-          stockPercent,
-          symbol,
-          symbolRaw,
-          assetName,
-          weightPct: clampPct(row?.percent),
-          sourceRef: `https://danjuanfunds.com/rn/fund-detail/archive?id=103&code=${encodeURIComponent(fundCode)}`,
-          market: toMarketByCode(symbolRaw),
-        };
-      })
-      .filter(Boolean)
-      .map((row: any) => ({
-        fundCode: row.fundCode,
-        fundName: row.fundName,
-        reportDate: row.reportDate,
-        market: row.market,
-        cashPercent: row.cashPercent,
-        stockPercent: row.stockPercent,
-        symbol: row.symbol,
-        symbolRaw: row.symbolRaw,
-        assetName: row.assetName,
-        weightPct: row.weightPct,
-        sourceRef: row.sourceRef,
-      }));
+    return {
+      rows: rows
+        .map((row: any) => {
+          const symbolRaw = String(row?.code || "").trim();
+          const symbol = toNormalizedSymbol(symbolRaw);
+          if (!symbol) return null;
+          const assetName = String(row?.name || symbolRaw || symbol).trim();
+          return {
+            fundCode,
+            fundName: String(data?.fund_name || "").trim() || `基金 ${fundCode}`,
+            reportDate: sourceMark || reportDate,
+            cashPercent,
+            stockPercent,
+            symbol,
+            symbolRaw,
+            assetName,
+            weightPct: clampPct(row?.percent),
+            sourceRef: `https://danjuanfunds.com/rn/fund-detail/archive?id=103&code=${encodeURIComponent(fundCode)}`,
+            market: toMarketByCode(symbolRaw),
+          };
+        })
+        .filter(Boolean)
+        .map((row: any) => ({
+          fundCode: row.fundCode,
+          fundName: row.fundName,
+          reportDate: row.reportDate,
+          market: row.market,
+          cashPercent: row.cashPercent,
+          stockPercent: row.stockPercent,
+          symbol: row.symbol,
+          symbolRaw: row.symbolRaw,
+          assetName: row.assetName,
+          weightPct: row.weightPct,
+          sourceRef: row.sourceRef,
+        })),
+      raw,
+    };
   } catch {
-    return [];
+    return {
+      rows: [],
+      raw: {
+        requestUrl: url.toString(),
+        responseStatus: 0,
+        responseHeadersJson: {},
+        payloadJson: null,
+        payloadText: "",
+      },
+    };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function fetchDanjuanFundAssetPercentV1(params: {
+  fundCode: string;
+  reportDate: string;
+  timeoutMs?: number;
+}): Promise<DanjuanHoldingRowV1[]> {
+  const result = await fetchDanjuanFundAssetPercentWithRawV1(params);
+  return result.rows;
 }

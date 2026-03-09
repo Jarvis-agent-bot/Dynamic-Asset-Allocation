@@ -1,65 +1,46 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
+import { refreshMarketPricesV1, type MarketPriceAssetInputV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
+import { getMarketIndicatorRefreshSymbolsV1 } from "@/src/daa/modules/marketContext/marketIndicatorCatalogV1";
+import { WORKBENCH_FEATURED_ASSETS_CATALOG_V1 } from "@/src/daa/modules/workbench/featuredAssetsCatalogV1";
 import {
-  appendPriceHistoryRowsV1,
+  appendAssetPriceHistoryRowsV1,
   getDaaSystemConfigV2,
   listDaaAssetUniverseV1,
   updateDaaAssetUniverseLastPriceV1,
 } from "@/src/daa/store/daaStorePgV1";
-import { fetchYfinanceLatestCloseV1 } from "@/src/market/yfinanceFetchV1";
-import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
 
 export const runtime = "nodejs";
 
-function toSymbolsFromDataSources(dataSources: Array<{ configJson: Record<string, unknown> }>): string[] {
-  const out = new Set<string>();
-  for (const source of dataSources) {
-    const symbolsRaw = (source.configJson as any)?.symbols;
-    if (Array.isArray(symbolsRaw)) {
-      for (const symbol of symbolsRaw) {
-        const key = String(symbol || "").trim().toUpperCase();
-        if (key) out.add(key);
-      }
-      continue;
-    }
-
-    if (typeof symbolsRaw === "string") {
-      for (const part of symbolsRaw.split(",")) {
-        const key = String(part || "").trim().toUpperCase();
-        if (key) out.add(key);
-      }
-    }
-  }
-  return [...out];
+function normalizeUpper(value: unknown, fallback = ""): string {
+  const text = String(value || "").trim().toUpperCase();
+  return text || fallback;
 }
 
-type PriceTarget = {
-  yfinanceSymbol: string;
-};
+function inferMarketBySymbolV1(symbolRaw: string): string {
+  const symbol = normalizeUpper(symbolRaw);
+  if (!symbol) return "US";
+  if (symbol.endsWith(".HK")) return "HK";
+  if (symbol.endsWith(".SS") || symbol.endsWith(".SZ")) return "CN";
+  if (symbol.includes("-USD")) return "CRYPTO";
+  return "US";
+}
 
-function toPriceTargetsV1(input: {
-  dataSources: Array<{ configJson: Record<string, unknown> }>;
-  assetRows: Array<{ symbol: string; market: string }>;
-}): PriceTarget[] {
-  const out = new Map<string, PriceTarget>();
-
-  for (const row of input.assetRows) {
-    const yfinanceSymbol = toYfinanceSymbolByMarketV1(row.symbol, row.market);
-    if (!yfinanceSymbol) continue;
-    out.set(yfinanceSymbol, {
-      yfinanceSymbol,
-    });
+function dedupeTargetsV1(rows: MarketPriceAssetInputV1[]): MarketPriceAssetInputV1[] {
+  const out = new Map<string, MarketPriceAssetInputV1>();
+  for (const row of rows) {
+    const market = normalizeUpper(row.market, "US");
+    const symbol = normalizeUpper(row.symbol);
+    if (!symbol) continue;
+    const key = `${market}::${symbol}`;
+    if (!out.has(key)) {
+      out.set(key, {
+        market,
+        symbol,
+        currency: normalizeUpper(row.currency, market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD"),
+      });
+    }
   }
-
-  const sourceSymbols = toSymbolsFromDataSources(input.dataSources);
-  for (const symbol of sourceSymbols) {
-    const yfinanceSymbol = toYfinanceSymbolByMarketV1(symbol, "US");
-    if (!yfinanceSymbol || out.has(yfinanceSymbol)) continue;
-    out.set(yfinanceSymbol, {
-      yfinanceSymbol,
-    });
-  }
-
   return [...out.values()];
 }
 
@@ -72,39 +53,77 @@ export async function POST(req: Request) {
     }
 
     const [system, assetRows] = await Promise.all([getDaaSystemConfigV2(), listDaaAssetUniverseV1()]);
-    const priceFeed = system.config.dataSources.priceFeed;
-    const dataSources = priceFeed.enabled
-      ? [{ configJson: { symbols: priceFeed.symbols } }]
-      : [];
-    const priceTargets = toPriceTargetsV1({ dataSources, assetRows });
+    const marketCache = system.config.dataSources.priceFeed.marketCache;
 
-    const latestBySymbol = new Map<string, { symbol: string; price: number; ts: string }>();
-    for (const target of priceTargets) {
-      const latest = await fetchYfinanceLatestCloseV1(target.yfinanceSymbol);
-      if (!latest || !(latest.price > 0)) continue;
-      latestBySymbol.set(target.yfinanceSymbol, latest);
-    }
-    const hits = [...latestBySymbol.values()];
+    const targets = dedupeTargetsV1([
+      ...assetRows.map((row) => ({
+        market: row.market,
+        symbol: row.symbol,
+        currency: row.currency,
+      })),
+      ...(system.config.dataSources.priceFeed.symbols || []).map((symbol) => {
+        const market = inferMarketBySymbolV1(symbol);
+        return {
+          market,
+          symbol: normalizeUpper(symbol),
+          currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
+        };
+      }),
+      ...WORKBENCH_FEATURED_ASSETS_CATALOG_V1.map((row) => ({
+        market: row.market,
+        symbol: row.symbol,
+        currency: row.currency,
+      })),
+      ...getMarketIndicatorRefreshSymbolsV1(system.config.dataSources.marketIndicators).map((symbol) => {
+        const market = inferMarketBySymbolV1(symbol);
+        return {
+          market,
+          symbol: normalizeUpper(symbol),
+          currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
+        };
+      }),
+    ]);
 
-    await appendPriceHistoryRowsV1(hits.map((row) => ({ ...row, source: "yfinance" })));
+    const result = await refreshMarketPricesV1({
+      assets: targets,
+      triggerSource: "cron_price_refresh",
+      timeoutMs: 2600,
+      concurrency: 6,
+      rawRetentionDays: marketCache.rawRetentionDays,
+    });
 
     const refreshedAssetKeys: string[] = [];
+    const historyRows: Array<{ assetKey: string; ts?: string; price: number; source?: string }> = [];
     for (const row of assetRows) {
-      const yfinanceSymbol = toYfinanceSymbolByMarketV1(row.symbol, row.market);
-      if (!yfinanceSymbol) continue;
-      const latest = latestBySymbol.get(yfinanceSymbol);
-      if (!latest || !(latest.price > 0)) continue;
+      const key = `${normalizeUpper(row.market, "US")}::${normalizeUpper(row.symbol)}`;
+      const priced = result.results[key];
+      if (!priced || !(priced.price > 0)) continue;
+      if (!priced.priceUpdatedAt) continue;
+      const updatedAt = priced.priceUpdatedAt;
       const updated = await updateDaaAssetUniverseLastPriceV1({
         assetKey: row.assetKey,
-        lastPrice: latest.price,
-        priceUpdatedAt: latest.ts,
+        lastPrice: priced.price,
+        priceUpdatedAt: updatedAt,
       });
-      if (updated) refreshedAssetKeys.push(updated.assetKey);
+      if (!updated) continue;
+      refreshedAssetKeys.push(updated.assetKey);
+      historyRows.push({
+        assetKey: updated.assetKey,
+        price: priced.price,
+        ts: updatedAt,
+        source: "cron_price_refresh",
+      });
+    }
+
+    if (historyRows.length > 0) {
+      await appendAssetPriceHistoryRowsV1(historyRows);
     }
 
     return okV1({
-      refreshedSymbols: hits.length,
-      symbols: hits.map((x) => x.symbol),
+      requested: targets.length,
+      refreshedSymbols: result.refreshed,
+      staleSymbols: result.stale,
+      missingSymbols: result.missing,
       refreshedAssets: refreshedAssetKeys.length,
       assetKeys: refreshedAssetKeys,
       at: new Date().toISOString(),

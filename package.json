@@ -5,14 +5,17 @@
   "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "next dev",
+    "dev:mem": "DAA_PG_MEM=1 next dev",
     "build": "next build",
     "build:check": "NEXT_DIST_DIR=.next-check next build",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "test:daa-e2e-chain-gate-v0": "pnpm run gates",
-    "typecheck": "tsc -p tsconfig.core.json",
-    "gates": "pnpm test && pnpm run typecheck && pnpm run build:check"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gates": "pnpm test && pnpm run typecheck && pnpm run build:check",
+    "typecheck:core": "tsc -p tsconfig.core.json"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -33,6 +36,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/node": "^25.2.0",
     "@types/pg": "^8.16.0",
     "@types/react": "19.2.13",

@@ -1,13 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Plus, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import type {
   WorkbenchFeaturedAssetGroupV1,
   WorkbenchFeaturedAssetItemV1,
@@ -15,9 +12,26 @@ import type {
   WorkbenchSearchAssetResultV1,
 } from "@/src/daa/modules/workbench/workbenchTypesV1";
 
+import {
+  DeepLedgerActionButton,
+  DeepLedgerEmptyState,
+  DeepLedgerFilterChip,
+  DeepLedgerMiniStat,
+  DeepLedgerNoticeBox,
+  DeepLedgerPanel,
+  DeepLedgerStatusPill,
+  deepLedgerFieldClassName,
+  deepLedgerSearchShellClassName,
+  deepLedgerTableCellClassName,
+  deepLedgerTableHeadClassName,
+  deepLedgerTableShellClassName,
+} from "../../../_components/DeepLedgerUI";
+
 const ASSET_CLASS_OPTIONS_V1 = [
+  { value: "ALL", label: "全部" },
   { value: "EQUITY", label: "股票" },
   { value: "ETF", label: "ETF" },
+  { value: "COMMODITY", label: "商品" },
   { value: "BOND", label: "债券" },
   { value: "CRYPTO", label: "加密" },
 ] as const;
@@ -62,6 +76,32 @@ function marketLabelZhV1(value: string): string {
   return key || "其他";
 }
 
+function currencySymbolV1(currency: string): string {
+  const ccy = String(currency || "").trim().toUpperCase();
+  if (ccy === "CNY" || ccy === "RMB") return "¥";
+  if (ccy === "HKD") return "HK$";
+  if (ccy === "EUR") return "€";
+  if (ccy === "USD") return "$";
+  if (ccy === "USDC") return "USDC";
+  return ccy || "-";
+}
+
+function assetKeyV1(input: { market: string; symbol: string }): string {
+  return `${String(input.market || "").trim().toUpperCase()}::${String(input.symbol || "").trim().toUpperCase()}`;
+}
+
+function assetTestIdV1(input: { market: string; symbol: string }): string {
+  return `${String(input.market || "").trim().toLowerCase()}-${String(input.symbol || "").trim().toLowerCase()}`
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function priceToneV1(status?: string | null): "cyan" | "amber" | "red" {
+  if (status === "fresh") return "cyan";
+  if (status === "stale") return "amber";
+  return "red";
+}
+
 export default function AssetDiscoveryPanel(props: {
   loading?: boolean;
   joinedAssetKeys: Record<string, true>;
@@ -71,7 +111,7 @@ export default function AssetDiscoveryPanel(props: {
 }) {
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("ALL");
-  const [assetClass, setAssetClass] = useState("EQUITY");
+  const [assetClass, setAssetClass] = useState("ALL");
   const [searching, setSearching] = useState(false);
   const [addingAssetKey, setAddingAssetKey] = useState<string | null>(null);
   const [items, setItems] = useState<WorkbenchSearchAssetResultV1[]>([]);
@@ -81,6 +121,7 @@ export default function AssetDiscoveryPanel(props: {
   const [featuredError, setFeaturedError] = useState("");
   const [featuredCollapsed, setFeaturedCollapsed] = useState(false);
   const featuredRequestIdRef = useRef(0);
+  const hasActiveFilters = market !== "ALL" || assetClass !== "ALL";
 
   const loadFeatured = useCallback(async () => {
     const requestId = featuredRequestIdRef.current + 1;
@@ -110,10 +151,6 @@ export default function AssetDiscoveryPanel(props: {
     void loadFeatured();
   }, [featuredCollapsed, loadFeatured]);
 
-  function assetKeyV1(input: { market: string; symbol: string }): string {
-    return `${String(input.market || "").trim().toUpperCase()}::${String(input.symbol || "").trim().toUpperCase()}`;
-  }
-
   function isJoinedV1(input: { market: string; symbol: string }): boolean {
     return Boolean(props.joinedAssetKeys[assetKeyV1(input)]);
   }
@@ -139,7 +176,7 @@ export default function AssetDiscoveryPanel(props: {
 
   async function handleAdd(item: WorkbenchSearchAssetResultV1 | WorkbenchFeaturedAssetItemV1) {
     if (addingAssetKey) return;
-    const nextKey = `${item.market}::${item.symbol}`;
+    const nextKey = assetKeyV1(item);
     setAddingAssetKey(nextKey);
     try {
       await props.onAddAsset(item);
@@ -150,123 +187,182 @@ export default function AssetDiscoveryPanel(props: {
     }
   }
 
+  function resetFilters() {
+    setMarket("ALL");
+    setAssetClass("ALL");
+  }
+
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">推荐与搜索资产</CardTitle>
-        <CardDescription>默认展示优质资产推荐，同时支持输入代码或名称进行精准搜索。</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-1">
-          <div className="text-xs font-medium text-muted-foreground">资产类</div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {ASSET_CLASS_OPTIONS_V1.map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="sm"
-                variant={assetClass === option.value ? "default" : "outline"}
-                className="h-7 shrink-0 px-3 text-xs"
-                onClick={() => setAssetClass(option.value)}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <div className="text-xs font-medium text-muted-foreground">市场</div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {MARKET_OPTIONS_V1.map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="sm"
-                variant={market === option.value ? "default" : "outline"}
-                className="h-7 shrink-0 px-3 text-xs"
-                onClick={() => setMarket(option.value)}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-xl border bg-gradient-to-br from-slate-50/80 to-cyan-50/60 p-3">
-          <div className="mb-3 flex items-center justify-between gap-2">
+    <DeepLedgerPanel
+      title="推荐与搜索资产"
+      subtitle="先用高置信推荐快速组篮子，再用精准搜索补足长尾标的。"
+      accent="indigo"
+      bodyClassName="space-y-5"
+      action={
+        <DeepLedgerStatusPill tone="indigo">
+          {featuredCollapsed ? "推荐已折叠" : "发现工作流"}
+        </DeepLedgerStatusPill>
+      }
+    >
+      <div className="relative overflow-hidden rounded-[18px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,38,0.98),rgba(10,15,25,0.94))] p-5">
+        <div className="absolute -left-10 top-0 h-32 w-32 rounded-full bg-[rgba(129,140,248,0.16)] blur-3xl" />
+        <div className="absolute right-0 top-0 h-full w-[40%] bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.12),transparent_65%)]" />
+        <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)] xl:items-end">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(129,140,248,0.22)] bg-[rgba(129,140,248,0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--indigo)]">
+              <Sparkles className="h-3.5 w-3.5" />
+              Discovery Console
+            </div>
             <div>
-              <div className="text-sm font-medium">推荐资产</div>
-              <div className="text-xs text-muted-foreground">按市场展示优质资产，可直接加入观察。</div>
-            </div>
-            <div className="flex items-center gap-2">
-              {featuredLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1.5 rounded-full border-slate-300 bg-white/80 px-3 text-xs"
-                onClick={() => setFeaturedCollapsed((prev) => !prev)}
-              >
-                {featuredCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-                {featuredCollapsed ? "展开推荐" : "收起推荐"}
-              </Button>
+              <div className="font-[var(--font-display)] text-[30px] leading-none tracking-[-0.035em] text-[var(--text)] sm:text-[34px]">
+                从推荐池收敛高质量观察标的
+              </div>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)] sm:text-[15px]">
+                推荐池优先覆盖流动性、代表性与叙事完整度较高的资产；搜索区则补足特定市场、主题与个股，便于后续纳入再平衡工作台。
+              </p>
             </div>
           </div>
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <DeepLedgerMiniStat label="当前市场" value={marketLabelZhV1(market)} tone="cyan" />
+            <DeepLedgerMiniStat label="资产类型" value={assetClassLabelZhV1(assetClass)} tone="amber" />
+            <DeepLedgerMiniStat label="已纳入观察" value={Object.keys(props.joinedAssetKeys).length} tone="indigo" />
+          </div>
+        </div>
 
-          {featuredCollapsed ? (
-            <div className="rounded-md border border-dashed border-slate-300 bg-white/60 px-3 py-4 text-center text-xs text-muted-foreground">
-              推荐资产已折叠，点击“展开推荐”即可查看。
+        <div className="relative mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2.5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">资产类筛选</div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {ASSET_CLASS_OPTIONS_V1.map((option) => (
+                <DeepLedgerFilterChip
+                  key={option.value}
+                  active={assetClass === option.value}
+                  onClick={() => setAssetClass(option.value)}
+                >
+                  {option.label}
+                </DeepLedgerFilterChip>
+              ))}
             </div>
+          </div>
+          <div className="space-y-2.5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">市场筛选</div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {MARKET_OPTIONS_V1.map((option) => (
+                <DeepLedgerFilterChip
+                  key={option.value}
+                  active={market === option.value}
+                  onClick={() => setMarket(option.value)}
+                >
+                  {option.label}
+                </DeepLedgerFilterChip>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="rounded-[18px] border border-[var(--border)] bg-[rgba(9,15,27,0.78)] p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+              <span className="inline-flex h-2 w-2 rounded-full bg-[var(--indigo)]" />
+              推荐资产池
+            </div>
+            <div className="mt-1 text-xs leading-5 text-[var(--muted)]">
+              按市场分桶展示高流动性标的，可直接加入观察并继续进入再平衡目标设定。
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {featuredLoading ? <Loader2 className="h-4 w-4 animate-spin text-[var(--faint)]" /> : null}
+            <DeepLedgerActionButton
+              tone="slate"
+              className="rounded-full px-3 py-1.5 text-xs"
+              onClick={() => setFeaturedCollapsed((prev) => !prev)}
+            >
+              {featuredCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+              {featuredCollapsed ? "展开推荐" : "收起推荐"}
+            </DeepLedgerActionButton>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          {featuredCollapsed ? (
+            <DeepLedgerEmptyState
+              title="推荐池已折叠"
+              description="保持当前筛选条件，重新展开即可查看分市场推荐名单。"
+            />
           ) : null}
 
           {!featuredCollapsed ? (
             <>
               {featuredError ? (
-                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{featuredError}</div>
+                <DeepLedgerNoticeBox tone="red" title="推荐加载失败" description={featuredError} />
               ) : null}
 
               {!featuredLoading && !featuredError && featuredGroups.length <= 0 ? (
-                <div className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                  当前筛选下暂无推荐资产。
-                </div>
+                <DeepLedgerEmptyState
+                  title="当前筛选下暂无推荐资产"
+                  description="可以切换市场与资产类型，或者直接使用下方搜索快速定位目标。"
+                  action={hasActiveFilters ? <DeepLedgerActionButton tone="slate" onClick={resetFilters}>重置筛选</DeepLedgerActionButton> : null}
+                />
               ) : null}
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {featuredGroups.map((group) => (
-                  <div key={group.market} className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">{group.marketLabelZh}</div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <div key={group.market} className="space-y-3">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">
+                      <span className="h-px w-8 bg-[var(--indigo)]/55" />
+                      <span>{group.marketLabelZh}</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-4">
                       {group.items.map((item) => {
                         const joined = isJoinedV1(item);
                         const busy = addingAssetKey === assetKeyV1(item);
                         const displayName = item.longName || item.shortName || item.name || item.symbol;
+                        const testId = assetTestIdV1(item);
                         return (
-                          <div key={`${group.market}::${item.symbol}`} className="rounded-md border bg-background p-2">
-                            <div className="flex items-start justify-between gap-2">
+                          <div
+                            key={`${group.market}::${item.symbol}`}
+                            data-testid={`featured-asset-${testId}`}
+                            data-asset-key={assetKeyV1(item)}
+                            className="group rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.96),rgba(10,15,25,0.98))] p-4 shadow-[0_16px_36px_rgba(0,0,0,0.22)] transition-transform duration-200 hover:-translate-y-0.5"
+                          >
+                            <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="truncate text-sm font-medium" title={displayName}>{displayName}</div>
-                                <div className="truncate text-xs text-muted-foreground" title={`${item.symbol} · ${marketLabelZhV1(item.market)}`}>
+                                <div className="truncate text-sm font-semibold text-[var(--text)]" title={displayName}>
+                                  {displayName}
+                                </div>
+                                <div className="mt-1 truncate text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]" title={`${item.symbol} · ${marketLabelZhV1(item.market)}`}>
                                   {item.symbol} · {marketLabelZhV1(item.market)}
                                 </div>
                               </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 shrink-0 px-2 text-xs"
+                              <DeepLedgerActionButton
+                                tone={joined ? "slate" : "primary"}
+                                data-testid={`featured-asset-add-${testId}`}
+                                className="h-8 shrink-0 rounded-full px-3 text-xs"
                                 disabled={busy || props.loading || joined}
                                 onClick={() => void handleAdd(item)}
                               >
-                                {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="mr-1 h-3.5 w-3.5" />}
+                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="h-3.5 w-3.5" />}
                                 {joined ? "已加入" : "加入"}
-                              </Button>
+                              </DeepLedgerActionButton>
                             </div>
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              {assetClassLabelZhV1(item.assetClass)} · {item.currency} {item.price > 0 ? item.price.toFixed(4) : "待补行情"}
+
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <DeepLedgerStatusPill tone="slate">{assetClassLabelZhV1(item.assetClass)}</DeepLedgerStatusPill>
+                              <DeepLedgerStatusPill tone={priceToneV1(item.priceStatus)}>
+                                {item.price > 0 ? `${currencySymbolV1(item.currency)} ${item.price.toFixed(2)}` : "待补行情"}
+                              </DeepLedgerStatusPill>
                             </div>
-                            {item.thesisTagZh ? (
-                              <div className="mt-1 truncate text-xs text-muted-foreground" title={item.thesisTagZh}>{item.thesisTagZh}</div>
-                            ) : null}
+
+                            <div className="mt-3 space-y-1 text-xs text-[var(--muted)]">
+                              <div>{regionLabelZhV1(item.region)} · {item.exchangeDisp || item.exchange || "交易所待补充"}</div>
+                              {item.thesisTagZh ? (
+                                <div className="truncate text-[var(--faint)]" title={item.thesisTagZh}>
+                                  {item.thesisTagZh}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                         );
                       })}
@@ -277,92 +373,161 @@ export default function AssetDiscoveryPanel(props: {
             </>
           ) : null}
         </div>
+      </section>
 
+      <div className="grid gap-3 rounded-[18px] border border-[var(--border)] bg-[rgba(9,15,27,0.72)] p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <div className="space-y-2">
-          <div className="text-sm font-medium">精准搜索</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold text-[var(--text)]">精准搜索</div>
+            <DeepLedgerStatusPill tone="slate">{marketLabelZhV1(market)}</DeepLedgerStatusPill>
+            <DeepLedgerStatusPill tone="slate">{assetClassLabelZhV1(assetClass)}</DeepLedgerStatusPill>
+            {hasSearched ? <DeepLedgerStatusPill tone="indigo">结果 {items.length}</DeepLedgerStatusPill> : null}
+          </div>
+          <div className="text-xs leading-5 text-[var(--muted)]">
+            输入代码、名称或常用简称，例如 `NVDA`、`0700`、`BTC`，系统会按当前筛选条件返回匹配资产。
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 lg:min-w-[460px]">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void handleSearch();
-                }
-              }}
-              placeholder="输入代码或名称，例如 NVDA / 0700 / BTC"
-              className="h-8 text-xs"
-            />
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 px-3 text-xs"
+            <div className={cn(deepLedgerSearchShellClassName, "h-11 flex-1")}>
+              <Search className="h-4 w-4 text-[var(--faint)]" />
+              <input
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleSearch();
+                  }
+                }}
+                placeholder="输入代码或名称，例如 NVDA / 0700 / BTC"
+                className="h-11 w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--faint)]"
+              />
+            </div>
+            <DeepLedgerActionButton
+              tone="primary"
+              className="h-11 justify-center rounded-[14px] px-4"
               onClick={() => void handleSearch()}
               disabled={props.loading || searching || !q.trim()}
             >
-              {searching ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
+              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               {searching ? "搜索中..." : "搜索资产"}
-            </Button>
+            </DeepLedgerActionButton>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {q ? (
+              <DeepLedgerActionButton
+                tone="slate"
+                className="rounded-full px-3 py-1.5 text-xs"
+                onClick={() => {
+                  setQ("");
+                  setItems([]);
+                  setHasSearched(false);
+                }}
+              >
+                清空关键词
+              </DeepLedgerActionButton>
+            ) : null}
+            {hasActiveFilters ? (
+              <DeepLedgerActionButton
+                tone="slate"
+                className="rounded-full px-3 py-1.5 text-xs"
+                onClick={resetFilters}
+              >
+                重置筛选
+              </DeepLedgerActionButton>
+            ) : null}
           </div>
         </div>
+      </div>
 
-        <div className="overflow-x-auto rounded-lg border">
-          <Table className="min-w-[860px] table-fixed">
-            <TableHeader>
-              <TableRow className="text-xs">
-                <TableHead>资产</TableHead>
-                <TableHead>分类</TableHead>
-                <TableHead className="text-right">价格</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => {
-                const joined = isJoinedV1(item);
-                const busy = addingAssetKey === assetKeyV1(item);
-                const displayName = item.longName || item.shortName || item.name || item.symbol;
-                return (
-                  <TableRow key={`${item.market}::${item.symbol}`}>
-                    <TableCell className="max-w-0">
-                      <div className="truncate font-medium" title={displayName}>{displayName}</div>
-                      <div className="truncate text-xs text-muted-foreground" title={`${item.symbol} · ${item.market} · ${item.currency} · ${item.exchangeDisp || item.exchange}`}>{item.symbol} · {item.market} · {item.currency} · {item.exchangeDisp || item.exchange}</div>
-                      <div className="truncate text-xs text-muted-foreground" title={`类型：${item.typeDisp || item.quoteType || "未知"} · yfinance：${item.yfinanceSymbol || item.symbol}`}>
-                        类型：{item.typeDisp || item.quoteType || "未知"} · yfinance：{item.yfinanceSymbol || item.symbol}
+      <div className={cn(deepLedgerTableShellClassName, "overflow-x-auto")}>
+        <table className="min-w-[780px] w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={deepLedgerTableHeadClassName}>资产</th>
+              <th className={deepLedgerTableHeadClassName}>分类 / 地域</th>
+              <th className={cn(deepLedgerTableHeadClassName, "text-right")}>价格</th>
+              <th className={cn(deepLedgerTableHeadClassName, "text-right")}>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const joined = isJoinedV1(item);
+              const busy = addingAssetKey === assetKeyV1(item);
+              const displayName = item.longName || item.shortName || item.name || item.symbol;
+              const testId = assetTestIdV1(item);
+              return (
+                <tr
+                  key={`${item.market}::${item.symbol}`}
+                  data-testid={`search-asset-row-${testId}`}
+                  data-asset-key={assetKeyV1(item)}
+                  className="border-b border-[var(--border)]/70 text-[13px] transition-colors hover:bg-[rgba(56,189,248,0.04)]"
+                >
+                  <td className={deepLedgerTableCellClassName}>
+                    <div className="max-w-[320px]">
+                      <div className="truncate font-semibold text-[var(--text)]" title={displayName}>
+                        {displayName}
                       </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {assetClassLabelZhV1(item.assetClass)} · {regionLabelZhV1(item.region)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {item.price > 0 ? `${item.currency} ${item.price.toFixed(4)}` : "待补行情"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 text-xs"
-                        disabled={busy || props.loading || joined}
-                        onClick={() => void handleAdd(item)}
-                      >
-                        {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="mr-1 h-3.5 w-3.5" />}
-                        {joined ? "已加入" : "加入观察"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                      <div className="mt-1 truncate text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]" title={`${item.symbol} · ${item.market} · ${item.currency} · ${item.exchangeDisp || item.exchange}`}>
+                        {item.symbol} · {item.market} · {item.currency} · {item.exchangeDisp || item.exchange}
+                      </div>
+                      <div className="mt-2 truncate text-xs text-[var(--muted)]" title={`类型：${item.typeDisp || item.quoteType || "未知"} · yfinance：${item.yfinanceSymbol || item.symbol}`}>
+                        类型：{item.typeDisp || item.quoteType || "未知"} · 行情映射：{item.yfinanceSymbol || item.symbol}
+                      </div>
+                    </div>
+                  </td>
+                  <td className={cn(deepLedgerTableCellClassName, "text-xs text-[var(--muted)]")}>
+                    <div>{assetClassLabelZhV1(item.assetClass)} · {regionLabelZhV1(item.region)}</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <DeepLedgerStatusPill tone="slate">{marketLabelZhV1(item.market)}</DeepLedgerStatusPill>
+                      <DeepLedgerStatusPill tone={priceToneV1(item.priceStatus)}>
+                        {item.priceStatus === "stale" ? "价格偏旧" : item.price > 0 ? "可交易" : "待补行情"}
+                      </DeepLedgerStatusPill>
+                    </div>
+                  </td>
+                  <td className={cn(deepLedgerTableCellClassName, "text-right font-[var(--font-mono)] text-[var(--text)]")}>
+                    {item.price > 0 ? `${currencySymbolV1(item.currency)} ${item.price.toFixed(4)}` : "待补行情"}
+                    {item.price > 0 && item.priceStatus === "stale" ? (
+                      <div className="mt-1 text-[11px] text-[var(--amber)]">缓存稍旧</div>
+                    ) : null}
+                  </td>
+                  <td className={cn(deepLedgerTableCellClassName, "text-right")}>
+                    <DeepLedgerActionButton
+                      tone={joined ? "slate" : "primary"}
+                      data-testid={`search-asset-add-${testId}`}
+                      className="h-8 rounded-full px-3 text-xs"
+                      disabled={busy || props.loading || joined}
+                      onClick={() => void handleAdd(item)}
+                    >
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="h-3.5 w-3.5" />}
+                      {joined ? "已加入" : "加入观察"}
+                    </DeepLedgerActionButton>
+                  </td>
+                </tr>
+              );
+            })}
 
-              {items.length <= 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                    {hasSearched ? "未找到匹配资产，请尝试其他关键词。" : "输入关键词后点击搜索按钮。"}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+            {items.length <= 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center">
+                  <DeepLedgerEmptyState
+                    title={hasSearched ? "未找到匹配资产" : "等待输入搜索指令"}
+                    description={hasSearched ? "可以尝试更短的代码、正式英文名称，或放宽当前市场与资产类筛选。" : "输入关键词后点击搜索按钮，结果会显示在这里。"}
+                    action={hasSearched ? (
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {q ? <DeepLedgerActionButton tone="slate" onClick={() => { setQ(""); setItems([]); setHasSearched(false); }}>清空关键词</DeepLedgerActionButton> : null}
+                        {hasActiveFilters ? <DeepLedgerActionButton tone="slate" onClick={resetFilters}>重置筛选</DeepLedgerActionButton> : null}
+                      </div>
+                    ) : null}
+                    className="border-0 bg-transparent px-0 py-0"
+                  />
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </DeepLedgerPanel>
   );
 }
