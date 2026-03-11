@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { daaPgPoolV0, withDaaPgClientV0 } from "@/src/daa/pg/daaPgV0";
+import { runDaaStoreRuntimeMigrationsV1 } from "@/src/daa/store/runtimeMigrationsV1";
 import { normalizeCurrencyAliasV2 } from "@/src/daa/config/currencyV2";
 import { buildDaaAssetKeyV1, parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
 import {
@@ -29,6 +30,7 @@ import type { ProposalDecisionContextV1 } from "@/src/daa/modules/workbench/work
 
 type DaaStoreStateV1 = {
   schemaInit: Promise<void> | null;
+  runtimeMigrationInit: Promise<void> | null;
   marketCacheSchemaInit: Promise<void> | null;
 };
 
@@ -37,9 +39,14 @@ const STORE_GLOBAL_KEY_V1 = "__daa_store_pg_state_v0__";
 function getStoreStateV1(): DaaStoreStateV1 {
   const g = globalThis as any;
   if (!g[STORE_GLOBAL_KEY_V1]) {
-    g[STORE_GLOBAL_KEY_V1] = { schemaInit: null, marketCacheSchemaInit: null } satisfies DaaStoreStateV1;
-  } else if (!("marketCacheSchemaInit" in g[STORE_GLOBAL_KEY_V1])) {
-    g[STORE_GLOBAL_KEY_V1].marketCacheSchemaInit = null;
+    g[STORE_GLOBAL_KEY_V1] = { schemaInit: null, runtimeMigrationInit: null, marketCacheSchemaInit: null } satisfies DaaStoreStateV1;
+  } else {
+    if (!("runtimeMigrationInit" in g[STORE_GLOBAL_KEY_V1])) {
+      g[STORE_GLOBAL_KEY_V1].runtimeMigrationInit = null;
+    }
+    if (!("marketCacheSchemaInit" in g[STORE_GLOBAL_KEY_V1])) {
+      g[STORE_GLOBAL_KEY_V1].marketCacheSchemaInit = null;
+    }
   }
   return g[STORE_GLOBAL_KEY_V1] as DaaStoreStateV1;
 }
@@ -788,6 +795,211 @@ export type DaaStoreSystemConfigRowV2 = {
   updatedAt: string;
 };
 
+export type DaaStoreAccountStateV1 = {
+  id: "default";
+  baseCurrency: string;
+  cash: number;
+  investableCash: number;
+  frozenCash: number;
+  totalEquity: number | null;
+  updatedAt: string;
+};
+
+function mapAccountStateRowV1(row: Record<string, unknown>): DaaStoreAccountStateV1 {
+  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
+  return {
+    id: "default",
+    baseCurrency: normalizeCurrencyAliasV2(normalizeText(row.base_currency, "USD"), "USD"),
+    cash: Math.max(0, toFiniteNumber(row.cash, 0)),
+    investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
+    frozenCash: Math.max(0, toFiniteNumber(row.frozen_cash, 0)),
+    totalEquity: Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null,
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mergeRuntimeAccountIntoSystemConfigV2(
+  configRaw: DaaSystemConfigV2,
+  account: Pick<DaaStoreAccountStateV1, "baseCurrency" | "cash" | "investableCash" | "frozenCash" | "totalEquity">,
+): DaaSystemConfigV2 {
+  const normalized = normalizeSystemConfigV2(configRaw);
+  return {
+    ...normalized,
+    strategy: {
+      ...normalized.strategy,
+      account: {
+        ...normalized.strategy.account,
+        baseCurrency: normalizeCurrencyAliasV2(account.baseCurrency, normalized.strategy.account.baseCurrency) as DaaSystemConfigV2["strategy"]["account"]["baseCurrency"],
+        cash: Math.max(0, toFiniteNumber(account.cash, 0)),
+        investableCash: Math.max(0, toFiniteNumber(account.investableCash, 0)),
+        frozenCash: Math.max(0, toFiniteNumber(account.frozenCash, 0)),
+        totalEquity: account.totalEquity == null ? null : Math.max(0, toFiniteNumber(account.totalEquity, 0)),
+      },
+    },
+  };
+}
+
+function mergeSystemConfigRowWithAccountStateV1(
+  row: DaaStoreSystemConfigRowV2,
+  account: DaaStoreAccountStateV1,
+): DaaStoreSystemConfigRowV2 {
+  return {
+    ...row,
+    config: mergeRuntimeAccountIntoSystemConfigV2(row.config, account),
+  };
+}
+
+function stripRuntimeAccountFromConfigV2(configRaw: unknown): {
+  sanitizedConfig: DaaSystemConfigV2;
+  runtimeAccount: {
+    baseCurrency: string;
+    cash: unknown;
+    investableCash: unknown;
+    frozenCash: unknown;
+    totalEquity: unknown;
+  };
+} {
+  const normalized = normalizeSystemConfigV2(configRaw);
+  const rootRaw = isRecordV1(configRaw) ? configRaw : {};
+  const strategyRaw = isRecordV1(rootRaw.strategy) ? rootRaw.strategy : {};
+  const accountRaw = isRecordV1(strategyRaw.account) ? strategyRaw.account : {};
+  const runtimeAccount = {
+    baseCurrency: normalizeCurrencyAliasV2(
+      normalizeText(accountRaw.baseCurrency, normalized.strategy.account.baseCurrency),
+      normalized.strategy.account.baseCurrency,
+    ),
+    cash: Object.prototype.hasOwnProperty.call(accountRaw, "cash") ? accountRaw.cash : normalized.strategy.account.cash,
+    investableCash: Object.prototype.hasOwnProperty.call(accountRaw, "investableCash") ? accountRaw.investableCash : normalized.strategy.account.investableCash,
+    frozenCash: Object.prototype.hasOwnProperty.call(accountRaw, "frozenCash") ? accountRaw.frozenCash : normalized.strategy.account.frozenCash,
+    totalEquity: Object.prototype.hasOwnProperty.call(accountRaw, "totalEquity") ? accountRaw.totalEquity : normalized.strategy.account.totalEquity,
+  };
+  return {
+    sanitizedConfig: {
+      ...normalized,
+      strategy: {
+        ...normalized.strategy,
+        account: {
+          ...normalized.strategy.account,
+          cash: 0,
+          investableCash: 0,
+          frozenCash: 0,
+          totalEquity: null,
+        },
+      },
+    },
+    runtimeAccount,
+  };
+}
+
+async function ensureAccountStateRowInTxV1(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+): Promise<DaaStoreAccountStateV1> {
+  await query(`
+    CREATE TABLE IF NOT EXISTS daa_account_state (
+      id TEXT PRIMARY KEY,
+      base_currency TEXT NOT NULL DEFAULT 'USD',
+      cash NUMERIC NOT NULL DEFAULT 0,
+      investable_cash NUMERIC NOT NULL DEFAULT 0,
+      frozen_cash NUMERIC NOT NULL DEFAULT 0,
+      total_equity NUMERIC,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  const existing = await query(
+    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state WHERE id = 'default' LIMIT 1",
+  );
+  if (existing.rows.length > 0) {
+    return mapAccountStateRowV1(existing.rows[0]);
+  }
+
+  const systemRow = await ensureSystemConfigRowInTxV2(query);
+  const strategyRaw = (isRecordV1(systemRow.config.strategy) ? systemRow.config.strategy : {}) as Record<string, unknown>;
+  const accountRaw = (isRecordV1(strategyRaw.account) ? strategyRaw.account : {}) as Record<string, unknown>;
+  const baseCurrency = normalizeCurrencyAliasV2(normalizeText(accountRaw.baseCurrency, "USD"), "USD");
+  const cash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
+  const frozenCash = Math.max(0, toFiniteNumber(accountRaw.frozenCash, 0));
+  const investableCash = resolveInvestableCashV1(cash, frozenCash, accountRaw.investableCash);
+  const totalEquityRaw = accountRaw.totalEquity == null ? Number.NaN : toFiniteNumber(accountRaw.totalEquity, Number.NaN);
+  const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
+
+  const inserted = await query(
+    `INSERT INTO daa_account_state (
+      id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
+    ) VALUES (
+      'default', $1, $2, $3, $4, $5, NOW()
+    ) RETURNING id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
+    [baseCurrency, cash, investableCash, frozenCash, totalEquity],
+  );
+  return mapAccountStateRowV1(inserted.rows[0]);
+}
+
+async function getAccountStateForUpdateInTxV1(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+): Promise<DaaStoreAccountStateV1> {
+  await ensureAccountStateRowInTxV1(query);
+  const locked = await query(
+    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state WHERE id = 'default' LIMIT 1 FOR UPDATE",
+  );
+  if (locked.rows.length > 0) {
+    return mapAccountStateRowV1(locked.rows[0]);
+  }
+  return ensureAccountStateRowInTxV1(query);
+}
+
+async function writeAccountStateInTxV1(
+  query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
+  nextRaw: {
+    baseCurrency?: unknown;
+    cash?: unknown;
+    investableCash?: unknown;
+    frozenCash?: unknown;
+    totalEquity?: unknown;
+  },
+): Promise<DaaStoreAccountStateV1> {
+  const current = await getAccountStateForUpdateInTxV1(query);
+  const cash = Object.prototype.hasOwnProperty.call(nextRaw, "cash")
+    ? Math.max(0, toFiniteNumber(nextRaw.cash, current.cash))
+    : current.cash;
+  const baseCurrency = normalizeCurrencyAliasV2(
+    normalizeText(nextRaw.baseCurrency, current.baseCurrency),
+    current.baseCurrency,
+  );
+  const frozenCash = Object.prototype.hasOwnProperty.call(nextRaw, "frozenCash")
+    ? Math.max(0, Math.min(cash, toFiniteNumber(nextRaw.frozenCash, current.frozenCash)))
+    : current.frozenCash;
+  const investableSource = Object.prototype.hasOwnProperty.call(nextRaw, "investableCash")
+    ? nextRaw.investableCash
+    : current.investableCash;
+  const investableCash = resolveInvestableCashV1(cash, frozenCash, investableSource);
+  let totalEquity = current.totalEquity;
+  if (Object.prototype.hasOwnProperty.call(nextRaw, "totalEquity")) {
+    if (nextRaw.totalEquity == null) {
+      totalEquity = null;
+    } else {
+      const totalEquityRaw = toFiniteNumber(nextRaw.totalEquity, Number.NaN);
+      totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : current.totalEquity;
+    }
+  }
+
+  const updated = await query(
+    `UPDATE daa_account_state
+     SET base_currency = $2,
+         cash = $3,
+         investable_cash = $4,
+         frozen_cash = $5,
+         total_equity = $6,
+         updated_at = NOW()
+     WHERE id = 'default'
+     RETURNING id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
+    ["default", baseCurrency, cash, investableCash, frozenCash, totalEquity],
+  );
+  if (updated.rows.length > 0) {
+    return mapAccountStateRowV1(updated.rows[0]);
+  }
+  return ensureAccountStateRowInTxV1(query);
+}
+
 function mapSystemConfigRowV2(row: Record<string, unknown>): DaaStoreSystemConfigRowV2 {
   const versionRaw = Number(row.version);
   return {
@@ -878,7 +1090,11 @@ async function saveSystemConfigInTxV2(
 
 export async function getDaaSystemConfigV2(): Promise<DaaStoreSystemConfigRowV2> {
   await ensureDaaStoreSchemaPgV1();
-  return withDaaPgClientV0(async ({ query }) => ensureSystemConfigRowInTxV2(query as any));
+  return withDaaPgClientV0(async ({ query }) => {
+    const row = await ensureSystemConfigRowInTxV2(query as any);
+    const account = await ensureAccountStateRowInTxV1(query as any);
+    return mergeSystemConfigRowWithAccountStateV1(row, account);
+  });
 }
 
 export async function saveDaaSystemConfigV2(input: {
@@ -889,9 +1105,11 @@ export async function saveDaaSystemConfigV2(input: {
   return withDaaPgClientV0(async ({ query }) => {
     await query("BEGIN");
     try {
-      const saved = await saveSystemConfigInTxV2(query as any, input.config, input.baseVersion);
+      const { sanitizedConfig, runtimeAccount } = stripRuntimeAccountFromConfigV2(input.config);
+      const saved = await saveSystemConfigInTxV2(query as any, sanitizedConfig, input.baseVersion);
+      const account = await writeAccountStateInTxV1(query as any, runtimeAccount);
       await query("COMMIT");
-      return saved;
+      return mergeSystemConfigRowWithAccountStateV1(saved, account);
     } catch (error) {
       try {
         await query("ROLLBACK");
@@ -911,11 +1129,15 @@ export async function patchDaaSystemConfigV2(input: {
   return withDaaPgClientV0(async ({ query }) => {
     await query("BEGIN");
     try {
-      const current = await ensureSystemConfigRowInTxV2(query as any);
-      const nextConfig = applySystemConfigPatchesV2(current.config, Array.isArray(input.patches) ? input.patches : []);
-      const saved = await saveSystemConfigInTxV2(query as any, nextConfig, input.baseVersion ?? current.version);
+      const current = await getSystemConfigRowForUpdateInTxV2(query as any);
+      const currentAccount = await getAccountStateForUpdateInTxV1(query as any);
+      const mergedCurrent = mergeSystemConfigRowWithAccountStateV1(current, currentAccount);
+      const nextConfig = applySystemConfigPatchesV2(mergedCurrent.config, Array.isArray(input.patches) ? input.patches : []);
+      const { sanitizedConfig, runtimeAccount } = stripRuntimeAccountFromConfigV2(nextConfig);
+      const saved = await saveSystemConfigInTxV2(query as any, sanitizedConfig, input.baseVersion ?? current.version);
+      const account = await writeAccountStateInTxV1(query as any, runtimeAccount);
       await query("COMMIT");
-      return saved;
+      return mergeSystemConfigRowWithAccountStateV1(saved, account);
     } catch (error) {
       try {
         await query("ROLLBACK");
@@ -927,10 +1149,36 @@ export async function patchDaaSystemConfigV2(input: {
   });
 }
 
+async function ensureDaaStoreRuntimeMigrationsAppliedV1(): Promise<void> {
+  const st = getStoreStateV1();
+  if (!st.runtimeMigrationInit) {
+    st.runtimeMigrationInit = withDaaPgClientV0(async ({ query }) => {
+      await query("BEGIN");
+      try {
+        await ensureSystemConfigRowInTxV2(query as any);
+        await runDaaStoreRuntimeMigrationsV1(query as any);
+        await query("COMMIT");
+      } catch (error) {
+        try {
+          await query("ROLLBACK");
+        } catch {
+          // ignore
+        }
+        throw error;
+      }
+    }).catch((error) => {
+      st.runtimeMigrationInit = null;
+      throw error;
+    });
+  }
+  await st.runtimeMigrationInit;
+}
+
 export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
   const st = getStoreStateV1();
   if (st.schemaInit) {
     await st.schemaInit;
+    await ensureDaaStoreRuntimeMigrationsAppliedV1();
     const ready = await isStoreSchemaReadyV1();
     if (ready) return;
     st.schemaInit = null;
@@ -1424,6 +1672,7 @@ export async function ensureDaaStoreSchemaPgV1(): Promise<void> {
         );
 
         await ensureSystemConfigRowInTxV2(query as any);
+        await runDaaStoreRuntimeMigrationsV1(query as any);
 
         await query("COMMIT");
       } catch (error) {
@@ -1939,20 +2188,21 @@ async function syncStrategyAccountCashInTxV1(
   frozenCash: number;
   totalEquity: number | null;
 }> {
-  const currentSystem = await getSystemConfigRowForUpdateInTxV2(query as any);
-  const patched = applyAccountCashDeltaToConfigV1(currentSystem.config.strategy as unknown as Record<string, unknown>, nextCash, opts.totalEquity);
-
-  await writeSystemConfigCasInTxV2(
-    query as any,
-    {
-      ...currentSystem.config,
-      strategy: patched.configJson,
-    },
-    currentSystem.version,
-  );
+  const currentAccount = await getAccountStateForUpdateInTxV1(query as any);
+  const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, currentAccount.cash));
+  const previousInvestable = resolveInvestableCashV1(currentAccount.cash, currentAccount.frozenCash, currentAccount.investableCash);
+  const delta = normalizedNextCash - currentAccount.cash;
+  const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
+  const account = await writeAccountStateInTxV1(query as any, {
+    baseCurrency: currentAccount.baseCurrency,
+    cash: normalizedNextCash,
+    investableCash: nextInvestable,
+    frozenCash: currentAccount.frozenCash,
+    totalEquity: Object.prototype.hasOwnProperty.call(opts, "totalEquity") ? opts.totalEquity ?? null : currentAccount.totalEquity,
+  });
   return {
-    ...patched.account,
-    baseCurrency: normalizeCurrencyAliasV2(patched.account.baseCurrency, "USD"),
+    ...account,
+    baseCurrency: normalizeCurrencyAliasV2(account.baseCurrency, "USD"),
   };
 }
 
@@ -2895,11 +3145,9 @@ export async function appendDaaCashLedgerEntryV1(input: DaaStoreCashLedgerApplyI
 
     await query("BEGIN");
     try {
-      const systemRow = await getSystemConfigRowForUpdateInTxV2(query as any);
-      const currentConfig = systemRow.config.strategy as unknown as Record<string, unknown>;
-      const accountRaw = isRecordV1(currentConfig.account) ? currentConfig.account : {};
-      const currentCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
-      const accountBaseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
+      const accountState = await getAccountStateForUpdateInTxV1(query as any);
+      const currentCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
+      const accountBaseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
       const entryCurrency = normalizeCcyCode(input.baseCurrency, accountBaseCurrency);
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMapV1(fxRes.rows as Array<Record<string, unknown>>);
@@ -3668,11 +3916,9 @@ export async function createDaaTradeTicketV1(input: DaaStoreCreateTradeTicketInp
 
     await query("BEGIN");
     try {
-      const systemRow = await ensureSystemConfigRowInTxV2(query as any);
-      const strategyRaw = (isRecordV1(systemRow.config.strategy) ? systemRow.config.strategy : {}) as Record<string, unknown>;
-      const accountRaw = (isRecordV1(strategyRaw.account) ? strategyRaw.account : {}) as Record<string, unknown>;
-      const baseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
-      const cash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
+      const accountState = await ensureAccountStateRowInTxV1(query as any);
+      const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
+      const cash = Math.max(0, toFiniteNumber(accountState.cash, 0));
 
       let basketId = basketIdInput;
       if (!basketId) {
@@ -3830,11 +4076,9 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
         positionsMap.set(buildPositionKeyV1(pos.symbol, pos.market), pos);
       }
 
-      const systemRow = await getSystemConfigRowForUpdateInTxV2(query as any);
-      const strategyRaw = (isRecordV1(systemRow.config.strategy) ? systemRow.config.strategy : {}) as Record<string, unknown>;
-      const accountRaw = (isRecordV1(strategyRaw.account) ? strategyRaw.account : {}) as Record<string, unknown>;
-      const baseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
-      let accountCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
+      const accountState = await getAccountStateForUpdateInTxV1(query as any);
+      const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
+      let accountCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMapV1(fxRes.rows as Array<Record<string, unknown>>);

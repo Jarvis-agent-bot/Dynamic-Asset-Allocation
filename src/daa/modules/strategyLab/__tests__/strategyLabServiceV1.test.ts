@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getDaaSystemConfigV2, listDaaAssetUniverseV1, saveDaaSystemConfigV2, upsertDaaAssetUniverseRowV1 } from "@/src/daa/store/daaStorePgV1";
+import { listStrategyLabRunSnapshotsV1 } from "@/src/daa/store/strategyLabSnapshotRepoV1";
 import { runStrategyLabV1, writeStrategyLabTargetWeightsV1 } from "../strategyLabServiceV1";
 
 const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
@@ -389,6 +390,57 @@ describe("strategyLabServiceV1", () => {
       lookbackBars: 2,
       initialEquity: 10000,
     }, { marketDataClient })).rejects.toThrow(/历史 FX 日线缺失/);
+  });
+
+
+  it("run 后会写入研究快照", async () => {
+    const marketDataClient = createMarketDataClientV1({
+      AAPL: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 103 },
+        { date: "2025-01-06", close: 104 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100.5 },
+        { date: "2025-01-03", close: 101 },
+        { date: "2025-01-06", close: 101.5 },
+      ],
+    });
+
+    await runStrategyLabV1({
+      assets: [
+        {
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "AAPL",
+          currentTargetWeightPct: 100,
+          currentWeightPct: 100,
+        },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    const snapshots = await listStrategyLabRunSnapshotsV1(5);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].baseCurrency).toBe("USD");
+    expect(snapshots[0].startDate).toBe("2025-01-01");
+    expect(snapshots[0].endDate).toBe("2025-01-06");
+    expect(snapshots[0].requestJson.benchmarkSymbol).toBe("SPY");
+    expect(Number(snapshots[0].summaryJson.assetsUsedCount)).toBe(1);
+    expect(Number(snapshots[0].summaryJson.candidateCount)).toBeGreaterThan(0);
   });
 
   it("writes selected candidate weights back to asset universe and clears legacy config weights", async () => {

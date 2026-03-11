@@ -78,7 +78,15 @@ function toErrorMessage(payload: any, status: number): string {
   return raw || `http ${status}`;
 }
 
-export function createMarketDataClient(opts: { endpointBase?: string; fetch?: FetchLike } = {}): MarketDataClient {
+function mergeHeadersV1(baseHeaders: HeadersInit | undefined, nextHeaders: HeadersInit | undefined): HeadersInit | undefined {
+  if (!baseHeaders && !nextHeaders) return undefined;
+  const headers = new Headers(baseHeaders || undefined);
+  const next = new Headers(nextHeaders || undefined);
+  next.forEach((value, key) => headers.set(key, value));
+  return headers;
+}
+
+export function createMarketDataClient(opts: { endpointBase?: string; fetch?: FetchLike; headers?: HeadersInit } = {}): MarketDataClient {
   const base = normalizeBase(opts.endpointBase ?? "");
   const fetchFn: FetchLike = opts.fetch ?? fetch;
 
@@ -88,6 +96,7 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
     const response = await fetchFn(url, {
       method: "GET",
       ...init,
+      headers: mergeHeadersV1(opts.headers, init?.headers),
     });
 
     const text = await response.text();

@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { runWorkbenchRecommendationsV1 } from "@/src/daa/modules/workbench/workbenchRecommendationServiceV1";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminEditorAuth: vi.fn(async () => null),
 }));
 
-vi.mock("@/src/daa/modules/workbench/workbenchServiceV1", () => ({
+vi.mock("@/src/daa/modules/workbench/workbenchRecommendationServiceV1", () => ({
   runWorkbenchRecommendationsV1: vi.fn(),
 }));
 
 import { POST } from "@/app/api/daa/workbench/recommendations/route";
-import { runWorkbenchRecommendationsV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 
 describe("workbench-recommendations-route-v1", () => {
   beforeEach(() => {

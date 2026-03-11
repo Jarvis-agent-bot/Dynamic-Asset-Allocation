@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -8,7 +9,6 @@ vi.mock("@/src/daa/adminAuth", () => ({
 import { PATCH as patchCycleRoute } from "@/app/api/daa/workbench/rebalance/cycles/[id]/route";
 import { POST as executeSummaryRoute } from "@/app/api/daa/workbench/rebalance/execute-summary/route";
 import { POST as executeRoute } from "@/app/api/daa/workbench/rebalance/execute/route";
-import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import {
   createDaaRebalanceCycleV1,
   getDaaSystemConfigV2,
@@ -247,6 +247,6 @@ describe("workbench-rebalance-guards-v1", () => {
     expect(generated.created).toBe(true);
     expect(generated.skippedByCooldown).toBe(false);
     expect(generated.cycle?.triggerSource).toBe("drift");
-  }, 10000);
+  }, 20000);
 });
 

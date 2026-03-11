@@ -1,8 +1,9 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { buildWorkbenchBootstrapV1, generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { sendTelegramByEnvV1 } from "@/src/daa/notify/telegramV1";
 import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
+import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
 
 export const runtime = "nodejs";
 

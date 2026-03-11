@@ -425,6 +425,9 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
   const sortedUnionDates = [...unionDates].sort();
 
   let aligned: Record<string, PriceBar[]> = {};
+  let alignedDateCount = 0;
+  let alignedStartDate = "";
+  let alignedEndDate = "";
   if (mode === "intersection") {
     let commonDates = new Set<string>(cleanedBySymbol[symbols[0]].map((bar) => bar.date));
     for (const symbol of symbols.slice(1)) {
@@ -433,6 +436,9 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
     }
 
     const sortedDates = [...commonDates].sort();
+    alignedDateCount = sortedDates.length;
+    alignedStartDate = sortedDates[0] || "";
+    alignedEndDate = sortedDates[sortedDates.length - 1] || "";
     for (const symbol of symbols) {
       const map = new Map(cleanedBySymbol[symbol].map((bar) => [bar.date, bar.close]));
       aligned[symbol] = sortedDates.map((date) => ({ date, close: Number(map.get(date) || 0) }));
@@ -471,6 +477,10 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
         aligned[symbol].push({ date, close: row[symbol] });
       }
     }
+    const firstSymbol = symbols[0];
+    alignedDateCount = aligned[firstSymbol]?.length || 0;
+    alignedStartDate = alignedDateCount ? aligned[firstSymbol][0].date : "";
+    alignedEndDate = alignedDateCount ? aligned[firstSymbol][alignedDateCount - 1].date : "";
   }
 
   const droppedSymbols: string[] = [];
@@ -487,22 +497,12 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
   }
 
   const keptSymbols = Object.keys(aligned).sort();
-  if (keptSymbols.length >= 1) {
-    const commonDateCount = aligned[keptSymbols[0]].length;
-    diagnosticsBase.outputSymbolCount = keptSymbols.length;
-    diagnosticsBase.unionDateCount = sortedUnionDates.length;
-    diagnosticsBase.commonDateCount = commonDateCount;
-    diagnosticsBase.startDate = commonDateCount ? aligned[keptSymbols[0]][0].date : "";
-    diagnosticsBase.endDate = commonDateCount ? aligned[keptSymbols[0]][commonDateCount - 1].date : "";
-    diagnosticsBase.droppedSymbols = droppedSymbols;
-  } else {
-    diagnosticsBase.outputSymbolCount = 0;
-    diagnosticsBase.unionDateCount = sortedUnionDates.length;
-    diagnosticsBase.commonDateCount = 0;
-    diagnosticsBase.startDate = "";
-    diagnosticsBase.endDate = "";
-    diagnosticsBase.droppedSymbols = droppedSymbols;
-  }
+  diagnosticsBase.unionDateCount = sortedUnionDates.length;
+  diagnosticsBase.commonDateCount = alignedDateCount;
+  diagnosticsBase.startDate = alignedStartDate;
+  diagnosticsBase.endDate = alignedEndDate;
+  diagnosticsBase.droppedSymbols = droppedSymbols;
+  diagnosticsBase.outputSymbolCount = keptSymbols.length;
 
   return {
     seriesBySymbol: keptSymbols.length ? aligned : {},

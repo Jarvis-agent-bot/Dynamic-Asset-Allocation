@@ -54,4 +54,31 @@ describe("market/marketDataClient", () => {
 
     await expect(client.yahoo.rss({ symbol: "" })).rejects.toThrow(/missing symbol/i);
   });
+
+  it("merges default headers into internal provider requests", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      ok: true,
+      data: {
+        source: "yfinance",
+        series: [{ date: "2026-02-01", close: 1 }],
+      },
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    const client = createMarketDataClient({
+      endpointBase: "https://example.com",
+      fetch: fetchMock as any,
+      headers: { cookie: "daa_session=abc", authorization: "Bearer token-1" },
+    });
+
+    await client.yfinance.priceSeries({ symbol: "QQQ" });
+
+    const calls = fetchMock.mock.calls as unknown as [string | URL, RequestInit?][];
+    const init = calls[0]?.[1];
+    const headers = new Headers(init?.headers);
+    expect(headers.get("cookie")).toBe("daa_session=abc");
+    expect(headers.get("authorization")).toBe("Bearer token-1");
+  });
 });

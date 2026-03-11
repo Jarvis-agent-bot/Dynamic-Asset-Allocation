@@ -55,17 +55,28 @@ const DATE_SERIES = ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-06'];
 const FEATURED_HK_SYMBOL = '0700.HK';
 const FEATURED_CN_SYMBOL = '600519.SS';
 
-async function loginAsAdmin(page: Page) {
-  await page.goto('/daa/login');
-  const loginUrl = new URL('/api/daa/auth/login', page.url()).toString();
-  const response = await page.context().request.post(loginUrl, {
-    data: {
-      username: 'admin',
-      password: 'admin123',
-      returnTo: '/daa/dashboard/workbench',
-    },
-  });
-  expect(response.ok()).toBeTruthy();
+async function loginAsAdmin(page: Page, returnTo = '/daa/dashboard') {
+  await page.goto(`/daa/login?returnTo=${encodeURIComponent(returnTo)}`);
+
+  const usernameInput = page.getByLabel('用户名');
+  const passwordInput = page.getByLabel('密码');
+  const submitButton = page.getByRole('button', { name: /登录系统/ });
+
+  await expect(usernameInput).toBeVisible();
+  await usernameInput.fill('admin');
+  await passwordInput.fill('admin123');
+
+  await Promise.all([
+    page.waitForURL((url) => url.pathname.startsWith('/daa/dashboard'), { timeout: 15_000 }),
+    submitButton.click(),
+  ]);
+
+  await expect.poll(() => {
+    const current = new URL(page.url());
+    const value = `${current.pathname}${current.search}`;
+    return value === returnTo || value.startsWith(`${returnTo}?`) || value.startsWith(`${returnTo}&`);
+  }).toBeTruthy();
+  await expect(page.getByRole('navigation', { name: 'DAA 主导航' })).toBeVisible();
 }
 
 function makeTestIdSegment(input: { market: string; symbol: string }): string {
@@ -356,6 +367,53 @@ function buildBootstrap(state: MockState): Record<string, any> {
     overviewAlerts: [],
     latestCycle: null,
     warnings: [],
+  };
+}
+
+function buildWorkbenchReadModel(state: MockState): Record<string, any> {
+  return {
+    bootstrap: buildBootstrap(state),
+    cycles: [],
+    loadedAt: NOW,
+  };
+}
+
+function buildStrategyLabSeedReadModel(state: MockState): Record<string, any> {
+  const strategy = state.systemConfig.strategy || {};
+  const account = strategy.account || {};
+  const constraints = strategy.constraints || {};
+  const execution = strategy.execution || {};
+  const rebalanceStrategy = state.systemConfig.rebalanceStrategy || {};
+  return {
+    bootstrap: buildBootstrap(state),
+    baseCurrency: String(account.baseCurrency || 'USD'),
+    initialEquity: Number(account.totalEquity || account.cash || 100000),
+    constraints: {
+      maxPositionPct: Number(constraints.maxPositionPct || 1),
+      minNotional: Number(constraints.minNotional || 0),
+      maxOrderPctOfNav: Number(constraints.maxOrderPctOfNav || 0.2),
+    },
+    policy: {
+      thresholdPct: Number(rebalanceStrategy.drift?.thresholdPct || 0.05),
+      minTradeNotional: Number(strategy.policy?.minTradeNotional || constraints.minNotional || 0),
+      cooldownSeconds: Number((rebalanceStrategy.cooldownHours || 24) * 3600),
+    },
+    execution: {
+      feeRateBps: Number(execution.feeRateBps || constraints.tradeFeeRateBps || 0),
+      slippageBps: Number(execution.slippageBps || 0),
+      maxOrderPctOfNav: Number(constraints.maxOrderPctOfNav || 0.2),
+    },
+    availableAssets: state.assets,
+    selectedAssetKeys: state.assets.filter((asset) => asset.watchEnabled || asset.holdingQty > 0).map((asset) => asset.assetKey),
+    loadedAt: NOW,
+  };
+}
+
+function buildTradesReadModel(): Record<string, any> {
+  return {
+    records: { cycles: [], orders: [] },
+    reports: [],
+    loadedAt: NOW,
   };
 }
 
@@ -724,6 +782,27 @@ async function mockDaaApis(page: Page, state: MockState, options: MockOptions = 
     });
   });
 
+  await page.route('**/api/daa/read/workbench*', async (route) => {
+    await fulfillJson(route, {
+      ok: true,
+      data: buildWorkbenchReadModel(state),
+    });
+  });
+
+  await page.route('**/api/daa/read/strategy-lab-seed', async (route) => {
+    await fulfillJson(route, {
+      ok: true,
+      data: buildStrategyLabSeedReadModel(state),
+    });
+  });
+
+  await page.route('**/api/daa/read/trades*', async (route) => {
+    await fulfillJson(route, {
+      ok: true,
+      data: buildTradesReadModel(),
+    });
+  });
+
   await page.route('**/api/daa/workbench/rebalance/cycles*', async (route) => {
     await fulfillJson(route, {
       ok: true,
@@ -849,8 +928,11 @@ test('加 HK/CN 资产后可以完成跨币种回测并写回当前配置', asyn
   await page.getByTestId('strategy-lab-run-button').click();
 
   await expect(page.getByText('策略实验室运行完成，生成 2 组候选。')).toBeVisible();
-  await expect(page.getByText('理想回测 vs 可执行回测')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '候选详情 · 跨市场组合候选' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '运行总览' })).toBeVisible();
+  await expect(page.getByText('理想回测')).toBeVisible();
+  await expect(page.getByText('可执行回测')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '候选详情' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /跨市场组合候选/ })).toBeVisible();
 
   expect(lastRunPayload).not.toBeNull();
   expect(lastRunPayload?.assets).toEqual(expect.arrayContaining([
@@ -860,7 +942,7 @@ test('加 HK/CN 资产后可以完成跨币种回测并写回当前配置', asyn
 
   await page.getByTestId('strategy-lab-writeback-button').click();
 
-  await expect(page.getByText('当前目标已经与该候选一致，可直接写回确认。')).toBeVisible();
+  await expect(page.getByText('已将 跨市场组合候选 写回为当前目标。')).toBeVisible();
   await expect(page.getByText('0700.HK', { exact: true })).toBeVisible();
   await expect(page.getByText('600519.SS', { exact: true })).toBeVisible();
 

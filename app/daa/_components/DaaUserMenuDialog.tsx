@@ -36,7 +36,7 @@ type Model =
 
 function formatRoles(roles: string[]): string {
   const xs = Array.isArray(roles) ? roles.filter(Boolean) : [];
-  if (xs.length === 0) return "(no roles)";
+  if (xs.length === 0) return "未分配角色";
   return xs.join(", ");
 }
 
@@ -103,9 +103,9 @@ export default function DaaUserMenuDialog() {
   async function handleCopy(label: string, text: string) {
     try {
       await copyTextToClipboard(text);
-      toast.success("Copied " + label + ".");
+      toast.success(`已复制${label}。`);
     } catch {
-      toast.error("Copy " + label + " failed.");
+      toast.error(`复制${label}失败。`);
     }
   }
 
@@ -116,7 +116,7 @@ export default function DaaUserMenuDialog() {
   if (model.kind === "signedOut") {
     return (
       <Button asChild size="sm" variant="secondary">
-        <Link href={`/daa/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in</Link>
+        <Link href={`/daa/login?returnTo=${encodeURIComponent(returnTo)}`}>登录</Link>
       </Button>
     );
   }
@@ -132,7 +132,7 @@ export default function DaaUserMenuDialog() {
           setRev((x) => x + 1);
         }}
       >
-        Session
+        会话
       </Button>
     );
   }
@@ -156,44 +156,44 @@ export default function DaaUserMenuDialog() {
         <DropdownMenuContent align="end" className="w-[220px]">
           <DropdownMenuLabel className="max-w-[200px] truncate">{username}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void handleCopy("user id", accountId)}>
+          <DropdownMenuItem onSelect={() => void handleCopy("用户 ID", accountId)}>
             <Copy className="mr-2 h-4 w-4" />
-            Copy User ID
+            复制用户 ID
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void handleCopy("email", email)}>
+          <DropdownMenuItem onSelect={() => void handleCopy("邮箱", email)}>
             <Mail className="mr-2 h-4 w-4" />
-            Copy Email
+            复制邮箱
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
             <User className="mr-2 h-4 w-4" />
-            Profile
+            账户信息
           </DropdownMenuItem>
           <DropdownMenuItem disabled={logoutBusy} onSelect={() => void logout()} className="text-destructive">
             <LogOut className="mr-2 h-4 w-4" />
-            {logoutBusy ? "Logging out..." : "Logout"}
+            {logoutBusy ? "退出中..." : "退出登录"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Account</DialogTitle>
-          <DialogDescription>Signed in as {username}</DialogDescription>
+          <DialogTitle>账户</DialogTitle>
+          <DialogDescription>当前登录账号：{username}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1 text-sm">
           <div>
-            <span className="text-muted-foreground">Roles:</span> {roles}
+            <span className="text-muted-foreground">角色：</span> {roles}
           </div>
           <div>
-            <span className="text-muted-foreground">Session expires:</span> {expiresAt}
+            <span className="text-muted-foreground">会话到期：</span> {expiresAt}
           </div>
         </div>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setProfileOpen(false)}>
-            Close
+            关闭
           </Button>
         </DialogFooter>
       </DialogContent>

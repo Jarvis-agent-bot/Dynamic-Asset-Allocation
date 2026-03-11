@@ -373,6 +373,8 @@ export type UpdateRebalanceCycleInputV1 = {
     reason?: string;
   };
   selectedSymbols?: string[];
+  /** 精确匹配格式：`${assetKey}::${side}`，优先于 selectedSymbols */
+  selectedAssetSideKeys?: string[];
 };
 
 export type WorkbenchMarketDataHealthV1 = {

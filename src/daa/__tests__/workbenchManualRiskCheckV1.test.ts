@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
 
-import { validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { getDaaSystemConfigV2, saveDaaSystemConfigV2, upsertDaaAssetUniverseRowV1 } from "@/src/daa/store/daaStorePgV1";
 
 const PG_GLOBAL_KEY = "__daa_pg_state_v0__";

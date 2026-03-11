@@ -11,6 +11,7 @@ import {
   patchDaaAssetUniverseRowV1,
   saveDaaSystemConfigV2,
 } from "@/src/daa/store/daaStorePgV1";
+import { appendStrategyLabRunSnapshotV1 } from "@/src/daa/store/strategyLabSnapshotRepoV1";
 import { createMarketDataClient, type MarketDataClient } from "@/src/market/marketDataClient";
 import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
 
@@ -1128,7 +1129,7 @@ export async function runStrategyLabV1(
     warnings.push(`当前对齐样本仅有 ${prepared.diagnostics.commonDateCount} 个 bar，尚不足以形成 ${lookbackBars} bar 的首个 walk-forward 决策窗口。`);
   }
 
-  return {
+  const result: StrategyLabRunResultV1 = {
     generatedAt: new Date().toISOString(),
     benchmark: {
       symbol: benchmarkSymbol,
@@ -1149,6 +1150,44 @@ export async function runStrategyLabV1(
     bestCandidateId: defaultScenario?.bestCandidateId || null,
     warnings,
   };
+
+  await appendStrategyLabRunSnapshotV1({
+    baseCurrency,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    requestJson: {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      benchmarkSymbol,
+      alignmentMode,
+      minBars,
+      lookbackBars,
+      initialEquity: input.initialEquity,
+      baseCurrency: requestedBaseCurrency,
+      assets: assets.map((asset) => ({
+        assetKey: asset.assetKey,
+        symbol: asset.symbol,
+        market: asset.market,
+        currency: asset.currency,
+      })),
+      constraints: input.constraints,
+      policy: input.policy,
+      execution: input.execution,
+    },
+    summaryJson: {
+      generatedAt: result.generatedAt,
+      baseCurrency: result.baseCurrency,
+      assetsUsedCount: result.assetsUsed.length,
+      benchmarkSymbol: result.benchmark.symbol,
+      candidateCount: result.candidates.length,
+      scenarioCount: result.scenarios.length,
+      bestCandidateId: result.bestCandidateId,
+      defaultScenarioId: result.defaultScenarioId,
+      warningCount: result.warnings.length,
+    },
+  });
+
+  return result;
 }
 
 export async function writeStrategyLabTargetWeightsV1(

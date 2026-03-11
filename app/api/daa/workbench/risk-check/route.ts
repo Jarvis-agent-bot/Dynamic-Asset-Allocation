@@ -1,6 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { runWorkbenchRiskCheckV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
+import { runWorkbenchRiskCheckV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
 
 export const runtime = "nodejs";
 

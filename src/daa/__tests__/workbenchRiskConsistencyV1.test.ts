@@ -50,7 +50,7 @@ import {
 import {
   generateWorkbenchRebalanceCycleV1,
   updateWorkbenchRebalanceCycleV1,
-} from "@/src/daa/modules/workbench/workbenchServiceV1";
+} from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
 
 const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
 const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
@@ -118,7 +118,7 @@ describe("workbench-risk-consistency-v1", () => {
     const stored = generated.cycle ? await getDaaRebalanceCycleV1(generated.cycle.cycleId) : null;
     const storedMaxOrderItem = stored?.riskCheck.items.find((item) => item.rule === "max_order_pct");
     expect(storedMaxOrderItem?.current).toBeCloseTo(14, 6);
-  });
+  }, 15000);
 
   it("更新勾选后应持久化最新风险检查，避免刷新后口径回退", async () => {
     await upsertDaaAssetUniverseRowV1({

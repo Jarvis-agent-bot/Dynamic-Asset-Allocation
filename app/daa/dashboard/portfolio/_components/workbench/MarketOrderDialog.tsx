@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, TriangleAlert } from "lucide-react";
 
+import { formatDateTimeV1 } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import type { AssetUniverseViewV1, WorkbenchMarketOrderPreviewResultV1 } from "@/src/daa/modules/workbench/workbenchTypesV1";
@@ -17,14 +18,6 @@ import {
   deepLedgerMonoPanelClassName,
   deepLedgerSubtlePanelClassName,
 } from "../../../_components/DeepLedgerUI";
-
-function formatDateTimeV1(value: string | null | undefined): string {
-  const text = String(value || "").trim();
-  if (!text) return "暂无";
-  const ms = Date.parse(text);
-  if (!Number.isFinite(ms)) return text;
-  return new Date(ms).toLocaleString();
-}
 
 function formatMaybeAmountV1(currency: string, value: number | null | undefined, digits = 4): string {
   if (value == null || !Number.isFinite(value)) return `${currency} --`;

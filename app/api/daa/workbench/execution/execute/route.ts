@@ -2,8 +2,8 @@ import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { normalizeDaaCurrencyCodeV1 } from "@/src/daa/assetKeyV1";
 import { buildFxLookupToBaseV1, resolveFxRateToBaseV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
-import { normalizeReasonTagsV1, normalizeTradeSideV1, validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { createDaaTradeTicketV1, executeDaaTradeTicketsV1, getDaaSystemConfigV2, listDaaFxRatesV1, listDaaTradeTicketsV1 } from "@/src/daa/store/daaStorePgV1";
+import { normalizeReasonTagsV1, normalizeTradeSideV1, validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
 
 export const runtime = "nodejs";
 

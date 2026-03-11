@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
 }));
 
-vi.mock("@/src/daa/modules/workbench/workbenchServiceV1", () => ({
+vi.mock("@/src/daa/modules/workbench/workbenchReadServiceV1", () => ({
   buildWorkbenchBootstrapV1: vi.fn(),
 }));
 
 import { GET } from "@/app/api/daa/workbench/bootstrap/route";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 
 describe("workbench-bootstrap-route-v1", () => {
   beforeEach(() => {

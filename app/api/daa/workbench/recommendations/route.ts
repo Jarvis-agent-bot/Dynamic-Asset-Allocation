@@ -1,7 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
-import { runWorkbenchRecommendationsV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
+import { runWorkbenchRecommendationsV1 } from "@/src/daa/modules/workbench/workbenchRecommendationServiceV1";
 
 export const runtime = "nodejs";
 

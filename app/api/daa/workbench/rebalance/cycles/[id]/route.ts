@@ -1,7 +1,8 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { getDaaRebalanceCycleV1 } from "@/src/daa/store/daaStorePgV1";
-import { WorkbenchDomainErrorV1, updateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
+import { WorkbenchDomainErrorV1 } from "@/src/daa/modules/workbench/workbenchErrorsV1";
+import { updateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,7 @@ type Body = {
   notes?: unknown;
   cancel?: unknown;
   selectedSymbols?: unknown;
+  selectedAssetSideKeys?: unknown;
 };
 
 function readCancelReason(value: unknown): string {
@@ -47,6 +49,9 @@ export async function PATCH(req: Request, { params }: Params) {
     const selectedSymbols = Array.isArray(payload.selectedSymbols)
       ? payload.selectedSymbols.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
       : undefined;
+    const selectedAssetSideKeys = Array.isArray(payload.selectedAssetSideKeys)
+      ? payload.selectedAssetSideKeys.map((item) => String(item || "").trim()).filter(Boolean)
+      : undefined;
 
     let data;
     try {
@@ -55,6 +60,7 @@ export async function PATCH(req: Request, { params }: Params) {
         notes: payload.notes == null ? undefined : String(payload.notes || ""),
         cancel: payload.cancel ? { reason: readCancelReason(payload.cancel) } : undefined,
         selectedSymbols,
+        selectedAssetSideKeys,
       });
     } catch (error) {
       if (error instanceof WorkbenchDomainErrorV1) {

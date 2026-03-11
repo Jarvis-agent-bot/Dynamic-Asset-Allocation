@@ -1,9 +1,9 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { preferAssetRowPriceV1 } from "@/src/daa/modules/workbench/preferAssetRowPriceV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { patchDaaAssetUniverseRowV1 } from "@/src/daa/store/daaStorePgV1";
 import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 
 export const runtime = "nodejs";
 

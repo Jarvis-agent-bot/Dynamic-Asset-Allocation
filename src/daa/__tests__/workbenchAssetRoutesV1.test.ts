@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -16,8 +17,11 @@ vi.mock("@/src/daa/modules/marketCache/marketCacheServiceV1", () => ({
   getMarketPricesWithCacheV1: vi.fn(async () => ({})),
 }));
 
-vi.mock("@/src/daa/modules/workbench/workbenchServiceV1", () => ({
+vi.mock("@/src/daa/modules/workbench/workbenchReadServiceV1", () => ({
   buildWorkbenchBootstrapV1: vi.fn(),
+}));
+
+vi.mock("@/src/daa/modules/workbench/workbenchSharedV1", () => ({
   mapOpportunityActionLabelZhV1: vi.fn((action: string) => action === "open_or_add" ? "开仓/加仓" : action === "reduce_or_avoid" ? "减仓/回避" : "观察"),
   summarizeOpportunityReasonZhV1: vi.fn((reasons: string[]) => Array.isArray(reasons) ? reasons.join("；") : ""),
   summarizeOpportunityRiskZhV1: vi.fn(() => "风险可控，注意仓位管理"),
@@ -37,7 +41,6 @@ import { GET as getAssetInsights } from "@/app/api/daa/workbench/assets/[assetKe
 import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
 import { buildOpportunityPanelV1 } from "@/src/daa/signals/opportunityServiceV1";
 import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { getDaaSystemConfigV2, patchDaaAssetUniverseRowV1, updateDaaAssetUniverseLastPriceV1, upsertDaaAssetUniverseRowV1 } from "@/src/daa/store/daaStorePgV1";
 
 const MOCK_ASSET_ROW = {

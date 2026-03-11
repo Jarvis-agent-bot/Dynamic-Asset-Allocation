@@ -4,9 +4,10 @@ import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
 import { getStrategyExecutionConfigV2 } from "@/src/daa/config/systemConfigV2";
 import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
 import { buildFxLookupToBaseV1, resolveFxRateToBaseV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
-import { buildWorkbenchBootstrapV1, validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { getDaaSystemConfigV2, listDaaAssetUniverseV1, listDaaFxRatesV1, updateDaaAssetUniverseLastPriceV1 } from "@/src/daa/store/daaStorePgV1";
 import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
+import { validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
 
 export const runtime = "nodejs";
 

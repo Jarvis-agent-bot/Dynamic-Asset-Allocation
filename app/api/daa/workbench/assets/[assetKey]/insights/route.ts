@@ -5,12 +5,12 @@ import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
 import { buildMarketContextAttributionV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
 import { preferAssetRowPriceV1 } from "@/src/daa/modules/workbench/preferAssetRowPriceV1";
 import { buildOpportunityPanelV1 } from "@/src/daa/signals/opportunityServiceV1";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 import {
-  buildWorkbenchBootstrapV1,
   mapOpportunityActionLabelZhV1,
   summarizeOpportunityReasonZhV1,
   summarizeOpportunityRiskZhV1,
-} from "@/src/daa/modules/workbench/workbenchServiceV1";
+} from "@/src/daa/modules/workbench/workbenchSharedV1";
 
 export const runtime = "nodejs";
 

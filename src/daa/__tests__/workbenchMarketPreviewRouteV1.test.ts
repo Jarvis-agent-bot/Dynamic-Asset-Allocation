@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminEditorAuth: vi.fn(async () => null),
@@ -8,8 +9,11 @@ vi.mock("@/src/daa/modules/marketCache/marketCacheServiceV1", () => ({
   getMarketPricesWithCacheV1: vi.fn(),
 }));
 
-vi.mock("@/src/daa/modules/workbench/workbenchServiceV1", () => ({
+vi.mock("@/src/daa/modules/workbench/workbenchReadServiceV1", () => ({
   buildWorkbenchBootstrapV1: vi.fn(),
+}));
+
+vi.mock("@/src/daa/modules/workbench/workbenchExecutionServiceV1", () => ({
   validateExecutionRiskV1: vi.fn(async () => ({
     overallStatus: "warn",
     items: [],
@@ -25,7 +29,6 @@ vi.mock("@/src/daa/store/daaStorePgV1", () => ({
 
 import { POST } from "@/app/api/daa/workbench/execution/preview/route";
 import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { getDaaSystemConfigV2, listDaaAssetUniverseV1, listDaaFxRatesV1, updateDaaAssetUniverseLastPriceV1 } from "@/src/daa/store/daaStorePgV1";
 
 describe("workbench-market-preview-route-v1", () => {

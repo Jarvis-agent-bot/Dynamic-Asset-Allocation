@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
 
 vi.mock("@/src/daa/cron/authV1", () => ({
   requireCronAuthV1: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock("@/src/daa/modules/marketContext/marketIndicatorServiceV1", () => ({
   refreshMarketIndicatorsV1: vi.fn(),
 }));
 
-vi.mock("@/src/daa/modules/workbench/workbenchServiceV1", () => ({
+vi.mock("@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1", () => ({
   generateWorkbenchRebalanceCycleV1: vi.fn(),
 }));
 
@@ -39,7 +40,6 @@ import { POST as fxRefreshPost } from "@/app/api/daa/cron/fx-refresh/route";
 import { POST as newsRefreshPost } from "@/app/api/daa/cron/news-refresh/route";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
 import { refreshMarketIndicatorsV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
-import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { sendEmailByEnvV1 } from "@/src/daa/notify/emailV1";
 import { buildNewsSignalsV1 } from "@/src/daa/signals/newsSignalV1";
 import {

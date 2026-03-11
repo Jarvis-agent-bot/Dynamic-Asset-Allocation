@@ -38,5 +38,11 @@ describe("daa/urlV0", () => {
       expect(normalizeDaaReturnToV0("/daa/dashboard?tab=unknown#x")).toBe("/daa/dashboard#x");
       expect(normalizeDaaReturnToV0("/daa/dashboard?tab=settings&section=security#x")).toBe("/daa/dashboard?section=security#x");
     });
+
+    it("preserves dashboard deep links", () => {
+      expect(normalizeDaaReturnToV0("/daa/dashboard/workbench")).toBe("/daa/dashboard/workbench");
+      expect(normalizeDaaReturnToV0("/daa/dashboard/strategy-lab?from=login#run")).toBe("/daa/dashboard/strategy-lab?from=login#run");
+      expect(normalizeDaaReturnToV0("/daa/dashboard/settings?section=risk")).toBe("/daa/dashboard/settings?section=risk");
+    });
   });
 });

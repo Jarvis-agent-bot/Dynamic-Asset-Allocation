@@ -211,7 +211,7 @@ export default function AssetDiscoveryPanel(props: {
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(129,140,248,0.22)] bg-[rgba(129,140,248,0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--indigo)]">
               <Sparkles className="h-3.5 w-3.5" />
-              Discovery Console
+              资产发现
             </div>
             <div>
               <div className="font-[var(--font-display)] text-[30px] leading-none tracking-[-0.035em] text-[var(--text)] sm:text-[34px]">

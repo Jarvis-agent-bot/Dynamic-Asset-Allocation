@@ -1,7 +1,7 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { normalizeExecutionLogFiltersV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { listDaaTradeTicketsV1 } from "@/src/daa/store/daaStorePgV1";
+import { normalizeExecutionLogFiltersV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
 
 export const runtime = "nodejs";
 

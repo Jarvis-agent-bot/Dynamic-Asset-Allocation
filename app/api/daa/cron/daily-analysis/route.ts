@@ -1,9 +1,10 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
+import { runLoggedJobV1 } from "@/src/daa/jobs/jobServiceV1";
 import { refreshMarketIndicatorsV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
-import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { sendEmailByEnvV1 } from "@/src/daa/notify/emailV1";
 import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
+import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
 
 export const runtime = "nodejs";
 
@@ -40,72 +41,102 @@ export async function POST(req: Request) {
       return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const system = await getDaaSystemConfigV2();
-    const strategy = system.config.rebalanceStrategy;
-    if (!strategy.autoGenerateEnabled) {
-      return okV1({
-        skipped: true,
-        reason: "auto generate disabled",
-        at: new Date().toISOString(),
-      });
-    }
+    const execution = await runLoggedJobV1({
+      req,
+      jobType: "cron_daily_analysis",
+      triggerSource: "cron_daily_analysis",
+      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      summarize: (result) => ({
+        skipped: result.skipped,
+        created: result.created,
+        cycleId: result.cycleId,
+        proposalCount: result.proposalCount,
+        marketRefreshOk: result.marketRefresh.ok,
+      }),
+      handler: async () => {
+        const system = await getDaaSystemConfigV2();
+        const strategy = system.config.rebalanceStrategy;
+        if (!strategy.autoGenerateEnabled) {
+          return {
+            skipped: true,
+            created: false,
+            skippedByCooldown: false,
+            cooldownUntil: null,
+            reason: "auto generate disabled",
+            message: "auto generate disabled",
+            cycleId: null,
+            proposalCount: 0,
+            email: { sent: false, reason: "auto generate disabled" },
+            marketRefresh: { ok: true, refreshedCount: 0 },
+            at: new Date().toISOString(),
+          };
+        }
 
-    let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
-    try {
-      const refreshed = await refreshMarketIndicatorsV1();
-      marketRefresh = { ok: true, refreshedCount: refreshed.refreshedCount };
-    } catch (error) {
-      marketRefresh = {
-        ok: false,
-        reason: error instanceof Error ? error.message : String(error),
-      };
-    }
+        let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
+        try {
+          const refreshed = await refreshMarketIndicatorsV1();
+          marketRefresh = { ok: true, refreshedCount: refreshed.refreshedCount };
+        } catch (error) {
+          marketRefresh = {
+            ok: false,
+            reason: error instanceof Error ? error.message : String(error),
+          };
+        }
 
-    const generated = await generateWorkbenchRebalanceCycleV1({
-      triggerSource: "calendar",
-      triggerReason: "定期再平衡触发",
-      manual: false,
+        const generated = await generateWorkbenchRebalanceCycleV1({
+          triggerSource: "calendar",
+          triggerReason: "定期再平衡触发",
+          manual: false,
+        });
+
+        const cycle = generated.cycle;
+        const recipient = strategy.notifyEmailTo;
+        let email: Awaited<ReturnType<typeof sendEmailByEnvV1>> | null = null;
+        if (cycle && generated.created && recipient && system.config.notification.email.onSuggestionGenerated) {
+          email = await sendEmailByEnvV1({
+            to: recipient,
+            subject: `DAA 自动再平衡建议 ${new Date().toISOString().slice(0, 10)}`,
+            text: buildMailText({
+              cycleId: cycle.cycleId,
+              triggerReason: cycle.triggerReason,
+              riskStatus: cycle.riskCheck.overallStatus,
+              proposals: cycle.proposals.map((row) => ({
+                symbol: row.symbol,
+                side: row.side,
+                suggestedNotional: row.suggestedNotional,
+              })),
+            }),
+          });
+        }
+        const emailResult = email || {
+          sent: false,
+          reason: !generated.created
+            ? "本次未生成新周期，跳过邮件通知"
+            : (!recipient
+              ? "未配置邮件收件人"
+              : (system.config.notification.email.onSuggestionGenerated ? "邮件服务未返回结果" : "邮件通知开关关闭")),
+        };
+
+        return {
+          skipped: !generated.created,
+          created: generated.created,
+          skippedByCooldown: generated.skippedByCooldown,
+          cooldownUntil: generated.cooldownUntil,
+          message: generated.message,
+          cycleId: cycle?.cycleId || null,
+          proposalCount: cycle?.proposals.length || 0,
+          email: emailResult,
+          marketRefresh,
+          at: new Date().toISOString(),
+        };
+      },
     });
 
-    const cycle = generated.cycle;
-    const recipient = strategy.notifyEmailTo;
-    let email: Awaited<ReturnType<typeof sendEmailByEnvV1>> | null = null;
-    if (cycle && generated.created && recipient && system.config.notification.email.onSuggestionGenerated) {
-      email = await sendEmailByEnvV1({
-        to: recipient,
-        subject: `DAA 自动再平衡建议 ${new Date().toISOString().slice(0, 10)}`,
-        text: buildMailText({
-          cycleId: cycle.cycleId,
-          triggerReason: cycle.triggerReason,
-          riskStatus: cycle.riskCheck.overallStatus,
-          proposals: cycle.proposals.map((row) => ({
-            symbol: row.symbol,
-            side: row.side,
-            suggestedNotional: row.suggestedNotional,
-          })),
-        }),
-      });
-    }
-    const emailResult = email || {
-      sent: false,
-      reason: !generated.created
-        ? "本次未生成新周期，跳过邮件通知"
-        : (!recipient
-          ? "未配置邮件收件人"
-          : (system.config.notification.email.onSuggestionGenerated ? "邮件服务未返回结果" : "邮件通知开关关闭")),
-    };
-
     return okV1({
-      skipped: !generated.created,
-      created: generated.created,
-      skippedByCooldown: generated.skippedByCooldown,
-      cooldownUntil: generated.cooldownUntil,
-      message: generated.message,
-      cycleId: cycle?.cycleId || null,
-      proposalCount: cycle?.proposals.length || 0,
-      email: emailResult,
-      marketRefresh,
-      at: new Date().toISOString(),
+      ...execution.result,
+      requestId: execution.requestId,
+      jobId: execution.jobId,
+      durationMs: execution.durationMs,
     });
   });
 }

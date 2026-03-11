@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getWorkbenchRebalanceCycleReportV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
+import { getWorkbenchRebalanceCycleReportV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 
 export const runtime = "nodejs";
 

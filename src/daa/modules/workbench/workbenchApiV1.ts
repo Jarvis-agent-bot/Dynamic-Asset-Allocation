@@ -11,7 +11,6 @@ import type {
   RebalanceCycleV1,
   UpdateRebalanceCycleInputV1,
   WorkbenchAssetInsightResponseV1,
-  WorkbenchBootstrapV1,
   WorkbenchRebalanceCycleReportV1,
   WorkbenchExecutionExecuteInputV1,
   WorkbenchFeaturedAssetsResultV1,
@@ -25,13 +24,6 @@ import type {
   WorkbenchSearchAssetResultV1,
   WorkbenchTradeRecordsV1,
 } from "./workbenchTypesV1";
-
-export async function getWorkbenchBootstrapV1(): Promise<WorkbenchBootstrapV1> {
-  return requestDataV1<WorkbenchBootstrapV1>("/api/daa/workbench/bootstrap", {
-    method: "GET",
-    cache: "no-store",
-  });
-}
 
 export async function getWorkbenchRecommendationsV1(input: { analysisFocus: string }): Promise<WorkbenchRecommendationsResultV1> {
   return requestDataV1<WorkbenchRecommendationsResultV1>("/api/daa/workbench/recommendations", {
@@ -183,17 +175,6 @@ export async function generateWorkbenchRebalanceCycleV1(
   });
 }
 
-export async function listWorkbenchRebalanceCyclesV1(limit = 120): Promise<RebalanceCycleV1[]> {
-  const data = await requestDataV1<{ cycles: RebalanceCycleV1[] }>(
-    `/api/daa/workbench/rebalance/cycles?limit=${Math.max(1, Math.min(500, Math.trunc(limit || 120)))}`,
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
-  return Array.isArray(data.cycles) ? data.cycles : [];
-}
-
 export async function getWorkbenchRebalanceCycleV1(cycleId: string): Promise<RebalanceCycleV1> {
   return requestDataV1<RebalanceCycleV1>(`/api/daa/workbench/rebalance/cycles/${encodeURIComponent(cycleId)}`, {
     method: "GET",
@@ -243,17 +224,6 @@ export async function getWorkbenchRebalanceCycleReportV1(cycleId: string): Promi
   return payload.report || null;
 }
 
-export async function listWorkbenchRebalanceReportsV1(limit = 50): Promise<WorkbenchRebalanceCycleReportV1[]> {
-  const payload = await requestDataV1<{ reports: WorkbenchRebalanceCycleReportV1[] }>(
-    `/api/daa/workbench/rebalance/reports?limit=${Math.max(1, Math.min(200, Math.trunc(limit || 50)))}`,
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
-  return Array.isArray(payload.reports) ? payload.reports : [];
-}
-
 export async function submitWorkbenchLlmFeedbackV1(input: {
   contextId: string;
   type: WorkbenchLlmFeedbackTypeV1;
@@ -279,16 +249,3 @@ export async function runWorkbenchRiskCheckV1(input: {
   });
 }
 
-export async function listWorkbenchTradeRecordsV1(limit = 120): Promise<WorkbenchTradeRecordsV1> {
-  const [cycles, ordersData] = await Promise.all([
-    listWorkbenchRebalanceCyclesV1(limit),
-    requestDataV1<{ logs: WorkbenchTradeRecordsV1["orders"] }>(
-      `/api/daa/workbench/execution/logs?limit=${Math.max(1, Math.min(500, Math.trunc(limit * 2 || 240)))}`,
-      { method: "GET", cache: "no-store" },
-    ),
-  ]);
-  return {
-    cycles,
-    orders: Array.isArray(ordersData.logs) ? ordersData.logs : [],
-  };
-}
