@@ -89,6 +89,34 @@ describe("auth-routes-api-response-v1", () => {
     expect(response.headers.get("set-cookie")).toContain(DAA_AUTH_SESSION_COOKIE_V0);
   });
 
+
+  it("login 会保留 dashboard 深链 returnTo", async () => {
+    await bootstrapCreateFirstDaaAuthAccountV0({
+      username: "admin",
+      password: "pw-1",
+      roles: ["viewer"],
+    });
+
+    const response = await loginPost(new Request("http://localhost/api/daa/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        username: "admin",
+        password: "pw-1",
+        returnTo: "/daa/dashboard/workbench?from=login",
+      }),
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({
+      ok: true,
+      data: {
+        redirectTo: "/daa/dashboard/workbench?from=login&notice=signed_in",
+      },
+    });
+  });
+
   it("me silent 未登录时返回 ApiResponseV1 错误结构并清理 cookie", async () => {
     const response = await meGet(new Request("http://localhost/api/daa/auth/me?silent=1"));
     const json = await response.json();

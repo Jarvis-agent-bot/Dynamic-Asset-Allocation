@@ -53,7 +53,8 @@ export default function RootLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
-  const GA_ID = "G-PD2JWJHVEM"; // Replace with your Google Analytics ID.
+  const GA_ID = "G-PD2JWJHVEM";
+  const analyticsEnabled = process.env.NODE_ENV === "production";
 
   return (
     <html
@@ -68,19 +69,22 @@ export default function RootLayout({
         />
         <meta name="color-scheme" content="dark" />
 
-        {/* Google Analytics */}
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${GA_ID}');
-          `}
-        </Script>
+        {analyticsEnabled ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_ID}');
+              `}
+            </Script>
+          </>
+        ) : null}
       </head>
       <body>
         {children}

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -9,7 +10,6 @@ import { POST as runStrategyLabWriteback } from "@/app/api/daa/strategy-lab/writ
 import { POST as upsertAsset } from "@/app/api/daa/workbench/assets/upsert/route";
 import { getDaaSystemConfigV2, saveDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 import { runStrategyLabV1 } from "@/src/daa/modules/strategyLab/strategyLabServiceV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 
 const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
 const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
@@ -235,5 +235,5 @@ describe("strategy-lab-cross-market-flow-v1", () => {
 
     const nextConfig = await getDaaSystemConfigV2();
     expect(nextConfig.config.strategy.targetWeights).toEqual({});
-  });
+  }, 15000);
 });

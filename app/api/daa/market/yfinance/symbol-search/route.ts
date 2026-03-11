@@ -1,4 +1,5 @@
-import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
+import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 
 export const runtime = "nodejs";
 
@@ -199,9 +200,13 @@ async function fetchSnapshotsBySymbols(symbols: string[]): Promise<Map<string, Q
 }
 
 export async function GET(req: Request) {
-  try {
-    const url = new URL(req.url);
-    const q = String(url.searchParams.get("q") || "").trim();
+  return withApiHandlerV1(async () => {
+    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+    if (denied) return denied;
+
+    try {
+      const url = new URL(req.url);
+      const q = String(url.searchParams.get("q") || "").trim();
     const limit = clampLimit(url.searchParams.get("limit"));
     const marketFilter = normalizeMarketFilter(url.searchParams.get("market"));
 
@@ -347,12 +352,13 @@ export async function GET(req: Request) {
       marketFilter,
       items,
     });
-  } catch (error) {
-    return failV1("INTERNAL_ERROR", "symbol search failed", {
-      status: 502,
-      details: {
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
+    } catch (error) {
+      return failV1("INTERNAL_ERROR", "symbol search failed", {
+        status: 502,
+        details: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  });
 }

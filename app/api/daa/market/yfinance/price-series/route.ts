@@ -1,4 +1,5 @@
-import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
+import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 
 import { assertIsoDateString } from "@/src/core/isoDate";
 import { addDaysIsoUtc, normalizeYfinanceHistoricalQuotes, normalizeYfinanceSymbol } from "@/src/market/yfinance";
@@ -15,9 +16,13 @@ function isValidationMessageV1(message: string): boolean {
 }
 
 export async function GET(req: Request) {
-  try {
-    const url = new URL(req.url);
-    const symbolRaw = url.searchParams.get("symbol")?.trim();
+  return withApiHandlerV1(async () => {
+    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+    if (denied) return denied;
+
+    try {
+      const url = new URL(req.url);
+      const symbolRaw = url.searchParams.get("symbol")?.trim();
     if (!symbolRaw) {
       return failV1("VALIDATION_FAILED", "missing symbol", { status: 400 });
     }
@@ -117,16 +122,17 @@ export async function GET(req: Request) {
       series: normalized.series,
       issues: normalized.issues,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (isValidationMessageV1(message)) {
-      return failV1("VALIDATION_FAILED", message, { status: 400 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isValidationMessageV1(message)) {
+        return failV1("VALIDATION_FAILED", message, { status: 400 });
+      }
+      return failV1("INTERNAL_ERROR", "yfinance price-series fetch failed", {
+        status: 502,
+        details: {
+          message,
+        },
+      });
     }
-    return failV1("INTERNAL_ERROR", "yfinance price-series fetch failed", {
-      status: 502,
-      details: {
-        message,
-      },
-    });
-  }
+  });
 }

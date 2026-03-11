@@ -1,5 +1,6 @@
 import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
+import { runLoggedJobV1 } from "@/src/daa/jobs/jobServiceV1";
 import { refreshMarketPricesV1, type MarketPriceAssetInputV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
 import { getMarketIndicatorRefreshSymbolsV1 } from "@/src/daa/modules/marketContext/marketIndicatorCatalogV1";
 import { WORKBENCH_FEATURED_ASSETS_CATALOG_V1 } from "@/src/daa/modules/workbench/featuredAssetsCatalogV1";
@@ -52,81 +53,103 @@ export async function POST(req: Request) {
       return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const [system, assetRows] = await Promise.all([getDaaSystemConfigV2(), listDaaAssetUniverseV1()]);
-    const marketCache = system.config.dataSources.priceFeed.marketCache;
-
-    const targets = dedupeTargetsV1([
-      ...assetRows.map((row) => ({
-        market: row.market,
-        symbol: row.symbol,
-        currency: row.currency,
-      })),
-      ...(system.config.dataSources.priceFeed.symbols || []).map((symbol) => {
-        const market = inferMarketBySymbolV1(symbol);
-        return {
-          market,
-          symbol: normalizeUpper(symbol),
-          currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
-        };
-      }),
-      ...WORKBENCH_FEATURED_ASSETS_CATALOG_V1.map((row) => ({
-        market: row.market,
-        symbol: row.symbol,
-        currency: row.currency,
-      })),
-      ...getMarketIndicatorRefreshSymbolsV1(system.config.dataSources.marketIndicators).map((symbol) => {
-        const market = inferMarketBySymbolV1(symbol);
-        return {
-          market,
-          symbol: normalizeUpper(symbol),
-          currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
-        };
-      }),
-    ]);
-
-    const result = await refreshMarketPricesV1({
-      assets: targets,
+    const execution = await runLoggedJobV1({
+      req,
+      jobType: "cron_price_refresh",
       triggerSource: "cron_price_refresh",
-      timeoutMs: 2600,
-      concurrency: 6,
-      rawRetentionDays: marketCache.rawRetentionDays,
+      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      summarize: (result) => ({
+        requested: result.requested,
+        refreshedSymbols: result.refreshedSymbols,
+        staleSymbols: result.staleSymbols,
+        missingSymbols: result.missingSymbols,
+        refreshedAssets: result.refreshedAssets,
+      }),
+      handler: async () => {
+        const [system, assetRows] = await Promise.all([getDaaSystemConfigV2(), listDaaAssetUniverseV1()]);
+        const marketCache = system.config.dataSources.priceFeed.marketCache;
+
+        const targets = dedupeTargetsV1([
+          ...assetRows.map((row) => ({
+            market: row.market,
+            symbol: row.symbol,
+            currency: row.currency,
+          })),
+          ...(system.config.dataSources.priceFeed.symbols || []).map((symbol) => {
+            const market = inferMarketBySymbolV1(symbol);
+            return {
+              market,
+              symbol: normalizeUpper(symbol),
+              currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
+            };
+          }),
+          ...WORKBENCH_FEATURED_ASSETS_CATALOG_V1.map((row) => ({
+            market: row.market,
+            symbol: row.symbol,
+            currency: row.currency,
+          })),
+          ...getMarketIndicatorRefreshSymbolsV1(system.config.dataSources.marketIndicators).map((symbol) => {
+            const market = inferMarketBySymbolV1(symbol);
+            return {
+              market,
+              symbol: normalizeUpper(symbol),
+              currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
+            };
+          }),
+        ]);
+
+        const result = await refreshMarketPricesV1({
+          assets: targets,
+          triggerSource: "cron_price_refresh",
+          timeoutMs: 2600,
+          concurrency: 6,
+          rawRetentionDays: marketCache.rawRetentionDays,
+        });
+
+        const refreshedAssetKeys: string[] = [];
+        const historyRows: Array<{ assetKey: string; ts?: string; price: number; source?: string }> = [];
+        for (const row of assetRows) {
+          const key = `${normalizeUpper(row.market, "US")}::${normalizeUpper(row.symbol)}`;
+          const priced = result.results[key];
+          if (!priced || !(priced.price > 0)) continue;
+          if (!priced.priceUpdatedAt) continue;
+          const updatedAt = priced.priceUpdatedAt;
+          const updated = await updateDaaAssetUniverseLastPriceV1({
+            assetKey: row.assetKey,
+            lastPrice: priced.price,
+            priceUpdatedAt: updatedAt,
+          });
+          if (!updated) continue;
+          refreshedAssetKeys.push(updated.assetKey);
+          historyRows.push({
+            assetKey: updated.assetKey,
+            price: priced.price,
+            ts: updatedAt,
+            source: "cron_price_refresh",
+          });
+        }
+
+        if (historyRows.length > 0) {
+          await appendAssetPriceHistoryRowsV1(historyRows);
+        }
+
+        return {
+          requested: targets.length,
+          refreshedSymbols: result.refreshed,
+          staleSymbols: result.stale,
+          missingSymbols: result.missing,
+          refreshedAssets: refreshedAssetKeys.length,
+          assetKeys: refreshedAssetKeys,
+          at: new Date().toISOString(),
+        };
+      },
     });
 
-    const refreshedAssetKeys: string[] = [];
-    const historyRows: Array<{ assetKey: string; ts?: string; price: number; source?: string }> = [];
-    for (const row of assetRows) {
-      const key = `${normalizeUpper(row.market, "US")}::${normalizeUpper(row.symbol)}`;
-      const priced = result.results[key];
-      if (!priced || !(priced.price > 0)) continue;
-      if (!priced.priceUpdatedAt) continue;
-      const updatedAt = priced.priceUpdatedAt;
-      const updated = await updateDaaAssetUniverseLastPriceV1({
-        assetKey: row.assetKey,
-        lastPrice: priced.price,
-        priceUpdatedAt: updatedAt,
-      });
-      if (!updated) continue;
-      refreshedAssetKeys.push(updated.assetKey);
-      historyRows.push({
-        assetKey: updated.assetKey,
-        price: priced.price,
-        ts: updatedAt,
-        source: "cron_price_refresh",
-      });
-    }
-
-    if (historyRows.length > 0) {
-      await appendAssetPriceHistoryRowsV1(historyRows);
-    }
-
     return okV1({
-      requested: targets.length,
-      refreshedSymbols: result.refreshed,
-      staleSymbols: result.stale,
-      missingSymbols: result.missing,
-      refreshedAssets: refreshedAssetKeys.length,
-      assetKeys: refreshedAssetKeys,
-      at: new Date().toISOString(),
+      ...execution.result,
+      requestId: execution.requestId,
+      jobId: execution.jobId,
+      durationMs: execution.durationMs,
     });
   });
 }

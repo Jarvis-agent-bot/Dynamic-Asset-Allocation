@@ -4,6 +4,7 @@ import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/s
 import { getDaaAuthContextFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
 import { ensureDevDefaultDaaAuthAccountV0, refreshDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
 import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
+import { shouldUseDevMemFallbackV1 } from "@/src/daa/devMemFallbackV1";
 
 export const runtime = "nodejs";
 
@@ -81,6 +82,9 @@ export async function GET(req: Request) {
 
     return res;
   } catch (error) {
+    if (isSilentMode(req) && shouldUseDevMemFallbackV1(error)) {
+      return unauthenticatedResponse({ silent: true });
+    }
     return failV1("INTERNAL_ERROR", "auth_backend_unavailable", {
       status: 503,
       details: {

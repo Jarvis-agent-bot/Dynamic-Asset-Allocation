@@ -61,7 +61,7 @@ export default function DaaSessionGuard() {
             } catch {
               // Ignore storage errors (private mode / quota).
             }
-            toast.error("Session expired. Please sign in again.");
+            toast.error("会话已过期，请重新登录。");
           }
 
           const href = buildLoginHref(returnTo);

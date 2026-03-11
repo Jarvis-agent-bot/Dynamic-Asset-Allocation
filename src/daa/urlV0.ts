@@ -13,15 +13,17 @@ export function normalizeDaaReturnToV0(raw: unknown): string {
   if (!v.startsWith("/")) return DEFAULT_DASHBOARD_RETURN_TO_V0;
   if (v.startsWith("//")) return DEFAULT_DASHBOARD_RETURN_TO_V0;
 
-  // Keep post-login redirects inside the DAA surface.
-  if (!v.startsWith("/daa")) return DEFAULT_DASHBOARD_RETURN_TO_V0;
-
-  // Avoid redirect loops back into login.
-  if (v.startsWith("/daa/login")) return DEFAULT_DASHBOARD_RETURN_TO_V0;
-
   try {
     // Use a dummy origin so URL can parse relative paths in Node + browsers.
     const u = new URL(v, DUMMY_ORIGIN_V0);
+
+    // Keep post-login redirects inside the DAA surface.
+    if (!u.pathname.startsWith("/daa")) return DEFAULT_DASHBOARD_RETURN_TO_V0;
+
+    // Avoid redirect loops back into login.
+    if (u.pathname === "/daa/login" || u.pathname.startsWith("/daa/login/")) {
+      return DEFAULT_DASHBOARD_RETURN_TO_V0;
+    }
 
     if (u.pathname === "/daa" || u.pathname === "/daa/") {
       return `${DEFAULT_DASHBOARD_RETURN_TO_V0}${u.hash || ""}`;
@@ -32,6 +34,11 @@ export function normalizeDaaReturnToV0(raw: unknown): string {
       u.searchParams.delete("tab");
       const qs = u.searchParams.toString();
       return `/daa/dashboard${qs ? `?${qs}` : ""}${u.hash || ""}`;
+    }
+
+    // Allow deep links inside the authenticated dashboard shell.
+    if (u.pathname.startsWith("/daa/dashboard/")) {
+      return `${u.pathname}${u.search}${u.hash}`;
     }
   } catch {
     // Ignore parse errors; fall back to dashboard.

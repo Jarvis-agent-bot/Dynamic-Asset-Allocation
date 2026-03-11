@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatCurrency, formatDateTimeV1, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
+import { DashboardEmptyStateV1, DashboardErrorNoticeV1 } from "@/app/daa/dashboard/_components/DashboardFeedbackV1";
 import { cn } from "@/lib/utils";
 import type { TradeTicketSideV1 } from "@/src/daa/modules/trade/tradeTypesV1";
 import type {
@@ -43,6 +44,15 @@ const HOLDING_GROUP_META_V1: Array<{ key: HoldingGroupKeyV1; label: string }> = 
   { key: "bond", label: "债券" },
   { key: "crypto", label: "加密" },
 ];
+
+function normalizeTargetWeightPctV1(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * 100) / 100;
+}
+
+function formatTargetWeightDraftV1(value: number): string {
+  return normalizeTargetWeightPctV1(value).toFixed(2);
+}
 
 function isInBasketV1(row: AssetUniverseViewV1): boolean {
   return row.watchEnabled && row.targetWeightHint > 0;
@@ -112,14 +122,6 @@ function priceStatusClassV1(status: string): string {
   if (status === "stale") return "text-amber-200";
   if (status === "unsupported") return "text-slate-300";
   return "text-rose-200";
-}
-
-function formatDateTimeV1(value: string | null | undefined): string {
-  const text = String(value || "").trim();
-  if (!text) return "暂无";
-  const ms = Date.parse(text);
-  if (!Number.isFinite(ms)) return text;
-  return new Date(ms).toLocaleString();
 }
 
 function priceStatusNoteV1(status: string): string {
@@ -320,10 +322,16 @@ function InlineInsightsV1(props: {
     );
   }
   if (props.error) {
-    return <div className="rounded-[16px] border border-rose-400/22 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{props.error}</div>;
+    return <DashboardErrorNoticeV1 title="洞察加载失败" description={props.error} className="rounded-[16px]" />;
   }
   if (!props.data) {
-    return <div className="rounded-[16px] border border-dashed border-[var(--border-strong)] px-4 py-5 text-sm text-[var(--muted)]">暂无洞察数据。</div>;
+    return (
+      <DashboardEmptyStateV1
+        title="暂无洞察"
+        description="当前资产还没有生成洞察，可先刷新数据或切换其他标的。"
+        className="px-4 py-5 text-left"
+      />
+    );
   }
 
   const opportunity = props.data.opportunity;
@@ -395,7 +403,7 @@ function InlineInsightsV1(props: {
             ["valuation", "估值"],
             ["market", "市场"],
             ["news", "新闻"],
-            ["llm", "AI解读"],
+            ["llm", "AI 解读"],
           ].map(([value, label]) => (
             <TabsTrigger
               key={value}
@@ -641,7 +649,7 @@ function InlineInsightsV1(props: {
                     规则环境 {marketRegimeLabelV1(marketContext?.regime || null)}
                   </DeepLedgerStatusPill>
                   <DeepLedgerStatusPill tone={marketRegimeToneV1(aiMarketRegime)}>
-                    AI 输入环境 {marketRegimeLabelV1(aiMarketRegime)}
+                    AI 分析环境 {marketRegimeLabelV1(aiMarketRegime)}
                   </DeepLedgerStatusPill>
                 </div>
                 {aiMarketFacts.length > 0 ? (
@@ -662,7 +670,7 @@ function InlineInsightsV1(props: {
             {llm && llm.status === "ok" ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <DeepLedgerStatusPill tone="indigo">模型 {llm.provider}/{llm.model}</DeepLedgerStatusPill>
+                  <DeepLedgerStatusPill tone="indigo">分析模型 {llm.provider}/{llm.model}</DeepLedgerStatusPill>
                   <DeepLedgerStatusPill tone="slate">生成于 {formatDateTimeV1(llm.generatedAt)}</DeepLedgerStatusPill>
                 </div>
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 text-[var(--text)]">{llm.summary}</div>
@@ -724,8 +732,8 @@ function InlineInsightsV1(props: {
               </>
             ) : (
               <DeepLedgerEmptyState
-                title="暂无 AI 分析结果"
-                description="如果其他页签已有结构化信号，可以先用它们做决策；AI 解读生成后会同步展示在这里。"
+                title="暂无 AI 解读"
+                description="如果其他页签已有结构化信号，可以先据此判断；AI 解读生成后会同步展示在这里。"
                 className="border-0 bg-transparent px-0 py-2 text-left"
               />
             )}
@@ -835,14 +843,14 @@ export default function AssetUniverseTable(props: {
 
   function draftTargetValue(row: AssetUniverseViewV1): string {
     if (targetDrafts[row.assetKey] != null) return targetDrafts[row.assetKey];
-    return row.targetWeightPct.toFixed(2);
+    return formatTargetWeightDraftV1(row.targetWeightPct);
   }
 
   async function handleSaveTarget(row: AssetUniverseViewV1) {
     const raw = draftTargetValue(row);
     const next = Number(raw);
     if (!Number.isFinite(next) || next < 0) return;
-    await props.onUpdateTargetWeight(row, next);
+    await props.onUpdateTargetWeight(row, normalizeTargetWeightPctV1(next));
     setTargetDrafts((prev) => {
       const nextState = { ...prev };
       delete nextState[row.assetKey];
@@ -853,7 +861,6 @@ export default function AssetUniverseTable(props: {
   return (
     <DeepLedgerPanel
       title="观察与再平衡"
-      subtitle="信息区支持横向浏览，右侧操作区固定；更适合在同一屏内同时看持仓、权重偏离和执行动作。"
       accent={props.view === "holdings" ? "cyan" : "amber"}
       bodyClassName="space-y-5"
       action={<DeepLedgerStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>{viewLabelV1(props.view)}</DeepLedgerStatusPill>}
@@ -862,8 +869,7 @@ export default function AssetUniverseTable(props: {
         <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,38,0.98),rgba(9,14,24,0.94))] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">Asset Console</div>
-              <div className="mt-2 font-[var(--font-display)] text-[28px] leading-none tracking-[-0.03em] text-[var(--text)]">
+              <div className="font-[var(--font-display)] text-[28px] leading-none tracking-[-0.03em] text-[var(--text)]">
                 {viewLabelV1(props.view)}
               </div>
               <div className="mt-3 max-w-2xl text-[13px] leading-6 text-[var(--muted)]">
@@ -879,9 +885,6 @@ export default function AssetUniverseTable(props: {
               {props.updatingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
 {props.updatingTarget ? "处理中..." : "研究目标归一到 100%"}
             </DeepLedgerActionButton>
-          </div>
-          <div className="mt-4 text-xs leading-5 text-[var(--faint)]">
-            说明：这里的“重算到 100%”只会调整目标比例，不会触发任何交易执行。
           </div>
         </div>
 
@@ -919,7 +922,7 @@ export default function AssetUniverseTable(props: {
 
       <div className={cn(deepLedgerTableShellClassName, "overflow-x-auto")}>
         <div className="border-b border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-2.5 text-[11px] text-[var(--faint)]">
-          左侧信息区可横向浏览，右侧操作区固定；建议先看偏离和 FX，再决定买入或卖出。
+          左侧信息区可横向浏览，右侧操作区固定；建议先看偏离和汇率折算，再决定买入或卖出。
         </div>
         <TooltipProvider delayDuration={120}>
           <table className="min-w-[1320px] w-full border-collapse">
@@ -947,7 +950,7 @@ export default function AssetUniverseTable(props: {
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>研究目标</th>
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>偏离</th>
                 <th className={deepLedgerTableHeadClassName}>人因 / 观点</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>FX</th>
+                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>汇率</th>
                 <th className="sticky right-0 z-20 border-b border-[var(--border)] bg-[rgba(7,10,18,0.98)] px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">操作区</th>
               </tr>
             </thead>
@@ -972,7 +975,7 @@ export default function AssetUniverseTable(props: {
                 const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
                 const targetDraft = draftTargetValue(row);
                 const targetDraftNum = Number(targetDraft);
-                const targetChanged = Number.isFinite(targetDraftNum) && Math.abs(targetDraftNum - row.targetWeightPct) > 1e-6;
+                const targetChanged = Number.isFinite(targetDraftNum) && Math.abs(targetDraftNum - normalizeTargetWeightPctV1(row.targetWeightPct)) > 1e-6;
                 const targetInvalid = !Number.isFinite(targetDraftNum) || targetDraftNum < 0;
                 const buyDisabled = props.disabled || !(price > 0);
                 const sellDisabled = props.disabled || !(price > 0) || !(row.holdingQty > 0);
@@ -1063,7 +1066,7 @@ export default function AssetUniverseTable(props: {
                               {row.valuationBase != null ? (
                                 <div className="text-xs">折算约 {formatCurrency(row.valuationBase, props.baseCurrency)}</div>
                               ) : (
-                                <div className="text-xs text-[var(--muted)]">暂无 {props.baseCurrency} 折算值</div>
+                                <div className="text-xs text-[var(--muted)]">暂无基准币折算值</div>
                               )}
                             </TooltipContent>
                           </Tooltip>

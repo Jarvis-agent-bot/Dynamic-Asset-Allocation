@@ -2,8 +2,22 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import type { StrategyLabRunInputV1 } from "@/src/daa/modules/strategyLab/strategyLabContractsV1";
 import { StrategyLabValidationErrorV1, runStrategyLabV1 } from "@/src/daa/modules/strategyLab/strategyLabServiceV1";
+import { createMarketDataClient } from "@/src/market/marketDataClient";
 
 export const runtime = "nodejs";
+
+function buildForwardedMarketHeadersV1(req: Request): HeadersInit | undefined {
+  const cookie = req.headers.get("cookie")?.trim();
+  const authorization = req.headers.get("authorization")?.trim();
+  const requestId = req.headers.get("x-request-id")?.trim();
+
+  const headers = new Headers();
+  if (cookie) headers.set("cookie", cookie);
+  if (authorization) headers.set("authorization", authorization);
+  if (requestId) headers.set("x-request-id", requestId);
+
+  return [...headers.keys()].length > 0 ? headers : undefined;
+}
 
 export async function POST(req: Request) {
   return withApiHandlerV1(async () => {
@@ -22,6 +36,10 @@ export async function POST(req: Request) {
     }
 
     const endpointBase = new URL(req.url).origin;
+    const marketDataClient = createMarketDataClient({
+      endpointBase,
+      headers: buildForwardedMarketHeadersV1(req),
+    });
 
     try {
       const data = await runStrategyLabV1({
@@ -38,7 +56,7 @@ export async function POST(req: Request) {
         constraints: body?.constraints,
         policy: body?.policy,
         execution: body?.execution,
-      }, { endpointBase });
+      }, { endpointBase, marketDataClient });
 
       return okV1(data);
     } catch (error) {

@@ -62,6 +62,30 @@ describe("strategy-lab-run-route-v1", () => {
     expect(json.error.details.code).toBe("EMPTY_ASSETS");
   });
 
+
+  it("会把当前请求的会话头透传给内部行情客户端", async () => {
+    const response = await POST(new Request("http://localhost/api/daa/strategy-lab/run", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "daa_session=abc123",
+        authorization: "Bearer token-1",
+        "x-request-id": "req-1",
+      },
+      body: JSON.stringify({
+        assets: [{ assetKey: "US::AAPL", symbol: "AAPL", market: "US", currency: "USD" }],
+        startDate: "2025-01-01",
+        endDate: "2025-01-06",
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(vi.mocked(runStrategyLabV1)).toHaveBeenCalledTimes(1);
+    const [, deps] = vi.mocked(runStrategyLabV1).mock.calls[0] || [];
+    expect(deps).toMatchObject({ endpointBase: "http://localhost" });
+    expect(deps?.marketDataClient).toBeDefined();
+  });
+
   it("会把缺 FX / 缺字段类错误映射成 VALIDATION_FAILED 并保留细节", async () => {
     vi.mocked(runStrategyLabV1).mockRejectedValue(
       new StrategyLabValidationErrorV1(

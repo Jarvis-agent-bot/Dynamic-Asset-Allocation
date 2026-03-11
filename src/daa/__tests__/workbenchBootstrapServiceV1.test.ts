@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
 
 vi.mock("@/src/daa/store/daaStorePgV1", () => ({
   appendDaaTriggerEventV1: vi.fn(async () => null),
@@ -50,7 +51,6 @@ vi.mock("@/src/daa/modules/workbench/assetUniverseServiceV1", () => ({
 }));
 
 import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchServiceV1";
 import { buildAssetUniverseViewRowsV1 } from "@/src/daa/modules/workbench/assetUniverseServiceV1";
 import { getDaaMarketCacheHealthStatsV1, getDaaSystemConfigV2, listDaaAssetUniverseV1 } from "@/src/daa/store/daaStorePgV1";
 

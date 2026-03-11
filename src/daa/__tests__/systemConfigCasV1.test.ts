@@ -211,6 +211,60 @@ describe("system-config-cas-v1", () => {
     });
   });
 
+
+  it("运行态账户状态迁入 account_state，system config 仅保留稳定配置", async () => {
+    const current = await getDaaSystemConfigV2();
+    await saveDaaSystemConfigV2({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        rebalanceStrategy: {
+          ...current.config.rebalanceStrategy,
+          analysisFocus: "runtime-account-separated",
+        },
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 800,
+            investableCash: 760,
+            frozenCash: 40,
+            totalEquity: 1500,
+          },
+        },
+      },
+    });
+
+    const latest = await getDaaSystemConfigV2();
+    expect(latest.config.strategy.account.cash).toBeCloseTo(800, 6);
+    expect(latest.config.strategy.account.investableCash).toBeCloseTo(760, 6);
+    expect(latest.config.strategy.account.frozenCash).toBeCloseTo(40, 6);
+    expect(latest.config.strategy.account.totalEquity).toBeCloseTo(1500, 6);
+    expect(latest.config.rebalanceStrategy.analysisFocus).toBe("runtime-account-separated");
+
+    await withDaaPgClientV0(async ({ query }) => {
+      const configRows = await query("SELECT config_json FROM daa_system_config_v2 WHERE id = 'default' LIMIT 1");
+      const rawConfig = (configRows.rows[0] as Record<string, unknown>).config_json;
+      const persisted = typeof rawConfig === "string" ? JSON.parse(rawConfig) : rawConfig as Record<string, any>;
+      expect(persisted.strategy.account.cash).toBe(0);
+      expect(persisted.strategy.account.investableCash).toBe(0);
+      expect(persisted.strategy.account.frozenCash).toBe(0);
+      expect(persisted.strategy.account.totalEquity).toBe(null);
+      expect(persisted.rebalanceStrategy.analysisFocus).toBe("runtime-account-separated");
+
+      const accountRows = await query(
+        "SELECT base_currency, cash, investable_cash, frozen_cash, total_equity FROM daa_account_state WHERE id = 'default' LIMIT 1",
+      );
+      const account = accountRows.rows[0] as Record<string, unknown>;
+      expect(String(account.base_currency)).toBe("USD");
+      expect(Number(account.cash)).toBeCloseTo(800, 6);
+      expect(Number(account.investable_cash)).toBeCloseTo(760, 6);
+      expect(Number(account.frozen_cash)).toBeCloseTo(40, 6);
+      expect(Number(account.total_equity)).toBeCloseTo(1500, 6);
+    });
+  });
+
   it("cash ledger 更新现金时保留管理员写入的非 account 配置", async () => {
     const current = await getDaaSystemConfigV2();
     await saveDaaSystemConfigV2({
