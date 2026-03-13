@@ -20,6 +20,7 @@ export async function preferAssetRowPriceV1(
   if (!yfinanceSymbol) return row;
 
   const systemRow = await getDaaSystemConfigV2();
+  const priceFeedEnabled = systemRow.config.dataSources?.priceFeed?.enabled !== false;
   const marketCache = systemRow.config.dataSources?.priceFeed?.marketCache || defaultMarketCacheConfigV1();
   const key = `${String(row.market || "").toUpperCase()}::${String(row.symbol || "").toUpperCase()}`;
   const priced = await getMarketPricesWithCacheV1({
@@ -28,8 +29,8 @@ export async function preferAssetRowPriceV1(
       market: row.market,
       currency: row.currency,
     }],
-    allowRefresh: true,
-    forceRefresh: true,
+    allowRefresh: priceFeedEnabled,
+    forceRefresh: priceFeedEnabled,
     refreshBudget: 1,
     timeoutMs: 2600,
     source,

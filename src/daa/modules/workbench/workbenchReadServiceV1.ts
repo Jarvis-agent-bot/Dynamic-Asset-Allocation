@@ -1,4 +1,5 @@
 import { normalizeDaaCurrencyCodeV1, normalizeDaaSymbolV1, parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
+import { resolveInvestableCashV1 } from "@/src/daa/account/resolveInvestableCashV1";
 import type { DaaMarketContextV1, DaaMarketRegimeV1 } from "@/src/daa/modules/marketContext/marketContextTypesV1";
 import { getStrategyExecutionConfigV2 } from "@/src/daa/config/systemConfigV2";
 import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
@@ -106,7 +107,12 @@ export async function syncWorkbenchPricesV1(opts: {
   const maxTargets = Math.max(1, Math.min(100, Math.trunc(opts.maxTargets ?? defaultMaxTargets)));
   const timeoutMs = Math.max(600, Math.min(8000, Math.trunc(opts.timeoutMs ?? PRICE_SYNC_TIMEOUT_MS)));
   const concurrency = Math.max(1, Math.min(12, Math.trunc(opts.concurrency ?? PRICE_SYNC_CONCURRENCY)));
+  const priceFeedEnabled = system.config.dataSources.priceFeed.enabled !== false;
   const marketCache = system.config.dataSources.priceFeed.marketCache;
+
+  if (!priceFeedEnabled) {
+    return { updated: 0, attempted: 0, skipped: rows.length };
+  }
 
   const targets = (forceRefreshAll
     ? rows
@@ -195,10 +201,11 @@ export async function buildUnifiedRequestFromStoreV1(): Promise<{
   const baseCurrency = normalizeDaaCurrencyCodeV1(accountRaw.baseCurrency, "USD");
   const cash = toPositive(accountRaw.cash, 0);
   const frozenCash = toPositive(accountRaw.frozenCash, 0);
-  const investableCashRaw = toFinite(accountRaw.investableCash, Number.NaN);
-  const investableCash = Number.isFinite(investableCashRaw)
-    ? Math.max(0, Math.min(cash, investableCashRaw))
-    : Math.max(0, cash - frozenCash);
+  const investableCash = resolveInvestableCashV1({
+    cash,
+    frozenCash,
+    investableCash: accountRaw.investableCash,
+  });
 
   const totalEquity = computeTotalEquityV1({
     rows: assetRows,
@@ -321,10 +328,11 @@ export async function buildWorkbenchBootstrapV1(opts: {
   const baseCurrency = normalizeDaaCurrencyCodeV1(accountRaw.baseCurrency, "USD");
   const cash = toPositive(accountRaw.cash, 0);
   const frozenCash = toPositive(accountRaw.frozenCash, 0);
-  const investableCashRaw = toFinite(accountRaw.investableCash, Number.NaN);
-  const investableCash = Number.isFinite(investableCashRaw)
-    ? Math.max(0, Math.min(cash, investableCashRaw))
-    : Math.max(0, cash - frozenCash);
+  const investableCash = resolveInvestableCashV1({
+    cash,
+    frozenCash,
+    investableCash: accountRaw.investableCash,
+  });
 
   const marketCache = systemRow.config.dataSources.priceFeed.marketCache;
   let priceContextByKey: Record<string, Awaited<ReturnType<typeof getMarketPricesWithCacheV1>>[string]> = {};
@@ -645,4 +653,3 @@ export async function getWorkbenchRebalanceCycleReportV1(cycleId: string): Promi
   const report = await getDaaCycleReportV1(cycleId);
   return mapStoreCycleReportToViewV1(report);
 }
-

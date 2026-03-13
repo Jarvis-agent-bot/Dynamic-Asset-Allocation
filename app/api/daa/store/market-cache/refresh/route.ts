@@ -99,6 +99,12 @@ export async function POST(req: Request) {
 
     const body = await readJsonBodyV1<RefreshBodyV1>(req);
     const system = await getDaaSystemConfigV2();
+    if (system.config.dataSources.priceFeed.enabled === false) {
+      return failV1("VALIDATION_FAILED", "priceFeed is disabled", {
+        status: 409,
+        details: { code: "PRICE_FEED_DISABLED" },
+      });
+    }
     const cacheConfig = system.config.dataSources.priceFeed.marketCache;
     const includeFeatured = body?.includeFeatured !== false;
     const manualTargets = normalizeAssetsInputV1(body?.assets);

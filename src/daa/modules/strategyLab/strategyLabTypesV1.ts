@@ -13,6 +13,7 @@ export type StrategyLabCandidateResultV1 = {
   targetWeights: Record<string, number>;
   targetWeightsByDate: Record<string, Record<string, number>>;
   averageTargetWeights: Record<string, number>;
+  warnings: string[];
   backtest: DriftRebalanceBacktestResult;
 };
 

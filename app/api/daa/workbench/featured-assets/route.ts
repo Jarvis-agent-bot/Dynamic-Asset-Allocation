@@ -112,7 +112,7 @@ function toFeaturedItemV1(input: {
 
 async function enrichPricesV1(
   items: WorkbenchFeaturedAssetItemV1[],
-  opts: { freshSec: number; serveStaleSec: number; rawRetentionDays: number },
+  opts: { freshSec: number; serveStaleSec: number; rawRetentionDays: number; allowRefresh: boolean },
 ): Promise<WorkbenchFeaturedAssetItemV1[]> {
   if (!items.length) return items;
   const refreshTargets = items.filter((item) => item.yfinanceSymbol);
@@ -124,8 +124,8 @@ async function enrichPricesV1(
       market: item.market,
       currency: item.currency,
     })),
-    allowRefresh: true,
-    forceRefresh: true,
+    allowRefresh: opts.allowRefresh,
+    forceRefresh: opts.allowRefresh,
     refreshBudget: refreshTargets.length,
     timeoutMs: 2400,
     source: "featured_assets",
@@ -202,6 +202,7 @@ export async function GET(req: Request) {
     const assetClassFilter = normalizeAssetClassFilterV1(url.searchParams.get("assetClass"));
     const limitPerMarket = clampLimitPerMarketV1(url.searchParams.get("limitPerMarket"));
     const system = await getDaaSystemConfigV2();
+    const priceFeedEnabled = system.config.dataSources?.priceFeed?.enabled !== false;
     const cacheConfig = system.config.dataSources?.priceFeed?.marketCache || {
       freshMinutes: 15,
       serveStaleHours: 48,
@@ -214,6 +215,7 @@ export async function GET(req: Request) {
         market: group.market,
         marketLabelZh: MARKET_LABEL_ZH_V1[group.market],
         items: await enrichPricesV1(group.rows, {
+          allowRefresh: priceFeedEnabled,
           freshSec: Math.max(60, cacheConfig.freshMinutes * 60),
           serveStaleSec: Math.max(3600, cacheConfig.serveStaleHours * 3600),
           rawRetentionDays: cacheConfig.rawRetentionDays,

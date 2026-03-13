@@ -143,6 +143,49 @@ describe("workbench-search-assets-route-v1", () => {
     }));
   });
 
+  it("行情源关闭时仍可搜索，但价格富化只读缓存不触发实时刷新", async () => {
+    vi.mocked(getDaaSystemConfigV2).mockResolvedValue({
+      config: {
+        dataSources: {
+          priceFeed: {
+            enabled: false,
+            marketCache: {
+              freshMinutes: 15,
+              serveStaleHours: 48,
+              rawRetentionDays: 90,
+            },
+          },
+        },
+      },
+    } as any);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      quotes: [
+        {
+          symbol: "AAPL",
+          exchange: "NMS",
+          currency: "USD",
+          regularMarketPrice: 180.3,
+          shortname: "Apple",
+          quoteType: "EQUITY",
+          region: "US",
+        },
+      ],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await GET(new Request("http://localhost/api/daa/workbench/search-assets?q=aapl&market=US&assetClass=EQUITY&region=US&limit=10"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.items[0]).toMatchObject({ symbol: "AAPL", price: 180.3 });
+    expect(vi.mocked(getMarketPricesWithCacheV1)).toHaveBeenCalledWith(expect.objectContaining({
+      allowRefresh: false,
+      forceRefresh: false,
+      source: "search_assets",
+    }));
+  });
+
   it("同 symbol 的不同市场不互相去重", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       quotes: [

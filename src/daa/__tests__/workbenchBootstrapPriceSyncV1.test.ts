@@ -34,6 +34,47 @@ describe("workbench-bootstrap-price-sync-v1", () => {
     } as any);
   });
 
+  it("行情源关闭时跳过价格刷新，不再触发外部行情拉取", async () => {
+    vi.mocked(getDaaSystemConfigV2).mockResolvedValue({
+      config: {
+        dataSources: {
+          priceFeed: {
+            enabled: false,
+            marketCache: {
+              freshMinutes: 15,
+              serveStaleHours: 48,
+              rawRetentionDays: 90,
+            },
+          },
+        },
+      },
+    } as any);
+    vi.mocked(listDaaAssetUniverseV1).mockResolvedValue([
+      {
+        assetKey: "US::AAPL",
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        lastPrice: 188.2,
+        priceUpdatedAt: new Date().toISOString(),
+      },
+      {
+        assetKey: "US::MSFT",
+        symbol: "MSFT",
+        market: "US",
+        currency: "USD",
+        lastPrice: 399.1,
+        priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+      },
+    ] as any);
+
+    const result = await syncWorkbenchPricesV1({ forceRefreshAll: true });
+
+    expect(result).toEqual({ updated: 0, attempted: 0, skipped: 2 });
+    expect(vi.mocked(getMarketPricesWithCacheV1)).not.toHaveBeenCalled();
+    expect(vi.mocked(updateDaaAssetUniverseLastPriceV1)).not.toHaveBeenCalled();
+  });
+
   it("forceRefreshAll=true 时会为总览刷新所有资产，而不是只刷新过期资产", async () => {
     vi.mocked(listDaaAssetUniverseV1).mockResolvedValue([
       {

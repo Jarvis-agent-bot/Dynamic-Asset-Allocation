@@ -80,10 +80,11 @@ export async function buildOpportunityPanelV1(input: {
   const newsQuery = String(newsConfig.query || "").trim();
   const newsSymbols = parseSymbolsFromConfig(newsConfig.symbols);
   const finalNewsSymbols = [...new Set([...symbols, ...newsSymbols])];
+  const newsEnabled = newsConfig.enabled !== false;
   const valuationEnabled = newsConfig.valuationEnabled !== false;
 
   const [newsSignals, technicalSignals, valuationSignals] = await Promise.all([
-    newsProvider === "yahoo_rss"
+    newsEnabled && newsProvider === "yahoo_rss"
       ? buildNewsSignalsV1({ symbols: finalNewsSymbols, query: newsQuery })
       : Promise.resolve([] as DaaNewsSignalV1[]),
     buildTechnicalSignalsV1(symbols),
@@ -91,6 +92,11 @@ export async function buildOpportunityPanelV1(input: {
   ]);
 
   const weights = resolveFusionWeights(newsConfig as unknown as Record<string, unknown>);
+  const requestedWeights = {
+    ...weights,
+    ...(newsEnabled ? {} : { news: 0 }),
+    ...(valuationEnabled ? {} : { valuation: 0 }),
+  };
 
   const opportunities = buildFusedOpportunitiesV1({
     symbols,
@@ -98,10 +104,9 @@ export async function buildOpportunityPanelV1(input: {
     newsSignals,
     technicalSignals,
     valuationSignals,
-    weights: valuationEnabled ? weights : { ...weights, valuation: 0 },
+    weights: requestedWeights,
   });
-  const effectiveWeights = opportunities[0]?.weights
-    ?? (valuationEnabled ? weights : { ...weights, valuation: 0 });
+  const effectiveWeights = opportunities[0]?.weights ?? requestedWeights;
 
   return {
     generatedAt: new Date().toISOString(),

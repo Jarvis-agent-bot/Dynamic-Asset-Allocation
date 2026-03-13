@@ -56,10 +56,70 @@ vi.mock("@/src/daa/store/daaStorePgV1", () => ({
 import { POST as priceRefreshPost } from "@/app/api/daa/cron/price-refresh/route";
 import { POST as cacheCleanupPost } from "@/app/api/daa/cron/cache-cleanup/route";
 import { cleanupMarketCacheRawPayloadV1, refreshMarketPricesV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
+import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
 
 describe("cron-market-cache-routes-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getDaaSystemConfigV2).mockResolvedValue({
+      config: {
+        dataSources: {
+          priceFeed: {
+            symbols: ["AAPL"],
+            marketCache: {
+              rawRetentionDays: 90,
+            },
+          },
+          marketIndicators: {
+            indicators: {
+              vix: { enabled: false, weight: 1 },
+              qqqSpyRatio: { enabled: false, weight: 1 },
+              fxiVolatility: { enabled: false, weight: 1 },
+              kwebFxiRatio: { enabled: false, weight: 1 },
+              btcEthRatio: { enabled: false, weight: 1 },
+              btcVolatility: { enabled: false, weight: 1 },
+              goldSilverRatio: { enabled: false, weight: 1 },
+            },
+          },
+        },
+      },
+    } as any);
+  });
+
+  it("price-refresh 在行情源关闭时直接跳过", async () => {
+    vi.mocked(getDaaSystemConfigV2).mockResolvedValue({
+      config: {
+        dataSources: {
+          priceFeed: {
+            enabled: false,
+            symbols: ["AAPL"],
+            marketCache: {
+              rawRetentionDays: 90,
+            },
+          },
+          marketIndicators: {
+            indicators: {
+              vix: { enabled: false, weight: 1 },
+              qqqSpyRatio: { enabled: false, weight: 1 },
+              fxiVolatility: { enabled: false, weight: 1 },
+              kwebFxiRatio: { enabled: false, weight: 1 },
+              btcEthRatio: { enabled: false, weight: 1 },
+              btcVolatility: { enabled: false, weight: 1 },
+              goldSilverRatio: { enabled: false, weight: 1 },
+            },
+          },
+        },
+      },
+    } as any);
+
+    const response = await priceRefreshPost(new Request("http://localhost/api/daa/cron/price-refresh", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.requested).toBe(0);
+    expect(json.data.refreshedSymbols).toBe(0);
+    expect(vi.mocked(refreshMarketPricesV1)).not.toHaveBeenCalled();
   });
 
   it("price-refresh 目标集合包含 featured 商品", async () => {

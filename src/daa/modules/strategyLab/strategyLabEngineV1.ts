@@ -31,9 +31,22 @@ const STRATEGY_LABELS_V1: Record<StrategyLabCandidateIdV1, string> = {
   baseline: "当前配置",
   momentum: "趋势进攻",
   riskParity: "风险平衡",
-  minVariance: "低波防守",
+  minVariance: "长仓最小方差",
   equalWeight: "均衡基线",
   ensemble: "组合候选",
+};
+
+type StrategyLabCandidateWindowBuildResultV1 = {
+  weightsByCandidate: Record<StrategyLabCandidateIdV1, Record<string, number>>;
+  warningsByCandidate: Record<StrategyLabCandidateIdV1, string[]>;
+};
+
+type StrategyLabObservedDatesBySymbolV1 = Record<string, string[]>;
+
+type PreparedAlignedSeriesResultV1 = {
+  seriesBySymbol: Record<string, PriceBar[]>;
+  diagnostics: PreparedSeriesDiagnosticsV1;
+  observedDatesBySymbol: StrategyLabObservedDatesBySymbolV1;
 };
 
 function toPositiveFiniteNumberV1(value: unknown, fallback = 0): number {
@@ -42,18 +55,34 @@ function toPositiveFiniteNumberV1(value: unknown, fallback = 0): number {
   return n;
 }
 
-function normalizeWeightsV1(input: Record<string, number>): Record<string, number> {
+function cleanWeightsV1(input: Record<string, number>): Record<string, number> {
   const cleaned: Record<string, number> = {};
-  let sum = 0;
   for (const [symbolRaw, valueRaw] of Object.entries(input || {})) {
     const symbol = String(symbolRaw || "").trim().toUpperCase();
     const value = toPositiveFiniteNumberV1(valueRaw, 0);
     if (!symbol || value <= 0) continue;
     cleaned[symbol] = value;
-    sum += value;
+  }
+  return cleaned;
+}
+
+function normalizeWeightsV1(input: Record<string, number>): Record<string, number> {
+  const cleaned = cleanWeightsV1(input);
+  const sum = Object.values(cleaned).reduce((acc, value) => acc + value, 0);
+  if (sum <= 0) return {};
+
+  for (const symbol of Object.keys(cleaned)) {
+    cleaned[symbol] = cleaned[symbol] / sum;
   }
 
+  return cleaned;
+}
+
+function normalizeWeightsPreservingCashV1(input: Record<string, number>): Record<string, number> {
+  const cleaned = cleanWeightsV1(input);
+  const sum = Object.values(cleaned).reduce((acc, value) => acc + value, 0);
   if (sum <= 0) return {};
+  if (sum <= 1.000001) return cleaned;
 
   for (const symbol of Object.keys(cleaned)) {
     cleaned[symbol] = cleaned[symbol] / sum;
@@ -85,50 +114,102 @@ function covarianceV1(left: number[], right: number[]): number {
   return sum / left.length;
 }
 
-function computeDailyReturnsV1(series: PriceBar[]): number[] {
-  const out: number[] = [];
+function buildObservedDateSetV1(input: {
+  symbol: string;
+  series: PriceBar[];
+  observedDatesBySymbol?: StrategyLabObservedDatesBySymbolV1;
+}): Set<string> {
+  const fromInput = input.observedDatesBySymbol?.[input.symbol];
+  if (Array.isArray(fromInput) && fromInput.length > 0) {
+    return new Set(fromInput.map((date) => String(date || "").trim()).filter(Boolean));
+  }
+  return new Set((input.series || []).map((bar) => String(bar.date || "").trim()).filter(Boolean));
+}
+
+function buildObservedBarsV1(input: {
+  symbol: string;
+  series: PriceBar[];
+  observedDatesBySymbol?: StrategyLabObservedDatesBySymbolV1;
+}): PriceBar[] {
+  const observedDateSet = buildObservedDateSetV1(input);
+  return (input.series || []).filter((bar) => {
+    const date = String(bar.date || "").trim();
+    const close = Number(bar.close);
+    return observedDateSet.has(date) && Number.isFinite(close) && close > 0;
+  });
+}
+
+function buildObservedReturnsByEndDateV1(series: PriceBar[]): Record<string, number> {
+  const out: Record<string, number> = {};
   for (let i = 1; i < series.length; i += 1) {
     const prev = Number(series[i - 1]?.close);
     const next = Number(series[i]?.close);
-    if (!(Number.isFinite(prev) && Number.isFinite(next) && prev > 0 && next > 0)) {
-      out.push(0);
-      continue;
-    }
-    out.push(next / prev - 1);
+    const date = String(series[i]?.date || "").trim();
+    if (!date || !(Number.isFinite(prev) && Number.isFinite(next) && prev > 0 && next > 0)) continue;
+    out[date] = next / prev - 1;
   }
   return out;
 }
 
-function computeSeriesStatsV1(seriesBySymbol: Record<string, PriceBar[]>): {
+function computeSeriesStatsV1(input: {
+  seriesBySymbol: Record<string, PriceBar[]>;
+  observedDatesBySymbol?: StrategyLabObservedDatesBySymbolV1;
+}): {
   periodReturnsBySymbol: Record<string, number>;
   volBySymbol: Record<string, number>;
   covMatrixBySymbol: Record<string, Record<string, number>>;
 } {
-  const symbols = Object.keys(seriesBySymbol).sort();
+  const symbols = Object.keys(input.seriesBySymbol || {}).sort();
   const periodReturnsBySymbol: Record<string, number> = {};
   const volBySymbol: Record<string, number> = {};
-  const dailyReturnsBySymbol: Record<string, number[]> = {};
+  const returnsByEndDateBySymbol: Record<string, Record<string, number>> = {};
 
   for (const symbol of symbols) {
-    const series = seriesBySymbol[symbol] || [];
-    if (series.length < 2) continue;
+    const observedBars = buildObservedBarsV1({
+      symbol,
+      series: input.seriesBySymbol[symbol] || [],
+      observedDatesBySymbol: input.observedDatesBySymbol,
+    });
+    if (observedBars.length < 2) continue;
 
-    const first = Number(series[0]?.close);
-    const last = Number(series[series.length - 1]?.close);
+    const first = Number(observedBars[0]?.close);
+    const last = Number(observedBars[observedBars.length - 1]?.close);
     if (!(Number.isFinite(first) && Number.isFinite(last) && first > 0 && last > 0)) continue;
 
-    const dailyReturns = computeDailyReturnsV1(series);
-    dailyReturnsBySymbol[symbol] = dailyReturns;
     periodReturnsBySymbol[symbol] = last / first - 1;
-    volBySymbol[symbol] = stdDevV1(dailyReturns);
+
+    const returnsByEndDate = buildObservedReturnsByEndDateV1(observedBars);
+    returnsByEndDateBySymbol[symbol] = returnsByEndDate;
+    const returnValues = Object.values(returnsByEndDate).filter((value) => Number.isFinite(value));
+    if (returnValues.length >= 2) {
+      const volatility = stdDevV1(returnValues);
+      if (Number.isFinite(volatility) && volatility > 0) {
+        volBySymbol[symbol] = volatility;
+      }
+    }
   }
 
   const covMatrixBySymbol: Record<string, Record<string, number>> = {};
-  const activeSymbols = Object.keys(dailyReturnsBySymbol).sort();
+  const activeSymbols = Object.keys(returnsByEndDateBySymbol).sort();
   for (const left of activeSymbols) {
-    covMatrixBySymbol[left] = {};
+    const row: Record<string, number> = {};
+    const leftReturns = returnsByEndDateBySymbol[left] || {};
     for (const right of activeSymbols) {
-      covMatrixBySymbol[left][right] = covarianceV1(dailyReturnsBySymbol[left], dailyReturnsBySymbol[right]);
+      const rightReturns = returnsByEndDateBySymbol[right] || {};
+      const commonDates = Object.keys(leftReturns)
+        .filter((date) => Object.prototype.hasOwnProperty.call(rightReturns, date))
+        .sort();
+      if (commonDates.length < 2) continue;
+
+      const leftValues = commonDates.map((date) => Number(leftReturns[date]));
+      const rightValues = commonDates.map((date) => Number(rightReturns[date]));
+      const covariance = covarianceV1(leftValues, rightValues);
+      if (Number.isFinite(covariance)) {
+        row[right] = covariance;
+      }
+    }
+    if (Object.keys(row).length > 0) {
+      covMatrixBySymbol[left] = row;
     }
   }
 
@@ -172,9 +253,18 @@ function buildWeightsByCandidateForWindowV1(input: {
   volBySymbol: Record<string, number>;
   covMatrixBySymbol: Record<string, Record<string, number>>;
   ensembleConfig: StrategyLabEnsembleConfigV1;
-}): Record<StrategyLabCandidateIdV1, Record<string, number>> {
+  decisionDate?: string;
+}): StrategyLabCandidateWindowBuildResultV1 {
   const equalWeight = buildEqualWeightTargetWeightsV1(input.symbols);
-  const baseline = normalizeWeightsV1(input.baselineTargetWeights);
+  const baseline = normalizeWeightsPreservingCashV1(input.baselineTargetWeights);
+  const warningsByCandidate: Record<StrategyLabCandidateIdV1, string[]> = {
+    baseline: [],
+    momentum: [],
+    riskParity: [],
+    minVariance: [],
+    equalWeight: [],
+    ensemble: [],
+  };
 
   const single: Record<StrategyLabSingleStrategyIdV1, Record<string, number>> = {
     momentum: normalizeWeightsV1(buildMomentumTargetWeightsV1(input.periodReturnsBySymbol)),
@@ -183,22 +273,49 @@ function buildWeightsByCandidateForWindowV1(input: {
     equalWeight: normalizeWeightsV1(equalWeight),
   };
 
-  const normalizedSingles: Record<StrategyLabSingleStrategyIdV1, Record<string, number>> = {
-    momentum: Object.keys(single.momentum).length ? single.momentum : equalWeight,
-    riskParity: Object.keys(single.riskParity).length ? single.riskParity : equalWeight,
-    minVariance: Object.keys(single.minVariance).length ? single.minVariance : equalWeight,
-    equalWeight,
-  };
+  const warningDate = input.decisionDate || "unknown-date";
+  const hasPositiveVol = Object.values(input.volBySymbol || {}).some((value) => Number.isFinite(value) && Number(value) > 0);
+  if (!Object.keys(single.riskParity).length && !hasPositiveVol) {
+    warningsByCandidate.riskParity.push(`riskParity: ${warningDate} volatility unavailable, emitted empty weights`);
+  }
+  const hasPositiveVariance = Object.entries(input.covMatrixBySymbol || {}).some(([symbolRaw, row]) => {
+    const symbol = String(symbolRaw || "").trim().toUpperCase();
+    const variance = Number((row || {})[symbol]);
+    return Boolean(symbol) && Number.isFinite(variance) && variance > 0;
+  });
+  if (!Object.keys(single.minVariance).length && !hasPositiveVariance) {
+    warningsByCandidate.minVariance.push(`minVariance: ${warningDate} covariance unavailable, emitted empty weights`);
+  }
 
-  const ensemble = buildEnsembleWeightsV1(normalizedSingles, input.ensembleConfig);
+  const activeStrategyWeights = {} as Record<StrategyLabSingleStrategyIdV1, Record<string, number>>;
+  const activeStrategyIds: StrategyLabSingleStrategyIdV1[] = [];
+  for (const strategyId of SINGLE_STRATEGY_ORDER_V1) {
+    const alpha = Number(input.ensembleConfig[strategyId]) || 0;
+    const weights = single[strategyId] || {};
+    activeStrategyWeights[strategyId] = weights;
+    if (alpha > 0 && Object.keys(weights).length > 0) activeStrategyIds.push(strategyId);
+  }
+
+  const ensemble = buildEnsembleWeightsV1(activeStrategyWeights, input.ensembleConfig);
+  const activeEnsembleAlphaIds = SINGLE_STRATEGY_ORDER_V1.filter((strategyId) => (Number(input.ensembleConfig[strategyId]) || 0) > 0);
+  if (!Object.keys(ensemble).length) {
+    if (!activeEnsembleAlphaIds.length) {
+      warningsByCandidate.ensemble.push(`ensemble: ${warningDate} no active component strategies, emitted empty weights`);
+    } else if (!activeStrategyIds.length) {
+      warningsByCandidate.ensemble.push(`ensemble: ${warningDate} all active component strategies unavailable, emitted empty weights`);
+    }
+  }
 
   return {
-    baseline: baseline,
-    momentum: normalizedSingles.momentum,
-    riskParity: normalizedSingles.riskParity,
-    minVariance: normalizedSingles.minVariance,
-    equalWeight,
-    ensemble: Object.keys(ensemble).length ? ensemble : equalWeight,
+    weightsByCandidate: {
+      baseline,
+      momentum: single.momentum,
+      riskParity: single.riskParity,
+      minVariance: single.minVariance,
+      equalWeight,
+      ensemble,
+    },
+    warningsByCandidate,
   };
 }
 
@@ -237,6 +354,18 @@ function buildZeroCandidateTimelineV1(dates: string[]): Record<StrategyLabCandid
   return out;
 }
 
+function fillStaticCandidateTimelineV1(input: {
+  dates: string[];
+  timeline: Record<string, Record<string, number>>;
+  weights: Record<string, number>;
+  preserveCash?: boolean;
+}) {
+  const weights = input.preserveCash ? normalizeWeightsPreservingCashV1(input.weights) : normalizeWeightsV1(input.weights);
+  for (const date of input.dates) {
+    input.timeline[date] = weights;
+  }
+}
+
 function computeAverageWeightsV1(input: {
   dates: string[];
   timeline: Record<string, Record<string, number>>;
@@ -264,18 +393,21 @@ function pickLastNonEmptyWeightsV1(input: {
   dates: string[];
   timeline: Record<string, Record<string, number>>;
   fallback: Record<string, number>;
+  preserveCash?: boolean;
 }): Record<string, number> {
+  const normalize = input.preserveCash ? normalizeWeightsPreservingCashV1 : normalizeWeightsV1;
   for (let i = input.dates.length - 1; i >= 0; i -= 1) {
-    const weights = normalizeWeightsV1(input.timeline[input.dates[i]] || {});
+    const weights = normalize(input.timeline[input.dates[i]] || {});
     if (Object.keys(weights).length > 0) return weights;
   }
-  return normalizeWeightsV1(input.fallback);
+  return normalize(input.fallback);
 }
 
 function buildCandidateTimelinesV1(input: {
   dates: string[];
   symbols: string[];
   seriesBySymbol: Record<string, PriceBar[]>;
+  observedDatesBySymbol?: StrategyLabObservedDatesBySymbolV1;
   baselineTargetWeights: Record<string, number>;
   ensembleConfig: StrategyLabEnsembleConfigV1;
   lookbackBars: number;
@@ -283,57 +415,79 @@ function buildCandidateTimelinesV1(input: {
   targetWeightsByCandidateByDate: Record<StrategyLabCandidateIdV1, Record<string, Record<string, number>>>;
   weightsByCandidate: Record<StrategyLabCandidateIdV1, Record<string, number>>;
   averageWeightsByCandidate: Record<StrategyLabCandidateIdV1, Record<string, number>>;
+  warningsByCandidate: Record<StrategyLabCandidateIdV1, string[]>;
 } {
   const targetWeightsByCandidateByDate = buildZeroCandidateTimelineV1(input.dates);
-  const staticFallbacks = buildWeightsByCandidateForWindowV1({
-    symbols: input.symbols,
-    baselineTargetWeights: input.baselineTargetWeights,
-    periodReturnsBySymbol: {},
-    volBySymbol: {},
-    covMatrixBySymbol: {},
-    ensembleConfig: input.ensembleConfig,
+  const baselineFallback = normalizeWeightsPreservingCashV1(input.baselineTargetWeights);
+  const equalWeightFallback = buildEqualWeightTargetWeightsV1(input.symbols);
+  fillStaticCandidateTimelineV1({
+    dates: input.dates,
+    timeline: targetWeightsByCandidateByDate.baseline,
+    weights: baselineFallback,
+    preserveCash: true,
   });
+  fillStaticCandidateTimelineV1({
+    dates: input.dates,
+    timeline: targetWeightsByCandidateByDate.equalWeight,
+    weights: equalWeightFallback,
+  });
+  const warningBuckets = {
+    baseline: new Set<string>(),
+    momentum: new Set<string>(),
+    riskParity: new Set<string>(),
+    minVariance: new Set<string>(),
+    equalWeight: new Set<string>(),
+    ensemble: new Set<string>(),
+  } satisfies Record<StrategyLabCandidateIdV1, Set<string>>;
 
   for (let i = input.lookbackBars; i < input.dates.length; i += 1) {
     const decisionDate = input.dates[i];
     const windowSeries = sliceSeriesWindowV1(input.seriesBySymbol, i - input.lookbackBars, i);
-    const stats = computeSeriesStatsV1(windowSeries);
-    const candidateWeights = buildWeightsByCandidateForWindowV1({
+    const stats = computeSeriesStatsV1({ seriesBySymbol: windowSeries, observedDatesBySymbol: input.observedDatesBySymbol });
+    const candidateWindow = buildWeightsByCandidateForWindowV1({
       symbols: input.symbols,
       baselineTargetWeights: input.baselineTargetWeights,
       periodReturnsBySymbol: stats.periodReturnsBySymbol,
       volBySymbol: stats.volBySymbol,
       covMatrixBySymbol: stats.covMatrixBySymbol,
       ensembleConfig: input.ensembleConfig,
+      decisionDate,
     });
 
     for (const candidateId of STRATEGY_LAB_CANDIDATE_ORDER_V1) {
-      targetWeightsByCandidateByDate[candidateId][decisionDate] = candidateWeights[candidateId] || {};
+      targetWeightsByCandidateByDate[candidateId][decisionDate] = candidateWindow.weightsByCandidate[candidateId] || {};
+      for (const warning of candidateWindow.warningsByCandidate[candidateId] || []) {
+        warningBuckets[candidateId].add(warning);
+      }
     }
   }
 
   const weightsByCandidate = {} as Record<StrategyLabCandidateIdV1, Record<string, number>>;
   const averageWeightsByCandidate = {} as Record<StrategyLabCandidateIdV1, Record<string, number>>;
+  const warningsByCandidate = {} as Record<StrategyLabCandidateIdV1, string[]>;
   for (const candidateId of STRATEGY_LAB_CANDIDATE_ORDER_V1) {
     const fallback = candidateId === "baseline" || candidateId === "equalWeight"
-      ? staticFallbacks[candidateId]
+      ? (candidateId === "baseline" ? baselineFallback : equalWeightFallback)
       : {};
     weightsByCandidate[candidateId] = pickLastNonEmptyWeightsV1({
       dates: input.dates,
       timeline: targetWeightsByCandidateByDate[candidateId],
       fallback,
+      preserveCash: candidateId === "baseline",
     });
     averageWeightsByCandidate[candidateId] = computeAverageWeightsV1({
       dates: input.dates,
       timeline: targetWeightsByCandidateByDate[candidateId],
       symbols: input.symbols,
     });
+    warningsByCandidate[candidateId] = [...warningBuckets[candidateId]];
   }
 
   return {
     targetWeightsByCandidateByDate,
     weightsByCandidate,
     averageWeightsByCandidate,
+    warningsByCandidate,
   };
 }
 
@@ -355,11 +509,12 @@ export type PreparedSeriesDiagnosticsV1 = {
 export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
   rawSeriesBySymbol: Record<string, Array<{ date: string; close: number }>>,
   opts: { mode?: SeriesAlignmentModeV1; minBars?: number } = {},
-): { seriesBySymbol: Record<string, PriceBar[]>; diagnostics: PreparedSeriesDiagnosticsV1 } {
+): PreparedAlignedSeriesResultV1 {
   const mode: SeriesAlignmentModeV1 = opts.mode === "ffill_union" ? "ffill_union" : "intersection";
   const minBars = Math.max(2, Math.trunc(Number(opts.minBars) || 2));
 
   const cleanedBySymbol: Record<string, PriceBar[]> = {};
+  const observedDatesBySymbol: StrategyLabObservedDatesBySymbolV1 = {};
   const barsBySymbol: Record<string, { raw: number; cleaned: number; aligned: number; ffillCount: number }> = {};
 
   for (const [symbolRaw, seriesRaw] of Object.entries(rawSeriesBySymbol || {})) {
@@ -392,6 +547,7 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
 
     if (cleaned.length >= 2) {
       cleanedBySymbol[symbol] = cleaned;
+      observedDatesBySymbol[symbol] = cleaned.map((bar) => bar.date);
     }
   }
 
@@ -413,6 +569,7 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
     return {
       seriesBySymbol: {},
       diagnostics: diagnosticsBase,
+      observedDatesBySymbol: {},
     };
   }
 
@@ -442,6 +599,7 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
     for (const symbol of symbols) {
       const map = new Map(cleanedBySymbol[symbol].map((bar) => [bar.date, bar.close]));
       aligned[symbol] = sortedDates.map((date) => ({ date, close: Number(map.get(date) || 0) }));
+      observedDatesBySymbol[symbol] = [...sortedDates];
     }
   } else {
     const perSymbolMap: Record<string, Map<string, number>> = {};
@@ -486,11 +644,12 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
   const droppedSymbols: string[] = [];
   for (const symbol of Object.keys(aligned)) {
     const count = aligned[symbol]?.length || 0;
+    const observedCount = observedDatesBySymbol[symbol]?.length || 0;
     barsBySymbol[symbol] = {
       ...(barsBySymbol[symbol] || { raw: 0, cleaned: 0, aligned: 0, ffillCount: 0 }),
       aligned: count,
     };
-    if (count < minBars) {
+    if (observedCount < minBars) {
       droppedSymbols.push(symbol);
       delete aligned[symbol];
     }
@@ -504,9 +663,14 @@ export function prepareAlignedSeriesBySymbolWithDiagnosticsV1(
   diagnosticsBase.droppedSymbols = droppedSymbols;
   diagnosticsBase.outputSymbolCount = keptSymbols.length;
 
+  const keptObservedDatesBySymbol = Object.fromEntries(
+    keptSymbols.map((symbol) => [symbol, [...(observedDatesBySymbol[symbol] || [])]]),
+  ) as StrategyLabObservedDatesBySymbolV1;
+
   return {
     seriesBySymbol: keptSymbols.length ? aligned : {},
     diagnostics: diagnosticsBase,
+    observedDatesBySymbol: keptObservedDatesBySymbol,
   };
 }
 
@@ -519,6 +683,8 @@ export function prepareAlignedSeriesBySymbolV1(
 
 export function runStrategyLabBacktestsV1(input: {
   seriesBySymbol: Record<string, PriceBar[]>;
+  observedDatesBySymbol?: StrategyLabObservedDatesBySymbolV1;
+  executableDatesBySymbol?: StrategyLabObservedDatesBySymbolV1;
   baselineTargetWeights: Record<string, number>;
   ensembleConfig: StrategyLabEnsembleConfigV1;
   lookbackBars?: number;
@@ -540,6 +706,7 @@ export function runStrategyLabBacktestsV1(input: {
     dates,
     symbols,
     seriesBySymbol: input.seriesBySymbol,
+    observedDatesBySymbol: input.observedDatesBySymbol,
     baselineTargetWeights: input.baselineTargetWeights,
     ensembleConfig: input.ensembleConfig,
     lookbackBars,
@@ -549,17 +716,19 @@ export function runStrategyLabBacktestsV1(input: {
 
   const candidates: StrategyLabCandidateResultV1[] = [];
   for (const candidateId of STRATEGY_LAB_CANDIDATE_ORDER_V1) {
+    const bootstrapToTarget = candidateId === "baseline" || candidateId === "equalWeight";
     const backtest: DriftRebalanceBacktestResult = backtestDriftRebalance({
       seriesBySymbol: input.seriesBySymbol,
       targetWeights: candidateTimelines.weightsByCandidate[candidateId],
       targetWeightsByDate: candidateTimelines.targetWeightsByCandidateByDate[candidateId],
+      executableDatesBySymbol: input.executableDatesBySymbol,
       initialHoldings,
       initialCash: input.initialCash,
       initialEquity: initialHoldings ? undefined : input.initialEquity,
       constraints: input.constraints,
       policy: input.policy,
       execution: input.execution,
-      bootstrapToTarget: false,
+      bootstrapToTarget,
       includeEventStates: true,
       includeTimeline: true,
     });
@@ -570,6 +739,7 @@ export function runStrategyLabBacktestsV1(input: {
       targetWeights: candidateTimelines.weightsByCandidate[candidateId],
       targetWeightsByDate: candidateTimelines.targetWeightsByCandidateByDate[candidateId],
       averageTargetWeights: candidateTimelines.averageWeightsByCandidate[candidateId],
+      warnings: candidateTimelines.warningsByCandidate[candidateId],
       backtest,
     });
   }
@@ -587,8 +757,8 @@ export function buildTargetWeightDiffRowsV1(
   currentWeights: Record<string, number>,
   nextWeights: Record<string, number>,
 ): StrategyLabWeightDiffRowV1[] {
-  const current = normalizeWeightsV1(currentWeights || {});
-  const next = normalizeWeightsV1(nextWeights || {});
+  const current = normalizeWeightsPreservingCashV1(currentWeights || {});
+  const next = normalizeWeightsPreservingCashV1(nextWeights || {});
 
   const allSymbols = [...new Set([...Object.keys(current), ...Object.keys(next)])].sort();
 

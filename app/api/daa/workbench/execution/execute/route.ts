@@ -1,6 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { normalizeDaaCurrencyCodeV1 } from "@/src/daa/assetKeyV1";
+import { resolveInvestableCashV1 } from "@/src/daa/account/resolveInvestableCashV1";
 import { buildFxLookupToBaseV1, resolveFxRateToBaseV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
 import { createDaaTradeTicketV1, executeDaaTradeTicketsV1, getDaaSystemConfigV2, listDaaFxRatesV1, listDaaTradeTicketsV1 } from "@/src/daa/store/daaStorePgV1";
 import { normalizeReasonTagsV1, normalizeTradeSideV1, validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
@@ -85,6 +86,25 @@ export async function POST(req: Request) {
     }
 
     const notionalInBase = qty * price * fxRateToBase;
+    const feeInBase = fee * fxRateToBase;
+    const totalCostInBase = side === "BUY" ? (notionalInBase + feeInBase) : Math.max(0, notionalInBase - feeInBase);
+    const accountConfig = systemRow.config.strategy.account;
+    const investableCash = resolveInvestableCashV1({
+      cash: accountConfig.cash,
+      frozenCash: accountConfig.frozenCash,
+      investableCash: accountConfig.investableCash,
+    });
+    if (side === "BUY" && investableCash + 1e-9 < totalCostInBase) {
+      return failV1("VALIDATION_FAILED", `可投资现金不足：需要 ${totalCostInBase.toFixed(2)} ${baseCurrency}，当前可投资现金 ${investableCash.toFixed(2)} ${baseCurrency}`, {
+        status: 409,
+        details: {
+          code: "INSUFFICIENT_INVESTABLE_CASH",
+          needed: totalCostInBase,
+          investableCash,
+          baseCurrency,
+        },
+      });
+    }
     const manualRiskCheck = await validateExecutionRiskV1({
       manualProposal: {
         assetKey: String(body?.assetKey || "").trim() || `${market}::${symbol}`,

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { daaPgPoolV0, withDaaPgClientV0 } from "@/src/daa/pg/daaPgV0";
+import { resolveInvestableCashV1 as resolveRuntimeInvestableCashV1 } from "@/src/daa/account/resolveInvestableCashV1";
 import { runDaaStoreRuntimeMigrationsV1 } from "@/src/daa/store/runtimeMigrationsV1";
 import { normalizeCurrencyAliasV2 } from "@/src/daa/config/currencyV2";
 import { buildDaaAssetKeyV1, parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
@@ -2117,13 +2118,11 @@ function isRecordV1(value: unknown): value is Record<string, unknown> {
 }
 
 function resolveInvestableCashV1(cash: number, frozenCash: number, investableCashRaw: unknown): number {
-  const safeCash = Math.max(0, toFiniteNumber(cash));
-  const safeFrozen = Math.max(0, toFiniteNumber(frozenCash));
-  const fallback = Math.max(0, safeCash - safeFrozen);
-  const raw = toFiniteNumber(investableCashRaw, Number.NaN);
-  if (!Number.isFinite(raw)) return fallback;
-  if (raw <= 0 && safeCash > 0 && safeFrozen < safeCash) return fallback;
-  return Math.max(0, Math.min(safeCash, raw));
+  return resolveRuntimeInvestableCashV1({
+    cash,
+    frozenCash,
+    investableCash: investableCashRaw,
+  });
 }
 
 function applyAccountCashDeltaToConfigV1(
@@ -4079,6 +4078,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
       const accountState = await getAccountStateForUpdateInTxV1(query as any);
       const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
       let accountCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
+      let accountInvestableCash = resolveInvestableCashV1(accountState.cash, accountState.frozenCash, accountState.investableCash);
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMapV1(fxRes.rows as Array<Record<string, unknown>>);
@@ -4146,22 +4146,23 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
 
         if (ticket.side === "BUY") {
           const cashOut = notionalInBase + feeInBase;
-          if (accountCash + 1e-9 < cashOut) {
-            const rejectMessage = `可用现金不足：需要 ${cashOut.toFixed(2)} ${baseCurrency}，当前 ${accountCash.toFixed(2)} ${baseCurrency}`;
+          if (accountInvestableCash + 1e-9 < cashOut) {
+            const rejectMessage = `可投资现金不足：需要 ${cashOut.toFixed(2)} ${baseCurrency}，当前 ${accountInvestableCash.toFixed(2)} ${baseCurrency}`;
             await query(
-              "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'INSUFFICIENT_CASH', reject_message = $1, updated_at = NOW() WHERE ticket_id = $2",
+              "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'INSUFFICIENT_INVESTABLE_CASH', reject_message = $1, updated_at = NOW() WHERE ticket_id = $2",
               [rejectMessage, ticket.ticketId],
             );
             results.push({
               ticketId: ticket.ticketId,
               status: "rejected",
-              rejectCode: "INSUFFICIENT_CASH",
+              rejectCode: "INSUFFICIENT_INVESTABLE_CASH",
               rejectMessage,
             });
             continue;
           }
 
           accountCash = Math.max(0, accountCash - cashOut);
+          accountInvestableCash = Math.max(0, accountInvestableCash - cashOut);
           const prevQty = Math.max(0, existingPosition.qty);
           const nextQty = prevQty + ticket.qty;
           const prevCostBasis = prevQty > 0
@@ -4193,6 +4194,7 @@ export async function executeDaaTradeTicketsV1(input: DaaStoreExecuteTradeTicket
             continue;
           }
           accountCash = Math.max(0, accountCash + notionalInBase - feeInBase);
+          accountInvestableCash = Math.max(0, accountInvestableCash + notionalInBase - feeInBase);
           const nextQty = Math.max(0, prevQty - ticket.qty);
           if (nextQty <= 0) {
             positionsMap.delete(positionKey);

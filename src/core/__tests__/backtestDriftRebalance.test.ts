@@ -125,6 +125,67 @@ describe("backtestDriftRebalance", () => {
     expect(res.summary.initialEquityAbs).toBeLessThan(100);
   });
 
+  it("carries bootstrap costs into normalized equity and total return", () => {
+    const res = backtestDriftRebalance({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 1 },
+          { date: "2026-01-02", close: 1 },
+          { date: "2026-01-03", close: 1 },
+        ],
+      },
+      targetWeights: { AAA: 1 },
+      initialEquity: 100,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0.2, minTradeNotional: 0 },
+      execution: {
+        feeRateBps: 100,
+        slippageBps: 0,
+      },
+    });
+
+    expect(res.summary.initialEquityAbs).toBeCloseTo(99.00990099, 8);
+    expect(res.equity[0]).toBeCloseTo(0.9900990099, 8);
+    expect(res.metrics.totalReturn).toBeCloseTo(-0.0099009901, 8);
+  });
+
+  it("rolls synthetic-bar orders forward by asset until the next real bar", () => {
+    const res = backtestDriftRebalance({
+      seriesBySymbol: {
+        AAA: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 120 },
+          { date: "2026-01-03", close: 125 },
+        ],
+        BBB: [
+          { date: "2026-01-01", close: 100 },
+          { date: "2026-01-02", close: 100 },
+          { date: "2026-01-03", close: 110 },
+        ],
+      },
+      executableDatesBySymbol: {
+        AAA: ["2026-01-01", "2026-01-02", "2026-01-03"],
+        BBB: ["2026-01-01", "2026-01-03"],
+      },
+      targetWeights: { AAA: 0.5, BBB: 0.5 },
+      initialHoldings: { AAA: 1 },
+      initialCash: 0,
+      constraints: { maxIn: 1e9, maxOut: 1e9 },
+      policy: { thresholdPct: 0, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close" },
+    });
+
+    const rebalanceEvents = res.events.filter((event) => event.kind === "rebalance");
+    expect(rebalanceEvents).toHaveLength(2);
+    expect(rebalanceEvents[0].signalDate).toBe("2026-01-01");
+    expect(rebalanceEvents[0].date).toBe("2026-01-02");
+    expect(rebalanceEvents[0].orders.map((order) => order.symbol)).toEqual(["AAA"]);
+    expect(rebalanceEvents[1].signalDate).toBe("2026-01-01");
+    expect(rebalanceEvents[1].date).toBe("2026-01-03");
+    expect(rebalanceEvents[1].orders.map((order) => order.symbol)).toEqual(["BBB"]);
+    expect(res.summary.rebalanceCount).toBe(2);
+  });
+
   it("supports targetWeightsByDate and keeps warm-up in cash until the first valid signal", () => {
     const res = backtestDriftRebalance({
       seriesBySymbol: {

@@ -145,6 +145,112 @@ describe("workbench-market-preview-route-v1", () => {
     expect(json.data.warnings.some((item: string) => item.includes("集中度偏高"))).toBe(true);
   });
 
+  it("行情源关闭时不再发起实时刷新，并沿用本地价格预览", async () => {
+    vi.mocked(getDaaSystemConfigV2).mockResolvedValue({
+      config: {
+        strategy: {
+          constraints: {
+            tradeFeeRateBps: 5,
+          },
+        },
+        dataSources: {
+          priceFeed: {
+            enabled: false,
+            marketCache: {
+              freshMinutes: 15,
+              serveStaleHours: 48,
+              rawRetentionDays: 90,
+            },
+          },
+        },
+      },
+    } as any);
+    vi.mocked(buildWorkbenchBootstrapV1).mockResolvedValue({
+      baseCurrency: "USD",
+      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
+      assetUniverse: [{
+        assetKey: "US::AAPL",
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        assetClass: "EQUITY",
+        region: "US",
+        exchange: "NASDAQ",
+        instrumentType: "STOCK",
+        marketGroup: "US_EQUITY",
+        holdingQty: 0,
+        holdingPrice: 0,
+        costBasis: null,
+        holdingTags: [],
+        watchEnabled: true,
+        targetWeightHint: 0,
+        watchTags: [],
+        notes: null,
+        lastPrice: 100,
+        priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+        valuationBase: 0,
+        fxRateToBase: 1,
+        fxMissing: false,
+        actualWeightPct: 0,
+        targetWeightPct: 0,
+        gapPct: null,
+      }],
+      execution: {
+        logs: [],
+      },
+      rebalance: {
+        mode: "manual",
+        autoAnalysisEnabled: false,
+        analysisTimeUtc: "00:20",
+        timezone: "Asia/Shanghai",
+        emailTo: "",
+        analysisFocus: "mock",
+      },
+      warnings: [],
+    } as any);
+    vi.mocked(listDaaAssetUniverseV1).mockResolvedValue([{
+      assetKey: "US::AAPL",
+      symbol: "AAPL",
+      market: "US",
+      currency: "USD",
+      assetClass: "EQUITY",
+      region: "US",
+      exchange: "NASDAQ",
+      instrumentType: "STOCK",
+      marketGroup: "US_EQUITY",
+      holdingQty: 0,
+      holdingPrice: 0,
+      costBasis: null,
+      holdingTags: [],
+      watchEnabled: true,
+      targetWeightHint: 0,
+      watchTags: [],
+      notes: null,
+      lastPrice: 100,
+      priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    }]);
+    vi.mocked(listDaaFxRatesV1).mockResolvedValue([]);
+
+    const response = await POST(new Request("http://localhost/api/daa/workbench/execution/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        assetKey: "US::AAPL",
+        side: "BUY",
+        qty: 1,
+      }),
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.price).toBe(100);
+    expect(json.data.warnings.some((item: string) => item.includes("行情源已关闭"))).toBe(true);
+    expect(vi.mocked(getMarketPricesWithCacheV1)).not.toHaveBeenCalled();
+  });
+
   it("会优先使用第三方行情，失败后才回退本地缓存价", async () => {
     vi.mocked(buildWorkbenchBootstrapV1).mockResolvedValue({
       baseCurrency: "USD",
