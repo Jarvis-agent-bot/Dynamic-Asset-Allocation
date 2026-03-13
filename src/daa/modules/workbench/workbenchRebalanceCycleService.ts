@@ -589,8 +589,46 @@ export async function executeWorkbenchRebalanceCycle(input: {
     riskCheck: preTradeRiskCheck,
   });
 
+  // ── Refresh prices before execution to avoid stale-price losses ──
+  const executionConfig = getStrategyExecutionConfig(systemRow.config);
+  const slippageRate = executionConfig.slippageBps / 10_000;
+
+  const refreshedPrices = await getMarketPricesWithCache({
+    assets: toExecute.map((row) => ({
+      symbol: row.symbol,
+      market: parseDaaAssetKey(row.assetKey)?.market || "US",
+      currency: row.currency,
+    })),
+    allowRefresh: true,
+    forceRefresh: true,
+    refreshBudget: toExecute.length,
+    timeoutMs: 5000,
+    source: "rebalance_execution",
+    freshSec: 120,
+    serveStaleSec: 3600,
+    rawRetentionDays: 90,
+  });
+
+  // Build execution-ready proposals with refreshed prices + slippage
+  const executionRows = toExecute.map((row) => {
+    const parsed = parseDaaAssetKey(row.assetKey);
+    const priceKey = `${parsed?.market || "US"}::${row.symbol}`.toUpperCase();
+    const refreshed = refreshedPrices[priceKey];
+    const basePrice = (refreshed && refreshed.price > 0) ? refreshed.price : row.price;
+    // Apply slippage: BUY pays more, SELL receives less
+    const slippageMultiplier = row.side === "BUY" ? (1 + slippageRate) : (1 - slippageRate);
+    const executionPrice = basePrice * slippageMultiplier;
+    return {
+      ...row,
+      price: executionPrice,
+      _originalPrice: row.price,
+      _refreshedPrice: basePrice,
+      _slippageApplied: slippageRate > 0,
+    };
+  });
+
   const createdTicketIds: string[] = [];
-  for (const row of toExecute) {
+  for (const row of executionRows) {
     if (!(row.price > 0) || !(row.suggestedQty > 0)) continue;
     const parsed = parseDaaAssetKey(row.assetKey);
     const fee = Math.max(0, row.suggestedQty * row.price * feeRate);
@@ -628,6 +666,14 @@ export async function executeWorkbenchRebalanceCycle(input: {
   const totalNotional = toExecute.reduce((sum, row) => sum + row.suggestedNotional, 0);
   const newMaxDriftPct = cycle.driftSnapshot.reduce((max, row) => Math.max(max, Math.abs(row.driftPct * 100)), 0);
 
+  const priceAdjustmentNotes = executionRows
+    .filter((row) => row._refreshedPrice !== row._originalPrice || row._slippageApplied)
+    .map((row) => `${row.symbol}: 原价${row._originalPrice.toFixed(2)} → 刷新${row._refreshedPrice.toFixed(2)} → 执行${row.price.toFixed(2)}${row._slippageApplied ? ` (滑点${(slippageRate * 10000).toFixed(0)}bps)` : ""}`)
+    .slice(0, 10);
+  const executionNotes = priceAdjustmentNotes.length > 0
+    ? `\n[执行价格] ${priceAdjustmentNotes.join(" | ")}`
+    : "";
+
   const completed = await patchDaaRebalanceCycle({
     cycleId: input.cycleId,
     status: "completed",
@@ -639,6 +685,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
       totalNotional,
       newMaxDriftPct,
     },
+    notes: (cycle.notes || "") + executionNotes || null,
   });
 
   const [logs, afterBootstrap] = await Promise.all([
