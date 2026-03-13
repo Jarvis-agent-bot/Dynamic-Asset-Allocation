@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
@@ -9,14 +9,14 @@ function normalizeText(value: unknown, fallback = ""): string {
   return text || fallback;
 }
 
-type LlmHealthProbeV1 = {
+type LlmHealthProbe = {
   reachable: boolean;
   healthCode: number | null;
   healthMessage: string;
   checkedAt: string;
 };
 
-async function probeLlmEndpointV1(input: { endpoint: string; apiKey: string; model: string; timeoutMs?: number }): Promise<LlmHealthProbeV1> {
+async function probeLlmEndpoint(input: { endpoint: string; apiKey: string; model: string; timeoutMs?: number }): Promise<LlmHealthProbe> {
   const checkedAt = new Date().toISOString();
   const endpoint = normalizeText(input.endpoint);
   if (!endpoint) {
@@ -69,11 +69,11 @@ async function probeLlmEndpointV1(input: { endpoint: string; apiKey: string; mod
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const system = await getDaaSystemConfigV2();
+    const system = await getDaaSystemConfig();
     const llm = system.config.dataSources.llmAnalysis;
     const provider = normalizeText(llm.provider || "codex").toLowerCase();
 
@@ -85,9 +85,9 @@ export async function GET(req: Request) {
       : normalizeText(process.env.OPENAI_API_KEY);
     const envModel = normalizeText(process.env.DAA_LLM_MODEL || process.env.OPENAI_MODEL);
     const model = envModel || normalizeText(llm.model, "gpt-5-codex");
-    const health = await probeLlmEndpointV1({ endpoint, apiKey, model });
+    const health = await probeLlmEndpoint({ endpoint, apiKey, model });
 
-    return okV1({
+    return ok({
       provider,
       endpointConfigured: Boolean(endpoint),
       apiKeyConfigured: Boolean(apiKey),

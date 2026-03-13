@@ -1,22 +1,22 @@
 "use client";
 
-import { useTradesModelV1 } from "@/app/daa/dashboard/_hooks/useTradesModelV1";
+import { useTradesModel } from "@/app/daa/dashboard/_hooks/useTradesModel";
 import {
-  TradesErrorStateV1,
-  TradesHeaderV1,
-  TradesSummaryMetricsV1,
-  TradesTabsPanelV1,
-} from "@/app/daa/dashboard/trades/_components/TradesSectionsV1";
+  TradesErrorState,
+  TradesHeader,
+  TradesSummaryMetrics,
+  TradesTabsPanel,
+} from "@/app/daa/dashboard/trades/_components/TradesSections";
 
 export default function TradesPageClient() {
-  const model = useTradesModelV1();
+  const model = useTradesModel();
 
   return (
     <div className="space-y-6 lg:space-y-7">
-      <TradesHeaderV1 model={model} />
-      <TradesSummaryMetricsV1 model={model} />
-      <TradesErrorStateV1 error={model.error} />
-      <TradesTabsPanelV1 model={model} />
+      <TradesHeader model={model} />
+      <TradesSummaryMetrics model={model} />
+      <TradesErrorState error={model.error} />
+      <TradesTabsPanel model={model} />
     </div>
   );
 }

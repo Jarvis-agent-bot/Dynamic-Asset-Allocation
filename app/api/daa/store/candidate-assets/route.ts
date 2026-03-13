@@ -1,30 +1,30 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { listDaaCandidateAssetsV1, replaceDaaCandidateAssetsV1 } from "@/src/daa/store/daaStorePgV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { listDaaCandidateAssets, replaceDaaCandidateAssets } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const candidates = await listDaaCandidateAssetsV1();
-    return okV1({ candidates });
+    const candidates = await listDaaCandidateAssets();
+    return ok({ candidates });
   });
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<{ candidates?: unknown }>(req);
+    const body = await readJsonBody<{ candidates?: unknown }>(req);
     if (!Array.isArray(body?.candidates)) {
-      return failV1("VALIDATION_FAILED", "candidates must be an array", { status: 400 });
+      return fail("VALIDATION_FAILED", "candidates must be an array", { status: 400 });
     }
 
-    const candidates = await replaceDaaCandidateAssetsV1(body.candidates as any[]);
-    return okV1({ candidates });
+    const candidates = await replaceDaaCandidateAssets(body.candidates as any[]);
+    return ok({ candidates });
   });
 }

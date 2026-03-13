@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getHumanIngestRuntimeStateV1, getLatestHumanSignalBatchV1, runHumanIngestV1 } from "@/src/daa/hf/hfServiceV1";
+import { mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { getHumanIngestRuntimeState, getLatestHumanSignalBatch, runHumanIngest } from "@/src/daa/hf/hfService";
 
 export const runtime = "nodejs";
 
@@ -27,14 +27,14 @@ function normalizeFundCodes(input: unknown): string[] | undefined {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    await getLatestHumanSignalBatchV1({ autoIngestOnMiss: false });
-    const state = getHumanIngestRuntimeStateV1();
+    await getLatestHumanSignalBatch({ autoIngestOnMiss: false });
+    const state = getHumanIngestRuntimeState();
 
-    return okV1({
+    return ok({
       lastIngestAt: state.lastIngestAt,
       ingestCount: state.ingestCount,
       hasBatch: Boolean(state.latestBatch),
@@ -45,20 +45,20 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<IngestBody>(req);
+    const body = await readJsonBody<IngestBody>(req);
 
     const marketScope = normalizeMarketScope(body?.marketScope);
     const reportDates = Array.isArray(body?.reportDates)
       ? body.reportDates.map((x) => String(x || "").trim()).filter(Boolean)
       : undefined;
     const fundCodes = normalizeFundCodes(body?.fundCodes);
-    const { summary, batch } = await runHumanIngestV1({ marketScope, reportDates, fundCodes });
+    const { summary, batch } = await runHumanIngest({ marketScope, reportDates, fundCodes });
 
-    return okV1({
+    return ok({
       summary,
       batch,
     });

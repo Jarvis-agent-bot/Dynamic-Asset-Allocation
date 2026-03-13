@@ -1,5 +1,5 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
+import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 
 export const runtime = "nodejs";
 
@@ -200,8 +200,8 @@ async function fetchSnapshotsBySymbols(symbols: string[]): Promise<Map<string, Q
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     try {
@@ -211,7 +211,7 @@ export async function GET(req: Request) {
     const marketFilter = normalizeMarketFilter(url.searchParams.get("market"));
 
     if (!q) {
-      return failV1("VALIDATION_FAILED", "missing q", { status: 400 });
+      return fail("VALIDATION_FAILED", "missing q", { status: 400 });
     }
 
     const upstream = new URL("https://query1.finance.yahoo.com/v1/finance/search");
@@ -231,7 +231,7 @@ export async function GET(req: Request) {
 
     const text = await response.text();
     if (!response.ok) {
-      return failV1("INTERNAL_ERROR", "yfinance search upstream error", {
+      return fail("INTERNAL_ERROR", "yfinance search upstream error", {
         status: 502,
         details: {
           status: response.status,
@@ -346,14 +346,14 @@ export async function GET(req: Request) {
       if (items.length >= limit) break;
     }
 
-    return okV1({
+    return ok({
       source: "yfinance-search",
       query: q,
       marketFilter,
       items,
     });
     } catch (error) {
-      return failV1("INTERNAL_ERROR", "symbol search failed", {
+      return fail("INTERNAL_ERROR", "symbol search failed", {
         status: 502,
         details: {
           message: error instanceof Error ? error.message : String(error),

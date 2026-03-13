@@ -1,24 +1,24 @@
-import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { sendTelegramByEnvV1 } from "@/src/daa/notify/telegramV1";
-import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
-import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
+import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { requireCronAuth } from "@/src/daa/cron/auth";
+import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = requireCronAuthV1(req);
+  return withApiHandler(async () => {
+    const denied = requireCronAuth(req);
     if (denied) {
       const status = denied.status || 401;
-      return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
+      return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const system = await getDaaSystemConfigV2();
+    const system = await getDaaSystemConfig();
     const strategy = system.config.rebalanceStrategy;
     if (!strategy.autoGenerateEnabled) {
-      return okV1({
+      return ok({
         skipped: true,
         reason: "auto generate disabled",
         at: new Date().toISOString(),
@@ -26,16 +26,16 @@ export async function POST(req: Request) {
     }
 
     if (!strategy.drift.enabled) {
-      return okV1({
+      return ok({
         skipped: true,
         reason: "drift trigger disabled",
         at: new Date().toISOString(),
       });
     }
 
-    await buildWorkbenchBootstrapV1({ syncPrices: false, autoRiskCycle: true });
+    await buildWorkbenchBootstrap({ syncPrices: false, autoRiskCycle: true });
 
-    const generated = await generateWorkbenchRebalanceCycleV1({
+    const generated = await generateWorkbenchRebalanceCycle({
       triggerSource: "drift",
       triggerReason: "偏移量阈值触发",
       manual: false,
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         && system.config.notification.telegram.enabled
         && system.config.notification.telegram.onDriftTrigger
       ) {
-        await sendTelegramByEnvV1(
+        await sendTelegramByEnv(
           [
             "*DAA 偏移触发再平衡*",
             `Cycle: ${cycle.cycleId}`,
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       // 通知失败不阻塞主流程
     }
 
-    return okV1({
+    return ok({
       skipped: !generated.created,
       created: generated.created,
       skippedByCooldown: generated.skippedByCooldown,

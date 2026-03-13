@@ -1,7 +1,7 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { DEFAULT_ANALYSIS_FOCUS_V1 } from "@/src/daa/llm/analysisFocusDefaultsV1";
-import { getDaaSystemConfigV2, patchDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
+import { getDaaSystemConfig, patchDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
@@ -58,32 +58,32 @@ function toView(config: {
     analysisTimeUtc: String(config.analysisTimeUtc || "00:20"),
     timezone: String(config.timezone || "Asia/Shanghai"),
     emailTo: String(config.notifyEmailTo || "").trim(),
-    analysisFocus: String(config.analysisFocus || DEFAULT_ANALYSIS_FOCUS_V1).trim() || DEFAULT_ANALYSIS_FOCUS_V1,
+    analysisFocus: String(config.analysisFocus || DEFAULT_ANALYSIS_FOCUS_).trim() || DEFAULT_ANALYSIS_FOCUS_,
   };
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const row = await getDaaSystemConfigV2();
-    return okV1(toView(row.config.rebalanceStrategy));
+    const row = await getDaaSystemConfig();
+    return ok(toView(row.config.rebalanceStrategy));
   });
 }
 
 export async function PATCH(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
+    const body = await readJsonBody<Body>(req);
     const patches: Array<{ path: string; value: unknown }> = [];
 
     if (body?.mode != null) {
       const mode = toMode(body.mode);
       if (!mode) {
-        return failV1("VALIDATION_FAILED", "mode must be manual or auto", { status: 400 });
+        return fail("VALIDATION_FAILED", "mode must be manual or auto", { status: 400 });
       }
       patches.push({ path: "/rebalanceStrategy/autoGenerateEnabled", value: mode === "auto" });
     }
@@ -91,7 +91,7 @@ export async function PATCH(req: Request) {
     if (body?.autoAnalysisEnabled != null) {
       const enabled = toBool(body.autoAnalysisEnabled);
       if (enabled == null) {
-        return failV1("VALIDATION_FAILED", "autoAnalysisEnabled must be boolean", { status: 400 });
+        return fail("VALIDATION_FAILED", "autoAnalysisEnabled must be boolean", { status: 400 });
       }
       patches.push({ path: "/rebalanceStrategy/autoGenerateEnabled", value: enabled });
     }
@@ -103,7 +103,7 @@ export async function PATCH(req: Request) {
     if (body?.analysisTimeUtc != null) {
       const analysisTimeUtc = toTimeUtc(body.analysisTimeUtc);
       if (!analysisTimeUtc) {
-        return failV1("VALIDATION_FAILED", "analysisTimeUtc must be HH:MM", { status: 400 });
+        return fail("VALIDATION_FAILED", "analysisTimeUtc must be HH:MM", { status: 400 });
       }
       patches.push({ path: "/rebalanceStrategy/analysisTimeUtc", value: analysisTimeUtc });
     }
@@ -111,32 +111,32 @@ export async function PATCH(req: Request) {
     if (body?.timezone != null) {
       const timezone = String(body.timezone || "").trim();
       if (!timezone) {
-        return failV1("VALIDATION_FAILED", "timezone must not be empty", { status: 400 });
+        return fail("VALIDATION_FAILED", "timezone must not be empty", { status: 400 });
       }
       patches.push({ path: "/rebalanceStrategy/timezone", value: timezone });
     }
 
     if (body?.analysisFocus != null) {
-      const analysisFocus = String(body.analysisFocus || "").trim() || DEFAULT_ANALYSIS_FOCUS_V1;
+      const analysisFocus = String(body.analysisFocus || "").trim() || DEFAULT_ANALYSIS_FOCUS_;
       patches.push({ path: "/rebalanceStrategy/analysisFocus", value: analysisFocus });
     }
 
     if (patches.length <= 0) {
-      const current = await getDaaSystemConfigV2();
-      return okV1(toView(current.config.rebalanceStrategy));
+      const current = await getDaaSystemConfig();
+      return ok(toView(current.config.rebalanceStrategy));
     }
 
     try {
-      const saved = await patchDaaSystemConfigV2({
+      const saved = await patchDaaSystemConfig({
         patches,
         baseVersion: toBaseVersion(body?.baseVersion),
       });
-      return okV1(toView(saved.config.rebalanceStrategy));
+      return ok(toView(saved.config.rebalanceStrategy));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error || "");
       if (message.startsWith("system_config_version_conflict:")) {
         const latestVersion = Number(message.split(":")[1] || 0) || 0;
-        return failV1("VERSION_CONFLICT", "system config version conflict", {
+        return fail("VERSION_CONFLICT", "system config version conflict", {
           status: 409,
           details: { latestVersion },
         });

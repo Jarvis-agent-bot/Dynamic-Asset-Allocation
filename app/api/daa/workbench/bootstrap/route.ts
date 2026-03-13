@@ -1,18 +1,18 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const data = await buildWorkbenchBootstrapV1({
+    const data = await buildWorkbenchBootstrap({
       syncPrices: false,
       autoRiskCycle: false,
     });
-    return okV1(data);
+    return ok(data);
   });
 }

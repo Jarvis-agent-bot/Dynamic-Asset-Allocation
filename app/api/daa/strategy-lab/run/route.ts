@@ -1,12 +1,12 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import type { StrategyLabRunInputV1 } from "@/src/daa/modules/strategyLab/strategyLabContractsV1";
-import { StrategyLabValidationErrorV1, runStrategyLabV1 } from "@/src/daa/modules/strategyLab/strategyLabServiceV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import type { StrategyLabRunInput } from "@/src/daa/modules/strategyLab/strategyLabContracts";
+import { StrategyLabValidationError, runStrategyLab } from "@/src/daa/modules/strategyLab/strategyLabService";
 import { createMarketDataClient } from "@/src/market/marketDataClient";
 
 export const runtime = "nodejs";
 
-function buildForwardedMarketHeadersV1(req: Request): HeadersInit | undefined {
+function buildForwardedMarketHeaders(req: Request): HeadersInit | undefined {
   const cookie = req.headers.get("cookie")?.trim();
   const authorization = req.headers.get("authorization")?.trim();
   const requestId = req.headers.get("x-request-id")?.trim();
@@ -20,14 +20,14 @@ function buildForwardedMarketHeadersV1(req: Request): HeadersInit | undefined {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<StrategyLabRunInputV1>(req);
+    const body = await readJsonBody<StrategyLabRunInput>(req);
     const assets = Array.isArray(body?.assets) ? body.assets : [];
     if (!assets.length) {
-      return failV1("VALIDATION_FAILED", "请至少选择 1 个研究资产后再运行策略实验室。", {
+      return fail("VALIDATION_FAILED", "请至少选择 1 个研究资产后再运行策略实验室。", {
         status: 400,
         details: {
           code: "EMPTY_ASSETS",
@@ -38,11 +38,11 @@ export async function POST(req: Request) {
     const endpointBase = new URL(req.url).origin;
     const marketDataClient = createMarketDataClient({
       endpointBase,
-      headers: buildForwardedMarketHeadersV1(req),
+      headers: buildForwardedMarketHeaders(req),
     });
 
     try {
-      const data = await runStrategyLabV1({
+      const data = await runStrategyLab({
         assets,
         startDate: String(body?.startDate || "").trim(),
         endDate: String(body?.endDate || "").trim(),
@@ -58,10 +58,10 @@ export async function POST(req: Request) {
         execution: body?.execution,
       }, { endpointBase, marketDataClient });
 
-      return okV1(data);
+      return ok(data);
     } catch (error) {
-      if (error instanceof StrategyLabValidationErrorV1) {
-        return failV1("VALIDATION_FAILED", error.message, {
+      if (error instanceof StrategyLabValidationError) {
+        return fail("VALIDATION_FAILED", error.message, {
           status: error.status,
           details: {
             code: error.code,

@@ -1,24 +1,24 @@
-import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
+import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { requireCronAuth } from "@/src/daa/cron/auth";
 import {
-  appendDaaExternalPayloadRawV1,
-  appendDaaFxRateHistoryRowsV1,
-  appendDaaIngestJobLogV1,
-  getDaaSystemConfigV2,
-  listDaaAssetUniverseV1,
-  listDaaFxRatesV1,
-  upsertDaaFxRatesV1,
-} from "@/src/daa/store/daaStorePgV1";
+  appendDaaExternalPayloadRaw,
+  appendDaaFxRateHistoryRows,
+  appendDaaIngestJobLog,
+  getDaaSystemConfig,
+  listDaaAssetUniverse,
+  listDaaFxRates,
+  upsertDaaFxRates,
+} from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
-type NormalizedFxPairV1 = {
+type NormalizedFxPair = {
   baseCcy: string;
   quoteCcy: string;
   pair: string;
 };
 
-type FxFetchResultV1 = {
+type FxFetchResult = {
   ok: boolean;
   rate: number;
   status: number;
@@ -29,14 +29,14 @@ type FxFetchResultV1 = {
   responseHeadersJson: Record<string, string>;
 };
 
-function normalizeCcyV1(value: unknown, fallback = "USD"): string {
+function normalizeCcy(value: unknown, fallback = "USD"): string {
   const ccy = String(value || "").trim().toUpperCase();
   if (!ccy) return fallback;
   if (ccy === "RMB" || ccy === "CNH") return "CNY";
   return ccy;
 }
 
-function normalizePairTokenV1(value: unknown): string {
+function normalizePairToken(value: unknown): string {
   return String(value || "")
     .trim()
     .toUpperCase()
@@ -44,9 +44,9 @@ function normalizePairTokenV1(value: unknown): string {
     .replace(/-/g, "/");
 }
 
-function buildPairV1(baseCcy: string, quoteCcy: string): NormalizedFxPairV1 {
-  const base = normalizeCcyV1(baseCcy, "USD");
-  const quote = normalizeCcyV1(quoteCcy, "USD");
+function buildPair(baseCcy: string, quoteCcy: string): NormalizedFxPair {
+  const base = normalizeCcy(baseCcy, "USD");
+  const quote = normalizeCcy(quoteCcy, "USD");
   return {
     baseCcy: base,
     quoteCcy: quote,
@@ -54,10 +54,10 @@ function buildPairV1(baseCcy: string, quoteCcy: string): NormalizedFxPairV1 {
   };
 }
 
-function toFxPairsFromConfigV1(input: { enabled: boolean; baseCurrency: string; pairs: unknown }): NormalizedFxPairV1[] {
+function toFxPairsFromConfig(input: { enabled: boolean; baseCurrency: string; pairs: unknown }): NormalizedFxPair[] {
   if (!input.enabled) return [];
 
-  const baseCurrency = normalizeCcyV1(input.baseCurrency, "USD");
+  const baseCurrency = normalizeCcy(input.baseCurrency, "USD");
   const pairsRaw = input.pairs;
   const tokens = Array.isArray(pairsRaw)
     ? pairsRaw
@@ -65,51 +65,51 @@ function toFxPairsFromConfigV1(input: { enabled: boolean; baseCurrency: string; 
       ? pairsRaw.split(/[\s,，;；\n]+/g)
       : [];
 
-  const out = new Map<string, NormalizedFxPairV1>();
+  const out = new Map<string, NormalizedFxPair>();
   for (const raw of tokens) {
-    const token = normalizePairTokenV1(raw);
+    const token = normalizePairToken(raw);
     if (!token) continue;
     if (/^[A-Z]{3}\/[A-Z]{3}$/.test(token)) {
       const [base, quote] = token.split("/");
-      const pair = buildPairV1(base, quote);
+      const pair = buildPair(base, quote);
       out.set(pair.pair, pair);
       continue;
     }
     if (/^[A-Z]{3}$/.test(token)) {
-      const pair = buildPairV1(baseCurrency, token);
+      const pair = buildPair(baseCurrency, token);
       out.set(pair.pair, pair);
     }
   }
   return [...out.values()];
 }
 
-function toFxPairsFromAssetsV1(
+function toFxPairsFromAssets(
   baseCurrency: string,
   rows: Array<{ currency: string; holdingQty: number; watchEnabled: boolean }>,
-): NormalizedFxPairV1[] {
-  const base = normalizeCcyV1(baseCurrency, "USD");
-  const out = new Map<string, NormalizedFxPairV1>();
+): NormalizedFxPair[] {
+  const base = normalizeCcy(baseCurrency, "USD");
+  const out = new Map<string, NormalizedFxPair>();
 
   for (const row of rows) {
     if (!(row.holdingQty > 0) && row.watchEnabled === false) continue;
-    const quote = normalizeCcyV1(row.currency, base);
+    const quote = normalizeCcy(row.currency, base);
     if (!quote || quote === base) continue;
-    const pair = buildPairV1(base, quote);
+    const pair = buildPair(base, quote);
     out.set(pair.pair, pair);
   }
 
   return [...out.values()];
 }
 
-function mergeFxPairsV1(...groups: NormalizedFxPairV1[][]): NormalizedFxPairV1[] {
-  const out = new Map<string, NormalizedFxPairV1>();
+function mergeFxPairs(...groups: NormalizedFxPair[][]): NormalizedFxPair[] {
+  const out = new Map<string, NormalizedFxPair>();
   for (const rows of groups) {
     for (const pair of rows) out.set(pair.pair, pair);
   }
   return [...out.values()];
 }
 
-function toShanghaiDayV1(date: Date): string {
+function toShanghaiDay(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Shanghai",
     year: "numeric",
@@ -118,13 +118,13 @@ function toShanghaiDayV1(date: Date): string {
   }).format(date);
 }
 
-function toBusinessDayV1(value: unknown): string {
+function toBusinessDay(value: unknown): string {
   const ms = Date.parse(String(value || ""));
   if (!Number.isFinite(ms)) return "";
-  return toShanghaiDayV1(new Date(ms));
+  return toShanghaiDay(new Date(ms));
 }
 
-function pickLatestPositiveV1(values: unknown[]): number {
+function pickLatestPositive(values: unknown[]): number {
   for (let i = values.length - 1; i >= 0; i -= 1) {
     const n = Number(values[i]);
     if (Number.isFinite(n) && n > 0) return n;
@@ -132,7 +132,7 @@ function pickLatestPositiveV1(values: unknown[]): number {
   return 0;
 }
 
-function extractHeadersV1(headers: Headers): Record<string, string> {
+function extractHeaders(headers: Headers): Record<string, string> {
   const out: Record<string, string> = {};
   headers.forEach((value, key) => {
     out[key] = value;
@@ -140,7 +140,7 @@ function extractHeadersV1(headers: Headers): Record<string, string> {
   return out;
 }
 
-async function fetchYfinanceFxRateV1(baseCcy: string, quoteCcy: string): Promise<FxFetchResultV1> {
+async function fetchYfinanceFxRate(baseCcy: string, quoteCcy: string): Promise<FxFetchResult> {
   if (baseCcy === quoteCcy) {
     return {
       ok: true,
@@ -185,7 +185,7 @@ async function fetchYfinanceFxRateV1(baseCcy: string, quoteCcy: string): Promise
       errorMessage: `FX upstream error(${response.status}) for ${baseCcy}/${quoteCcy}`,
       payloadJson,
       payloadText: raw,
-      responseHeadersJson: extractHeadersV1(response.headers),
+      responseHeadersJson: extractHeaders(response.headers),
     };
   }
 
@@ -199,14 +199,14 @@ async function fetchYfinanceFxRateV1(baseCcy: string, quoteCcy: string): Promise
       errorMessage: `FX chart error for ${baseCcy}/${quoteCcy}`,
       payloadJson,
       payloadText: raw,
-      responseHeadersJson: extractHeadersV1(response.headers),
+      responseHeadersJson: extractHeaders(response.headers),
     };
   }
 
   const result = (payloadJson as any)?.chart?.result?.[0];
   const metaPrice = Number(result?.meta?.regularMarketPrice);
   const closes = Array.isArray(result?.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : [];
-  const closePrice = pickLatestPositiveV1(closes);
+  const closePrice = pickLatestPositive(closes);
   const rate = metaPrice > 0 ? metaPrice : closePrice;
 
   if (!Number.isFinite(rate) || rate <= 0) {
@@ -218,7 +218,7 @@ async function fetchYfinanceFxRateV1(baseCcy: string, quoteCcy: string): Promise
       errorMessage: `FX rate missing for ${baseCcy}/${quoteCcy}`,
       payloadJson,
       payloadText: raw,
-      responseHeadersJson: extractHeadersV1(response.headers),
+      responseHeadersJson: extractHeaders(response.headers),
     };
   }
 
@@ -230,39 +230,39 @@ async function fetchYfinanceFxRateV1(baseCcy: string, quoteCcy: string): Promise
     errorMessage: null,
     payloadJson,
     payloadText: raw,
-    responseHeadersJson: extractHeadersV1(response.headers),
+    responseHeadersJson: extractHeaders(response.headers),
   };
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = requireCronAuthV1(req);
+  return withApiHandler(async () => {
+    const denied = requireCronAuth(req);
     if (denied) {
       const status = denied.status || 401;
-      return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
+      return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
     const [system, assetRows, existingRates] = await Promise.all([
-      getDaaSystemConfigV2(),
-      listDaaAssetUniverseV1(),
-      listDaaFxRatesV1(),
+      getDaaSystemConfig(),
+      listDaaAssetUniverse(),
+      listDaaFxRates(),
     ]);
 
-    const strategyBase = normalizeCcyV1((system.config.strategy?.account as any)?.baseCurrency, "USD");
+    const strategyBase = normalizeCcy((system.config.strategy?.account as any)?.baseCurrency, "USD");
     const fxFeed = system.config.dataSources.fxFeed;
     const rawRetentionDays = Math.max(7, Math.min(365, Math.trunc(system.config.dataSources.priceFeed.marketCache.rawRetentionDays || 90)));
-    const fxPairs = mergeFxPairsV1(
-      toFxPairsFromConfigV1({
+    const fxPairs = mergeFxPairs(
+      toFxPairsFromConfig({
         enabled: fxFeed.enabled !== false,
         baseCurrency: fxFeed.baseCurrency || strategyBase,
         pairs: fxFeed.pairs,
       }),
-      toFxPairsFromAssetsV1(strategyBase, assetRows),
+      toFxPairsFromAssets(strategyBase, assetRows),
     );
 
     if (fxPairs.length === 0) {
       const finishedAt = new Date().toISOString();
-      await appendDaaIngestJobLogV1({
+      await appendDaaIngestJobLog({
         jobType: "cron_fx_refresh",
         triggerSource: "cron_fx_refresh",
         status: "ok",
@@ -273,7 +273,7 @@ export async function POST(req: Request) {
         failureCount: 0,
         diagnosticsJson: { reason: "no_pairs" },
       });
-      return okV1({
+      return ok({
         updatedPairs: [],
         skippedPairs: [],
         failures: [],
@@ -282,9 +282,9 @@ export async function POST(req: Request) {
     }
 
     const nowIso = new Date().toISOString();
-    const today = toShanghaiDayV1(new Date(nowIso));
+    const today = toShanghaiDay(new Date(nowIso));
     const existingByPair = new Map(existingRates.map((row) => [
-      `${normalizeCcyV1(row.baseCcy)}/${normalizeCcyV1(row.quoteCcy)}`,
+      `${normalizeCcy(row.baseCcy)}/${normalizeCcy(row.quoteCcy)}`,
       row,
     ]));
 
@@ -306,15 +306,15 @@ export async function POST(req: Request) {
     const failures: string[] = [];
 
     for (const pair of fxPairs) {
-      if (toBusinessDayV1(existingByPair.get(pair.pair)?.asOfTs) === today) {
+      if (toBusinessDay(existingByPair.get(pair.pair)?.asOfTs) === today) {
         skippedPairs.push(pair.pair);
         continue;
       }
 
-      const fetchResult = await fetchYfinanceFxRateV1(pair.baseCcy, pair.quoteCcy);
+      const fetchResult = await fetchYfinanceFxRate(pair.baseCcy, pair.quoteCcy);
       let rawRefId: string | null = null;
       if (fetchResult.payloadJson || fetchResult.payloadText) try {
-        const raw = await appendDaaExternalPayloadRawV1({
+        const raw = await appendDaaExternalPayloadRaw({
           provider: "yfinance",
           resource: "yfinance.fx.chart",
           subjectKey: pair.pair,
@@ -373,13 +373,13 @@ export async function POST(req: Request) {
     }
 
     if (rowsToUpsert.length > 0) {
-      await upsertDaaFxRatesV1(rowsToUpsert);
+      await upsertDaaFxRates(rowsToUpsert);
     }
     if (fxHistoryRows.length > 0) {
-      await appendDaaFxRateHistoryRowsV1(fxHistoryRows);
+      await appendDaaFxRateHistoryRows(fxHistoryRows);
     }
 
-    await appendDaaIngestJobLogV1({
+    await appendDaaIngestJobLog({
       jobType: "cron_fx_refresh",
       triggerSource: "cron_fx_refresh",
       status: failures.length <= 0 ? "ok" : updatedPairs.length > 0 ? "partial" : "failed",
@@ -393,7 +393,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return okV1({
+    return ok({
       updatedPairs,
       skippedPairs,
       failures,

@@ -1,14 +1,14 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
-import { resolveInvestableCashV1 } from "@/src/daa/account/resolveInvestableCashV1";
-import { getStrategyExecutionConfigV2 } from "@/src/daa/config/systemConfigV2";
-import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
-import { buildFxLookupToBaseV1, resolveFxRateToBaseV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
-import { getDaaSystemConfigV2, listDaaAssetUniverseV1, listDaaFxRatesV1, updateDaaAssetUniverseLastPriceV1 } from "@/src/daa/store/daaStorePgV1";
-import { toYfinanceSymbolByMarketV1 } from "@/src/market/yfinanceSymbolV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
-import { validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
+import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
+import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
+import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
+import { getDaaSystemConfig, listDaaAssetUniverse, listDaaFxRates, updateDaaAssetUniverseLastPrice } from "@/src/daa/store/daaStorePg";
+import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { validateExecutionRisk } from "@/src/daa/modules/workbench/workbenchExecutionService";
 
 export const runtime = "nodejs";
 
@@ -40,36 +40,36 @@ function normalizeSide(v: unknown): "BUY" | "SELL" | null {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
-    const parsed = parseDaaAssetKeyV1(body?.assetKey);
-    if (!parsed) return failV1("VALIDATION_FAILED", "assetKey is required", { status: 400 });
+    const body = await readJsonBody<Body>(req);
+    const parsed = parseDaaAssetKey(body?.assetKey);
+    if (!parsed) return fail("VALIDATION_FAILED", "assetKey is required", { status: 400 });
 
     const side = normalizeSide(body?.side);
-    if (!side) return failV1("VALIDATION_FAILED", "side must be BUY or SELL", { status: 400 });
+    if (!side) return fail("VALIDATION_FAILED", "side must be BUY or SELL", { status: 400 });
 
     const [bootstrap, fxRows, universeRows, systemRow] = await Promise.all([
-      buildWorkbenchBootstrapV1({ syncPrices: false }),
-      listDaaFxRatesV1(),
-      listDaaAssetUniverseV1(),
-      getDaaSystemConfigV2(),
+      buildWorkbenchBootstrap({ syncPrices: false }),
+      listDaaFxRates(),
+      listDaaAssetUniverse(),
+      getDaaSystemConfig(),
     ]);
-    const defaultFeeRateBps = getStrategyExecutionConfigV2(systemRow.config).feeRateBps;
+    const defaultFeeRateBps = getStrategyExecutionConfig(systemRow.config).feeRateBps;
     const feeRateBps = toNonNegative(body?.feeRateBps) ?? defaultFeeRateBps;
 
     const assetKey = `${parsed.market}::${parsed.symbol}`;
     const row = universeRows.find((item) => item.assetKey === assetKey);
-    if (!row) return failV1("NOT_FOUND", `asset not found: ${assetKey}`, { status: 404 });
+    if (!row) return fail("NOT_FOUND", `asset not found: ${assetKey}`, { status: 404 });
     const bootstrapRow = bootstrap.assetUniverse.find((item) => item.assetKey === assetKey) || null;
 
     let price = toPositive(bootstrapRow?.lastPrice || row.lastPrice || row.holdingPrice);
     let priceSource = bootstrapRow?.priceSource || (row.lastPrice > 0 ? "asset_universe.last_price" : "asset_universe.holding_price");
     let priceSnapshotAt = bootstrapRow?.priceUpdatedAt || row.priceUpdatedAt || null;
 
-    const yfinanceSymbol = toYfinanceSymbolByMarketV1(row.symbol, row.market);
+    const yfinanceSymbol = toYfinanceSymbolByMarket(row.symbol, row.market);
     const priceFeedEnabled = systemRow.config.dataSources?.priceFeed?.enabled !== false;
     const marketCache = systemRow.config.dataSources?.priceFeed?.marketCache || {
       freshMinutes: 15,
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     };
     const warnings: string[] = [];
     if (yfinanceSymbol && priceFeedEnabled) {
-      const priced = await getMarketPricesWithCacheV1({
+      const priced = await getMarketPricesWithCache({
         assets: [{
           symbol: row.symbol,
           market: row.market,
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
         priceSource = latest.priceSource || `yfinance:${yfinanceSymbol}`;
         if (latest.priceUpdatedAt) {
           priceSnapshotAt = latest.priceUpdatedAt;
-          await updateDaaAssetUniverseLastPriceV1({
+          await updateDaaAssetUniverseLastPrice({
             assetKey: row.assetKey,
             lastPrice: latest.price,
             priceUpdatedAt: latest.priceUpdatedAt,
@@ -113,18 +113,18 @@ export async function POST(req: Request) {
 
     if (!(price > 0)) {
       if (!yfinanceSymbol) {
-        return failV1("VALIDATION_FAILED", `symbol unsupported for yfinance: ${row.market}::${row.symbol}`, {
+        return fail("VALIDATION_FAILED", `symbol unsupported for yfinance: ${row.market}::${row.symbol}`, {
           status: 400,
           details: { reasonCode: "UNSUPPORTED_SYMBOL" },
         });
       }
       if (!priceFeedEnabled) {
-        return failV1("VALIDATION_FAILED", `${row.symbol} 缺少可用本地行情，且行情源已关闭`, {
+        return fail("VALIDATION_FAILED", `${row.symbol} 缺少可用本地行情，且行情源已关闭`, {
           status: 409,
           details: { reasonCode: "PRICE_FEED_DISABLED" },
         });
       }
-      return failV1("INTERNAL_ERROR", `${row.symbol} 拉取实时价格失败，请稍后重试`, {
+      return fail("INTERNAL_ERROR", `${row.symbol} 拉取实时价格失败，请稍后重试`, {
         status: 502,
         details: { reasonCode: "PRICE_FETCH_TIMEOUT" },
       });
@@ -134,15 +134,15 @@ export async function POST(req: Request) {
     const notionalInput = toPositive(body?.notional);
     const qty = qtyInput > 0 ? qtyInput : (notionalInput > 0 ? (notionalInput / price) : 0);
     if (!(qty > 0)) {
-      return failV1("VALIDATION_FAILED", "qty 或 notional 至少提供一个且 > 0", { status: 400 });
+      return fail("VALIDATION_FAILED", "qty 或 notional 至少提供一个且 > 0", { status: 400 });
     }
 
     const grossNotional = qty * price;
     const fee = grossNotional * (feeRateBps / 10000);
 
-    const investableCash = resolveInvestableCashV1(bootstrap.account);
-    const fxLookup = buildFxLookupToBaseV1(fxRows);
-    const fxRateResolved = resolveFxRateToBaseV1(bootstrap.baseCurrency, row.currency, fxLookup);
+    const investableCash = resolveInvestableCash(bootstrap.account);
+    const fxLookup = buildFxLookupToBase(fxRows);
+    const fxRateResolved = resolveFxRateToBase(bootstrap.baseCurrency, row.currency, fxLookup);
     const hasFxRate = Number.isFinite(fxRateResolved) && Number(fxRateResolved) > 0;
     const fxRateToBase = hasFxRate ? Number(fxRateResolved) : null;
     if (!hasFxRate && row.currency !== bootstrap.baseCurrency) {
@@ -194,7 +194,7 @@ export async function POST(req: Request) {
       warnings.push("缺少可用汇率，暂无法计算交易后的基准币仓位变化");
     }
 
-    const riskCheck = await validateExecutionRiskV1({
+    const riskCheck = await validateExecutionRisk({
       manualProposal: {
         assetKey,
         symbol: row.symbol,
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
       manualBlock = true;
     }
 
-    return okV1({
+    return ok({
       assetKey,
       symbol: row.symbol,
       market: row.market,

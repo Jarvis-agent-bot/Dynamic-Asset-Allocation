@@ -1,16 +1,16 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
-import { runLlmAnalysisV1 } from "@/src/daa/llm/llmAnalysisV1";
-import { buildMarketContextAttributionV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
-import { preferAssetRowPriceV1 } from "@/src/daa/modules/workbench/preferAssetRowPriceV1";
-import { buildOpportunityPanelV1 } from "@/src/daa/signals/opportunityServiceV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
+import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
+import { buildMarketContextAttribution } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { preferAssetRowPrice } from "@/src/daa/modules/workbench/preferAssetRowPrice";
+import { buildOpportunityPanel } from "@/src/daa/signals/opportunityService";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import {
-  mapOpportunityActionLabelZhV1,
-  summarizeOpportunityReasonZhV1,
-  summarizeOpportunityRiskZhV1,
-} from "@/src/daa/modules/workbench/workbenchSharedV1";
+  mapOpportunityActionLabelZh,
+  summarizeOpportunityReasonZh,
+  summarizeOpportunityRiskZh,
+} from "@/src/daa/modules/workbench/workbenchShared";
 
 export const runtime = "nodejs";
 
@@ -28,7 +28,7 @@ function parseBool(value: string | null, fallback = false): boolean {
   return fallback;
 }
 
-type InsightMetricV1 = {
+type InsightMetric = {
   key: string;
   label: string;
   value: number | string;
@@ -37,10 +37,10 @@ type InsightMetricV1 = {
   description?: string;
 };
 
-function toMetricArray(technical: any): InsightMetricV1[] {
+function toMetricArray(technical: any): InsightMetric[] {
   if (!technical?.metrics) return [];
   const m = technical.metrics;
-  const common: InsightMetricV1[] = [
+  const common: InsightMetric[] = [
     { key: "close", label: "最新收盘", value: Number(m.close || 0), unit: "价格" },
     { key: "ema12", label: "EMA12", value: Number(m.ema12 || 0) },
     { key: "ema26", label: "EMA26", value: Number(m.ema26 || 0) },
@@ -81,13 +81,13 @@ function toMetricArray(technical: any): InsightMetricV1[] {
   return common;
 }
 
-function valuationTemperatureLabelV1(value: "cheap" | "neutral" | "expensive"): string {
+function valuationTemperatureLabel(value: "cheap" | "neutral" | "expensive"): string {
   if (value === "cheap") return "偏便宜";
   if (value === "expensive") return "偏贵";
   return "中性";
 }
 
-function toPriceSnapshotV1(row: {
+function toPriceSnapshot(row: {
   lastPrice: number;
   holdingPrice: number;
   currency: string;
@@ -109,13 +109,13 @@ function toPriceSnapshotV1(row: {
 }
 
 export async function GET(req: Request, ctx: Ctx) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const parsed = parseDaaAssetKeyV1(ctx.params?.assetKey);
+    const parsed = parseDaaAssetKey(ctx.params?.assetKey);
     if (!parsed) {
-      return failV1("VALIDATION_FAILED", "assetKey is required", { status: 400 });
+      return fail("VALIDATION_FAILED", "assetKey is required", { status: 400 });
     }
 
     const url = new URL(req.url);
@@ -123,21 +123,21 @@ export async function GET(req: Request, ctx: Ctx) {
     const analysisFocus = String(url.searchParams.get("analysisFocus") || "评估该资产的机会与风险").trim() || "评估该资产的机会与风险";
 
     const [bootstrap, panel] = await Promise.all([
-      buildWorkbenchBootstrapV1({ syncPrices: false }),
-      buildOpportunityPanelV1({ symbols: [parsed.symbol] }),
+      buildWorkbenchBootstrap({ syncPrices: false }),
+      buildOpportunityPanel({ symbols: [parsed.symbol] }),
     ]);
     const bootstrapRow = bootstrap.assetUniverse.find((item) => item.assetKey === `${parsed.market}::${parsed.symbol}`) || null;
     let resolvedAssetRow = bootstrapRow;
     if (bootstrapRow) {
       try {
-        resolvedAssetRow = await preferAssetRowPriceV1(bootstrapRow, "asset_insights");
+        resolvedAssetRow = await preferAssetRowPrice(bootstrapRow, "asset_insights");
       } catch {
         resolvedAssetRow = bootstrapRow;
       }
     }
-    const priceSnapshot = toPriceSnapshotV1(resolvedAssetRow);
+    const priceSnapshot = toPriceSnapshot(resolvedAssetRow);
     const marketContext = bootstrap.marketContext || null;
-    const marketAttribution = buildMarketContextAttributionV1({
+    const marketAttribution = buildMarketContextAttribution({
       symbol: parsed.symbol,
       assetClass: resolvedAssetRow?.assetClass,
       marketGroup: resolvedAssetRow?.marketGroup,
@@ -177,7 +177,7 @@ export async function GET(req: Request, ctx: Ctx) {
     }
 
     const llmAnalysis = includeLlm && opp
-      ? await runLlmAnalysisV1({
+      ? await runLlmAnalysis({
         analysisContext: "insight",
         baseCurrency: "USD",
         shouldRebalance: opp.action === "open_or_add",
@@ -203,26 +203,26 @@ export async function GET(req: Request, ctx: Ctx) {
         bearish: llmAnalysis.riskNotes.slice(0, 4),
         uncertainties: riskHints.slice(0, 4),
         actions: [
-          opp ? `${mapOpportunityActionLabelZhV1(opp.action)}（${opp.symbol}）` : "继续观察",
+          opp ? `${mapOpportunityActionLabelZh(opp.action)}（${opp.symbol}）` : "继续观察",
           ...(llmAnalysis.opportunityNotes.slice(0, 2)),
         ],
       }
       : null;
 
-    return okV1({
+    return ok({
       assetKey: `${parsed.market}::${parsed.symbol}`,
       symbol: parsed.symbol,
       generatedAt: new Date().toISOString(),
       priceSnapshot,
       opportunity: opp ? {
         action: opp.action,
-        actionLabelZh: mapOpportunityActionLabelZhV1(opp.action),
+        actionLabelZh: mapOpportunityActionLabelZh(opp.action),
         finalScorePct: opp.finalScorePct,
         confidencePct: opp.confidencePct,
         riskScorePct: opp.riskScorePct,
         reasons: opp.reasons,
-        reasonZh: summarizeOpportunityReasonZhV1(opp.reasons),
-        riskZh: summarizeOpportunityRiskZhV1(opp.riskScorePct, opp.reasons),
+        reasonZh: summarizeOpportunityReasonZh(opp.reasons),
+        riskZh: summarizeOpportunityRiskZh(opp.riskScorePct, opp.reasons),
         scores: opp.scores,
       } : null,
       technical: technical ? {
@@ -256,7 +256,7 @@ export async function GET(req: Request, ctx: Ctx) {
           {
             key: "valuation_temperature",
             label: "估值温度",
-            value: valuationTemperatureLabelV1(valuation.temperature),
+            value: valuationTemperatureLabel(valuation.temperature),
             status: valuation.temperature === "cheap" ? "bullish" : (valuation.temperature === "expensive" ? "bearish" : "neutral"),
           },
           {

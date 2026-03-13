@@ -1,6 +1,6 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { appendDaaEquitySnapshotV1, listDaaEquitySnapshotsV1 } from "@/src/daa/store/daaStorePgV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { appendDaaEquitySnapshot, listDaaEquitySnapshots } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
@@ -15,27 +15,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     const url = new URL(req.url);
-    const snapshots = await listDaaEquitySnapshotsV1(toLimit(url.searchParams.get("limit")));
-    return okV1({ snapshots });
+    const snapshots = await listDaaEquitySnapshots(toLimit(url.searchParams.get("limit")));
+    return ok({ snapshots });
   });
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<{ snapshot?: unknown }>(req);
+    const body = await readJsonBody<{ snapshot?: unknown }>(req);
     if (!isRecord(body?.snapshot)) {
-      return failV1("VALIDATION_FAILED", "snapshot must be an object", { status: 400 });
+      return fail("VALIDATION_FAILED", "snapshot must be an object", { status: 400 });
     }
 
-    const snapshot = await appendDaaEquitySnapshotV1(body.snapshot as any);
-    return okV1({ snapshot });
+    const snapshot = await appendDaaEquitySnapshot(body.snapshot as any);
+    return ok({ snapshot });
   });
 }

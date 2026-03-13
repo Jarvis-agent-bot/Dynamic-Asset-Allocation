@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createMarketDataClient } from "./marketDataClient";
 
 describe("market/marketDataClient", () => {
-  it("yfinance.priceSeries() builds the expected URL and unwraps ApiResponseV1", async () => {
+  it("yfinance.priceSeries() builds the expected URL and unwraps ApiResponse", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -36,7 +36,7 @@ describe("market/marketDataClient", () => {
     expect(init?.method).toBe("GET");
   });
 
-  it("yahoo.rss() throws a useful error on ApiResponseV1 failures", async () => {
+  it("yahoo.rss() throws a useful error on ApiResponse failures", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(JSON.stringify({
         ok: false,

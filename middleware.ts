@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { DAA_AUTH_SESSION_COOKIE_V0 } from "./src/daa/auth/daaAuthConstantsV0";
+import { DAA_AUTH_SESSION_COOKIE_ } from "./src/daa/auth/daaAuthConstants";
 
 // 统一 DAA 路径的尾部斜杠，避免线上环境 308 干扰体验。
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
-  const token = req.cookies.get(DAA_AUTH_SESSION_COOKIE_V0)?.value?.trim() || "";
+  const token = req.cookies.get(DAA_AUTH_SESSION_COOKIE_)?.value?.trim() || "";
 
   // Keep `/daa/` as-is; only normalize deeper paths.
   if (pathname.startsWith("/daa/") && pathname.length > "/daa/".length && pathname.endsWith("/")) {

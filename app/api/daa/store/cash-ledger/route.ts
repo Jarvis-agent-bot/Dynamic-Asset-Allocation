@@ -1,6 +1,6 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { appendDaaCashLedgerEntryV1, listDaaCashLedgerEntriesV1 } from "@/src/daa/store/daaStorePgV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { appendDaaCashLedgerEntry, listDaaCashLedgerEntries } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
@@ -11,17 +11,17 @@ function toLimit(value: string | null): number {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     const url = new URL(req.url);
-    const entries = await listDaaCashLedgerEntriesV1(toLimit(url.searchParams.get("limit")));
-    return okV1({ entries });
+    const entries = await listDaaCashLedgerEntries(toLimit(url.searchParams.get("limit")));
+    return ok({ entries });
   });
 }
 
-type CashLedgerBodyV1 = {
+type CashLedgerBody = {
   side?: unknown;
   amount?: unknown;
   baseCurrency?: unknown;
@@ -37,34 +37,34 @@ function normalizeBaseCurrency(value: unknown): string {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<CashLedgerBodyV1>(req);
+    const body = await readJsonBody<CashLedgerBody>(req);
     const side = String(body?.side || "").trim().toLowerCase();
     const amount = Number(body?.amount || 0);
 
     if (side !== "deposit" && side !== "withdraw") {
-      return failV1("VALIDATION_FAILED", "side must be deposit or withdraw", { status: 400 });
+      return fail("VALIDATION_FAILED", "side must be deposit or withdraw", { status: 400 });
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      return failV1("VALIDATION_FAILED", "amount must be a positive number", { status: 400 });
+      return fail("VALIDATION_FAILED", "amount must be a positive number", { status: 400 });
     }
 
     const baseCurrency = normalizeBaseCurrency(body?.baseCurrency);
     if (!SUPPORTED_CASH_CURRENCIES.has(baseCurrency)) {
-      return failV1("VALIDATION_FAILED", "baseCurrency must be one of USD/CNY/HKD/EUR/USDC", { status: 400 });
+      return fail("VALIDATION_FAILED", "baseCurrency must be one of USD/CNY/HKD/EUR/USDC", { status: 400 });
     }
 
-    const result = await appendDaaCashLedgerEntryV1({
+    const result = await appendDaaCashLedgerEntry({
       side,
       amount,
       baseCurrency,
       note: String(body?.note || "").trim() || undefined,
     });
 
-    return okV1(result);
+    return ok(result);
   });
 }

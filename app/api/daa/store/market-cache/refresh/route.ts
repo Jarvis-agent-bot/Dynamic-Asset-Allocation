@@ -1,12 +1,12 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { refreshMarketPricesV1, type MarketPriceAssetInputV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
-import { WORKBENCH_FEATURED_ASSETS_CATALOG_V1 } from "@/src/daa/modules/workbench/featuredAssetsCatalogV1";
-import { getDaaSystemConfigV2, listDaaAssetUniverseV1 } from "@/src/daa/store/daaStorePgV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
+import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
+import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
-type RefreshBodyV1 = {
+type RefreshBody = {
   assets?: unknown;
   timeoutMs?: unknown;
   concurrency?: unknown;
@@ -22,7 +22,7 @@ function normalizeUpper(value: unknown, fallback = ""): string {
   return normalizeText(value, fallback).toUpperCase();
 }
 
-function inferMarketBySymbolV1(symbolRaw: string): string {
+function inferMarketBySymbol(symbolRaw: string): string {
   const symbol = normalizeUpper(symbolRaw);
   if (!symbol) return "US";
   if (symbol.endsWith(".HK")) return "HK";
@@ -31,14 +31,14 @@ function inferMarketBySymbolV1(symbolRaw: string): string {
   return "US";
 }
 
-function normalizeAssetsInputV1(input: unknown): MarketPriceAssetInputV1[] {
+function normalizeAssetsInput(input: unknown): MarketPriceAssetInput[] {
   if (!Array.isArray(input)) return [];
-  const out = new Map<string, MarketPriceAssetInputV1>();
+  const out = new Map<string, MarketPriceAssetInput>();
   for (const row of input) {
     const item = row && typeof row === "object" ? (row as Record<string, unknown>) : null;
     if (!item) continue;
     const symbol = normalizeUpper(item.symbol);
-    const market = normalizeUpper(item.market, inferMarketBySymbolV1(symbol));
+    const market = normalizeUpper(item.market, inferMarketBySymbol(symbol));
     if (!symbol) continue;
     const currency = normalizeUpper(item.currency, market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD");
     const key = `${market}::${symbol}`;
@@ -47,13 +47,13 @@ function normalizeAssetsInputV1(input: unknown): MarketPriceAssetInputV1[] {
   return [...out.values()];
 }
 
-async function buildDefaultTargetsV1(includeFeatured: boolean): Promise<MarketPriceAssetInputV1[]> {
+async function buildDefaultTargets(includeFeatured: boolean): Promise<MarketPriceAssetInput[]> {
   const [systemRow, rows] = await Promise.all([
-    getDaaSystemConfigV2(),
-    listDaaAssetUniverseV1(),
+    getDaaSystemConfig(),
+    listDaaAssetUniverse(),
   ]);
 
-  const out = new Map<string, MarketPriceAssetInputV1>();
+  const out = new Map<string, MarketPriceAssetInput>();
   for (const row of rows) {
     const key = `${row.market}::${row.symbol}`;
     out.set(key, {
@@ -66,7 +66,7 @@ async function buildDefaultTargetsV1(includeFeatured: boolean): Promise<MarketPr
   for (const symbol of systemRow.config.dataSources.priceFeed.symbols || []) {
     const normalized = normalizeUpper(symbol);
     if (!normalized) continue;
-    const market = inferMarketBySymbolV1(normalized);
+    const market = inferMarketBySymbol(normalized);
     const key = `${market}::${normalized}`;
     if (!out.has(key)) {
       out.set(key, {
@@ -78,7 +78,7 @@ async function buildDefaultTargetsV1(includeFeatured: boolean): Promise<MarketPr
   }
 
   if (includeFeatured) {
-    for (const row of WORKBENCH_FEATURED_ASSETS_CATALOG_V1) {
+    for (const row of WORKBENCH_FEATURED_ASSETS_CATALOG_) {
       const key = `${row.market}::${normalizeUpper(row.symbol)}`;
       if (out.has(key)) continue;
       out.set(key, {
@@ -93,31 +93,31 @@ async function buildDefaultTargetsV1(includeFeatured: boolean): Promise<MarketPr
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<RefreshBodyV1>(req);
-    const system = await getDaaSystemConfigV2();
+    const body = await readJsonBody<RefreshBody>(req);
+    const system = await getDaaSystemConfig();
     if (system.config.dataSources.priceFeed.enabled === false) {
-      return failV1("VALIDATION_FAILED", "priceFeed is disabled", {
+      return fail("VALIDATION_FAILED", "priceFeed is disabled", {
         status: 409,
         details: { code: "PRICE_FEED_DISABLED" },
       });
     }
     const cacheConfig = system.config.dataSources.priceFeed.marketCache;
     const includeFeatured = body?.includeFeatured !== false;
-    const manualTargets = normalizeAssetsInputV1(body?.assets);
-    const targets = manualTargets.length > 0 ? manualTargets : await buildDefaultTargetsV1(includeFeatured);
+    const manualTargets = normalizeAssetsInput(body?.assets);
+    const targets = manualTargets.length > 0 ? manualTargets : await buildDefaultTargets(includeFeatured);
 
     if (targets.length <= 0) {
-      return failV1("VALIDATION_FAILED", "no price targets", { status: 400 });
+      return fail("VALIDATION_FAILED", "no price targets", { status: 400 });
     }
 
     const timeoutMs = Math.max(600, Math.min(8000, Math.trunc(Number(body?.timeoutMs) || 2600)));
     const concurrency = Math.max(1, Math.min(12, Math.trunc(Number(body?.concurrency) || 6)));
 
-    const result = await refreshMarketPricesV1({
+    const result = await refreshMarketPrices({
       assets: targets,
       triggerSource: "manual_api",
       timeoutMs,
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
       rawRetentionDays: cacheConfig.rawRetentionDays,
     });
 
-    return okV1({
+    return ok({
       requested: targets.length,
       refreshed: result.refreshed,
       stale: result.stale,

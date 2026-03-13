@@ -1,6 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
+import { mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
 
@@ -21,18 +21,18 @@ function toTriggerSource(value: unknown): "calendar" | "drift" | "manual" | "ris
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
+    const body = await readJsonBody<Body>(req);
     const payload = (body || {}) as Body;
-    const data = await generateWorkbenchRebalanceCycleV1({
+    const data = await generateWorkbenchRebalanceCycle({
       triggerSource: toTriggerSource(payload.triggerSource),
       triggerReason: String(payload.triggerReason || "").trim(),
       analysisFocus: String(payload.analysisFocus || "").trim() || undefined,
       manual: payload.manual === true || payload.manual === "1" || payload.manual === "true",
     });
-    return okV1(data);
+    return ok(data);
   });
 }

@@ -1,28 +1,28 @@
 "use client";
 
-import { useStrategyLabModelV1 } from "@/app/daa/dashboard/_hooks/useStrategyLabModelV1";
+import { useStrategyLabModel } from "@/app/daa/dashboard/_hooks/useStrategyLabModel";
 import {
-  StrategyLabCandidateDetailPanelV1,
-  StrategyLabDeepAnalysisPanelV1,
-  StrategyLabEmptyStatePanelV1,
-  StrategyLabRunOverviewPanelV1,
-  StrategyLabSetupPanelV1,
-} from "@/app/daa/dashboard/strategy-lab/_components/StrategyLabSectionsV1";
+  StrategyLabCandidateDetailPanel,
+  StrategyLabDeepAnalysisPanel,
+  StrategyLabEmptyStatePanel,
+  StrategyLabRunOverviewPanel,
+  StrategyLabSetupPanel,
+} from "@/app/daa/dashboard/strategy-lab/_components/StrategyLabSections";
 
 export default function StrategyLabPageClient() {
-  const model = useStrategyLabModelV1();
+  const model = useStrategyLabModel();
 
   return (
     <div className="space-y-6 lg:space-y-7">
-      <StrategyLabSetupPanelV1 model={model} />
+      <StrategyLabSetupPanel model={model} />
       {model.result ? (
         <>
-          <StrategyLabRunOverviewPanelV1 model={model} />
-          <StrategyLabCandidateDetailPanelV1 model={model} />
-          <StrategyLabDeepAnalysisPanelV1 model={model} />
+          <StrategyLabRunOverviewPanel model={model} />
+          <StrategyLabCandidateDetailPanel model={model} />
+          <StrategyLabDeepAnalysisPanel model={model} />
         </>
       ) : (
-        <StrategyLabEmptyStatePanelV1 model={model} />
+        <StrategyLabEmptyStatePanel model={model} />
       )}
     </div>
   );

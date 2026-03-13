@@ -1,12 +1,12 @@
-import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { buildNewsSignalsV1 } from "@/src/daa/signals/newsSignalV1";
+import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { requireCronAuth } from "@/src/daa/cron/auth";
+import { buildNewsSignals } from "@/src/daa/signals/newsSignal";
 import {
-  appendDaaIngestJobLogV1,
-  getDaaSystemConfigV2,
-  listDaaAssetUniverseV1,
-} from "@/src/daa/store/daaStorePgV1";
-import { parseSymbolsFromNewsQueryV1 } from "@/src/market/yahooRssFetchV1";
+  appendDaaIngestJobLog,
+  getDaaSystemConfig,
+  listDaaAssetUniverse,
+} from "@/src/daa/store/daaStorePg";
+import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 
 export const runtime = "nodejs";
 
@@ -14,14 +14,14 @@ function normalizeUpper(value: unknown): string {
   return String(value || "").trim().toUpperCase();
 }
 
-function describeErrorV1(error: unknown): string {
+function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error || "unknown_error");
 }
 
-async function resolveSymbolsV1(): Promise<string[]> {
+async function resolveSymbols(): Promise<string[]> {
   const [system, assets] = await Promise.all([
-    getDaaSystemConfigV2(),
-    listDaaAssetUniverseV1(),
+    getDaaSystemConfig(),
+    listDaaAssetUniverse(),
   ]);
 
   const out = new Set<string>();
@@ -33,7 +33,7 @@ async function resolveSymbolsV1(): Promise<string[]> {
     const key = normalizeUpper(symbol);
     if (key) out.add(key);
   }
-  for (const symbol of parseSymbolsFromNewsQueryV1(newsFeed.query || "")) {
+  for (const symbol of parseSymbolsFromNewsQuery(newsFeed.query || "")) {
     const key = normalizeUpper(symbol);
     if (key) out.add(key);
   }
@@ -48,20 +48,20 @@ async function resolveSymbolsV1(): Promise<string[]> {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = requireCronAuthV1(req);
+  return withApiHandler(async () => {
+    const denied = requireCronAuth(req);
     if (denied) {
       const status = denied.status || 401;
-      return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
+      return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
     const startedAt = new Date().toISOString();
     let totalCount = 0;
     try {
-      const symbols = await resolveSymbolsV1();
+      const symbols = await resolveSymbols();
       totalCount = symbols.length;
       if (symbols.length <= 0) {
-        await appendDaaIngestJobLogV1({
+        await appendDaaIngestJobLog({
           jobType: "cron_news_refresh",
           triggerSource: "cron_news_refresh",
           status: "ok",
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
           failureCount: 0,
           diagnosticsJson: { reason: "no_symbols" },
         });
-        return okV1({
+        return ok({
           refreshedSymbols: 0,
           signals: 0,
           items: 0,
@@ -80,11 +80,11 @@ export async function POST(req: Request) {
         });
       }
 
-      const signals = await buildNewsSignalsV1({ symbols });
+      const signals = await buildNewsSignals({ symbols });
       const signalRows = signals.length;
       const itemRows = signals.reduce((acc, signal) => acc + signal.items.length, 0);
 
-      await appendDaaIngestJobLogV1({
+      await appendDaaIngestJobLog({
         jobType: "cron_news_refresh",
         triggerSource: "cron_news_refresh",
         status: signals.length > 0 ? "ok" : "partial",
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
         },
       });
 
-      return okV1({
+      return ok({
         refreshedSymbols: symbols.length,
         signals: signalRows,
         items: itemRows,
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       try {
-        await appendDaaIngestJobLogV1({
+        await appendDaaIngestJobLog({
           jobType: "cron_news_refresh",
           triggerSource: "cron_news_refresh",
           status: "failed",
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
           successCount: 0,
           failureCount: Math.max(1, totalCount),
           diagnosticsJson: {
-            error: describeErrorV1(error),
+            error: describeError(error),
           },
         });
       } catch {

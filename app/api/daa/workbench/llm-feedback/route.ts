@@ -1,6 +1,6 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { appendDaaLlmFeedbackV1, listDaaLlmFeedbackV1 } from "@/src/daa/store/daaStorePgV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { appendDaaLlmFeedback, listDaaLlmFeedback } from "@/src/daa/store/daaStorePg";
 
 type Body = {
   contextId?: unknown;
@@ -22,8 +22,8 @@ function normalizeScore(value: unknown): "up" | "down" | null {
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     const url = new URL(req.url);
@@ -32,9 +32,9 @@ export async function GET(req: Request) {
     const type = normalizeType(url.searchParams.get("type"));
     const days = Math.max(1, Math.min(30, Math.trunc(Number(url.searchParams.get("days") || 7) || 7)));
 
-    const rows = await listDaaLlmFeedbackV1({ type, limit });
+    const rows = await listDaaLlmFeedback({ type, limit });
     if (mode !== "stats") {
-      return okV1({ rows });
+      return ok({ rows });
     }
 
     const sinceMs = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     const useful = weekRows.filter((row) => row.score === "up").length;
     const useless = weekRows.filter((row) => row.score === "down").length;
     const total = useful + useless;
-    return okV1({
+    return ok({
       days,
       total,
       useful,
@@ -59,26 +59,26 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
+    const body = await readJsonBody<Body>(req);
     const contextId = String(body?.contextId || "").trim();
     if (!contextId) {
-      return failV1("VALIDATION_FAILED", "contextId is required", { status: 400 });
+      return fail("VALIDATION_FAILED", "contextId is required", { status: 400 });
     }
     const score = normalizeScore(body?.score);
     if (!score) {
-      return failV1("VALIDATION_FAILED", "score must be up or down", { status: 400 });
+      return fail("VALIDATION_FAILED", "score must be up or down", { status: 400 });
     }
 
-    const row = await appendDaaLlmFeedbackV1({
+    const row = await appendDaaLlmFeedback({
       contextId,
       type: normalizeType(body?.type),
       score,
       comment: String(body?.comment || "").trim() || undefined,
     });
-    return okV1({ row });
+    return ok({ row });
   });
 }

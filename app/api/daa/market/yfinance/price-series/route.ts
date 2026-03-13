@@ -1,5 +1,5 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
+import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 
 import { assertIsoDateString } from "@/src/core/isoDate";
 import { addDaysIsoUtc, normalizeYfinanceHistoricalQuotes, normalizeYfinanceSymbol } from "@/src/market/yfinance";
@@ -11,20 +11,20 @@ function epochSecondsUtcStart(iso: string): number {
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : NaN;
 }
 
-function isValidationMessageV1(message: string): boolean {
+function isValidationMessage(message: string): boolean {
   return /must match YYYY-MM-DD|must be a valid calendar date|must be a non-empty string/i.test(message);
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     try {
       const url = new URL(req.url);
       const symbolRaw = url.searchParams.get("symbol")?.trim();
     if (!symbolRaw) {
-      return failV1("VALIDATION_FAILED", "missing symbol", { status: 400 });
+      return fail("VALIDATION_FAILED", "missing symbol", { status: 400 });
     }
 
     const start = url.searchParams.get("start")?.trim() || undefined;
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     if (start !== undefined) assertIsoDateString(start, "start");
     if (end !== undefined) assertIsoDateString(end, "end");
     if (start && end && end < start) {
-      return failV1("VALIDATION_FAILED", "end must be >= start", {
+      return fail("VALIDATION_FAILED", "end must be >= start", {
         status: 400,
         details: { start, end },
       });
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
 
     const symbol = normalizeYfinanceSymbol(symbolRaw);
     if (!symbol) {
-      return failV1("VALIDATION_FAILED", "invalid symbol", { status: 400 });
+      return fail("VALIDATION_FAILED", "invalid symbol", { status: 400 });
     }
 
     const period1 = start ? epochSecondsUtcStart(start) : NaN;
@@ -70,7 +70,7 @@ export async function GET(req: Request) {
 
     const text = await response.text();
     if (!response.ok) {
-      return failV1("INTERNAL_ERROR", "yfinance upstream error", {
+      return fail("INTERNAL_ERROR", "yfinance upstream error", {
         status: 502,
         details: {
           status: response.status,
@@ -88,7 +88,7 @@ export async function GET(req: Request) {
 
     const err = payload?.chart?.error;
     if (err) {
-      return failV1("INTERNAL_ERROR", "yfinance chart error", {
+      return fail("INTERNAL_ERROR", "yfinance chart error", {
         status: 502,
         details: {
           code: err.code,
@@ -111,7 +111,7 @@ export async function GET(req: Request) {
 
     const normalized = normalizeYfinanceHistoricalQuotes(rows, { start, end });
 
-    return okV1({
+    return ok({
       source: "yfinance",
       interval: "1d",
       priceMode: useAdjustedClose ? "adjclose" : "close",
@@ -124,10 +124,10 @@ export async function GET(req: Request) {
     });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (isValidationMessageV1(message)) {
-        return failV1("VALIDATION_FAILED", message, { status: 400 });
+      if (isValidationMessage(message)) {
+        return fail("VALIDATION_FAILED", message, { status: 400 });
       }
-      return failV1("INTERNAL_ERROR", "yfinance price-series fetch failed", {
+      return fail("INTERNAL_ERROR", "yfinance price-series fetch failed", {
         status: 502,
         details: {
           message,

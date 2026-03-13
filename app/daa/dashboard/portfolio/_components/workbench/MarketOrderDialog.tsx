@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, TriangleAlert } from "lucide-react";
 
-import { formatDateTimeV1 } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
-import type { AssetUniverseViewV1, WorkbenchMarketOrderPreviewResultV1 } from "@/src/daa/modules/workbench/workbenchTypesV1";
+import type { AssetUniverseView, WorkbenchMarketOrderPreviewResult } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
   DeepLedgerActionButton,
@@ -19,24 +19,24 @@ import {
   deepLedgerSubtlePanelClassName,
 } from "../../../_components/DeepLedgerUI";
 
-function formatMaybeAmountV1(currency: string, value: number | null | undefined, digits = 4): string {
+function formatMaybeAmount(currency: string, value: number | null | undefined, digits = 4): string {
   if (value == null || !Number.isFinite(value)) return `${currency} --`;
   return `${currency} ${value.toFixed(digits)}`;
 }
 
 export default function MarketOrderDialog(props: {
   open: boolean;
-  row: AssetUniverseViewV1 | null;
+  row: AssetUniverseView | null;
   side: "BUY" | "SELL";
   loading?: boolean;
   onOpenChange: (next: boolean) => void;
-  onPreview: (input: { assetKey: string; side: "BUY" | "SELL"; qty?: number; notional?: number }) => Promise<WorkbenchMarketOrderPreviewResultV1>;
-  onSubmit: (preview: WorkbenchMarketOrderPreviewResultV1) => Promise<void>;
+  onPreview: (input: { assetKey: string; side: "BUY" | "SELL"; qty?: number; notional?: number }) => Promise<WorkbenchMarketOrderPreviewResult>;
+  onSubmit: (preview: WorkbenchMarketOrderPreviewResult) => Promise<void>;
 }) {
   const [qty, setQty] = useState("");
   const [notional, setNotional] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [preview, setPreview] = useState<WorkbenchMarketOrderPreviewResultV1 | null>(null);
+  const [preview, setPreview] = useState<WorkbenchMarketOrderPreviewResult | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -269,7 +269,7 @@ export default function MarketOrderDialog(props: {
                   </div>
                   <div className={cn(deepLedgerMonoPanelClassName, "min-h-[82px] px-3 py-2 leading-5")}>
                     <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">快照时间</div>
-                    <div className="mt-1 font-[var(--font-body)] text-xs leading-5 text-[var(--text)]">{formatDateTimeV1(preview.priceSnapshotAt)}</div>
+                    <div className="mt-1 font-[var(--font-body)] text-xs leading-5 text-[var(--text)]">{formatDateTime(preview.priceSnapshotAt)}</div>
                   </div>
                 </div>
 
@@ -283,7 +283,7 @@ export default function MarketOrderDialog(props: {
                 <DeepLedgerMiniStat label="名义金额" value={`${preview.currency} ${preview.grossNotional.toFixed(4)}`} tone="amber" />
                 <DeepLedgerMiniStat
                   label="基准币折算"
-                  value={formatMaybeAmountV1(preview.baseCurrency, preview.notionalInBase)}
+                  value={formatMaybeAmount(preview.baseCurrency, preview.notionalInBase)}
                   hint={preview.fxRateToBase == null ? "缺少有效汇率，当前仅可预览不可执行" : `汇率 ${preview.fxRateToBase.toFixed(6)}` }
                   tone="indigo"
                 />

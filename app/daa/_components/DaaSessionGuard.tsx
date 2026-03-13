@@ -4,11 +4,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
-import { fetchDaaAuthSessionV1 } from "./daaAuthSessionClientV1";
+import { fetchDaaAuthSession } from "./daaAuthSessionClient";
 
 const SESSION_EXPIRED_NOTICE_AT_KEY = "daa_notice_session_expired_at_v0";
 const SESSION_EXPIRED_REDIRECT_DELAY_MS = 650;
-const DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1 = "daa:dashboard:persist-error";
+const DAA_DASHBOARD_PERSIST_ERROR_EVENT_ = "daa:dashboard:persist-error";
 
 function buildLoginHref(returnTo: string): string {
   const safe = returnTo && returnTo.startsWith("/") ? returnTo : "/daa/dashboard";
@@ -35,7 +35,7 @@ export default function DaaSessionGuard() {
       if (cancelled || redirectingRef.current) return;
 
       try {
-        const result = await fetchDaaAuthSessionV1({
+        const result = await fetchDaaAuthSession({
           silent: true,
           force: true,
           cacheTtlMs: 0,
@@ -102,9 +102,9 @@ export default function DaaSessionGuard() {
       toast.error(message);
     }
 
-    window.addEventListener(DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1, onPersistError as EventListener);
+    window.addEventListener(DAA_DASHBOARD_PERSIST_ERROR_EVENT_, onPersistError as EventListener);
     return () => {
-      window.removeEventListener(DAA_DASHBOARD_PERSIST_ERROR_EVENT_V1, onPersistError as EventListener);
+      window.removeEventListener(DAA_DASHBOARD_PERSIST_ERROR_EVENT_, onPersistError as EventListener);
     };
   }, []);
 

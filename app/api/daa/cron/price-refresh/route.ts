@@ -1,15 +1,15 @@
-import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { runLoggedJobV1 } from "@/src/daa/jobs/jobServiceV1";
-import { refreshMarketPricesV1, type MarketPriceAssetInputV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
-import { getMarketIndicatorRefreshSymbolsV1 } from "@/src/daa/modules/marketContext/marketIndicatorCatalogV1";
-import { WORKBENCH_FEATURED_ASSETS_CATALOG_V1 } from "@/src/daa/modules/workbench/featuredAssetsCatalogV1";
+import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { requireCronAuth } from "@/src/daa/cron/auth";
+import { runLoggedJob } from "@/src/daa/jobs/jobService";
+import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
+import { getMarketIndicatorRefreshSymbols } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
+import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import {
-  appendAssetPriceHistoryRowsV1,
-  getDaaSystemConfigV2,
-  listDaaAssetUniverseV1,
-  updateDaaAssetUniverseLastPriceV1,
-} from "@/src/daa/store/daaStorePgV1";
+  appendAssetPriceHistoryRows,
+  getDaaSystemConfig,
+  listDaaAssetUniverse,
+  updateDaaAssetUniverseLastPrice,
+} from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,7 @@ function normalizeUpper(value: unknown, fallback = ""): string {
   return text || fallback;
 }
 
-function inferMarketBySymbolV1(symbolRaw: string): string {
+function inferMarketBySymbol(symbolRaw: string): string {
   const symbol = normalizeUpper(symbolRaw);
   if (!symbol) return "US";
   if (symbol.endsWith(".HK")) return "HK";
@@ -27,8 +27,8 @@ function inferMarketBySymbolV1(symbolRaw: string): string {
   return "US";
 }
 
-function dedupeTargetsV1(rows: MarketPriceAssetInputV1[]): MarketPriceAssetInputV1[] {
-  const out = new Map<string, MarketPriceAssetInputV1>();
+function dedupeTargets(rows: MarketPriceAssetInput[]): MarketPriceAssetInput[] {
+  const out = new Map<string, MarketPriceAssetInput>();
   for (const row of rows) {
     const market = normalizeUpper(row.market, "US");
     const symbol = normalizeUpper(row.symbol);
@@ -46,14 +46,14 @@ function dedupeTargetsV1(rows: MarketPriceAssetInputV1[]): MarketPriceAssetInput
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = requireCronAuthV1(req);
+  return withApiHandler(async () => {
+    const denied = requireCronAuth(req);
     if (denied) {
       const status = denied.status || 401;
-      return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
+      return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJobV1({
+    const execution = await runLoggedJob({
       req,
       jobType: "cron_price_refresh",
       triggerSource: "cron_price_refresh",
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         refreshedAssets: result.refreshedAssets,
       }),
       handler: async () => {
-        const [system, assetRows] = await Promise.all([getDaaSystemConfigV2(), listDaaAssetUniverseV1()]);
+        const [system, assetRows] = await Promise.all([getDaaSystemConfig(), listDaaAssetUniverse()]);
         const priceFeed = system.config.dataSources.priceFeed;
         if (priceFeed.enabled === false) {
           return {
@@ -83,27 +83,27 @@ export async function POST(req: Request) {
         }
         const marketCache = priceFeed.marketCache;
 
-        const targets = dedupeTargetsV1([
+        const targets = dedupeTargets([
           ...assetRows.map((row) => ({
             market: row.market,
             symbol: row.symbol,
             currency: row.currency,
           })),
           ...(system.config.dataSources.priceFeed.symbols || []).map((symbol) => {
-            const market = inferMarketBySymbolV1(symbol);
+            const market = inferMarketBySymbol(symbol);
             return {
               market,
               symbol: normalizeUpper(symbol),
               currency: market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD",
             };
           }),
-          ...WORKBENCH_FEATURED_ASSETS_CATALOG_V1.map((row) => ({
+          ...WORKBENCH_FEATURED_ASSETS_CATALOG_.map((row) => ({
             market: row.market,
             symbol: row.symbol,
             currency: row.currency,
           })),
-          ...getMarketIndicatorRefreshSymbolsV1(system.config.dataSources.marketIndicators).map((symbol) => {
-            const market = inferMarketBySymbolV1(symbol);
+          ...getMarketIndicatorRefreshSymbols(system.config.dataSources.marketIndicators).map((symbol) => {
+            const market = inferMarketBySymbol(symbol);
             return {
               market,
               symbol: normalizeUpper(symbol),
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
           }),
         ]);
 
-        const result = await refreshMarketPricesV1({
+        const result = await refreshMarketPrices({
           assets: targets,
           triggerSource: "cron_price_refresh",
           timeoutMs: 2600,
@@ -128,7 +128,7 @@ export async function POST(req: Request) {
           if (!priced || !(priced.price > 0)) continue;
           if (!priced.priceUpdatedAt) continue;
           const updatedAt = priced.priceUpdatedAt;
-          const updated = await updateDaaAssetUniverseLastPriceV1({
+          const updated = await updateDaaAssetUniverseLastPrice({
             assetKey: row.assetKey,
             lastPrice: priced.price,
             priceUpdatedAt: updatedAt,
@@ -144,7 +144,7 @@ export async function POST(req: Request) {
         }
 
         if (historyRows.length > 0) {
-          await appendAssetPriceHistoryRowsV1(historyRows);
+          await appendAssetPriceHistoryRows(historyRows);
         }
 
         return {
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return okV1({
+    return ok({
       ...execution.result,
       requestId: execution.requestId,
       jobId: execution.jobId,

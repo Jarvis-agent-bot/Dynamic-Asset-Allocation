@@ -6,11 +6,11 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import type {
-  WorkbenchFeaturedAssetGroupV1,
-  WorkbenchFeaturedAssetItemV1,
-  WorkbenchFeaturedAssetsResultV1,
-  WorkbenchSearchAssetResultV1,
-} from "@/src/daa/modules/workbench/workbenchTypesV1";
+  WorkbenchFeaturedAssetGroup,
+  WorkbenchFeaturedAssetItem,
+  WorkbenchFeaturedAssetsResult,
+  WorkbenchSearchAssetResult,
+} from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
   DeepLedgerActionButton,
@@ -27,7 +27,7 @@ import {
   deepLedgerTableShellClassName,
 } from "../../../_components/DeepLedgerUI";
 
-const ASSET_CLASS_OPTIONS_V1 = [
+const ASSET_CLASS_OPTIONS_ = [
   { value: "ALL", label: "全部" },
   { value: "EQUITY", label: "股票" },
   { value: "ETF", label: "ETF" },
@@ -36,7 +36,7 @@ const ASSET_CLASS_OPTIONS_V1 = [
   { value: "CRYPTO", label: "加密" },
 ] as const;
 
-const MARKET_OPTIONS_V1 = [
+const MARKET_OPTIONS_ = [
   { value: "ALL", label: "全部" },
   { value: "US", label: "美股" },
   { value: "HK", label: "港股" },
@@ -44,7 +44,7 @@ const MARKET_OPTIONS_V1 = [
   { value: "CRYPTO", label: "加密" },
 ] as const;
 
-function assetClassLabelZhV1(value: string): string {
+function assetClassLabelZh(value: string): string {
   const key = String(value || "").toUpperCase();
   if (key === "EQUITY") return "股票";
   if (key === "ETF") return "ETF";
@@ -56,7 +56,7 @@ function assetClassLabelZhV1(value: string): string {
   return key || "其他";
 }
 
-function regionLabelZhV1(value: string): string {
+function regionLabelZh(value: string): string {
   const key = String(value || "").toUpperCase();
   if (key === "US") return "美国";
   if (key === "HK") return "香港";
@@ -67,7 +67,7 @@ function regionLabelZhV1(value: string): string {
   return key || "其他";
 }
 
-function marketLabelZhV1(value: string): string {
+function marketLabelZh(value: string): string {
   const key = String(value || "").toUpperCase();
   if (key === "US") return "美股";
   if (key === "HK") return "港股";
@@ -76,7 +76,7 @@ function marketLabelZhV1(value: string): string {
   return key || "其他";
 }
 
-function currencySymbolV1(currency: string): string {
+function currencySymbol(currency: string): string {
   const ccy = String(currency || "").trim().toUpperCase();
   if (ccy === "CNY" || ccy === "RMB") return "¥";
   if (ccy === "HKD") return "HK$";
@@ -86,17 +86,17 @@ function currencySymbolV1(currency: string): string {
   return ccy || "-";
 }
 
-function assetKeyV1(input: { market: string; symbol: string }): string {
+function assetKey(input: { market: string; symbol: string }): string {
   return `${String(input.market || "").trim().toUpperCase()}::${String(input.symbol || "").trim().toUpperCase()}`;
 }
 
-function assetTestIdV1(input: { market: string; symbol: string }): string {
+function assetTestId(input: { market: string; symbol: string }): string {
   return `${String(input.market || "").trim().toLowerCase()}-${String(input.symbol || "").trim().toLowerCase()}`
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
 
-function priceToneV1(status?: string | null): "cyan" | "amber" | "red" {
+function priceTone(status?: string | null): "cyan" | "amber" | "red" {
   if (status === "fresh") return "cyan";
   if (status === "stale") return "amber";
   return "red";
@@ -105,18 +105,18 @@ function priceToneV1(status?: string | null): "cyan" | "amber" | "red" {
 export default function AssetDiscoveryPanel(props: {
   loading?: boolean;
   joinedAssetKeys: Record<string, true>;
-  onListFeaturedAssets: (input: { market: string; assetClass: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResultV1>;
-  onSearch: (input: { q: string; market: string; assetClass: string; region: string }) => Promise<WorkbenchSearchAssetResultV1[]>;
-  onAddAsset: (item: WorkbenchSearchAssetResultV1 | WorkbenchFeaturedAssetItemV1) => Promise<void>;
+  onListFeaturedAssets: (input: { market: string; assetClass: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
+  onSearch: (input: { q: string; market: string; assetClass: string; region: string }) => Promise<WorkbenchSearchAssetResult[]>;
+  onAddAsset: (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => Promise<void>;
 }) {
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("ALL");
   const [assetClass, setAssetClass] = useState("ALL");
   const [searching, setSearching] = useState(false);
   const [addingAssetKey, setAddingAssetKey] = useState<string | null>(null);
-  const [items, setItems] = useState<WorkbenchSearchAssetResultV1[]>([]);
+  const [items, setItems] = useState<WorkbenchSearchAssetResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
-  const [featuredGroups, setFeaturedGroups] = useState<WorkbenchFeaturedAssetGroupV1[]>([]);
+  const [featuredGroups, setFeaturedGroups] = useState<WorkbenchFeaturedAssetGroup[]>([]);
   const [featuredLoading, setFeaturedLoading] = useState(false);
   const [featuredError, setFeaturedError] = useState("");
   const [featuredCollapsed, setFeaturedCollapsed] = useState(false);
@@ -151,8 +151,8 @@ export default function AssetDiscoveryPanel(props: {
     void loadFeatured();
   }, [featuredCollapsed, loadFeatured]);
 
-  function isJoinedV1(input: { market: string; symbol: string }): boolean {
-    return Boolean(props.joinedAssetKeys[assetKeyV1(input)]);
+  function isJoined(input: { market: string; symbol: string }): boolean {
+    return Boolean(props.joinedAssetKeys[assetKey(input)]);
   }
 
   async function handleSearch() {
@@ -174,9 +174,9 @@ export default function AssetDiscoveryPanel(props: {
     }
   }
 
-  async function handleAdd(item: WorkbenchSearchAssetResultV1 | WorkbenchFeaturedAssetItemV1) {
+  async function handleAdd(item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) {
     if (addingAssetKey) return;
-    const nextKey = assetKeyV1(item);
+    const nextKey = assetKey(item);
     setAddingAssetKey(nextKey);
     try {
       await props.onAddAsset(item);
@@ -223,8 +223,8 @@ export default function AssetDiscoveryPanel(props: {
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <DeepLedgerMiniStat label="当前市场" value={marketLabelZhV1(market)} tone="cyan" />
-            <DeepLedgerMiniStat label="资产类型" value={assetClassLabelZhV1(assetClass)} tone="amber" />
+            <DeepLedgerMiniStat label="当前市场" value={marketLabelZh(market)} tone="cyan" />
+            <DeepLedgerMiniStat label="资产类型" value={assetClassLabelZh(assetClass)} tone="amber" />
             <DeepLedgerMiniStat label="已纳入观察" value={Object.keys(props.joinedAssetKeys).length} tone="indigo" />
           </div>
         </div>
@@ -233,7 +233,7 @@ export default function AssetDiscoveryPanel(props: {
           <div className="space-y-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">资产类筛选</div>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {ASSET_CLASS_OPTIONS_V1.map((option) => (
+              {ASSET_CLASS_OPTIONS_.map((option) => (
                 <DeepLedgerFilterChip
                   key={option.value}
                   active={assetClass === option.value}
@@ -247,7 +247,7 @@ export default function AssetDiscoveryPanel(props: {
           <div className="space-y-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">市场筛选</div>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {MARKET_OPTIONS_V1.map((option) => (
+              {MARKET_OPTIONS_.map((option) => (
                 <DeepLedgerFilterChip
                   key={option.value}
                   active={market === option.value}
@@ -316,15 +316,15 @@ export default function AssetDiscoveryPanel(props: {
                     </div>
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-4">
                       {group.items.map((item) => {
-                        const joined = isJoinedV1(item);
-                        const busy = addingAssetKey === assetKeyV1(item);
+                        const joined = isJoined(item);
+                        const busy = addingAssetKey === assetKey(item);
                         const displayName = item.longName || item.shortName || item.name || item.symbol;
-                        const testId = assetTestIdV1(item);
+                        const testId = assetTestId(item);
                         return (
                           <div
                             key={`${group.market}::${item.symbol}`}
                             data-testid={`featured-asset-${testId}`}
-                            data-asset-key={assetKeyV1(item)}
+                            data-asset-key={assetKey(item)}
                             className="group rounded-[16px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.96),rgba(10,15,25,0.98))] p-4 shadow-[0_16px_36px_rgba(0,0,0,0.22)] transition-transform duration-200 hover:-translate-y-0.5"
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -332,8 +332,8 @@ export default function AssetDiscoveryPanel(props: {
                                 <div className="truncate text-sm font-semibold text-[var(--text)]" title={displayName}>
                                   {displayName}
                                 </div>
-                                <div className="mt-1 truncate text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]" title={`${item.symbol} · ${marketLabelZhV1(item.market)}`}>
-                                  {item.symbol} · {marketLabelZhV1(item.market)}
+                                <div className="mt-1 truncate text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]" title={`${item.symbol} · ${marketLabelZh(item.market)}`}>
+                                  {item.symbol} · {marketLabelZh(item.market)}
                                 </div>
                               </div>
                               <DeepLedgerActionButton
@@ -349,14 +349,14 @@ export default function AssetDiscoveryPanel(props: {
                             </div>
 
                             <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <DeepLedgerStatusPill tone="slate">{assetClassLabelZhV1(item.assetClass)}</DeepLedgerStatusPill>
-                              <DeepLedgerStatusPill tone={priceToneV1(item.priceStatus)}>
-                                {item.price > 0 ? `${currencySymbolV1(item.currency)} ${item.price.toFixed(2)}` : "待补行情"}
+                              <DeepLedgerStatusPill tone="slate">{assetClassLabelZh(item.assetClass)}</DeepLedgerStatusPill>
+                              <DeepLedgerStatusPill tone={priceTone(item.priceStatus)}>
+                                {item.price > 0 ? `${currencySymbol(item.currency)} ${item.price.toFixed(2)}` : "待补行情"}
                               </DeepLedgerStatusPill>
                             </div>
 
                             <div className="mt-3 space-y-1 text-xs text-[var(--muted)]">
-                              <div>{regionLabelZhV1(item.region)} · {item.exchangeDisp || item.exchange || "交易所待补充"}</div>
+                              <div>{regionLabelZh(item.region)} · {item.exchangeDisp || item.exchange || "交易所待补充"}</div>
                               {item.thesisTagZh ? (
                                 <div className="truncate text-[var(--faint)]" title={item.thesisTagZh}>
                                   {item.thesisTagZh}
@@ -379,8 +379,8 @@ export default function AssetDiscoveryPanel(props: {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-sm font-semibold text-[var(--text)]">精准搜索</div>
-            <DeepLedgerStatusPill tone="slate">{marketLabelZhV1(market)}</DeepLedgerStatusPill>
-            <DeepLedgerStatusPill tone="slate">{assetClassLabelZhV1(assetClass)}</DeepLedgerStatusPill>
+            <DeepLedgerStatusPill tone="slate">{marketLabelZh(market)}</DeepLedgerStatusPill>
+            <DeepLedgerStatusPill tone="slate">{assetClassLabelZh(assetClass)}</DeepLedgerStatusPill>
             {hasSearched ? <DeepLedgerStatusPill tone="indigo">结果 {items.length}</DeepLedgerStatusPill> : null}
           </div>
           <div className="text-xs leading-5 text-[var(--muted)]">
@@ -453,15 +453,15 @@ export default function AssetDiscoveryPanel(props: {
           </thead>
           <tbody>
             {items.map((item) => {
-              const joined = isJoinedV1(item);
-              const busy = addingAssetKey === assetKeyV1(item);
+              const joined = isJoined(item);
+              const busy = addingAssetKey === assetKey(item);
               const displayName = item.longName || item.shortName || item.name || item.symbol;
-              const testId = assetTestIdV1(item);
+              const testId = assetTestId(item);
               return (
                 <tr
                   key={`${item.market}::${item.symbol}`}
                   data-testid={`search-asset-row-${testId}`}
-                  data-asset-key={assetKeyV1(item)}
+                  data-asset-key={assetKey(item)}
                   className="border-b border-[var(--border)]/70 text-[13px] transition-colors hover:bg-[rgba(56,189,248,0.04)]"
                 >
                   <td className={deepLedgerTableCellClassName}>
@@ -478,16 +478,16 @@ export default function AssetDiscoveryPanel(props: {
                     </div>
                   </td>
                   <td className={cn(deepLedgerTableCellClassName, "text-xs text-[var(--muted)]")}>
-                    <div>{assetClassLabelZhV1(item.assetClass)} · {regionLabelZhV1(item.region)}</div>
+                    <div>{assetClassLabelZh(item.assetClass)} · {regionLabelZh(item.region)}</div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <DeepLedgerStatusPill tone="slate">{marketLabelZhV1(item.market)}</DeepLedgerStatusPill>
-                      <DeepLedgerStatusPill tone={priceToneV1(item.priceStatus)}>
+                      <DeepLedgerStatusPill tone="slate">{marketLabelZh(item.market)}</DeepLedgerStatusPill>
+                      <DeepLedgerStatusPill tone={priceTone(item.priceStatus)}>
                         {item.priceStatus === "stale" ? "价格偏旧" : item.price > 0 ? "可交易" : "待补行情"}
                       </DeepLedgerStatusPill>
                     </div>
                   </td>
                   <td className={cn(deepLedgerTableCellClassName, "text-right font-[var(--font-mono)] text-[var(--text)]")}>
-                    {item.price > 0 ? `${currencySymbolV1(item.currency)} ${item.price.toFixed(4)}` : "待补行情"}
+                    {item.price > 0 ? `${currencySymbol(item.currency)} ${item.price.toFixed(4)}` : "待补行情"}
                     {item.price > 0 && item.priceStatus === "stale" ? (
                       <div className="mt-1 text-[11px] text-[var(--amber)]">缓存稍旧</div>
                     ) : null}

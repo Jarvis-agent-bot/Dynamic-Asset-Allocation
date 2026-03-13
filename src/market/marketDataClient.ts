@@ -1,4 +1,4 @@
-import { isApiResponseV1 } from "@/src/daa/api/contractsV1";
+import { isApiResponse } from "@/src/daa/api/contracts";
 
 import type { PriceBar } from "../core/domain";
 
@@ -78,7 +78,7 @@ function toErrorMessage(payload: any, status: number): string {
   return raw || `http ${status}`;
 }
 
-function mergeHeadersV1(baseHeaders: HeadersInit | undefined, nextHeaders: HeadersInit | undefined): HeadersInit | undefined {
+function mergeHeaders(baseHeaders: HeadersInit | undefined, nextHeaders: HeadersInit | undefined): HeadersInit | undefined {
   if (!baseHeaders && !nextHeaders) return undefined;
   const headers = new Headers(baseHeaders || undefined);
   const next = new Headers(nextHeaders || undefined);
@@ -96,7 +96,7 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
     const response = await fetchFn(url, {
       method: "GET",
       ...init,
-      headers: mergeHeadersV1(opts.headers, init?.headers),
+      headers: mergeHeaders(opts.headers, init?.headers),
     });
 
     const text = await response.text();
@@ -106,7 +106,7 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
       throw new Error(toErrorMessage(payload, response.status));
     }
 
-    if (isApiResponseV1(payload)) {
+    if (isApiResponse(payload)) {
       if (!payload.ok) {
         throw new Error(toErrorMessage(payload, response.status));
       }

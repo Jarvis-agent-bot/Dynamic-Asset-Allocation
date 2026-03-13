@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { getDaaAuthContextFromRequestV0 } from "./auth/daaAuthRequestV0";
+import { getDaaAuthContextFromRequest } from "./auth/daaAuthRequest";
 
 export type DaaAdminRole = "viewer" | "editor";
 
-export type DaaAdminTokenKindV0 = "viewer" | "editor" | "unknown" | "none";
+export type DaaAdminTokenKind = "viewer" | "editor" | "unknown" | "none";
 
 function normalizeToken(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
@@ -16,12 +16,12 @@ function getAdminTokens() {
   return { viewer, editor };
 }
 
-export function getDaaAdminTokensConfiguredV0() {
+export function getDaaAdminTokensConfigured() {
   const { viewer, editor } = getAdminTokens();
   return { viewer: Boolean(viewer), editor: Boolean(editor) };
 }
 
-export function inferDaaAdminTokenKindV0(providedToken: string | null | undefined): DaaAdminTokenKindV0 {
+export function inferDaaAdminTokenKind(providedToken: string | null | undefined): DaaAdminTokenKind {
   const t = normalizeToken(providedToken);
   if (!t) return "none";
 
@@ -31,8 +31,8 @@ export function inferDaaAdminTokenKindV0(providedToken: string | null | undefine
   return "unknown";
 }
 
-export function inferDaaAdminRoleForTokenV0(providedToken: string | null | undefined): DaaAdminRole | null {
-  const kind = inferDaaAdminTokenKindV0(providedToken);
+export function inferDaaAdminRoleForToken(providedToken: string | null | undefined): DaaAdminRole | null {
+  const kind = inferDaaAdminTokenKind(providedToken);
   if (kind === "viewer") return "viewer";
   if (kind === "editor") return "editor";
   return null;
@@ -51,9 +51,9 @@ function unauthorized() {
   );
 }
 
-export type DaaAdminActorUserIdV0 = "viewer-token" | "editor-token" | "unknown-token";
+export type DaaAdminActorUserId = "viewer-token" | "editor-token" | "unknown-token";
 
-export function inferDaaAdminActorUserIdV0(providedToken: string | null | undefined): DaaAdminActorUserIdV0 {
+export function inferDaaAdminActorUserId(providedToken: string | null | undefined): DaaAdminActorUserId {
   const t = normalizeToken(providedToken);
   if (!t) return "unknown-token";
 
@@ -63,16 +63,16 @@ export function inferDaaAdminActorUserIdV0(providedToken: string | null | undefi
   return "unknown-token";
 }
 
-export function getDaaAdminActorUserIdFromRequestV0(req: Request): DaaAdminActorUserIdV0 {
-  return inferDaaAdminActorUserIdV0(parseBearer(req));
+export function getDaaAdminActorUserIdFromRequestSync(req: Request): DaaAdminActorUserId {
+  return inferDaaAdminActorUserId(parseBearer(req));
 }
 
 // Session-based actor id; used by write endpoints so audit logs can attribute actions.
-export async function getDaaAdminActorUserIdFromRequestV1(req: Request): Promise<string> {
-  const ctx = await getDaaAuthContextFromRequestV0(req);
+export async function getDaaAdminActorUserIdFromRequest(req: Request): Promise<string> {
+  const ctx = await getDaaAuthContextFromRequest(req);
   if (ctx?.account?.username) return `auth:${ctx.account.username}`;
   if (ctx?.account?.accountId) return `auth:${ctx.account.accountId}`;
-  return getDaaAdminActorUserIdFromRequestV0(req);
+  return getDaaAdminActorUserIdFromRequestSync(req);
 }
 
 function roleSatisfied(required: DaaAdminRole, rolesRaw: unknown): boolean {
@@ -89,7 +89,7 @@ function roleSatisfied(required: DaaAdminRole, rolesRaw: unknown): boolean {
  * - Roles are derived from the Postgres-backed auth account/session
  */
 export async function requireDaaAdminRole(req: Request, role: DaaAdminRole): Promise<NextResponse | null> {
-  const ctx = await getDaaAuthContextFromRequestV0(req);
+  const ctx = await getDaaAuthContextFromRequest(req);
   if (!ctx) return unauthorized();
   if (!roleSatisfied(role, ctx.account.roles)) return unauthorized();
   return null;

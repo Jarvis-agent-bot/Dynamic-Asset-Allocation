@@ -1,6 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { listDaaFxRatesV1, upsertDaaFxRatesV1 } from "@/src/daa/store/daaStorePgV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { listDaaFxRates, upsertDaaFxRates } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
@@ -139,25 +139,25 @@ async function fetchFxRateFromYfinance(baseCcy: string, quoteCcy: string): Promi
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<FxSnapshotBody>(req);
+    const body = await readJsonBody<FxSnapshotBody>(req);
     const baseCurrency = normalizeCcy(body?.baseCurrency, "USD");
     const pairs = normalizePairsInput(body?.pairs, baseCurrency);
 
     if (!pairs.length) {
-      return failV1("VALIDATION_FAILED", "pairs must include at least one valid pair", { status: 400 });
+      return fail("VALIDATION_FAILED", "pairs must include at least one valid pair", { status: 400 });
     }
     if (pairs.length > 20) {
-      return failV1("VALIDATION_FAILED", "pairs length exceeds limit(20)", { status: 400 });
+      return fail("VALIDATION_FAILED", "pairs length exceeds limit(20)", { status: 400 });
     }
 
     const nowIso = new Date().toISOString();
     const today = toShanghaiDay(new Date(nowIso));
 
-    const existingRates = await listDaaFxRatesV1();
+    const existingRates = await listDaaFxRates();
     const existingByPair = new Map(existingRates.map((row) => [
       `${normalizeCcy(row.baseCcy)}/${normalizeCcy(row.quoteCcy)}`,
       row,
@@ -168,7 +168,7 @@ export async function POST(req: Request) {
       .map((pair) => pair.pair);
 
     if (alreadyPulledPairs.length === pairs.length) {
-      return okV1({
+      return ok({
         pulledAt: nowIso,
         day: today,
         alreadyPulledToday: true,
@@ -193,9 +193,9 @@ export async function POST(req: Request) {
       updatedPairs.push(pair.pair);
     }
 
-    const rates = rowsToUpsert.length ? await upsertDaaFxRatesV1(rowsToUpsert) : existingRates;
+    const rates = rowsToUpsert.length ? await upsertDaaFxRates(rowsToUpsert) : existingRates;
 
-    return okV1({
+    return ok({
       pulledAt: nowIso,
       day: today,
       alreadyPulledToday: false,

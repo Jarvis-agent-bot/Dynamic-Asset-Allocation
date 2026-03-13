@@ -1,10 +1,10 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { normalizeDaaCurrencyCodeV1 } from "@/src/daa/assetKeyV1";
-import { resolveInvestableCashV1 } from "@/src/daa/account/resolveInvestableCashV1";
-import { buildFxLookupToBaseV1, resolveFxRateToBaseV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
-import { createDaaTradeTicketV1, executeDaaTradeTicketsV1, getDaaSystemConfigV2, listDaaFxRatesV1, listDaaTradeTicketsV1 } from "@/src/daa/store/daaStorePgV1";
-import { normalizeReasonTagsV1, normalizeTradeSideV1, validateExecutionRiskV1 } from "@/src/daa/modules/workbench/workbenchExecutionServiceV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
+import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
+import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
+import { createDaaTradeTicket, executeDaaTradeTickets, getDaaSystemConfig, listDaaFxRates, listDaaTradeTickets } from "@/src/daa/store/daaStorePg";
+import { normalizeReasonTags, normalizeTradeSide, validateExecutionRisk } from "@/src/daa/modules/workbench/workbenchExecutionService";
 
 export const runtime = "nodejs";
 
@@ -37,14 +37,14 @@ function normalizeSource(v: unknown): "manual" | "decision" {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
-    const side = normalizeTradeSideV1(body?.side);
+    const body = await readJsonBody<Body>(req);
+    const side = normalizeTradeSide(body?.side);
     if (!side) {
-      return failV1("VALIDATION_FAILED", "side must be BUY or SELL", { status: 400 });
+      return fail("VALIDATION_FAILED", "side must be BUY or SELL", { status: 400 });
     }
 
     const symbol = String(body?.symbol || "").trim().toUpperCase();
@@ -53,29 +53,29 @@ export async function POST(req: Request) {
     const price = Number(body?.price);
     const fee = Number(body?.fee || 0);
     if (!symbol) {
-      return failV1("VALIDATION_FAILED", "symbol is required", { status: 400 });
+      return fail("VALIDATION_FAILED", "symbol is required", { status: 400 });
     }
     if (!Number.isFinite(qty) || qty <= 0) {
-      return failV1("VALIDATION_FAILED", "qty must be > 0", { status: 400 });
+      return fail("VALIDATION_FAILED", "qty must be > 0", { status: 400 });
     }
     if (!Number.isFinite(price) || price <= 0) {
-      return failV1("VALIDATION_FAILED", "price must be > 0", { status: 400 });
+      return fail("VALIDATION_FAILED", "price must be > 0", { status: 400 });
     }
     if (!Number.isFinite(fee) || fee < 0) {
-      return failV1("VALIDATION_FAILED", "fee must be >= 0", { status: 400 });
+      return fail("VALIDATION_FAILED", "fee must be >= 0", { status: 400 });
     }
 
     const source = normalizeSource(body?.source ?? body?.origin);
-    const instrumentCurrency = normalizeDaaCurrencyCodeV1(body?.currency, "USD");
+    const instrumentCurrency = normalizeDaaCurrencyCode(body?.currency, "USD");
     const [systemRow, fxRows] = await Promise.all([
-      getDaaSystemConfigV2(),
-      listDaaFxRatesV1(),
+      getDaaSystemConfig(),
+      listDaaFxRates(),
     ]);
-    const baseCurrency = normalizeDaaCurrencyCodeV1(systemRow.config.strategy.account.baseCurrency, "USD");
-    const fxLookup = buildFxLookupToBaseV1(fxRows);
-    const fxRateToBase = resolveFxRateToBaseV1(baseCurrency, instrumentCurrency, fxLookup);
+    const baseCurrency = normalizeDaaCurrencyCode(systemRow.config.strategy.account.baseCurrency, "USD");
+    const fxLookup = buildFxLookupToBase(fxRows);
+    const fxRateToBase = resolveFxRateToBase(baseCurrency, instrumentCurrency, fxLookup);
     if (fxRateToBase == null || fxRateToBase <= 0) {
-      return failV1("VALIDATION_FAILED", `缺少汇率：${instrumentCurrency}/${baseCurrency}`, {
+      return fail("VALIDATION_FAILED", `缺少汇率：${instrumentCurrency}/${baseCurrency}`, {
         status: 409,
         details: {
           code: "FX_RATE_MISSING",
@@ -89,13 +89,13 @@ export async function POST(req: Request) {
     const feeInBase = fee * fxRateToBase;
     const totalCostInBase = side === "BUY" ? (notionalInBase + feeInBase) : Math.max(0, notionalInBase - feeInBase);
     const accountConfig = systemRow.config.strategy.account;
-    const investableCash = resolveInvestableCashV1({
+    const investableCash = resolveInvestableCash({
       cash: accountConfig.cash,
       frozenCash: accountConfig.frozenCash,
       investableCash: accountConfig.investableCash,
     });
     if (side === "BUY" && investableCash + 1e-9 < totalCostInBase) {
-      return failV1("VALIDATION_FAILED", `可投资现金不足：需要 ${totalCostInBase.toFixed(2)} ${baseCurrency}，当前可投资现金 ${investableCash.toFixed(2)} ${baseCurrency}`, {
+      return fail("VALIDATION_FAILED", `可投资现金不足：需要 ${totalCostInBase.toFixed(2)} ${baseCurrency}，当前可投资现金 ${investableCash.toFixed(2)} ${baseCurrency}`, {
         status: 409,
         details: {
           code: "INSUFFICIENT_INVESTABLE_CASH",
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
         },
       });
     }
-    const manualRiskCheck = await validateExecutionRiskV1({
+    const manualRiskCheck = await validateExecutionRisk({
       manualProposal: {
         assetKey: String(body?.assetKey || "").trim() || `${market}::${symbol}`,
         symbol,
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     });
     const blocked = manualRiskCheck.items.find((item) => item.status === "block");
     if (blocked) {
-      return failV1("VALIDATION_FAILED", blocked.message, {
+      return fail("VALIDATION_FAILED", blocked.message, {
         status: 409,
         details: {
           code: "RISK_BLOCKED",
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const item = await createDaaTradeTicketV1({
+    const item = await createDaaTradeTicket({
       source,
       side,
       assetKey: String(body?.assetKey || "").trim() || undefined,
@@ -145,21 +145,21 @@ export async function POST(req: Request) {
       priceSource: String(body?.priceSource || "").trim() || undefined,
       priceSnapshotAt: String(body?.priceSnapshotAt || "").trim() || undefined,
       decisionRefId: String(body?.decisionRefId || "").trim() || null,
-      reasonTags: normalizeReasonTagsV1(body?.reasonTags),
+      reasonTags: normalizeReasonTags(body?.reasonTags),
       reasonText: String(body?.reasonText || "").trim() || undefined,
       createdBy: String(body?.createdBy || "").trim() || "admin",
     });
 
-    const executed = await executeDaaTradeTicketsV1({ ticketIds: [item.ticketId] });
+    const executed = await executeDaaTradeTickets({ ticketIds: [item.ticketId] });
     const result = executed.results[0] || {
       ticketId: item.ticketId,
       status: "rejected" as const,
       rejectCode: "UNKNOWN",
       rejectMessage: "execution result missing",
     };
-    const logs = await listDaaTradeTicketsV1({ limit: 200 });
+    const logs = await listDaaTradeTickets({ limit: 200 });
 
-    return okV1({
+    return ok({
       item: executed.tickets.find((ticket) => ticket.ticketId === item.ticketId) || item,
       result,
       summary: {
