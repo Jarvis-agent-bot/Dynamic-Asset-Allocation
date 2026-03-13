@@ -42,6 +42,7 @@ import {
 } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 
+import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
 import { buildAssetUniverseViewRows } from "./assetUniverseService";
 import type {
   ExecuteRebalanceSummary,
@@ -408,11 +409,38 @@ export async function generateWorkbenchRebalanceCycle(
   // 将融合警告追加到系统 warnings
   const allWarnings = [...bootstrap.warnings, ...fusionResult.fusionWarnings];
 
+  // ── Step E.5: Tax-Loss Harvesting 扫描 ────────────────────────────
+  let tlhProposals: RebalanceProposal[] = [];
+  try {
+    const tlhResult = await scanTaxLossHarvestingCandidates({ bootstrap });
+    if (tlhResult.proposals.length > 0) {
+      // Filter out TLH proposals that conflict with existing fusion proposals
+      const existingSellKeys = new Set(
+        fusionResult.proposals
+          .filter((p) => p.side === "SELL")
+          .map((p) => p.assetKey.toUpperCase()),
+      );
+      tlhProposals = tlhResult.proposals.filter(
+        (p) => !existingSellKeys.has(p.assetKey.toUpperCase()),
+      );
+      if (tlhProposals.length > 0) {
+        allWarnings.push(
+          `发现 ${tlhProposals.length} 个税务收割机会，预计可收割损失 ${tlhResult.totalHarvestableBase.toFixed(0)} ${bootstrap.baseCurrency}`,
+        );
+      }
+    }
+  } catch {
+    // TLH scan failure does not block rebalance
+  }
+
+  // Merge TLH proposals with fusion proposals
+  const mergedProposals = [...fusionResult.proposals, ...tlhProposals];
+
   // ── Step F: 风险检查（使用融合后的建议）──────────────────────────
   const riskCheck = buildPreTradeRiskCheckFromBootstrap({
     bootstrap,
     systemConfig: systemRow.config,
-    proposals: fusionResult.proposals.filter((p) => p.selected),
+    proposals: mergedProposals.filter((p) => p.selected),
   });
 
   // ── Step G: 创建 Cycle（proposals 已含 decisionContext）──────────
@@ -430,6 +458,9 @@ export async function generateWorkbenchRebalanceCycle(
     cashClassification.cashIdleWarning
       ? `现金提示: 闲置资金 ${(cashClassification.investableIdlePct * 100).toFixed(1)}%（已${cashClassification.cashIdleDays}天）`
       : null,
+    tlhProposals.length > 0
+      ? `税务收割: ${tlhProposals.length} 条建议，预计损失收割 ${tlhProposals.reduce((sum, p) => sum + p.suggestedNotional, 0).toFixed(0)} ${bootstrap.baseCurrency}`
+      : null,
   ].filter(Boolean).join("\n");
 
   const created = await createDaaRebalanceCycle({
@@ -438,7 +469,7 @@ export async function generateWorkbenchRebalanceCycle(
     snapshotAt: new Date().toISOString(),
     equitySnapshot: Math.max(0, toFinite(bootstrap.account.totalEquity, 0)),
     driftSnapshot: draft.driftSnapshot,
-    proposals: fusionResult.proposals,
+    proposals: mergedProposals,
     riskCheck,
     notes: cycleNotes || null,
     marketContext,
@@ -450,7 +481,8 @@ export async function generateWorkbenchRebalanceCycle(
     cycleId: created.cycleId,
     status: "accepted",
     detailsJson: {
-      proposalCount: fusionResult.proposals.length,
+      proposalCount: mergedProposals.length,
+      tlhProposalCount: tlhProposals.length,
       riskOverallStatus: riskCheck.overallStatus,
       llmStatus: llmDecision.status,
       ruleBasedMarketRegime: marketContext?.regime || null,
