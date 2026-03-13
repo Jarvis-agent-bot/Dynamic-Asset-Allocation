@@ -85,7 +85,6 @@ export async function POST(req: Request) {
 
   const provided =
     normalizeToken(req.headers.get("x-daa-bootstrap-token")) ||
-    normalizeToken(body?.bootstrapToken) ||
     parseBearer(req);
 
   if (!secureEqual(provided, expected)) {

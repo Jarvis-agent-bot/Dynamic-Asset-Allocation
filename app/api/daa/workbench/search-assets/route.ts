@@ -58,6 +58,37 @@ function toPositive(...values: unknown[]): number {
   return 0;
 }
 
+type YahooQuoteRaw = {
+  symbol?: unknown;
+  exchange?: unknown;
+  exchDisp?: unknown;
+  shortname?: unknown;
+  longname?: unknown;
+  quoteType?: unknown;
+  typeDisp?: unknown;
+  currency?: unknown;
+  region?: unknown;
+  regularMarketPrice?: unknown;
+  postMarketPrice?: unknown;
+  bid?: unknown;
+  ask?: unknown;
+};
+
+function safeQuote(raw: unknown): YahooQuoteRaw {
+  if (!raw || typeof raw !== "object") return {};
+  return raw as YahooQuoteRaw;
+}
+
+function safeString(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+function safeQuotesArray(payload: unknown): unknown[] {
+  if (!payload || typeof payload !== "object") return [];
+  const obj = payload as Record<string, unknown>;
+  return Array.isArray(obj.quotes) ? obj.quotes : [];
+}
+
 function shouldSkipQuoteType(quoteTypeRaw: unknown): boolean {
   const quoteType = normalizeText(quoteTypeRaw).toUpperCase();
   if (!quoteType) return false;
@@ -196,48 +227,49 @@ export async function GET(req: Request) {
       });
     }
 
-    const payload = JSON.parse(text) as Record<string, unknown>;
-    const quotes = Array.isArray((payload as any)?.quotes) ? (payload as any).quotes : [];
+    const payload: unknown = JSON.parse(text);
+    const quotes = safeQuotesArray(payload);
 
     const out: SearchAssetItem[] = [];
     const dedup = new Set<string>();
 
-    for (const row of quotes) {
-      const symbol = normalizeText((row as any)?.symbol).toUpperCase();
-      if (shouldSkipQuoteType((row as any)?.quoteType)) continue;
-      const exchange = normalizeText((row as any)?.exchange || (row as any)?.exchDisp);
+    for (const raw of quotes) {
+      const row = safeQuote(raw);
+      const symbol = normalizeText(row.symbol).toUpperCase();
+      if (shouldSkipQuoteType(row.quoteType)) continue;
+      const exchange = normalizeText(safeString(row.exchange) || safeString(row.exchDisp));
       const market = inferMarket(symbol, exchange);
       const dedupKey = `${market}::${symbol}`;
       if (!symbol || dedup.has(dedupKey)) continue;
       const inferredAssetClass = inferAssetClassByQuoteType({
-        quoteType: (row as any)?.quoteType,
+        quoteType: row.quoteType,
         symbol,
         market,
       });
-      const name = normalizeText((row as any)?.shortname || (row as any)?.longname || symbol) || symbol;
-      const shortName = normalizeText((row as any)?.shortname || symbol);
-      const longName = normalizeText((row as any)?.longname || (row as any)?.shortname || symbol);
-      const typeDisp = normalizeText((row as any)?.typeDisp || (row as any)?.quoteType || "");
+      const name = normalizeText(safeString(row.shortname) || safeString(row.longname) || symbol) || symbol;
+      const shortName = normalizeText(safeString(row.shortname) || symbol);
+      const longName = normalizeText(safeString(row.longname) || safeString(row.shortname) || symbol);
+      const typeDisp = normalizeText(safeString(row.typeDisp) || safeString(row.quoteType));
       const assetClass = shouldTreatAsCommodity({
         symbol,
-        quoteType: normalizeText((row as any)?.quoteType || ""),
+        quoteType: normalizeText(safeString(row.quoteType)),
         name,
         shortName,
         longName,
         typeDisp,
       }) ? "COMMODITY" : inferredAssetClass;
-      const region = normalizeRegion((row as any)?.region, inferRegionByMarket(market));
+      const region = normalizeRegion(row.region, inferRegionByMarket(market));
       const item: SearchAssetItem = {
         symbol,
         market,
-        currency: normalizeDaaCurrencyCode((row as any)?.currency, market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD"),
-        price: toPositive((row as any)?.regularMarketPrice, (row as any)?.postMarketPrice, (row as any)?.bid, (row as any)?.ask),
+        currency: normalizeDaaCurrencyCode(row.currency, market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD"),
+        price: toPositive(row.regularMarketPrice, row.postMarketPrice, row.bid, row.ask),
         name,
         shortName,
         longName,
         exchange,
-        exchangeDisp: normalizeText((row as any)?.exchDisp || exchange || market),
-        quoteType: normalizeText((row as any)?.quoteType || ""),
+        exchangeDisp: normalizeText(safeString(row.exchDisp) || exchange || market),
+        quoteType: normalizeText(safeString(row.quoteType)),
         typeDisp,
         assetClass,
         region,

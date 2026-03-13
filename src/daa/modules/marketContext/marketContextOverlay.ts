@@ -185,9 +185,12 @@ export function mergeMarketRegimeConservatively(
   llmRegime: DaaMarketRegime | null | undefined,
 ): DaaMarketRegime | null {
   if (!ruleRegime && !llmRegime) return null;
+  if (!ruleRegime) return llmRegime!;
+  if (!llmRegime) return ruleRegime;
+  // Both present: pick the more conservative (higher priority = more defensive)
   return compareMarketRegimePriority(ruleRegime) >= compareMarketRegimePriority(llmRegime)
-    ? (ruleRegime || llmRegime || null)
-    : (llmRegime || ruleRegime || null);
+    ? ruleRegime
+    : llmRegime;
 }
 
 export function isHighRiskAsset(input: {

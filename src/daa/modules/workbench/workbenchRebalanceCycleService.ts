@@ -231,7 +231,7 @@ export async function generateWorkbenchRebalanceCycle(
   // ── drift 触发的阈值守卫（仅自动触发需要）────────────────────────
   if (!manual && triggerSource === "drift") {
     const thresholdPct = Math.max(0, strategy.drift.thresholdPct * 100);
-    if (!(draft.maxAbsDriftPct > thresholdPct)) {
+    if (draft.maxAbsDriftPct < thresholdPct) {
       return skipWithLatest(
         `最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}% 未超过阈值 ${thresholdPct.toFixed(2)}%`,
       );
@@ -542,6 +542,25 @@ export async function executeWorkbenchRebalanceCycle(input: {
 }): Promise<ExecuteRebalanceCycleResult> {
   const cycle = await getDaaRebalanceCycle(input.cycleId);
   if (!cycle) throw new Error(`cycle not found: ${input.cycleId}`);
+
+  // ── Stuck-cycle recovery: reset cycles stuck in "executing" for > 5 min ──
+  if (cycle.status === "executing" && !cycle.executedAt) {
+    const updatedMs = Date.parse(cycle.snapshotAt);
+    const stuckThresholdMs = 5 * 60 * 1000;
+    if (Number.isFinite(updatedMs) && Date.now() - updatedMs > stuckThresholdMs) {
+      console.warn(`[DAA] Recovering stuck cycle ${input.cycleId}: resetting executing → reviewing`);
+      await patchDaaRebalanceCycle({
+        cycleId: input.cycleId,
+        status: "reviewing",
+        notes: `${cycle.notes || ""}\n[系统恢复] 执行中断超时，已自动重置为审阅状态`.trim(),
+      });
+      // Re-fetch after recovery
+      const recovered = await getDaaRebalanceCycle(input.cycleId);
+      if (!recovered) throw new Error(`cycle not found after recovery: ${input.cycleId}`);
+      Object.assign(cycle, recovered);
+    }
+  }
+
   assertCycleExecutable(cycle, "execute");
 
   const toExecute = cycle.proposals.filter((row) => input.executeMode === "all" || row.selected);
@@ -708,8 +727,13 @@ export async function executeWorkbenchRebalanceCycle(input: {
         maxDriftAfter: afterSnapshot.maxDriftPct,
       },
     });
-  } catch {
-    // 复盘报告生成失败不阻塞交易主流程
+  } catch (reportError) {
+    console.error(`[DAA] Cycle report generation failed for ${input.cycleId}:`, reportError);
+    // Record failure in cycle notes for audit trail
+    void patchDaaRebalanceCycle({
+      cycleId: input.cycleId,
+      notes: `${cycle.notes || ""}\n[复盘报告] 生成失败: ${reportError instanceof Error ? reportError.message : String(reportError)}`.trim(),
+    }).catch(() => {});
   }
 
   return {
