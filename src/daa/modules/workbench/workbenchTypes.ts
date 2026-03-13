@@ -143,6 +143,7 @@ export type PreTradeRiskRule =
   | "max_position"
   | "max_order_pct"
   | "concentration"
+  | "correlation"
   | "stop_loss_breach"
   | "total_weight";
 

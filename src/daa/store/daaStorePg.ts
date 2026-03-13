@@ -613,6 +613,7 @@ export type DaaStoreRiskRule =
   | "max_position"
   | "max_order_pct"
   | "concentration"
+  | "correlation"
   | "stop_loss_breach"
   | "total_weight";
 
@@ -2623,6 +2624,7 @@ function normalizeRiskRule(value: unknown): DaaStoreRiskRule {
   const text = normalizeText(value).toLowerCase();
   if (text === "max_order_pct") return "max_order_pct";
   if (text === "concentration") return "concentration";
+  if (text === "correlation") return "correlation";
   if (text === "stop_loss_breach") return "stop_loss_breach";
   if (text === "total_weight") return "total_weight";
   return "max_position";
