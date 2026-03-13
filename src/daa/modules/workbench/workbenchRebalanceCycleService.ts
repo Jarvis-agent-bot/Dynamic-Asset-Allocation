@@ -72,6 +72,7 @@ import {
   buildCycleDraftFromBootstrap,
   buildPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
+  enrichRiskCheckWithCorrelation,
   buildRiskCycleDraft,
   calcHoldingCostPerUnit,
   getZonedYmd,
@@ -409,11 +410,16 @@ export async function generateWorkbenchRebalanceCycle(
   const allWarnings = [...bootstrap.warnings, ...fusionResult.fusionWarnings];
 
   // ── Step F: 风险检查（使用融合后的建议）──────────────────────────
-  const riskCheck = buildPreTradeRiskCheckFromBootstrap({
+  const baseRiskCheck = buildPreTradeRiskCheckFromBootstrap({
     bootstrap,
     systemConfig: systemRow.config,
     proposals: fusionResult.proposals.filter((p) => p.selected),
   });
+  const riskCheck = await enrichRiskCheckWithCorrelation(
+    baseRiskCheck,
+    bootstrap.assetUniverse,
+    systemRow.config.strategy.risk.correlationCapPct,
+  );
 
   // ── Step G: 创建 Cycle（proposals 已含 decisionContext）──────────
   // 构建 notes：记录 LLM 状态和融合摘要，供审计追踪
