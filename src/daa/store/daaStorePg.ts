@@ -479,7 +479,7 @@ export type DaaStoreIngestJobLog = {
 };
 
 export type DaaStoreCashLedgerSide = "deposit" | "withdraw";
-export type DaaStoreCashLedgerEntryKind = "manual" | "trade_execution";
+export type DaaStoreCashLedgerEntryKind = "manual" | "trade_execution" | "dividend";
 
 export type DaaStoreCashLedgerEntry = {
   id: string;
@@ -3088,7 +3088,9 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
   const normalizedEntryKind = normalizeText(row.entry_kind).toLowerCase();
   const entryKind: DaaStoreCashLedgerEntryKind | null = normalizedEntryKind === "trade_execution"
     ? "trade_execution"
-    : (normalizedEntryKind === "manual" ? "manual" : null);
+    : normalizedEntryKind === "dividend"
+      ? "dividend"
+      : (normalizedEntryKind === "manual" ? "manual" : null);
   return {
     id: normalizeText(row.id),
     ts: toIsoString(row.ts),
@@ -3138,7 +3140,7 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
     if (amount <= 0) throw new Error("cash ledger amount must be greater than 0");
 
     const rawEntryKind = normalizeText(input.entryKind, "manual").toLowerCase();
-    const entryKind: DaaStoreCashLedgerEntryKind = rawEntryKind === "trade_execution" ? "trade_execution" : "manual";
+    const entryKind: DaaStoreCashLedgerEntryKind = rawEntryKind === "trade_execution" ? "trade_execution" : rawEntryKind === "dividend" ? "dividend" : "manual";
     const note = normalizeText(input.note, "");
     const entryId = randomUUID();
 
