@@ -26,13 +26,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { copyTextToClipboard } from "../copyToClipboard";
-import { fetchDaaAuthSessionV1, invalidateDaaAuthSessionCacheV1, type DaaAuthMePayloadV1 } from "./daaAuthSessionClientV1";
+import { fetchDaaAuthSession, invalidateDaaAuthSessionCache, type DaaAuthMePayload } from "./daaAuthSessionClient";
 
 type Model =
   | { kind: "loading" }
   | { kind: "signedOut" }
   | { kind: "error"; message: string }
-  | { kind: "signedIn"; me: DaaAuthMePayloadV1 };
+  | { kind: "signedIn"; me: DaaAuthMePayload };
 
 function formatRoles(roles: string[]): string {
   const xs = Array.isArray(roles) ? roles.filter(Boolean) : [];
@@ -58,7 +58,7 @@ export default function DaaUserMenuDialog() {
     let cancelled = false;
 
     async function run() {
-      const result = await fetchDaaAuthSessionV1({ silent: true });
+      const result = await fetchDaaAuthSession({ silent: true });
       if (cancelled) return;
       if (result.kind === "signedIn") {
         setModel({ kind: "signedIn", me: result.me });
@@ -87,7 +87,7 @@ export default function DaaUserMenuDialog() {
       });
 
       if (res.ok) {
-        invalidateDaaAuthSessionCacheV1();
+        invalidateDaaAuthSessionCache();
         window.location.href = `/daa/login?returnTo=${encodeURIComponent(returnTo)}&notice=signed_out`;
         return;
       }

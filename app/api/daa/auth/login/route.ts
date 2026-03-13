@@ -1,13 +1,13 @@
-import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
-import { getClientIpFromRequestV0, getUserAgentFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
+import { DAA_AUTH_SESSION_COOKIE_PATH_, DAA_AUTH_SESSION_COOKIE_ } from "@/src/daa/auth/daaAuthConstants";
+import { getClientIpFromRequest, getUserAgentFromRequest } from "@/src/daa/auth/daaAuthRequest";
 import {
-  appendDaaAuthAuditEventV0,
-  authenticateDaaAuthAccountV0,
-  createDaaAuthSessionV0,
-  ensureDevDefaultDaaAuthAccountV0,
-} from "@/src/daa/auth/daaAuthStoreV0";
-import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
-import { appendNoticeParamV0, normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
+  appendDaaAuthAuditEvent,
+  authenticateDaaAuthAccount,
+  createDaaAuthSession,
+  ensureDevDefaultDaaAuthAccount,
+} from "@/src/daa/auth/daaAuthStore";
+import { fail, ok } from "@/src/daa/api/routeHelpers";
+import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
 
 export const runtime = "nodejs";
 
@@ -30,36 +30,36 @@ export async function POST(req: Request) {
 
   const username = normalizeUsernameLoose(body?.username);
   const password = typeof body?.password === "string" ? body.password : "";
-  const returnTo = normalizeDaaReturnToV0(body?.returnTo);
+  const returnTo = normalizeDaaReturnTo(body?.returnTo);
 
-  const userAgent = getUserAgentFromRequestV0(req) || null;
-  const ip = getClientIpFromRequestV0(req) || null;
+  const userAgent = getUserAgentFromRequest(req) || null;
+  const ip = getClientIpFromRequest(req) || null;
 
   if (!username || !password) {
-    return failV1("UNAUTHORIZED", "invalid_credentials", { status: 401 });
+    return fail("UNAUTHORIZED", "invalid_credentials", { status: 401 });
   }
 
   try {
-    await ensureDevDefaultDaaAuthAccountV0().catch(() => null);
+    await ensureDevDefaultDaaAuthAccount().catch(() => null);
 
-    const account = await authenticateDaaAuthAccountV0({ username, password });
+    const account = await authenticateDaaAuthAccount({ username, password });
     if (!account) {
-      await appendDaaAuthAuditEventV0({
+      await appendDaaAuthAuditEvent({
         kind: "auth.login.failed",
         actorUserId: "anonymous",
         payload: { username, returnTo, userAgent, ip },
       }).catch(() => null);
 
-      return failV1("UNAUTHORIZED", "invalid_credentials", { status: 401 });
+      return fail("UNAUTHORIZED", "invalid_credentials", { status: 401 });
     }
 
-    const { session, token } = await createDaaAuthSessionV0({
+    const { session, token } = await createDaaAuthSession({
       accountId: account.accountId,
       userAgent,
       ip,
     });
 
-    await appendDaaAuthAuditEventV0({
+    await appendDaaAuthAuditEvent({
       kind: "auth.login.success",
       actorUserId: account.accountId,
       accountId: account.accountId,
@@ -67,9 +67,9 @@ export async function POST(req: Request) {
       payload: { username: account.username, returnTo, userAgent, ip },
     }).catch(() => null);
 
-    const redirectTo = appendNoticeParamV0(returnTo, "signed_in");
+    const redirectTo = appendNoticeParam(returnTo, "signed_in");
 
-    const res = okV1({
+    const res = ok({
       redirectTo,
       account: {
         accountId: account.accountId,
@@ -79,18 +79,18 @@ export async function POST(req: Request) {
     });
 
     res.cookies.set({
-      name: DAA_AUTH_SESSION_COOKIE_V0,
+      name: DAA_AUTH_SESSION_COOKIE_,
       value: token,
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
+      path: DAA_AUTH_SESSION_COOKIE_PATH_,
       expires: new Date(session.expiresAt),
     });
 
     return res;
   } catch (error) {
-    return failV1("INTERNAL_ERROR", "auth_backend_unavailable", {
+    return fail("INTERNAL_ERROR", "auth_backend_unavailable", {
       status: 503,
       details: {
         message: error instanceof Error ? error.message : String(error),

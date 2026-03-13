@@ -13,15 +13,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { formatCurrency, formatDateTimeV1, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
-import { DashboardEmptyStateV1, DashboardErrorNoticeV1 } from "@/app/daa/dashboard/_components/DashboardFeedbackV1";
+import { formatCurrency, formatDateTime, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
+import { DashboardEmptyState, DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { cn } from "@/lib/utils";
-import type { TradeTicketSideV1 } from "@/src/daa/modules/trade/tradeTypesV1";
+import type { TradeTicketSide } from "@/src/daa/modules/trade/tradeTypes";
 import type {
-  AssetUniverseViewV1,
-  WorkbenchAssetInsightResponseV1,
-  WorkbenchLlmFeedbackScoreV1,
-} from "@/src/daa/modules/workbench/workbenchTypesV1";
+  AssetUniverseView,
+  WorkbenchAssetInsightResponse,
+  WorkbenchLlmFeedbackScore,
+} from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
   DeepLedgerActionButton,
@@ -35,51 +35,51 @@ import {
   deepLedgerTableShellClassName,
 } from "../../../_components/DeepLedgerUI";
 
-export type AssetUniverseViewFilterV1 = "all" | "holdings" | "watchlist" | "basket";
-type HoldingGroupKeyV1 = "stock" | "etf" | "bond" | "crypto";
+export type AssetUniverseViewFilter = "all" | "holdings" | "watchlist" | "basket";
+type HoldingGroupKey = "stock" | "etf" | "bond" | "crypto";
 
-const HOLDING_GROUP_META_V1: Array<{ key: HoldingGroupKeyV1; label: string }> = [
+const HOLDING_GROUP_META_: Array<{ key: HoldingGroupKey; label: string }> = [
   { key: "stock", label: "股票" },
   { key: "etf", label: "ETF" },
   { key: "bond", label: "债券" },
   { key: "crypto", label: "加密" },
 ];
 
-function normalizeTargetWeightPctV1(value: number): number {
+function normalizeTargetWeightPct(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * 100) / 100;
 }
 
-function formatTargetWeightDraftV1(value: number): string {
-  return normalizeTargetWeightPctV1(value).toFixed(2);
+function formatTargetWeightDraft(value: number): string {
+  return normalizeTargetWeightPct(value).toFixed(2);
 }
 
-function isInBasketV1(row: AssetUniverseViewV1): boolean {
+function isInBasket(row: AssetUniverseView): boolean {
   return row.watchEnabled && row.targetWeightHint > 0;
 }
 
-function passFilter(row: AssetUniverseViewV1, view: AssetUniverseViewFilterV1): boolean {
+function passFilter(row: AssetUniverseView, view: AssetUniverseViewFilter): boolean {
   if (view === "holdings") return row.holdingQty > 0;
   if (view === "watchlist") return row.watchEnabled;
-  if (view === "basket") return isInBasketV1(row);
+  if (view === "basket") return isInBasket(row);
   return row.watchEnabled || row.holdingQty > 0;
 }
 
-function viewLabelV1(view: AssetUniverseViewFilterV1): string {
+function viewLabel(view: AssetUniverseViewFilter): string {
   if (view === "holdings") return "持仓视图";
   if (view === "watchlist") return "观察列表";
   if (view === "basket") return "再平衡篮子";
   return "全部资产";
 }
 
-function fxLabel(row: AssetUniverseViewV1): string {
+function fxLabel(row: AssetUniverseView): string {
   if (row.currency === "") return "-";
   if (row.fxMissing) return "缺失";
   if (row.fxRateToBase == null) return "-";
   return row.fxRateToBase.toFixed(4);
 }
 
-function currencySymbolV1(currency: string): string {
+function currencySymbol(currency: string): string {
   const ccy = String(currency || "").trim().toUpperCase();
   if (ccy === "CNY" || ccy === "RMB") return "¥";
   if (ccy === "HKD") return "HK$";
@@ -89,63 +89,59 @@ function currencySymbolV1(currency: string): string {
   return ccy || "-";
 }
 
-function priceLabel(row: AssetUniverseViewV1): string {
+function priceLabel(row: AssetUniverseView): string {
   const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
   if (!(price > 0)) return "-";
-  return `${currencySymbolV1(row.currency)} ${price.toFixed(4)}`;
+  return `${currencySymbol(row.currency)} ${price.toFixed(4)}`;
 }
 
-function priceStatusTextV1(status: string): string {
+function priceStatusText(status: string): string {
   if (status === "fresh") return "最新";
   if (status === "stale") return "价格偏旧";
   if (status === "unsupported") return "不支持自动行情";
   return "无价格";
 }
 
-function priceStatusLabel(row: AssetUniverseViewV1): string {
-  return priceStatusTextV1(row.priceStatus);
+function priceStatusLabel(row: AssetUniverseView): string {
+  return priceStatusText(row.priceStatus);
 }
 
-function priceStatusToneV1(status: string): "green" | "amber" | "red" | "slate" {
+function priceStatusTone(status: string): "green" | "amber" | "red" | "slate" {
   if (status === "fresh") return "green";
   if (status === "stale") return "amber";
   if (status === "unsupported") return "slate";
   return "red";
 }
 
-function priceStatusClass(row: AssetUniverseViewV1): string {
-  return priceStatusClassV1(row.priceStatus);
-}
-
-function priceStatusClassV1(status: string): string {
+function priceStatusClass(status: string): string {
   if (status === "fresh") return "text-emerald-300";
   if (status === "stale") return "text-amber-200";
   if (status === "unsupported") return "text-slate-300";
   return "text-rose-200";
 }
 
-function priceStatusNoteV1(status: string): string {
+function priceStatusNote(status: string): string {
   if (status === "fresh") return "已按最新可得行情刷新。";
   if (status === "stale") return "当前展示的是较旧缓存，建议结合最新市场状态判断。";
   if (status === "unsupported") return "该标的不支持自动行情映射。";
   return "当前暂无可用行情。";
 }
 
-function marketRegimeToneV1(regime: string | null | undefined) {
+function marketRegimeTone(regime: string | null | undefined) {
   if (regime === "risk_off") return "red" as const;
   if (regime === "risk_on") return "green" as const;
   if (regime === "transitional") return "amber" as const;
   return "slate" as const;
 }
 
-function marketRegimeLabelV1(regime: string | null | undefined): string {
+function marketRegimeLabel(regime: string | null | undefined): string {
   if (regime === "risk_off") return "偏防守";
   if (regime === "risk_on") return "偏进攻";
   if (regime === "transitional") return "过渡";
   return "待计算";
 }
 
-function marketIndicatorKeyLabelV1(key: string): string {
+function marketIndicatorKeyLabel(key: string): string {
   if (key === "vix") return "VIX";
   if (key === "qqq_spy_ratio") return "QQQ/SPY";
   if (key === "fxi_volatility") return "FXI 波动率";
@@ -156,12 +152,12 @@ function marketIndicatorKeyLabelV1(key: string): string {
   return key;
 }
 
-function marketPercentileTextV1(value: number | null | undefined): string {
+function marketPercentileText(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "近一年位置 N/A";
   return `近一年位置 ${value.toFixed(1)}%`;
 }
 
-function formatMarketIndicatorValueV1(value: number | null | undefined, unit?: string): string {
+function formatMarketIndicatorValue(value: number | null | undefined, unit?: string): string {
   if (value == null || !Number.isFinite(value)) return "N/A";
   if (unit === "%") return `${value.toFixed(1)}%`;
   if (unit === "x") return `${value.toFixed(2)}x`;
@@ -170,12 +166,12 @@ function formatMarketIndicatorValueV1(value: number | null | undefined, unit?: s
   return value.toFixed(3);
 }
 
-function formatSignedPercentV1(value: number | null | undefined): string | null {
+function formatSignedPercent(value: number | null | undefined): string | null {
   if (value == null || !Number.isFinite(value)) return null;
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
-function disabledReasonV1(input: {
+function disabledReason(input: {
   disabled: boolean;
   disabledGlobal: boolean;
   price: number;
@@ -189,19 +185,19 @@ function disabledReasonV1(input: {
   return "当前不可操作。";
 }
 
-function hfSignalIconV1(signal: AssetUniverseViewV1["hfSignal"]): string {
+function hfSignalIcon(signal: AssetUniverseView["hfSignal"]): string {
   if (!signal) return "⚪";
   return signal.icon;
 }
 
-function hfTrendLabelV1(trend: "adding" | "trimming" | "neutral" | "none"): string {
+function hfTrendLabel(trend: "adding" | "trimming" | "neutral" | "none"): string {
   if (trend === "adding") return "整体偏增持";
   if (trend === "trimming") return "整体偏减持";
   if (trend === "neutral") return "整体变化不大";
   return "暂无趋势";
 }
 
-function normalizeFundLabelV1(fundName: string, fundCode: string): string {
+function normalizeFundLabel(fundName: string, fundCode: string): string {
   const name = String(fundName || "").trim();
   if (name) return name;
   const code = String(fundCode || "").trim();
@@ -211,25 +207,25 @@ function normalizeFundLabelV1(fundName: string, fundCode: string): string {
   return `来源 ${code.replace(/[_-]/g, " ").trim()}`;
 }
 
-function localValuationV1(row: AssetUniverseViewV1): number {
+function localValuation(row: AssetUniverseView): number {
   const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
   if (!(price > 0) || !(row.holdingQty > 0)) return 0;
   return price * row.holdingQty;
 }
 
-function holdingCostPerUnitV1(row: AssetUniverseViewV1): number {
+function holdingCostPerUnit(row: AssetUniverseView): number {
   if (row.costBasis != null && row.costBasis > 0 && row.holdingQty > 0) return row.costBasis / row.holdingQty;
   return row.holdingPrice > 0 ? row.holdingPrice : 0;
 }
 
-function unrealizedPnlPctV1(row: AssetUniverseViewV1): number | null {
+function unrealizedPnlPct(row: AssetUniverseView): number | null {
   const px = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-  const cost = holdingCostPerUnitV1(row);
+  const cost = holdingCostPerUnit(row);
   if (!(px > 0) || !(cost > 0) || !(row.holdingQty > 0)) return null;
   return ((px - cost) / cost) * 100;
 }
 
-function gapLabelV1(gapPct: number | null): { text: string; className: string; barClassName: string } {
+function gapLabel(gapPct: number | null): { text: string; className: string; barClassName: string } {
   if (gapPct == null) return { text: "-", className: "text-[var(--faint)]", barClassName: "bg-[rgba(148,163,184,0.3)]" };
   if (gapPct > 0.01) {
     return { text: `低配 ${formatPercent(gapPct)}`, className: "text-emerald-300", barClassName: "bg-emerald-400" };
@@ -240,14 +236,14 @@ function gapLabelV1(gapPct: number | null): { text: string; className: string; b
   return { text: "接近目标", className: "text-[var(--muted)]", barClassName: "bg-[var(--primary)]" };
 }
 
-function valuationTemperatureMetaV1(score: number | null): { text: string; className: string } {
+function valuationTemperatureMeta(score: number | null): { text: string; className: string } {
   if (score == null || !Number.isFinite(score)) return { text: "待分析", className: "text-[var(--muted)]" };
   if (score >= 62) return { text: "偏便宜", className: "text-emerald-300" };
   if (score <= 38) return { text: "偏贵", className: "text-rose-300" };
   return { text: "中性", className: "text-[var(--muted)]" };
 }
 
-function holdingGroupKeyV1(row: AssetUniverseViewV1): HoldingGroupKeyV1 {
+function holdingGroupKey(row: AssetUniverseView): HoldingGroupKey {
   const assetClass = String(row.assetClass || "").toUpperCase();
   const instrumentType = String(row.instrumentType || "").toUpperCase();
   const market = String(row.market || "").toUpperCase();
@@ -257,7 +253,7 @@ function holdingGroupKeyV1(row: AssetUniverseViewV1): HoldingGroupKeyV1 {
   return "stock";
 }
 
-function ActionButtonV1(props: {
+function ActionButton(props: {
   label: string;
   disabled: boolean;
   reason: string;
@@ -290,7 +286,7 @@ function ActionButtonV1(props: {
   );
 }
 
-function InsightMetricCardV1(props: { label: string; value: string; hint?: string }) {
+function InsightMetricCard(props: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] px-3 py-2.5 text-xs">
       <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{props.label}</div>
@@ -300,17 +296,17 @@ function InsightMetricCardV1(props: { label: string; value: string; hint?: strin
   );
 }
 
-function InlineInsightsV1(props: {
+function InlineInsights(props: {
   loading: boolean;
   error: string;
-  data: WorkbenchAssetInsightResponseV1 | null;
+  data: WorkbenchAssetInsightResponse | null;
   feedbackContextId: string | null;
   feedbackSubmitting: boolean;
-  feedbackScore: WorkbenchLlmFeedbackScoreV1 | null;
+  feedbackScore: WorkbenchLlmFeedbackScore | null;
   onSubmitFeedback: (input: {
     contextId: string;
     type: "insight";
-    score: WorkbenchLlmFeedbackScoreV1;
+    score: WorkbenchLlmFeedbackScore;
   }) => void;
 }) {
   if (props.loading) {
@@ -322,11 +318,11 @@ function InlineInsightsV1(props: {
     );
   }
   if (props.error) {
-    return <DashboardErrorNoticeV1 title="洞察加载失败" description={props.error} className="rounded-[16px]" />;
+    return <DashboardErrorNotice title="洞察加载失败" description={props.error} className="rounded-[16px]" />;
   }
   if (!props.data) {
     return (
-      <DashboardEmptyStateV1
+      <DashboardEmptyState
         title="暂无洞察"
         description="当前资产还没有生成洞察，可先刷新数据或切换其他标的。"
         className="px-4 py-5 text-left"
@@ -381,16 +377,16 @@ function InlineInsightsV1(props: {
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">行情快照</div>
             <div className="mt-2 font-[var(--font-display)] text-[24px] leading-none tracking-[-0.03em] text-[var(--text)]">
-              {currencySymbolV1(priceSnapshot.currency)} {priceSnapshot.price > 0 ? priceSnapshot.price.toFixed(4) : "-"}
+              {currencySymbol(priceSnapshot.currency)} {priceSnapshot.price > 0 ? priceSnapshot.price.toFixed(4) : "-"}
             </div>
-            <div className={cn("mt-2 text-sm", priceStatusClassV1(priceSnapshot.priceStatus))}>
-              {priceStatusTextV1(priceSnapshot.priceStatus)} · {priceStatusNoteV1(priceSnapshot.priceStatus)}
+            <div className={cn("mt-2 text-sm", priceStatusClass(priceSnapshot.priceStatus))}>
+              {priceStatusText(priceSnapshot.priceStatus)} · {priceStatusNote(priceSnapshot.priceStatus)}
             </div>
-            <div className="mt-1 text-xs text-[var(--muted)]">行情更新时间：{formatDateTimeV1(priceSnapshot.priceUpdatedAt)}</div>
+            <div className="mt-1 text-xs text-[var(--muted)]">行情更新时间：{formatDateTime(priceSnapshot.priceUpdatedAt)}</div>
             <div className="mt-1 text-xs text-[var(--muted)]">来源：{priceSnapshot.priceSource || "-"}</div>
           </div>
-          <DeepLedgerStatusPill tone={priceStatusToneV1(priceSnapshot.priceStatus)}>
-            {priceStatusTextV1(priceSnapshot.priceStatus)}
+          <DeepLedgerStatusPill tone={priceStatusTone(priceSnapshot.priceStatus)}>
+            {priceStatusText(priceSnapshot.priceStatus)}
           </DeepLedgerStatusPill>
         </div>
       ) : null}
@@ -426,10 +422,10 @@ function InlineInsightsV1(props: {
                 </div>
                 {opportunity.scores ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <InsightMetricCardV1 label="人因" value={opportunity.scores.human.toFixed(1)} />
-                    <InsightMetricCardV1 label="新闻" value={opportunity.scores.news.toFixed(1)} />
-                    <InsightMetricCardV1 label="技术" value={opportunity.scores.technical.toFixed(1)} />
-                    <InsightMetricCardV1 label="估值" value={opportunity.scores.valuation.toFixed(1)} />
+                    <InsightMetricCard label="人因" value={opportunity.scores.human.toFixed(1)} />
+                    <InsightMetricCard label="新闻" value={opportunity.scores.news.toFixed(1)} />
+                    <InsightMetricCard label="技术" value={opportunity.scores.technical.toFixed(1)} />
+                    <InsightMetricCard label="估值" value={opportunity.scores.valuation.toFixed(1)} />
                   </div>
                 ) : null}
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">{opportunity.reasonZh}</div>
@@ -468,7 +464,7 @@ function InlineInsightsV1(props: {
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[...technical.common, ...technical.specific].slice(0, 8).map((item) => (
-                  <InsightMetricCardV1 key={`${item.key}-${item.label}`} label={item.label} value={`${item.value}${item.unit || ""}`} hint={item.description} />
+                  <InsightMetricCard key={`${item.key}-${item.label}`} label={item.label} value={`${item.value}${item.unit || ""}`} hint={item.description} />
                 ))}
               </div>
             </div>
@@ -494,7 +490,7 @@ function InlineInsightsV1(props: {
               ) : null}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {valuationMetrics.map((item) => (
-                  <InsightMetricCardV1 key={`${item.key}-${item.label}`} label={item.label} value={`${item.value}${item.unit || ""}`} hint={item.description} />
+                  <InsightMetricCard key={`${item.key}-${item.label}`} label={item.label} value={`${item.value}${item.unit || ""}`} hint={item.description} />
                 ))}
               </div>
               {valuation.relative ? (
@@ -526,8 +522,8 @@ function InlineInsightsV1(props: {
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{displayMarketLabel === "组合摘要" ? "组合摘要环境" : `${displayMarketLabel}环境`}</div>
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className="font-[var(--font-mono)] text-base text-[var(--text)]">{marketRegimeLabelV1(displayMarketContext.regime)}</div>
-                    <DeepLedgerStatusPill tone={marketRegimeToneV1(displayMarketContext.regime)}>{marketRegimeLabelV1(displayMarketContext.regime)}</DeepLedgerStatusPill>
+                    <div className="font-[var(--font-mono)] text-base text-[var(--text)]">{marketRegimeLabel(displayMarketContext.regime)}</div>
+                    <DeepLedgerStatusPill tone={marketRegimeTone(displayMarketContext.regime)}>{marketRegimeLabel(displayMarketContext.regime)}</DeepLedgerStatusPill>
                   </div>
                 </div>
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
@@ -549,18 +545,18 @@ function InlineInsightsV1(props: {
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {(marketIndicators.length > 0 ? marketIndicators : displayMarketContext.indicators).map((indicator) => {
-                    const trend30d = formatSignedPercentV1(indicator.trend30dPct);
+                    const trend30d = formatSignedPercent(indicator.trend30dPct);
                     return (
                       <div key={indicator.key} className="rounded-[14px] border border-[rgba(129,140,248,0.18)] bg-[rgba(8,12,20,0.46)] px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-sm font-semibold text-[var(--text)]">{indicator.label}</div>
-                          <DeepLedgerStatusPill tone={marketRegimeToneV1(indicator.stance === "neutral" ? null : indicator.stance)}>
-                            {indicator.stance === "neutral" ? "中性" : marketRegimeLabelV1(indicator.stance)}
+                          <DeepLedgerStatusPill tone={marketRegimeTone(indicator.stance === "neutral" ? null : indicator.stance)}>
+                            {indicator.stance === "neutral" ? "中性" : marketRegimeLabel(indicator.stance)}
                           </DeepLedgerStatusPill>
                         </div>
-                        <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">{formatMarketIndicatorValueV1(indicator.rawValue, indicator.unit)}</div>
+                        <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">{formatMarketIndicatorValue(indicator.rawValue, indicator.unit)}</div>
                         <div className="mt-1 text-xs text-[var(--muted)]">
-                          {marketPercentileTextV1(indicator.percentile252)}
+                          {marketPercentileText(indicator.percentile252)}
                           {trend30d ? ` · 30日 ${trend30d}` : ""}
                         </div>
                         <div className="mt-3 text-xs leading-6 text-[var(--muted)]">{indicator.reason}</div>
@@ -578,7 +574,7 @@ function InlineInsightsV1(props: {
                       ? marketAttribution.relevantKeys
                       : (marketIndicators.length > 0 ? marketIndicators.map((item) => item.key) : displayMarketContext.indicators.map((item) => item.key))
                     ).map((key) => (
-                      <DeepLedgerStatusPill key={key} tone="slate">{marketIndicatorKeyLabelV1(key)}</DeepLedgerStatusPill>
+                      <DeepLedgerStatusPill key={key} tone="slate">{marketIndicatorKeyLabel(key)}</DeepLedgerStatusPill>
                     ))}
                   </div>
                 </div>
@@ -625,7 +621,7 @@ function InlineInsightsV1(props: {
                     className="block rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.54)] px-4 py-3 text-sm text-[var(--text)] transition-colors hover:border-[var(--primary)]/35 hover:text-[var(--primary)]"
                   >
                     <div className="font-medium">{item.title}</div>
-                    <div className="mt-1 text-xs text-[var(--muted)]">{formatDateTimeV1(item.ts)}</div>
+                    <div className="mt-1 text-xs text-[var(--muted)]">{formatDateTime(item.ts)}</div>
                   </a>
                 ))}
               </div>
@@ -645,11 +641,11 @@ function InlineInsightsV1(props: {
               <div className="rounded-[14px] border border-[rgba(129,140,248,0.18)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">AI 依据</div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <DeepLedgerStatusPill tone={marketRegimeToneV1(marketContext?.regime || null)}>
-                    规则环境 {marketRegimeLabelV1(marketContext?.regime || null)}
+                  <DeepLedgerStatusPill tone={marketRegimeTone(marketContext?.regime || null)}>
+                    规则环境 {marketRegimeLabel(marketContext?.regime || null)}
                   </DeepLedgerStatusPill>
-                  <DeepLedgerStatusPill tone={marketRegimeToneV1(aiMarketRegime)}>
-                    AI 分析环境 {marketRegimeLabelV1(aiMarketRegime)}
+                  <DeepLedgerStatusPill tone={marketRegimeTone(aiMarketRegime)}>
+                    AI 分析环境 {marketRegimeLabel(aiMarketRegime)}
                   </DeepLedgerStatusPill>
                 </div>
                 {aiMarketFacts.length > 0 ? (
@@ -671,7 +667,7 @@ function InlineInsightsV1(props: {
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <DeepLedgerStatusPill tone="indigo">分析模型 {llm.provider}/{llm.model}</DeepLedgerStatusPill>
-                  <DeepLedgerStatusPill tone="slate">生成于 {formatDateTimeV1(llm.generatedAt)}</DeepLedgerStatusPill>
+                  <DeepLedgerStatusPill tone="slate">生成于 {formatDateTime(llm.generatedAt)}</DeepLedgerStatusPill>
                 </div>
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 text-[var(--text)]">{llm.summary}</div>
                 {props.feedbackContextId ? (
@@ -745,7 +741,7 @@ function InlineInsightsV1(props: {
 }
 
 export default function AssetUniverseTable(props: {
-  rows: AssetUniverseViewV1[];
+  rows: AssetUniverseView[];
   baseCurrency: string;
   counts: {
     all: number;
@@ -753,25 +749,25 @@ export default function AssetUniverseTable(props: {
     watchlist: number;
     basket: number;
   };
-  view: AssetUniverseViewFilterV1;
-  onAddToExecution: (row: AssetUniverseViewV1, side: TradeTicketSideV1) => void;
-  onUpdateTargetWeight: (row: AssetUniverseViewV1, targetWeightPct: number) => Promise<void>;
+  view: AssetUniverseViewFilter;
+  onAddToExecution: (row: AssetUniverseView, side: TradeTicketSide) => void;
+  onUpdateTargetWeight: (row: AssetUniverseView, targetWeightPct: number) => Promise<void>;
   onNormalizeTargetWeights: () => Promise<void>;
-  onToggleBasket: (row: AssetUniverseViewV1, nextInBasket: boolean) => Promise<void>;
-  onRemoveFromWatchlist: (row: AssetUniverseViewV1) => Promise<void>;
-  onOpenCalibration: (row: AssetUniverseViewV1) => void;
+  onToggleBasket: (row: AssetUniverseView, nextInBasket: boolean) => Promise<void>;
+  onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
+  onOpenCalibration: (row: AssetUniverseView) => void;
   expandedInsightKeys: Record<string, boolean>;
   insightLoadingByAssetKey: Record<string, boolean>;
   insightErrorByAssetKey: Record<string, string>;
-  insightDataByAssetKey: Record<string, WorkbenchAssetInsightResponseV1>;
-  onToggleInlineInsights: (row: AssetUniverseViewV1) => void;
+  insightDataByAssetKey: Record<string, WorkbenchAssetInsightResponse>;
+  onToggleInlineInsights: (row: AssetUniverseView) => void;
   onSubmitLlmFeedback: (input: {
     contextId: string;
     type: "insight";
-    score: WorkbenchLlmFeedbackScoreV1;
+    score: WorkbenchLlmFeedbackScore;
   }) => void;
   llmFeedbackSubmittingByContext: Record<string, boolean>;
-  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScoreV1>;
+  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
   actioningAssetKey?: string | null;
   disabled?: boolean;
   updatingTarget?: boolean;
@@ -805,13 +801,13 @@ export default function AssetUniverseTable(props: {
       return filteredRows.map((row) => ({ type: "item" as const, row }));
     }
 
-    const grouped = new Map<HoldingGroupKeyV1, {
-      rows: AssetUniverseViewV1[];
+    const grouped = new Map<HoldingGroupKey, {
+      rows: AssetUniverseView[];
       totalValue: number;
       totalWeightPct: number;
     }>();
     for (const row of filteredRows) {
-      const key = holdingGroupKeyV1(row);
+      const key = holdingGroupKey(row);
       const current = grouped.get(key) || { rows: [], totalValue: 0, totalWeightPct: 0 };
       current.rows.push(row);
       current.totalValue += Math.max(0, row.valuationBase ?? 0);
@@ -820,10 +816,10 @@ export default function AssetUniverseTable(props: {
     }
 
     const out: Array<
-      | { type: "group"; key: HoldingGroupKeyV1; label: string; totalValue: number; totalWeightPct: number; count: number }
-      | { type: "item"; row: AssetUniverseViewV1 }
+      | { type: "group"; key: HoldingGroupKey; label: string; totalValue: number; totalWeightPct: number; count: number }
+      | { type: "item"; row: AssetUniverseView }
     > = [];
-    for (const meta of HOLDING_GROUP_META_V1) {
+    for (const meta of HOLDING_GROUP_META_) {
       const block = grouped.get(meta.key);
       if (!block || block.rows.length <= 0) continue;
       out.push({
@@ -841,16 +837,16 @@ export default function AssetUniverseTable(props: {
     return out;
   }, [filteredRows, props.view]);
 
-  function draftTargetValue(row: AssetUniverseViewV1): string {
+  function draftTargetValue(row: AssetUniverseView): string {
     if (targetDrafts[row.assetKey] != null) return targetDrafts[row.assetKey];
-    return formatTargetWeightDraftV1(row.targetWeightPct);
+    return formatTargetWeightDraft(row.targetWeightPct);
   }
 
-  async function handleSaveTarget(row: AssetUniverseViewV1) {
+  async function handleSaveTarget(row: AssetUniverseView) {
     const raw = draftTargetValue(row);
     const next = Number(raw);
     if (!Number.isFinite(next) || next < 0) return;
-    await props.onUpdateTargetWeight(row, normalizeTargetWeightPctV1(next));
+    await props.onUpdateTargetWeight(row, normalizeTargetWeightPct(next));
     setTargetDrafts((prev) => {
       const nextState = { ...prev };
       delete nextState[row.assetKey];
@@ -863,14 +859,14 @@ export default function AssetUniverseTable(props: {
       title="观察与再平衡"
       accent={props.view === "holdings" ? "cyan" : "amber"}
       bodyClassName="space-y-5"
-      action={<DeepLedgerStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>{viewLabelV1(props.view)}</DeepLedgerStatusPill>}
+      action={<DeepLedgerStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>{viewLabel(props.view)}</DeepLedgerStatusPill>}
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
         <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,38,0.98),rgba(9,14,24,0.94))] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="font-[var(--font-display)] text-[28px] leading-none tracking-[-0.03em] text-[var(--text)]">
-                {viewLabelV1(props.view)}
+                {viewLabel(props.view)}
               </div>
               <div className="mt-3 max-w-2xl text-[13px] leading-6 text-[var(--muted)]">
                 先把标的加入观察列表，再维护研究目标；目标大于 0 即进入再平衡篮子，但这里只改目标，不会直接下单。
@@ -975,28 +971,28 @@ export default function AssetUniverseTable(props: {
                 const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
                 const targetDraft = draftTargetValue(row);
                 const targetDraftNum = Number(targetDraft);
-                const targetChanged = Number.isFinite(targetDraftNum) && Math.abs(targetDraftNum - normalizeTargetWeightPctV1(row.targetWeightPct)) > 1e-6;
+                const targetChanged = Number.isFinite(targetDraftNum) && Math.abs(targetDraftNum - normalizeTargetWeightPct(row.targetWeightPct)) > 1e-6;
                 const targetInvalid = !Number.isFinite(targetDraftNum) || targetDraftNum < 0;
                 const buyDisabled = props.disabled || !(price > 0);
                 const sellDisabled = props.disabled || !(price > 0) || !(row.holdingQty > 0);
                 const actionBusy = props.actioningAssetKey === row.assetKey;
-                const inBasket = isInBasketV1(row);
+                const inBasket = isInBasket(row);
                 const expanded = Boolean(props.expandedInsightKeys[row.assetKey]);
-                const localValuation = localValuationV1(row);
-                const gapLabel = gapLabelV1(row.gapPct);
+                const rowValuation = localValuation(row);
+                const rowGapLabel = gapLabel(row.gapPct);
                 const gapBarWidth = row.gapPct == null ? 0 : Math.min(100, Math.max(8, Math.abs(row.gapPct) * 1000));
-                const unrealizedPnlPct = unrealizedPnlPctV1(row);
+                const rowPnlPct = unrealizedPnlPct(row);
                 const valuationScore = props.insightDataByAssetKey[row.assetKey]?.valuation?.scorePct ?? null;
-                const valuationTemp = valuationTemperatureMetaV1(valuationScore);
+                const valuationTemp = valuationTemperatureMeta(valuationScore);
 
-                const buyReason = disabledReasonV1({
+                const buyReason = disabledReason({
                   disabled: buyDisabled,
                   disabledGlobal: Boolean(props.disabled),
                   price,
                   requireHolding: false,
                   holdingQty: row.holdingQty,
                 });
-                const sellReason = disabledReasonV1({
+                const sellReason = disabledReason({
                   disabled: sellDisabled,
                   disabledGlobal: Boolean(props.disabled),
                   price,
@@ -1037,7 +1033,7 @@ export default function AssetUniverseTable(props: {
                         <div>{row.holdingQty.toFixed(4)}</div>
                         {row.holdingQty > 0 ? (
                           <div className="mt-1 text-[11px] text-[var(--muted)]">
-                            成本 {currencySymbolV1(row.currency)} {holdingCostPerUnitV1(row).toFixed(4)}
+                            成本 {currencySymbol(row.currency)} {holdingCostPerUnit(row).toFixed(4)}
                           </div>
                         ) : null}
                       </td>
@@ -1046,21 +1042,21 @@ export default function AssetUniverseTable(props: {
                           <TooltipTrigger asChild>
                             <div className="inline-flex cursor-default flex-col items-end">
                               <div>{priceLabel(row)}</div>
-                              <div className="mt-1"><DeepLedgerStatusPill tone={priceStatusToneV1(row.priceStatus)}>{priceStatusLabel(row)}</DeepLedgerStatusPill></div>
+                              <div className="mt-1"><DeepLedgerStatusPill tone={priceStatusTone(row.priceStatus)}>{priceStatusLabel(row)}</DeepLedgerStatusPill></div>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
-                            <div className="text-xs font-medium">行情更新时间：{formatDateTimeV1(row.priceUpdatedAt)}</div>
+                            <div className="text-xs font-medium">行情更新时间：{formatDateTime(row.priceUpdatedAt)}</div>
                             <div className="mt-1 text-xs text-[var(--muted)]">系统最近一次成功拉取并写入本地行情的时间。</div>
                             <div className="mt-1 text-xs text-[var(--muted)]">来源：{row.priceSource || "-"}</div>
                           </TooltipContent>
                         </Tooltip>
                       </td>
                       <td className="px-4 py-3 text-right align-top font-[var(--font-mono)] text-sm text-[var(--text)]">
-                        {localValuation > 0 ? (
+                        {rowValuation > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="cursor-default">{formatCurrency(localValuation, row.currency)}</span>
+                              <span className="cursor-default">{formatCurrency(rowValuation, row.currency)}</span>
                             </TooltipTrigger>
                             <TooltipContent className="border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
                               {row.valuationBase != null ? (
@@ -1074,9 +1070,9 @@ export default function AssetUniverseTable(props: {
                       </td>
                       <td className="px-4 py-3 text-right align-top">
                         <div className="font-[var(--font-mono)] text-sm text-[var(--text)]">{formatPercent(row.actualWeightPct)}</div>
-                        {unrealizedPnlPct != null ? (
-                          <div className={cn("mt-1 text-[11px]", unrealizedPnlPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
-                            浮盈亏 {unrealizedPnlPct.toFixed(2)}%
+                        {rowPnlPct != null ? (
+                          <div className={cn("mt-1 text-[11px]", rowPnlPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
+                            浮盈亏 {rowPnlPct.toFixed(2)}%
                           </div>
                         ) : null}
                         <div className={cn("mt-1 text-[11px]", valuationTemp.className)}>估值温度 {valuationTemp.text}</div>
@@ -1112,9 +1108,9 @@ export default function AssetUniverseTable(props: {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div className="inline-flex cursor-default flex-col items-end gap-2">
-                              <span className={cn("text-xs font-semibold", gapLabel.className)}>{gapLabel.text}</span>
+                              <span className={cn("text-xs font-semibold", rowGapLabel.className)}>{rowGapLabel.text}</span>
                               <span className="h-1.5 w-20 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-                                <span className={cn("block h-full rounded-full", gapLabel.barClassName)} style={{ width: `${gapBarWidth}%` }} />
+                                <span className={cn("block h-full rounded-full", rowGapLabel.barClassName)} style={{ width: `${gapBarWidth}%` }} />
                               </span>
                             </div>
                           </TooltipTrigger>
@@ -1130,7 +1126,7 @@ export default function AssetUniverseTable(props: {
                               type="button"
                               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-1.5 text-xs text-[var(--text)]"
                             >
-                              <span className="text-base leading-none">{hfSignalIconV1(row.hfSignal)}</span>
+                              <span className="text-base leading-none">{hfSignalIcon(row.hfSignal)}</span>
                               <span>{row.hfSignal?.label || "暂无人因"}</span>
                             </button>
                           </TooltipTrigger>
@@ -1142,13 +1138,13 @@ export default function AssetUniverseTable(props: {
                                   信号强度 {row.hfSignal.aggregatedScorePct.toFixed(1)}% · 一致性 {row.hfSignal.convictionPct.toFixed(1)}%
                                 </div>
                                 <div className="text-xs text-[var(--muted)]">
-                                  观点偏离度 {row.hfSignal.thesisDriftPct.toFixed(1)}% · {hfTrendLabelV1(row.hfSignal.trend)}
+                                  观点偏离度 {row.hfSignal.thesisDriftPct.toFixed(1)}% · {hfTrendLabel(row.hfSignal.trend)}
                                 </div>
                                 {row.hfSignal.funds.length ? (
                                   <div className="space-y-1">
                                     {row.hfSignal.funds.slice(0, 3).map((fund) => (
                                       <div key={`${fund.fundCode}-${fund.weightPct}`} className="text-xs text-[var(--muted)]">
-                                        {normalizeFundLabelV1(fund.fundName, fund.fundCode)} · 当前仓位 {fund.weightPct.toFixed(1)}% · 变动 {fund.changePct >= 0 ? "+" : ""}{fund.changePct.toFixed(1)}%
+                                        {normalizeFundLabel(fund.fundName, fund.fundCode)} · 当前仓位 {fund.weightPct.toFixed(1)}% · 变动 {fund.changePct >= 0 ? "+" : ""}{fund.changePct.toFixed(1)}%
                                       </div>
                                     ))}
                                   </div>
@@ -1165,7 +1161,7 @@ export default function AssetUniverseTable(props: {
                       </td>
                       <td className="sticky right-0 z-10 bg-[rgba(7,10,18,0.98)] px-4 py-3 text-right align-top">
                         <div className="flex w-[136px] flex-col gap-2 ml-auto">
-                          <ActionButtonV1
+                          <ActionButton
                             label="买入"
                             testId={`workbench-buy-${row.assetKey}`}
                             disabled={buyDisabled}
@@ -1174,7 +1170,7 @@ export default function AssetUniverseTable(props: {
                             className="w-full justify-center"
                             onClick={() => props.onAddToExecution(row, "BUY")}
                           />
-                          <ActionButtonV1
+                          <ActionButton
                             label="卖出"
                             testId={`workbench-sell-${row.assetKey}`}
                             disabled={sellDisabled}
@@ -1229,7 +1225,7 @@ export default function AssetUniverseTable(props: {
                     {expanded ? (
                       <tr className="border-b border-[var(--border)]/70 bg-[rgba(8,12,20,0.86)]">
                         <td colSpan={11} className="px-4 py-4">
-                          <InlineInsightsV1
+                          <InlineInsights
                             loading={Boolean(props.insightLoadingByAssetKey[row.assetKey])}
                             error={props.insightErrorByAssetKey[row.assetKey] || ""}
                             data={props.insightDataByAssetKey[row.assetKey] || null}

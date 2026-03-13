@@ -1,10 +1,10 @@
 import type { NextResponse } from "next/server";
 
-import { DAA_AUTH_SESSION_COOKIE_PATH_V0, DAA_AUTH_SESSION_COOKIE_V0 } from "@/src/daa/auth/daaAuthConstantsV0";
-import { getDaaAuthContextFromRequestV0 } from "@/src/daa/auth/daaAuthRequestV0";
-import { ensureDevDefaultDaaAuthAccountV0, refreshDaaAuthSessionV0 } from "@/src/daa/auth/daaAuthStoreV0";
-import { failV1, okV1 } from "@/src/daa/api/routeHelpersV1";
-import { shouldUseDevMemFallbackV1 } from "@/src/daa/devMemFallbackV1";
+import { DAA_AUTH_SESSION_COOKIE_PATH_, DAA_AUTH_SESSION_COOKIE_ } from "@/src/daa/auth/daaAuthConstants";
+import { getDaaAuthContextFromRequest } from "@/src/daa/auth/daaAuthRequest";
+import { ensureDevDefaultDaaAuthAccount, refreshDaaAuthSession } from "@/src/daa/auth/daaAuthStore";
+import { fail, ok } from "@/src/daa/api/routeHelpers";
+import { shouldUseDevMemFallback } from "@/src/daa/devMemFallback";
 
 export const runtime = "nodejs";
 
@@ -19,40 +19,40 @@ function isSilentMode(req: Request): boolean {
   }
 }
 
-function clearSessionCookieV1(res: NextResponse) {
+function clearSessionCookie(res: NextResponse) {
   res.cookies.set({
-    name: DAA_AUTH_SESSION_COOKIE_V0,
+    name: DAA_AUTH_SESSION_COOKIE_,
     value: "",
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
+    path: DAA_AUTH_SESSION_COOKIE_PATH_,
     maxAge: 0,
   });
 }
 
 function unauthenticatedResponse(opts?: { silent?: boolean }) {
   const silent = Boolean(opts?.silent);
-  const res = failV1("UNAUTHORIZED", "not_authenticated", { status: silent ? 200 : 401 });
-  clearSessionCookieV1(res);
+  const res = fail("UNAUTHORIZED", "not_authenticated", { status: silent ? 200 : 401 });
+  clearSessionCookie(res);
   return res;
 }
 
 export async function GET(req: Request) {
   try {
-    await ensureDevDefaultDaaAuthAccountV0().catch(() => null);
+    await ensureDevDefaultDaaAuthAccount().catch(() => null);
     const silent = isSilentMode(req);
 
-    const ctx = await getDaaAuthContextFromRequestV0(req, { touch: false });
+    const ctx = await getDaaAuthContextFromRequest(req, { touch: false });
     if (!ctx) {
       return unauthenticatedResponse({ silent });
     }
 
     const { account, session, token } = ctx;
-    const refreshed = await refreshDaaAuthSessionV0({ sessionId: session.sessionId });
+    const refreshed = await refreshDaaAuthSession({ sessionId: session.sessionId });
     const responseSession = refreshed ?? session;
 
-    const res = okV1({
+    const res = ok({
       account: {
         accountId: account.accountId,
         username: account.username,
@@ -70,22 +70,22 @@ export async function GET(req: Request) {
 
     if (refreshed) {
       res.cookies.set({
-        name: DAA_AUTH_SESSION_COOKIE_V0,
+        name: DAA_AUTH_SESSION_COOKIE_,
         value: token,
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
-        path: DAA_AUTH_SESSION_COOKIE_PATH_V0,
+        path: DAA_AUTH_SESSION_COOKIE_PATH_,
         expires: new Date(refreshed.expiresAt),
       });
     }
 
     return res;
   } catch (error) {
-    if (isSilentMode(req) && shouldUseDevMemFallbackV1(error)) {
+    if (isSilentMode(req) && shouldUseDevMemFallback(error)) {
       return unauthenticatedResponse({ silent: true });
     }
-    return failV1("INTERNAL_ERROR", "auth_backend_unavailable", {
+    return fail("INTERNAL_ERROR", "auth_backend_unavailable", {
       status: 503,
       details: {
         message: error instanceof Error ? error.message : String(error),

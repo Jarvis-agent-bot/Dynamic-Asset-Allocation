@@ -108,3 +108,9 @@ Thumbs.db
 
 # Factory
 .factory/specs/
+
+# Build / temp artifacts
+output/
+.tmp/
+.history/
+.vercel/

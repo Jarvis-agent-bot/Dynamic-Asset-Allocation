@@ -1,25 +1,25 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { buildOverviewReadModelV1 } from "@/src/daa/modules/read/overviewReadServiceV1";
-import { buildDevMemOverviewReadModelV1, shouldUseDevMemFallbackV1 } from "@/src/daa/devMemFallbackV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { buildOverviewReadModel } from "@/src/daa/modules/read/overviewReadService";
+import { buildDevMemOverviewReadModel, shouldUseDevMemFallback } from "@/src/daa/devMemFallback";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
+  return withApiHandler(async () => {
     const authResult = await requireDaaAdminViewerAuth(req).catch((error) => {
-      if (shouldUseDevMemFallbackV1(error)) return null;
+      if (shouldUseDevMemFallback(error)) return null;
       throw error;
     });
-    const denied = mapDeniedResponseV1(authResult);
+    const denied = mapDeniedResponse(authResult);
     if (denied) {
-      if (shouldUseDevMemFallbackV1()) return okV1(buildDevMemOverviewReadModelV1());
+      if (shouldUseDevMemFallback()) return ok(buildDevMemOverviewReadModel());
       return denied;
     }
     try {
-      return okV1(await buildOverviewReadModelV1());
+      return ok(await buildOverviewReadModel());
     } catch (error) {
-      if (shouldUseDevMemFallbackV1(error)) return okV1(buildDevMemOverviewReadModelV1());
+      if (shouldUseDevMemFallback(error)) return ok(buildDevMemOverviewReadModel());
       throw error;
     }
   });

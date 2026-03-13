@@ -1,12 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1 } from "@/src/daa/api/routeHelpersV1";
+import { fail, mapDeniedResponse, ok } from "@/src/daa/api/routeHelpers";
 import {
-  bootstrapCreateFirstDaaAuthAccountV0,
-  createDaaAuthAccountV0,
-  hasAnyDaaAuthAccountsV0,
-} from "@/src/daa/auth/daaAuthStoreV0";
+  bootstrapCreateFirstDaaAuthAccount,
+  createDaaAuthAccount,
+  hasAnyDaaAuthAccounts,
+} from "@/src/daa/auth/daaAuthStore";
 
 export const runtime = "nodejs";
 
@@ -32,11 +32,11 @@ function secureEqual(aRaw: unknown, bRaw: unknown): boolean {
 }
 
 function misconfigured(message: string) {
-  return failV1("INTERNAL_ERROR", message, { status: 500 });
+  return fail("INTERNAL_ERROR", message, { status: 500 });
 }
 
 function unauthorized() {
-  return failV1("UNAUTHORIZED", "unauthorized", {
+  return fail("UNAUTHORIZED", "unauthorized", {
     status: 401,
     headers: { "www-authenticate": "DaaBootstrap" },
   });
@@ -54,15 +54,15 @@ export async function POST(req: Request) {
   const password = typeof body?.password === "string" ? body.password : undefined;
   const roles = Array.isArray(body?.roles) ? body.roles : undefined;
 
-  const anyAccounts = await hasAnyDaaAuthAccountsV0();
+  const anyAccounts = await hasAnyDaaAuthAccounts();
 
   if (anyAccounts) {
-    const mapped = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+    const mapped = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (mapped) return mapped;
 
     try {
-      const account = await createDaaAuthAccountV0({ username, password, roles });
-      return okV1({
+      const account = await createDaaAuthAccount({ username, password, roles });
+      return ok({
         account: {
           accountId: account.accountId,
           username: account.username,
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     } catch (error: any) {
       const msg = String(error?.message ?? error ?? "error");
       const status = /unique/i.test(msg) ? 409 : 400;
-      return failV1("VALIDATION_FAILED", msg, { status });
+      return fail("VALIDATION_FAILED", msg, { status });
     }
   }
 
@@ -93,8 +93,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const account = await bootstrapCreateFirstDaaAuthAccountV0({ username, password, roles });
-    return okV1({
+    const account = await bootstrapCreateFirstDaaAuthAccount({ username, password, roles });
+    return ok({
       account: {
         accountId: account.accountId,
         username: account.username,
@@ -106,10 +106,10 @@ export async function POST(req: Request) {
     const msg = String(error?.message ?? error ?? "error");
 
     if (/accounts already exist/i.test(msg) || /bootstrap not allowed/i.test(msg)) {
-      return failV1("VALIDATION_FAILED", "bootstrap not allowed", { status: 409 });
+      return fail("VALIDATION_FAILED", "bootstrap not allowed", { status: 409 });
     }
 
     const status = /unique/i.test(msg) ? 409 : 400;
-    return failV1("VALIDATION_FAILED", msg, { status });
+    return fail("VALIDATION_FAILED", msg, { status });
   }
 }

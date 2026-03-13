@@ -5,8 +5,8 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { appendNoticeParamV0, normalizeDaaReturnToV0 } from "@/src/daa/urlV0";
-import { fetchDaaAuthSessionV1, type DaaAuthMePayloadV1 } from "@/app/daa/_components/daaAuthSessionClientV1";
+import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
+import { fetchDaaAuthSession, type DaaAuthMePayload } from "@/app/daa/_components/daaAuthSessionClient";
 
 type Props = {
   returnTo: string;
@@ -17,7 +17,7 @@ type Props = {
 type SessionModel =
   | { kind: "checking" }
   | { kind: "signedOut" }
-  | { kind: "signedIn"; me: DaaAuthMePayloadV1 };
+  | { kind: "signedIn"; me: DaaAuthMePayload };
 
 function parseApiError(json: any, fallback: string): string {
   const message = typeof json?.error?.message === "string" ? json.error.message.trim() : "";
@@ -49,7 +49,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   const userRef = useRef<HTMLInputElement | null>(null);
   const passRef = useRef<HTMLInputElement | null>(null);
 
-  const safeReturnTo = useMemo(() => normalizeDaaReturnToV0(returnTo), [returnTo]);
+  const safeReturnTo = useMemo(() => normalizeDaaReturnTo(returnTo), [returnTo]);
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
   const [username, setUsername] = useState("admin");
@@ -71,7 +71,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      const result = await fetchDaaAuthSessionV1({ silent: true });
+      const result = await fetchDaaAuthSession({ silent: true });
       if (cancelled) return;
       if (result.kind === "signedIn") { setSession({ kind: "signedIn", me: result.me }); return; }
       setSession({ kind: "signedOut" });
@@ -122,7 +122,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       let json: any = null;
       try { json = JSON.parse(text); } catch { json = null; }
       if (!res.ok || !json?.ok) { setAuthError(mapLoginError(parseApiError(json, `HTTP ${res.status}`))); return; }
-      const redirectTo = normalizeDaaReturnToV0(typeof json?.data?.redirectTo === "string" ? json.data.redirectTo : appendNoticeParamV0(safeReturnTo, "signed_in"));
+      const redirectTo = normalizeDaaReturnTo(typeof json?.data?.redirectTo === "string" ? json.data.redirectTo : appendNoticeParam(safeReturnTo, "signed_in"));
       window.location.href = redirectTo;
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : String(e));
@@ -135,7 +135,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (refreshingSession) return;
     setRefreshingSession(true);
     try {
-      const result = await fetchDaaAuthSessionV1({ silent: true, force: true, cacheTtlMs: 0 });
+      const result = await fetchDaaAuthSession({ silent: true, force: true, cacheTtlMs: 0 });
       if (result.kind === "signedIn") { setSession({ kind: "signedIn", me: result.me }); toast.success("会话已刷新。"); return; }
       if (result.kind === "signedOut") { setSession({ kind: "signedOut" }); toast.error("会话已过期，请重新登录。"); return; }
       throw new Error(result.message || "会话刷新失败");
@@ -153,7 +153,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       let json: any = null;
       try { json = JSON.parse(text); } catch { json = null; }
       if (!res.ok || !json?.ok) throw new Error(parseApiError(json, `HTTP ${res.status}`));
-      window.location.href = appendNoticeParamV0("/daa/login", "signed_out");
+      window.location.href = appendNoticeParam("/daa/login", "signed_out");
     } catch (e) {
       toast.error(`退出失败：${e instanceof Error ? e.message : String(e)}`);
     }

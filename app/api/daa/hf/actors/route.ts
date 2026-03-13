@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { listHumanActorsV1 } from "@/src/daa/hf/hfServiceV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { listHumanActors } from "@/src/daa/hf/hfService";
 
 export const runtime = "nodejs";
 
@@ -14,15 +14,15 @@ function parseCsvList(raw: string | null): string[] | undefined {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     const url = new URL(req.url);
     const marketScope = parseCsvList(url.searchParams.get("markets"));
-    const actors = listHumanActorsV1({ marketScope });
+    const actors = listHumanActors({ marketScope });
 
-    return okV1({
+    return ok({
       marketScope: marketScope ?? null,
       count: actors.length,
       actors,

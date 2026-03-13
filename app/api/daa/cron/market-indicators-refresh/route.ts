@@ -1,19 +1,19 @@
-import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { refreshMarketIndicatorsV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
+import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { requireCronAuth } from "@/src/daa/cron/auth";
+import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
 
 export const runtime = "nodejs";
 
 async function handle(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = requireCronAuthV1(req);
+  return withApiHandler(async () => {
+    const denied = requireCronAuth(req);
     if (denied) {
       const status = denied.status || 401;
-      return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
+      return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const result = await refreshMarketIndicatorsV1();
-    return okV1({
+    const result = await refreshMarketIndicators();
+    return ok({
       refreshedCount: result.refreshedCount,
       marketContext: result.marketContext,
       indicators: result.indicators,

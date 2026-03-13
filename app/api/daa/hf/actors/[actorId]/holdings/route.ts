@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { listActorHoldingsV1 } from "@/src/daa/hf/hfServiceV1";
+import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { listActorHoldings } from "@/src/daa/hf/hfService";
 
 export const runtime = "nodejs";
 
@@ -17,20 +17,20 @@ export async function GET(
   req: Request,
   context: { params: { actorId: string } },
 ) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     const actorId = String(context.params.actorId || "").trim();
     if (!actorId) {
-      return failV1("VALIDATION_FAILED", "missing_actor_id", { status: 400 });
+      return fail("VALIDATION_FAILED", "missing_actor_id", { status: 400 });
     }
 
     const url = new URL(req.url);
     const marketScope = parseCsvList(url.searchParams.get("markets"));
-    const holdings = listActorHoldingsV1(actorId, { marketScope });
+    const holdings = listActorHoldings(actorId, { marketScope });
 
-    return okV1({
+    return ok({
       actorId,
       marketScope: marketScope ?? null,
       count: holdings.length,

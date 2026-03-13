@@ -98,7 +98,7 @@ export function ensembleStrategy({
   };
 }
 
-function normalizeTargetWeightsV1(input: Record<string, number>): Record<string, number> {
+function normalizeTargetWeights(input: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};
   let sum = 0;
   for (const [symbolRaw, valueRaw] of Object.entries(input || {})) {
@@ -115,14 +115,14 @@ function normalizeTargetWeightsV1(input: Record<string, number>): Record<string,
   return out;
 }
 
-export function buildEqualWeightTargetWeightsV1(symbols: string[]): Record<string, number> {
+export function buildEqualWeightTargetWeights(symbols: string[]): Record<string, number> {
   const unique = [...new Set((symbols || []).map((x) => String(x || "").trim().toUpperCase()).filter(Boolean))];
   if (!unique.length) return {};
   const w = 1 / unique.length;
   return Object.fromEntries(unique.map((symbol) => [symbol, w]));
 }
 
-export function buildMomentumTargetWeightsV1(returnsBySymbol: Record<string, number>): Record<string, number> {
+export function buildMomentumTargetWeights(returnsBySymbol: Record<string, number>): Record<string, number> {
   const positive: Record<string, number> = {};
   for (const [symbolRaw, raw] of Object.entries(returnsBySymbol || {})) {
     const symbol = String(symbolRaw || "").trim().toUpperCase();
@@ -131,10 +131,10 @@ export function buildMomentumTargetWeightsV1(returnsBySymbol: Record<string, num
     if (value <= 0) continue;
     positive[symbol] = value;
   }
-  return normalizeTargetWeightsV1(positive);
+  return normalizeTargetWeights(positive);
 }
 
-export function buildRiskParityTargetWeightsV1(volBySymbol: Record<string, number>): Record<string, number> {
+export function buildRiskParityTargetWeights(volBySymbol: Record<string, number>): Record<string, number> {
   const inverseVol: Record<string, number> = {};
   for (const [symbolRaw, raw] of Object.entries(volBySymbol || {})) {
     const symbol = String(symbolRaw || "").trim().toUpperCase();
@@ -142,10 +142,10 @@ export function buildRiskParityTargetWeightsV1(volBySymbol: Record<string, numbe
     if (!symbol || !Number.isFinite(vol) || vol <= 0) continue;
     inverseVol[symbol] = 1 / vol;
   }
-  return normalizeTargetWeightsV1(inverseVol);
+  return normalizeTargetWeights(inverseVol);
 }
 
-function projectToSimplexV1(values: number[]): number[] {
+function projectToSimplex(values: number[]): number[] {
   if (!values.length) return [];
 
   const sorted = [...values].sort((left, right) => right - left);
@@ -177,7 +177,7 @@ function projectToSimplexV1(values: number[]): number[] {
   return projected.map((value) => value / sum);
 }
 
-function buildSymmetricCovarianceMatrixV1(covMatrix: Record<string, Record<string, number>>): {
+function buildSymmetricCovarianceMatrix(covMatrix: Record<string, Record<string, number>>): {
   symbols: string[];
   matrix: number[][];
 } {
@@ -226,17 +226,17 @@ function buildSymmetricCovarianceMatrixV1(covMatrix: Record<string, Record<strin
   return { symbols, matrix };
 }
 
-function multiplyMatrixVectorV1(matrix: number[][], vector: number[]): number[] {
+function multiplyMatrixVector(matrix: number[][], vector: number[]): number[] {
   return matrix.map((row) => row.reduce((sum, value, index) => sum + value * (vector[index] || 0), 0));
 }
 
-function computePortfolioVarianceV1(matrix: number[][], weights: number[]): number {
-  const sigmaW = multiplyMatrixVectorV1(matrix, weights);
+function computePortfolioVariance(matrix: number[][], weights: number[]): number {
+  const sigmaW = multiplyMatrixVector(matrix, weights);
   return weights.reduce((sum, weight, index) => sum + weight * sigmaW[index], 0);
 }
 
-export function buildMinVarianceTargetWeightsV1(covMatrix: Record<string, Record<string, number>>): Record<string, number> {
-  const { symbols, matrix } = buildSymmetricCovarianceMatrixV1(covMatrix);
+export function buildMinVarianceTargetWeights(covMatrix: Record<string, Record<string, number>>): Record<string, number> {
+  const { symbols, matrix } = buildSymmetricCovarianceMatrix(covMatrix);
 
   if (symbols.length === 0) return {};
   if (symbols.length === 1) return { [symbols[0]]: 1 };
@@ -250,13 +250,13 @@ export function buildMinVarianceTargetWeightsV1(covMatrix: Record<string, Record
   const step = maxRowAbsSum > 0 ? 1 / (2 * maxRowAbsSum) : 1;
   let weights = symbols.map(() => 1 / symbols.length);
   let bestWeights = [...weights];
-  let bestVariance = computePortfolioVarianceV1(matrix, weights);
+  let bestVariance = computePortfolioVariance(matrix, weights);
 
   for (let iter = 0; iter < 400; iter += 1) {
-    const sigmaW = multiplyMatrixVectorV1(matrix, weights);
+    const sigmaW = multiplyMatrixVector(matrix, weights);
     const gradient = sigmaW.map((value) => 2 * value);
-    const candidate = projectToSimplexV1(weights.map((weight, index) => weight - step * gradient[index]));
-    const candidateVariance = computePortfolioVarianceV1(matrix, candidate);
+    const candidate = projectToSimplex(weights.map((weight, index) => weight - step * gradient[index]));
+    const candidateVariance = computePortfolioVariance(matrix, candidate);
 
     if (Number.isFinite(candidateVariance) && candidateVariance < bestVariance) {
       bestVariance = candidateVariance;
@@ -269,5 +269,5 @@ export function buildMinVarianceTargetWeightsV1(covMatrix: Record<string, Record
   }
 
   if (!Number.isFinite(bestVariance)) return {};
-  return normalizeTargetWeightsV1(Object.fromEntries(symbols.map((symbol, index) => [symbol, bestWeights[index]])));
+  return normalizeTargetWeights(Object.fromEntries(symbols.map((symbol, index) => [symbol, bestWeights[index]])));
 }

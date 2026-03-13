@@ -7,15 +7,15 @@ export async function register() {
   if (process.env.DAA_PG_DISABLE_BOOT_SCHEMA === "1") return;
 
   try {
-    const { isDaaPgEnabledV0, ensureDaaAuthSchemaPgV0 } = await import("@/src/daa/pg/daaPgV0");
-    const { ensureDaaStoreSchemaPgV1 } = await import("@/src/daa/store/daaStorePgV1");
+    const { isDaaPgEnabled, ensureDaaAuthSchemaPg } = await import("@/src/daa/pg/daaPg");
+    const { ensureDaaStoreSchemaPg } = await import("@/src/daa/store/daaStorePg");
 
     // Allow the app to boot without a DB configured (dev/preview), but when a DB is configured,
     // fail fast so deployment issues are immediately visible.
-    if (!isDaaPgEnabledV0()) return;
+    if (!isDaaPgEnabled()) return;
 
-    await ensureDaaAuthSchemaPgV0();
-    await ensureDaaStoreSchemaPgV1();
+    await ensureDaaAuthSchemaPg();
+    await ensureDaaStoreSchemaPg();
   } catch (e) {
     console.error("[daa_pg] boot-time schema init failed", e);
     throw e;

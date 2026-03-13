@@ -1,10 +1,10 @@
-import { failV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { requireCronAuthV1 } from "@/src/daa/cron/authV1";
-import { runLoggedJobV1 } from "@/src/daa/jobs/jobServiceV1";
-import { refreshMarketIndicatorsV1 } from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
-import { sendEmailByEnvV1 } from "@/src/daa/notify/emailV1";
-import { getDaaSystemConfigV2 } from "@/src/daa/store/daaStorePgV1";
-import { generateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
+import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { requireCronAuth } from "@/src/daa/cron/auth";
+import { runLoggedJob } from "@/src/daa/jobs/jobService";
+import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { sendEmailByEnv } from "@/src/daa/notify/email";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
 
@@ -34,14 +34,14 @@ function buildMailText(input: {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = requireCronAuthV1(req);
+  return withApiHandler(async () => {
+    const denied = requireCronAuth(req);
     if (denied) {
       const status = denied.status || 401;
-      return failV1(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
+      return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJobV1({
+    const execution = await runLoggedJob({
       req,
       jobType: "cron_daily_analysis",
       triggerSource: "cron_daily_analysis",
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         marketRefreshOk: result.marketRefresh.ok,
       }),
       handler: async () => {
-        const system = await getDaaSystemConfigV2();
+        const system = await getDaaSystemConfig();
         const strategy = system.config.rebalanceStrategy;
         if (!strategy.autoGenerateEnabled) {
           return {
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
 
         let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
         try {
-          const refreshed = await refreshMarketIndicatorsV1();
+          const refreshed = await refreshMarketIndicators();
           marketRefresh = { ok: true, refreshedCount: refreshed.refreshedCount };
         } catch (error) {
           marketRefresh = {
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
           };
         }
 
-        const generated = await generateWorkbenchRebalanceCycleV1({
+        const generated = await generateWorkbenchRebalanceCycle({
           triggerSource: "calendar",
           triggerReason: "定期再平衡触发",
           manual: false,
@@ -91,9 +91,9 @@ export async function POST(req: Request) {
 
         const cycle = generated.cycle;
         const recipient = strategy.notifyEmailTo;
-        let email: Awaited<ReturnType<typeof sendEmailByEnvV1>> | null = null;
+        let email: Awaited<ReturnType<typeof sendEmailByEnv>> | null = null;
         if (cycle && generated.created && recipient && system.config.notification.email.onSuggestionGenerated) {
-          email = await sendEmailByEnvV1({
+          email = await sendEmailByEnv({
             to: recipient,
             subject: `DAA 自动再平衡建议 ${new Date().toISOString().slice(0, 10)}`,
             text: buildMailText({
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return okV1({
+    return ok({
       ...execution.result,
       requestId: execution.requestId,
       jobId: execution.jobId,

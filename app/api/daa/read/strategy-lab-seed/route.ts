@@ -1,25 +1,25 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { buildStrategyLabSeedReadModelV1 } from "@/src/daa/modules/read/strategyLabSeedReadServiceV1";
-import { buildDevMemStrategyLabSeedReadModelV1, shouldUseDevMemFallbackV1 } from "@/src/daa/devMemFallbackV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { buildStrategyLabSeedReadModel } from "@/src/daa/modules/read/strategyLabSeedReadService";
+import { buildDevMemStrategyLabSeedReadModel, shouldUseDevMemFallback } from "@/src/daa/devMemFallback";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
+  return withApiHandler(async () => {
     const authResult = await requireDaaAdminViewerAuth(req).catch((error) => {
-      if (shouldUseDevMemFallbackV1(error)) return null;
+      if (shouldUseDevMemFallback(error)) return null;
       throw error;
     });
-    const denied = mapDeniedResponseV1(authResult);
+    const denied = mapDeniedResponse(authResult);
     if (denied) {
-      if (shouldUseDevMemFallbackV1()) return okV1(buildDevMemStrategyLabSeedReadModelV1());
+      if (shouldUseDevMemFallback()) return ok(buildDevMemStrategyLabSeedReadModel());
       return denied;
     }
     try {
-      return okV1(await buildStrategyLabSeedReadModelV1());
+      return ok(await buildStrategyLabSeedReadModel());
     } catch (error) {
-      if (shouldUseDevMemFallbackV1(error)) return okV1(buildDevMemStrategyLabSeedReadModelV1());
+      if (shouldUseDevMemFallback(error)) return ok(buildDevMemStrategyLabSeedReadModel());
       throw error;
     }
   });

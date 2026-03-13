@@ -51,14 +51,14 @@ export type DriftRebalanceBacktestRequest = {
   };
 };
 
-export type PortfolioWeightsSnapshotV0 = {
+export type PortfolioWeightsSnapshot = {
   equityAbs: number;
   cashAbs: number;
   cashPct01: number;
   weightsBySymbolPct01: Record<string, number>;
 };
 
-export type DriftRebalanceBacktestPortfolioPointV0 = PortfolioWeightsSnapshotV0 & {
+export type DriftRebalanceBacktestPortfolioPoint = PortfolioWeightsSnapshot & {
   date: string;
 };
 
@@ -72,11 +72,11 @@ export type DriftRebalanceBacktestEvent = {
   executed: SuggestedOrder[];
   turnoverNotional: number;
   feeNotional: number;
-  before?: PortfolioWeightsSnapshotV0;
-  after?: PortfolioWeightsSnapshotV0;
+  before?: PortfolioWeightsSnapshot;
+  after?: PortfolioWeightsSnapshot;
 };
 
-export type DriftRebalanceBacktestTimelinePointV0 = {
+export type DriftRebalanceBacktestTimelinePoint = {
   date: string;
   trigger: RebalanceTriggerDecision;
   topAbsDriftsPct01: Array<{ symbol: string; absDriftPct01: number; deltaNotional: number }>;
@@ -97,11 +97,11 @@ export type DriftRebalanceBacktestResult = {
   };
   events: DriftRebalanceBacktestEvent[];
   warnings: string[];
-  portfolioByDate: DriftRebalanceBacktestPortfolioPointV0[];
-  timeline?: DriftRebalanceBacktestTimelinePointV0[];
+  portfolioByDate: DriftRebalanceBacktestPortfolioPoint[];
+  timeline?: DriftRebalanceBacktestTimelinePoint[];
   states?: {
-    initial: PortfolioWeightsSnapshotV0;
-    final: PortfolioWeightsSnapshotV0;
+    initial: PortfolioWeightsSnapshot;
+    final: PortfolioWeightsSnapshot;
   };
 };
 
@@ -188,7 +188,7 @@ function computeWeightsSnapshot(opts: {
   cash: number;
   prices: Record<string, number>;
   warnings: string[];
-}): PortfolioWeightsSnapshotV0 {
+}): PortfolioWeightsSnapshot {
   const cashAbs = Math.max(0, toFiniteNumber(opts.cash, 0));
   const valuesBySymbol: Record<string, number> = {};
 
@@ -301,7 +301,7 @@ function executeOrders(opts: {
   return { holdings, cash, executed, turnoverNotional, feeNotional };
 }
 
-function buildExecutableDateSetsBySymbolV1(
+function buildExecutableDateSetsBySymbol(
   input: DriftRebalanceBacktestRequest["executableDatesBySymbol"] | undefined,
 ): Record<string, Set<string>> | null {
   const entries = Object.entries(input || {})
@@ -318,7 +318,7 @@ function buildExecutableDateSetsBySymbolV1(
   return Object.fromEntries(entries);
 }
 
-function partitionOrdersByExecutableDateV1(input: {
+function partitionOrdersByExecutableDate(input: {
   date: string;
   orders: SuggestedOrder[];
   executableDateSetsBySymbol: Record<string, Set<string>> | null;
@@ -457,8 +457,8 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   }
 
   const events: DriftRebalanceBacktestEvent[] = [];
-  const timeline: DriftRebalanceBacktestTimelinePointV0[] = [];
-  const portfolioByDate: DriftRebalanceBacktestPortfolioPointV0[] = [];
+  const timeline: DriftRebalanceBacktestTimelinePoint[] = [];
+  const portfolioByDate: DriftRebalanceBacktestPortfolioPoint[] = [];
 
   const prices0 = buildPricesAtIndex(req.seriesBySymbol, 0, warnings);
   let equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
@@ -468,7 +468,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   }
 
   const initialState = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : null;
-  const executableDateSetsBySymbol = buildExecutableDateSetsBySymbolV1(req.executableDatesBySymbol);
+  const executableDateSetsBySymbol = buildExecutableDateSetsBySymbol(req.executableDatesBySymbol);
   let lastRebalanceAt = "";
   let pendingFill:
     | {
@@ -498,7 +498,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       appendUniqueWarnings(res.warnings);
 
       if (res.orders.length > 0) {
-        const { executableOrders, deferredOrders } = partitionOrdersByExecutableDateV1({
+        const { executableOrders, deferredOrders } = partitionOrdersByExecutableDate({
           date: dates[0],
           orders: res.orders,
           executableDateSetsBySymbol,
@@ -559,7 +559,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     const now = isoToIsoDateTime(dates[i]);
 
     if (pendingFill?.orders?.length) {
-      const { executableOrders, deferredOrders } = partitionOrdersByExecutableDateV1({
+      const { executableOrders, deferredOrders } = partitionOrdersByExecutableDate({
         date: dates[i],
         orders: pendingFill.orders,
         executableDateSetsBySymbol,

@@ -1,8 +1,8 @@
 "use client";
 
-import { DEFAULT_SYSTEM_CONFIG_V2 } from "@/src/daa/config/systemConfigV2";
+import { DEFAULT_SYSTEM_CONFIG_ } from "@/src/daa/config/systemConfig";
 
-export const DAA_RUNTIME_DATA_EVENT_V1 = "daa:data:updated";
+export const DAA_RUNTIME_DATA_EVENT_ = "daa:data:updated";
 
 export type DaaPositionRow = {
   id?: string;
@@ -121,7 +121,7 @@ export type DaaCashLedgerEntry = {
   note?: string | null;
 };
 
-export type UnifiedInputStateV1 = {
+export type UnifiedInputState = {
   schemaVersion: 1;
   updatedAt: string;
   positions: DaaPositionRow[] | null;
@@ -139,21 +139,21 @@ export type UnifiedInputStateV1 = {
   opLog: string[] | null;
 };
 
-export type UnifiedInputSliceKeyV1 = keyof Omit<UnifiedInputStateV1, "schemaVersion" | "updatedAt">;
+export type UnifiedInputSliceKey = keyof Omit<UnifiedInputState, "schemaVersion" | "updatedAt">;
 
 function nowIso(): string {
   return new Date().toISOString();
 }
 
 export const DEFAULT_STRATEGY_CONFIG: DaaStrategyConfig = {
-  ...JSON.parse(JSON.stringify(DEFAULT_SYSTEM_CONFIG_V2.strategy)),
+  ...JSON.parse(JSON.stringify(DEFAULT_SYSTEM_CONFIG_.strategy)),
 } as DaaStrategyConfig;
 
 export const DEFAULT_HF_FUND_REGISTRY: DaaHfFundTrackRow[] = JSON.parse(
-  JSON.stringify(DEFAULT_SYSTEM_CONFIG_V2.dataSources.hfFund.funds),
+  JSON.stringify(DEFAULT_SYSTEM_CONFIG_.dataSources.hfFund.funds),
 ) as DaaHfFundTrackRow[];
 
-function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
+function defaultUnifiedInputState(): UnifiedInputState {
   return {
     schemaVersion: 1,
     updatedAt: nowIso(),
@@ -173,9 +173,9 @@ function defaultUnifiedInputStateV1(): UnifiedInputStateV1 {
   };
 }
 
-const GLOBAL_STATE_KEY_V1 = "__daa_unified_input_state_v1__";
+const GLOBAL_STATE_KEY_ = "__daa_unified_input_state_v1__";
 
-function cloneStateV1<T>(value: T): T {
+function cloneState<T>(value: T): T {
   try {
     return JSON.parse(JSON.stringify(value)) as T;
   } catch {
@@ -183,78 +183,78 @@ function cloneStateV1<T>(value: T): T {
   }
 }
 
-function getMutableStateV1(): UnifiedInputStateV1 {
+function getMutableState(): UnifiedInputState {
   const g = globalThis as any;
-  if (!g[GLOBAL_STATE_KEY_V1]) {
-    g[GLOBAL_STATE_KEY_V1] = defaultUnifiedInputStateV1();
+  if (!g[GLOBAL_STATE_KEY_]) {
+    g[GLOBAL_STATE_KEY_] = defaultUnifiedInputState();
   } else {
-    const current = g[GLOBAL_STATE_KEY_V1] as Partial<UnifiedInputStateV1>;
+    const current = g[GLOBAL_STATE_KEY_] as Partial<UnifiedInputState>;
     if (current.candidateAssets === undefined) {
       current.candidateAssets = null;
     }
   }
-  return g[GLOBAL_STATE_KEY_V1] as UnifiedInputStateV1;
+  return g[GLOBAL_STATE_KEY_] as UnifiedInputState;
 }
 
-function dispatchDataEventV1() {
+function dispatchDataEvent() {
   try {
-    window.dispatchEvent(new CustomEvent(DAA_RUNTIME_DATA_EVENT_V1));
+    window.dispatchEvent(new CustomEvent(DAA_RUNTIME_DATA_EVENT_));
   } catch {
     // ignore
   }
 }
 
-export function bootstrapUnifiedInputRuntimeV1(opts: { dispatchEvent?: boolean } = {}): UnifiedInputStateV1 {
-  const current = getMutableStateV1();
-  if (opts.dispatchEvent !== false) dispatchDataEventV1();
-  return cloneStateV1(current);
+export function bootstrapUnifiedInputRuntime(opts: { dispatchEvent?: boolean } = {}): UnifiedInputState {
+  const current = getMutableState();
+  if (opts.dispatchEvent !== false) dispatchDataEvent();
+  return cloneState(current);
 }
 
-export function loadUnifiedInputStateV1(): UnifiedInputStateV1 {
-  return cloneStateV1(getMutableStateV1());
+export function loadUnifiedInputState(): UnifiedInputState {
+  return cloneState(getMutableState());
 }
 
-export function saveUnifiedInputStateV1(
-  nextState: UnifiedInputStateV1,
+export function saveUnifiedInputState(
+  nextState: UnifiedInputState,
   opts: { dispatchEvent?: boolean } = {},
-): UnifiedInputStateV1 {
-  const current = getMutableStateV1();
-  const next: UnifiedInputStateV1 = {
+): UnifiedInputState {
+  const current = getMutableState();
+  const next: UnifiedInputState = {
     ...current,
-    ...cloneStateV1(nextState),
+    ...cloneState(nextState),
     schemaVersion: 1,
     updatedAt: nowIso(),
   };
-  (globalThis as any)[GLOBAL_STATE_KEY_V1] = next;
-  if (opts.dispatchEvent !== false) dispatchDataEventV1();
-  return cloneStateV1(next);
+  (globalThis as any)[GLOBAL_STATE_KEY_] = next;
+  if (opts.dispatchEvent !== false) dispatchDataEvent();
+  return cloneState(next);
 }
 
-export function patchUnifiedInputStateV1(
-  patch: Partial<Omit<UnifiedInputStateV1, "schemaVersion" | "updatedAt">>,
+export function patchUnifiedInputState(
+  patch: Partial<Omit<UnifiedInputState, "schemaVersion" | "updatedAt">>,
   opts: { dispatchEvent?: boolean } = {},
-): UnifiedInputStateV1 {
-  const current = getMutableStateV1();
-  const next: UnifiedInputStateV1 = {
+): UnifiedInputState {
+  const current = getMutableState();
+  const next: UnifiedInputState = {
     ...current,
-    ...cloneStateV1(patch),
+    ...cloneState(patch),
     schemaVersion: 1,
     updatedAt: nowIso(),
   };
-  (globalThis as any)[GLOBAL_STATE_KEY_V1] = next;
-  if (opts.dispatchEvent !== false) dispatchDataEventV1();
-  return cloneStateV1(next);
+  (globalThis as any)[GLOBAL_STATE_KEY_] = next;
+  if (opts.dispatchEvent !== false) dispatchDataEvent();
+  return cloneState(next);
 }
 
-export function readUnifiedInputSliceV1<T = unknown>(sliceKey: UnifiedInputSliceKeyV1): T | null {
-  const st = getMutableStateV1();
-  return (cloneStateV1(st[sliceKey]) as T | null) ?? null;
+export function readUnifiedInputSlice<T = unknown>(sliceKey: UnifiedInputSliceKey): T | null {
+  const st = getMutableState();
+  return (cloneState(st[sliceKey]) as T | null) ?? null;
 }
 
-export function writeUnifiedInputSliceV1(
-  sliceKey: UnifiedInputSliceKeyV1,
+export function writeUnifiedInputSlice(
+  sliceKey: UnifiedInputSliceKey,
   value: unknown,
   opts: { dispatchEvent?: boolean } = {},
-): UnifiedInputStateV1 {
-  return patchUnifiedInputStateV1({ [sliceKey]: value ?? null }, opts);
+): UnifiedInputState {
+  return patchUnifiedInputState({ [sliceKey]: value ?? null }, opts);
 }

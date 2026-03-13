@@ -1,0 +1,731 @@
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { getDaaSystemConfig, listDaaAssetUniverse, saveDaaSystemConfig, upsertDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
+import { listStrategyLabRunSnapshots } from "@/src/daa/store/strategyLabSnapshotRepo";
+import { runStrategyLab, writeStrategyLabTargetWeights } from "../strategyLabService";
+
+const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
+const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
+
+function resetPgMemRuntime() {
+  process.env.DAA_PG_MEM = "1";
+  delete process.env.DAA_DB_URL;
+  delete process.env.DATABASE_URL;
+  delete (globalThis as Record<string, unknown>)[PG_GLOBAL_KEY];
+  delete (globalThis as Record<string, unknown>)[STORE_GLOBAL_KEY];
+}
+
+function createMarketDataClient(seriesMap: Record<string, Array<{ date: string; close: number }>>) {
+  return {
+    yfinance: {
+      async priceSeriesBars(params: { symbol: string }) {
+        const rows = seriesMap[params.symbol];
+        if (!rows) throw new Error(`missing symbol ${params.symbol}`);
+        return rows;
+      },
+    },
+  } as any;
+}
+
+describe("strategyLabService", () => {
+  beforeEach(() => {
+    resetPgMemRuntime();
+  });
+
+  it("runs strategy lab with walk-forward candidates and benchmark scores", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAPL: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 102 },
+        { date: "2025-01-03", close: 105 },
+        { date: "2025-01-06", close: 107 },
+      ],
+      MSFT: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 99 },
+        { date: "2025-01-03", close: 101 },
+        { date: "2025-01-06", close: 104 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+        { date: "2025-01-06", close: 103 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        {
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "AAPL",
+          currentTargetWeightPct: 60,
+          currentWeightPct: 55,
+        },
+        {
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "MSFT",
+          currentTargetWeightPct: 40,
+          currentWeightPct: 45,
+        },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 0.7, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    expect(result.baseCurrency).toBe("USD");
+    expect(result.lookbackBars).toBe(2);
+    expect(result.assetsUsed.map((item) => item.assetKey)).toEqual(["US::AAPL", "US::MSFT"]);
+    expect(result.candidates.map((item) => item.id)).toEqual([
+      "baseline",
+      "momentum",
+      "riskParity",
+      "minVariance",
+      "equalWeight",
+      "ensemble",
+    ]);
+    expect(result.benchmark.symbol).toBe("SPY");
+    expect(result.benchmark.equity.length).toBe(result.candidates[0].backtest.equity.length);
+    expect(result.defaultScenarioId).toBe("executable");
+    expect(result.scenarios.map((item) => item.scenarioId)).toEqual(["executable", "ideal"]);
+    expect(result.candidateComparisons).toHaveLength(6);
+    expect(result.candidateComparisons.every((item) => item.sourceBreakdown.length === 4)).toBe(true);
+    expect(result.candidates.every((item) => Number.isFinite(item.score))).toBe(true);
+  });
+
+  it("keeps benchmark chart aligned while using real benchmark return in ffill_union mode", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAA: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+        { date: "2025-01-06", close: 103 },
+      ],
+      BBB: [
+        { date: "2025-01-02", close: 50 },
+        { date: "2025-01-03", close: 51 },
+        { date: "2025-01-06", close: 52 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+        { date: "2025-01-06", close: 103 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        {
+          assetKey: "US::AAA",
+          symbol: "AAA",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "AAA",
+          currentTargetWeightPct: 50,
+          currentWeightPct: 50,
+        },
+        {
+          assetKey: "US::BBB",
+          symbol: "BBB",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "BBB",
+          currentTargetWeightPct: 50,
+          currentWeightPct: 50,
+        },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "ffill_union",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    expect(result.benchmark.equity.length).toBe(result.candidates[0].backtest.equity.length);
+    expect(result.benchmark.totalReturn).toBeCloseTo(103 / 101 - 1, 8);
+    expect(result.warnings.some((warning) => warning.includes("统计输入与成交执行仅使用真实观测 bar"))).toBe(true);
+  });
+
+
+  it("hides benchmark totalReturn and activeReturn when benchmark does not fully cover the sample", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAA: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 102 },
+        { date: "2025-01-03", close: 104 },
+        { date: "2025-01-06", close: 106 },
+      ],
+      BBB: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 99 },
+        { date: "2025-01-03", close: 98 },
+        { date: "2025-01-06", close: 97 },
+      ],
+      SPY: [
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 101 },
+        { date: "2025-01-06", close: 102 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        { assetKey: "US::AAA", symbol: "AAA", market: "US", currency: "USD", yfinanceSymbol: "AAA", currentTargetWeightPct: 50, currentWeightPct: 50 },
+        { assetKey: "US::BBB", symbol: "BBB", market: "US", currency: "USD", yfinanceSymbol: "BBB", currentTargetWeightPct: 50, currentWeightPct: 50 },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    expect(result.benchmark.equity.length).toBe(result.candidates[0].backtest.equity.length);
+    expect(result.benchmark.coverage).toBe("partial");
+    expect(result.benchmark.equity[0]).toBeNull();
+    expect(result.benchmark.totalReturn).toBeNull();
+    expect(result.candidates.every((candidate) => candidate.attribution.activeReturn === null)).toBe(true);
+    expect(result.warnings.some((warning) => warning.includes("activeReturn 已隐藏"))).toBe(true);
+  });
+
+
+  it("does not forward-fill a flat synthetic tail after the last real benchmark bar", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAA: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 102 },
+        { date: "2025-01-03", close: 104 },
+        { date: "2025-01-06", close: 106 },
+      ],
+      BBB: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+        { date: "2025-01-06", close: 103 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        { assetKey: "US::AAA", symbol: "AAA", market: "US", currency: "USD", yfinanceSymbol: "AAA", currentTargetWeightPct: 50, currentWeightPct: 50 },
+        { assetKey: "US::BBB", symbol: "BBB", market: "US", currency: "USD", yfinanceSymbol: "BBB", currentTargetWeightPct: 50, currentWeightPct: 50 },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    expect(result.benchmark.coverage).toBe("partial");
+    expect(result.benchmark.equity).toEqual([1.01, 1.02, null]);
+    expect(result.benchmark.totalReturn).toBeNull();
+  });
+
+  it("respects explicit zero ensemble weights instead of falling back to defaults", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAA: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 103 },
+        { date: "2025-01-03", close: 106 },
+        { date: "2025-01-06", close: 110 },
+      ],
+      BBB: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 99 },
+        { date: "2025-01-03", close: 98 },
+        { date: "2025-01-06", close: 97 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 100 },
+        { date: "2025-01-06", close: 100 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        { assetKey: "US::AAA", symbol: "AAA", market: "US", currency: "USD", yfinanceSymbol: "AAA", currentTargetWeightPct: 50, currentWeightPct: 50 },
+        { assetKey: "US::BBB", symbol: "BBB", market: "US", currency: "USD", yfinanceSymbol: "BBB", currentTargetWeightPct: 50, currentWeightPct: 50 },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      ensembleConfig: {
+        momentum: 1,
+        riskParity: 0,
+        minVariance: 0,
+        equalWeight: 0,
+      },
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    const momentum = result.candidates.find((candidate) => candidate.id === "momentum");
+    const ensemble = result.candidates.find((candidate) => candidate.id === "ensemble");
+    expect(momentum?.targetWeights).toEqual({ "US::AAA": 1 });
+    expect(ensemble?.targetWeights).toEqual(momentum?.targetWeights);
+  });
+
+  it("keeps executable friction separate from the ideal scenario", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAA: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 200 },
+        { date: "2025-01-03", close: 200 },
+        { date: "2025-01-06", close: 200 },
+      ],
+      BBB: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 100 },
+        { date: "2025-01-06", close: 100 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 101 },
+        { date: "2025-01-06", close: 101 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        {
+          assetKey: "US::AAA",
+          symbol: "AAA",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "AAA",
+          currentTargetWeightPct: 50,
+          currentWeightPct: 50,
+        },
+        {
+          assetKey: "US::BBB",
+          symbol: "BBB",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "BBB",
+          currentTargetWeightPct: 50,
+          currentWeightPct: 50,
+        },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 200,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 0.25, minNotional: 0 },
+      policy: { thresholdPct: 0.1, minTradeNotional: 40, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 100, slippageBps: 10 },
+    }, { marketDataClient });
+
+    const executable = result.scenarios.find((item) => item.scenarioId === "executable");
+    const ideal = result.scenarios.find((item) => item.scenarioId === "ideal");
+
+    expect(executable).toBeTruthy();
+    expect(ideal).toBeTruthy();
+    expect(executable?.execution.feeRateBps).toBeCloseTo(100, 8);
+    expect(ideal?.execution.feeRateBps).toBe(0);
+    expect(ideal?.execution.slippageBps).toBe(0);
+    expect(ideal?.policy.minTradeNotional).toBe(0);
+    expect(ideal?.constraints.minNotional).toBe(0);
+    expect(ideal?.constraints.maxOrderPctOfNav).toBe(1);
+
+    const executableWarnings = executable?.candidates.flatMap((item) => item.backtest.warnings) || [];
+    const idealWarnings = ideal?.candidates.flatMap((item) => item.backtest.warnings) || [];
+
+    expect(executableWarnings.some((warning) => warning.includes("constraints.maxIn=") || warning.includes("constraints.maxOut=") || warning.includes("blocks all trades") || warning.includes("min order size"))).toBe(true);
+    expect(idealWarnings.some((warning) => warning.includes("constraints.maxIn=") || warning.includes("constraints.maxOut=") || warning.includes("blocks all trades") || warning.includes("min order size"))).toBe(false);
+
+    const executableBaseline = executable?.candidates.find((item) => item.id === "baseline");
+    const idealBaseline = ideal?.candidates.find((item) => item.id === "baseline");
+    const baselineComparison = result.candidateComparisons.find((item) => item.candidateId === "baseline");
+
+    expect(executableBaseline?.backtest.summary.turnoverNotional || 0).toBeLessThan(idealBaseline?.backtest.summary.turnoverNotional || 0);
+    expect(executableBaseline?.backtest.summary.totalFeesAbs || 0).toBeGreaterThan(0);
+    expect(idealBaseline?.backtest.summary.totalFeesAbs || 0).toBe(0);
+    expect(baselineComparison?.sourceBreakdown.map((item) => item.sourceId)).toEqual(["fee", "slippage", "tradeFloor", "tradeCaps"]);
+    expect((baselineComparison?.sourceBreakdown || []).some((item) => Math.abs(item.returnImpact) > 1e-8)).toBe(true);
+    expect((baselineComparison?.sourceBreakdown || []).reduce((sum, item) => sum + item.returnImpact, 0)).toBeCloseTo(baselineComparison?.executionGap || 0, 8);
+  });
+
+  it("propagates candidate warnings and uses the updated minVariance label", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAA: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 100 },
+        { date: "2025-01-06", close: 100 },
+      ],
+      BBB: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 100 },
+        { date: "2025-01-06", close: 100 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 100 },
+        { date: "2025-01-06", close: 100 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        { assetKey: "US::AAA", symbol: "AAA", market: "US", currency: "USD", yfinanceSymbol: "AAA", currentTargetWeightPct: 50, currentWeightPct: 50 },
+        { assetKey: "US::BBB", symbol: "BBB", market: "US", currency: "USD", yfinanceSymbol: "BBB", currentTargetWeightPct: 50, currentWeightPct: 50 },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    const executable = result.scenarios.find((item) => item.scenarioId === "executable");
+    const minVariance = executable?.candidates.find((item) => item.id === "minVariance");
+
+    expect(minVariance?.label).toBe("长仓最小方差");
+    expect(minVariance?.targetWeights).toEqual({});
+    expect((minVariance?.warnings || []).some((warning) => warning.includes("covariance unavailable"))).toBe(true);
+  });
+
+  it("uses shared execution defaults from system config when the request does not override them", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          constraints: {
+            ...current.config.strategy.constraints,
+            maxOrderPctOfNav: 0.15,
+          },
+          execution: {
+            ...current.config.strategy.execution,
+            feeRateBps: 12,
+            slippageBps: 8,
+            timing: "t_plus_1_close",
+          },
+        },
+      },
+    });
+
+    const marketDataClient = createMarketDataClient({
+      AAA: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+        { date: "2025-01-06", close: 103 },
+      ],
+      BBB: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 99 },
+        { date: "2025-01-03", close: 98 },
+        { date: "2025-01-06", close: 97 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 100 },
+        { date: "2025-01-06", close: 100 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        { assetKey: "US::AAA", symbol: "AAA", market: "US", currency: "USD", yfinanceSymbol: "AAA", currentTargetWeightPct: 50, currentWeightPct: 50 },
+        { assetKey: "US::BBB", symbol: "BBB", market: "US", currency: "USD", yfinanceSymbol: "BBB", currentTargetWeightPct: 50, currentWeightPct: 50 },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+    }, { marketDataClient });
+
+    const executable = result.scenarios.find((item) => item.scenarioId === "executable");
+    expect(executable?.constraints.maxOrderPctOfNav).toBeCloseTo(0.15, 8);
+    expect(executable?.execution.feeRateBps).toBeCloseTo(12, 8);
+    expect(executable?.execution.slippageBps).toBeCloseTo(8, 8);
+  });
+
+  it("converts mixed USD/HKD/CNY assets into the system base currency before backtesting", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAPL: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 102 },
+        { date: "2025-01-03", close: 103 },
+        { date: "2025-01-06", close: 104 },
+      ],
+      "0700.HK": [
+        { date: "2025-01-01", close: 780 },
+        { date: "2025-01-02", close: 782 },
+        { date: "2025-01-03", close: 790 },
+        { date: "2025-01-06", close: 800 },
+      ],
+      "600519.SS": [
+        { date: "2025-01-01", close: 1500 },
+        { date: "2025-01-02", close: 1510 },
+        { date: "2025-01-03", close: 1520 },
+        { date: "2025-01-06", close: 1530 },
+      ],
+      "HKDUSD=X": [
+        { date: "2025-01-01", close: 0.128 },
+        { date: "2025-01-02", close: 0.128 },
+        { date: "2025-01-03", close: 0.128 },
+        { date: "2025-01-06", close: 0.128 },
+      ],
+      "CNYUSD=X": [
+        { date: "2025-01-01", close: 0.138 },
+        { date: "2025-01-02", close: 0.138 },
+        { date: "2025-01-03", close: 0.138 },
+        { date: "2025-01-06", close: 0.138 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+        { date: "2025-01-06", close: 103 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        { assetKey: "US::AAPL", symbol: "AAPL", market: "US", currency: "USD", yfinanceSymbol: "AAPL", currentTargetWeightPct: 34, currentWeightPct: 34 },
+        { assetKey: "HK::0700", symbol: "0700", market: "HK", currency: "HKD", yfinanceSymbol: "0700.HK", currentTargetWeightPct: 33, currentWeightPct: 33 },
+        { assetKey: "CN::600519", symbol: "600519", market: "CN", currency: "CNY", yfinanceSymbol: "600519.SS", currentTargetWeightPct: 33, currentWeightPct: 33 },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    expect(result.baseCurrency).toBe("USD");
+    expect(result.assetsUsed.map((item) => item.assetKey)).toEqual(["US::AAPL", "HK::0700", "CN::600519"]);
+    expect(result.benchmark.equity.length).toBeGreaterThan(0);
+    expect(result.candidates.every((item) => Number.isFinite(item.backtest.metrics.totalReturn))).toBe(true);
+  });
+
+  it("accepts weekend-stamped FX series by carrying forward the latest available close on asset trading days", async () => {
+    const marketDataClient = createMarketDataClient({
+      "0700.HK": [
+        { date: "2024-04-02", close: 780 },
+        { date: "2024-04-03", close: 782 },
+        { date: "2024-04-05", close: 790 },
+        { date: "2024-04-08", close: 800 },
+      ],
+      "HKDUSD=X": [
+        { date: "2024-04-02", close: 0.1280 },
+        { date: "2024-04-03", close: 0.1281 },
+        { date: "2024-04-04", close: 0.1282 },
+        { date: "2024-04-07", close: 0.1283 },
+        { date: "2024-04-08", close: 0.1284 },
+      ],
+      SPY: [
+        { date: "2024-04-02", close: 100 },
+        { date: "2024-04-03", close: 101 },
+        { date: "2024-04-05", close: 102 },
+        { date: "2024-04-08", close: 103 },
+      ],
+    });
+
+    const result = await runStrategyLab({
+      assets: [
+        { assetKey: "HK::0700", symbol: "0700", market: "HK", currency: "HKD", yfinanceSymbol: "0700.HK", currentTargetWeightPct: 100, currentWeightPct: 100 },
+      ],
+      startDate: "2024-04-02",
+      endDate: "2024-04-08",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    expect(result.assetsUsed.map((item) => item.assetKey)).toEqual(["HK::0700"]);
+    expect(result.candidates.every((item) => Number.isFinite(item.backtest.metrics.totalReturn))).toBe(true);
+  });
+
+  it("blocks when required FX series are missing", async () => {
+    const marketDataClient = createMarketDataClient({
+      "0700.HK": [
+        { date: "2025-01-01", close: 780 },
+        { date: "2025-01-02", close: 782 },
+        { date: "2025-01-03", close: 790 },
+        { date: "2025-01-06", close: 800 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 102 },
+        { date: "2025-01-06", close: 103 },
+      ],
+    });
+
+    await expect(runStrategyLab({
+      assets: [
+        { assetKey: "HK::0700", symbol: "0700", market: "HK", currency: "HKD", yfinanceSymbol: "0700.HK", currentTargetWeightPct: 100, currentWeightPct: 100 },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+    }, { marketDataClient })).rejects.toThrow(/历史 FX 日线缺失/);
+  });
+
+
+  it("run 后会写入研究快照", async () => {
+    const marketDataClient = createMarketDataClient({
+      AAPL: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 101 },
+        { date: "2025-01-03", close: 103 },
+        { date: "2025-01-06", close: 104 },
+      ],
+      SPY: [
+        { date: "2025-01-01", close: 100 },
+        { date: "2025-01-02", close: 100.5 },
+        { date: "2025-01-03", close: 101 },
+        { date: "2025-01-06", close: 101.5 },
+      ],
+    });
+
+    await runStrategyLab({
+      assets: [
+        {
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          market: "US",
+          currency: "USD",
+          yfinanceSymbol: "AAPL",
+          currentTargetWeightPct: 100,
+          currentWeightPct: 100,
+        },
+      ],
+      startDate: "2025-01-01",
+      endDate: "2025-01-06",
+      benchmarkSymbol: "SPY",
+      alignmentMode: "intersection",
+      minBars: 2,
+      lookbackBars: 2,
+      initialEquity: 10000,
+      constraints: { maxPositionPct: 1, maxOrderPctOfNav: 1, minNotional: 0 },
+      policy: { thresholdPct: 0.05, minTradeNotional: 0, cooldownSeconds: 0 },
+      execution: { timing: "t_plus_1_close", feeRateBps: 0, slippageBps: 0 },
+    }, { marketDataClient });
+
+    const snapshots = await listStrategyLabRunSnapshots(5);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0].baseCurrency).toBe("USD");
+    expect(snapshots[0].startDate).toBe("2025-01-01");
+    expect(snapshots[0].endDate).toBe("2025-01-06");
+    expect(snapshots[0].requestJson.benchmarkSymbol).toBe("SPY");
+    expect(Number(snapshots[0].summaryJson.assetsUsedCount)).toBe(1);
+    expect(Number(snapshots[0].summaryJson.candidateCount)).toBeGreaterThan(0);
+  });
+
+  it("writes selected candidate weights back to asset universe and clears legacy config weights", async () => {
+    await upsertDaaAssetUniverseRow({ symbol: "AAPL", market: "US", watchEnabled: true, targetWeightHint: 0.5, lastPrice: 100 });
+    await upsertDaaAssetUniverseRow({ symbol: "MSFT", market: "US", watchEnabled: true, targetWeightHint: 0.5, lastPrice: 100 });
+
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          targetWeights: {
+            "US::AAPL": 0.6,
+            "US::MSFT": 0.4,
+          },
+        },
+      },
+    });
+
+    const result = await writeStrategyLabTargetWeights({
+      candidateId: "ensemble",
+      scopeAssetKeys: ["US::AAPL", "US::MSFT"],
+      weightsByAssetKey: {
+        "US::AAPL": 0.3,
+        "US::MSFT": 0.7,
+      },
+    });
+
+    const rows = await listDaaAssetUniverse();
+    const byKey = new Map(rows.map((row) => [row.assetKey, row]));
+    const next = await getDaaSystemConfig();
+
+    expect(result.updatedCount).toBe(2);
+    expect(byKey.get("US::AAPL")?.targetWeightHint).toBeCloseTo(0.3, 6);
+    expect(byKey.get("US::MSFT")?.targetWeightHint).toBeCloseTo(0.7, 6);
+    expect(next.config.strategy.targetWeights).toEqual({});
+  });
+});

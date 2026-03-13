@@ -1,9 +1,9 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { preferAssetRowPriceV1 } from "@/src/daa/modules/workbench/preferAssetRowPriceV1";
-import { upsertDaaAssetUniverseRowV1 } from "@/src/daa/store/daaStorePgV1";
-import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { preferAssetRowPrice } from "@/src/daa/modules/workbench/preferAssetRowPrice";
+import { upsertDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 
 export const runtime = "nodejs";
 
@@ -30,18 +30,18 @@ function toOptionalText(value: unknown): string | undefined {
 }
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
+    const body = await readJsonBody<Body>(req);
     const symbol = String(body?.symbol || "").trim().toUpperCase();
     const market = String(body?.market || "US").trim().toUpperCase() || "US";
     if (!symbol) {
-      return failV1("VALIDATION_FAILED", "symbol is required", { status: 400 });
+      return fail("VALIDATION_FAILED", "symbol is required", { status: 400 });
     }
 
-    const saved = await upsertDaaAssetUniverseRowV1({
+    const saved = await upsertDaaAssetUniverseRow({
       symbol,
       market,
       currency: toOptionalText(body?.currency),
@@ -57,19 +57,19 @@ export async function POST(req: Request) {
       lastPrice: Number(body?.lastPrice || 0),
     });
 
-    const bootstrap = await buildWorkbenchBootstrapV1({ syncPrices: false });
+    const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
     const row = bootstrap.assetUniverse.find((item) => item.assetKey === saved.assetKey);
     if (!row) {
-      const parsed = parseDaaAssetKeyV1(saved.assetKey);
-      return failV1("NOT_FOUND", `asset not found after upsert: ${parsed?.symbol || saved.assetKey}`, { status: 404 });
+      const parsed = parseDaaAssetKey(saved.assetKey);
+      return fail("NOT_FOUND", `asset not found after upsert: ${parsed?.symbol || saved.assetKey}`, { status: 404 });
     }
 
     let resolvedRow = row;
     try {
-      resolvedRow = await preferAssetRowPriceV1(row, "asset_upsert");
+      resolvedRow = await preferAssetRowPrice(row, "asset_upsert");
     } catch {
       resolvedRow = row;
     }
-    return okV1({ row: resolvedRow });
+    return ok({ row: resolvedRow });
   });
 }

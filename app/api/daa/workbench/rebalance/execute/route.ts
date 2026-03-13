@@ -1,7 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { WorkbenchDomainErrorV1 } from "@/src/daa/modules/workbench/workbenchErrorsV1";
-import { executeWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { WorkbenchDomainError } from "@/src/daa/modules/workbench/workbenchErrors";
+import { executeWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
 
@@ -11,23 +11,23 @@ type Body = {
 };
 
 export async function POST(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
+    const body = await readJsonBody<Body>(req);
     const payload = (body || {}) as Body;
     const cycleId = String(payload.cycleId || "").trim();
     if (!cycleId) {
-      return failV1("VALIDATION_FAILED", "cycleId is required", { status: 400 });
+      return fail("VALIDATION_FAILED", "cycleId is required", { status: 400 });
     }
     const executeMode = String(payload.executeMode || "").trim().toLowerCase() === "selected" ? "selected" : "all";
     let data;
     try {
-      data = await executeWorkbenchRebalanceCycleV1({ cycleId, executeMode });
+      data = await executeWorkbenchRebalanceCycle({ cycleId, executeMode });
     } catch (error) {
-      if (error instanceof WorkbenchDomainErrorV1) {
-        return failV1("VALIDATION_FAILED", error.message, {
+      if (error instanceof WorkbenchDomainError) {
+        return fail("VALIDATION_FAILED", error.message, {
           status: error.status,
           details: {
             code: error.code,
@@ -57,10 +57,10 @@ export async function POST(req: Request) {
         } catch {
           reason = raw || reason;
         }
-        return failV1("VALIDATION_FAILED", reason, { status: 409, details });
+        return fail("VALIDATION_FAILED", reason, { status: 409, details });
       }
       throw error;
     }
-    return okV1(data);
+    return ok(data);
   });
 }

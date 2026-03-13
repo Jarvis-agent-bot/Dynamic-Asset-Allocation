@@ -1,11 +1,11 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
+import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 
-import { fetchTextWithTimeoutV0, getProviderErrorStatusV0, mustGetEnvV0 } from "../../_lib/providerAdaptersV0";
+import { fetchTextWithTimeout, getProviderErrorStatus, mustGetEnv } from "../../_lib/providerAdapters";
 
 export const runtime = "nodejs";
 
-function parseJsonBestEffortV1(text: string): unknown {
+function parseJsonBestEffort(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
@@ -14,8 +14,8 @@ function parseJsonBestEffortV1(text: string): unknown {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     try {
@@ -23,15 +23,15 @@ export async function GET(req: Request) {
       const screenName = url.searchParams.get("screenName")?.trim();
 
       if (!screenName) {
-        return failV1("VALIDATION_FAILED", "missing screenName", { status: 400 });
+        return fail("VALIDATION_FAILED", "missing screenName", { status: 400 });
       }
 
-      const token = mustGetEnvV0("TWITTERDATA_TOKEN");
+      const token = mustGetEnv("TWITTERDATA_TOKEN");
       const upstream = new URL("https://pro.twitterdata.com/UserByScreenName");
       upstream.searchParams.set("screenName", screenName);
       upstream.searchParams.set("token", token);
 
-      const response = await fetchTextWithTimeoutV0(upstream, {
+      const response = await fetchTextWithTimeout(upstream, {
         method: "GET",
         headers: {
           accept: "application/json",
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
 
       const text = await response.text();
       if (!response.ok) {
-        return failV1("INTERNAL_ERROR", "twitterdata upstream error", {
+        return fail("INTERNAL_ERROR", "twitterdata upstream error", {
           status: 502,
           details: {
             status: response.status,
@@ -48,14 +48,14 @@ export async function GET(req: Request) {
         });
       }
 
-      return okV1({
+      return ok({
         source: "twitterdata",
         screenName,
-        payload: parseJsonBestEffortV1(text),
+        payload: parseJsonBestEffort(text),
       });
     } catch (error) {
-      return failV1("INTERNAL_ERROR", "twitter user resolve failed", {
-        status: getProviderErrorStatusV0(error),
+      return fail("INTERNAL_ERROR", "twitter user resolve failed", {
+        status: getProviderErrorStatus(error),
         details: {
           message: error instanceof Error ? error.message : String(error),
         },

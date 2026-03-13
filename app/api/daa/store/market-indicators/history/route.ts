@@ -1,14 +1,14 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
+import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import {
-  listMarketIndicatorHistorySeriesV1,
-} from "@/src/daa/modules/marketContext/marketIndicatorServiceV1";
-import type { DaaMarketIndicatorKeyV1, DaaMarketIndicatorScopeV1 } from "@/src/daa/modules/marketContext/marketContextTypesV1";
-import { buildDevMemMarketIndicatorHistoryV1, shouldUseDevMemFallbackV1 } from "@/src/daa/devMemFallbackV1";
+  listMarketIndicatorHistorySeries,
+} from "@/src/daa/modules/marketContext/marketIndicatorService";
+import type { DaaMarketIndicatorKey, DaaMarketIndicatorScope } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { buildDevMemMarketIndicatorHistory, shouldUseDevMemFallback } from "@/src/daa/devMemFallback";
 
 export const runtime = "nodejs";
 
-const VALID_KEYS = new Set<DaaMarketIndicatorKeyV1>([
+const VALID_KEYS = new Set<DaaMarketIndicatorKey>([
   "vix",
   "qqq_spy_ratio",
   "fxi_volatility",
@@ -18,7 +18,7 @@ const VALID_KEYS = new Set<DaaMarketIndicatorKeyV1>([
   "gold_silver_ratio",
 ]);
 
-const VALID_SCOPES = new Set<DaaMarketIndicatorScopeV1>([
+const VALID_SCOPES = new Set<DaaMarketIndicatorScope>([
   "us_equity",
   "hk_cn_equity",
   "crypto",
@@ -26,36 +26,36 @@ const VALID_SCOPES = new Set<DaaMarketIndicatorScopeV1>([
 ]);
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
+  return withApiHandler(async () => {
     const url = new URL(req.url);
     const keys = String(url.searchParams.get("keys") || "")
       .split(",")
       .map((item) => item.trim().toLowerCase())
-      .filter((item): item is DaaMarketIndicatorKeyV1 => VALID_KEYS.has(item as DaaMarketIndicatorKeyV1));
+      .filter((item): item is DaaMarketIndicatorKey => VALID_KEYS.has(item as DaaMarketIndicatorKey));
     if (!keys.length) {
-      return failV1("VALIDATION_FAILED", "keys is required", { status: 400 });
+      return fail("VALIDATION_FAILED", "keys is required", { status: 400 });
     }
     const days = Math.max(1, Math.min(365, Math.trunc(Number(url.searchParams.get("days") || 90) || 90)));
     const scopeParam = String(url.searchParams.get("scope") || "").trim();
-    const scope = VALID_SCOPES.has(scopeParam as DaaMarketIndicatorScopeV1)
-      ? scopeParam as DaaMarketIndicatorScopeV1
+    const scope = VALID_SCOPES.has(scopeParam as DaaMarketIndicatorScope)
+      ? scopeParam as DaaMarketIndicatorScope
       : undefined;
 
     const authResult = await requireDaaAdminViewerAuth(req).catch((error) => {
-      if (shouldUseDevMemFallbackV1(error)) return null;
+      if (shouldUseDevMemFallback(error)) return null;
       throw error;
     });
-    const denied = mapDeniedResponseV1(authResult);
+    const denied = mapDeniedResponse(authResult);
     if (denied) {
-      if (shouldUseDevMemFallbackV1()) return okV1(buildDevMemMarketIndicatorHistoryV1({ keys, days, scope }));
+      if (shouldUseDevMemFallback()) return ok(buildDevMemMarketIndicatorHistory({ keys, days, scope }));
       return denied;
     }
 
     try {
-      const history = await listMarketIndicatorHistorySeriesV1({ keys, days, scope });
-      return okV1({ keys, days, scope: scope || null, history, at: new Date().toISOString() });
+      const history = await listMarketIndicatorHistorySeries({ keys, days, scope });
+      return ok({ keys, days, scope: scope || null, history, at: new Date().toISOString() });
     } catch (error) {
-      if (shouldUseDevMemFallbackV1(error)) return okV1(buildDevMemMarketIndicatorHistoryV1({ keys, days, scope }));
+      if (shouldUseDevMemFallback(error)) return ok(buildDevMemMarketIndicatorHistory({ keys, days, scope }));
       throw error;
     }
   });

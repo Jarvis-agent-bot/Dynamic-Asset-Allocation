@@ -1,8 +1,8 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getDaaRebalanceCycleV1 } from "@/src/daa/store/daaStorePgV1";
-import { WorkbenchDomainErrorV1 } from "@/src/daa/modules/workbench/workbenchErrorsV1";
-import { updateWorkbenchRebalanceCycleV1 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleServiceV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { getDaaRebalanceCycle } from "@/src/daa/store/daaStorePg";
+import { WorkbenchDomainError } from "@/src/daa/modules/workbench/workbenchErrors";
+import { updateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
 
@@ -27,24 +27,24 @@ function readCancelReason(value: unknown): string {
 }
 
 export async function GET(req: Request, { params }: Params) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
-    const cycle = await getDaaRebalanceCycleV1(params.id);
+    const cycle = await getDaaRebalanceCycle(params.id);
     if (!cycle) {
-      return failV1("NOT_FOUND", "cycle not found", { status: 404 });
+      return fail("NOT_FOUND", "cycle not found", { status: 404 });
     }
-    return okV1(cycle);
+    return ok(cycle);
   });
 }
 
 export async function PATCH(req: Request, { params }: Params) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBodyV1<Body>(req);
+    const body = await readJsonBody<Body>(req);
     const payload = (body || {}) as Body;
     const selectedSymbols = Array.isArray(payload.selectedSymbols)
       ? payload.selectedSymbols.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
@@ -55,7 +55,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
     let data;
     try {
-      data = await updateWorkbenchRebalanceCycleV1(params.id, {
+      data = await updateWorkbenchRebalanceCycle(params.id, {
         status: payload.status === "reviewing" ? "reviewing" : undefined,
         notes: payload.notes == null ? undefined : String(payload.notes || ""),
         cancel: payload.cancel ? { reason: readCancelReason(payload.cancel) } : undefined,
@@ -63,8 +63,8 @@ export async function PATCH(req: Request, { params }: Params) {
         selectedAssetSideKeys,
       });
     } catch (error) {
-      if (error instanceof WorkbenchDomainErrorV1) {
-        return failV1("VALIDATION_FAILED", error.message, {
+      if (error instanceof WorkbenchDomainError) {
+        return fail("VALIDATION_FAILED", error.message, {
           status: error.status,
           details: {
             code: error.code,
@@ -74,6 +74,6 @@ export async function PATCH(req: Request, { params }: Params) {
       }
       throw error;
     }
-    return okV1(data);
+    return ok(data);
   });
 }

@@ -1,11 +1,11 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { buildWorkbenchReadModelV1 } from "@/src/daa/modules/read/workbenchReadServiceV1";
-import { buildDevMemWorkbenchReadModelV1, shouldUseDevMemFallbackV1 } from "@/src/daa/devMemFallbackV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { buildDevMemWorkbenchReadModel, shouldUseDevMemFallback } from "@/src/daa/devMemFallback";
 
 export const runtime = "nodejs";
 
-function toBooleanV1(value: string | null, fallback = false): boolean {
+function toBoolean(value: string | null, fallback = false): boolean {
   if (value == null) return fallback;
   const text = value.trim().toLowerCase();
   if (["1", "true", "yes", "on"].includes(text)) return true;
@@ -14,24 +14,24 @@ function toBooleanV1(value: string | null, fallback = false): boolean {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
+  return withApiHandler(async () => {
     const authResult = await requireDaaAdminViewerAuth(req).catch((error) => {
-      if (shouldUseDevMemFallbackV1(error)) return null;
+      if (shouldUseDevMemFallback(error)) return null;
       throw error;
     });
-    const denied = mapDeniedResponseV1(authResult);
+    const denied = mapDeniedResponse(authResult);
     if (denied) {
-      if (shouldUseDevMemFallbackV1()) return okV1(buildDevMemWorkbenchReadModelV1());
+      if (shouldUseDevMemFallback()) return ok(buildDevMemWorkbenchReadModel());
       return denied;
     }
     const { searchParams } = new URL(req.url);
     try {
-      return okV1(await buildWorkbenchReadModelV1({
-        syncPrices: toBooleanV1(searchParams.get("syncPrices"), false),
-        autoRiskCycle: toBooleanV1(searchParams.get("autoRiskCycle"), false),
+      return ok(await buildWorkbenchReadModel({
+        syncPrices: toBoolean(searchParams.get("syncPrices"), false),
+        autoRiskCycle: toBoolean(searchParams.get("autoRiskCycle"), false),
       }));
     } catch (error) {
-      if (shouldUseDevMemFallbackV1(error)) return okV1(buildDevMemWorkbenchReadModelV1());
+      if (shouldUseDevMemFallback(error)) return ok(buildDevMemWorkbenchReadModel());
       throw error;
     }
   });

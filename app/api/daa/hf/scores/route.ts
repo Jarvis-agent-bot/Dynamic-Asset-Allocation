@@ -1,6 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getLatestHumanSignalBatchV1 } from "@/src/daa/hf/hfServiceV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { getLatestHumanSignalBatch } from "@/src/daa/hf/hfService";
 
 export const runtime = "nodejs";
 
@@ -19,8 +19,8 @@ function parseBool(raw: string | null): boolean {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     const url = new URL(req.url);
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     const fundCodes = parseCsvList(url.searchParams.get("fundCodes"));
     const forceRefresh = parseBool(url.searchParams.get("refresh"));
 
-    const batch = await getLatestHumanSignalBatchV1({
+    const batch = await getLatestHumanSignalBatch({
       marketScope,
       symbols,
       fundCodes,
@@ -37,6 +37,6 @@ export async function GET(req: Request) {
       autoIngestOnMiss: false,
     });
 
-    return okV1({ batch });
+    return ok({ batch });
   });
 }

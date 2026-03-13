@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMinVarianceTargetWeightsV1 } from "../ensemble/strategy";
+import { buildMinVarianceTargetWeights } from "../ensemble/strategy";
 
-function computePortfolioVarianceV1(
+function computePortfolioVariance(
   covMatrix: Record<string, Record<string, number>>,
   weights: Record<string, number>,
 ): number {
@@ -18,9 +18,9 @@ function computePortfolioVarianceV1(
   return variance;
 }
 
-describe("buildMinVarianceTargetWeightsV1", () => {
+describe("buildMinVarianceTargetWeights", () => {
   it("在纯对角协方差下退化为逆方差权重", () => {
-    const weights = buildMinVarianceTargetWeightsV1({
+    const weights = buildMinVarianceTargetWeights({
       AAA: { AAA: 1, BBB: 0, CCC: 0 },
       BBB: { AAA: 0, BBB: 2, CCC: 0 },
       CCC: { AAA: 0, BBB: 0, CCC: 4 },
@@ -39,7 +39,7 @@ describe("buildMinVarianceTargetWeightsV1", () => {
       CCC: { AAA: 0, BBB: 0, CCC: 2 },
     };
 
-    const minVariance = buildMinVarianceTargetWeightsV1(covMatrix);
+    const minVariance = buildMinVarianceTargetWeights(covMatrix);
     const inverseVariance = {
       AAA: 0.4,
       BBB: 0.4,
@@ -51,15 +51,15 @@ describe("buildMinVarianceTargetWeightsV1", () => {
     expect(minVariance.CCC).toBeGreaterThan(inverseVariance.CCC);
     expect(Object.values(minVariance).reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 8);
 
-    const minVarianceRisk = computePortfolioVarianceV1(covMatrix, minVariance);
-    const inverseVarianceRisk = computePortfolioVarianceV1(covMatrix, inverseVariance);
+    const minVarianceRisk = computePortfolioVariance(covMatrix, minVariance);
+    const inverseVarianceRisk = computePortfolioVariance(covMatrix, inverseVariance);
 
     expect(minVarianceRisk).toBeLessThan(inverseVarianceRisk);
   });
 
 
   it("在没有有效正定对角信息时返回空结果", () => {
-    const weights = buildMinVarianceTargetWeightsV1({
+    const weights = buildMinVarianceTargetWeights({
       AAA: { AAA: 0, BBB: 1 },
       BBB: { AAA: 1, BBB: 0 },
     });

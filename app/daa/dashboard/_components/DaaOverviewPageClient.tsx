@@ -1,32 +1,32 @@
 "use client";
 
-import { usePortfolioOverviewModelV1 } from "@/app/daa/dashboard/_hooks/usePortfolioOverviewModelV1";
+import { usePortfolioOverviewModel } from "@/app/daa/dashboard/_hooks/usePortfolioOverviewModel";
 import {
-  OverviewAlertsPanelV1,
-  OverviewAllocationPanelV1,
-  OverviewCashLedgerDialogV1,
-  OverviewCashLedgerPanelV1,
-  OverviewEquityTrendPanelV1,
-  OverviewErrorStateV1,
-  OverviewMarketTemperaturePanelV1,
-  OverviewRunSummaryPanelV1,
-  OverviewSummaryHeaderV1,
-} from "@/app/daa/dashboard/_components/overview/OverviewSectionsV1";
+  OverviewAlertsPanel,
+  OverviewAllocationPanel,
+  OverviewCashLedgerDialog,
+  OverviewCashLedgerPanel,
+  OverviewEquityTrendPanel,
+  OverviewErrorState,
+  OverviewMarketTemperaturePanel,
+  OverviewRunSummaryPanel,
+  OverviewSummaryHeader,
+} from "@/app/daa/dashboard/_components/overview/OverviewSections";
 
 export default function DaaOverviewPageClient() {
-  const model = usePortfolioOverviewModelV1();
+  const model = usePortfolioOverviewModel();
 
   return (
     <div className="space-y-6 lg:space-y-7">
-      <OverviewSummaryHeaderV1 model={model} />
-      <OverviewErrorStateV1 error={model.error} />
-      <OverviewRunSummaryPanelV1 model={model} />
-      <OverviewMarketTemperaturePanelV1 model={model} />
-      <OverviewAlertsPanelV1 model={model} />
-      <OverviewEquityTrendPanelV1 model={model} />
-      <OverviewAllocationPanelV1 model={model} />
-      <OverviewCashLedgerPanelV1 model={model} />
-      <OverviewCashLedgerDialogV1 model={model} />
+      <OverviewSummaryHeader model={model} />
+      <OverviewErrorState error={model.error} />
+      <OverviewRunSummaryPanel model={model} />
+      <OverviewMarketTemperaturePanel model={model} />
+      <OverviewAlertsPanel model={model} />
+      <OverviewEquityTrendPanel model={model} />
+      <OverviewAllocationPanel model={model} />
+      <OverviewCashLedgerPanel model={model} />
+      <OverviewCashLedgerDialog model={model} />
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { preferAssetRowPriceV1 } from "@/src/daa/modules/workbench/preferAssetRowPriceV1";
-import { patchDaaAssetUniverseRowV1 } from "@/src/daa/store/daaStorePgV1";
-import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
-import { buildWorkbenchBootstrapV1 } from "@/src/daa/modules/workbench/workbenchReadServiceV1";
+import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { preferAssetRowPrice } from "@/src/daa/modules/workbench/preferAssetRowPrice";
+import { patchDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 
 export const runtime = "nodejs";
 
@@ -30,15 +30,15 @@ type Ctx = {
 };
 
 export async function PATCH(req: Request, ctx: Ctx) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminEditorAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const parsed = parseDaaAssetKeyV1(ctx.params?.assetKey);
-    if (!parsed) return failV1("VALIDATION_FAILED", "assetKey is required", { status: 400 });
+    const parsed = parseDaaAssetKey(ctx.params?.assetKey);
+    if (!parsed) return fail("VALIDATION_FAILED", "assetKey is required", { status: 400 });
 
-    const body = await readJsonBodyV1<Body>(req);
-    const saved = await patchDaaAssetUniverseRowV1({
+    const body = await readJsonBody<Body>(req);
+    const saved = await patchDaaAssetUniverseRow({
       assetKey: `${parsed.market}::${parsed.symbol}`,
       watchEnabled: body?.watchEnabled == null ? undefined : Boolean(body?.watchEnabled),
       watchTags: Array.isArray(body?.watchTags) ? body.watchTags.map(String) : undefined,
@@ -55,18 +55,18 @@ export async function PATCH(req: Request, ctx: Ctx) {
       lastPrice: body?.lastPrice == null ? undefined : Number(body.lastPrice),
     });
 
-    const bootstrap = await buildWorkbenchBootstrapV1({ syncPrices: false });
+    const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
     const row = bootstrap.assetUniverse.find((item) => item.assetKey === saved.assetKey);
     if (!row) {
-      return failV1("NOT_FOUND", `asset not found after patch: ${saved.assetKey}`, { status: 404 });
+      return fail("NOT_FOUND", `asset not found after patch: ${saved.assetKey}`, { status: 404 });
     }
 
     let resolvedRow = row;
     try {
-      resolvedRow = await preferAssetRowPriceV1(row, "asset_patch");
+      resolvedRow = await preferAssetRowPrice(row, "asset_patch");
     } catch {
       resolvedRow = row;
     }
-    return okV1({ row: resolvedRow });
+    return ok({ row: resolvedRow });
   });
 }

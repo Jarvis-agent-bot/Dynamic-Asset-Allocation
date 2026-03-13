@@ -1,7 +1,7 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { failV1, mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
+import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 
-import { fetchTextWithTimeoutV0, getProviderErrorStatusV0 } from "../../../_lib/providerAdaptersV0";
+import { fetchTextWithTimeout, getProviderErrorStatus } from "../../../_lib/providerAdapters";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ function normalizeReportDate(raw: string | null): string | null {
   return `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
 }
 
-function parseJsonBestEffortV1(text: string): unknown {
+function parseJsonBestEffort(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
@@ -22,8 +22,8 @@ function parseJsonBestEffortV1(text: string): unknown {
 }
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     try {
@@ -32,17 +32,17 @@ export async function GET(req: Request) {
       const reportDate = normalizeReportDate(url.searchParams.get("report_date"));
 
       if (!fundCode) {
-        return failV1("VALIDATION_FAILED", "missing fund_code", { status: 400 });
+        return fail("VALIDATION_FAILED", "missing fund_code", { status: 400 });
       }
       if (!reportDate) {
-        return failV1("VALIDATION_FAILED", "invalid report_date", { status: 400 });
+        return fail("VALIDATION_FAILED", "invalid report_date", { status: 400 });
       }
 
       const upstream = new URL("https://danjuanfunds.com/djapi/fundx/base/fund/record/asset/percent");
       upstream.searchParams.set("fund_code", fundCode);
       upstream.searchParams.set("report_date", reportDate);
 
-      const response = await fetchTextWithTimeoutV0(upstream, {
+      const response = await fetchTextWithTimeout(upstream, {
         method: "GET",
         headers: {
           accept: "application/json, text/plain, */*",
@@ -53,10 +53,10 @@ export async function GET(req: Request) {
       });
 
       const text = await response.text();
-      const payload = parseJsonBestEffortV1(text);
+      const payload = parseJsonBestEffort(text);
 
       if (!response.ok) {
-        return failV1("INTERNAL_ERROR", "danjuan upstream error", {
+        return fail("INTERNAL_ERROR", "danjuan upstream error", {
           status: 502,
           details: {
             status: response.status,
@@ -65,15 +65,15 @@ export async function GET(req: Request) {
         });
       }
 
-      return okV1({
+      return ok({
         source: "danjuan",
         fundCode,
         reportDate,
         payload,
       });
     } catch (error) {
-      return failV1("INTERNAL_ERROR", "danjuan fund asset-percent fetch failed", {
-        status: getProviderErrorStatusV0(error),
+      return fail("INTERNAL_ERROR", "danjuan fund asset-percent fetch failed", {
+        status: getProviderErrorStatus(error),
         details: {
           message: error instanceof Error ? error.message : String(error),
         },

@@ -1,17 +1,17 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
-import { mapDeniedResponseV1, okV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
-import { getMarketCacheHealthV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
+import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { getMarketCacheHealth } from "@/src/daa/modules/marketCache/marketCacheService";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  return withApiHandlerV1(async () => {
-    const denied = mapDeniedResponseV1(await requireDaaAdminViewerAuth(req));
+  return withApiHandler(async () => {
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
     const url = new URL(req.url);
     const provider = String(url.searchParams.get("provider") || "yfinance").trim() || "yfinance";
-    const stats = await getMarketCacheHealthV1(provider);
-    return okV1(stats);
+    const stats = await getMarketCacheHealth(provider);
+    return ok(stats);
   });
 }
