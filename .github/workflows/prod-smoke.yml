@@ -1,8 +1,6 @@
 name: DAA Production Smoke
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
