@@ -1,6 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { failV1, mapDeniedResponseV1, okV1, readJsonBodyV1, withApiHandlerV1 } from "@/src/daa/api/routeHelpersV1";
 import { parseDaaAssetKeyV1 } from "@/src/daa/assetKeyV1";
+import { resolveInvestableCashV1 } from "@/src/daa/account/resolveInvestableCashV1";
 import { getStrategyExecutionConfigV2 } from "@/src/daa/config/systemConfigV2";
 import { getMarketPricesWithCacheV1 } from "@/src/daa/modules/marketCache/marketCacheServiceV1";
 import { buildFxLookupToBaseV1, resolveFxRateToBaseV1 } from "@/src/daa/modules/portfolio/portfolioValuationV1";
@@ -69,12 +70,14 @@ export async function POST(req: Request) {
     let priceSnapshotAt = bootstrapRow?.priceUpdatedAt || row.priceUpdatedAt || null;
 
     const yfinanceSymbol = toYfinanceSymbolByMarketV1(row.symbol, row.market);
+    const priceFeedEnabled = systemRow.config.dataSources?.priceFeed?.enabled !== false;
     const marketCache = systemRow.config.dataSources?.priceFeed?.marketCache || {
       freshMinutes: 15,
       serveStaleHours: 48,
       rawRetentionDays: 90,
     };
-    if (yfinanceSymbol) {
+    const warnings: string[] = [];
+    if (yfinanceSymbol && priceFeedEnabled) {
       const priced = await getMarketPricesWithCacheV1({
         assets: [{
           symbol: row.symbol,
@@ -104,6 +107,8 @@ export async function POST(req: Request) {
           });
         }
       }
+    } else if (yfinanceSymbol && !priceFeedEnabled) {
+      warnings.push("行情源已关闭，当前预览沿用本地缓存/持仓价格，不发起实时刷新。");
     }
 
     if (!(price > 0)) {
@@ -111,6 +116,12 @@ export async function POST(req: Request) {
         return failV1("VALIDATION_FAILED", `symbol unsupported for yfinance: ${row.market}::${row.symbol}`, {
           status: 400,
           details: { reasonCode: "UNSUPPORTED_SYMBOL" },
+        });
+      }
+      if (!priceFeedEnabled) {
+        return failV1("VALIDATION_FAILED", `${row.symbol} 缺少可用本地行情，且行情源已关闭`, {
+          status: 409,
+          details: { reasonCode: "PRICE_FEED_DISABLED" },
         });
       }
       return failV1("INTERNAL_ERROR", `${row.symbol} 拉取实时价格失败，请稍后重试`, {
@@ -129,7 +140,7 @@ export async function POST(req: Request) {
     const grossNotional = qty * price;
     const fee = grossNotional * (feeRateBps / 10000);
 
-    const warnings: string[] = [];
+    const investableCash = resolveInvestableCashV1(bootstrap.account);
     const fxLookup = buildFxLookupToBaseV1(fxRows);
     const fxRateResolved = resolveFxRateToBaseV1(bootstrap.baseCurrency, row.currency, fxLookup);
     const hasFxRate = Number.isFinite(fxRateResolved) && Number(fxRateResolved) > 0;
@@ -145,8 +156,8 @@ export async function POST(req: Request) {
       : (side === "BUY" ? (notionalInBase + feeInBase) : (notionalInBase - feeInBase));
 
     let manualBlock = false;
-    if (side === "BUY" && totalCostInBase != null && bootstrap.account.cash + 1e-9 < totalCostInBase) {
-      warnings.push(`现金不足：预计需要 ${totalCostInBase.toFixed(2)} ${bootstrap.baseCurrency}，当前现金 ${bootstrap.account.cash.toFixed(2)} ${bootstrap.baseCurrency}`);
+    if (side === "BUY" && totalCostInBase != null && investableCash + 1e-9 < totalCostInBase) {
+      warnings.push(`可投资现金不足：预计需要 ${totalCostInBase.toFixed(2)} ${bootstrap.baseCurrency}，当前可投资现金 ${investableCash.toFixed(2)} ${bootstrap.baseCurrency}`);
       manualBlock = true;
     }
     if (side === "BUY" && fxRateToBase == null && row.currency !== bootstrap.baseCurrency) {

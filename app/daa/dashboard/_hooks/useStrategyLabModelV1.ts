@@ -491,6 +491,7 @@ export function useStrategyLabModelV1() {
   const warningSummary = useMemo(() => buildWarningSummaryV1([
     ...(result?.warnings || []),
     ...(selectedScenario?.warnings || []),
+    ...(selectedCandidate?.warnings || []),
     ...(selectedCandidate?.backtest.warnings || []),
   ]), [result, selectedCandidate, selectedScenario]);
 

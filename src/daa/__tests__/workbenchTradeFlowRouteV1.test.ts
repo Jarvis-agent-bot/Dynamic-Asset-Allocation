@@ -205,6 +205,99 @@ describe("workbench-trade-flow-route-v1", () => {
     });
   }, 15000);
 
+  it("冻结现金不应被手工预览与执行链路透支", async () => {
+    const current = await getDaaSystemConfigV2();
+    await saveDaaSystemConfigV2({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 1000,
+            frozenCash: 800,
+            investableCash: 200,
+          },
+          targetWeights: {},
+        },
+        dataSources: {
+          ...current.config.dataSources,
+          priceFeed: {
+            ...current.config.dataSources.priceFeed,
+            enabled: false,
+          },
+        },
+      },
+    });
+
+    const upsertResponse = await upsertAsset(new Request("http://localhost/api/daa/workbench/assets/upsert", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        assetClass: "EQUITY",
+        region: "US",
+        exchange: "NASDAQ",
+        instrumentType: "STOCK",
+        marketGroup: "US_EQUITY",
+        watchEnabled: true,
+        lastPrice: 100,
+      }),
+    }));
+    expect(upsertResponse.status).toBe(200);
+
+    const previewResponse = await previewExecution(new Request("http://localhost/api/daa/workbench/execution/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        assetKey: "US::AAPL",
+        side: "BUY",
+        qty: 3,
+      }),
+    }));
+    const previewJson = await previewResponse.json();
+
+    expect(previewResponse.status).toBe(200);
+    expect(previewJson.ok).toBe(true);
+    expect(previewJson.data.canSubmit).toBe(false);
+    expect(previewJson.data.warnings.some((item: string) => item.includes("可投资现金不足"))).toBe(true);
+
+    const executeResponse = await executeOrder(new Request("http://localhost/api/daa/workbench/execution/execute", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: "manual",
+        side: "BUY",
+        assetKey: "US::AAPL",
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        qty: 3,
+        price: 100,
+        fee: 0,
+        pricingMode: "manual",
+        reasonText: "冻结现金保护测试",
+      }),
+    }));
+    const executeJson = await executeResponse.json();
+
+    expect(executeResponse.status).toBe(409);
+    expect(executeJson.ok).toBe(false);
+    expect(executeJson.error.details.code).toBe("INSUFFICIENT_INVESTABLE_CASH");
+
+    const bootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const bootstrapJson = await bootstrapResponse.json();
+    expect(bootstrapResponse.status).toBe(200);
+    expect(bootstrapJson.data.account.cash).toBeCloseTo(1000, 6);
+    expect(bootstrapJson.data.account.investableCash).toBeCloseTo(200, 6);
+    expect(bootstrapJson.data.account.frozenCash).toBeCloseTo(800, 6);
+    expect(bootstrapJson.data.assetUniverse.every((item: { holdingQty: number }) => Number(item.holdingQty) === 0)).toBe(true);
+  });
+
   it("直接执行外币订单时会按服务端 FX 换算基准币风控金额", async () => {
     const current = await getDaaSystemConfigV2();
     await saveDaaSystemConfigV2({

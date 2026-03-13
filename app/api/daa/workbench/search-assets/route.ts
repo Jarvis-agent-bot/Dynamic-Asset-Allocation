@@ -70,7 +70,7 @@ function shouldSkipQuoteTypeV1(quoteTypeRaw: unknown): boolean {
 async function enrichPreferredPriceV1(
   items: SearchAssetItemV1[],
   maxFetch = 10,
-  opts: { freshSec: number; serveStaleSec: number; rawRetentionDays: number },
+  opts: { freshSec: number; serveStaleSec: number; rawRetentionDays: number; allowRefresh: boolean },
 ): Promise<SearchAssetItemV1[]> {
   if (items.length <= 0) return items;
   const refreshTargets = items.filter((item) => item.yfinanceSymbol).slice(0, Math.max(1, Math.trunc(maxFetch)));
@@ -82,8 +82,8 @@ async function enrichPreferredPriceV1(
       market: item.market,
       currency: item.currency,
     })),
-    allowRefresh: true,
-    forceRefresh: true,
+    allowRefresh: opts.allowRefresh,
+    forceRefresh: opts.allowRefresh,
     refreshBudget: refreshTargets.length,
     timeoutMs: 2300,
     source: "search_assets",
@@ -166,6 +166,7 @@ export async function GET(req: Request) {
     const assetClassFilter = normalizeText(url.searchParams.get("assetClass")).toUpperCase() || "ALL";
     const regionFilter = normalizeText(url.searchParams.get("region")).toUpperCase() || "ALL";
     const system = await getDaaSystemConfigV2();
+    const priceFeedEnabled = system.config.dataSources?.priceFeed?.enabled !== false;
     const cacheConfig = system.config.dataSources?.priceFeed?.marketCache || {
       freshMinutes: 15,
       serveStaleHours: 48,
@@ -261,6 +262,7 @@ export async function GET(req: Request) {
     let items = out;
     try {
       items = await enrichPreferredPriceV1(out, limit, {
+        allowRefresh: priceFeedEnabled,
         freshSec: Math.max(60, cacheConfig.freshMinutes * 60),
         serveStaleSec: Math.max(3600, cacheConfig.serveStaleHours * 3600),
         rawRetentionDays: cacheConfig.rawRetentionDays,

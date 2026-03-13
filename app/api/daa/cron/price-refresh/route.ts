@@ -67,7 +67,21 @@ export async function POST(req: Request) {
       }),
       handler: async () => {
         const [system, assetRows] = await Promise.all([getDaaSystemConfigV2(), listDaaAssetUniverseV1()]);
-        const marketCache = system.config.dataSources.priceFeed.marketCache;
+        const priceFeed = system.config.dataSources.priceFeed;
+        if (priceFeed.enabled === false) {
+          return {
+            requested: 0,
+            refreshedSymbols: 0,
+            staleSymbols: 0,
+            missingSymbols: 0,
+            refreshedAssets: 0,
+            assetKeys: [],
+            at: new Date().toISOString(),
+            skipped: true,
+            reason: "PRICE_FEED_DISABLED",
+          };
+        }
+        const marketCache = priceFeed.marketCache;
 
         const targets = dedupeTargetsV1([
           ...assetRows.map((row) => ({

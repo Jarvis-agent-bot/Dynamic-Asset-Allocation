@@ -1,5 +1,4 @@
 import { assertIsoDateString } from "@/src/core/isoDate";
-import { cumulativeProduct } from "@/src/core/math";
 import { scoreMetrics } from "@/src/core/metrics";
 import { computeBacktestAttribution } from "@/src/core/backtest/attribution";
 import type { PriceBar } from "@/src/core/domain";
@@ -151,11 +150,16 @@ function normalizeRunAssetsV1(input: StrategyLabRunAssetInputV1[]): StrategyLabR
 }
 
 function normalizeEnsembleConfigV1(input: Partial<StrategyLabEnsembleConfigV1> | undefined): StrategyLabEnsembleConfigV1 {
+  const pick = (value: unknown, fallback: number) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : fallback;
+  };
+
   return {
-    momentum: Math.max(0, Number(input?.momentum) || DEFAULT_ENSEMBLE_CONFIG_V1.momentum),
-    riskParity: Math.max(0, Number(input?.riskParity) || DEFAULT_ENSEMBLE_CONFIG_V1.riskParity),
-    minVariance: Math.max(0, Number(input?.minVariance) || DEFAULT_ENSEMBLE_CONFIG_V1.minVariance),
-    equalWeight: Math.max(0, Number(input?.equalWeight) || DEFAULT_ENSEMBLE_CONFIG_V1.equalWeight),
+    momentum: pick(input?.momentum, DEFAULT_ENSEMBLE_CONFIG_V1.momentum),
+    riskParity: pick(input?.riskParity, DEFAULT_ENSEMBLE_CONFIG_V1.riskParity),
+    minVariance: pick(input?.minVariance, DEFAULT_ENSEMBLE_CONFIG_V1.minVariance),
+    equalWeight: pick(input?.equalWeight, DEFAULT_ENSEMBLE_CONFIG_V1.equalWeight),
   };
 }
 
@@ -461,14 +465,15 @@ function buildExecutionBreakdownSourceDefinitionsV1(runtime: StrategyLabScenario
 function buildScenarioCandidateViewsV1(input: {
   run: ReturnType<typeof runStrategyLabBacktestsV1>;
   benchmarkSymbol: string;
+  benchmarkSeriesForMetrics: PriceBar[];
   seriesForAttribution: Record<string, PriceBar[]>;
 }): StrategyLabRunCandidateViewV1[] {
   return input.run.candidates.map((candidate) => {
     const attribution = computeBacktestAttribution({
       backtest: candidate.backtest,
-      targetWeights: candidate.averageTargetWeights,
       seriesBySymbol: input.seriesForAttribution,
       benchmarkSymbol: input.benchmarkSymbol,
+      benchmarkSeries: input.benchmarkSeriesForMetrics,
     });
 
     return {
@@ -551,56 +556,85 @@ function buildCandidateScenarioComparisonsV1(input: {
   });
 }
 
-function alignSeriesToDatesV1(input: {
-  series: PriceBar[];
-  dates: string[];
-}): PriceBar[] {
-  const map = new Map<string, number>();
-  for (const bar of input.series || []) {
+function normalizePriceSeriesV1(series: PriceBar[]): PriceBar[] {
+  const deduped = new Map<string, number>();
+  for (const bar of series || []) {
     const date = normalizeText(bar.date);
     const close = Number(bar.close);
     if (!date || !(close > 0)) continue;
-    map.set(date, close);
+    deduped.set(date, close);
   }
-
-  const out: PriceBar[] = [];
-  let lastClose: number | undefined;
-  for (const date of input.dates) {
-    const direct = map.get(date);
-    if (Number.isFinite(direct) && (direct as number) > 0) {
-      lastClose = direct as number;
-    }
-    if (!(lastClose && lastClose > 0)) continue;
-    out.push({ date, close: lastClose });
-  }
-  return out;
+  return [...deduped.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, close]) => ({ date, close }));
 }
 
-function buildEquityCurveFromSeriesV1(series: PriceBar[]): {
+function buildBenchmarkCurveAgainstDatesV1(input: {
+  series: PriceBar[];
   dates: string[];
-  equity: number[];
-  totalReturn: number;
+}): {
+  dates: string[];
+  equity: Array<number | null>;
+  totalReturn: number | null;
+  coverage: "full" | "partial" | "missing";
 } {
-  if (!Array.isArray(series) || series.length < 2) {
-    return { dates: [], equity: [], totalReturn: 0 };
+  const dates = (input.dates || []).map((date) => normalizeText(date)).filter(Boolean);
+  if (dates.length < 2) {
+    return { dates: [], equity: [], totalReturn: null, coverage: "missing" };
   }
 
-  const dailyReturns: number[] = [];
-  for (let i = 0; i < series.length - 1; i += 1) {
-    const prev = Number(series[i]?.close);
-    const next = Number(series[i + 1]?.close);
-    if (!(prev > 0) || !(next > 0)) {
-      dailyReturns.push(0);
-      continue;
+  const series = normalizePriceSeriesV1(input.series);
+  if (series.length < 2) {
+    return {
+      dates: dates.slice(1),
+      equity: dates.slice(1).map(() => null),
+      totalReturn: null,
+      coverage: "missing",
+    };
+  }
+
+  const firstSeriesDate = series[0]?.date || "";
+  const lastSeriesDate = series[series.length - 1]?.date || "";
+  const horizonStart = dates[0];
+  const horizonEnd = dates[dates.length - 1];
+
+  let pointer = 0;
+  let carriedClose: number | undefined;
+  while (pointer < series.length && series[pointer].date <= horizonStart) {
+    carriedClose = series[pointer].close;
+    pointer += 1;
+  }
+
+  let prevClose = carriedClose;
+  let equityValue = 1;
+  const equity: Array<number | null> = [];
+  for (let i = 1; i < dates.length; i += 1) {
+    while (pointer < series.length && series[pointer].date <= dates[i]) {
+      carriedClose = series[pointer].close;
+      pointer += 1;
     }
-    dailyReturns.push(next / prev - 1);
+    const currentClose = dates[i] <= lastSeriesDate ? carriedClose : undefined;
+    if (prevClose && prevClose > 0 && currentClose && currentClose > 0) {
+      equityValue *= currentClose / prevClose;
+      equity.push(equityValue);
+    } else {
+      equity.push(null);
+    }
+    if (currentClose && currentClose > 0) {
+      prevClose = currentClose;
+    }
   }
 
-  const equity = cumulativeProduct(dailyReturns, 1);
+  const coverage = firstSeriesDate <= horizonStart && lastSeriesDate >= horizonEnd && carriedClose && carriedClose > 0 && prevClose && prevClose > 0
+    ? "full"
+    : "partial";
+  const totalReturn = coverage === "full" && equity.length > 0 && equity[equity.length - 1] !== null ? (equity[equity.length - 1] as number) - 1 : null;
+
   return {
-    dates: series.slice(1).map((item) => item.date),
+    dates: dates.slice(1),
     equity,
-    totalReturn: equity.length ? equity[equity.length - 1] - 1 : 0,
+    totalReturn,
+    coverage,
   };
 }
 
@@ -1032,6 +1066,8 @@ export async function runStrategyLabV1(
     runtimeExecution: StrategyLabRunExecutionSettingsV1;
   }) => runStrategyLabBacktestsV1({
     seriesBySymbol: prepared.seriesBySymbol,
+    observedDatesBySymbol: prepared.observedDatesBySymbol,
+    executableDatesBySymbol: prepared.observedDatesBySymbol,
     baselineTargetWeights: currentTargetWeights,
     ensembleConfig,
     lookbackBars,
@@ -1081,21 +1117,20 @@ export async function runStrategyLabV1(
     }
   }
 
-  const alignedBenchmarkSeries = alignSeriesToDatesV1({
+  const benchmarkCurve = buildBenchmarkCurveAgainstDatesV1({
     series: benchmarkSeriesInBase,
     dates: masterDates,
   });
-  const benchmarkCurve = buildEquityCurveFromSeriesV1(alignedBenchmarkSeries);
 
   const seriesForAttribution: Record<string, PriceBar[]> = {
     ...prepared.seriesBySymbol,
-    ...(alignedBenchmarkSeries.length ? { [benchmarkSymbol]: alignedBenchmarkSeries } : {}),
   };
 
   const scenarios: StrategyLabRunScenarioViewV1[] = scenarioRuns.map((scenario) => {
     const candidates = buildScenarioCandidateViewsV1({
       run: scenario.run,
       benchmarkSymbol,
+      benchmarkSeriesForMetrics: benchmarkSeriesInBase,
       seriesForAttribution,
     });
 
@@ -1128,6 +1163,14 @@ export async function runStrategyLabV1(
   if (prepared.diagnostics.commonDateCount <= lookbackBars) {
     warnings.push(`当前对齐样本仅有 ${prepared.diagnostics.commonDateCount} 个 bar，尚不足以形成 ${lookbackBars} bar 的首个 walk-forward 决策窗口。`);
   }
+  if (alignmentMode === "ffill_union") {
+    warnings.push("ffill_union 下图表按并集前值填充对齐展示；统计输入与成交执行仅使用真实观测 bar。");
+  }
+  if (benchmarkCurve.coverage === "partial") {
+    warnings.push(`基准 ${benchmarkSymbol} 未完整覆盖样本区间；图表仅在可估值区间展示，benchmark totalReturn 与 activeReturn 已隐藏。`);
+  } else if (benchmarkCurve.coverage === "missing") {
+    warnings.push(`基准 ${benchmarkSymbol} 缺少足够真实覆盖；图表与 benchmark 对比指标已隐藏。`);
+  }
 
   const result: StrategyLabRunResultV1 = {
     generatedAt: new Date().toISOString(),
@@ -1136,6 +1179,7 @@ export async function runStrategyLabV1(
       dates: benchmarkCurve.dates,
       equity: benchmarkCurve.equity,
       totalReturn: benchmarkCurve.totalReturn,
+      coverage: benchmarkCurve.coverage,
     },
     baseCurrency,
     lookbackBars,

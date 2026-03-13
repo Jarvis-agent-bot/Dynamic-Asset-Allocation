@@ -118,8 +118,9 @@ export type StrategyLabRunResultV1 = {
   benchmark: {
     symbol: string;
     dates: string[];
-    equity: number[];
-    totalReturn: number;
+    equity: Array<number | null>;
+    totalReturn: number | null;
+    coverage: "full" | "partial" | "missing";
   };
   baseCurrency: string;
   lookbackBars: number;

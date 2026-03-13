@@ -1,3 +1,5 @@
+import { resolveInvestableCashV1 } from "@/src/daa/account/resolveInvestableCashV1";
+
 type QueryFnV1 = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
 
 type MigrationV1 = {
@@ -55,10 +57,11 @@ async function ensureAccountStateSeedV1(query: QueryFnV1): Promise<void> {
   const baseCurrency = normalizeBaseCurrencyV1(account.baseCurrency, "USD");
   const cash = Math.max(0, toFiniteNumberV1(account.cash, 0));
   const frozenCash = Math.max(0, toFiniteNumberV1(account.frozenCash, 0));
-  const rawInvestable = toFiniteNumberV1(account.investableCash, Number.NaN);
-  const investableCash = Number.isFinite(rawInvestable)
-    ? Math.max(0, Math.min(cash, rawInvestable))
-    : Math.max(0, cash - frozenCash);
+  const investableCash = resolveInvestableCashV1({
+    cash,
+    frozenCash,
+    investableCash: account.investableCash,
+  });
   const totalEquityRaw = account.totalEquity == null ? Number.NaN : toFiniteNumberV1(account.totalEquity, Number.NaN);
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 

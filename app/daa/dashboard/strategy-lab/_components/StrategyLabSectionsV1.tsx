@@ -26,12 +26,17 @@ import type { StrategyLabEnsembleConfigV1 } from "@/src/daa/modules/strategyLab/
 const STRATEGY_STYLE_META_V1: Record<keyof StrategyLabEnsembleConfigV1, { label: string; description: string }> = {
   momentum: { label: "趋势进攻", description: "更偏向强者恒强的配置。" },
   riskParity: { label: "风险平衡", description: "用波动平衡风险暴露。" },
-  minVariance: { label: "低波防守", description: "更强调回撤控制。" },
+  minVariance: { label: "长仓最小方差", description: "基于历史协方差求解，更强调组合波动控制。" },
   equalWeight: { label: "均衡基线", description: "不带偏见的对照组。" },
 };
 
 function formatPercent01V1(value: number, digits = 2): string {
   return formatPercent((Number(value) || 0) * 100, digits);
+}
+
+function formatOptionalPercent01V1(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "--";
+  return formatPercent01V1(Number(value), digits);
 }
 
 function formatSignedPercentV1(value: number, digits = 2): string {
@@ -357,7 +362,7 @@ export function StrategyLabRunOverviewPanelV1({ model }: { model: StrategyLabMod
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <DeepLedgerMiniStat label="当前候选" value={model.selectedCandidate?.label || "-"} hint={`最佳候选 ${model.selectedScenario.bestCandidateId || "-"}`} tone="green" />
-        <DeepLedgerMiniStat label="总收益" value={formatPercent01V1(model.selectedCandidate?.backtest.metrics.totalReturn || 0)} hint={`vs ${model.result.benchmark.symbol} ${formatPercent01V1(model.selectedCandidate?.attribution.activeReturn || 0)}`} tone="cyan" />
+        <DeepLedgerMiniStat label="总收益" value={formatPercent01V1(model.selectedCandidate?.backtest.metrics.totalReturn || 0)} hint={`vs ${model.result.benchmark.symbol} ${formatOptionalPercent01V1(model.selectedCandidate?.attribution.activeReturn)}`} tone="cyan" />
         <DeepLedgerMiniStat label="Sharpe / MDD" value={`${(model.selectedCandidate?.backtest.metrics.sharpe || 0).toFixed(2)} / ${formatPercent01V1(model.selectedCandidate?.backtest.metrics.maxDrawdown || 0)}`} hint={`胜率 ${formatPercent01V1(model.selectedCandidate?.backtest.metrics.winRate || 0)}`} tone="indigo" />
         <DeepLedgerMiniStat label="换手 / 再平衡" value={`${formatCurrency(model.selectedCandidate?.backtest.summary.turnoverNotional || 0, model.baseCurrency)}`} hint={`${model.selectedCandidate?.backtest.summary.rebalanceCount || 0} 次事件`} tone="amber" />
       </div>
@@ -411,7 +416,7 @@ export function StrategyLabCandidateDetailPanelV1({ model }: { model: StrategyLa
           <div className="grid gap-3 md:grid-cols-2">
             <DeepLedgerMiniStat label="执行差异" value={model.executionGapMeta?.displayValue || "-"} hint={model.executionGapMeta?.label || "等待比较"} tone={model.executionGapMeta?.tone || "slate"} />
             <DeepLedgerMiniStat label="排名变化" value={model.selectedCandidateRankMeta?.displayValue || "-"} hint={model.selectedCandidateRankMeta?.label || "等待比较"} tone={model.selectedCandidateRankMeta?.tone || "slate"} />
-            <DeepLedgerMiniStat label="主动收益" value={formatPercent01V1(model.selectedCandidate.attribution.activeReturn)} hint={`基准 ${model.result.benchmark.symbol}`} tone="cyan" />
+            <DeepLedgerMiniStat label="主动收益" value={formatOptionalPercent01V1(model.selectedCandidate.attribution.activeReturn)} hint={`基准 ${model.result.benchmark.symbol}`} tone="cyan" />
             <DeepLedgerMiniStat label="波动 / Calmar" value={`${formatPercent01V1(model.selectedCandidate.attribution.metrics.volatility)} / ${model.selectedCandidate.attribution.metrics.calmar.toFixed(2)}`} hint={`MDD ${formatPercent01V1(model.selectedCandidate.attribution.metrics.maxDrawdown)}`} tone="amber" />
           </div>
           {model.warningSummary.length > 0 ? (

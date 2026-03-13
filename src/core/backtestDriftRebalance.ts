@@ -40,6 +40,9 @@ export type DriftRebalanceBacktestRequest = {
   /** When enabled, include per-day drift/trigger decisions. Default: true. */
   includeTimeline?: boolean;
 
+  /** Optional real-bar calendar; when provided, orders can only execute on these dates per symbol. */
+  executableDatesBySymbol?: Record<string, string[]>;
+
   execution?: {
     timing?: "t_plus_1_close";
     feeRateBps?: number;
@@ -53,6 +56,10 @@ export type PortfolioWeightsSnapshotV0 = {
   cashAbs: number;
   cashPct01: number;
   weightsBySymbolPct01: Record<string, number>;
+};
+
+export type DriftRebalanceBacktestPortfolioPointV0 = PortfolioWeightsSnapshotV0 & {
+  date: string;
 };
 
 export type DriftRebalanceBacktestEvent = {
@@ -90,6 +97,7 @@ export type DriftRebalanceBacktestResult = {
   };
   events: DriftRebalanceBacktestEvent[];
   warnings: string[];
+  portfolioByDate: DriftRebalanceBacktestPortfolioPointV0[];
   timeline?: DriftRebalanceBacktestTimelinePointV0[];
   states?: {
     initial: PortfolioWeightsSnapshotV0;
@@ -293,6 +301,54 @@ function executeOrders(opts: {
   return { holdings, cash, executed, turnoverNotional, feeNotional };
 }
 
+function buildExecutableDateSetsBySymbolV1(
+  input: DriftRebalanceBacktestRequest["executableDatesBySymbol"] | undefined,
+): Record<string, Set<string>> | null {
+  const entries = Object.entries(input || {})
+    .map(([symbolRaw, datesRaw]) => {
+      const symbol = String(symbolRaw || "").trim().toUpperCase();
+      const dates = Array.isArray(datesRaw)
+        ? datesRaw.map((date) => String(date || "").trim()).filter(Boolean)
+        : [];
+      return symbol ? [symbol, new Set(dates)] as const : null;
+    })
+    .filter((item): item is readonly [string, Set<string>] => Boolean(item));
+
+  if (!entries.length) return null;
+  return Object.fromEntries(entries);
+}
+
+function partitionOrdersByExecutableDateV1(input: {
+  date: string;
+  orders: SuggestedOrder[];
+  executableDateSetsBySymbol: Record<string, Set<string>> | null;
+}): { executableOrders: SuggestedOrder[]; deferredOrders: SuggestedOrder[] } {
+  if (!input.executableDateSetsBySymbol) {
+    return {
+      executableOrders: [...(input.orders || [])],
+      deferredOrders: [],
+    };
+  }
+
+  const executableOrders: SuggestedOrder[] = [];
+  const deferredOrders: SuggestedOrder[] = [];
+  for (const order of input.orders || []) {
+    const symbol = String(order.symbol || "").trim().toUpperCase();
+    if (!symbol) {
+      executableOrders.push(order);
+      continue;
+    }
+    const allowedDates = input.executableDateSetsBySymbol[symbol];
+    if (allowedDates?.has(input.date)) {
+      executableOrders.push(order);
+    } else {
+      deferredOrders.push(order);
+    }
+  }
+
+  return { executableOrders, deferredOrders };
+}
+
 function normalizeExecutionConfig(
   input: DriftRebalanceBacktestRequest["execution"] | undefined,
 ): { timing: "t_plus_1_close"; feeRateBps: number; slippageBps: number } {
@@ -402,15 +458,25 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
 
   const events: DriftRebalanceBacktestEvent[] = [];
   const timeline: DriftRebalanceBacktestTimelinePointV0[] = [];
+  const portfolioByDate: DriftRebalanceBacktestPortfolioPointV0[] = [];
 
   const prices0 = buildPricesAtIndex(req.seriesBySymbol, 0, warnings);
   let equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
+  const fundedEquityAbs = equity0;
   if (!(Number.isFinite(equity0) && equity0 > 0)) {
     throw new Error("initial equity must be > 0 (check initialCash/holdings and day-0 prices)");
   }
 
   const initialState = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : null;
+  const executableDateSetsBySymbol = buildExecutableDateSetsBySymbolV1(req.executableDatesBySymbol);
   let lastRebalanceAt = "";
+  let pendingFill:
+    | {
+        signalDate: string;
+        trigger: RebalanceTriggerDecision;
+        orders: SuggestedOrder[];
+      }
+    | undefined;
 
   if (bootstrapToTarget && !Object.keys(req.initialHoldings || {}).length) {
     const initialTargetWeights = resolveTargetWeightsForDate(req, dates[0]);
@@ -432,37 +498,53 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       appendUniqueWarnings(res.warnings);
 
       if (res.orders.length > 0) {
-        const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : undefined;
-        const ex = executeOrders({
-          holdings: {},
-          cash: equity0,
-          prices: prices0,
-          orders: res.orders,
-          feeRateBps: execution.feeRateBps,
-          slippageBps: execution.slippageBps,
-          warnings,
-        });
-        const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: prices0, warnings }) : undefined;
-
-        holdings = ex.holdings;
-        cash = ex.cash;
-        equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
-
-        events.push({
+        const { executableOrders, deferredOrders } = partitionOrdersByExecutableDateV1({
           date: dates[0],
-          signalDate: dates[0],
-          executionTiming: execution.timing,
-          kind: "init",
-          trigger: res.trigger,
           orders: res.orders,
-          executed: ex.executed,
-          turnoverNotional: ex.turnoverNotional,
-          feeNotional: ex.feeNotional,
-          before,
-          after,
+          executableDateSetsBySymbol,
         });
 
-        lastRebalanceAt = isoToIsoDateTime(dates[0]);
+        if (executableOrders.length > 0) {
+          const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices: prices0, warnings }) : undefined;
+          const ex = executeOrders({
+            holdings: {},
+            cash: equity0,
+            prices: prices0,
+            orders: executableOrders,
+            feeRateBps: execution.feeRateBps,
+            slippageBps: execution.slippageBps,
+            warnings,
+          });
+          const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices: prices0, warnings }) : undefined;
+
+          holdings = ex.holdings;
+          cash = ex.cash;
+          equity0 = portfolioValueAbs(holdings, cash, prices0, warnings);
+
+          events.push({
+            date: dates[0],
+            signalDate: dates[0],
+            executionTiming: execution.timing,
+            kind: "init",
+            trigger: res.trigger,
+            orders: executableOrders,
+            executed: ex.executed,
+            turnoverNotional: ex.turnoverNotional,
+            feeNotional: ex.feeNotional,
+            before,
+            after,
+          });
+
+          lastRebalanceAt = isoToIsoDateTime(dates[0]);
+        }
+
+        if (deferredOrders.length > 0) {
+          pendingFill = {
+            signalDate: dates[0],
+            trigger: res.trigger,
+            orders: deferredOrders,
+          };
+        }
       }
     }
   }
@@ -471,57 +553,70 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   let turnoverNotional = events.reduce((sum, event) => sum + event.turnoverNotional, 0);
   let totalFeesAbs = events.reduce((sum, event) => sum + event.feeNotional, 0);
   let rebalanceCount = 0;
-  let pendingFill:
-    | {
-        signalDate: string;
-        trigger: RebalanceTriggerDecision;
-        orders: SuggestedOrder[];
-      }
-    | undefined;
 
   for (let i = 0; i < dates.length; i += 1) {
     const prices = buildPricesAtIndex(req.seriesBySymbol, i, warnings);
     const now = isoToIsoDateTime(dates[i]);
 
     if (pendingFill?.orders?.length) {
-      const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices, warnings }) : undefined;
-      const ex = executeOrders({
-        holdings,
-        cash,
-        prices,
-        orders: pendingFill.orders,
-        feeRateBps: execution.feeRateBps,
-        slippageBps: execution.slippageBps,
-        warnings,
-      });
-      const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices, warnings }) : undefined;
-
-      holdings = ex.holdings;
-      cash = ex.cash;
-      turnoverNotional += ex.turnoverNotional;
-      totalFeesAbs += ex.feeNotional;
-      rebalanceCount += 1;
-
-      events.push({
+      const { executableOrders, deferredOrders } = partitionOrdersByExecutableDateV1({
         date: dates[i],
-        signalDate: pendingFill.signalDate,
-        executionTiming: execution.timing,
-        kind: "rebalance",
-        trigger: pendingFill.trigger,
         orders: pendingFill.orders,
-        executed: ex.executed,
-        turnoverNotional: ex.turnoverNotional,
-        feeNotional: ex.feeNotional,
-        before,
-        after,
+        executableDateSetsBySymbol,
       });
 
-      lastRebalanceAt = now;
-      pendingFill = undefined;
+      if (executableOrders.length > 0) {
+        const before = includeEventStates ? computeWeightsSnapshot({ holdings, cash, prices, warnings }) : undefined;
+        const ex = executeOrders({
+          holdings,
+          cash,
+          prices,
+          orders: executableOrders,
+          feeRateBps: execution.feeRateBps,
+          slippageBps: execution.slippageBps,
+          warnings,
+        });
+        const after = includeEventStates ? computeWeightsSnapshot({ holdings: ex.holdings, cash: ex.cash, prices, warnings }) : undefined;
+
+        holdings = ex.holdings;
+        cash = ex.cash;
+        turnoverNotional += ex.turnoverNotional;
+        totalFeesAbs += ex.feeNotional;
+        rebalanceCount += 1;
+
+        events.push({
+          date: dates[i],
+          signalDate: pendingFill.signalDate,
+          executionTiming: execution.timing,
+          kind: "rebalance",
+          trigger: pendingFill.trigger,
+          orders: executableOrders,
+          executed: ex.executed,
+          turnoverNotional: ex.turnoverNotional,
+          feeNotional: ex.feeNotional,
+          before,
+          after,
+        });
+
+        lastRebalanceAt = now;
+      }
+
+      pendingFill = deferredOrders.length > 0
+        ? {
+            signalDate: pendingFill.signalDate,
+            trigger: pendingFill.trigger,
+            orders: deferredOrders,
+          }
+        : undefined;
     }
 
-    const equity = portfolioValueAbs(holdings, cash, prices, warnings);
+    const portfolioPoint = computeWeightsSnapshot({ holdings, cash, prices, warnings });
+    const equity = portfolioPoint.equityAbs;
     equityAbsByDay.push(equity);
+    portfolioByDate.push({
+      date: dates[i],
+      ...portfolioPoint,
+    });
 
     const targetWeights = resolveTargetWeightsForDate(req, dates[i]);
     const runtimeConstraints = buildRuntimeConstraintsForEquity(req.constraints, equity);
@@ -553,7 +648,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       });
     }
 
-    if (res.trigger.shouldRebalance) {
+    if (!pendingFill?.orders?.length && res.trigger.shouldRebalance) {
       if (i >= dates.length - 1) {
         warnings.push(`warning: rebalance signal on ${dates[i]} skipped because no next bar for T+1 execution`);
       } else {
@@ -567,7 +662,10 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
   }
 
   if (pendingFill?.orders?.length) {
-    warnings.push(`warning: pending rebalance signal on ${pendingFill.signalDate} was not executed due to missing next bar`);
+    const pendingSymbols = [...new Set(pendingFill.orders.map((order) => String(order.symbol || "").trim()).filter(Boolean))].sort();
+    warnings.push(
+      `warning: pending rebalance signal on ${pendingFill.signalDate} left ${pendingFill.orders.length} order(s) unexecuted due to missing future real bars${pendingSymbols.length ? ` (${pendingSymbols.join(", ")})` : ""}`,
+    );
   }
 
   const dailyReturns: number[] = [];
@@ -582,7 +680,15 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     dailyReturns.push(Number.isFinite(ret) ? ret : 0);
   }
 
-  const equity = cumulativeProduct(dailyReturns, 1);
+  const normalizationStart = (() => {
+    const firstEquityAbs = equityAbsByDay[0];
+    if (!(Number.isFinite(fundedEquityAbs) && fundedEquityAbs > 0)) return 1;
+    if (!(Number.isFinite(firstEquityAbs) && firstEquityAbs > 0)) return 1;
+    const factor = firstEquityAbs / fundedEquityAbs;
+    return Number.isFinite(factor) && factor > 0 ? factor : 1;
+  })();
+
+  const equity = cumulativeProduct(dailyReturns, normalizationStart);
   const metrics: BacktestMetrics = computeMetrics(equity, dailyReturns);
 
   const finalState = (() => {
@@ -606,6 +712,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
     },
     events,
     warnings,
+    portfolioByDate,
     timeline: includeTimeline ? timeline : undefined,
     states: includeEventStates && initialState && finalState ? { initial: initialState, final: finalState } : undefined,
   };
