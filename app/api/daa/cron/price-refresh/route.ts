@@ -1,6 +1,7 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
+import { extractDividendsFromRawPayloads } from "@/src/daa/modules/dividend/dividendExtractor";
 import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getMarketIndicatorRefreshSymbols } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
@@ -147,6 +148,15 @@ export async function POST(req: Request) {
           await appendAssetPriceHistoryRows(historyRows);
         }
 
+        // Extract dividends from raw payloads stored during this refresh (last 10 days window)
+        let dividendExtracted = 0;
+        try {
+          const divResult = await extractDividendsFromRawPayloads({ sinceDays: 1 });
+          dividendExtracted = divResult.extracted;
+        } catch {
+          // Dividend extraction failure should not block price refresh
+        }
+
         return {
           requested: targets.length,
           refreshedSymbols: result.refreshed,
@@ -154,6 +164,7 @@ export async function POST(req: Request) {
           missingSymbols: result.missing,
           refreshedAssets: refreshedAssetKeys.length,
           assetKeys: refreshedAssetKeys,
+          dividendExtracted,
           at: new Date().toISOString(),
         };
       },

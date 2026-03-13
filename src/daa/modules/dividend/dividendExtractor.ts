@@ -9,6 +9,9 @@ type YahooChartDividend = {
 /**
  * Extract dividend events from stored Yahoo Finance raw payloads.
  * Scans the daa_external_payload_raw_v1 table for chart responses that contain dividend events.
+ *
+ * Note: the raw payload table uses `subject_key` (format "MARKET::SYMBOL"),
+ * not separate symbol/market columns.
  */
 export async function extractDividendsFromRawPayloads(input: {
   symbols?: string[];
@@ -24,20 +27,28 @@ export async function extractDividendsFromRawPayloads(input: {
   );
   if (tableCheck.length === 0) return { extracted: 0, symbols: [] };
 
+  // Build subject_key filter from symbols (e.g. ["SPY","QQQ"] → subject_key IN ('US::SPY','US::QQQ',...))
   const symbolFilter = input.symbols && input.symbols.length > 0
-    ? `AND symbol = ANY($2)`
+    ? `AND subject_key = ANY($2)`
     : "";
   const params: unknown[] = [cutoff];
   if (input.symbols && input.symbols.length > 0) {
+    // subject_key format is "MARKET::SYMBOL" — we don't know the market, so match by suffix
     params.push(input.symbols.map((s) => s.toUpperCase()));
   }
 
+  // subject_key is "MARKET::SYMBOL"; we extract market and symbol from it
+  const subjectKeyFilter = input.symbols && input.symbols.length > 0
+    ? `AND split_part(subject_key, '::', 2) = ANY($2)`
+    : "";
+
   const { rows } = await pool.query(
-    `SELECT id, symbol, market, payload_json, fetched_at
+    `SELECT id, subject_key, payload_json, fetched_at
      FROM daa_external_payload_raw_v1
      WHERE fetched_at >= $1::timestamptz
        AND provider = 'yfinance'
-       ${symbolFilter}
+       AND resource = 'yfinance.chart.latest'
+       ${subjectKeyFilter}
      ORDER BY fetched_at DESC`,
     params,
   );
@@ -56,6 +67,13 @@ export async function extractDividendsFromRawPayloads(input: {
 
   for (const row of rows) {
     try {
+      // Parse subject_key "MARKET::SYMBOL" → market, symbol
+      const subjectKey = String(row.subject_key || "");
+      const sepIdx = subjectKey.indexOf("::");
+      const market = sepIdx >= 0 ? subjectKey.slice(0, sepIdx).toUpperCase() : "US";
+      const symbol = sepIdx >= 0 ? subjectKey.slice(sepIdx + 2).toUpperCase() : subjectKey.toUpperCase();
+      if (!symbol) continue;
+
       const payload = typeof row.payload_json === "string"
         ? JSON.parse(row.payload_json)
         : row.payload_json;
@@ -71,14 +89,14 @@ export async function extractDividendsFromRawPayloads(input: {
         if (!(div.amount > 0) || !div.date) continue;
         const exDate = new Date(div.date * 1000).toISOString().slice(0, 10);
         allRecords.push({
-          symbol: String(row.symbol).toUpperCase(),
-          market: String(row.market).toUpperCase(),
+          symbol,
+          market,
           exDate,
           amount: div.amount,
           currency,
           source: "yfinance",
         });
-        symbolsFound.add(String(row.symbol).toUpperCase());
+        symbolsFound.add(symbol);
       }
     } catch {
       // Skip unparseable payloads
