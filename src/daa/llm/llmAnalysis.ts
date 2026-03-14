@@ -1,5 +1,5 @@
-import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
+import { callLlm, LlmRequestError, normalizeText, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 export type DaaLlmAnalysisStatus = "skipped" | "ok" | "error";
@@ -42,67 +42,9 @@ export type DaaLlmAnalysisInput = {
 
 export { DEFAULT_ANALYSIS_FOCUS_ };
 
-type LlmRuntimeConfig = {
-  enabled: boolean;
-  enabledInDecision: boolean;
-  provider: string;
-  model: string;
-  endpoint: string;
-  apiKey: string;
-  timeoutMs: number;
-};
-
-class LlmRequestError extends Error {
-  status: number;
-  reasonCode: string;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "LlmRequestError";
-    this.status = status;
-    this.reasonCode = `http_${status}`;
-  }
-}
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
-
-function toFinite(value: unknown, fallback: number): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-async function resolveLlmRuntimeConfig(): Promise<LlmRuntimeConfig> {
-  const system = await getDaaSystemConfig();
-  const config = system.config.dataSources.llmAnalysis;
-  const provider = normalizeText(config.provider, "codex").toLowerCase();
-  const envModel = normalizeText(process.env.DAA_LLM_MODEL || process.env.OPENAI_MODEL);
-  const model = normalizeText(envModel, normalizeText(config.model, provider === "packycode" ? "packycode-default" : "gpt-5-codex"));
-  const timeoutMs = Math.max(2000, Math.min(20000, Math.trunc(toFinite(config.timeoutMs, 8000))));
-
-  const endpoint = provider === "packycode"
-    ? normalizeText(process.env.PACKYCODE_ENDPOINT)
-    : normalizeText(process.env.DAA_LLM_ENDPOINT, "https://api.openai.com/v1/responses");
-
-  const apiKey = provider === "packycode"
-    ? normalizeText(process.env.PACKYCODE_API_KEY)
-    : normalizeText(process.env.OPENAI_API_KEY);
-
-  const enabled = Boolean(config.enabled);
-  const enabledInDecision = config.enabledInDecision !== false;
-
-  return {
-    enabled,
-    enabledInDecision,
-    provider,
-    model,
-    endpoint,
-    apiKey,
-    timeoutMs,
-  };
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Prompt & Parsing
+// ─────────────────────────────────────────────────────────────────────────────
 
 function formatMarketContextForPrompt(marketContext: DaaMarketContext | null | undefined): string {
   if (!marketContext) return "市场状态层未启用或暂无可用快照";
@@ -142,24 +84,6 @@ ${top || "无"}`,
     "2) opportunity_notes：3-5条机会说明",
     "3) risk_notes：3-5条风险提示",
   ].join("\n");
-}
-
-function extractTextFromOpenAiLike(payload: any): string {
-  if (typeof payload?.output_text === "string" && payload.output_text.trim()) {
-    return payload.output_text.trim();
-  }
-
-  const output = Array.isArray(payload?.output) ? payload.output : [];
-  const parts: string[] = [];
-  for (const item of output) {
-    const content = Array.isArray(item?.content) ? item.content : [];
-    for (const block of content) {
-      const text = String(block?.text || "").trim();
-      if (text) parts.push(text);
-    }
-  }
-
-  return parts.join("\n").trim();
 }
 
 function splitAnalysisText(text: string): { summary: string; opportunityNotes: string[]; riskNotes: string[] } {
@@ -216,77 +140,13 @@ function resolveFailure(error: unknown): { reasonCode: string; reasonMessage: st
   };
 }
 
-async function callOpenAiLike(config: LlmRuntimeConfig, prompt: string): Promise<{ text: string; raw: unknown }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
-
-  try {
-    const response = await fetch(config.endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        input: prompt,
-      }),
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new LlmRequestError(response.status, String((payload as any)?.error?.message || (payload as any)?.message || `http ${response.status}`));
-    }
-
-    return {
-      text: extractTextFromOpenAiLike(payload),
-      raw: payload,
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function callPackyCode(config: LlmRuntimeConfig, prompt: string): Promise<{ text: string; raw: unknown }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
-
-  try {
-    const response = await fetch(config.endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        authorization: config.apiKey ? `Bearer ${config.apiKey}` : "",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        prompt,
-      }),
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new LlmRequestError(response.status, String((payload as any)?.error || (payload as any)?.message || `http ${response.status}`));
-    }
-
-    const text = normalizeText((payload as any)?.text)
-      || normalizeText((payload as any)?.output)
-      || normalizeText((payload as any)?.answer)
-      || extractTextFromOpenAiLike(payload);
-
-    return { text, raw: payload };
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Public API
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function runLlmAnalysis(input: DaaLlmAnalysisInput): Promise<DaaLlmAnalysis> {
   const startedAt = Date.now();
-  const config = await resolveLlmRuntimeConfig();
+  const config = await resolveLlmConfig();
   const analysisFocus = normalizeText(input.analysisFocus);
   const generatedAt = new Date().toISOString();
   const sharedMarketMeta = {
@@ -386,10 +246,7 @@ export async function runLlmAnalysis(input: DaaLlmAnalysisInput): Promise<DaaLlm
       analysisFocus,
     });
 
-    const result = config.provider === "packycode"
-      ? await callPackyCode(config, prompt)
-      : await callOpenAiLike(config, prompt);
-
+    const result = await callLlm(config, prompt);
     const parsed = splitAnalysisText(result.text);
 
     return {
