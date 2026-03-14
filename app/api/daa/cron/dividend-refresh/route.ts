@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   return withApiHandler(async () => {
-    const denied = requireCronAuth(req);
+    const denied = await requireCronAuth(req);
     if (denied) {
       const status = denied.status || 401;
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });

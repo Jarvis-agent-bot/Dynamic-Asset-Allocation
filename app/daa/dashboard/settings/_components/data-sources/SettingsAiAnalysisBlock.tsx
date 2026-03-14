@@ -52,7 +52,7 @@ export function SettingsAiAnalysisBlock(props: {
                         ...prev.dataSources,
                         llmAnalysis: {
                           ...prev.dataSources.llmAnalysis,
-                          model: e.target.value.trim() || "gpt-5-codex",
+                          model: e.target.value.trim() || "deepseek-chat",
                         },
                       },
                     }

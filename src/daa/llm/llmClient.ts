@@ -1,16 +1,16 @@
 /**
  * llmClient.ts
  *
- * 统一 LLM HTTP 调用层。支持两种 API 格式：
- * - OpenAI Chat Completions（DeepSeek、OpenAI /v1/chat/completions）
- * - OpenAI Responses API（/v1/responses）
+ * 统一 LLM HTTP 调用层。支持 Chat Completions API 格式。
  *
  * provider 映射：
- * - "deepseek" → Chat Completions，endpoint 默认 https://api.deepseek.com/v1/chat/completions
- * - "openai"  → Chat Completions，endpoint 默认 https://api.openai.com/v1/chat/completions
- * - "codex" / 其他 → Responses API，endpoint 默认 https://api.openai.com/v1/responses
+ * - "deepseek" → https://api.deepseek.com/v1/chat/completions (默认)
+ * - "openai"  → https://api.openai.com/v1/chat/completions
+ *
+ * 凭证解析优先级：env var > DB (secretsManager) > 配置默认值
  */
 
+import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,24 +88,19 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
   const provider = normalizeText(config.provider, "deepseek").toLowerCase();
 
   const defaults = getProviderDefaults(provider);
-  const envModel = normalizeText(process.env.DAA_LLM_MODEL);
-  const model = normalizeText(envModel, normalizeText(config.model, defaults.model));
-
   const timeoutMs = Math.max(2000, Math.min(30000, Math.trunc(toFinite(config.timeoutMs, 10000))));
 
-  const envEndpoint = normalizeText(process.env.DAA_LLM_ENDPOINT);
-  const endpoint = normalizeText(envEndpoint, defaults.endpoint);
-
-  const apiKey = normalizeText(
-    process.env.DAA_LLM_API_KEY || process.env.OPENAI_API_KEY,
-  );
+  // Resolve secrets: env > DB > config defaults
+  const apiKey = await resolveSecret("llm_api_key");
+  const endpoint = await resolveSecret("llm_endpoint");
+  const model = await resolveSecret("llm_model");
 
   return {
     enabled: Boolean(config.enabled),
     enabledInDecision: config.enabledInDecision !== false,
     provider,
-    model,
-    endpoint,
+    model: normalizeText(model, normalizeText(config.model, defaults.model)),
+    endpoint: normalizeText(endpoint, defaults.endpoint),
     apiKey,
     timeoutMs,
   };

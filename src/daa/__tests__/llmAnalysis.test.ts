@@ -36,8 +36,8 @@ describe("llm-analysis-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.OPENAI_API_KEY = "mock-key";
-    process.env.DAA_LLM_ENDPOINT = "https://mock.llm.example/v1/responses";
-    process.env.DAA_LLM_MODEL = "gpt-5-codex";
+    process.env.DAA_LLM_ENDPOINT = "https://mock.llm.example/v1/chat/completions";
+    process.env.DAA_LLM_MODEL = "deepseek-chat";
   });
 
   afterEach(() => {
@@ -70,13 +70,13 @@ describe("llm-analysis-v1", () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(
       mockSystemConfig({
         enabledInDecision: true,
-        provider: "codex",
-        model: "gpt-5-codex",
+        provider: "deepseek",
+        model: "deepseek-chat",
       }),
     );
 
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      output_text: "summary\\nopportunity note\\nrisk note",
+      choices: [{ message: { content: "summary\\nopportunity note\\nrisk note" } }],
     }), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -103,20 +103,21 @@ describe("llm-analysis-v1", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const firstCall = fetchMock.mock.calls[0] as unknown as [unknown, RequestInit | undefined] | undefined;
     const payload = JSON.parse(String(firstCall?.[1]?.body || "{}"));
-    expect(String(payload.input || "")).toContain("重点关注技术形态与基金经理加减仓");
+    const prompt = Array.isArray(payload.messages) ? String(payload.messages[0]?.content || "") : String(payload.input || "");
+    expect(prompt).toContain("重点关注技术形态与基金经理加减仓");
   });
 
   it("enabledInDecision=false 时仅阻断 decision，上层洞察仍可调用", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(
       mockSystemConfig({
         enabledInDecision: false,
-        provider: "codex",
-        model: "gpt-5-codex",
+        provider: "deepseek",
+        model: "deepseek-chat",
       }),
     );
 
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      output_text: "summary\\nopportunity note\\nrisk note",
+      choices: [{ message: { content: "summary\\nopportunity note\\nrisk note" } }],
     }), {
       status: 200,
       headers: { "content-type": "application/json" },

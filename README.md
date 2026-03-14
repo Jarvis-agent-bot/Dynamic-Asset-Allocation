@@ -59,11 +59,12 @@ pnpm dev
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase 项目 URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ✅ | Supabase publishable key（`sb_publishable_xxx`） |
 | `SUPABASE_SERVICE_ROLE_KEY` | - | 服务端管理密钥（用于 bootstrap） |
-| `OPENAI_API_KEY` | ✅ | LLM API Key |
-| `DAA_LLM_ENDPOINT` | - | 默认 `https://api.openai.com/v1/responses` |
-| `DAA_LLM_MODEL` | - | 默认 `gpt-5-codex` |
+| `DAA_LLM_API_KEY` | ✅ | LLM API Key（也兼容 `OPENAI_API_KEY`） |
+| `DAA_LLM_ENDPOINT` | - | 默认 `https://api.deepseek.com/v1/chat/completions` |
+| `DAA_LLM_MODEL` | - | 默认 `deepseek-chat` |
 | `DAA_DB_URL` | - | Postgres 连接串（未配置时自动回退 pg-mem） |
 | `DATABASE_URL` | - | 通用 DB 连接串（回退） |
+| `DAA_SECRETS_ENCRYPTION_KEY` | - | 凭证加密密钥（未设置时自动从 DB URL 派生） |
 
 ### 通知配置（可选）
 
@@ -73,7 +74,7 @@ pnpm dev
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Telegram 机器人通知 |
 | `FEISHU_WEBHOOK_URL` | 飞书自定义机器人 webhook |
 
-通知开关在前端 Settings > 通知 页面配置。
+通知开关在前端 Settings > 通知 页面配置。所有 API Key / Token 也可通过 Settings > 凭证 页面在线配置（AES-256-GCM 加密存储），env var 优先级高于数据库。
 
 ### 避免"重启后数据清空"
 
@@ -162,6 +163,8 @@ Next.js 14 App Router
 | 端点 | 说明 |
 | ---- | ---- |
 | `GET/PATCH /api/daa/store/system-config` | 系统配置（含乐观并发） |
+| `GET/PUT/DELETE /api/daa/store/secrets` | 凭证管理（加密存储） |
+| `POST /api/daa/store/secrets/test` | 凭证连通性测试 |
 | `GET /api/daa/store/cash-ledger` | 现金台账 |
 | `GET /api/daa/store/equity-snapshots` | 权益快照 |
 | `GET /api/daa/store/fx-rates` | 汇率 |

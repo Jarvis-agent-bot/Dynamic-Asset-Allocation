@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 vi.mock("@/src/daa/cron/auth", () => ({
-  requireCronAuth: vi.fn(),
+  requireCronAuth: vi.fn(async () => null),
 }));
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
@@ -125,7 +125,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 
-  vi.mocked(requireCronAuth).mockReturnValue(null);
+  vi.mocked(requireCronAuth).mockResolvedValue(null);
   vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig());
   vi.mocked(listDaaAssetUniverse).mockResolvedValue([] as any[]);
   vi.mocked(listDaaFxRates).mockResolvedValue([] as any[]);

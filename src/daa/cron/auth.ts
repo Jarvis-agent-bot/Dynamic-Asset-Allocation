@@ -2,6 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
+import { resolveSecret } from "@/src/daa/config/secretsManager";
+
 function normalizeToken(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
@@ -12,8 +14,8 @@ function parseBearer(req: Request): string {
   return normalizeToken(m ? m[1] : "");
 }
 
-export function requireCronAuth(req: Request): NextResponse | null {
-  const expected = normalizeToken(process.env.DAA_CRON_TOKEN || process.env.CRON_SECRET);
+export async function requireCronAuth(req: Request): Promise<NextResponse | null> {
+  const expected = await resolveSecret("cron_token");
 
   if (!expected) {
     if ((process.env.NODE_ENV || "").toLowerCase() !== "production") return null;

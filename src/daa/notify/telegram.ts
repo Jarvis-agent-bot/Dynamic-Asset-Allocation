@@ -1,3 +1,5 @@
+import { resolveSecret } from "@/src/daa/config/secretsManager";
+
 export async function sendTelegramMessage(opts: {
   botToken: string;
   chatId: string;
@@ -31,8 +33,8 @@ export async function sendTelegramMessage(opts: {
 }
 
 export async function sendTelegramByEnv(message: string): Promise<boolean> {
-  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || process.env.DAA_TELEGRAM_BOT_TOKEN || "").trim();
-  const chatId = String(process.env.TELEGRAM_CHAT_ID || process.env.DAA_TELEGRAM_CHAT_ID || "").trim();
+  const botToken = await resolveSecret("telegram_bot_token");
+  const chatId = await resolveSecret("telegram_chat_id");
   if (!botToken || !chatId) return false;
   return sendTelegramMessage({ botToken, chatId, text: message });
 }

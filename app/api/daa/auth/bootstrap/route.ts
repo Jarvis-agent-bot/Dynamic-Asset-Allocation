@@ -1,12 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { fail, ok } from "@/src/daa/api/routeHelpers";
+import { resolveSecret } from "@/src/daa/config/secretsManager";
 
 export const runtime = "nodejs";
-
-function normalizeToken(v: unknown): string {
-  return typeof v === "string" ? v.trim() : "";
-}
 
 /**
  * Bootstrap endpoint: create the first admin account via Supabase Admin API.
@@ -30,8 +27,8 @@ export async function POST(req: Request) {
     return fail("VALIDATION_FAILED", "email and password are required", { status: 400 });
   }
 
-  const supabaseUrl = normalizeToken(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const serviceRoleKey = normalizeToken(process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const supabaseUrl = await resolveSecret("supabase_url");
+  const serviceRoleKey = await resolveSecret("supabase_service_role_key");
 
   if (!supabaseUrl || !serviceRoleKey) {
     return fail("INTERNAL_ERROR", "Supabase service role key not configured", { status: 500 });
