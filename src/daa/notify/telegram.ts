@@ -31,8 +31,19 @@ export async function sendTelegramMessage(opts: {
 }
 
 export async function sendTelegramByEnv(message: string): Promise<boolean> {
-  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || process.env.DAA_TELEGRAM_BOT_TOKEN || "").trim();
-  const chatId = String(process.env.TELEGRAM_CHAT_ID || process.env.DAA_TELEGRAM_CHAT_ID || "").trim();
+  let botToken = String(process.env.TELEGRAM_BOT_TOKEN || process.env.DAA_TELEGRAM_BOT_TOKEN || "").trim();
+  let chatId = String(process.env.TELEGRAM_CHAT_ID || process.env.DAA_TELEGRAM_CHAT_ID || "").trim();
+
+  if (!botToken || !chatId) {
+    try {
+      const { resolveSecret } = await import("@/src/daa/config/secretsManager");
+      if (!botToken) botToken = await resolveSecret("telegram_bot_token");
+      if (!chatId) chatId = await resolveSecret("telegram_chat_id");
+    } catch {
+      // secretsManager not available
+    }
+  }
+
   if (!botToken || !chatId) return false;
   return sendTelegramMessage({ botToken, chatId, text: message });
 }

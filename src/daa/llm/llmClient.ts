@@ -88,24 +88,30 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
   const provider = normalizeText(config.provider, "deepseek").toLowerCase();
 
   const defaults = getProviderDefaults(provider);
-  const envModel = normalizeText(process.env.DAA_LLM_MODEL);
-  const model = normalizeText(envModel, normalizeText(config.model, defaults.model));
-
   const timeoutMs = Math.max(2000, Math.min(30000, Math.trunc(toFinite(config.timeoutMs, 10000))));
 
-  const envEndpoint = normalizeText(process.env.DAA_LLM_ENDPOINT);
-  const endpoint = normalizeText(envEndpoint, defaults.endpoint);
-
-  const apiKey = normalizeText(
-    process.env.DAA_LLM_API_KEY || process.env.OPENAI_API_KEY,
-  );
+  // Resolve secrets: env > DB > config defaults
+  let apiKey = "";
+  let endpoint = "";
+  let model = "";
+  try {
+    const { resolveSecret } = await import("@/src/daa/config/secretsManager");
+    apiKey = await resolveSecret("llm_api_key");
+    endpoint = await resolveSecret("llm_endpoint");
+    model = await resolveSecret("llm_model");
+  } catch {
+    // fallback to env only
+    apiKey = normalizeText(process.env.DAA_LLM_API_KEY || process.env.OPENAI_API_KEY);
+    endpoint = normalizeText(process.env.DAA_LLM_ENDPOINT);
+    model = normalizeText(process.env.DAA_LLM_MODEL);
+  }
 
   return {
     enabled: Boolean(config.enabled),
     enabledInDecision: config.enabledInDecision !== false,
     provider,
-    model,
-    endpoint,
+    model: normalizeText(model, normalizeText(config.model, defaults.model)),
+    endpoint: normalizeText(endpoint, defaults.endpoint),
     apiKey,
     timeoutMs,
   };

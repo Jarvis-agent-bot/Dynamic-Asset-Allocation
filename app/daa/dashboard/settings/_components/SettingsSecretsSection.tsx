@@ -1,0 +1,300 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Check, Eye, EyeOff, KeyRound, Lock, Pencil, PlugZap, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
+
+import { SectionCard } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
+import {
+  deleteSecretValue,
+  listSecrets,
+  testSecretConnectivity,
+  writeSecretValue,
+  type StoreSecretStatus,
+  type StoreSecretTestResult,
+} from "@/src/daa/modules/store/storeApi";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GROUP_META: Record<string, { label: string; order: number }> = {
+  llm: { label: "LLM 分析 (DeepSeek)", order: 0 },
+  email: { label: "邮件 (Resend)", order: 1 },
+  telegram: { label: "Telegram", order: 2 },
+  feishu: { label: "飞书 (Lark)", order: 3 },
+  supabase: { label: "Supabase 认证", order: 4 },
+};
+
+const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "resend_api_key"]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SecretRow
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SecretRow({
+  secret,
+  onSaved,
+  testResult,
+  onTest,
+  testing,
+}: {
+  secret: StoreSecretStatus;
+  onSaved: (secrets: StoreSecretStatus[]) => void;
+  testResult: StoreSecretTestResult | null;
+  onTest: (key: string) => void;
+  testing: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [showValue, setShowValue] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      const secrets = await writeSecretValue(secret.key, value);
+      onSaved(secrets);
+      setEditing(false);
+      setValue("");
+      toast.success(`${secret.label} 已保存`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSaving(false);
+    }
+  }, [secret.key, secret.label, value, onSaved]);
+
+  const handleDelete = useCallback(async () => {
+    setDeleting(true);
+    try {
+      const secrets = await deleteSecretValue(secret.key);
+      onSaved(secrets);
+      toast.success(`${secret.label} 已删除`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "删除失败");
+    } finally {
+      setDeleting(false);
+    }
+  }, [secret.key, secret.label, onSaved]);
+
+  const sourceLabel = secret.source === "env" ? "环境变量" : secret.source === "db" ? "数据库" : "未配置";
+  const isTestable = TESTABLE_KEYS.has(secret.key);
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 py-2.5">
+      {/* Label + source */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-medium text-[var(--text)]">{secret.label}</span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+            secret.source === "env"
+              ? "bg-blue-500/10 text-blue-400"
+              : secret.source === "db"
+                ? "bg-emerald-500/10 text-emerald-400"
+                : "bg-zinc-500/10 text-zinc-500"
+          }`}>
+            {secret.source === "env" && <Lock className="h-2.5 w-2.5" />}
+            {sourceLabel}
+          </span>
+        </div>
+
+        {/* Masked value or editing input */}
+        {editing ? (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showValue ? "text" : "password"}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={secret.sensitive ? "输入新值…" : "输入值…"}
+                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--elevated)] px-2.5 py-1.5 pr-8 text-[13px] text-[var(--text)] outline-none transition-colors focus:border-[var(--primary)]"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleSave();
+                  if (e.key === "Escape") { setEditing(false); setValue(""); }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowValue(!showValue)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--faint)] hover:text-[var(--muted)]"
+              >
+                {showValue ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving || !value.trim()}
+              className="rounded-md bg-emerald-600 p-1.5 text-white transition-opacity hover:opacity-80 disabled:opacity-40"
+            >
+              <Check className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEditing(false); setValue(""); }}
+              className="rounded-md bg-zinc-600 p-1.5 text-white transition-opacity hover:opacity-80"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="mt-1 flex items-center gap-2">
+            <code className={`text-[12px] ${secret.masked ? "text-[var(--muted)]" : "text-zinc-600 italic"}`}>
+              {secret.masked || "—"}
+            </code>
+            {testResult && (
+              <span className={`text-[11px] ${testResult.success ? "text-emerald-400" : "text-red-400"}`}>
+                {testResult.success ? "✓" : "✗"} {testResult.message} ({testResult.latencyMs}ms)
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      {!editing && (
+        <div className="flex items-center gap-1">
+          {isTestable && secret.source !== "empty" && (
+            <button
+              type="button"
+              onClick={() => onTest(secret.key)}
+              disabled={testing}
+              title="连通性测试"
+              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--primary)] disabled:opacity-40"
+            >
+              <PlugZap className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
+            </button>
+          )}
+          {!secret.readOnly && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              title={secret.source === "env" ? "环境变量优先，DB 值仅在无 env 时使用" : "编辑"}
+              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {!secret.readOnly && secret.source === "db" && (
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+              title="从数据库中删除"
+              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function SettingsSecretsSection() {
+  const [secrets, setSecrets] = useState<StoreSecretStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [testResults, setTestResults] = useState<Record<string, StoreSecretTestResult>>({});
+  const [testingKey, setTestingKey] = useState<string | null>(null);
+
+  const loadSecrets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await listSecrets();
+      setSecrets(data);
+    } catch {
+      toast.error("加载凭证状态失败");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSecrets();
+  }, [loadSecrets]);
+
+  const handleTest = useCallback(async (key: string) => {
+    setTestingKey(key);
+    try {
+      const result = await testSecretConnectivity(key);
+      setTestResults((prev) => ({ ...prev, [key]: result }));
+      if (result.success) {
+        toast.success(`${result.message}`);
+      } else {
+        toast.error(`测试失败: ${result.message}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "测试失败");
+    } finally {
+      setTestingKey(null);
+    }
+  }, []);
+
+  // Group secrets
+  const groups = new Map<string, StoreSecretStatus[]>();
+  for (const secret of secrets) {
+    const list = groups.get(secret.group) || [];
+    list.push(secret);
+    groups.set(secret.group, list);
+  }
+
+  const sortedGroups = [...groups.entries()].sort(
+    (a, b) => (GROUP_META[a[0]]?.order ?? 99) - (GROUP_META[b[0]]?.order ?? 99),
+  );
+
+  return (
+    <section id="settings-secrets" className="scroll-mt-28">
+      <SectionCard
+        title="凭证与密钥"
+        description="管理 API Key、Token 和 Webhook 等敏感凭证。环境变量 (env) 设定的值优先级最高，数据库值仅在无对应 env 时生效。"
+      >
+        {loading ? (
+          <div className="py-8 text-center text-sm text-[var(--muted)]">加载凭证状态…</div>
+        ) : (
+          <div className="space-y-5">
+            {sortedGroups.map(([group, items]) => (
+              <div key={group}>
+                <div className="mb-2 flex items-center gap-2">
+                  <KeyRound className="h-3.5 w-3.5 text-[var(--faint)]" />
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                    {GROUP_META[group]?.label || group}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {items.map((secret) => (
+                    <SecretRow
+                      key={secret.key}
+                      secret={secret}
+                      onSaved={setSecrets}
+                      testResult={testResults[secret.key] ?? null}
+                      onTest={handleTest}
+                      testing={testingKey === secret.key}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-[12px] leading-5 text-[var(--faint)]">
+              <strong>来源说明：</strong>
+              <span className="ml-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-blue-400">环境变量</span>{" "}
+              通过 .env 文件配置，优先级最高，前端不可覆盖；
+              <span className="ml-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-emerald-400">数据库</span>{" "}
+              通过前端配置，AES-256 加密存储；
+              <span className="ml-1 rounded-full bg-zinc-500/10 px-1.5 py-0.5 text-zinc-500">未配置</span>{" "}
+              未设定任何值，相关功能将被禁用。
+            </div>
+          </div>
+        )}
+      </SectionCard>
+    </section>
+  );
+}

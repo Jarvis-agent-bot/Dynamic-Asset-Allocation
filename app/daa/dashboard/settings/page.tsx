@@ -15,6 +15,7 @@ import {
 import { SettingsHumanFactorSection } from "@/app/daa/dashboard/settings/_components/SettingsHumanFactorSection";
 import { SettingsNotificationSection } from "@/app/daa/dashboard/settings/_components/SettingsNotificationSection";
 import { SettingsRiskSection } from "@/app/daa/dashboard/settings/_components/SettingsRiskSection";
+import { SettingsSecretsSection } from "@/app/daa/dashboard/settings/_components/SettingsSecretsSection";
 import { SettingsStrategySection } from "@/app/daa/dashboard/settings/_components/SettingsStrategySection";
 import { ApiClientError } from "@/src/daa/api/client";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
@@ -196,6 +197,7 @@ export default function SettingsPage() {
           <SettingsDataSourcesSection config={config} setConfig={setConfig} />
           <SettingsHumanFactorSection config={config} setConfig={setConfig} />
           <SettingsNotificationSection config={config} setConfig={setConfig} />
+          <SettingsSecretsSection />
         </div>
       </div>
 

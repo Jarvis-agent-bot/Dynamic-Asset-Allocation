@@ -368,6 +368,67 @@ export async function refreshMarketIndicators(): Promise<StoreMarketIndicatorRef
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Secrets
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type StoreSecretStatus = {
+  key: string;
+  label: string;
+  group: string;
+  masked: string;
+  source: "env" | "db" | "empty";
+  sensitive: boolean;
+  readOnly: boolean;
+  updatedAt: string | null;
+};
+
+export type StoreSecretTestResult = {
+  key: string;
+  success: boolean;
+  message: string;
+  latencyMs: number;
+};
+
+export async function listSecrets(): Promise<StoreSecretStatus[]> {
+  const data = await requestData<{ secrets: StoreSecretStatus[] }>("/api/daa/store/secrets", {
+    method: "GET",
+    cache: "no-store",
+  });
+  return Array.isArray(data.secrets) ? data.secrets : [];
+}
+
+export async function writeSecretValue(key: string, value: string): Promise<StoreSecretStatus[]> {
+  const data = await requestData<{ secrets: StoreSecretStatus[] }>("/api/daa/store/secrets", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key, value }),
+  });
+  return Array.isArray(data.secrets) ? data.secrets : [];
+}
+
+export async function deleteSecretValue(key: string): Promise<StoreSecretStatus[]> {
+  const data = await requestData<{ secrets: StoreSecretStatus[] }>("/api/daa/store/secrets", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  return Array.isArray(data.secrets) ? data.secrets : [];
+}
+
+export async function testSecretConnectivity(key: string): Promise<StoreSecretTestResult> {
+  const data = await requestData<{ result: StoreSecretTestResult }>("/api/daa/store/secrets/test", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  return data.result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Market Indicators
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function listMarketIndicatorHistory(input: {
   keys: DaaMarketIndicatorKey[];
   days?: number;

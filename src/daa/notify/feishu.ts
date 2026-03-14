@@ -70,9 +70,19 @@ export async function sendFeishuRichMessage(opts: {
 }
 
 export async function sendFeishuByEnv(message: string): Promise<boolean> {
-  const webhookUrl = String(
+  let webhookUrl = String(
     process.env.FEISHU_WEBHOOK_URL || process.env.DAA_FEISHU_WEBHOOK_URL || "",
   ).trim();
+
+  if (!webhookUrl) {
+    try {
+      const { resolveSecret } = await import("@/src/daa/config/secretsManager");
+      webhookUrl = await resolveSecret("feishu_webhook_url");
+    } catch {
+      // secretsManager not available
+    }
+  }
+
   if (!webhookUrl) return false;
   return sendFeishuMessage({ webhookUrl, text: message });
 }
