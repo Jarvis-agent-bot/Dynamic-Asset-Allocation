@@ -29,34 +29,25 @@ function parseApiError(json: any, fallback: string): string {
   return fallback;
 }
 
-function normalizeUsernameLoose(raw: string): string {
-  const v = raw.trim().toLowerCase();
-  if (!v) return "";
-  if (v.length > 64) return "";
-  if (/\s/.test(v)) return "";
-  if (!/^[a-z0-9._@+\-]+$/.test(v)) return "";
-  return v;
-}
-
 function mapLoginError(message: string): string {
   const code = String(message || "").trim();
-  if (code === "invalid_credentials") return "账号或密码错误。";
+  if (code === "invalid_credentials") return "邮箱或密码错误。";
   if (code === "auth_backend_unavailable") return "认证服务不可用，请稍后重试。";
+  if (code === "Invalid login credentials") return "邮箱或密码错误。";
   return code || "登录失败，请重试。";
 }
 
 export default function DaaLoginClient({ returnTo, error, notice }: Props) {
-  const userRef = useRef<HTMLInputElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
   const passRef = useRef<HTMLInputElement | null>(null);
 
   const safeReturnTo = useMemo(() => normalizeDaaReturnTo(returnTo), [returnTo]);
 
   const [session, setSession] = useState<SessionModel>({ kind: "checking" });
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [redirectingToDashboard, setRedirectingToDashboard] = useState(false);
-  const [refreshingSession, setRefreshingSession] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,7 +55,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (!n) return;
     if (n === "session_expired") toast.error("会话已过期，请重新登录。");
     if (n === "signed_out") toast.success("已退出登录。");
-    if (n === "bootstrapped") toast.success("默认账号已初始化，请登录。");
     if (n === "signed_in") toast.success("登录成功。");
   }, [notice]);
 
@@ -82,11 +72,9 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   useEffect(() => {
     if (session.kind === "signedOut") {
-      if (!username) userRef.current?.focus();
-      else if (!password) passRef.current?.focus();
-      else userRef.current?.focus();
+      emailRef.current?.focus();
     }
-  }, [session.kind, username, password]);
+  }, [session.kind]);
 
   useEffect(() => {
     const msg = String(error || "").trim();
@@ -103,10 +91,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
   async function login() {
     if (busy || session.kind === "checking") return;
-    const normalized = normalizeUsernameLoose(username);
-    if (!normalized || !password.trim()) {
-      setAuthError("请填写有效的用户名和密码。");
-      if (!normalized) userRef.current?.focus();
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password.trim()) {
+      setAuthError("请填写有效的邮箱和密码。");
+      if (!trimmedEmail) emailRef.current?.focus();
       else passRef.current?.focus();
       return;
     }
@@ -116,7 +104,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       const res = await fetch("/api/daa/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ username: normalized, password, returnTo: safeReturnTo }),
+        body: JSON.stringify({ email: trimmedEmail, password, returnTo: safeReturnTo }),
       });
       const text = await res.text().catch(() => "");
       let json: any = null;
@@ -128,21 +116,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       setAuthError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function refreshSession() {
-    if (refreshingSession) return;
-    setRefreshingSession(true);
-    try {
-      const result = await fetchDaaAuthSession({ silent: true, force: true, cacheTtlMs: 0 });
-      if (result.kind === "signedIn") { setSession({ kind: "signedIn", me: result.me }); toast.success("会话已刷新。"); return; }
-      if (result.kind === "signedOut") { setSession({ kind: "signedOut" }); toast.error("会话已过期，请重新登录。"); return; }
-      throw new Error(result.message || "会话刷新失败");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRefreshingSession(false);
     }
   }
 
@@ -159,7 +132,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     }
   }
 
-  /* ── Already signed in ── */
+  /* -- Already signed in -- */
   if (session.kind === "signedIn") {
     const roles = session.me.account.roles?.filter(Boolean).join(", ") || "(no roles)";
     return (
@@ -190,15 +163,6 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             </button>
             <button
               type="button"
-              onClick={() => void refreshSession()}
-              disabled={refreshingSession}
-              className="w-full rounded-md border py-2.5 text-sm transition-colors hover:bg-accent disabled:opacity-50"
-              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-            >
-              {refreshingSession ? "刷新中..." : "刷新会话"}
-            </button>
-            <button
-              type="button"
               onClick={() => void logout()}
               className="w-full py-2 text-sm transition-opacity hover:opacity-70"
               style={{ color: "var(--faint)" }}
@@ -211,7 +175,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     );
   }
 
-  /* ── Login form ── */
+  /* -- Login form -- */
   return (
     <div className="flex min-h-svh" style={{ background: "var(--bg)" }}>
 
@@ -374,24 +338,24 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
             <div className="space-y-1.5">
               <label
-                htmlFor="daa-login-username"
+                htmlFor="daa-login-email"
                 className="block text-[11px] font-semibold uppercase tracking-widest"
                 style={{ color: "var(--faint)" }}
               >
-                用户名
+                邮箱
               </label>
               <input
-                id="daa-login-username"
-                ref={userRef}
-                type="text"
+                id="daa-login-email"
+                ref={emailRef}
+                type="email"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                autoComplete="username"
-                placeholder="请输入用户名"
-                value={username}
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
                 disabled={busy || session.kind === "checking"}
-                onChange={(e) => { setUsername(e.target.value); setAuthError(null); }}
+                onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
                 className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-all disabled:opacity-50"
                 style={{
                   background: "var(--elevated)",
@@ -473,20 +437,10 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               className="text-[10px] font-semibold uppercase tracking-widest"
               style={{ color: "var(--faint)" }}
             >
-              默认账号
+              认证说明
             </div>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              非生产环境首次会自动初始化{" "}
-              <code
-                className="rounded px-1 py-0.5 text-[11px]"
-                style={{
-                  background: "var(--hover)",
-                  color: "var(--primary)",
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                admin / admin123
-              </code>
+              使用 Supabase Auth 邮箱密码登录。首次使用请在 Supabase 控制台创建账号。
             </p>
           </div>
 

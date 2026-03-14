@@ -1,60 +1,80 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  createSupabaseFromRequest: vi.fn(),
+}));
+
+vi.mock("@/src/daa/supabase/server", () => ({
+  createSupabaseFromRequest: mocks.createSupabaseFromRequest,
+  createSupabaseServerClient: vi.fn(),
+}));
 
 import { requireDaaAdminViewerAuth } from "../adminAuth";
-import { DAA_AUTH_SESSION_COOKIE_ } from "../auth/daaAuthConstants";
-import {
-  createDaaAuthAccount,
-  createDaaAuthSession,
-} from "../auth/daaAuthStore";
 
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_PG_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMem() {
-  // Use in-memory Postgres emulation for unit tests.
-  process.env.DAA_PG_MEM = "1";
-  delete (globalThis as any)[PG_GLOBAL_KEY];
-  delete (globalThis as any)[STORE_PG_GLOBAL_KEY];
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-}
-
-function makeCookieHeader(token: string): string {
-  return `${DAA_AUTH_SESSION_COOKIE_}=${encodeURIComponent(token)}`;
+function mockSupabaseUser(user: any) {
+  mocks.createSupabaseFromRequest.mockReturnValue({
+    auth: {
+      getUser: vi.fn(async () => ({
+        data: { user },
+        error: user ? null : { message: "not authenticated" },
+      })),
+    },
+  });
 }
 
 describe("daa/adminAuth require* v0", () => {
-  it("denies bearer-only auth without a session cookie", async () => {
-    resetPgMem();
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    const req = new Request("http://localhost/api/daa/admin/users", {
-      headers: { authorization: "Bearer viewer-1" },
-    });
+  it("denies request without valid Supabase session", async () => {
+    mockSupabaseUser(null);
+
+    const req = new Request("http://localhost/api/daa/admin/users");
     const denied = await requireDaaAdminViewerAuth(req);
 
     expect(denied).not.toBe(null);
     expect(denied!.status).toBe(401);
   });
 
-  it("allows viewer role via cookie-backed session", async () => {
-    resetPgMem();
-
-    const account = await createDaaAuthAccount({
-      username: "viewer@example.com",
-      password: "pw-1",
-      roles: ["viewer"],
-    });
-    const { token } = await createDaaAuthSession({
-      accountId: account.accountId,
-      ttlDays: 7,
-      userAgent: "ua",
-      ip: "1.2.3.4",
+  it("allows viewer role via Supabase session", async () => {
+    mockSupabaseUser({
+      id: "user-1",
+      email: "viewer@example.com",
+      app_metadata: { roles: ["viewer"] },
+      created_at: "2026-01-01T00:00:00Z",
     });
 
-    const req = new Request("http://localhost/api/daa/admin/users", {
-      headers: { cookie: makeCookieHeader(token) },
-    });
-
+    const req = new Request("http://localhost/api/daa/admin/users");
     expect(await requireDaaAdminViewerAuth(req)).toBe(null);
+  });
+
+  it("denies viewer-only user from editor endpoints", async () => {
+    mockSupabaseUser({
+      id: "user-1",
+      email: "viewer@example.com",
+      app_metadata: { roles: ["viewer"] },
+      created_at: "2026-01-01T00:00:00Z",
+    });
+
+    const { requireDaaAdminEditorAuth } = await import("../adminAuth");
+    const req = new Request("http://localhost/api/daa/admin/users");
+    const denied = await requireDaaAdminEditorAuth(req);
+
+    expect(denied).not.toBe(null);
+    expect(denied!.status).toBe(401);
+  });
+
+  it("allows editor role for editor endpoints", async () => {
+    mockSupabaseUser({
+      id: "user-1",
+      email: "editor@example.com",
+      app_metadata: { roles: ["editor"] },
+      created_at: "2026-01-01T00:00:00Z",
+    });
+
+    const { requireDaaAdminEditorAuth } = await import("../adminAuth");
+    const req = new Request("http://localhost/api/daa/admin/users");
+    expect(await requireDaaAdminEditorAuth(req)).toBe(null);
   });
 });

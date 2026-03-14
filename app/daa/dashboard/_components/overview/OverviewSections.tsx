@@ -21,17 +21,18 @@ import {
   type DeepLedgerTone,
 } from "@/app/daa/dashboard/_components/DeepLedgerUI";
 import type { PortfolioOverviewModel } from "@/app/daa/dashboard/_hooks/usePortfolioOverviewModel";
-import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type { DaaMarketIndicatorKey, DaaMarketIndicatorScope } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { MARKET_SCOPE_LABEL_ZH_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 
 const PIE_COLORS = ["#38BDF8", "#818CF8", "#F6AD55", "#34D399", "#F87171", "#A78BFA", "#6EE7B7"];
 const MARKET_INDICATOR_LINE_META_: Record<DaaMarketIndicatorKey, { label: string; color: string }> = {
-  vix: { label: "VIX", color: "#38BDF8" },
-  qqq_spy_ratio: { label: "QQQ/SPY", color: "#818CF8" },
-  fxi_volatility: { label: "FXI 波动率", color: "#F87171" },
-  kweb_fxi_ratio: { label: "KWEB/FXI", color: "#F6AD55" },
-  btc_eth_ratio: { label: "BTC/ETH", color: "#34D399" },
-  btc_volatility: { label: "BTC 波动率", color: "#A78BFA" },
-  gold_silver_ratio: { label: "金银比", color: "#FBBF24" },
+  vix: { label: "美股恐慌指数 (VIX)", color: "#38BDF8" },
+  qqq_spy_ratio: { label: "美股成长/大盘比 (QQQ/SPY)", color: "#818CF8" },
+  fxi_volatility: { label: "港中概波动率 (FXI)", color: "#F87171" },
+  kweb_fxi_ratio: { label: "中概互联/大盘比 (KWEB/FXI)", color: "#F6AD55" },
+  btc_eth_ratio: { label: "比特币/以太坊比 (BTC/ETH)", color: "#34D399" },
+  btc_volatility: { label: "比特币波动率 (BTC)", color: "#A78BFA" },
+  gold_silver_ratio: { label: "金银比 (GC/SI)", color: "#FBBF24" },
 };
 const CASH_CURRENCY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "USD", label: "美元 (USD)" },
@@ -203,7 +204,7 @@ export function OverviewMarketTemperaturePanel({ model }: { model: PortfolioOver
                 onClick={() => model.setMarketHistoryRange(days as 30 | 90)}
                 className={`rounded-full px-3 py-1 text-xs transition-colors ${model.marketHistoryRange === days ? "bg-[var(--primary)] text-[var(--bg)]" : "text-[var(--muted)] hover:text-[var(--text)]"}`}
               >
-                {days}d
+                {days}天
               </button>
             ))}
           </div>
@@ -222,7 +223,7 @@ export function OverviewMarketTemperaturePanel({ model }: { model: PortfolioOver
             onClick={() => model.setSelectedMarketScope(scope)}
             className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${model.selectedScope === scope ? "border-[var(--primary)]/40 bg-[rgba(56,189,248,0.12)] text-[var(--primary)]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]"}`}
           >
-            {scope}
+            {MARKET_SCOPE_LABEL_ZH_[scope as DaaMarketIndicatorScope] || scope}
           </button>
         ))}
       </div>

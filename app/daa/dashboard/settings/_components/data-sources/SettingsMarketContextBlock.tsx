@@ -86,7 +86,7 @@ export function SettingsMarketContextBlock(props: {
           <div style={{ gridColumn: "1 / -1", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", padding: "10px 12px" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>市场划分说明</div>
             <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-              美股使用 VIX 与 QQQ / SPY；港股 / 中概使用 FXI 波动率与 KWEB / FXI；加密使用 BTC / ETH 与 BTC 波动率；宏观防御使用金银比作为辅助观察。
+              美股使用恐慌指数与成长/大盘比；港股 / 中概使用港中概波动率与中概互联/大盘比；加密使用比特币/以太坊比与比特币波动率；宏观防御使用金银比作为辅助观察。
             </div>
           </div>
         </div>
@@ -103,7 +103,7 @@ export function SettingsMarketContextBlock(props: {
             lineHeight: 1.7,
           }}
         >
-          固定依赖：VIX → ^VIX；QQQ / SPY → QQQ / SPY；FXI 波动率 → FXI；KWEB / FXI → KWEB / FXI；BTC / ETH → BTC-USD / ETH-USD；BTC 波动率 → BTC-USD；金银比 → GC=F / SI=F。
+          数据源对照：美股恐慌指数 → ^VIX；美股成长/大盘比 → QQQ / SPY；港中概波动率 → FXI；中概互联/大盘比 → KWEB / FXI；比特币/以太坊比 → BTC-USD / ETH-USD；比特币波动率 → BTC-USD；金银比 → GC=F / SI=F。
         </div>
 
         <div style={{ marginTop: 16 }}>

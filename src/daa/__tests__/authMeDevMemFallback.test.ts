@@ -1,34 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  ensureDevDefaultDaaAuthAccount: vi.fn(),
-  refreshDaaAuthSession: vi.fn(),
-  getDaaAuthContextFromRequest: vi.fn(),
+  createSupabaseServerClient: vi.fn(),
 }));
 
-vi.mock("@/src/daa/auth/daaAuthStore", () => ({
-  ensureDevDefaultDaaAuthAccount: mocks.ensureDevDefaultDaaAuthAccount,
-  refreshDaaAuthSession: mocks.refreshDaaAuthSession,
-}));
-
-vi.mock("@/src/daa/auth/daaAuthRequest", () => ({
-  getDaaAuthContextFromRequest: mocks.getDaaAuthContextFromRequest,
+vi.mock("@/src/daa/supabase/server", () => ({
+  createSupabaseServerClient: mocks.createSupabaseServerClient,
+  createSupabaseFromRequest: vi.fn(),
 }));
 
 import { GET } from "@/app/api/daa/auth/me/route";
-import { DAA_AUTH_SESSION_COOKIE_ } from "@/src/daa/auth/daaAuthConstants";
 
 describe("auth-me-devmem-fallback-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.DAA_PG_MEM = "1";
-    mocks.ensureDevDefaultDaaAuthAccount.mockResolvedValue(undefined);
-    mocks.getDaaAuthContextFromRequest.mockResolvedValue(null);
-    mocks.refreshDaaAuthSession.mockResolvedValue(null);
   });
 
-  it("silent 模式下鉴权后端不可用时回落到 signed-out 响应", async () => {
-    mocks.ensureDevDefaultDaaAuthAccount.mockRejectedValue(new Error('database "daa" does not exist'));
+  it("silent 模式下未登录返回 not_authenticated with 200", async () => {
+    mocks.createSupabaseServerClient.mockReturnValue({
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: { user: null },
+          error: { message: "not authenticated" },
+        })),
+      },
+    });
 
     const response = await GET(new Request("http://localhost/api/daa/auth/me?silent=1"));
     const json = await response.json();
@@ -41,33 +37,49 @@ describe("auth-me-devmem-fallback-v1", () => {
         message: "not_authenticated",
       },
     });
-    expect(response.headers.get("set-cookie")).toContain(`${DAA_AUTH_SESSION_COOKIE_}=`);
   });
 
-  it("非 silent 模式仍保留 503，避免掩盖真实后端问题", async () => {
-    mocks.getDaaAuthContextFromRequest.mockResolvedValue({
-      token: "tok-1",
-      account: {
-        accountId: "acc-1",
-        username: "admin",
-        roles: ["editor"],
-        status: "active",
-      },
-      session: {
-        sessionId: "sess-1",
-        createdAt: "2026-03-01T00:00:00.000Z",
-        expiresAt: "2026-03-08T00:00:00.000Z",
-        revokedAt: null,
-        lastSeenAt: null,
+  it("非 silent 模式未登录返回 401", async () => {
+    mocks.createSupabaseServerClient.mockReturnValue({
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: { user: null },
+          error: { message: "not authenticated" },
+        })),
       },
     });
-    mocks.refreshDaaAuthSession.mockRejectedValue(new Error('database "daa" does not exist'));
 
     const response = await GET(new Request("http://localhost/api/daa/auth/me"));
     const json = await response.json();
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(401);
     expect(json.ok).toBe(false);
-    expect(json.error.message).toBe("auth_backend_unavailable");
+    expect(json.error.message).toBe("not_authenticated");
+  });
+
+  it("已登录返回用户信息", async () => {
+    mocks.createSupabaseServerClient.mockReturnValue({
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: {
+            user: {
+              id: "user-1",
+              email: "admin@example.com",
+              app_metadata: { roles: ["editor"] },
+              created_at: "2026-01-01T00:00:00Z",
+            },
+          },
+          error: null,
+        })),
+      },
+    });
+
+    const response = await GET(new Request("http://localhost/api/daa/auth/me?silent=1"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.account.username).toBe("admin@example.com");
+    expect(json.data.account.roles).toEqual(["editor"]);
   });
 });

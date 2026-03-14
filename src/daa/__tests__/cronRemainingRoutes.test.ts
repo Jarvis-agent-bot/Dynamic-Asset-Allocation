@@ -17,6 +17,12 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
           enabled: true,
           onDriftTrigger: true,
         },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: false,
+        },
       },
     },
   })),
@@ -44,6 +50,10 @@ vi.mock('@/src/daa/modules/workbench/workbenchRebalanceCycleService', () => ({
 
 vi.mock('@/src/daa/notify/telegram', () => ({
   sendTelegramByEnv: vi.fn(async () => null),
+}));
+
+vi.mock('@/src/daa/notify/feishu', () => ({
+  sendFeishuByEnv: vi.fn(async () => null),
 }));
 
 vi.mock('@/src/daa/hf/hfService', () => ({

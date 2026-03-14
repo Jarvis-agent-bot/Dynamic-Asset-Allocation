@@ -51,14 +51,14 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
   fixedSymbols: string[];
 }> = {
   vix: {
-    label: "VIX",
+    label: "美股恐慌指数 (VIX)",
     category: "volatility",
     scope: "us_equity",
     source: "yfinance:^VIX",
     fixedSymbols: ["^VIX"],
   },
   qqq_spy_ratio: {
-    label: "QQQ/SPY",
+    label: "美股成长/大盘比 (QQQ/SPY)",
     category: "relative_value",
     scope: "us_equity",
     unit: "x",
@@ -66,7 +66,7 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     fixedSymbols: ["QQQ", "SPY"],
   },
   fxi_volatility: {
-    label: "FXI 波动率",
+    label: "港中概波动率 (FXI)",
     category: "volatility",
     scope: "hk_cn_equity",
     unit: "%",
@@ -74,7 +74,7 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     fixedSymbols: ["FXI"],
   },
   kweb_fxi_ratio: {
-    label: "KWEB/FXI",
+    label: "中概互联/大盘比 (KWEB/FXI)",
     category: "relative_value",
     scope: "hk_cn_equity",
     unit: "x",
@@ -82,7 +82,7 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     fixedSymbols: ["KWEB", "FXI"],
   },
   btc_eth_ratio: {
-    label: "BTC/ETH",
+    label: "比特币/以太坊比 (BTC/ETH)",
     category: "relative_value",
     scope: "crypto",
     unit: "x",
@@ -90,7 +90,7 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     fixedSymbols: ["BTC-USD", "ETH-USD"],
   },
   btc_volatility: {
-    label: "BTC 波动率",
+    label: "比特币波动率 (BTC)",
     category: "volatility",
     scope: "crypto",
     unit: "%",
@@ -98,7 +98,7 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     fixedSymbols: ["BTC-USD"],
   },
   gold_silver_ratio: {
-    label: "金银比",
+    label: "金银比 (GC/SI)",
     category: "relative_value",
     scope: "macro_defensive",
     unit: "x",

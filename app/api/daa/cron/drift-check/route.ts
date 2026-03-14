@@ -1,5 +1,6 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
+import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
@@ -43,21 +44,24 @@ export async function POST(req: Request) {
 
     const cycle = generated.cycle;
     try {
-      if (
-        cycle
-        && generated.created
-        && system.config.notification.telegram.enabled
-        && system.config.notification.telegram.onDriftTrigger
-      ) {
-        await sendTelegramByEnv(
-          [
-            "*DAA 偏移触发再平衡*",
-            `Cycle: ${cycle.cycleId}`,
-            `原因: ${cycle.triggerReason}`,
-            `建议数: ${cycle.proposals.length}`,
-            `风控: ${cycle.riskCheck.overallStatus}`,
-          ].join("\n"),
-        );
+      if (cycle && generated.created) {
+        const driftMsg = [
+          "DAA 偏移触发再平衡",
+          `Cycle: ${cycle.cycleId}`,
+          `原因: ${cycle.triggerReason}`,
+          `建议数: ${cycle.proposals.length}`,
+          `风控: ${cycle.riskCheck.overallStatus}`,
+        ].join("\n");
+
+        const notif = system.config.notification;
+        const sends: Promise<boolean>[] = [];
+        if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
+          sends.push(sendTelegramByEnv(`*${driftMsg.replace(/\n/g, "*\n")}*`));
+        }
+        if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
+          sends.push(sendFeishuByEnv(driftMsg));
+        }
+        await Promise.allSettled(sends);
       }
     } catch {
       // 通知失败不阻塞主流程
