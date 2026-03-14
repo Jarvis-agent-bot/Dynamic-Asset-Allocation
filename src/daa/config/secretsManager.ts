@@ -28,6 +28,7 @@ export const SECRET_KEY_DEFS_ = [
   { key: "supabase_service_role_key", label: "Supabase Service Role Key", group: "supabase", envVars: ["SUPABASE_SERVICE_ROLE_KEY"], sensitive: true },
   { key: "supabase_url", label: "Supabase URL", group: "supabase", envVars: ["NEXT_PUBLIC_SUPABASE_URL"], sensitive: false, readOnly: true },
   { key: "supabase_publishable_key", label: "Supabase Publishable Key", group: "supabase", envVars: ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"], sensitive: false, readOnly: true },
+  { key: "cron_token", label: "Cron Token", group: "cron", envVars: ["DAA_CRON_TOKEN", "CRON_SECRET"], sensitive: true },
 ] as const;
 
 export type DaaSecretKey = (typeof SECRET_KEY_DEFS_)[number]["key"];

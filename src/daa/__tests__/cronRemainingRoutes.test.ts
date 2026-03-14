@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
 
 vi.mock('@/src/daa/cron/auth', () => ({
-  requireCronAuth: vi.fn(() => null),
+  requireCronAuth: vi.fn(async () => null),
 }));
 
 vi.mock('@/src/daa/store/daaStorePg', () => ({
@@ -100,11 +100,11 @@ import { appendDaaIngestJobLog, getDaaSystemConfig } from '@/src/daa/store/daaSt
 describe('cron-remaining-routes-v1', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(requireCronAuth).mockReturnValue(null);
+    vi.mocked(requireCronAuth).mockResolvedValue(null);
   });
 
   it('drift-check 未通过 cron 鉴权时返回 401', async () => {
-    vi.mocked(requireCronAuth).mockReturnValue(NextResponse.json({ ok: false }, { status: 401 }));
+    vi.mocked(requireCronAuth).mockResolvedValue(NextResponse.json({ ok: false }, { status: 401 }));
 
     const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
     const json = await response.json();

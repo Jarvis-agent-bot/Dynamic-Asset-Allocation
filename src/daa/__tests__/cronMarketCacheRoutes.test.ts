@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/src/daa/cron/auth", () => ({
-  requireCronAuth: vi.fn(() => null),
+  requireCronAuth: vi.fn(async () => null),
 }));
 
 vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({

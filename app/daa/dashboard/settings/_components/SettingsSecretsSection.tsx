@@ -24,6 +24,7 @@ const GROUP_META: Record<string, { label: string; order: number }> = {
   telegram: { label: "Telegram", order: 2 },
   feishu: { label: "飞书 (Lark)", order: 3 },
   supabase: { label: "Supabase 认证", order: 4 },
+  cron: { label: "定时任务", order: 5 },
 };
 
 const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "resend_api_key"]);

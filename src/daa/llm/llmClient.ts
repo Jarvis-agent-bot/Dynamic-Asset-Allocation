@@ -1,14 +1,13 @@
 /**
  * llmClient.ts
  *
- * 统一 LLM HTTP 调用层。支持两种 API 格式：
- * - OpenAI Chat Completions（DeepSeek、OpenAI /v1/chat/completions）
- * - OpenAI Responses API（/v1/responses）
+ * 统一 LLM HTTP 调用层。支持 Chat Completions API 格式。
  *
  * provider 映射：
- * - "deepseek" → Chat Completions，endpoint 默认 https://api.deepseek.com/v1/chat/completions
- * - "openai"  → Chat Completions，endpoint 默认 https://api.openai.com/v1/chat/completions
- * - "codex" / 其他 → Responses API，endpoint 默认 https://api.openai.com/v1/responses
+ * - "deepseek" → https://api.deepseek.com/v1/chat/completions (默认)
+ * - "openai"  → https://api.openai.com/v1/chat/completions
+ *
+ * 凭证解析优先级：env var > DB (secretsManager) > 配置默认值
  */
 
 import { resolveSecret } from "@/src/daa/config/secretsManager";
