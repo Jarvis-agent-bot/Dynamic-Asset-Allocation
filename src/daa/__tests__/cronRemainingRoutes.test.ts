@@ -220,7 +220,7 @@ describe('cron-remaining-routes-v1', () => {
     expect(response.status).toBe(500);
     expect(json.ok).toBe(false);
     expect(json.error.code).toBe('INTERNAL_ERROR');
-    expect(json.error.message).toBe('hf upstream down');
+    expect(json.error.message).toBe('internal server error');
     expect(vi.mocked(appendDaaIngestJobLog)).toHaveBeenCalledWith(expect.objectContaining({
       jobType: 'cron_hf_ingest',
       status: 'failed',
