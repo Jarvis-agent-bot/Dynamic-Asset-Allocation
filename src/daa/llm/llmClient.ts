@@ -11,6 +11,7 @@
  * - "codex" / 其他 → Responses API，endpoint 默认 https://api.openai.com/v1/responses
  */
 
+import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,20 +92,9 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
   const timeoutMs = Math.max(2000, Math.min(30000, Math.trunc(toFinite(config.timeoutMs, 10000))));
 
   // Resolve secrets: env > DB > config defaults
-  let apiKey = "";
-  let endpoint = "";
-  let model = "";
-  try {
-    const { resolveSecret } = await import("@/src/daa/config/secretsManager");
-    apiKey = await resolveSecret("llm_api_key");
-    endpoint = await resolveSecret("llm_endpoint");
-    model = await resolveSecret("llm_model");
-  } catch {
-    // fallback to env only
-    apiKey = normalizeText(process.env.DAA_LLM_API_KEY || process.env.OPENAI_API_KEY);
-    endpoint = normalizeText(process.env.DAA_LLM_ENDPOINT);
-    model = normalizeText(process.env.DAA_LLM_MODEL);
-  }
+  const apiKey = await resolveSecret("llm_api_key");
+  const endpoint = await resolveSecret("llm_endpoint");
+  const model = await resolveSecret("llm_model");
 
   return {
     enabled: Boolean(config.enabled),

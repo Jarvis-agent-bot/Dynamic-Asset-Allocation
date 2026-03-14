@@ -1,3 +1,5 @@
+import { resolveSecret } from "@/src/daa/config/secretsManager";
+
 type SendEmailInput = {
   to: string;
   subject: string;
@@ -15,38 +17,8 @@ function normalizeText(value: unknown): string {
   return String(value || "").trim();
 }
 
-function pickApiKeySync(): string {
-  return normalizeText(process.env.RESEND_API_KEY || process.env.DAA_RESEND_API_KEY);
-}
-
-function pickFromAddressSync(): string {
-  return normalizeText(process.env.DAA_EMAIL_FROM) || "DAA Bot <onboarding@resend.dev>";
-}
-
-async function pickApiKey(): Promise<string> {
-  const envValue = pickApiKeySync();
-  if (envValue) return envValue;
-  try {
-    const { resolveSecret } = await import("@/src/daa/config/secretsManager");
-    return await resolveSecret("resend_api_key");
-  } catch {
-    return "";
-  }
-}
-
-async function pickFromAddress(): Promise<string> {
-  const envValue = pickFromAddressSync();
-  if (envValue) return envValue;
-  try {
-    const { resolveSecret } = await import("@/src/daa/config/secretsManager");
-    return (await resolveSecret("email_from")) || "DAA Bot <onboarding@resend.dev>";
-  } catch {
-    return "DAA Bot <onboarding@resend.dev>";
-  }
-}
-
 export async function sendEmailByEnv(input: SendEmailInput): Promise<SendEmailResult> {
-  const apiKey = await pickApiKey();
+  const apiKey = await resolveSecret("resend_api_key");
   if (!apiKey) {
     return { sent: false, reason: "RESEND_API_KEY 未配置" };
   }
@@ -61,8 +33,10 @@ export async function sendEmailByEnv(input: SendEmailInput): Promise<SendEmailRe
     return { sent: false, reason: "主题为空" };
   }
 
+  const fromAddress = (await resolveSecret("email_from")) || "DAA Bot <onboarding@resend.dev>";
+
   const payload = {
-    from: await pickFromAddress(),
+    from: fromAddress,
     to: [to],
     subject,
     text: normalizeText(input.text),

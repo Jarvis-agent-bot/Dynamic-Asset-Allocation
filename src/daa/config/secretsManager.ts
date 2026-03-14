@@ -48,17 +48,26 @@ export type DaaSecretStatus = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ALGORITHM = "aes-256-gcm";
-const IV_LENGTH = 16;
+const IV_LENGTH = 12; // NIST SP 800-38D recommends 96-bit (12-byte) IV for GCM
 const AUTH_TAG_LENGTH = 16;
 
+let cachedKey: Buffer | null = null;
+
 function deriveEncryptionKey(): Buffer {
+  if (cachedKey) return cachedKey;
+
   const explicit = (process.env.DAA_SECRETS_ENCRYPTION_KEY || "").trim();
   if (explicit) {
-    return createHash("sha256").update(explicit).digest();
+    cachedKey = createHash("sha256").update(explicit).digest();
+    return cachedKey;
   }
-  // Derive from DB URL as fallback (always available)
-  const dbUrl = (process.env.DAA_DB_URL || "daa-secrets-default-key").trim();
-  return createHash("sha256").update(`daa-secrets:${dbUrl}`).digest();
+
+  const dbUrl = (process.env.DAA_DB_URL || "").trim();
+  if (!dbUrl) {
+    console.warn("[secretsManager] DAA_SECRETS_ENCRYPTION_KEY 和 DAA_DB_URL 均未设置，使用固定密钥加密。建议在生产环境中配置 DAA_SECRETS_ENCRYPTION_KEY。");
+  }
+  cachedKey = createHash("sha256").update(`daa-secrets:${dbUrl || "daa-secrets-default-key"}`).digest();
+  return cachedKey;
 }
 
 function encrypt(plaintext: string): { ciphertext: string; iv: string } {
@@ -81,7 +90,7 @@ function decrypt(ciphertext: string, ivBase64: string): string {
   const encrypted = data.subarray(0, data.length - AUTH_TAG_LENGTH);
   const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   decipher.setAuthTag(authTag);
-  return decipher.update(encrypted) + decipher.final("utf8");
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

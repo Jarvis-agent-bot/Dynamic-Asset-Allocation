@@ -4,9 +4,11 @@
  * To use: create a custom bot in a Feishu group chat and get the webhook URL.
  * The webhook URL looks like: https://open.feishu.cn/open-apis/bot/v2/hook/<token>
  *
- * Set environment variable:
+ * Configure via Settings → Credentials UI, or set env var:
  *   FEISHU_WEBHOOK_URL or DAA_FEISHU_WEBHOOK_URL
  */
+
+import { resolveSecret } from "@/src/daa/config/secretsManager";
 
 export async function sendFeishuMessage(opts: {
   webhookUrl: string;
@@ -70,19 +72,7 @@ export async function sendFeishuRichMessage(opts: {
 }
 
 export async function sendFeishuByEnv(message: string): Promise<boolean> {
-  let webhookUrl = String(
-    process.env.FEISHU_WEBHOOK_URL || process.env.DAA_FEISHU_WEBHOOK_URL || "",
-  ).trim();
-
-  if (!webhookUrl) {
-    try {
-      const { resolveSecret } = await import("@/src/daa/config/secretsManager");
-      webhookUrl = await resolveSecret("feishu_webhook_url");
-    } catch {
-      // secretsManager not available
-    }
-  }
-
+  const webhookUrl = await resolveSecret("feishu_webhook_url");
   if (!webhookUrl) return false;
   return sendFeishuMessage({ webhookUrl, text: message });
 }

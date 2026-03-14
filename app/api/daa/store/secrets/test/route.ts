@@ -60,28 +60,26 @@ async function testTelegram(): Promise<TestResult> {
   const botToken = await resolveSecret("telegram_bot_token");
   const chatId = await resolveSecret("telegram_chat_id");
 
-  if (!botToken || !chatId) {
-    return { key: "telegram_bot_token", success: false, message: "Bot Token 或 Chat ID 未配置", latencyMs: Date.now() - start };
+  if (!botToken) {
+    return { key: "telegram_bot_token", success: false, message: "Bot Token 未配置", latencyMs: Date.now() - start };
+  }
+  if (!chatId) {
+    return { key: "telegram_bot_token", success: false, message: "Chat ID 未配置", latencyMs: Date.now() - start };
   }
 
   try {
-    const url = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: "DeepLedger 连通性测试 ✅",
-        disable_web_page_preview: true,
-      }),
-    });
+    // Use getMe to validate bot token without sending a message
+    const url = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/getMe`;
+    const response = await fetch(url, { method: "GET" });
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       return { key: "telegram_bot_token", success: false, message: `HTTP ${response.status}: ${body.slice(0, 100)}`, latencyMs: Date.now() - start };
     }
 
-    return { key: "telegram_bot_token", success: true, message: "已发送测试消息", latencyMs: Date.now() - start };
+    const data = (await response.json().catch(() => ({}))) as { ok?: boolean; result?: { username?: string } };
+    const botName = data.result?.username || "unknown";
+    return { key: "telegram_bot_token", success: true, message: `Bot @${botName} 验证通过，Chat ID 已配置`, latencyMs: Date.now() - start };
   } catch (e) {
     return { key: "telegram_bot_token", success: false, message: e instanceof Error ? e.message : String(e), latencyMs: Date.now() - start };
   }
