@@ -14,7 +14,8 @@
  * - 整个再平衡流程不阻断
  */
 
-import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { callLlm, normalizeText, resolveLlmConfig, toFinite } from "@/src/daa/llm/llmClient";
+import type { LlmRuntimeConfig } from "@/src/daa/llm/llmClient";
 import type { CashClassification } from "@/src/daa/modules/workbench/cashClassification";
 import type { DaaFusedOpportunity } from "@/src/daa/signals/fusion";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
@@ -99,26 +100,6 @@ export type LlmDecisionInput = {
 // Internal Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-type LlmRuntimeConfig = {
-  enabled: boolean;
-  enabledInDecision: boolean;
-  provider: string;
-  model: string;
-  endpoint: string;
-  apiKey: string;
-  timeoutMs: number;
-};
-
-function toFinite(value: unknown, fallback: number): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
-
 /**
  * P0-1: 清理用户/信号输入后再注入 LLM prompt，防止 prompt injection。
  * 移除反引号、方括号、换行，限制最大长度。
@@ -129,36 +110,6 @@ function sanitizeForPrompt(value: string, maxLen = 100): string {
     .replace(/\s{2,}/g, " ")
     .trim()
     .slice(0, maxLen);
-}
-
-async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
-  const system = await getDaaSystemConfig();
-  const config = system.config.dataSources.llmAnalysis;
-  const provider = normalizeText(config.provider, "codex").toLowerCase();
-
-  const envModel = normalizeText(process.env.DAA_LLM_MODEL || process.env.OPENAI_MODEL);
-  const defaultModel = provider === "packycode" ? "packycode-default" : "gpt-4o-mini";
-  const model = normalizeText(envModel, normalizeText(config.model, defaultModel));
-
-  const timeoutMs = Math.max(2000, Math.min(20000, Math.trunc(toFinite(config.timeoutMs, 10000))));
-
-  const endpoint = provider === "packycode"
-    ? normalizeText(process.env.PACKYCODE_ENDPOINT)
-    : normalizeText(process.env.DAA_LLM_ENDPOINT, "https://api.openai.com/v1/responses");
-
-  const apiKey = provider === "packycode"
-    ? normalizeText(process.env.PACKYCODE_API_KEY)
-    : normalizeText(process.env.OPENAI_API_KEY);
-
-  return {
-    enabled: Boolean(config.enabled),
-    enabledInDecision: config.enabledInDecision !== false,
-    provider,
-    model,
-    endpoint,
-    apiKey,
-    timeoutMs,
-  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,70 +291,6 @@ function parseLlmJsonOutput(jsonText: string): Omit<LlmDecisionOutput, "status" 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LLM HTTP Call
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function callLlmEndpoint(config: LlmRuntimeConfig, prompt: string): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
-
-  try {
-    const isPackyCode = config.provider === "packycode";
-    const body = isPackyCode
-      ? JSON.stringify({ model: config.model, prompt })
-      : JSON.stringify({ model: config.model, input: prompt });
-
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      accept: "application/json",
-    };
-    // P1-5: 无 API Key 时省略 authorization 头，避免发送空值被服务端拒绝
-    if (config.apiKey) {
-      headers.authorization = `Bearer ${config.apiKey}`;
-    }
-
-    const response = await fetch(config.endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers,
-      body,
-    });
-
-    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-
-    if (!response.ok) {
-      const errMsg = normalizeText(
-        (payload.error as any)?.message || (payload as any).message,
-        `HTTP ${response.status}`,
-      );
-      throw new Error(errMsg);
-    }
-
-    if (isPackyCode) {
-      return normalizeText(
-        payload.text ?? payload.output ?? payload.answer,
-      );
-    }
-
-    // OpenAI Responses API
-    const outputText = normalizeText(payload.output_text);
-    if (outputText) return outputText;
-
-    const outputs = Array.isArray(payload.output) ? payload.output : [];
-    const parts: string[] = [];
-    for (const item of outputs) {
-      for (const block of (Array.isArray((item as any)?.content) ? (item as any).content : [])) {
-        const t = normalizeText((block as any)?.text);
-        if (t) parts.push(t);
-      }
-    }
-    return parts.join("\n");
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Fallback Builders
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -488,7 +375,8 @@ export async function runLlmDecision(input: LlmDecisionInput): Promise<LlmDecisi
   // ── 调用 LLM ──────────────────────────────────────────────────
   try {
     const prompt = buildDecisionPrompt(input);
-    const rawText = await callLlmEndpoint(config, prompt);
+    const llmResult = await callLlm(config, prompt);
+    const rawText = llmResult.text;
 
     // 尝试解析 JSON
     const jsonText = extractJsonText(rawText);

@@ -295,9 +295,9 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     llmAnalysis: {
       id: "llm_analysis.default",
       enabled: true,
-      provider: "codex",
-      model: "gpt-5-codex",
-      timeoutMs: 8000,
+      provider: "deepseek",
+      model: "deepseek-chat",
+      timeoutMs: 15000,
       enabledInDecision: true,
     },
     marketIndicators: {
