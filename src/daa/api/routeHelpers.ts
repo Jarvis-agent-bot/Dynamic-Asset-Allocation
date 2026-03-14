@@ -54,14 +54,15 @@ function isDbErrorMessage(message: string): boolean {
 }
 
 export function errorToResponse(error: unknown): Response {
+  console.error("[DAA API]", error);
   const message = error instanceof Error ? error.message : String(error);
   if (/not found/i.test(message)) {
     return fail("NOT_FOUND", message, { status: 404 });
   }
   if (isDbErrorMessage(message)) {
-    return fail("DB_ERROR", message, { status: 503 });
+    return fail("DB_ERROR", "service temporarily unavailable", { status: 503 });
   }
-  return fail("INTERNAL_ERROR", message, { status: 500 });
+  return fail("INTERNAL_ERROR", "internal server error", { status: 500 });
 }
 
 export async function withApiHandler(handler: () => Promise<Response>): Promise<Response> {

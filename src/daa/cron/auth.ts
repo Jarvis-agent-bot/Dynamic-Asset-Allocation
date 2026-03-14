@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 function normalizeToken(v: unknown): string {
@@ -19,7 +21,16 @@ export function requireCronAuth(req: Request): NextResponse | null {
   }
 
   const provided = normalizeToken(req.headers.get("x-daa-cron-token")) || parseBearer(req);
-  if (provided && provided === expected) return null;
+  if (provided) {
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    const maxLen = Math.max(a.length, b.length);
+    const paddedA = Buffer.alloc(maxLen);
+    const paddedB = Buffer.alloc(maxLen);
+    a.copy(paddedA);
+    b.copy(paddedB);
+    if (a.length === b.length && timingSafeEqual(paddedA, paddedB)) return null;
+  }
 
   return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 }

@@ -3,6 +3,7 @@ import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { sendEmailByEnv } from "@/src/daa/notify/email";
+import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
@@ -108,6 +109,31 @@ export async function POST(req: Request) {
             }),
           });
         }
+        let feishuSent = false;
+        if (
+          cycle
+          && generated.created
+          && system.config.notification.feishu.enabled
+          && system.config.notification.feishu.onSuggestionGenerated
+        ) {
+          try {
+            feishuSent = await sendFeishuByEnv(
+              buildMailText({
+                cycleId: cycle.cycleId,
+                triggerReason: cycle.triggerReason,
+                riskStatus: cycle.riskCheck.overallStatus,
+                proposals: cycle.proposals.map((row) => ({
+                  symbol: row.symbol,
+                  side: row.side,
+                  suggestedNotional: row.suggestedNotional,
+                })),
+              }),
+            );
+          } catch {
+            // 飞书通知失败不阻塞主流程
+          }
+        }
+
         const emailResult = email || {
           sent: false,
           reason: !generated.created
@@ -126,6 +152,7 @@ export async function POST(req: Request) {
           cycleId: cycle?.cycleId || null,
           proposalCount: cycle?.proposals.length || 0,
           email: emailResult,
+          feishu: { sent: feishuSent },
           marketRefresh,
           at: new Date().toISOString(),
         };

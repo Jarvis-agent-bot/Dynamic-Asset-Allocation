@@ -42,6 +42,7 @@ import {
 } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 
+import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
 import { buildAssetUniverseViewRows } from "./assetUniverseService";
 import type {
   ExecuteRebalanceSummary,
@@ -72,6 +73,7 @@ import {
   buildCycleDraftFromBootstrap,
   buildPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
+  enrichRiskCheckWithCorrelation,
   buildRiskCycleDraft,
   calcHoldingCostPerUnit,
   getZonedYmd,
@@ -231,7 +233,7 @@ export async function generateWorkbenchRebalanceCycle(
   // ── drift 触发的阈值守卫（仅自动触发需要）────────────────────────
   if (!manual && triggerSource === "drift") {
     const thresholdPct = Math.max(0, strategy.drift.thresholdPct * 100);
-    if (!(draft.maxAbsDriftPct > thresholdPct)) {
+    if (draft.maxAbsDriftPct < thresholdPct) {
       return skipWithLatest(
         `最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}% 未超过阈值 ${thresholdPct.toFixed(2)}%`,
       );
@@ -408,12 +410,44 @@ export async function generateWorkbenchRebalanceCycle(
   // 将融合警告追加到系统 warnings
   const allWarnings = [...bootstrap.warnings, ...fusionResult.fusionWarnings];
 
+  // ── Step E.5: Tax-Loss Harvesting 扫描 ────────────────────────────
+  let tlhProposals: RebalanceProposal[] = [];
+  try {
+    const tlhResult = await scanTaxLossHarvestingCandidates({ bootstrap });
+    if (tlhResult.proposals.length > 0) {
+      // Filter out TLH proposals that conflict with existing fusion proposals
+      const existingSellKeys = new Set(
+        fusionResult.proposals
+          .filter((p) => p.side === "SELL")
+          .map((p) => p.assetKey.toUpperCase()),
+      );
+      tlhProposals = tlhResult.proposals.filter(
+        (p) => !existingSellKeys.has(p.assetKey.toUpperCase()),
+      );
+      if (tlhProposals.length > 0) {
+        allWarnings.push(
+          `发现 ${tlhProposals.length} 个税务收割机会，预计可收割损失 ${tlhResult.totalHarvestableBase.toFixed(0)} ${bootstrap.baseCurrency}`,
+        );
+      }
+    }
+  } catch {
+    // TLH scan failure does not block rebalance
+  }
+
+  // Merge TLH proposals with fusion proposals
+  const mergedProposals = [...fusionResult.proposals, ...tlhProposals];
+
   // ── Step F: 风险检查（使用融合后的建议）──────────────────────────
-  const riskCheck = buildPreTradeRiskCheckFromBootstrap({
+  const baseRiskCheck = buildPreTradeRiskCheckFromBootstrap({
     bootstrap,
     systemConfig: systemRow.config,
-    proposals: fusionResult.proposals.filter((p) => p.selected),
+    proposals: mergedProposals.filter((p) => p.selected),
   });
+  const riskCheck = await enrichRiskCheckWithCorrelation(
+    baseRiskCheck,
+    bootstrap.assetUniverse,
+    systemRow.config.strategy.risk.correlationCapPct,
+  );
 
   // ── Step G: 创建 Cycle（proposals 已含 decisionContext）──────────
   // 构建 notes：记录 LLM 状态和融合摘要，供审计追踪
@@ -430,6 +464,9 @@ export async function generateWorkbenchRebalanceCycle(
     cashClassification.cashIdleWarning
       ? `现金提示: 闲置资金 ${(cashClassification.investableIdlePct * 100).toFixed(1)}%（已${cashClassification.cashIdleDays}天）`
       : null,
+    tlhProposals.length > 0
+      ? `税务收割: ${tlhProposals.length} 条建议，预计损失收割 ${tlhProposals.reduce((sum, p) => sum + p.suggestedNotional, 0).toFixed(0)} ${bootstrap.baseCurrency}`
+      : null,
   ].filter(Boolean).join("\n");
 
   const created = await createDaaRebalanceCycle({
@@ -438,7 +475,7 @@ export async function generateWorkbenchRebalanceCycle(
     snapshotAt: new Date().toISOString(),
     equitySnapshot: Math.max(0, toFinite(bootstrap.account.totalEquity, 0)),
     driftSnapshot: draft.driftSnapshot,
-    proposals: fusionResult.proposals,
+    proposals: mergedProposals,
     riskCheck,
     notes: cycleNotes || null,
     marketContext,
@@ -450,7 +487,8 @@ export async function generateWorkbenchRebalanceCycle(
     cycleId: created.cycleId,
     status: "accepted",
     detailsJson: {
-      proposalCount: fusionResult.proposals.length,
+      proposalCount: mergedProposals.length,
+      tlhProposalCount: tlhProposals.length,
       riskOverallStatus: riskCheck.overallStatus,
       llmStatus: llmDecision.status,
       ruleBasedMarketRegime: marketContext?.regime || null,
@@ -542,6 +580,25 @@ export async function executeWorkbenchRebalanceCycle(input: {
 }): Promise<ExecuteRebalanceCycleResult> {
   const cycle = await getDaaRebalanceCycle(input.cycleId);
   if (!cycle) throw new Error(`cycle not found: ${input.cycleId}`);
+
+  // ── Stuck-cycle recovery: reset cycles stuck in "executing" for > 5 min ──
+  if (cycle.status === "executing" && !cycle.executedAt) {
+    const updatedMs = Date.parse(cycle.snapshotAt);
+    const stuckThresholdMs = 5 * 60 * 1000;
+    if (Number.isFinite(updatedMs) && Date.now() - updatedMs > stuckThresholdMs) {
+      console.warn(`[DAA] Recovering stuck cycle ${input.cycleId}: resetting executing → reviewing`);
+      await patchDaaRebalanceCycle({
+        cycleId: input.cycleId,
+        status: "reviewing",
+        notes: `${cycle.notes || ""}\n[系统恢复] 执行中断超时，已自动重置为审阅状态`.trim(),
+      });
+      // Re-fetch after recovery
+      const recovered = await getDaaRebalanceCycle(input.cycleId);
+      if (!recovered) throw new Error(`cycle not found after recovery: ${input.cycleId}`);
+      Object.assign(cycle, recovered);
+    }
+  }
+
   assertCycleExecutable(cycle, "execute");
 
   const toExecute = cycle.proposals.filter((row) => input.executeMode === "all" || row.selected);
@@ -589,8 +646,46 @@ export async function executeWorkbenchRebalanceCycle(input: {
     riskCheck: preTradeRiskCheck,
   });
 
+  // ── Refresh prices before execution to avoid stale-price losses ──
+  const executionConfig = getStrategyExecutionConfig(systemRow.config);
+  const slippageRate = executionConfig.slippageBps / 10_000;
+
+  const refreshedPrices = await getMarketPricesWithCache({
+    assets: toExecute.map((row) => ({
+      symbol: row.symbol,
+      market: parseDaaAssetKey(row.assetKey)?.market || "US",
+      currency: row.currency,
+    })),
+    allowRefresh: true,
+    forceRefresh: true,
+    refreshBudget: toExecute.length,
+    timeoutMs: 5000,
+    source: "rebalance_execution",
+    freshSec: 120,
+    serveStaleSec: 3600,
+    rawRetentionDays: 90,
+  });
+
+  // Build execution-ready proposals with refreshed prices + slippage
+  const executionRows = toExecute.map((row) => {
+    const parsed = parseDaaAssetKey(row.assetKey);
+    const priceKey = `${parsed?.market || "US"}::${row.symbol}`.toUpperCase();
+    const refreshed = refreshedPrices[priceKey];
+    const basePrice = (refreshed && refreshed.price > 0) ? refreshed.price : row.price;
+    // Apply slippage: BUY pays more, SELL receives less
+    const slippageMultiplier = row.side === "BUY" ? (1 + slippageRate) : (1 - slippageRate);
+    const executionPrice = basePrice * slippageMultiplier;
+    return {
+      ...row,
+      price: executionPrice,
+      _originalPrice: row.price,
+      _refreshedPrice: basePrice,
+      _slippageApplied: slippageRate > 0,
+    };
+  });
+
   const createdTicketIds: string[] = [];
-  for (const row of toExecute) {
+  for (const row of executionRows) {
     if (!(row.price > 0) || !(row.suggestedQty > 0)) continue;
     const parsed = parseDaaAssetKey(row.assetKey);
     const fee = Math.max(0, row.suggestedQty * row.price * feeRate);
@@ -628,6 +723,14 @@ export async function executeWorkbenchRebalanceCycle(input: {
   const totalNotional = toExecute.reduce((sum, row) => sum + row.suggestedNotional, 0);
   const newMaxDriftPct = cycle.driftSnapshot.reduce((max, row) => Math.max(max, Math.abs(row.driftPct * 100)), 0);
 
+  const priceAdjustmentNotes = executionRows
+    .filter((row) => row._refreshedPrice !== row._originalPrice || row._slippageApplied)
+    .map((row) => `${row.symbol}: 原价${row._originalPrice.toFixed(2)} → 刷新${row._refreshedPrice.toFixed(2)} → 执行${row.price.toFixed(2)}${row._slippageApplied ? ` (滑点${(slippageRate * 10000).toFixed(0)}bps)` : ""}`)
+    .slice(0, 10);
+  const executionNotes = priceAdjustmentNotes.length > 0
+    ? `\n[执行价格] ${priceAdjustmentNotes.join(" | ")}`
+    : "";
+
   const completed = await patchDaaRebalanceCycle({
     cycleId: input.cycleId,
     status: "completed",
@@ -639,6 +742,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
       totalNotional,
       newMaxDriftPct,
     },
+    notes: (cycle.notes || "") + executionNotes || null,
   });
 
   const [logs, afterBootstrap] = await Promise.all([
@@ -708,8 +812,13 @@ export async function executeWorkbenchRebalanceCycle(input: {
         maxDriftAfter: afterSnapshot.maxDriftPct,
       },
     });
-  } catch {
-    // 复盘报告生成失败不阻塞交易主流程
+  } catch (reportError) {
+    console.error(`[DAA] Cycle report generation failed for ${input.cycleId}:`, reportError);
+    // Record failure in cycle notes for audit trail
+    void patchDaaRebalanceCycle({
+      cycleId: input.cycleId,
+      notes: `${cycle.notes || ""}\n[复盘报告] 生成失败: ${reportError instanceof Error ? reportError.message : String(reportError)}`.trim(),
+    }).catch(() => {});
   }
 
   return {

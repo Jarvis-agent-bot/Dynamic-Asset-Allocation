@@ -25,7 +25,7 @@ DeepLedger 是一个面向个人投资者的动态资产配置工作台。核心
 4. **执行与复盘** — 市价预览 → 下单（模拟） → 回执 → 审计追踪
 
 **当前能力边界**
-- 支持：资产发现与入池、多维洞察、LLM 市场环境判断、再平衡提案生成与风控、市价预览与模拟执行、执行回执与日志、现金台账、汇率管理、策略实验室、账号鉴权
+- 支持：资产发现与入池、多维洞察、LLM 市场环境判断、再平衡提案生成与风控、市价预览与模拟执行、执行回执与日志、现金台账、汇率管理、策略实验室、Supabase Auth 邮箱认证、多渠道通知（邮件/Telegram/飞书）
 - 不支持：真实券商下单、多组合管理、自动执行
 
 ---
@@ -40,17 +40,40 @@ pnpm dev
 
 打开 http://localhost:3000/daa/dashboard
 
-**默认账号**（非生产环境自动初始化）：`admin / admin123`
+### 认证配置（Supabase Auth）
+
+1. 前往 [supabase.com](https://supabase.com) 创建项目（免费额度：50,000 MAU）
+2. 在 `.env.local` 中填入 `NEXT_PUBLIC_SUPABASE_URL` 和 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+3. 在 Supabase Dashboard > Authentication > Users 创建第一个用户
+4. 通过 SQL Editor 设置管理员角色：
+   ```sql
+   UPDATE auth.users
+   SET raw_app_meta_data = raw_app_meta_data || '{"roles": ["editor"]}'::jsonb
+   WHERE email = 'your@email.com';
+   ```
 
 ### 环境变量
 
-| 变量               | 必填 | 说明                                       |
-| ------------------ | ---- | ------------------------------------------ |
-| `OPENAI_API_KEY`   | ✅    | LLM API Key                                |
-| `DAA_LLM_ENDPOINT` | -    | 默认 `https://api.openai.com/v1/responses` |
-| `DAA_LLM_MODEL`    | -    | 默认 `gpt-5-codex`                         |
-| `DAA_DB_URL`       | -    | Postgres 连接串（未配置时自动回退 pg-mem） |
-| `DATABASE_URL`     | -    | 通用 DB 连接串（回退）                     |
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase 项目 URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ✅ | Supabase publishable key（`sb_publishable_xxx`） |
+| `SUPABASE_SERVICE_ROLE_KEY` | - | 服务端管理密钥（用于 bootstrap） |
+| `OPENAI_API_KEY` | ✅ | LLM API Key |
+| `DAA_LLM_ENDPOINT` | - | 默认 `https://api.openai.com/v1/responses` |
+| `DAA_LLM_MODEL` | - | 默认 `gpt-5-codex` |
+| `DAA_DB_URL` | - | Postgres 连接串（未配置时自动回退 pg-mem） |
+| `DATABASE_URL` | - | 通用 DB 连接串（回退） |
+
+### 通知配置（可选）
+
+| 变量 | 说明 |
+| --- | --- |
+| `RESEND_API_KEY` | Resend 邮件通知 |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Telegram 机器人通知 |
+| `FEISHU_WEBHOOK_URL` | 飞书自定义机器人 webhook |
+
+通知开关在前端 Settings > 通知 页面配置。
 
 ### 避免"重启后数据清空"
 
@@ -97,7 +120,7 @@ Next.js 14 App Router
     └── store/                   #   Postgres 存储
 ```
 
-**技术栈**：Next.js 14 · TypeScript · Tailwind CSS · shadcn/ui · Postgres / pg-mem · Recharts · Framer Motion
+**技术栈**：Next.js 14 · TypeScript · Tailwind CSS · shadcn/ui · Supabase Auth · Postgres / pg-mem · Recharts · Framer Motion
 
 ---
 

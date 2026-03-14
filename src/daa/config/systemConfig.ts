@@ -162,6 +162,12 @@ export type DaaSystemConfig = {
       onDriftTrigger: boolean;
       onTradeExecuted: boolean;
     };
+    feishu: {
+      enabled: boolean;
+      onDriftTrigger: boolean;
+      onSuggestionGenerated: boolean;
+      onTradeExecuted: boolean;
+    };
   };
 };
 
@@ -323,6 +329,12 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     telegram: {
       enabled: false,
       onDriftTrigger: false,
+      onTradeExecuted: false,
+    },
+    feishu: {
+      enabled: false,
+      onDriftTrigger: false,
+      onSuggestionGenerated: false,
       onTradeExecuted: false,
     },
   },
@@ -599,6 +611,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const notification = isRecord(source.notification) ? source.notification : {};
   const notificationEmail = isRecord(notification.email) ? notification.email : {};
   const notificationTelegram = isRecord(notification.telegram) ? notification.telegram : {};
+  const notificationFeishu = isRecord(notification.feishu) ? notification.feishu : {};
 
   const legacyAutomation = isRecord(source.automation) ? source.automation : {};
   const legacyDailyAnalysis = isRecord(legacyAutomation.dailyAnalysis) ? legacyAutomation.dailyAnalysis : {};
@@ -763,6 +776,12 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
           notificationTelegram.onTradeExecuted,
           toBool((legacyNotification as Record<string, unknown>).notifyOnRebalance, fallback.notification.telegram.onTradeExecuted),
         ),
+      },
+      feishu: {
+        enabled: toBool(notificationFeishu.enabled, fallback.notification.feishu.enabled),
+        onDriftTrigger: toBool(notificationFeishu.onDriftTrigger, fallback.notification.feishu.onDriftTrigger),
+        onSuggestionGenerated: toBool(notificationFeishu.onSuggestionGenerated, fallback.notification.feishu.onSuggestionGenerated),
+        onTradeExecuted: toBool(notificationFeishu.onTradeExecuted, fallback.notification.feishu.onTradeExecuted),
       },
     },
   };

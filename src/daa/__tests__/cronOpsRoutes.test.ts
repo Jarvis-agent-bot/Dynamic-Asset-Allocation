@@ -35,6 +35,14 @@ vi.mock("@/src/daa/notify/email", () => ({
   sendEmailByEnv: vi.fn(),
 }));
 
+vi.mock("@/src/daa/notify/feishu", () => ({
+  sendFeishuByEnv: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock("@/src/daa/store/jobExecutionLogRepo", () => ({
+  appendJobExecutionLog: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { POST as dailyAnalysisPost } from "@/app/api/daa/cron/daily-analysis/route";
 import { POST as fxRefreshPost } from "@/app/api/daa/cron/fx-refresh/route";
 import { POST as newsRefreshPost } from "@/app/api/daa/cron/news-refresh/route";
@@ -101,6 +109,12 @@ function buildSystemConfig(input?: {
       notification: {
         email: {
           onSuggestionGenerated: input?.emailEnabled ?? false,
+        },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: false,
         },
       },
     },

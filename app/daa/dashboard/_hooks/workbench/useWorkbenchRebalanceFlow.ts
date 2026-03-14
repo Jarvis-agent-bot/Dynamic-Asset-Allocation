@@ -126,7 +126,7 @@ export function useWorkbenchRebalanceFlow(input: {
     } finally {
       input.setBusy(false);
     }
-  }, [input]);
+  }, [input.busy, input.setBusy, input.syncCycleState, input.loadBootstrap]);
 
   const handleToggleProposal = useCallback(async (assetKey: string, side: "BUY" | "SELL", selected: boolean) => {
     if (!input.currentCycle || input.busy) return;
@@ -147,7 +147,7 @@ export function useWorkbenchRebalanceFlow(input: {
     } finally {
       input.setBusy(false);
     }
-  }, [input]);
+  }, [input.currentCycle, input.busy, input.setBusy, input.syncCycleState]);
 
   const handleSelectAllProposals = useCallback(async (selected: boolean) => {
     if (!input.currentCycle || input.busy) return;
@@ -167,7 +167,7 @@ export function useWorkbenchRebalanceFlow(input: {
     } finally {
       input.setBusy(false);
     }
-  }, [input]);
+  }, [input.currentCycle, input.busy, input.setBusy, input.syncCycleState]);
 
   const handleCancelCycle = useCallback(async () => {
     if (!input.currentCycle || input.busy) return;
@@ -188,7 +188,7 @@ export function useWorkbenchRebalanceFlow(input: {
     } finally {
       input.setBusy(false);
     }
-  }, [input]);
+  }, [input.currentCycle, input.busy, input.setBusy, input.syncCycleState, input.loadBootstrap]);
 
   return {
     summary,

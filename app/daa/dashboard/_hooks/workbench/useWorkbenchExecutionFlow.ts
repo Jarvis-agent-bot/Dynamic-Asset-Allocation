@@ -116,7 +116,7 @@ export function useWorkbenchExecutionFlow(input: {
     } finally {
       input.setBusy(false);
     }
-  }, [input]);
+  }, [input.currentCycle, input.busy, input.setBusy, input.setRiskCheck, input.mergeCycleState, input.loadBootstrap]);
 
   const handleConfirmExecuteCycle = useCallback(async () => {
     if (!pendingExecuteMode) return;
@@ -141,7 +141,7 @@ export function useWorkbenchExecutionFlow(input: {
       return;
     }
     setPendingExecuteMode(mode);
-  }, [input]);
+  }, [input.currentCycle, input.busy, input.currentRiskCheck, input.selectedProposalCount]);
 
   useEffect(() => {
     if (!pendingExecuteMode || !input.currentCycle) {

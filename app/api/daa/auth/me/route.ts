@@ -1,10 +1,5 @@
-import type { NextResponse } from "next/server";
-
-import { DAA_AUTH_SESSION_COOKIE_PATH_, DAA_AUTH_SESSION_COOKIE_ } from "@/src/daa/auth/daaAuthConstants";
-import { getDaaAuthContextFromRequest } from "@/src/daa/auth/daaAuthRequest";
-import { ensureDevDefaultDaaAuthAccount, refreshDaaAuthSession } from "@/src/daa/auth/daaAuthStore";
+import { createSupabaseServerClient } from "@/src/daa/supabase/server";
 import { fail, ok } from "@/src/daa/api/routeHelpers";
-import { shouldUseDevMemFallback } from "@/src/daa/devMemFallback";
 
 export const runtime = "nodejs";
 
@@ -19,71 +14,38 @@ function isSilentMode(req: Request): boolean {
   }
 }
 
-function clearSessionCookie(res: NextResponse) {
-  res.cookies.set({
-    name: DAA_AUTH_SESSION_COOKIE_,
-    value: "",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: DAA_AUTH_SESSION_COOKIE_PATH_,
-    maxAge: 0,
-  });
-}
-
-function unauthenticatedResponse(opts?: { silent?: boolean }) {
-  const silent = Boolean(opts?.silent);
-  const res = fail("UNAUTHORIZED", "not_authenticated", { status: silent ? 200 : 401 });
-  clearSessionCookie(res);
-  return res;
-}
-
 export async function GET(req: Request) {
   try {
-    await ensureDevDefaultDaaAuthAccount().catch(() => null);
     const silent = isSilentMode(req);
+    const supabase = createSupabaseServerClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    const ctx = await getDaaAuthContextFromRequest(req, { touch: false });
-    if (!ctx) {
-      return unauthenticatedResponse({ silent });
+    if (error || !user) {
+      return fail("UNAUTHORIZED", "not_authenticated", { status: silent ? 200 : 401 });
     }
 
-    const { account, session, token } = ctx;
-    const refreshed = await refreshDaaAuthSession({ sessionId: session.sessionId });
-    const responseSession = refreshed ?? session;
+    const roles = Array.isArray(user.app_metadata?.roles)
+      ? user.app_metadata.roles
+      : ["viewer"];
 
-    const res = ok({
+    return ok({
       account: {
-        accountId: account.accountId,
-        username: account.username,
-        roles: account.roles,
-        status: account.status,
+        accountId: user.id,
+        username: user.email || user.id,
+        roles,
+        status: "active",
       },
       session: {
-        sessionId: responseSession.sessionId,
-        createdAt: responseSession.createdAt,
-        expiresAt: responseSession.expiresAt,
-        revokedAt: responseSession.revokedAt,
-        lastSeenAt: responseSession.lastSeenAt,
+        sessionId: user.id,
+        createdAt: user.created_at || new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        revokedAt: null,
+        lastSeenAt: new Date().toISOString(),
       },
     });
-
-    if (refreshed) {
-      res.cookies.set({
-        name: DAA_AUTH_SESSION_COOKIE_,
-        value: token,
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        path: DAA_AUTH_SESSION_COOKIE_PATH_,
-        expires: new Date(refreshed.expiresAt),
-      });
-    }
-
-    return res;
   } catch (error) {
-    if (isSilentMode(req) && shouldUseDevMemFallback(error)) {
-      return unauthenticatedResponse({ silent: true });
+    if (isSilentMode(req)) {
+      return fail("UNAUTHORIZED", "not_authenticated", { status: 200 });
     }
     return fail("INTERNAL_ERROR", "auth_backend_unavailable", {
       status: 503,

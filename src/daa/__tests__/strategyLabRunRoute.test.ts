@@ -139,6 +139,6 @@ describe("strategy-lab-run-route-v1", () => {
     expect(response.status).toBe(500);
     expect(json.ok).toBe(false);
     expect(json.error.code).toBe("INTERNAL_ERROR");
-    expect(json.error.message).toBe("unexpected crash");
+    expect(json.error.message).toBe("internal server error");
   });
 });

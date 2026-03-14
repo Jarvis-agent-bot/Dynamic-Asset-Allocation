@@ -17,6 +17,12 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
           enabled: true,
           onDriftTrigger: true,
         },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: false,
+        },
       },
     },
   })),
@@ -44,6 +50,10 @@ vi.mock('@/src/daa/modules/workbench/workbenchRebalanceCycleService', () => ({
 
 vi.mock('@/src/daa/notify/telegram', () => ({
   sendTelegramByEnv: vi.fn(async () => null),
+}));
+
+vi.mock('@/src/daa/notify/feishu', () => ({
+  sendFeishuByEnv: vi.fn(async () => null),
 }));
 
 vi.mock('@/src/daa/hf/hfService', () => ({
@@ -210,7 +220,7 @@ describe('cron-remaining-routes-v1', () => {
     expect(response.status).toBe(500);
     expect(json.ok).toBe(false);
     expect(json.error.code).toBe('INTERNAL_ERROR');
-    expect(json.error.message).toBe('hf upstream down');
+    expect(json.error.message).toBe('internal server error');
     expect(vi.mocked(appendDaaIngestJobLog)).toHaveBeenCalledWith(expect.objectContaining({
       jobType: 'cron_hf_ingest',
       status: 'failed',

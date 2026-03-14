@@ -46,27 +46,24 @@ type SidebarNavProps = {
 
 function sidebarLinkClassName(input: { collapsed: boolean; isActive: boolean }) {
   const base = input.collapsed
-    ? "mx-auto flex h-[74px] w-full max-w-[72px] flex-col items-center justify-center gap-1.5 rounded-[20px] border px-0 py-2"
-    : "flex w-full items-center gap-3 rounded-[16px] border px-3 py-2.5";
+    ? "mx-auto flex h-10 w-10 items-center justify-center rounded-lg"
+    : "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2";
 
   const tone = input.isActive
-    ? "border-[rgba(56,189,248,0.24)] bg-[linear-gradient(135deg,rgba(56,189,248,0.16),rgba(129,140,248,0.08))] text-[var(--text)] shadow-[0_14px_28px_rgba(0,0,0,0.18)]"
-    : "border-transparent bg-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[rgba(255,255,255,0.03)] hover:text-[var(--text)]";
+    ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
+    : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.05)] hover:text-[var(--text)]";
 
   return cn(
-    "group relative overflow-hidden transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "group relative transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
     base,
     tone,
   );
 }
 
-function sidebarIconShellClassName(input: { collapsed: boolean; isActive: boolean }) {
+function sidebarIconClassName(input: { isActive: boolean }) {
   return cn(
-    "relative flex items-center justify-center rounded-[12px] border transition-all duration-200",
-    input.collapsed ? "h-10 w-10" : "h-9 w-9 shrink-0",
-    input.isActive
-      ? "border-[rgba(56,189,248,0.24)] bg-[rgba(56,189,248,0.14)] text-[var(--primary)] shadow-[0_8px_20px_rgba(56,189,248,0.16)]"
-      : "border-[var(--border)] bg-[rgba(255,255,255,0.02)] text-[var(--muted)] group-hover:border-[var(--border-strong)] group-hover:text-[var(--text)]",
+    "h-[18px] w-[18px] shrink-0 transition-colors duration-150",
+    input.isActive ? "text-[var(--primary)]" : "text-[var(--muted)] group-hover:text-[var(--text)]",
   );
 }
 
@@ -85,27 +82,9 @@ function SidebarLink(props: {
       onClick={onNavigate}
       className={sidebarLinkClassName({ collapsed, isActive })}
     >
-      {!collapsed && isActive ? <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-[var(--primary)]" /> : null}
-      <span className={sidebarIconShellClassName({ collapsed, isActive })}>
-        <item.Icon className="h-4 w-4" aria-hidden="true" />
-      </span>
-      {collapsed ? (
-        <span
-          className={cn(
-            "text-[10px] font-semibold leading-none tracking-[0.08em] transition-colors duration-200",
-            isActive ? "text-[var(--text)]" : "text-[var(--faint)] group-hover:text-[var(--text)]",
-          )}
-        >
-          {item.shortLabel}
-        </span>
-      ) : <span className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-[-0.01em]">{item.label}</span>}
+      <item.Icon className={sidebarIconClassName({ isActive })} aria-hidden="true" />
       {!collapsed ? (
-        <span
-          className={cn(
-            "ml-auto h-1.5 w-1.5 rounded-full transition-all duration-200",
-            isActive ? "bg-[var(--primary)] opacity-100" : "bg-[var(--border-strong)] opacity-0 group-hover:opacity-100",
-          )}
-        />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{item.label}</span>
       ) : null}
     </Link>
   );
@@ -128,7 +107,7 @@ export function DaaSidebarNav({ collapsed = false, onNavigate }: SidebarNavProps
 
   return (
     <TooltipProvider delayDuration={120}>
-      <nav className={cn("flex flex-col", collapsed ? "gap-1.5" : "gap-1.5")} aria-label="DAA 主导航">
+      <nav className="flex flex-col gap-0.5" aria-label="DAA 主导航">
         {items.map((item) => (
           <SidebarLink
             key={item.key}
@@ -165,15 +144,12 @@ export function DaaMobileNav() {
         className="w-72 border-r px-0"
         style={{ background: "var(--surface)", borderColor: "var(--border)" }}
       >
-        <SheetHeader className="border-b border-[var(--border)] px-4 pb-4 pt-5">
-          <SheetTitle className="text-left font-[var(--font-display)] text-[24px] tracking-[-0.03em] text-[var(--text)]">
+        <SheetHeader className="border-b border-[var(--border)] px-4 pb-3 pt-4">
+          <SheetTitle className="text-left text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
             DeepLedger
           </SheetTitle>
-          <div className="text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">
-            Bloomberg x SaaS Console
-          </div>
         </SheetHeader>
-        <nav className="mt-3 flex flex-col gap-1.5 px-3" aria-label="DAA 主导航">
+        <nav className="mt-2 flex flex-col gap-0.5 px-2" aria-label="DAA 主导航">
           {items.map((item) => {
             const isActive = active === item.key;
             return (
@@ -183,17 +159,14 @@ export function DaaMobileNav() {
                 aria-current={isActive ? "page" : undefined}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-[16px] border px-3 py-3 text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isActive
-                    ? "border-[rgba(56,189,248,0.24)] bg-[linear-gradient(135deg,rgba(56,189,248,0.16),rgba(129,140,248,0.08))] text-[var(--text)]"
-                    : "border-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[rgba(255,255,255,0.03)] hover:text-[var(--text)]",
+                    ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
+                    : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.05)] hover:text-[var(--text)]",
                 )}
               >
-                {isActive ? <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-[var(--primary)]" /> : null}
-                <span className={sidebarIconShellClassName({ collapsed: false, isActive })}>
-                  <item.Icon className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium tracking-[-0.01em]">{item.label}</span>
+                <item.Icon className={sidebarIconClassName({ isActive })} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
               </Link>
             );
           })}

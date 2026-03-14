@@ -14,7 +14,8 @@ import { buildDaaUnifiedPlan, type DaaUnifiedRequest } from "@/src/daa/unifiedRe
 import { buildFxLookupToBase, summarizeMarkToMarketPortfolio, } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildAssetUniverseViewRows } from "./assetUniverseService";
-import type { ExecuteRebalanceSummary, ExecuteRebalanceCycleResult, GenerateRebalanceCycleInput, GenerateRebalanceCycleResult, HfSignalSummary, PortfolioHealthyInsight, PreTradeRiskCheckItem, PreTradeRiskCheck, RebalanceCycle, RebalanceProposal, RebalanceTriggerSource, UpdateRebalanceCycleInput, WorkbenchBootstrap, WorkbenchRebalanceCycleReport, WorkbenchRecommendation, WorkbenchRecommendationsResult, WorkbenchTradeRecords, } from "./workbenchTypes";
+import { computeCorrelationMatrix } from "./correlationService";
+import type { ExecuteRebalanceSummary, ExecuteRebalanceCycleResult, GenerateRebalanceCycleInput, GenerateRebalanceCycleResult, HfSignalSummary, PortfolioHealthyInsight, PreTradeRiskRule, PreTradeRiskCheckItem, PreTradeRiskCheck, RebalanceCycle, RebalanceProposal, RebalanceTriggerSource, UpdateRebalanceCycleInput, WorkbenchBootstrap, WorkbenchRebalanceCycleReport, WorkbenchRecommendation, WorkbenchRecommendationsResult, WorkbenchTradeRecords, } from "./workbenchTypes";
 import { WorkbenchDomainError, type WorkbenchDomainErrorCode } from "./workbenchErrors";
 
 function toFinite(value: unknown, fallback = 0): number {
@@ -1103,6 +1104,83 @@ export function summarizeOpportunityRiskZh(riskScorePct: number, reasons: string
     return riskZh(riskScorePct, reasons);
 }
 
+async function enrichRiskCheckWithCorrelation(
+    riskCheck: PreTradeRiskCheck,
+    assetUniverse: WorkbenchBootstrap["assetUniverse"],
+    correlationCapPct: number,
+): Promise<PreTradeRiskCheck> {
+    const holdingSymbols = assetUniverse
+        .filter((row) => row.watchEnabled && row.targetWeightPct > 0)
+        .map((row) => row.symbol);
+
+    if (holdingSymbols.length < 2) {
+        return {
+            ...riskCheck,
+            items: [
+                ...riskCheck.items,
+                {
+                    rule: "correlation" as PreTradeRiskRule,
+                    status: "pass",
+                    current: 0,
+                    limit: correlationCapPct * 100,
+                    message: "持仓不足 2 个标的，无需相关性检查",
+                },
+            ],
+        };
+    }
+
+    try {
+        const matrix = await computeCorrelationMatrix({
+            symbols: holdingSymbols,
+            lookbackDays: 252,
+            highThreshold: correlationCapPct,
+        });
+
+        const maxCorrPct = matrix.maxCorrelation * 100;
+        const limitPct = correlationCapPct * 100;
+        const pair = matrix.maxCorrelationPair;
+        const pairLabel = pair ? `${pair.symbolA}/${pair.symbolB}` : "";
+
+        const status: "pass" | "warn" | "block" = maxCorrPct > limitPct ? "warn" : "pass";
+
+        const items: PreTradeRiskCheckItem[] = [
+            ...riskCheck.items,
+            {
+                rule: "correlation" as PreTradeRiskRule,
+                status,
+                current: Number(maxCorrPct.toFixed(2)),
+                limit: Number(limitPct.toFixed(2)),
+                message: status === "warn"
+                    ? `${pairLabel} 相关性 ${maxCorrPct.toFixed(1)}% 超过阈值 ${limitPct.toFixed(1)}%，存在伪分散化风险（高相关对数: ${matrix.highCorrelationCount}）`
+                    : `最大相关性 ${maxCorrPct.toFixed(1)}%（${pairLabel}），低于阈值 ${limitPct.toFixed(1)}%`,
+            },
+        ];
+
+        const hasBlock = items.some((item) => item.status === "block");
+        const hasWarn = items.some((item) => item.status === "warn");
+
+        return {
+            overallStatus: hasBlock ? "block" : (hasWarn ? "warn" : "pass"),
+            items,
+        };
+    } catch {
+        // Correlation check failure should not block trading
+        return {
+            ...riskCheck,
+            items: [
+                ...riskCheck.items,
+                {
+                    rule: "correlation" as PreTradeRiskRule,
+                    status: "pass",
+                    current: 0,
+                    limit: correlationCapPct * 100,
+                    message: "相关性数据不足或计算失败，跳过检查",
+                },
+            ],
+        };
+    }
+}
+
 export {
   toFinite,
   toPositive,
@@ -1125,6 +1203,7 @@ export {
   computeHhiPct,
   buildPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
+  enrichRiskCheckWithCorrelation,
   buildManualPreTradeRiskCheck,
   mapStoreCycleToView,
   buildMarketFacts,

@@ -143,6 +143,7 @@ export type PreTradeRiskRule =
   | "max_position"
   | "max_order_pct"
   | "concentration"
+  | "correlation"
   | "stop_loss_breach"
   | "total_weight";
 
@@ -685,4 +686,32 @@ export type WorkbenchLlmFeedbackRow = {
   score: WorkbenchLlmFeedbackScore;
   comment: string | null;
   createdAt: string;
+};
+
+// ── Tax-Loss Harvesting Types ──────────────────────────────────────────
+
+export type TlhCandidate = {
+  assetKey: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  holdingQty: number;
+  costBasis: number;
+  currentValue: number;
+  unrealizedLoss: number;
+  unrealizedLossPct: number;
+  lastPrice: number;
+  fxRateToBase: number;
+  lossInBase: number;
+  washSaleBlocked: boolean;
+  washSaleBlockedUntil: string | null;
+  harvestable: boolean;
+};
+
+export type TlhScanResult = {
+  candidates: TlhCandidate[];
+  totalHarvestableBase: number;
+  totalBlockedBase: number;
+  proposals: RebalanceProposal[];
+  scannedAt: string;
 };

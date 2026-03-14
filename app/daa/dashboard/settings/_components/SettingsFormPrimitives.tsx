@@ -14,7 +14,7 @@ export const SETTINGS_NAV_ITEMS_ = [
   { id: "risk", label: "风控参数", desc: "集中度、仓位和止盈止损阈值。" },
   { id: "data", label: "数据源", desc: "行情、资讯、汇率、AI 解读与市场状态层。" },
   { id: "human-factor", label: "人因数据源", desc: "基金池范围与人工信号叠加。" },
-  { id: "notification", label: "通知", desc: "邮件和 Telegram 触发策略。" },
+  { id: "notification", label: "通知", desc: "邮件、Telegram 和飞书触发策略。" },
 ] as const;
 
 export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS_)[number]["id"];
@@ -25,13 +25,13 @@ export const MARKET_INDICATOR_ITEMS_: Array<{
   hint: string;
   dependencies: string;
 }> = [
-  { key: "vix", label: "VIX", hint: "衡量美股隐含波动，越高通常代表美股更偏防守。", dependencies: "^VIX" },
-  { key: "qqqSpyRatio", label: "QQQ / SPY", hint: "观察美股成长风格相对宽基大盘的强弱切换。", dependencies: "QQQ, SPY" },
-  { key: "fxiVolatility", label: "FXI 波动率", hint: "衡量港股 / 中概代表指数的波动压力。", dependencies: "FXI" },
-  { key: "kwebFxiRatio", label: "KWEB / FXI", hint: "观察中概互联网相对中国大盘的风险偏好。", dependencies: "KWEB, FXI" },
-  { key: "btcEthRatio", label: "BTC / ETH", hint: "观察加密市场在防守与进攻风格之间的切换。", dependencies: "BTC-USD, ETH-USD" },
-  { key: "btcVolatility", label: "BTC 波动率", hint: "衡量加密市场核心资产的波动风险。", dependencies: "BTC-USD" },
-  { key: "goldSilverRatio", label: "金银比", hint: "高位通常意味着宏观资金更偏防御。", dependencies: "GC=F, SI=F" },
+  { key: "vix", label: "美股恐慌指数 (VIX)", hint: "衡量美股隐含波动，越高通常代表美股更偏防守。", dependencies: "^VIX" },
+  { key: "qqqSpyRatio", label: "美股成长/大盘比 (QQQ/SPY)", hint: "观察美股成长风格相对宽基大盘的强弱切换。", dependencies: "QQQ, SPY" },
+  { key: "fxiVolatility", label: "港中概波动率 (FXI)", hint: "衡量港股 / 中概代表指数的波动压力。", dependencies: "FXI" },
+  { key: "kwebFxiRatio", label: "中概互联/大盘比 (KWEB/FXI)", hint: "观察中概互联网相对中国大盘的风险偏好。", dependencies: "KWEB, FXI" },
+  { key: "btcEthRatio", label: "比特币/以太坊比 (BTC/ETH)", hint: "观察加密市场在防守与进攻风格之间的切换。", dependencies: "BTC-USD, ETH-USD" },
+  { key: "btcVolatility", label: "比特币波动率 (BTC)", hint: "衡量加密市场核心资产的波动风险。", dependencies: "BTC-USD" },
+  { key: "goldSilverRatio", label: "金银比 (GC/SI)", hint: "高位通常意味着宏观资金更偏防御。", dependencies: "GC=F, SI=F" },
 ];
 
 export type SettingsConfigSetter = Dispatch<SetStateAction<DaaSystemConfig | null>>;
