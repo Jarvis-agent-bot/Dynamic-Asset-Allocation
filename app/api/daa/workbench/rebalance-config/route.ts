@@ -10,7 +10,6 @@ type Body = {
   autoAnalysisEnabled?: unknown;
   analysisTimeUtc?: unknown;
   timezone?: unknown;
-  emailTo?: unknown;
   analysisFocus?: unknown;
   baseVersion?: unknown;
 };
@@ -49,7 +48,6 @@ function toView(config: {
   autoGenerateEnabled: boolean;
   analysisTimeUtc: string;
   timezone: string;
-  notifyEmailTo: string;
   analysisFocus: string;
 }) {
   return {
@@ -57,7 +55,6 @@ function toView(config: {
     autoAnalysisEnabled: Boolean(config.autoGenerateEnabled),
     analysisTimeUtc: String(config.analysisTimeUtc || "00:20"),
     timezone: String(config.timezone || "Asia/Shanghai"),
-    emailTo: String(config.notifyEmailTo || "").trim(),
     analysisFocus: String(config.analysisFocus || DEFAULT_ANALYSIS_FOCUS_).trim() || DEFAULT_ANALYSIS_FOCUS_,
   };
 }
@@ -94,10 +91,6 @@ export async function PATCH(req: Request) {
         return fail("VALIDATION_FAILED", "autoAnalysisEnabled must be boolean", { status: 400 });
       }
       patches.push({ path: "/rebalanceStrategy/autoGenerateEnabled", value: enabled });
-    }
-
-    if (body?.emailTo != null) {
-      patches.push({ path: "/rebalanceStrategy/notifyEmailTo", value: String(body.emailTo || "").trim() });
     }
 
     if (body?.analysisTimeUtc != null) {

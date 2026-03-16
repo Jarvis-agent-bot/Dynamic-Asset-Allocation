@@ -182,7 +182,6 @@ function baseSystemConfig(): Record<string, any> {
       timezone: 'Asia/Shanghai',
       analysisFocus: '跨市场研究',
       autoGenerateEnabled: false,
-      notifyEmailTo: '',
     },
     notification: {
       telegram: {
@@ -396,7 +395,6 @@ function buildBootstrap(state: MockState): Record<string, any> {
       autoAnalysisEnabled: false,
       analysisTimeUtc: '01:00',
       timezone: 'Asia/Shanghai',
-      emailTo: '',
       analysisFocus: '跨市场研究',
     },
     rebalanceStrategy: {
@@ -407,7 +405,6 @@ function buildBootstrap(state: MockState): Record<string, any> {
       timezone: 'Asia/Shanghai',
       analysisFocus: '跨市场研究',
       autoGenerateEnabled: false,
-      notifyEmailTo: '',
     },
     overviewAlerts: [],
     latestCycle: state.cycles[0] || null,

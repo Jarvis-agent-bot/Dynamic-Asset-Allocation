@@ -118,7 +118,6 @@ describe("workbench-asset-routes-v1", () => {
         autoAnalysisEnabled: false,
         analysisTimeUtc: "00:20",
         timezone: "Asia/Shanghai",
-        emailTo: "",
         analysisFocus: "mock",
       },
       marketContext: {

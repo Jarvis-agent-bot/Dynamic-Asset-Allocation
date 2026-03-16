@@ -25,7 +25,6 @@ describe("overview-read-route-v1", () => {
           autoAnalysisEnabled: false,
           analysisTimeUtc: "00:20",
           timezone: "Asia/Shanghai",
-          emailTo: "",
           analysisFocus: "mock",
         },
         rebalanceStrategy: {
@@ -36,7 +35,6 @@ describe("overview-read-route-v1", () => {
           timezone: "Asia/Shanghai",
           analysisFocus: "mock",
           autoGenerateEnabled: false,
-          notifyEmailTo: "",
         },
         overviewAlerts: [],
         latestCycle: null,

@@ -4465,13 +4465,13 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
 
 export async function getDaaNotificationConfig(): Promise<DaaStoreNotificationConfig> {
   const system = await getDaaSystemConfig();
-  const email = system.config.notification.email;
   const telegram = system.config.notification.telegram;
+  const feishu = system.config.notification.feishu;
   return {
     id: "default",
-    enabled: Boolean(telegram.enabled || email.onSuggestionGenerated || email.dailyReport),
-    notifyOnDrift: Boolean(telegram.onDriftTrigger || email.dailyReport),
-    notifyOnRebalance: Boolean(email.onSuggestionGenerated || telegram.onTradeExecuted),
+    enabled: Boolean(telegram.enabled || feishu.enabled),
+    notifyOnDrift: Boolean(telegram.onDriftTrigger || feishu.onDriftTrigger),
+    notifyOnRebalance: Boolean(telegram.onSuggestionGenerated || feishu.onSuggestionGenerated || telegram.onTradeExecuted || feishu.onTradeExecuted),
     notifyOnPriceAlert: false,
     updatedAt: system.updatedAt,
   };
@@ -4479,32 +4479,30 @@ export async function getDaaNotificationConfig(): Promise<DaaStoreNotificationCo
 
 export async function saveDaaNotificationConfig(input: Partial<DaaStoreNotificationConfig>): Promise<DaaStoreNotificationConfig> {
   const current = await getDaaSystemConfig();
-  const currentEmail = current.config.notification.email;
   const currentTelegram = current.config.notification.telegram;
+  const currentFeishu = current.config.notification.feishu;
   const next = normalizeSystemConfig({
     ...current.config,
     notification: {
-      email: {
-        ...currentEmail,
-        onSuggestionGenerated: input.notifyOnRebalance ?? currentEmail.onSuggestionGenerated,
-        dailyReport: input.notifyOnDrift ?? currentEmail.dailyReport,
-      },
       telegram: {
         ...currentTelegram,
         enabled: input.enabled ?? currentTelegram.enabled,
         onDriftTrigger: input.notifyOnDrift ?? currentTelegram.onDriftTrigger,
         onTradeExecuted: input.notifyOnRebalance ?? currentTelegram.onTradeExecuted,
       },
+      feishu: {
+        ...currentFeishu,
+      },
     },
   });
   const saved = await saveDaaSystemConfig({ config: next, baseVersion: current.version });
-  const email = saved.config.notification.email;
   const telegram = saved.config.notification.telegram;
+  const feishu = saved.config.notification.feishu;
   return {
     id: "default",
-    enabled: Boolean(telegram.enabled || email.onSuggestionGenerated || email.dailyReport),
-    notifyOnDrift: Boolean(telegram.onDriftTrigger || email.dailyReport),
-    notifyOnRebalance: Boolean(email.onSuggestionGenerated || telegram.onTradeExecuted),
+    enabled: Boolean(telegram.enabled || feishu.enabled),
+    notifyOnDrift: Boolean(telegram.onDriftTrigger || feishu.onDriftTrigger),
+    notifyOnRebalance: Boolean(telegram.onSuggestionGenerated || feishu.onSuggestionGenerated || telegram.onTradeExecuted || feishu.onTradeExecuted),
     notifyOnPriceAlert: false,
     updatedAt: saved.updatedAt,
   };

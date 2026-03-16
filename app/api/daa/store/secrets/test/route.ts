@@ -118,36 +118,10 @@ async function testFeishu(): Promise<TestResult> {
   }
 }
 
-async function testResend(): Promise<TestResult> {
-  const start = Date.now();
-  const apiKey = await resolveSecret("resend_api_key");
-
-  if (!apiKey) {
-    return { key: "resend_api_key", success: false, message: "API Key 未配置", latencyMs: Date.now() - start };
-  }
-
-  try {
-    // Use Resend's domains endpoint to validate the API key without sending email
-    const response = await fetch("https://api.resend.com/domains", {
-      method: "GET",
-      headers: { authorization: `Bearer ${apiKey}` },
-    });
-
-    if (!response.ok) {
-      return { key: "resend_api_key", success: false, message: `HTTP ${response.status}: API Key 无效`, latencyMs: Date.now() - start };
-    }
-
-    return { key: "resend_api_key", success: true, message: "API Key 验证通过", latencyMs: Date.now() - start };
-  } catch (e) {
-    return { key: "resend_api_key", success: false, message: e instanceof Error ? e.message : String(e), latencyMs: Date.now() - start };
-  }
-}
-
 const TEST_HANDLERS: Record<string, () => Promise<TestResult>> = {
   llm_api_key: testLlm,
   telegram_bot_token: testTelegram,
   feishu_webhook_url: testFeishu,
-  resend_api_key: testResend,
 };
 
 /** POST — test connectivity for a specific secret. */

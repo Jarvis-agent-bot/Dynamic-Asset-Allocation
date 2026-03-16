@@ -20,14 +20,13 @@ import {
 
 const GROUP_META: Record<string, { label: string; order: number }> = {
   llm: { label: "LLM 分析 (DeepSeek)", order: 0 },
-  email: { label: "邮件 (Resend)", order: 1 },
-  telegram: { label: "Telegram", order: 2 },
-  feishu: { label: "飞书 (Lark)", order: 3 },
-  supabase: { label: "Supabase 认证", order: 4 },
-  cron: { label: "定时任务", order: 5 },
+  telegram: { label: "Telegram", order: 1 },
+  feishu: { label: "飞书 (Lark)", order: 2 },
+  supabase: { label: "Supabase 认证", order: 3 },
+  cron: { label: "定时任务", order: 4 },
 };
 
-const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "resend_api_key"]);
+const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url"]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SecretRow

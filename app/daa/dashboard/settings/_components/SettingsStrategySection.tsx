@@ -244,27 +244,6 @@ export function SettingsStrategySection(props: {
             自动模式（自动生成建议 + 通知）
           </CheckboxRow>
 
-          <div>
-            <FieldLabel>通知邮箱</FieldLabel>
-            <FormInput
-              value={config.rebalanceStrategy.notifyEmailTo}
-              onChange={(e) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          notifyEmailTo: e.target.value.trim(),
-                        },
-                      }
-                    : prev,
-                )
-              }
-              placeholder="name@example.com"
-            />
-          </div>
-
           <div style={{ gridColumn: "1 / -1" }}>
             <FieldLabel>AI 关注重点</FieldLabel>
             <FormInput

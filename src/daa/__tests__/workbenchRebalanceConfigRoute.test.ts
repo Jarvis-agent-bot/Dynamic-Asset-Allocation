@@ -34,7 +34,7 @@ describe("workbench-rebalance-config-route-v1", () => {
     expect(json.data.autoAnalysisEnabled).toBe(false);
   });
 
-  it("支持更新自动模式与邮件配置", async () => {
+  it("支持更新自动模式配置", async () => {
     const patchResponse = await PATCH(new Request("http://localhost/api/daa/workbench/rebalance-config", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -42,7 +42,6 @@ describe("workbench-rebalance-config-route-v1", () => {
         mode: "auto",
         autoAnalysisEnabled: true,
         analysisTimeUtc: "00:05",
-        emailTo: "ops@example.com",
       }),
     }));
     const patchJson = await patchResponse.json();
@@ -52,7 +51,6 @@ describe("workbench-rebalance-config-route-v1", () => {
     expect(patchJson.data.mode).toBe("auto");
     expect(patchJson.data.autoAnalysisEnabled).toBe(true);
     expect(patchJson.data.analysisTimeUtc).toBe("00:05");
-    expect(patchJson.data.emailTo).toBe("ops@example.com");
 
     const response = await GET(new Request("http://localhost/api/daa/workbench/rebalance-config"));
     const json = await response.json();
@@ -62,6 +60,5 @@ describe("workbench-rebalance-config-route-v1", () => {
     expect(json.data.mode).toBe("auto");
     expect(json.data.autoAnalysisEnabled).toBe(true);
     expect(json.data.analysisTimeUtc).toBe("00:05");
-    expect(json.data.emailTo).toBe("ops@example.com");
   });
 });

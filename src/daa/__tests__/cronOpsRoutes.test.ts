@@ -31,12 +31,12 @@ vi.mock("@/src/daa/modules/workbench/workbenchRebalanceCycleService", () => ({
   generateWorkbenchRebalanceCycle: vi.fn(),
 }));
 
-vi.mock("@/src/daa/notify/email", () => ({
-  sendEmailByEnv: vi.fn(),
-}));
-
 vi.mock("@/src/daa/notify/feishu", () => ({
   sendFeishuByEnv: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock("@/src/daa/notify/telegram", () => ({
+  sendTelegramByEnv: vi.fn().mockResolvedValue(false),
 }));
 
 vi.mock("@/src/daa/store/jobExecutionLogRepo", () => ({
@@ -48,7 +48,8 @@ import { POST as fxRefreshPost } from "@/app/api/daa/cron/fx-refresh/route";
 import { POST as newsRefreshPost } from "@/app/api/daa/cron/news-refresh/route";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
-import { sendEmailByEnv } from "@/src/daa/notify/email";
+import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
+import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { buildNewsSignals } from "@/src/daa/signals/newsSignal";
 import {
   appendDaaExternalPayloadRaw,
@@ -74,8 +75,8 @@ function buildSystemConfig(input?: {
     pairs?: unknown;
   };
   autoGenerateEnabled?: boolean;
-  notifyEmailTo?: string;
-  emailEnabled?: boolean;
+  telegramOnSuggestion?: boolean;
+  feishuOnSuggestion?: boolean;
 }) {
   const baseCurrency = input?.baseCurrency || "USD";
   return {
@@ -104,16 +105,18 @@ function buildSystemConfig(input?: {
       },
       rebalanceStrategy: {
         autoGenerateEnabled: input?.autoGenerateEnabled ?? false,
-        notifyEmailTo: input?.notifyEmailTo ?? "",
       },
       notification: {
-        email: {
-          onSuggestionGenerated: input?.emailEnabled ?? false,
+        telegram: {
+          enabled: input?.telegramOnSuggestion ?? false,
+          onDriftTrigger: false,
+          onSuggestionGenerated: input?.telegramOnSuggestion ?? false,
+          onTradeExecuted: false,
         },
         feishu: {
-          enabled: false,
+          enabled: input?.feishuOnSuggestion ?? false,
           onDriftTrigger: false,
-          onSuggestionGenerated: false,
+          onSuggestionGenerated: input?.feishuOnSuggestion ?? false,
           onTradeExecuted: false,
         },
       },
@@ -144,7 +147,8 @@ beforeEach(() => {
     message: "",
     portfolioStatus: "skipped",
   } as any);
-  vi.mocked(sendEmailByEnv).mockResolvedValue({ sent: false, reason: "disabled" });
+  vi.mocked(sendFeishuByEnv).mockResolvedValue(false);
+  vi.mocked(sendTelegramByEnv).mockResolvedValue(false);
 });
 
 afterEach(() => {
@@ -300,14 +304,15 @@ describe("cron-ops-routes-v1", () => {
     expect(json.data.reason).toBe("auto generate disabled");
     expect(vi.mocked(refreshMarketIndicators)).not.toHaveBeenCalled();
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
-    expect(vi.mocked(sendEmailByEnv)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendFeishuByEnv)).not.toHaveBeenCalled();
   });
 
-  it("daily-analysis 生成新周期后会发送通知邮件", async () => {
+  it("daily-analysis 生成新周期后会发送通知", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig({
       autoGenerateEnabled: true,
-      notifyEmailTo: "ops@example.com",
-      emailEnabled: true,
+      telegramOnSuggestion: true,
+      feishuOnSuggestion: true,
     }));
     vi.mocked(refreshMarketIndicators).mockResolvedValue({ refreshedCount: 4 } as any);
     vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue({
@@ -323,7 +328,8 @@ describe("cron-ops-routes-v1", () => {
       message: "已生成再平衡周期 cycle-1",
       portfolioStatus: "needs_rebalance",
     } as any);
-    vi.mocked(sendEmailByEnv).mockResolvedValue({ sent: true, id: "mail-1" });
+    vi.mocked(sendTelegramByEnv).mockResolvedValue(true);
+    vi.mocked(sendFeishuByEnv).mockResolvedValue(true);
 
     const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
     const json = await response.json();
@@ -334,12 +340,10 @@ describe("cron-ops-routes-v1", () => {
     expect(json.data.skipped).toBe(false);
     expect(json.data.cycleId).toBe("cycle-1");
     expect(json.data.proposalCount).toBe(1);
-    expect(json.data.email).toEqual(expect.objectContaining({ sent: true, id: "mail-1" }));
     expect(json.data.marketRefresh).toEqual(expect.objectContaining({ ok: true, refreshedCount: 4 }));
-    expect(vi.mocked(sendEmailByEnv)).toHaveBeenCalledWith(expect.objectContaining({
-      to: "ops@example.com",
-      subject: expect.stringContaining("DAA 自动再平衡建议"),
-      text: expect.stringContaining("AAPL"),
-    }));
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
+    expect(vi.mocked(sendFeishuByEnv)).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(sendFeishuByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
   });
 });

@@ -96,7 +96,6 @@ describe("workbench-bootstrap-service-v1", () => {
           timezone: "Asia/Shanghai",
           analysisFocus: "mock",
           autoGenerateEnabled: false,
-          notifyEmailTo: "",
         },
       },
     } as any);
