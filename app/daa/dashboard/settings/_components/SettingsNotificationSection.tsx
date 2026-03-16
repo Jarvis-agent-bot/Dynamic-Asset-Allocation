@@ -106,6 +106,28 @@ export function SettingsNotificationSection(props: {
           >
             交易执行时通知
           </CheckboxRow>
+
+          <CheckboxRow
+            checked={config.notification.telegram.dailyReport}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      notification: {
+                        ...prev.notification,
+                        telegram: {
+                          ...prev.notification.telegram,
+                          dailyReport: value,
+                        },
+                      },
+                    }
+                  : prev,
+              )
+            }
+          >
+            每日分析报告
+          </CheckboxRow>
         </div>
 
         {/* Feishu */}
@@ -197,6 +219,28 @@ export function SettingsNotificationSection(props: {
             }
           >
             交易执行时通知
+          </CheckboxRow>
+
+          <CheckboxRow
+            checked={config.notification.feishu.dailyReport}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      notification: {
+                        ...prev.notification,
+                        feishu: {
+                          ...prev.notification.feishu,
+                          dailyReport: value,
+                        },
+                      },
+                    }
+                  : prev,
+              )
+            }
+          >
+            每日分析报告
           </CheckboxRow>
         </div>
       </SectionCard>
