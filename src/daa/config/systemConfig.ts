@@ -156,12 +156,14 @@ export type DaaSystemConfig = {
       onDriftTrigger: boolean;
       onSuggestionGenerated: boolean;
       onTradeExecuted: boolean;
+      dailyReport: boolean;
     };
     feishu: {
       enabled: boolean;
       onDriftTrigger: boolean;
       onSuggestionGenerated: boolean;
       onTradeExecuted: boolean;
+      dailyReport: boolean;
     };
   };
 };
@@ -320,12 +322,14 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       onDriftTrigger: false,
       onSuggestionGenerated: false,
       onTradeExecuted: false,
+      dailyReport: false,
     },
     feishu: {
       enabled: false,
       onDriftTrigger: false,
       onSuggestionGenerated: false,
       onTradeExecuted: false,
+      dailyReport: false,
     },
   },
 };
@@ -754,12 +758,14 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
           notificationTelegram.onTradeExecuted,
           toBool((legacyNotification as Record<string, unknown>).notifyOnRebalance, fallback.notification.telegram.onTradeExecuted),
         ),
+        dailyReport: toBool(notificationTelegram.dailyReport, fallback.notification.telegram.dailyReport),
       },
       feishu: {
         enabled: toBool(notificationFeishu.enabled, fallback.notification.feishu.enabled),
         onDriftTrigger: toBool(notificationFeishu.onDriftTrigger, fallback.notification.feishu.onDriftTrigger),
         onSuggestionGenerated: toBool(notificationFeishu.onSuggestionGenerated, fallback.notification.feishu.onSuggestionGenerated),
         onTradeExecuted: toBool(notificationFeishu.onTradeExecuted, fallback.notification.feishu.onTradeExecuted),
+        dailyReport: toBool(notificationFeishu.dailyReport, fallback.notification.feishu.dailyReport),
       },
     },
   };

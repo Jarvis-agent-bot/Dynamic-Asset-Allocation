@@ -986,15 +986,15 @@ async function writeAccountStateInTx(
 
   const updated = await query(
     `UPDATE daa_account_state
-     SET base_currency = $2,
-         cash = $3,
-         investable_cash = $4,
-         frozen_cash = $5,
-         total_equity = $6,
+     SET base_currency = $1,
+         cash = $2,
+         investable_cash = $3,
+         frozen_cash = $4,
+         total_equity = $5::numeric,
          updated_at = NOW()
      WHERE id = 'default'
      RETURNING id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
-    ["default", baseCurrency, cash, investableCash, frozenCash, totalEquity],
+    [baseCurrency, cash, investableCash, frozenCash, totalEquity],
   );
   if (updated.rows.length > 0) {
     return mapAccountStateRow(updated.rows[0]);
