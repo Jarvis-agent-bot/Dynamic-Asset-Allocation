@@ -24,7 +24,6 @@ describe("workbench-bootstrap-route-v1", () => {
         autoAnalysisEnabled: false,
         analysisTimeUtc: "00:20",
         timezone: "Asia/Shanghai",
-        emailTo: "",
         analysisFocus: "mock",
       },
       rebalanceStrategy: {
@@ -35,7 +34,6 @@ describe("workbench-bootstrap-route-v1", () => {
         timezone: "Asia/Shanghai",
         analysisFocus: "mock",
         autoGenerateEnabled: false,
-        notifyEmailTo: "",
       },
       overviewAlerts: [],
       latestCycle: null,

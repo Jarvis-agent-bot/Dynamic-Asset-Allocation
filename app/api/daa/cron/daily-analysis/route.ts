@@ -2,14 +2,14 @@ import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
-import { sendEmailByEnv } from "@/src/daa/notify/email";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
+import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
 
-function buildMailText(input: {
+function buildNotifyText(input: {
   cycleId: string;
   triggerReason: string;
   riskStatus: string;
@@ -67,7 +67,6 @@ export async function POST(req: Request) {
             message: "auto generate disabled",
             cycleId: null,
             proposalCount: 0,
-            email: { sent: false, reason: "auto generate disabled" },
             marketRefresh: { ok: true, refreshedCount: 0 },
             at: new Date().toISOString(),
           };
@@ -91,57 +90,36 @@ export async function POST(req: Request) {
         });
 
         const cycle = generated.cycle;
-        const recipient = strategy.notifyEmailTo;
-        let email: Awaited<ReturnType<typeof sendEmailByEnv>> | null = null;
-        if (cycle && generated.created && recipient && system.config.notification.email.onSuggestionGenerated) {
-          email = await sendEmailByEnv({
-            to: recipient,
-            subject: `DAA 自动再平衡建议 ${new Date().toISOString().slice(0, 10)}`,
-            text: buildMailText({
-              cycleId: cycle.cycleId,
-              triggerReason: cycle.triggerReason,
-              riskStatus: cycle.riskCheck.overallStatus,
-              proposals: cycle.proposals.map((row) => ({
-                symbol: row.symbol,
-                side: row.side,
-                suggestedNotional: row.suggestedNotional,
-              })),
-            }),
-          });
-        }
+        const notif = system.config.notification;
+
+        // Send notifications for onSuggestionGenerated
+        let telegramSent = false;
         let feishuSent = false;
-        if (
-          cycle
-          && generated.created
-          && system.config.notification.feishu.enabled
-          && system.config.notification.feishu.onSuggestionGenerated
-        ) {
+        if (cycle && generated.created) {
+          const text = buildNotifyText({
+            cycleId: cycle.cycleId,
+            triggerReason: cycle.triggerReason,
+            riskStatus: cycle.riskCheck.overallStatus,
+            proposals: cycle.proposals.map((row) => ({
+              symbol: row.symbol,
+              side: row.side,
+              suggestedNotional: row.suggestedNotional,
+            })),
+          });
+
+          const sends: Promise<boolean>[] = [];
+          if (notif.telegram.enabled && notif.telegram.onSuggestionGenerated) {
+            sends.push(sendTelegramByEnv(text).then((ok) => { telegramSent = ok; return ok; }));
+          }
+          if (notif.feishu.enabled && notif.feishu.onSuggestionGenerated) {
+            sends.push(sendFeishuByEnv(text).then((ok) => { feishuSent = ok; return ok; }));
+          }
           try {
-            feishuSent = await sendFeishuByEnv(
-              buildMailText({
-                cycleId: cycle.cycleId,
-                triggerReason: cycle.triggerReason,
-                riskStatus: cycle.riskCheck.overallStatus,
-                proposals: cycle.proposals.map((row) => ({
-                  symbol: row.symbol,
-                  side: row.side,
-                  suggestedNotional: row.suggestedNotional,
-                })),
-              }),
-            );
+            await Promise.allSettled(sends);
           } catch {
-            // 飞书通知失败不阻塞主流程
+            // 通知失败不阻塞主流程
           }
         }
-
-        const emailResult = email || {
-          sent: false,
-          reason: !generated.created
-            ? "本次未生成新周期，跳过邮件通知"
-            : (!recipient
-              ? "未配置邮件收件人"
-              : (system.config.notification.email.onSuggestionGenerated ? "邮件服务未返回结果" : "邮件通知开关关闭")),
-        };
 
         return {
           skipped: !generated.created,
@@ -151,7 +129,7 @@ export async function POST(req: Request) {
           message: generated.message,
           cycleId: cycle?.cycleId || null,
           proposalCount: cycle?.proposals.length || 0,
-          email: emailResult,
+          telegram: { sent: telegramSent },
           feishu: { sent: feishuSent },
           marketRefresh,
           at: new Date().toISOString(),

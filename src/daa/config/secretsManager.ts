@@ -20,8 +20,6 @@ export const SECRET_KEY_DEFS_ = [
   { key: "llm_api_key", label: "LLM API Key", group: "llm", envVars: ["DAA_LLM_API_KEY", "OPENAI_API_KEY"], sensitive: true },
   { key: "llm_endpoint", label: "LLM Endpoint", group: "llm", envVars: ["DAA_LLM_ENDPOINT"], sensitive: false },
   { key: "llm_model", label: "LLM Model", group: "llm", envVars: ["DAA_LLM_MODEL"], sensitive: false },
-  { key: "resend_api_key", label: "Resend API Key", group: "email", envVars: ["RESEND_API_KEY", "DAA_RESEND_API_KEY"], sensitive: true },
-  { key: "email_from", label: "Email From", group: "email", envVars: ["DAA_EMAIL_FROM"], sensitive: false },
   { key: "telegram_bot_token", label: "Telegram Bot Token", group: "telegram", envVars: ["TELEGRAM_BOT_TOKEN", "DAA_TELEGRAM_BOT_TOKEN"], sensitive: true },
   { key: "telegram_chat_id", label: "Telegram Chat ID", group: "telegram", envVars: ["TELEGRAM_CHAT_ID", "DAA_TELEGRAM_CHAT_ID"], sensitive: false },
   { key: "feishu_webhook_url", label: "Feishu Webhook URL", group: "feishu", envVars: ["FEISHU_WEBHOOK_URL", "DAA_FEISHU_WEBHOOK_URL"], sensitive: true },

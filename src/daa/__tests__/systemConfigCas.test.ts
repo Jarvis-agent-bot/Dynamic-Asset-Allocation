@@ -274,7 +274,6 @@ describe("system-config-cas-v1", () => {
         rebalanceStrategy: {
           ...current.config.rebalanceStrategy,
           analysisFocus: "preserve-non-account-fields",
-          notifyEmailTo: "ops@example.com",
         },
         strategy: {
           ...current.config.strategy,
@@ -300,7 +299,6 @@ describe("system-config-cas-v1", () => {
     expect(applied.account.cash).toBeCloseTo(620, 6);
     expect(applied.account.totalEquity).toBeGreaterThanOrEqual(applied.account.cash);
     expect(latest.config.rebalanceStrategy.analysisFocus).toBe("preserve-non-account-fields");
-    expect(latest.config.rebalanceStrategy.notifyEmailTo).toBe("ops@example.com");
     expect(latest.config.strategy.account.cash).toBeCloseTo(620, 6);
   });
 });

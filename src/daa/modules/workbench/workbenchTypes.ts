@@ -222,7 +222,6 @@ export type RebalanceStrategyConfig = {
   timezone: string;
   analysisFocus: string;
   autoGenerateEnabled: boolean;
-  notifyEmailTo: string;
   /** P1-2: 现金分类配置，可选（未配置时使用 classifyCash 默认值）*/
   cash?: RebalanceCashConfig;
 };
@@ -415,7 +414,6 @@ export type WorkbenchRebalanceConfig = {
   autoAnalysisEnabled: boolean;
   analysisTimeUtc: string;
   timezone: string;
-  emailTo: string;
   analysisFocus: string;
 };
 

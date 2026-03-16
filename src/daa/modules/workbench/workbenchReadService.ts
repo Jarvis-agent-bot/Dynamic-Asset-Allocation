@@ -459,7 +459,7 @@ export async function buildWorkbenchBootstrap(opts: {
           autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
           analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
           timezone: rebalanceStrategy.timezone,
-          emailTo: rebalanceStrategy.notifyEmailTo,
+
           analysisFocus: rebalanceStrategy.analysisFocus,
         },
         rebalanceStrategy,
@@ -607,7 +607,6 @@ export async function buildWorkbenchBootstrap(opts: {
       autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
       analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
       timezone: rebalanceStrategy.timezone,
-      emailTo: rebalanceStrategy.notifyEmailTo,
       analysisFocus: rebalanceStrategy.analysisFocus,
     },
     rebalanceStrategy: {
@@ -618,7 +617,6 @@ export async function buildWorkbenchBootstrap(opts: {
       timezone: rebalanceStrategy.timezone,
       analysisFocus: rebalanceStrategy.analysisFocus,
       autoGenerateEnabled: rebalanceStrategy.autoGenerateEnabled,
-      notifyEmailTo: rebalanceStrategy.notifyEmailTo,
     },
     overviewAlerts,
     latestCycle,

@@ -92,7 +92,6 @@ export type DaaSystemConfig = {
     timezone: string;
     analysisFocus: string;
     autoGenerateEnabled: boolean;
-    notifyEmailTo: string;
     /** P1-2: 现金分类配置（对应 classifyCash 参数）*/
     cash?: {
       operationalReservePct?: number;
@@ -152,14 +151,10 @@ export type DaaSystemConfig = {
     marketIndicators: DaaMarketIndicatorsConfig;
   };
   notification: {
-    email: {
-      recipient: string;
-      onSuggestionGenerated: boolean;
-      dailyReport: boolean;
-    };
     telegram: {
       enabled: boolean;
       onDriftTrigger: boolean;
+      onSuggestionGenerated: boolean;
       onTradeExecuted: boolean;
     };
     feishu: {
@@ -250,7 +245,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     timezone: "Asia/Shanghai",
     analysisFocus: DEFAULT_ANALYSIS_FOCUS_,
     autoGenerateEnabled: false,
-    notifyEmailTo: "",
   },
   dataSources: {
     hfFund: {
@@ -321,14 +315,10 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     },
   },
   notification: {
-    email: {
-      recipient: "",
-      onSuggestionGenerated: false,
-      dailyReport: false,
-    },
     telegram: {
       enabled: false,
       onDriftTrigger: false,
+      onSuggestionGenerated: false,
       onTradeExecuted: false,
     },
     feishu: {
@@ -609,7 +599,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const marketIndicators = isRecord(dataSources.marketIndicators) ? dataSources.marketIndicators : {};
 
   const notification = isRecord(source.notification) ? source.notification : {};
-  const notificationEmail = isRecord(notification.email) ? notification.email : {};
   const notificationTelegram = isRecord(notification.telegram) ? notification.telegram : {};
   const notificationFeishu = isRecord(notification.feishu) ? notification.feishu : {};
 
@@ -698,7 +687,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         rebalanceStrategy.autoGenerateEnabled,
         toBool(legacyDailyAnalysis.enabled, fallback.rebalanceStrategy.autoGenerateEnabled),
       ),
-      notifyEmailTo: String(rebalanceStrategy.notifyEmailTo || legacyDailyAnalysis.emailTo || fallback.rebalanceStrategy.notifyEmailTo).trim(),
     },
     dataSources: {
       hfFund: {
@@ -755,23 +743,13 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       marketIndicators: normalizeMarketIndicatorConfig(marketIndicators, fallback.dataSources.marketIndicators),
     },
     notification: {
-      email: {
-        recipient: String(notificationEmail.recipient || rebalanceStrategy.notifyEmailTo || legacyDailyAnalysis.emailTo || "").trim(),
-        onSuggestionGenerated: toBool(
-          notificationEmail.onSuggestionGenerated,
-          toBool((legacyNotification as Record<string, unknown>).notifyOnRebalance, fallback.notification.email.onSuggestionGenerated),
-        ),
-        dailyReport: toBool(
-          notificationEmail.dailyReport,
-          toBool((legacyNotification as Record<string, unknown>).notifyOnDrift, fallback.notification.email.dailyReport),
-        ),
-      },
       telegram: {
         enabled: toBool(notificationTelegram.enabled, fallback.notification.telegram.enabled),
         onDriftTrigger: toBool(
           notificationTelegram.onDriftTrigger,
           toBool((legacyNotification as Record<string, unknown>).notifyOnDrift, fallback.notification.telegram.onDriftTrigger),
         ),
+        onSuggestionGenerated: toBool(notificationTelegram.onSuggestionGenerated, fallback.notification.telegram.onSuggestionGenerated),
         onTradeExecuted: toBool(
           notificationTelegram.onTradeExecuted,
           toBool((legacyNotification as Record<string, unknown>).notifyOnRebalance, fallback.notification.telegram.onTradeExecuted),

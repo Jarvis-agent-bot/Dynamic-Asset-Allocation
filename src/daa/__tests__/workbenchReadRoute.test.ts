@@ -20,7 +20,7 @@ describe("workbench-read-route-v1", () => {
         account: { cash: 1200, investableCash: 1000, frozenCash: 200, totalEquity: 5200 },
         assetUniverse: [],
         execution: { logs: [] },
-        rebalance: { mode: "manual", autoAnalysisEnabled: false, analysisTimeUtc: "00:20", timezone: "Asia/Shanghai", emailTo: "", analysisFocus: "mock" },
+        rebalance: { mode: "manual", autoAnalysisEnabled: false, analysisTimeUtc: "00:20", timezone: "Asia/Shanghai", analysisFocus: "mock" },
         rebalanceStrategy: {
           calendar: { enabled: false, frequency: "monthly", dayOfMonth: 1 },
           drift: { enabled: true, thresholdPct: 0.05, checkFrequency: "daily" },
@@ -29,7 +29,6 @@ describe("workbench-read-route-v1", () => {
           timezone: "Asia/Shanghai",
           analysisFocus: "mock",
           autoGenerateEnabled: false,
-          notifyEmailTo: "",
         },
         overviewAlerts: [],
         latestCycle: null,

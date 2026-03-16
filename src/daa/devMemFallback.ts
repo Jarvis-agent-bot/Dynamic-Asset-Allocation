@@ -39,7 +39,6 @@ function buildRebalanceStrategyFallback(): RebalanceStrategyConfig {
     timezone: config.rebalanceStrategy.timezone,
     analysisFocus: config.rebalanceStrategy.analysisFocus,
     autoGenerateEnabled: config.rebalanceStrategy.autoGenerateEnabled,
-    notifyEmailTo: config.rebalanceStrategy.notifyEmailTo,
     ...(config.rebalanceStrategy.cash ? { cash: { ...config.rebalanceStrategy.cash } } : {}),
   };
 }
@@ -77,7 +76,6 @@ export function buildDevMemWorkbenchBootstrap(): WorkbenchBootstrap {
       autoAnalysisEnabled: config.rebalanceStrategy.autoGenerateEnabled,
       analysisTimeUtc: config.rebalanceStrategy.analysisTimeUtc,
       timezone: config.rebalanceStrategy.timezone,
-      emailTo: config.rebalanceStrategy.notifyEmailTo,
       analysisFocus: config.rebalanceStrategy.analysisFocus,
     },
     rebalanceStrategy,
