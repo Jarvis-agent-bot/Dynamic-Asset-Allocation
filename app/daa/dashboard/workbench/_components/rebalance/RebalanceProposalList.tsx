@@ -147,7 +147,15 @@ export function RebalanceProposalList(props: {
                                 <div className="mt-3 space-y-1.5 border-t border-[rgba(255,255,255,0.06)] pt-3 font-[var(--font-mono)] text-xs text-[var(--faint)]">
                                   <div>信号：{row.decisionContext.signalAction || "—"} · 评分 {row.decisionContext.signalScore ?? "—"}</div>
                                   <div>AI：{row.decisionContext.llmAdjustment || "—"} · 置信度 {row.decisionContext.llmConfidence ?? "—"}%</div>
-                                  <div>市场环境：{marketRegimeLabel(row.decisionContext.effectiveMarketRegime)} · 执行倍数 {((row.decisionContext.finalQtyMultiplier ?? 1) * 100).toFixed(0)}%</div>
+                                  {row.decisionContext.llmRationale ? (
+                                    <div className="text-[var(--muted)]">AI 理由：{row.decisionContext.llmRationale}</div>
+                                  ) : null}
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span>市场环境：{marketRegimeLabel(row.decisionContext.effectiveMarketRegime)} · 执行倍数 {((row.decisionContext.finalQtyMultiplier ?? 1) * 100).toFixed(0)}%</span>
+                                    {row.decisionContext.llmMarketRegime && row.decisionContext.effectiveMarketRegime && row.decisionContext.llmMarketRegime !== row.decisionContext.effectiveMarketRegime ? (
+                                      <span className="text-amber-400/80">(AI判断: {marketRegimeLabel(row.decisionContext.llmMarketRegime)})</span>
+                                    ) : null}
+                                  </div>
                                   {(row.decisionContext.conflictFlags ?? []).length > 0 ? (
                                     <div className="text-amber-400/80">冲突：{row.decisionContext.conflictFlags.join(" / ")}</div>
                                   ) : null}

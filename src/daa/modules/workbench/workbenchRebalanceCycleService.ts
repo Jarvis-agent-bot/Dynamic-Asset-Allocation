@@ -469,6 +469,22 @@ export async function generateWorkbenchRebalanceCycle(
       : null,
   ].filter(Boolean).join("\n");
 
+  // Build llmDecisionSnapshot for persistence (full LLM output minus per-asset adjustments)
+  const llmDecisionSnapshot: Record<string, unknown> | null = llmDecision.status === "ok" ? {
+    status: llmDecision.status,
+    marketRegime: llmDecision.marketRegime,
+    overallConfidence: llmDecision.overallConfidence,
+    summary: llmDecision.summary,
+    keyRisks: llmDecision.keyRisks,
+    keyOpportunities: llmDecision.keyOpportunities,
+    cashAdvice: llmDecision.cashAdvice,
+    cashRationale: llmDecision.cashRationale,
+    provider: llmDecision.provider,
+    model: llmDecision.model,
+    latencyMs: llmDecision.latencyMs,
+    generatedAt: llmDecision.generatedAt,
+  } : null;
+
   const created = await createDaaRebalanceCycle({
     triggerSource,
     triggerReason: draft.triggerReason,
@@ -479,6 +495,7 @@ export async function generateWorkbenchRebalanceCycle(
     riskCheck,
     notes: cycleNotes || null,
     marketContext,
+    llmDecisionSnapshot,
   });
 
   await appendTriggerEventSafe({

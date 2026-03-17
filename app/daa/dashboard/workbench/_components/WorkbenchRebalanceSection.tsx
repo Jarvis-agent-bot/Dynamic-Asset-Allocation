@@ -28,6 +28,7 @@ import type {
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
+  RebalanceAiInsight,
   RebalanceProposalList,
   RebalanceMarketSnapshot,
   RebalanceRiskAlerts,
@@ -154,6 +155,8 @@ export function WorkbenchRebalanceSection(props: {
             onToggleProposal={props.onToggleProposal}
             onSubmitLlmFeedback={props.onSubmitLlmFeedback}
           />
+
+          <RebalanceAiInsight currentCycle={props.currentCycle} />
 
           {props.activeMarketContext ? (
             <RebalanceMarketSnapshot
