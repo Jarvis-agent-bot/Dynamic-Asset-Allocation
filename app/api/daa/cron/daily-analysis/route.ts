@@ -2,10 +2,12 @@ import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
+import { buildDailyReportText } from "@/src/daa/notify/dailyReportBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
-import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
 
@@ -52,86 +54,139 @@ export async function POST(req: Request) {
         created: result.created,
         cycleId: result.cycleId,
         proposalCount: result.proposalCount,
-        marketRefreshOk: result.marketRefresh.ok,
+        marketRefreshOk: result.marketRefresh?.ok,
+        dailyReportSent: result.dailyReport?.sent,
       }),
       handler: async () => {
         const system = await getDaaSystemConfig();
         const strategy = system.config.rebalanceStrategy;
-        if (!strategy.autoGenerateEnabled) {
-          return {
+        const notif = system.config.notification;
+
+        // ── Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled) ──
+        let autoGenerate: {
+          skipped: boolean;
+          created: boolean;
+          skippedByCooldown: boolean;
+          cooldownUntil: string | null;
+          message: string;
+          cycleId: string | null;
+          proposalCount: number;
+          telegram: { sent: boolean };
+          feishu: { sent: boolean };
+          marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string };
+        };
+
+        if (strategy.autoGenerateEnabled) {
+          let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
+          try {
+            const refreshed = await refreshMarketIndicators();
+            marketRefresh = { ok: true, refreshedCount: refreshed.refreshedCount };
+          } catch (error) {
+            marketRefresh = {
+              ok: false,
+              reason: error instanceof Error ? error.message : String(error),
+            };
+          }
+
+          const generated = await generateWorkbenchRebalanceCycle({
+            triggerSource: "calendar",
+            triggerReason: "定期再平衡触发",
+            manual: false,
+          });
+
+          const cycle = generated.cycle;
+
+          // Send notifications for onSuggestionGenerated
+          let telegramSent = false;
+          let feishuSent = false;
+          if (cycle && generated.created) {
+            const text = buildNotifyText({
+              cycleId: cycle.cycleId,
+              triggerReason: cycle.triggerReason,
+              riskStatus: cycle.riskCheck.overallStatus,
+              proposals: cycle.proposals.map((row) => ({
+                symbol: row.symbol,
+                side: row.side,
+                suggestedNotional: row.suggestedNotional,
+              })),
+            });
+
+            const sends: Promise<boolean>[] = [];
+            if (notif.telegram.enabled && notif.telegram.onSuggestionGenerated) {
+              sends.push(sendTelegramByEnv(text).then((sent) => { telegramSent = sent; return sent; }));
+            }
+            if (notif.feishu.enabled && notif.feishu.onSuggestionGenerated) {
+              sends.push(sendFeishuByEnv(text).then((sent) => { feishuSent = sent; return sent; }));
+            }
+            try {
+              await Promise.allSettled(sends);
+            } catch {
+              // 通知失败不阻塞主流程
+            }
+          }
+
+          autoGenerate = {
+            skipped: !generated.created,
+            created: generated.created,
+            skippedByCooldown: generated.skippedByCooldown,
+            cooldownUntil: generated.cooldownUntil,
+            message: generated.message,
+            cycleId: cycle?.cycleId || null,
+            proposalCount: cycle?.proposals.length || 0,
+            telegram: { sent: telegramSent },
+            feishu: { sent: feishuSent },
+            marketRefresh,
+          };
+        } else {
+          autoGenerate = {
             skipped: true,
             created: false,
             skippedByCooldown: false,
             cooldownUntil: null,
-            reason: "auto generate disabled",
             message: "auto generate disabled",
             cycleId: null,
             proposalCount: 0,
+            telegram: { sent: false },
+            feishu: { sent: false },
             marketRefresh: { ok: true, refreshedCount: 0 },
-            at: new Date().toISOString(),
           };
         }
 
-        let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
-        try {
-          const refreshed = await refreshMarketIndicators();
-          marketRefresh = { ok: true, refreshedCount: refreshed.refreshedCount };
-        } catch (error) {
-          marketRefresh = {
-            ok: false,
-            reason: error instanceof Error ? error.message : String(error),
-          };
-        }
+        // ── Phase B: daily report (independent of autoGenerateEnabled) ──
+        const wantTgReport = notif.telegram.enabled && notif.telegram.dailyReport;
+        const wantFsReport = notif.feishu.enabled && notif.feishu.dailyReport;
+        let dailyReport: { sent: boolean; telegram: boolean; feishu: boolean } = {
+          sent: false,
+          telegram: false,
+          feishu: false,
+        };
 
-        const generated = await generateWorkbenchRebalanceCycle({
-          triggerSource: "calendar",
-          triggerReason: "定期再平衡触发",
-          manual: false,
-        });
-
-        const cycle = generated.cycle;
-        const notif = system.config.notification;
-
-        // Send notifications for onSuggestionGenerated
-        let telegramSent = false;
-        let feishuSent = false;
-        if (cycle && generated.created) {
-          const text = buildNotifyText({
-            cycleId: cycle.cycleId,
-            triggerReason: cycle.triggerReason,
-            riskStatus: cycle.riskCheck.overallStatus,
-            proposals: cycle.proposals.map((row) => ({
-              symbol: row.symbol,
-              side: row.side,
-              suggestedNotional: row.suggestedNotional,
-            })),
-          });
-
-          const sends: Promise<boolean>[] = [];
-          if (notif.telegram.enabled && notif.telegram.onSuggestionGenerated) {
-            sends.push(sendTelegramByEnv(text).then((ok) => { telegramSent = ok; return ok; }));
-          }
-          if (notif.feishu.enabled && notif.feishu.onSuggestionGenerated) {
-            sends.push(sendFeishuByEnv(text).then((ok) => { feishuSent = ok; return ok; }));
-          }
+        if (wantTgReport || wantFsReport) {
           try {
+            const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+            const reportText = buildDailyReportText(bootstrap);
+
+            const sends: Promise<void>[] = [];
+            if (wantTgReport) {
+              sends.push(
+                sendTelegramByEnv(reportText).then((sent) => { dailyReport.telegram = sent; }),
+              );
+            }
+            if (wantFsReport) {
+              sends.push(
+                sendFeishuByEnv(reportText).then((sent) => { dailyReport.feishu = sent; }),
+              );
+            }
             await Promise.allSettled(sends);
+            dailyReport.sent = dailyReport.telegram || dailyReport.feishu;
           } catch {
-            // 通知失败不阻塞主流程
+            // daily report 失败不阻塞
           }
         }
 
         return {
-          skipped: !generated.created,
-          created: generated.created,
-          skippedByCooldown: generated.skippedByCooldown,
-          cooldownUntil: generated.cooldownUntil,
-          message: generated.message,
-          cycleId: cycle?.cycleId || null,
-          proposalCount: cycle?.proposals.length || 0,
-          telegram: { sent: telegramSent },
-          feishu: { sent: feishuSent },
-          marketRefresh,
+          ...autoGenerate,
+          dailyReport,
           at: new Date().toISOString(),
         };
       },

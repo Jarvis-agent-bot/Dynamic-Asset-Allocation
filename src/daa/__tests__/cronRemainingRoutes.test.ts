@@ -10,18 +10,22 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
     config: {
       rebalanceStrategy: {
         autoGenerateEnabled: true,
-        drift: { enabled: true },
+        drift: { enabled: true, thresholdPct: 0.05 },
       },
       notification: {
         telegram: {
           enabled: true,
           onDriftTrigger: true,
+          onSuggestionGenerated: false,
+          onTradeExecuted: false,
+          dailyReport: false,
         },
         feishu: {
           enabled: false,
           onDriftTrigger: false,
           onSuggestionGenerated: false,
           onTradeExecuted: false,
+          dailyReport: false,
         },
       },
     },
@@ -30,7 +34,21 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
 }));
 
 vi.mock('@/src/daa/modules/workbench/workbenchReadService', () => ({
-  buildWorkbenchBootstrap: vi.fn(async () => ({ ok: true })),
+  buildWorkbenchBootstrap: vi.fn(async () => ({
+    account: { cash: 3000, investableCash: 3000, frozenCash: 0, totalEquity: 50000 },
+    baseCurrency: 'USD',
+    assetUniverse: [
+      { symbol: 'AAPL', holdingQty: 10, lastPrice: 180, holdingPrice: 170, gapPct: 6.0, watchEnabled: true, targetWeightHint: 0.1 },
+      { symbol: 'BND', holdingQty: 20, lastPrice: 75, holdingPrice: 74, gapPct: 1.0, watchEnabled: true, targetWeightHint: 0.2 },
+    ],
+    marketContext: { regime: 'risk_on', indicators: [], scopes: [] },
+    rebalanceStrategy: { calendar: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, thresholdPct: 0.05 } },
+    execution: { logs: [] },
+    rebalance: {},
+    overviewAlerts: [],
+    latestCycle: null,
+    warnings: [],
+  })),
 }));
 
 vi.mock('@/src/daa/modules/workbench/workbenchRebalanceCycleService', () => ({
@@ -120,15 +138,16 @@ describe('cron-remaining-routes-v1', () => {
     expect(vi.mocked(buildWorkbenchBootstrap)).not.toHaveBeenCalled();
   });
 
-  it('drift-check 在自动生成关闭时返回 skipped', async () => {
+  it('drift-check 在自动生成关闭时仍检测偏移并发送通知', async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue({
       config: {
         rebalanceStrategy: {
           autoGenerateEnabled: false,
-          drift: { enabled: true },
+          drift: { enabled: true, thresholdPct: 0.05 },
         },
         notification: {
           telegram: { enabled: true, onDriftTrigger: true },
+          feishu: { enabled: false, onDriftTrigger: false },
         },
       },
     } as any);
@@ -139,10 +158,15 @@ describe('cron-remaining-routes-v1', () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data).toMatchObject({
-      skipped: true,
-      reason: 'auto generate disabled',
+      driftDetected: true,
+      driftedAssetCount: 1,
+      autoGenerateEnabled: false,
     });
+    // Should still detect drift and send notification
+    expect(vi.mocked(buildWorkbenchBootstrap)).toHaveBeenCalledWith({ syncPrices: false, autoRiskCycle: true });
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('偏移触发');
   });
 
   it('drift-check 成功创建周期时会预热 bootstrap 并发送通知', async () => {
@@ -150,10 +174,11 @@ describe('cron-remaining-routes-v1', () => {
       config: {
         rebalanceStrategy: {
           autoGenerateEnabled: true,
-          drift: { enabled: true },
+          drift: { enabled: true, thresholdPct: 0.05 },
         },
         notification: {
           telegram: { enabled: true, onDriftTrigger: true },
+          feishu: { enabled: false, onDriftTrigger: false },
         },
       },
     } as any);
@@ -168,6 +193,7 @@ describe('cron-remaining-routes-v1', () => {
       created: true,
       cycleId: 'cycle-drift-1',
       proposalCount: 2,
+      driftDetected: true,
     });
     expect(vi.mocked(buildWorkbenchBootstrap)).toHaveBeenCalledWith({ syncPrices: false, autoRiskCycle: true });
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).toHaveBeenCalledWith({
