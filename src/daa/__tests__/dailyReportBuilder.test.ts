@@ -59,7 +59,7 @@ function makeBootstrap(overrides?: Partial<WorkbenchBootstrap>): WorkbenchBootst
       highRiskBuyScale: 1,
       reasons: [],
       indicators: [
-        { key: "vix", scope: "us", label: "VIX", latestValue: 14.2, weight: 0.55, signal: "risk_on", updatedAt: "2026-03-17T01:00:00Z" },
+        { key: "vix", scope: "us", label: "VIX", rawValue: 14.2, weight: 0.55, signal: "risk_on", updatedAt: "2026-03-17T01:00:00Z" },
       ],
       scopes: [
         { scope: "us", label: "美股", generatedAt: "2026-03-17T01:00:00Z", regime: "risk_on", riskOffScorePct: 15, confidencePct: 85, buyScale: 1, highRiskBuyScale: 1, reasons: [], indicators: [] },

@@ -31,7 +31,7 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
   if (mc) {
     lines.push("*市场环境*");
     const vix = mc.indicators.find((i) => i.key === "vix");
-    const vixStr = vix ? ` | VIX ${formatNum(vix.latestValue ?? 0)}` : "";
+    const vixStr = vix ? ` | VIX ${formatNum(vix.rawValue ?? 0)}` : "";
     lines.push(`综合: ${regimeLabel(mc.regime)}${vixStr}`);
 
     if (mc.scopes.length > 0) {

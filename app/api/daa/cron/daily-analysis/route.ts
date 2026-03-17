@@ -50,11 +50,11 @@ export async function POST(req: Request) {
       triggerSource: "cron_daily_analysis",
       idempotencyKey: req.headers.get("x-daa-idempotency-key"),
       summarize: (result) => ({
-        skipped: result.autoGenerate?.skipped,
-        created: result.autoGenerate?.created,
-        cycleId: result.autoGenerate?.cycleId,
-        proposalCount: result.autoGenerate?.proposalCount,
-        marketRefreshOk: result.autoGenerate?.marketRefresh?.ok,
+        skipped: result.skipped,
+        created: result.created,
+        cycleId: result.cycleId,
+        proposalCount: result.proposalCount,
+        marketRefreshOk: result.marketRefresh?.ok,
         dailyReportSent: result.dailyReport?.sent,
       }),
       handler: async () => {
