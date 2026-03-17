@@ -31,6 +31,23 @@ vi.mock("@/src/daa/modules/workbench/workbenchRebalanceCycleService", () => ({
   generateWorkbenchRebalanceCycle: vi.fn(),
 }));
 
+vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
+  buildWorkbenchBootstrap: vi.fn().mockResolvedValue({
+    account: { cash: 3200, investableCash: 3000, frozenCash: 0, totalEquity: 52300 },
+    baseCurrency: "USD",
+    assetUniverse: [
+      { symbol: "AAPL", holdingQty: 10, lastPrice: 180, holdingPrice: 170, gapPct: 2.1, watchEnabled: true, targetWeightHint: 0.1 },
+    ],
+    marketContext: { regime: "risk_on", indicators: [], scopes: [] },
+    rebalanceStrategy: { calendar: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, thresholdPct: 0.05 } },
+    execution: { logs: [] },
+    rebalance: {},
+    overviewAlerts: [],
+    latestCycle: null,
+    warnings: [],
+  }),
+}));
+
 vi.mock("@/src/daa/notify/feishu", () => ({
   sendFeishuByEnv: vi.fn().mockResolvedValue(false),
 }));
@@ -48,6 +65,7 @@ import { POST as fxRefreshPost } from "@/app/api/daa/cron/fx-refresh/route";
 import { POST as newsRefreshPost } from "@/app/api/daa/cron/news-refresh/route";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { buildNewsSignals } from "@/src/daa/signals/newsSignal";
@@ -77,6 +95,8 @@ function buildSystemConfig(input?: {
   autoGenerateEnabled?: boolean;
   telegramOnSuggestion?: boolean;
   feishuOnSuggestion?: boolean;
+  telegramDailyReport?: boolean;
+  feishuDailyReport?: boolean;
 }) {
   const baseCurrency = input?.baseCurrency || "USD";
   return {
@@ -108,16 +128,18 @@ function buildSystemConfig(input?: {
       },
       notification: {
         telegram: {
-          enabled: input?.telegramOnSuggestion ?? false,
+          enabled: (input?.telegramOnSuggestion ?? false) || (input?.telegramDailyReport ?? false),
           onDriftTrigger: false,
           onSuggestionGenerated: input?.telegramOnSuggestion ?? false,
           onTradeExecuted: false,
+          dailyReport: input?.telegramDailyReport ?? false,
         },
         feishu: {
-          enabled: input?.feishuOnSuggestion ?? false,
+          enabled: (input?.feishuOnSuggestion ?? false) || (input?.feishuDailyReport ?? false),
           onDriftTrigger: false,
           onSuggestionGenerated: input?.feishuOnSuggestion ?? false,
           onTradeExecuted: false,
+          dailyReport: input?.feishuDailyReport ?? false,
         },
       },
     },
@@ -290,7 +312,30 @@ describe("cron-ops-routes-v1", () => {
     }));
   });
 
-  it("daily-analysis 在关闭自动生成时直接跳过", async () => {
+  it("daily-analysis 在关闭自动生成时跳过生成但仍可发送每日报告", async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig({
+      autoGenerateEnabled: false,
+      telegramDailyReport: true,
+    }));
+    vi.mocked(sendTelegramByEnv).mockResolvedValue(true);
+
+    const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.skipped).toBe(true);
+    expect(json.data.message).toBe("auto generate disabled");
+    expect(vi.mocked(refreshMarketIndicators)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
+    // Daily report should still be sent
+    expect(vi.mocked(buildWorkbenchBootstrap)).toHaveBeenCalledWith({ syncPrices: false });
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
+    expect(json.data.dailyReport.sent).toBe(true);
+    expect(json.data.dailyReport.telegram).toBe(true);
+  });
+
+  it("daily-analysis 在关闭自动生成且无每日报告时不发送任何通知", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig({
       autoGenerateEnabled: false,
     }));
@@ -301,11 +346,12 @@ describe("cron-ops-routes-v1", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data.skipped).toBe(true);
-    expect(json.data.reason).toBe("auto generate disabled");
     expect(vi.mocked(refreshMarketIndicators)).not.toHaveBeenCalled();
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
+    expect(vi.mocked(buildWorkbenchBootstrap)).not.toHaveBeenCalled();
     expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
     expect(vi.mocked(sendFeishuByEnv)).not.toHaveBeenCalled();
+    expect(json.data.dailyReport.sent).toBe(false);
   });
 
   it("daily-analysis 生成新周期后会发送通知", async () => {

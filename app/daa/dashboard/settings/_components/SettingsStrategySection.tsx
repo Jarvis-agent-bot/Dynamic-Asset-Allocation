@@ -241,7 +241,7 @@ export function SettingsStrategySection(props: {
               )
             }
           >
-            自动模式（自动生成建议 + 通知）
+            自动模式（自动生成再平衡建议）
           </CheckboxRow>
 
           <div style={{ gridColumn: "1 / -1" }}>

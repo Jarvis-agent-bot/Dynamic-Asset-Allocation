@@ -18,13 +18,6 @@ export async function POST(req: Request) {
 
     const system = await getDaaSystemConfig();
     const strategy = system.config.rebalanceStrategy;
-    if (!strategy.autoGenerateEnabled) {
-      return ok({
-        skipped: true,
-        reason: "auto generate disabled",
-        at: new Date().toISOString(),
-      });
-    }
 
     if (!strategy.drift.enabled) {
       return ok({
@@ -34,29 +27,60 @@ export async function POST(req: Request) {
       });
     }
 
-    await buildWorkbenchBootstrap({ syncPrices: false, autoRiskCycle: true });
+    // Always run bootstrap to detect drift (independent of autoGenerateEnabled)
+    const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false, autoRiskCycle: true });
 
-    const generated = await generateWorkbenchRebalanceCycle({
-      triggerSource: "drift",
-      triggerReason: "偏移量阈值触发",
-      manual: false,
-    });
+    // Detect drift: find assets exceeding threshold
+    const driftThreshold = strategy.drift.thresholdPct;
+    const driftedAssets = bootstrap.assetUniverse.filter(
+      (a) => a.holdingQty > 0 && a.gapPct != null && Math.abs(a.gapPct) >= driftThreshold * 100,
+    );
+    const hasDrift = driftedAssets.length > 0;
 
-    const cycle = generated.cycle;
+    // Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled)
+    let generated: {
+      created: boolean;
+      skippedByCooldown: boolean;
+      cooldownUntil: string | null;
+      message: string;
+      cycle: { cycleId: string; triggerReason: string; proposals: unknown[]; riskCheck: { overallStatus: string } } | null;
+    } | null = null;
+
+    if (strategy.autoGenerateEnabled) {
+      generated = await generateWorkbenchRebalanceCycle({
+        triggerSource: "drift",
+        triggerReason: "偏移量阈值触发",
+        manual: false,
+      });
+    }
+
+    const cycle = generated?.cycle ?? null;
+    const notif = system.config.notification;
+
+    // Phase B: drift notification (independent of autoGenerateEnabled)
+    // Send if drift detected OR if a cycle was created
     try {
-      if (cycle && generated.created) {
-        const driftMsg = [
-          "DAA 偏移触发再平衡",
-          `Cycle: ${cycle.cycleId}`,
-          `原因: ${cycle.triggerReason}`,
-          `建议数: ${cycle.proposals.length}`,
-          `风控: ${cycle.riskCheck.overallStatus}`,
-        ].join("\n");
+      if (hasDrift || (cycle && generated?.created)) {
+        const topDrift = driftedAssets.slice(0, 5);
+        const driftLines = topDrift.map(
+          (a) => `${a.symbol}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
+        );
 
-        const notif = system.config.notification;
+        const msgParts = [
+          "DAA 偏移触发通知",
+          cycle ? `Cycle: ${cycle.cycleId}` : "未生成周期（自动生成已关闭）",
+          `偏移标的: ${driftedAssets.length} 个`,
+          ...driftLines,
+        ];
+        if (cycle) {
+          msgParts.push(`建议数: ${cycle.proposals.length}`);
+          msgParts.push(`风控: ${cycle.riskCheck.overallStatus}`);
+        }
+        const driftMsg = msgParts.join("\n");
+
         const sends: Promise<boolean>[] = [];
         if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
-          sends.push(sendTelegramByEnv(`*${driftMsg.replace(/\n/g, "*\n")}*`));
+          sends.push(sendTelegramByEnv(driftMsg));
         }
         if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
           sends.push(sendFeishuByEnv(driftMsg));
@@ -68,13 +92,16 @@ export async function POST(req: Request) {
     }
 
     return ok({
-      skipped: !generated.created,
-      created: generated.created,
-      skippedByCooldown: generated.skippedByCooldown,
-      cooldownUntil: generated.cooldownUntil,
-      message: generated.message,
+      skipped: generated ? !generated.created : true,
+      created: generated?.created ?? false,
+      skippedByCooldown: generated?.skippedByCooldown ?? false,
+      cooldownUntil: generated?.cooldownUntil ?? null,
+      message: generated?.message ?? (hasDrift ? "drift detected but auto generate disabled" : "no drift detected"),
       cycleId: cycle?.cycleId || null,
       proposalCount: cycle?.proposals.length || 0,
+      driftDetected: hasDrift,
+      driftedAssetCount: driftedAssets.length,
+      autoGenerateEnabled: strategy.autoGenerateEnabled,
       at: new Date().toISOString(),
     });
   });
