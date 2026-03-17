@@ -16,12 +16,35 @@ function buildNotifyText(input: {
   triggerReason: string;
   riskStatus: string;
   proposals: Array<{ symbol: string; side: "BUY" | "SELL"; suggestedNotional: number }>;
+  llmDecisionSnapshot?: {
+    status: string;
+    summary: string;
+    keyRisks: string[];
+    keyOpportunities: string[];
+    overallConfidence: number;
+  } | null;
 }) {
   const lines: string[] = [];
   lines.push("DAA 自动再平衡建议");
   lines.push(`周期 ID：${input.cycleId}`);
   lines.push(`触发原因：${input.triggerReason}`);
   lines.push(`风控状态：${input.riskStatus}`);
+
+  // AI summary section
+  const snap = input.llmDecisionSnapshot;
+  if (snap && snap.status === "ok" && snap.summary) {
+    lines.push("");
+    lines.push("*AI 判断*");
+    lines.push(snap.summary.slice(0, 100));
+    if (snap.keyRisks.length > 0) {
+      lines.push(`风险: ${snap.keyRisks.slice(0, 2).join("; ")}`);
+    }
+    if (snap.keyOpportunities.length > 0) {
+      lines.push(`机会: ${snap.keyOpportunities.slice(0, 2).join("; ")}`);
+    }
+    lines.push(`置信度: ${snap.overallConfidence}%`);
+  }
+
   lines.push("");
   lines.push("建议明细：");
   if (!input.proposals.length) {
@@ -109,6 +132,7 @@ export async function POST(req: Request) {
                 side: row.side,
                 suggestedNotional: row.suggestedNotional,
               })),
+              llmDecisionSnapshot: cycle.llmDecisionSnapshot ?? null,
             });
 
             const sends: Promise<boolean>[] = [];

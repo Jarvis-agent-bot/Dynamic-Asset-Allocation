@@ -674,6 +674,7 @@ export type DaaStoreRebalanceCycle = {
   cancelReason: string | null;
   notes: string | null;
   marketContext?: DaaMarketContext | null;
+  llmDecisionSnapshot?: Record<string, unknown> | null;
   createdAt: string;
 };
 
@@ -763,6 +764,7 @@ export type DaaStoreCreateRebalanceCycleInput = {
   riskCheck: DaaStorePreTradeRiskCheck;
   notes?: string | null;
   marketContext?: DaaMarketContext | null;
+  llmDecisionSnapshot?: Record<string, unknown> | null;
 };
 
 export type DaaStorePatchRebalanceCycleInput = {
@@ -2879,6 +2881,11 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
     cancelReason: row.cancel_reason == null ? null : normalizeText(row.cancel_reason) || null,
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
     marketContext: row.market_context_json == null ? null : normalizeMarketContextJson(parseJsonb<Record<string, unknown>>(row.market_context_json, {})),
+    llmDecisionSnapshot: (() => {
+      const mcRaw = parseJsonb<Record<string, unknown>>(row.market_context_json, {});
+      const snap = mcRaw?.__llmDecisionSnapshot;
+      return snap && typeof snap === "object" && !Array.isArray(snap) ? (snap as Record<string, unknown>) : null;
+    })(),
     createdAt: toIsoString(row.created_at),
   };
 }
@@ -3441,6 +3448,12 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
     const notes = input.notes == null ? null : normalizeText(input.notes) || null;
     const marketContext = input.marketContext == null ? null : normalizeMarketContextJson(input.marketContext);
 
+    // Embed llmDecisionSnapshot inside market_context_json to avoid schema change
+    const marketContextWithSnapshot = {
+      ...(marketContext ?? {}),
+      ...(input.llmDecisionSnapshot ? { __llmDecisionSnapshot: input.llmDecisionSnapshot } : {}),
+    };
+
     const inserted = await query(
       `INSERT INTO daa_rebalance_cycles (
          cycle_id, status, trigger_source, trigger_reason, snapshot_at, equity_snapshot,
@@ -3472,7 +3485,7 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
         JSON.stringify(proposals),
         JSON.stringify(riskCheck),
         notes,
-        marketContext == null ? JSON.stringify({}) : JSON.stringify(marketContext),
+        JSON.stringify(marketContextWithSnapshot),
       ],
     );
     return mapRebalanceCycleRow(inserted.rows[0] as Record<string, unknown>);

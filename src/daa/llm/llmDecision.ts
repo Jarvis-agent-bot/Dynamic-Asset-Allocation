@@ -43,7 +43,7 @@ export type LlmPerAssetAdjustment = {
   sizeMagnitude: number;
   /** LLM 对此调整的置信度（0-100）*/
   confidencePct: number;
-  /** 简短中文说明（30字以内）*/
+  /** 简短中文说明（60字以内，需引用具体数据）*/
   rationale: string;
 };
 
@@ -187,7 +187,7 @@ ${warningText}
       "adjustment": "execute 或 reduce_size 或 skip 或 increase_priority",
       "sizeMagnitude": 0到1（1.0=全量, 0.5=半仓, 0=等同skip）, 
       "confidencePct": 0到100,
-      "rationale": "中文说明，30字以内"
+      "rationale": "中文说明，60字以内，需引用具体数据（如指标值、偏移百分比）"
     }
   ],
   "cashAdvice": "hold 或 deploy_to_underweight 或 await_signal",

@@ -563,6 +563,24 @@ function mapStoreCycleToView(cycle: DaaStoreRebalanceCycle | null): RebalanceCyc
         cancelReason: cycle.cancelReason,
         notes: cycle.notes,
         marketContext: cycle.marketContext || null,
+        llmDecisionSnapshot: cycle.llmDecisionSnapshot ? {
+            status: String((cycle.llmDecisionSnapshot as Record<string, unknown>).status ?? ""),
+            marketRegime: String((cycle.llmDecisionSnapshot as Record<string, unknown>).marketRegime ?? ""),
+            overallConfidence: Number((cycle.llmDecisionSnapshot as Record<string, unknown>).overallConfidence) || 0,
+            summary: String((cycle.llmDecisionSnapshot as Record<string, unknown>).summary ?? ""),
+            keyRisks: Array.isArray((cycle.llmDecisionSnapshot as Record<string, unknown>).keyRisks)
+                ? ((cycle.llmDecisionSnapshot as Record<string, unknown>).keyRisks as string[])
+                : [],
+            keyOpportunities: Array.isArray((cycle.llmDecisionSnapshot as Record<string, unknown>).keyOpportunities)
+                ? ((cycle.llmDecisionSnapshot as Record<string, unknown>).keyOpportunities as string[])
+                : [],
+            cashAdvice: String((cycle.llmDecisionSnapshot as Record<string, unknown>).cashAdvice ?? ""),
+            cashRationale: String((cycle.llmDecisionSnapshot as Record<string, unknown>).cashRationale ?? ""),
+            provider: String((cycle.llmDecisionSnapshot as Record<string, unknown>).provider ?? ""),
+            model: String((cycle.llmDecisionSnapshot as Record<string, unknown>).model ?? ""),
+            latencyMs: Number((cycle.llmDecisionSnapshot as Record<string, unknown>).latencyMs) || 0,
+            generatedAt: String((cycle.llmDecisionSnapshot as Record<string, unknown>).generatedAt ?? ""),
+        } : null,
         createdAt: cycle.createdAt,
     };
 }

@@ -188,6 +188,20 @@ export type RebalanceCycle = {
   cancelReason: string | null;
   notes: string | null;
   marketContext?: DaaMarketContext | null;
+  llmDecisionSnapshot?: {
+    status: string;
+    marketRegime: string;
+    overallConfidence: number;
+    summary: string;
+    keyRisks: string[];
+    keyOpportunities: string[];
+    cashAdvice: string;
+    cashRationale: string;
+    provider: string;
+    model: string;
+    latencyMs: number;
+    generatedAt: string;
+  } | null;
   createdAt: string;
 };
 
