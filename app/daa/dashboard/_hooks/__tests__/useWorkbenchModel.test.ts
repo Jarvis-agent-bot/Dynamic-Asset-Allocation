@@ -25,6 +25,7 @@ describe("normalizeWorkbenchTab", () => {
     expect(normalizeWorkbenchTab("watchlist")).toBe("watchlist");
     expect(normalizeWorkbenchTab("discovery")).toBe("discovery");
     expect(normalizeWorkbenchTab("rebalance")).toBe("rebalance");
+    expect(normalizeWorkbenchTab("cash")).toBe("cash");
   });
 
   it("defaults to positions for invalid input", () => {

@@ -4,6 +4,7 @@ import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbench
 
 import AssetDiscoveryPanel from "../../portfolio/_components/workbench/AssetDiscoveryPanel";
 import AssetUniverseTable from "../../portfolio/_components/workbench/AssetUniverseTable";
+import { WorkbenchCashSection } from "./WorkbenchCashSection";
 import { WorkbenchRebalanceSection } from "./WorkbenchRebalanceSection";
 import { WorkbenchTabBar } from "./WorkbenchTabBar";
 
@@ -25,6 +26,7 @@ export function WorkbenchActiveTabPanel(props: {
       {model.activeTab === "watchlist" ? <AssetUniverseTable {...model.tableProps} view="watchlist" /> : null}
       {model.activeTab === "discovery" ? <AssetDiscoveryPanel {...model.discoveryProps} /> : null}
       {model.activeTab === "rebalance" && model.rebalanceSectionProps ? <WorkbenchRebalanceSection {...model.rebalanceSectionProps} /> : null}
+      {model.activeTab === "cash" ? <WorkbenchCashSection baseCurrency={model.bootstrap?.baseCurrency || "USD"} onCashChanged={() => void model.loadBootstrap(true)} /> : null}
     </div>
   );
 }

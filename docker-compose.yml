@@ -20,6 +20,28 @@ services:
       - postgres
     restart: unless-stopped
 
+  daa-cron:
+    image: alpine:3.19
+    restart: unless-stopped
+    depends_on:
+      - daa-web
+    environment:
+      - DAA_CRON_TOKEN=${DAA_CRON_TOKEN:-bf7626cf4558342362a45367d01780c4}
+    entrypoint: >
+      sh -c "
+        apk add --no-cache curl &&
+        echo '*/15 * * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/price-refresh' >> /etc/crontabs/root &&
+        echo '5 0 * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/fx-refresh' >> /etc/crontabs/root &&
+        echo '*/30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/news-refresh' >> /etc/crontabs/root &&
+        echo '*/30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/market-indicators-refresh' >> /etc/crontabs/root &&
+        echo '20 0 * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/cache-cleanup' >> /etc/crontabs/root &&
+        echo '0 1 * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/daily-analysis' >> /etc/crontabs/root &&
+        echo '0 9,21 * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/drift-check' >> /etc/crontabs/root &&
+        echo '0 8 * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/hf-ingest' >> /etc/crontabs/root &&
+        echo '30 1 * * * curl -sf -X POST -H \"x-daa-cron-token: $DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/dividend-refresh' >> /etc/crontabs/root &&
+        crond -f -L /dev/stdout
+      "
+
   postgres:
     image: postgres:16-alpine
     environment:

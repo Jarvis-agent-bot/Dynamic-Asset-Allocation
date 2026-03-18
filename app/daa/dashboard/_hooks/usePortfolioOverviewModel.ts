@@ -10,7 +10,6 @@ import {
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type { DaaMarketIndicatorKey, DaaMarketIndicatorScope } from "@/src/daa/modules/marketContext/marketContextTypes";
 import {
-  appendCashLedgerEntry,
   listMarketIndicatorHistory,
   refreshMarketIndicators,
   type StoreCashLedgerEntry,
@@ -19,12 +18,6 @@ import {
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 const DAA_DASHBOARD_REFRESH_EVENT_ = "daa:dashboard:refresh";
-
-function normalizeCashCurrency(value: string): string {
-  const raw = String(value || "").trim().toUpperCase();
-  if (raw === "RMB" || raw === "CNH") return "CNY";
-  return raw || "USD";
-}
 
 function dailyPnlFromSnapshots(snapshots: StoreEquitySnapshot[], fallbackTotalEquity: number): number {
   if (!snapshots.length) return 0;
@@ -65,11 +58,6 @@ export function usePortfolioOverviewModel() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [cashDialogSide, setCashDialogSide] = useState<"deposit" | "withdraw" | null>(null);
-  const [cashAmount, setCashAmount] = useState("");
-  const [cashCurrency, setCashCurrency] = useState("USD");
-  const [cashNote, setCashNote] = useState("");
-  const [cashSubmitting, setCashSubmitting] = useState(false);
   const [marketHistoryRange, setMarketHistoryRange] = useState<30 | 90>(30);
   const [selectedMarketScope, setSelectedMarketScope] = useState<DaaMarketIndicatorScope>("us_equity");
   const [marketHistoryLoading, setMarketHistoryLoading] = useState(true);
@@ -138,41 +126,6 @@ export function usePortfolioOverviewModel() {
     }
   }, [load, loadMarketHistory, marketHistoryRange, selectedScope]);
 
-  const closeCashDialog = useCallback(() => {
-    const baseCurrency = bootstrap?.baseCurrency || "USD";
-    setCashDialogSide(null);
-    setCashAmount("");
-    setCashCurrency(baseCurrency === "CNY" ? "RMB" : baseCurrency);
-    setCashNote("");
-  }, [bootstrap]);
-
-  const handleSubmitCashLedger = useCallback(async () => {
-    if (!cashDialogSide || cashSubmitting) return;
-    const amount = Number(cashAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("请输入大于 0 的金额");
-      return;
-    }
-
-    setCashSubmitting(true);
-    try {
-      const baseCurrency = bootstrap?.baseCurrency || "USD";
-      await appendCashLedgerEntry({
-        side: cashDialogSide,
-        amount,
-        baseCurrency: cashCurrency,
-        note: cashNote.trim() || undefined,
-      });
-      toast.success(cashDialogSide === "deposit" ? "入金已记录" : "出金已记录");
-      closeCashDialog();
-      setCashCurrency(baseCurrency === "CNY" ? "RMB" : baseCurrency);
-      await load(true);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "现金流水提交失败");
-    } finally {
-      setCashSubmitting(false);
-    }
-  }, [bootstrap, cashAmount, cashCurrency, cashDialogSide, cashNote, cashSubmitting, closeCashDialog, load]);
 
   useEffect(() => {
     void load(false);
@@ -199,7 +152,6 @@ export function usePortfolioOverviewModel() {
     }
   }, [marketScopes, selectedMarketScope]);
 
-  const cashDialogOpen = cashDialogSide != null;
   const baseCurrency = bootstrap?.baseCurrency || "USD";
   const totalEquity = bootstrap?.account.totalEquity ?? 0;
   const holdingsValue = useMemo(
@@ -242,10 +194,6 @@ export function usePortfolioOverviewModel() {
   }, [bootstrap, holdingsValue, cashValue]);
   const allocationTotal = allocationData.reduce((sum, row) => sum + Math.max(0, Number(row.value || 0)), 0);
 
-  useEffect(() => {
-    if (cashDialogOpen) setCashCurrency(baseCurrency === "CNY" ? "RMB" : baseCurrency);
-  }, [cashDialogOpen, baseCurrency]);
-
   return {
     bootstrap,
     snapshots,
@@ -253,15 +201,6 @@ export function usePortfolioOverviewModel() {
     loading,
     refreshing,
     error,
-    cashDialogSide,
-    setCashDialogSide,
-    cashAmount,
-    setCashAmount,
-    cashCurrency,
-    setCashCurrency,
-    cashNote,
-    setCashNote,
-    cashSubmitting,
     marketHistoryRange,
     setMarketHistoryRange,
     selectedMarketScope,
@@ -278,7 +217,6 @@ export function usePortfolioOverviewModel() {
     load,
     loadMarketHistory,
     handleRefreshMarketContext,
-    cashDialogOpen,
     baseCurrency,
     totalEquity,
     holdingsValue,
@@ -288,9 +226,6 @@ export function usePortfolioOverviewModel() {
     trendData,
     allocationData,
     allocationTotal,
-    handleSubmitCashLedger,
-    closeCashDialog,
-    normalizeCashCurrency,
   };
 }
 
