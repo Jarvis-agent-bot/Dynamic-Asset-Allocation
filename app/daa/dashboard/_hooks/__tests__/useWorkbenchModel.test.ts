@@ -23,7 +23,6 @@ describe("normalizeWorkbenchTab", () => {
   it("returns valid tab names as-is", () => {
     expect(normalizeWorkbenchTab("positions")).toBe("positions");
     expect(normalizeWorkbenchTab("watchlist")).toBe("watchlist");
-    expect(normalizeWorkbenchTab("discovery")).toBe("discovery");
     expect(normalizeWorkbenchTab("rebalance")).toBe("rebalance");
     expect(normalizeWorkbenchTab("cash")).toBe("cash");
   });
@@ -31,6 +30,7 @@ describe("normalizeWorkbenchTab", () => {
   it("defaults to positions for invalid input", () => {
     expect(normalizeWorkbenchTab("")).toBe("positions");
     expect(normalizeWorkbenchTab("invalid")).toBe("positions");
+    expect(normalizeWorkbenchTab("discovery")).toBe("positions");
     expect(normalizeWorkbenchTab("settings")).toBe("positions");
   });
 });

@@ -165,7 +165,7 @@ export function WorkbenchCashSection(props: {
               })}
               {!loading && cashLedger.length === 0 ? (
                 <TableRow className="border-[var(--border)]">
-                  <TableCell colSpan={4} className="py-12 text-center text-sm text-[var(--faint)]">还没有资金流水记录</TableCell>
+                  <TableCell colSpan={4} className="py-12 text-center text-sm text-[var(--faint)]">当前还没有入金或出金记录，先记录一笔资金变动后这里才会出现流水。</TableCell>
                 </TableRow>
               ) : null}
               {loading ? (

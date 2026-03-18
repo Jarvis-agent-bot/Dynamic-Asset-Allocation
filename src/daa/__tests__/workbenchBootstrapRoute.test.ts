@@ -35,7 +35,6 @@ describe("workbench-bootstrap-route-v1", () => {
         analysisFocus: "mock",
         autoGenerateEnabled: false,
       },
-      overviewAlerts: [],
       latestCycle: null,
       marketContext: {
         generatedAt: "2026-03-01T00:00:00.000Z",

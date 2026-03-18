@@ -15,13 +15,9 @@ type Props = {
 };
 
 const SECTION_META = {
-  overview: {
-    label: "总览",
-    hint: "KPI、提醒、净值曲线与资金流水",
-  },
   workbench: {
     label: "工作台",
-    hint: "资产池、建议生成、风险审阅与执行确认",
+    hint: "总览、组合、调仓与现金统一在一个工作空间内",
   },
   "strategy-lab": {
     label: "策略实验室",
@@ -38,15 +34,15 @@ const SECTION_META = {
 } as const;
 
 function resolveSection(pathname: string) {
-  if (pathname.startsWith("/daa/dashboard/workbench") || pathname.startsWith("/daa/dashboard/portfolio")) return "workbench" as const;
+  if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench" as const;
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab" as const;
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades" as const;
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings" as const;
-  return "overview" as const;
+  return "workbench" as const;
 }
 
 export default function DashboardShell({ children }: Props) {
-  const pathname = usePathname() || "/daa/dashboard";
+  const pathname = usePathname() || "/daa/dashboard/workbench";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   useEffect(() => {
@@ -83,7 +79,7 @@ export default function DashboardShell({ children }: Props) {
           <div className={cn("border-b border-[var(--border)]", sidebarCollapsed ? "px-2 py-3" : "px-3 py-3")}>
             <div className={cn("flex items-center", sidebarCollapsed ? "flex-col gap-2" : "gap-2.5")}>
               <Link
-                href="/daa/dashboard"
+                href="/daa/dashboard/workbench"
                 aria-label="DAA dashboard"
                 className="group relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ fontFamily: "var(--font-mono)" }}

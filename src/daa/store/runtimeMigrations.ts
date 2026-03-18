@@ -43,7 +43,7 @@ async function ensureVersionTable(query: QueryFn): Promise<void> {
 
 async function ensureAccountStateSeed(query: QueryFn): Promise<void> {
   const existing = await query(
-    "SELECT id FROM daa_account_state WHERE id = 'default' LIMIT 1",
+    "SELECT id FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
   );
   if (existing.rows.length > 0) return;
 
@@ -66,7 +66,7 @@ async function ensureAccountStateSeed(query: QueryFn): Promise<void> {
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 
   await query(
-    `INSERT INTO daa_account_state (
+    `INSERT INTO daa_account_state_v2 (
        id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
      ) VALUES (
        'default', $1, $2, $3, $4, $5, NOW()
@@ -80,7 +80,7 @@ const MIGRATIONS_: Migration[] = [
     id: "20260309_account_state",
     async apply(query) {
       await query(`
-        CREATE TABLE IF NOT EXISTS daa_account_state (
+        CREATE TABLE IF NOT EXISTS daa_account_state_v2 (
           id TEXT PRIMARY KEY,
           base_currency TEXT NOT NULL DEFAULT 'USD',
           cash NUMERIC NOT NULL DEFAULT 0,

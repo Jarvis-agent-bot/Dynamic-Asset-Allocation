@@ -62,16 +62,6 @@ export type AssetUniverseView = {
   hfSignal: HfSignalSummary | null;
 };
 
-export type WorkbenchOverviewAlertKind = "risk" | "hf" | "schedule" | "market";
-
-export type WorkbenchOverviewAlert = {
-  id: string;
-  kind: WorkbenchOverviewAlertKind;
-  level: "info" | "warn" | "success";
-  text: string;
-  createdAt: string;
-};
-
 export type RebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle";
 
 export type RebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
@@ -414,7 +404,6 @@ export type WorkbenchBootstrap = {
   };
   rebalance: WorkbenchRebalanceConfig;
   rebalanceStrategy: RebalanceStrategyConfig;
-  overviewAlerts: WorkbenchOverviewAlert[];
   latestCycle: RebalanceCycle | null;
   marketContext: DaaMarketContext | null;
   warnings: string[];

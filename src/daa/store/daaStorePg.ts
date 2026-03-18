@@ -110,6 +110,34 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
 
 type SchemaQueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
 
+function buildLegacyTableName(tableName: string): string {
+  return `${normalizeText(tableName).toLowerCase()}_legacy_v1`;
+}
+
+async function hasTable(query: SchemaQueryFn, tableName: string): Promise<boolean> {
+  const result = await query(
+    `SELECT 1
+     FROM information_schema.tables
+     WHERE table_schema = CURRENT_SCHEMA()
+       AND table_name = $1
+     LIMIT 1`,
+    [tableName.toLowerCase()],
+  );
+  return result.rows.length > 0;
+}
+
+async function archiveTableToLegacy(query: SchemaQueryFn, tableName: string): Promise<boolean> {
+  const normalized = normalizeText(tableName).toLowerCase();
+  if (!normalized) return false;
+  if (!(await hasTable(query, normalized))) return false;
+  const legacyTableName = buildLegacyTableName(normalized);
+  if (await hasTable(query, legacyTableName)) {
+    throw new Error(`legacy table already exists: ${legacyTableName}`);
+  }
+  await query(`ALTER TABLE ${normalized} RENAME TO ${legacyTableName}`);
+  return true;
+}
+
 async function hasTableColumn(query: SchemaQueryFn, tableName: string, columnName: string): Promise<boolean> {
   const result = await query(
     `SELECT 1
@@ -154,14 +182,46 @@ async function isStoreSchemaReady(): Promise<boolean> {
         "price_source",
         "price_snapshot_at",
       ],
-      daa_cash_ledger: [
-        "entry_kind",
+      daa_portfolio_ledger_events: [
+        "event_id",
+        "event_kind",
+        "side",
+        "amount",
+        "base_currency",
         "account_base_currency",
         "amount_in_account_base",
         "fx_rate_to_account",
         "ticket_id",
         "cycle_id",
         "settlement_ts",
+        "event_payload_json",
+      ],
+      daa_account_state_v2: [
+        "id",
+        "base_currency",
+        "cash",
+        "investable_cash",
+        "frozen_cash",
+        "total_equity",
+        "updated_at",
+      ],
+      daa_equity_snapshots_v2: [
+        "ts",
+        "total_equity",
+        "holdings_value",
+        "cash",
+        "source",
+      ],
+      daa_positions_v2: [
+        "asset_key",
+        "symbol",
+        "market",
+        "currency",
+        "qty",
+        "price",
+        "cost_basis",
+        "tags",
+        "updated_at",
       ],
     } as const;
 
@@ -197,6 +257,7 @@ async function isStoreSchemaReady(): Promise<boolean> {
     return true;
   } catch (error) {
     if (isMissingRelationError(error, "daa_asset_universe")) return false;
+    if (isMissingRelationError(error, "daa_portfolio_ledger_events")) return false;
     if (error instanceof Error && /column\s+.+\s+does\s+not\s+exist/i.test(error.message)) return false;
     throw error;
   }
@@ -899,7 +960,7 @@ async function ensureAccountStateRowInTx(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
 ): Promise<DaaStoreAccountState> {
   await query(`
-    CREATE TABLE IF NOT EXISTS daa_account_state (
+    CREATE TABLE IF NOT EXISTS daa_account_state_v2 (
       id TEXT PRIMARY KEY,
       base_currency TEXT NOT NULL DEFAULT 'USD',
       cash NUMERIC NOT NULL DEFAULT 0,
@@ -911,7 +972,7 @@ async function ensureAccountStateRowInTx(
   `);
 
   const existing = await query(
-    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state WHERE id = 'default' LIMIT 1",
+    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
   );
   if (existing.rows.length > 0) {
     return mapAccountStateRow(existing.rows[0]);
@@ -928,7 +989,7 @@ async function ensureAccountStateRowInTx(
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 
   const inserted = await query(
-    `INSERT INTO daa_account_state (
+    `INSERT INTO daa_account_state_v2 (
       id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
     ) VALUES (
       'default', $1, $2, $3, $4, $5, NOW()
@@ -943,7 +1004,7 @@ async function getAccountStateForUpdateInTx(
 ): Promise<DaaStoreAccountState> {
   await ensureAccountStateRowInTx(query);
   const locked = await query(
-    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state WHERE id = 'default' LIMIT 1 FOR UPDATE",
+    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1 FOR UPDATE",
   );
   if (locked.rows.length > 0) {
     return mapAccountStateRow(locked.rows[0]);
@@ -987,7 +1048,7 @@ async function writeAccountStateInTx(
   }
 
   const updated = await query(
-    `UPDATE daa_account_state
+    `UPDATE daa_account_state_v2
      SET base_currency = $1,
          cash = $2,
          investable_cash = $3,
@@ -1101,6 +1162,11 @@ export async function getDaaSystemConfig(): Promise<DaaStoreSystemConfigRow> {
   });
 }
 
+export async function getDaaAccountState(): Promise<DaaStoreAccountState> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => ensureAccountStateRowInTx(query as any));
+}
+
 export async function saveDaaSystemConfig(input: {
   config: unknown;
   baseVersion?: number;
@@ -1191,9 +1257,16 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
     st.schemaInit = withDaaPgClient(async ({ query }) => {
       await query("BEGIN");
       try {
+        const archivedLedgerV1 = ([
+          await archiveTableToLegacy(query as any, "daa_account_state"),
+          await archiveTableToLegacy(query as any, "daa_cash_ledger"),
+          await archiveTableToLegacy(query as any, "daa_equity_snapshots"),
+          await archiveTableToLegacy(query as any, "daa_positions"),
+        ]).some(Boolean);
+
         await query(`
-          CREATE TABLE IF NOT EXISTS daa_positions (
-            id TEXT PRIMARY KEY,
+          CREATE TABLE IF NOT EXISTS daa_positions_v2 (
+            asset_key TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
             market TEXT NOT NULL DEFAULT 'US',
             currency TEXT NOT NULL DEFAULT 'USD',
@@ -1204,8 +1277,51 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_positions_symbol_market
-            ON daa_positions(symbol, market);
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_positions_v2_symbol_market
+            ON daa_positions_v2(symbol, market);
+
+          CREATE TABLE IF NOT EXISTS daa_account_state_v2 (
+            id TEXT PRIMARY KEY,
+            base_currency TEXT NOT NULL DEFAULT 'USD',
+            cash NUMERIC NOT NULL DEFAULT 0,
+            investable_cash NUMERIC NOT NULL DEFAULT 0,
+            frozen_cash NUMERIC NOT NULL DEFAULT 0,
+            total_equity NUMERIC,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_equity_snapshots_v2 (
+            ts TIMESTAMPTZ PRIMARY KEY,
+            total_equity NUMERIC NOT NULL,
+            holdings_value NUMERIC NOT NULL,
+            cash NUMERIC NOT NULL,
+            source TEXT NOT NULL DEFAULT 'cron'
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_portfolio_ledger_events (
+            event_id TEXT PRIMARY KEY,
+            ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            event_kind TEXT NOT NULL,
+            side TEXT CHECK (side IN ('deposit', 'withdraw')),
+            amount NUMERIC NOT NULL DEFAULT 0,
+            base_currency TEXT NOT NULL DEFAULT 'USD',
+            account_base_currency TEXT,
+            amount_in_account_base NUMERIC,
+            fx_rate_to_account NUMERIC,
+            ticket_id TEXT,
+            cycle_id TEXT,
+            settlement_ts TIMESTAMPTZ,
+            note TEXT,
+            event_payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_portfolio_ledger_events_ts_desc
+            ON daa_portfolio_ledger_events(ts DESC);
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_portfolio_ledger_events_ticket_unique
+            ON daa_portfolio_ledger_events(ticket_id)
+            WHERE ticket_id IS NOT NULL;
 
           CREATE TABLE IF NOT EXISTS daa_asset_universe (
             asset_key TEXT PRIMARY KEY,
@@ -1428,35 +1544,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_execution_order_events_order_created_desc
             ON daa_execution_order_events(order_id, created_at DESC);
 
-          CREATE TABLE IF NOT EXISTS daa_equity_snapshots (
-            ts TIMESTAMPTZ PRIMARY KEY,
-            total_equity NUMERIC NOT NULL,
-            holdings_value NUMERIC NOT NULL,
-            cash NUMERIC NOT NULL,
-            source TEXT NOT NULL DEFAULT 'cron'
-          );
-
-          CREATE TABLE IF NOT EXISTS daa_cash_ledger (
-            id TEXT PRIMARY KEY,
-            ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            side TEXT NOT NULL CHECK (side IN ('deposit', 'withdraw')),
-            amount NUMERIC NOT NULL CHECK (amount > 0),
-            base_currency TEXT NOT NULL DEFAULT 'USD',
-            entry_kind TEXT,
-            account_base_currency TEXT,
-            amount_in_account_base NUMERIC,
-            fx_rate_to_account NUMERIC,
-            ticket_id TEXT,
-            cycle_id TEXT,
-            settlement_ts TIMESTAMPTZ,
-            note TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          );
-
-          CREATE INDEX IF NOT EXISTS idx_daa_cash_ledger_ts_desc
-            ON daa_cash_ledger(ts DESC);
-
-
           CREATE TABLE IF NOT EXISTS daa_run_history (
             id TEXT PRIMARY KEY,
             ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1525,50 +1612,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_fee NUMERIC NOT NULL DEFAULT 0");
         await query("ALTER TABLE daa_trade_journal ADD COLUMN IF NOT EXISTS execution_order_id TEXT");
         await query("DROP INDEX IF EXISTS idx_daa_trade_journal_execution_order_unique");
-        await query("ALTER TABLE daa_positions DROP COLUMN IF EXISTS liquidity_notional_24h");
-        const cashLedgerRequiredColumns = [
-          "entry_kind",
-          "account_base_currency",
-          "amount_in_account_base",
-          "fx_rate_to_account",
-          "ticket_id",
-          "cycle_id",
-          "settlement_ts",
-        ];
-        const cashLedgerMissingColumns = [] as string[];
-        for (const columnName of cashLedgerRequiredColumns) {
-          if (!(await hasTableColumn(query as any, "daa_cash_ledger", columnName))) {
-            cashLedgerMissingColumns.push(columnName);
-          }
-        }
-        if (cashLedgerMissingColumns.length > 0) {
-          await query("DROP INDEX IF EXISTS idx_daa_cash_ledger_ticket_unique");
-          await query("DROP TABLE IF EXISTS daa_cash_ledger CASCADE");
-          await query("DROP INDEX IF EXISTS daa_cash_ledger_pkey");
-          await query(`
-            CREATE TABLE daa_cash_ledger (
-              id TEXT PRIMARY KEY,
-              ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              side TEXT NOT NULL CHECK (side IN ('deposit', 'withdraw')),
-              amount NUMERIC NOT NULL CHECK (amount > 0),
-              base_currency TEXT NOT NULL DEFAULT 'USD',
-              entry_kind TEXT,
-              account_base_currency TEXT,
-              amount_in_account_base NUMERIC,
-              fx_rate_to_account NUMERIC,
-              ticket_id TEXT,
-              cycle_id TEXT,
-              settlement_ts TIMESTAMPTZ,
-              note TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-          `);
-          await query("CREATE INDEX IF NOT EXISTS idx_daa_cash_ledger_ts_desc ON daa_cash_ledger(ts DESC)");
-        } else {
-          await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS channel");
-          await query("ALTER TABLE daa_cash_ledger DROP COLUMN IF EXISTS reference_id");
-        }
-        await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_cash_ledger_ticket_unique ON daa_cash_ledger(ticket_id)");
         await ensureTableColumn(query as any, "daa_asset_universe", "asset_class", "TEXT NOT NULL DEFAULT 'EQUITY'");
         await ensureTableColumn(query as any, "daa_asset_universe", "region", "TEXT NOT NULL DEFAULT 'GLOBAL'");
         await ensureTableColumn(query as any, "daa_asset_universe", "exchange", "TEXT NOT NULL DEFAULT ''");
@@ -1595,7 +1638,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         );
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN basket_id DROP NOT NULL");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN asset_key DROP NOT NULL");
-        await query("UPDATE daa_positions SET id = CONCAT(symbol, '__', market) WHERE COALESCE(id, '') <> CONCAT(symbol, '__', market)");
         await query("UPDATE daa_trade_tickets SET asset_key = CONCAT(market, '::', symbol) WHERE asset_key IS NULL OR asset_key = ''");
         await query(
           "INSERT INTO daa_trade_baskets (basket_id, source, status, decision_ref_id, created_by, created_at, updated_at, executed_at) VALUES ('basket_migrated', 'migration', 'executed', NULL, 'migration', NOW(), NOW(), NOW()) ON CONFLICT (basket_id) DO NOTHING",
@@ -1607,62 +1649,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query(
           "ALTER TABLE daa_trade_tickets ADD CONSTRAINT fk_daa_trade_tickets_basket FOREIGN KEY (basket_id) REFERENCES daa_trade_baskets(basket_id) ON DELETE RESTRICT",
         );
-
-        // 一次性迁移：把历史持仓合并进资产宇宙主表。
-        await query(`
-          INSERT INTO daa_asset_universe (
-            asset_key,
-            symbol,
-            market,
-            currency,
-            holding_qty,
-            holding_price,
-            cost_basis,
-            holding_tags,
-            watch_enabled,
-            target_weight_hint,
-            watch_tags,
-            notes,
-            last_price,
-            price_updated_at,
-            created_at,
-            updated_at
-          )
-          SELECT
-            CONCAT(p.market, '::', p.symbol) AS asset_key,
-            p.symbol,
-            p.market,
-            COALESCE(p.currency, 'USD') AS currency,
-            COALESCE(p.qty, 0) AS holding_qty,
-            COALESCE(p.price, 0) AS holding_price,
-            p.cost_basis AS cost_basis,
-            COALESCE(p.tags, '{}'::TEXT[]) AS holding_tags,
-            FALSE AS watch_enabled,
-            0 AS target_weight_hint,
-            '{}'::TEXT[] AS watch_tags,
-            NULL::TEXT AS notes,
-            COALESCE(p.price, 0) AS last_price,
-            CASE WHEN COALESCE(p.price, 0) > 0 THEN NOW() ELSE NULL END AS price_updated_at,
-            NOW(),
-            NOW()
-          FROM daa_positions AS p
-          ON CONFLICT (asset_key) DO UPDATE
-          SET
-            symbol = EXCLUDED.symbol,
-            market = EXCLUDED.market,
-            currency = EXCLUDED.currency,
-            holding_qty = EXCLUDED.holding_qty,
-            holding_price = EXCLUDED.holding_price,
-            cost_basis = EXCLUDED.cost_basis,
-            holding_tags = EXCLUDED.holding_tags,
-            watch_enabled = EXCLUDED.watch_enabled,
-            target_weight_hint = EXCLUDED.target_weight_hint,
-            watch_tags = EXCLUDED.watch_tags,
-            notes = EXCLUDED.notes,
-            last_price = EXCLUDED.last_price,
-            price_updated_at = EXCLUDED.price_updated_at,
-            updated_at = NOW()
-        `);
         await query("DROP TABLE IF EXISTS daa_watchlist_candidates");
 
         await query(
@@ -1677,6 +1663,55 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
 
         await ensureSystemConfigRowInTx(query as any);
         await runDaaStoreRuntimeMigrations(query as any);
+        if (archivedLedgerV1) {
+          await query("DELETE FROM daa_portfolio_ledger_events");
+          await query("DELETE FROM daa_equity_snapshots_v2");
+          await query("DELETE FROM daa_positions_v2");
+          await query("DELETE FROM daa_account_state_v2");
+          await query(
+            `UPDATE daa_asset_universe
+             SET holding_qty = 0,
+                 holding_price = 0,
+                 cost_basis = NULL,
+                 holding_tags = '{}'::TEXT[],
+                 updated_at = NOW()
+             WHERE holding_qty > 0
+                OR holding_price > 0
+                OR cost_basis IS NOT NULL
+                OR holding_tags <> '{}'::TEXT[]`,
+          );
+          const account = await ensureAccountStateRowInTx(query as any);
+          const resetTs = new Date().toISOString();
+          await query(
+            `INSERT INTO daa_portfolio_ledger_events (
+               event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+               amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
+             ) VALUES (
+               $1,$2,'ledger_reset','deposit',0,$3,$3,0,1,NULL,NULL,$2,$4,$5::jsonb,NOW()
+             )`,
+            [
+              randomUUID(),
+              resetTs,
+              account.baseCurrency,
+              "账本 V2 已启用，旧现金流水/权益快照/账户状态已归档到 legacy_v1，当前账本从空状态重新开始。",
+              JSON.stringify({ reason: "archive_reset", version: "v2" }),
+            ],
+          );
+          await query(
+            "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
+            [resetTs, account.cash, 0, account.cash, "ledger_reset"],
+          );
+          await query(
+            "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'warn', $2, $3::jsonb)",
+            [
+              randomUUID(),
+              "账本 V2 已启用，旧账本已归档并按约定重置当前工作账本。",
+              JSON.stringify({ resetAt: resetTs }),
+            ],
+          );
+        } else {
+          await ensureAccountStateRowInTx(query as any);
+        }
 
         await query("COMMIT");
       } catch (error) {
@@ -1700,7 +1735,7 @@ function mapPositionRow(row: Record<string, unknown>): DaaStorePosition {
   const symbol = normalizeText(row.symbol).toUpperCase();
   const market = normalizeText(row.market, "US").toUpperCase();
   return {
-    id: normalizeText(row.id),
+    id: buildPositionId(symbol, market),
     assetKey: buildPositionKey(symbol, market),
     symbol,
     market,
@@ -1745,33 +1780,47 @@ function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUnivers
 }
 
 const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
-  "asset_key",
-  "symbol",
-  "market",
-  "currency",
-  "asset_class",
-  "region",
-  "exchange",
-  "instrument_type",
-  "market_group",
-  "holding_qty",
-  "holding_price",
-  "cost_basis",
-  "holding_tags",
-  "watch_enabled",
-  "target_weight_hint",
-  "watch_tags",
-  "notes",
-  "last_price",
-  "price_updated_at",
-  "created_at",
-  "updated_at",
+  "u.asset_key",
+  "u.symbol",
+  "u.market",
+  "u.currency",
+  "u.asset_class",
+  "u.region",
+  "u.exchange",
+  "u.instrument_type",
+  "u.market_group",
+  "COALESCE(p.qty, 0) AS holding_qty",
+  "COALESCE(p.price, 0) AS holding_price",
+  "p.cost_basis",
+  "COALESCE(p.tags, '{}'::TEXT[]) AS holding_tags",
+  "u.watch_enabled",
+  "u.target_weight_hint",
+  "u.watch_tags",
+  "u.notes",
+  "u.last_price",
+  "u.price_updated_at",
+  "u.created_at",
+  "u.updated_at",
 ].join(", ");
+
+const ASSET_UNIVERSE_FROM_SQL_ = "FROM daa_asset_universe u LEFT JOIN daa_positions_v2 p ON p.asset_key = u.asset_key";
+
+async function selectAssetUniverseRowByKeyInTx(
+  query: DaaTxQueryFn,
+  assetKey: string,
+): Promise<DaaStoreAssetUniverseRow | null> {
+  const result = await query(
+    `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE u.asset_key = $1 LIMIT 1`,
+    [assetKey],
+  );
+  if (!result.rows.length) return null;
+  return mapAssetUniverseRow(result.rows[0] as Record<string, unknown>);
+}
 
 export async function listDaaAssetUniverse(): Promise<DaaStoreAssetUniverseRow[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const result = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} FROM daa_asset_universe ORDER BY symbol ASC, market ASC`);
+    const result = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} ORDER BY u.symbol ASC, u.market ASC`);
     return result.rows.map((row) => mapAssetUniverseRow(row as Record<string, unknown>));
   });
 }
@@ -1793,11 +1842,11 @@ export async function updateDaaAssetUniverseLastPrice(input: {
       `UPDATE daa_asset_universe
        SET last_price = $2, price_updated_at = $3, updated_at = NOW()
        WHERE asset_key = $1
-       RETURNING ${ASSET_UNIVERSE_SELECT_COLUMNS_}`,
+       RETURNING asset_key`,
       [assetKey, lastPrice, priceUpdatedAt],
     );
     if (!result.rows.length) return null;
-    return mapAssetUniverseRow(result.rows[0] as Record<string, unknown>);
+    return selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, assetKey);
   });
 }
 
@@ -1860,7 +1909,7 @@ export async function upsertDaaAssetUniverseRow(input: {
         last_price = CASE WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.last_price ELSE daa_asset_universe.last_price END,
         price_updated_at = CASE WHEN EXCLUDED.last_price > 0 THEN COALESCE(EXCLUDED.price_updated_at, NOW()) ELSE daa_asset_universe.price_updated_at END,
         updated_at = NOW()
-      RETURNING ${ASSET_UNIVERSE_SELECT_COLUMNS_}`,
+      RETURNING asset_key`,
       [
         assetKey,
         symbol,
@@ -1879,7 +1928,7 @@ export async function upsertDaaAssetUniverseRow(input: {
         priceUpdatedAt,
       ],
     );
-    return mapAssetUniverseRow(result.rows[0] as Record<string, unknown>);
+    return (await selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, normalizeText(result.rows[0]?.asset_key, assetKey)))!;
   });
 }
 
@@ -1907,7 +1956,7 @@ export async function patchDaaAssetUniverseRow(input: {
     const parsed = parseDaaAssetKey(input.assetKey);
     if (!parsed) throw new Error("assetKey is required");
     const assetKey = buildPositionKey(parsed.symbol, parsed.market);
-    const currentRes = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} FROM daa_asset_universe WHERE asset_key = $1 LIMIT 1`, [assetKey]);
+    const currentRes = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE u.asset_key = $1 LIMIT 1`, [assetKey]);
     if (!currentRes.rows.length) throw new Error(`asset not found: ${assetKey}`);
     const current = mapAssetUniverseRow(currentRes.rows[0] as Record<string, unknown>);
 
@@ -1953,7 +2002,7 @@ export async function patchDaaAssetUniverseRow(input: {
          price_updated_at = $16,
          updated_at = NOW()
        WHERE asset_key = $1
-       RETURNING ${ASSET_UNIVERSE_SELECT_COLUMNS_}`,
+       RETURNING asset_key`,
       [
         assetKey,
         next.currency,
@@ -1973,7 +2022,18 @@ export async function patchDaaAssetUniverseRow(input: {
         next.priceUpdatedAt,
       ],
     );
-    return mapAssetUniverseRow(updatedRes.rows[0] as Record<string, unknown>);
+    await syncSinglePositionV2InTx(query as DaaTxQueryFn, {
+      assetKey,
+      symbol: current.symbol,
+      market: current.market,
+      currency: next.currency,
+      qty: next.holdingQty,
+      price: next.holdingPrice,
+      costBasis: next.costBasis,
+      tags: current.holdingTags,
+      updatedAt: new Date().toISOString(),
+    });
+    return (await selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, normalizeText(updatedRes.rows[0]?.asset_key, assetKey)))!;
   });
 }
 
@@ -1981,7 +2041,7 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, holding_qty, holding_price, cost_basis, holding_tags, updated_at FROM daa_asset_universe WHERE holding_qty > 0 ORDER BY symbol ASC, market ASC",
+      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -1993,10 +2053,10 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
         symbol,
         market,
         currency: normalizeText(item.currency, "USD").toUpperCase(),
-        qty: Math.max(0, toFiniteNumber(item.holding_qty)),
-        price: Math.max(0, toFiniteNumber(item.holding_price)),
+        qty: Math.max(0, toFiniteNumber(item.qty)),
+        price: Math.max(0, toFiniteNumber(item.price)),
         costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
-        tags: Array.isArray(item.holding_tags) ? item.holding_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
+        tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
     });
@@ -2059,6 +2119,20 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
       await query(
         "DELETE FROM daa_asset_universe WHERE watch_enabled = FALSE AND holding_qty <= 0",
       );
+      await replacePositionsV2SnapshotInTx(
+        query as DaaTxQueryFn,
+        rows.map((raw) => ({
+          assetKey: raw.assetKey,
+          symbol: raw.symbol,
+          market: raw.market,
+          currency: raw.currency,
+          qty: raw.qty,
+          price: raw.price,
+          costBasis: raw.costBasis,
+          tags: raw.tags,
+          updatedAt: new Date().toISOString(),
+        })),
+      );
 
       await query("COMMIT");
     } catch (error) {
@@ -2071,7 +2145,7 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
     }
 
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, holding_qty, holding_price, cost_basis, holding_tags, updated_at FROM daa_asset_universe WHERE holding_qty > 0 ORDER BY symbol ASC, market ASC",
+      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -2083,10 +2157,10 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
         symbol,
         market,
         currency: normalizeText(item.currency, "USD").toUpperCase(),
-        qty: Math.max(0, toFiniteNumber(item.holding_qty)),
-        price: Math.max(0, toFiniteNumber(item.holding_price)),
+        qty: Math.max(0, toFiniteNumber(item.qty)),
+        price: Math.max(0, toFiniteNumber(item.price)),
         costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
-        tags: Array.isArray(item.holding_tags) ? item.holding_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
+        tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
     });
@@ -2223,7 +2297,7 @@ export async function listDaaEquitySnapshots(limit = 200): Promise<DaaStoreEquit
   const n = Math.max(1, Math.min(2000, Math.trunc(toFiniteNumber(limit, 200))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots ORDER BY ts DESC LIMIT $1",
+      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 ORDER BY ts DESC LIMIT $1",
       [n],
     );
     return result.rows.map((row) => mapEquitySnapshotRow(row as Record<string, unknown>));
@@ -2240,12 +2314,12 @@ export async function appendDaaEquitySnapshot(snapshot: Partial<DaaStoreEquitySn
     const source = normalizeText(snapshot.source, "manual");
 
     await query(
-      "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (ts) DO UPDATE SET total_equity=EXCLUDED.total_equity, holdings_value=EXCLUDED.holdings_value, cash=EXCLUDED.cash, source=EXCLUDED.source",
+      "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (ts) DO UPDATE SET total_equity=EXCLUDED.total_equity, holdings_value=EXCLUDED.holdings_value, cash=EXCLUDED.cash, source=EXCLUDED.source",
       [ts, totalEquity, holdingsValue, cash, source],
     );
 
     const result = await query(
-      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots WHERE ts = $1 LIMIT 1",
+      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 WHERE ts = $1 LIMIT 1",
       [ts],
     );
     return mapEquitySnapshotRow(result.rows[0] as Record<string, unknown>);
@@ -2433,6 +2507,116 @@ function buildPositionId(symbol: string, market: string): string {
   return `${normalizeText(symbol).toUpperCase()}__${normalizeText(market, "US").toUpperCase()}`;
 }
 
+type DaaPositionSnapshotRow = {
+  assetKey: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  qty: number;
+  price: number;
+  costBasis: number | null;
+  tags: string[];
+  updatedAt: string;
+};
+
+function normalizePositionSnapshotRow(row: Partial<DaaPositionSnapshotRow>): DaaPositionSnapshotRow | null {
+  const symbol = normalizeText(row.symbol).toUpperCase();
+  const market = normalizeText(row.market, "US").toUpperCase();
+  if (!symbol) return null;
+  return {
+    assetKey: normalizeText(row.assetKey, buildPositionKey(symbol, market)).toUpperCase(),
+    symbol,
+    market,
+    currency: normalizeCcyCode(row.currency, "USD"),
+    qty: Math.max(0, toFiniteNumber(row.qty, 0)),
+    price: Math.max(0, toFiniteNumber(row.price, 0)),
+    costBasis: row.costBasis == null ? null : Math.max(0, toFiniteNumber(row.costBasis, 0)),
+    tags: Array.isArray(row.tags) ? row.tags.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean) : [],
+    updatedAt: toIsoString(row.updatedAt, new Date().toISOString()),
+  };
+}
+
+async function replacePositionsV2SnapshotInTx(
+  query: DaaTxQueryFn,
+  rows: Array<Partial<DaaPositionSnapshotRow>>,
+): Promise<void> {
+  await query("DELETE FROM daa_positions_v2");
+  for (const raw of rows) {
+    const row = normalizePositionSnapshotRow(raw);
+    if (!row || !(row.qty > 0)) continue;
+    await query(
+      `INSERT INTO daa_positions_v2 (
+         asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,$8,$9
+       )`,
+      [
+        row.assetKey,
+        row.symbol,
+        row.market,
+        row.currency,
+        row.qty,
+        row.price,
+        row.costBasis,
+        row.tags,
+        row.updatedAt,
+      ],
+    );
+  }
+}
+
+async function syncSinglePositionV2InTx(
+  query: DaaTxQueryFn,
+  row: Partial<DaaPositionSnapshotRow>,
+): Promise<void> {
+  const normalized = normalizePositionSnapshotRow(row);
+  if (!normalized) return;
+  if (!(normalized.qty > 0)) {
+    await query("DELETE FROM daa_positions_v2 WHERE asset_key = $1", [normalized.assetKey]);
+    return;
+  }
+  await query(
+    `INSERT INTO daa_positions_v2 (
+       asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9
+     )
+     ON CONFLICT (asset_key) DO UPDATE
+     SET
+       symbol = EXCLUDED.symbol,
+       market = EXCLUDED.market,
+       currency = EXCLUDED.currency,
+       qty = EXCLUDED.qty,
+       price = EXCLUDED.price,
+       cost_basis = EXCLUDED.cost_basis,
+       tags = EXCLUDED.tags,
+       updated_at = EXCLUDED.updated_at`,
+    [
+      normalized.assetKey,
+      normalized.symbol,
+      normalized.market,
+      normalized.currency,
+      normalized.qty,
+      normalized.price,
+      normalized.costBasis,
+      normalized.tags,
+      normalized.updatedAt,
+    ],
+  );
+}
+
+async function getCurrentLedgerStartTsInTx(query: DaaTxQueryFn): Promise<string | null> {
+  const result = await query(
+    `SELECT ts
+     FROM daa_portfolio_ledger_events
+     WHERE event_kind = 'ledger_reset'
+     ORDER BY ts DESC
+     LIMIT 1`,
+  );
+  if (!result.rows.length) return null;
+  return toIsoString(result.rows[0].ts);
+}
+
 type DaaFxLookupMap = Map<string, number>;
 
 function buildFxLookupMap(rows: Array<Record<string, unknown>>): DaaFxLookupMap {
@@ -2467,7 +2651,18 @@ async function buildPortfolioSnapshotFromAssetUniverseInTx(
   input: { baseCurrency: string; cash: number },
 ): Promise<{ holdingsValue: number; totalEquity: number }> {
   const [holdingsRes, fxRes] = await Promise.all([
-    query("SELECT symbol, market, currency, holding_qty, holding_price, last_price FROM daa_asset_universe WHERE holding_qty > 0"),
+    query(`
+      SELECT
+        p.symbol,
+        p.market,
+        p.currency,
+        p.qty AS holding_qty,
+        p.price AS holding_price,
+        COALESCE(u.last_price, p.price, 0) AS last_price
+      FROM daa_positions_v2 p
+      LEFT JOIN daa_asset_universe u ON u.asset_key = p.asset_key
+      WHERE p.qty > 0
+    `),
     query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates"),
   ]);
   const summary = summarizeMarkToMarketPortfolio({
@@ -3094,14 +3289,14 @@ export async function upsertDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Pr
 function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry {
   const normalizedSide = normalizeText(row.side, "deposit").toLowerCase();
   const side: DaaStoreCashLedgerSide = normalizedSide === "withdraw" ? "withdraw" : "deposit";
-  const normalizedEntryKind = normalizeText(row.entry_kind).toLowerCase();
+  const normalizedEntryKind = normalizeText(row.event_kind).toLowerCase();
   const entryKind: DaaStoreCashLedgerEntryKind | null = normalizedEntryKind === "trade_execution"
     ? "trade_execution"
     : normalizedEntryKind === "dividend"
       ? "dividend"
-      : (normalizedEntryKind === "manual" ? "manual" : null);
+      : ((normalizedEntryKind === "cash_transfer" || normalizedEntryKind === "manual") ? "manual" : null);
   return {
-    id: normalizeText(row.id),
+    id: normalizeText(row.event_id),
     ts: toIsoString(row.ts),
     side,
     amount: Math.max(0, toFiniteNumber(row.amount)),
@@ -3123,11 +3318,21 @@ export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCas
   const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at FROM daa_cash_ledger ORDER BY ts DESC LIMIT $1",
+      `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+              amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
+       FROM daa_portfolio_ledger_events
+       WHERE event_kind <> 'ledger_reset'
+       ORDER BY ts DESC
+       LIMIT $1`,
       [n],
     );
     return result.rows.map((row) => mapCashLedgerRow(row as Record<string, unknown>));
   });
+}
+
+export async function getDaaLedgerStartTs(): Promise<string | null> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => getCurrentLedgerStartTsInTx(query as DaaTxQueryFn));
 }
 
 export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInput): Promise<{
@@ -3150,6 +3355,7 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
 
     const rawEntryKind = normalizeText(input.entryKind, "manual").toLowerCase();
     const entryKind: DaaStoreCashLedgerEntryKind = rawEntryKind === "trade_execution" ? "trade_execution" : rawEntryKind === "dividend" ? "dividend" : "manual";
+    const eventKind = entryKind === "trade_execution" ? "trade_execution" : entryKind === "dividend" ? "dividend" : "cash_transfer";
     const note = normalizeText(input.note, "");
     const entryId = randomUUID();
 
@@ -3194,14 +3400,19 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
       const ts = input.settlementTs ? toIsoString(input.settlementTs, new Date().toISOString()) : new Date().toISOString();
       const settlementTs = input.settlementTs ? toIsoString(input.settlementTs, ts) : null;
       await query(
-        "INSERT INTO daa_cash_ledger (id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())",
+        `INSERT INTO daa_portfolio_ledger_events (
+           event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+           amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,NOW()
+         )`,
         [
           entryId,
           ts,
+          eventKind,
           side,
           amount,
           entryCurrency,
-          entryKind,
           account.baseCurrency,
           amountInAccountBase,
           fxRateToAccount,
@@ -3209,11 +3420,12 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
           input.cycleId ? normalizeText(input.cycleId) || null : null,
           settlementTs,
           note || null,
+          JSON.stringify({ entryKind }),
         ],
       );
 
       await query(
-        "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
+        "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
         [ts, valuation.totalEquity, valuation.holdingsValue, account.cash, "cash_ledger"],
       );
 
@@ -3243,7 +3455,11 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
       await query("COMMIT");
 
       const entryRes = await query(
-        "SELECT id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at FROM daa_cash_ledger WHERE id = $1 LIMIT 1",
+        `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+                amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
+         FROM daa_portfolio_ledger_events
+         WHERE event_id = $1
+         LIMIT 1`,
         [entryId],
       );
 
@@ -3966,10 +4182,10 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
       }
 
       const posRes = await query(
-        "SELECT holding_qty FROM daa_asset_universe WHERE asset_key = $1 LIMIT 1 FOR UPDATE",
+        "SELECT qty FROM daa_positions_v2 WHERE asset_key = $1 LIMIT 1 FOR UPDATE",
         [assetKey],
       );
-      const positionQty = Math.max(0, toFiniteNumber((posRes.rows[0] as Record<string, unknown> | undefined)?.holding_qty, 0));
+      const positionQty = Math.max(0, toFiniteNumber((posRes.rows[0] as Record<string, unknown> | undefined)?.qty, 0));
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
@@ -4073,22 +4289,10 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ticketMap.set(ticket.ticketId, ticket);
       }
 
-      const positionsRes = await query("SELECT asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, holding_qty, holding_price, cost_basis, holding_tags, watch_enabled, target_weight_hint, watch_tags, notes, last_price, price_updated_at, created_at, updated_at FROM daa_asset_universe FOR UPDATE");
+      const positionsRes = await query("SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 FOR UPDATE");
       const positionsMap = new Map<string, DaaStorePosition>();
       for (const row of positionsRes.rows as Array<Record<string, unknown>>) {
-        const item = mapAssetUniverseRow(row);
-        const pos: DaaStorePosition = {
-          id: item.assetKey,
-          assetKey: item.assetKey,
-          symbol: item.symbol,
-          market: item.market,
-          currency: item.currency,
-          qty: item.holdingQty,
-          price: item.holdingPrice,
-          costBasis: item.costBasis,
-          tags: item.holdingTags,
-          updatedAt: item.updatedAt,
-        };
+        const pos = mapPositionRow(row);
         positionsMap.set(buildPositionKey(pos.symbol, pos.market), pos);
       }
 
@@ -4258,10 +4462,11 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           ? (notionalInBase + feeInBase)
           : Math.max(0, notionalInBase - feeInBase);
         await query(
-          `INSERT INTO daa_cash_ledger (
-             id, ts, side, amount, base_currency, entry_kind, account_base_currency, amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
+          `INSERT INTO daa_portfolio_ledger_events (
+             event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+             amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
            ) VALUES (
-             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW()
+             $1,$2,'trade_execution',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,NOW()
            )
            ON CONFLICT (ticket_id) DO NOTHING`,
           [
@@ -4270,7 +4475,6 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             ledgerSide,
             ledgerAmountInBase,
             baseCurrency,
-            "trade_execution",
             baseCurrency,
             ledgerAmountInBase,
             1,
@@ -4278,6 +4482,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             ticket.cycleId,
             nowIso,
             `${ticket.side} ${ticket.symbol} ${ticket.qty.toFixed(6)} @ ${ticket.price.toFixed(4)}`,
+            JSON.stringify({ entryKind: "trade_execution", side: ticket.side }),
           ],
         );
 
@@ -4335,6 +4540,20 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         );
       }
       await query("DELETE FROM daa_asset_universe WHERE watch_enabled = FALSE AND holding_qty <= 0");
+      await replacePositionsV2SnapshotInTx(
+        query as DaaTxQueryFn,
+        [...positionsMap.values()].map((position) => ({
+          assetKey: buildPositionKey(position.symbol, position.market),
+          symbol: position.symbol,
+          market: position.market,
+          currency: position.currency,
+          qty: position.qty,
+          price: position.price,
+          costBasis: position.costBasis,
+          tags: position.tags,
+          updatedAt: position.updatedAt,
+        })),
+      );
 
       const valuation = await buildPortfolioSnapshotFromAssetUniverseInTx(query as DaaTxQueryFn, {
         baseCurrency,
@@ -4351,7 +4570,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
       };
       const snapshotTs = new Date().toISOString();
       await query(
-        "INSERT INTO daa_equity_snapshots (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
+        "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
         [snapshotTs, totalEquity, holdingsValue, account.cash, "trade_ticket"],
       );
 
@@ -4431,7 +4650,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ticketIds,
       );
       const latestPositionsRows = await query(
-        "SELECT asset_key, symbol, market, currency, holding_qty, holding_price, cost_basis, holding_tags, updated_at FROM daa_asset_universe WHERE holding_qty > 0 ORDER BY symbol ASC, market ASC",
+        "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
       );
 
       await query("COMMIT");
@@ -4449,10 +4668,10 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             symbol,
             market,
             currency: normalizeText(item.currency, "USD").toUpperCase(),
-            qty: Math.max(0, toFiniteNumber(item.holding_qty)),
-            price: Math.max(0, toFiniteNumber(item.holding_price)),
+            qty: Math.max(0, toFiniteNumber(item.qty)),
+            price: Math.max(0, toFiniteNumber(item.price)),
             costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
-            tags: Array.isArray(item.holding_tags) ? item.holding_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
+            tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
             updatedAt: toIsoString(item.updated_at),
           } satisfies DaaStorePosition;
         }),

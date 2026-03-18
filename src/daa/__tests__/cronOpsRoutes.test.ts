@@ -42,7 +42,6 @@ vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
     rebalanceStrategy: { calendar: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, thresholdPct: 0.05 } },
     execution: { logs: [] },
     rebalance: {},
-    overviewAlerts: [],
     latestCycle: null,
     warnings: [],
   }),

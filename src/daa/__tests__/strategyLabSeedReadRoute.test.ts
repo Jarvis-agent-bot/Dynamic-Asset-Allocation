@@ -36,7 +36,6 @@ describe("strategy-lab-seed-read-route-v1", () => {
           analysisFocus: "mock",
           autoGenerateEnabled: false,
         },
-        overviewAlerts: [],
         latestCycle: null,
         marketContext: null,
         warnings: [],

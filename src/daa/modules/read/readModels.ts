@@ -10,16 +10,13 @@ import type {
   WorkbenchTradeRecords,
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
-export type OverviewReadModel = {
-  bootstrap: WorkbenchBootstrap;
-  snapshots: DaaStoreEquitySnapshot[];
-  cashLedger: DaaStoreCashLedgerEntry[];
-  loadedAt: string;
-};
-
 export type WorkbenchReadModel = {
   bootstrap: WorkbenchBootstrap;
   cycles: RebalanceCycle[];
+  snapshots: DaaStoreEquitySnapshot[];
+  cashLedger: DaaStoreCashLedgerEntry[];
+  signals: WorkbenchSignal[];
+  allocationSummary: WorkbenchAllocationSummary;
   loadedAt: string;
 };
 
@@ -51,4 +48,27 @@ export type StrategyLabSeedReadModel = {
   availableAssets: AssetUniverseView[];
   selectedAssetKeys: string[];
   loadedAt: string;
+};
+
+export type WorkbenchSignal = {
+  id: string;
+  level: "info" | "warn" | "success";
+  source: "alert" | "warning" | "system";
+  text: string;
+  actionHref: string | null;
+  createdAt: string;
+};
+
+export type WorkbenchAllocationSummary = {
+  holdingCount: number;
+  watchlistCount: number;
+  holdingValue: number;
+  cashValue: number;
+  totalEquity: number;
+  topHoldings: Array<{
+    assetKey: string;
+    symbol: string;
+    value: number;
+    weightPct: number;
+  }>;
 };

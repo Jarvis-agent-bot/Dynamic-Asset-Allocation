@@ -68,7 +68,7 @@ export function useWorkbenchRebalanceFlow(input: {
       id: "watchlist",
       label: "观察列表至少 1 个资产",
       ok: summary.watchlistAssets > 0,
-      hint: "去资产发现添加候选资产",
+      hint: "去观察列表添加候选资产",
     },
     {
       id: "basket",

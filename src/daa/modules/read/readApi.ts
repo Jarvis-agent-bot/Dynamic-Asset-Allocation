@@ -1,15 +1,10 @@
 import { requestData } from "@/src/daa/api/client";
 
 import type {
-  OverviewReadModel,
   StrategyLabSeedReadModel,
   TradesReadModel,
   WorkbenchReadModel,
 } from "./readModels";
-
-export async function getOverviewReadModel(): Promise<OverviewReadModel> {
-  return requestData<OverviewReadModel>("/api/daa/read/overview", { method: "GET", cache: "no-store" });
-}
 
 export async function getWorkbenchReadModel(input: {
   syncPrices?: boolean;

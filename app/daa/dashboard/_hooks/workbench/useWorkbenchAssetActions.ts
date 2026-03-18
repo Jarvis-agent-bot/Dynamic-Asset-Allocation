@@ -153,7 +153,7 @@ export function useWorkbenchAssetActions(input: {
     limitPerMarket: payload.limitPerMarket,
   }), []);
 
-  const handleAddDiscoveredAsset = useCallback(async (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => {
+  const handleAddWatchlistAsset = useCallback(async (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => {
     await upsertWorkbenchAsset({
       symbol: item.symbol,
       market: item.market,
@@ -378,12 +378,12 @@ export function useWorkbenchAssetActions(input: {
     updatingTarget: targetUpdating,
   };
 
-  const discoveryProps = {
+  const watchlistBuilderProps = {
     loading: input.loading || input.busy || targetUpdating,
     joinedAssetKeys,
     onListFeaturedAssets: handleListFeaturedAssets,
     onSearch: handleSearchAssets,
-    onAddAsset: handleAddDiscoveredAsset,
+    onAddAsset: handleAddWatchlistAsset,
   };
 
   return {
@@ -402,6 +402,6 @@ export function useWorkbenchAssetActions(input: {
     handleSubmitManualOrder,
     handleSubmitCalibration,
     tableProps,
-    discoveryProps,
+    watchlistBuilderProps,
   };
 }

@@ -10,7 +10,6 @@ import type { UnifiedDecisionResult } from "@/src/daa/modules/decision/decisionR
 import {
   buildMarketContextAttribution,
   getCurrentMarketContext,
-  marketRegimeLabelZh,
 } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { classifyCash } from "./cashClassification";
 import { fuseDecision } from "./decisionFusion";
@@ -22,7 +21,9 @@ import {
   createDaaRebalanceDecision,
   createDaaTradeTicket,
   executeDaaTradeTickets,
+  getDaaAccountState,
   getDaaCycleReport,
+  getDaaLedgerStartTs,
   getDaaHumanIngestState,
   getDaaRebalanceCycle,
   getDaaSystemConfig,
@@ -78,7 +79,6 @@ import {
   computeTotalEquity,
   mapStoreCycleReportToView,
   mapStoreCycleToView,
-  nextCalendarDueDate,
   normalizeText,
   pickCycleMarketRegimes,
   priceAgeSec,
@@ -91,6 +91,12 @@ const PRICE_SYNC_CONCURRENCY = 4;
 const PRICE_SYNC_MAX_TARGETS = 30;
 const PRICE_STALE_SEC = 6 * 60 * 60;
 const PRICE_REFRESH_FRESH_SKIP_SEC = 120;
+
+function isWithinCurrentLedger(ts: string | null | undefined, ledgerStartTs: string | null): boolean {
+  if (!ledgerStartTs) return true;
+  if (!ts) return false;
+  return Date.parse(ts) >= Date.parse(ledgerStartTs);
+}
 
 export async function syncWorkbenchPrices(opts: {
   maxTargets?: number;
@@ -312,26 +318,28 @@ export async function buildWorkbenchBootstrap(opts: {
     }
   }
 
-  const [systemRow, rows, fxRates, allTickets, hfSignalMap, rebalanceCyclesRaw, marketCacheStats] = await Promise.all([
+  const [systemRow, accountState, rows, fxRates, allTicketsRaw, hfSignalMap, rebalanceCyclesRaw, marketCacheStats, ledgerStartTs] = await Promise.all([
     getDaaSystemConfig(),
+    getDaaAccountState(),
     listDaaAssetUniverse(),
     listDaaFxRates(),
     listDaaTradeTickets({ limit: 500 }),
     buildHfSignalMap(),
     listDaaRebalanceCycles(100),
     getDaaMarketCacheHealthStats(),
+    getDaaLedgerStartTs(),
   ]);
-  let rebalanceCycles = [...rebalanceCyclesRaw];
+  let rebalanceCycles = rebalanceCyclesRaw.filter((row) => isWithinCurrentLedger(row.createdAt, ledgerStartTs));
+  const allTickets = allTicketsRaw.filter((row) => isWithinCurrentLedger(row.createdAt, ledgerStartTs));
 
   const strategy = systemRow.config.strategy;
-  const accountRaw = strategy.account || {};
-  const baseCurrency = normalizeDaaCurrencyCode(accountRaw.baseCurrency, "USD");
-  const cash = toPositive(accountRaw.cash, 0);
-  const frozenCash = toPositive(accountRaw.frozenCash, 0);
+  const baseCurrency = normalizeDaaCurrencyCode(accountState.baseCurrency, "USD");
+  const cash = toPositive(accountState.cash, 0);
+  const frozenCash = toPositive(accountState.frozenCash, 0);
   const investableCash = resolveInvestableCash({
     cash,
     frozenCash,
-    investableCash: accountRaw.investableCash,
+    investableCash: accountState.investableCash,
   });
 
   const marketCache = systemRow.config.dataSources.priceFeed.marketCache;
@@ -402,7 +410,9 @@ export async function buildWorkbenchBootstrap(opts: {
   const holdingsValue = assetUniverse
     .filter((row) => row.holdingQty > 0)
     .reduce((sum, row) => sum + Math.max(0, toFinite(row.valuationBase, 0)), 0);
-  const totalEquity = holdingsValue + cash;
+  const totalEquity = accountState.totalEquity == null
+    ? holdingsValue + cash
+    : toPositive(accountState.totalEquity, holdingsValue + cash);
 
   const logs = allTickets
     .filter((ticket) => ticket.status !== "ready")
@@ -463,7 +473,6 @@ export async function buildWorkbenchBootstrap(opts: {
           analysisFocus: rebalanceStrategy.analysisFocus,
         },
         rebalanceStrategy,
-        overviewAlerts: [],
         latestCycle: null,
         marketContext,
         warnings: [],
@@ -540,56 +549,6 @@ export async function buildWorkbenchBootstrap(opts: {
   }
   const latestCycle = mapStoreCycleToView(rebalanceCycles[0] || null);
 
-  const overviewAlerts: WorkbenchBootstrap["overviewAlerts"] = [];
-  const maxDriftRow = assetUniverse
-    .filter((row) => row.gapPct != null)
-    .sort((a, b) => Math.abs(b.gapPct || 0) - Math.abs(a.gapPct || 0))[0];
-  if (maxDriftRow && Math.abs(maxDriftRow.gapPct || 0) > rebalanceStrategy.drift.thresholdPct * 100) {
-    overviewAlerts.push({
-      id: `risk-${maxDriftRow.assetKey}`,
-      kind: "risk",
-      level: "warn",
-      text: `${maxDriftRow.symbol} 偏移 ${Number(maxDriftRow.gapPct || 0).toFixed(2)}%，超过阈值 ${(rebalanceStrategy.drift.thresholdPct * 100).toFixed(2)}%`,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  const highlightedHf = assetUniverse.find((row) => row.hfSignal && row.hfSignal.level !== "none");
-  if (highlightedHf?.hfSignal) {
-    overviewAlerts.push({
-      id: `hf-${highlightedHf.assetKey}`,
-      kind: "hf",
-      level: highlightedHf.hfSignal.level === "bearish" ? "warn" : "info",
-      text: `人因信号：${highlightedHf.symbol} ${highlightedHf.hfSignal.icon} ${highlightedHf.hfSignal.label}`,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  if (rebalanceStrategy.calendar.enabled) {
-    const nextDueAt = nextCalendarDueDate({
-      frequency: rebalanceStrategy.calendar.frequency,
-      dayOfMonth: rebalanceStrategy.calendar.dayOfMonth,
-    });
-    overviewAlerts.push({
-      id: "next-calendar-cycle",
-      kind: "schedule",
-      level: "success",
-      text: `下次定期再平衡：${nextDueAt.slice(0, 10)}`,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  for (const scope of marketContext?.scopes || []) {
-    if (scope.regime !== "risk_off") continue;
-    overviewAlerts.push({
-      id: `market-${scope.scope}`,
-      kind: "market",
-      level: "warn",
-      text: `${scope.label}进入 ${marketRegimeLabelZh(scope.regime)}，普通买入执行 ${Math.round(scope.buyScale * 100)}%，高波动买入执行 ${Math.round(scope.highRiskBuyScale * 100)}%`,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
   return {
     baseCurrency,
     account: {
@@ -618,7 +577,6 @@ export async function buildWorkbenchBootstrap(opts: {
       analysisFocus: rebalanceStrategy.analysisFocus,
       autoGenerateEnabled: rebalanceStrategy.autoGenerateEnabled,
     },
-    overviewAlerts,
     latestCycle,
     marketContext,
     warnings,
@@ -627,24 +585,37 @@ export async function buildWorkbenchBootstrap(opts: {
 }
 
 export async function listWorkbenchRebalanceCycles(limit = 120): Promise<RebalanceCycle[]> {
-  const cycles = await listDaaRebalanceCycles(limit);
-  return cycles.map((row) => mapStoreCycleToView(row)).filter(Boolean) as RebalanceCycle[];
+  const [cycles, ledgerStartTs] = await Promise.all([
+    listDaaRebalanceCycles(limit),
+    getDaaLedgerStartTs(),
+  ]);
+  return cycles
+    .filter((row) => isWithinCurrentLedger(row.createdAt, ledgerStartTs))
+    .map((row) => mapStoreCycleToView(row))
+    .filter(Boolean) as RebalanceCycle[];
 }
 
 export async function listWorkbenchTradeRecords(limit = 120): Promise<WorkbenchTradeRecords> {
-  const [cycles, orders] = await Promise.all([
+  const [cycles, orders, ledgerStartTs] = await Promise.all([
     listDaaRebalanceCycles(limit),
     listDaaTradeTickets({ limit: Math.max(200, limit * 2) }),
+    getDaaLedgerStartTs(),
   ]);
   return {
-    cycles: cycles.map((row) => mapStoreCycleToView(row)!).filter(Boolean),
-    orders: orders,
+    cycles: cycles.filter((row) => isWithinCurrentLedger(row.createdAt, ledgerStartTs)).map((row) => mapStoreCycleToView(row)!).filter(Boolean),
+    orders: orders.filter((row) => isWithinCurrentLedger(row.createdAt, ledgerStartTs)),
   };
 }
 
 export async function listWorkbenchRebalanceReports(limit = 50): Promise<WorkbenchRebalanceCycleReport[]> {
-  const reports = await listDaaCycleReports(limit);
-  return reports.map((item) => mapStoreCycleReportToView(item)).filter(Boolean) as WorkbenchRebalanceCycleReport[];
+  const [reports, ledgerStartTs] = await Promise.all([
+    listDaaCycleReports(limit),
+    getDaaLedgerStartTs(),
+  ]);
+  return reports
+    .filter((item) => isWithinCurrentLedger(item.cycleCreatedAt, ledgerStartTs))
+    .map((item) => mapStoreCycleReportToView(item))
+    .filter(Boolean) as WorkbenchRebalanceCycleReport[];
 }
 
 export async function getWorkbenchRebalanceCycleReport(cycleId: string): Promise<WorkbenchRebalanceCycleReport | null> {
