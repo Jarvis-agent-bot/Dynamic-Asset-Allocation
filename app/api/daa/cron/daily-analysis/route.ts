@@ -82,6 +82,28 @@ export async function POST(req: Request) {
       }),
       handler: async () => {
         const system = await getDaaSystemConfig();
+
+        // Hour guard: skip if current UTC hour doesn't match configured hour.
+        // Allows cron to run every hour while the actual trigger time is configurable.
+        const configuredHour = system.config.notification.dailyAnalysisHourUtc;
+        const currentHour = new Date().getUTCHours();
+        const forcedByHeader = req.headers.get("x-daa-force") === "1";
+        if (!forcedByHeader && currentHour !== configuredHour) {
+          return {
+            skipped: true,
+            created: false,
+            skippedByCooldown: false,
+            cooldownUntil: null,
+            message: `hour guard: current UTC hour ${currentHour} != configured ${configuredHour}`,
+            cycleId: null,
+            proposalCount: 0,
+            telegram: { sent: false },
+            feishu: { sent: false },
+            marketRefresh: { ok: true, refreshedCount: 0 },
+            dailyReport: { sent: false, telegram: false, feishu: false },
+            at: new Date().toISOString(),
+          };
+        }
         const strategy = system.config.rebalanceStrategy;
         const notif = system.config.notification;
 
