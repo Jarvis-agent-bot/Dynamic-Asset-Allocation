@@ -151,6 +151,7 @@ export type DaaSystemConfig = {
     marketIndicators: DaaMarketIndicatorsConfig;
   };
   notification: {
+    dailyAnalysisHourUtc: number;
     telegram: {
       enabled: boolean;
       onDriftTrigger: boolean;
@@ -317,6 +318,7 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     },
   },
   notification: {
+    dailyAnalysisHourUtc: 1,
     telegram: {
       enabled: false,
       onDriftTrigger: false,
@@ -747,6 +749,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       marketIndicators: normalizeMarketIndicatorConfig(marketIndicators, fallback.dataSources.marketIndicators),
     },
     notification: {
+      dailyAnalysisHourUtc: Math.min(23, Math.max(0, Math.trunc(Number(notification.dailyAnalysisHourUtc) || fallback.notification.dailyAnalysisHourUtc))),
       telegram: {
         enabled: toBool(notificationTelegram.enabled, fallback.notification.telegram.enabled),
         onDriftTrigger: toBool(
