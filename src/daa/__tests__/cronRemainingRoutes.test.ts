@@ -13,6 +13,7 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
         drift: { enabled: true, thresholdPct: 0.05 },
       },
       notification: {
+        dailyAnalysisHourUtc: new Date().getUTCHours(),
         telegram: {
           enabled: true,
           onDriftTrigger: true,

@@ -127,6 +127,7 @@ function buildSystemConfig(input?: {
         autoGenerateEnabled: input?.autoGenerateEnabled ?? false,
       },
       notification: {
+        dailyAnalysisHourUtc: new Date().getUTCHours(),
         telegram: {
           enabled: (input?.telegramOnSuggestion ?? false) || (input?.telegramDailyReport ?? false),
           onDriftTrigger: false,
