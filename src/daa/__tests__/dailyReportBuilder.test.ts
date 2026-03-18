@@ -48,7 +48,6 @@ function makeBootstrap(overrides?: Partial<WorkbenchBootstrap>): WorkbenchBootst
       analysisFocus: "",
       autoGenerateEnabled: false,
     },
-    overviewAlerts: [],
     latestCycle: null,
     marketContext: {
       generatedAt: "2026-03-17T01:00:00Z",

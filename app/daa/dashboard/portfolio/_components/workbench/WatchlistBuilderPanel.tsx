@@ -102,7 +102,7 @@ function priceTone(status?: string | null): "cyan" | "amber" | "red" {
   return "red";
 }
 
-export default function AssetDiscoveryPanel(props: {
+export default function WatchlistBuilderPanel(props: {
   loading?: boolean;
   joinedAssetKeys: Record<string, true>;
   onListFeaturedAssets: (input: { market: string; assetClass: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
@@ -194,13 +194,13 @@ export default function AssetDiscoveryPanel(props: {
 
   return (
     <DeepLedgerPanel
-      title="推荐与搜索资产"
-      subtitle="先用高置信推荐快速组篮子，再用精准搜索补足长尾标的。"
+      title="添加观察标的"
+      subtitle="在观察列表里直接完成推荐挑选、搜索补充与加入观察，减少在不同页面之间跳转。"
       accent="indigo"
       bodyClassName="space-y-5"
       action={
         <DeepLedgerStatusPill tone="indigo">
-          {featuredCollapsed ? "推荐已折叠" : "发现工作流"}
+          {featuredCollapsed ? "推荐已折叠" : "观察池构建"}
         </DeepLedgerStatusPill>
       }
     >
@@ -211,14 +211,14 @@ export default function AssetDiscoveryPanel(props: {
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(129,140,248,0.22)] bg-[rgba(129,140,248,0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--indigo)]">
               <Sparkles className="h-3.5 w-3.5" />
-              资产发现
+              观察池补充
             </div>
             <div>
               <div className="font-[var(--font-display)] text-[30px] leading-none tracking-[-0.035em] text-[var(--text)] sm:text-[34px]">
-                从推荐池收敛高质量观察标的
+                先补齐观察池，再进入目标权重配置
               </div>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)] sm:text-[15px]">
-                推荐池优先覆盖流动性、代表性与叙事完整度较高的资产；搜索区则补足特定市场、主题与个股，便于后续纳入再平衡工作台。
+                推荐池优先覆盖高流动性与代表性标的；搜索区补足主题、市场与个股长尾。加入观察后可以立刻在下方维护目标权重并进入再平衡。
               </p>
             </div>
           </div>

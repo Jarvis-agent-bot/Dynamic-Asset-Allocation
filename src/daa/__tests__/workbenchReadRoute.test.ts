@@ -30,7 +30,6 @@ describe("workbench-read-route-v1", () => {
           analysisFocus: "mock",
           autoGenerateEnabled: false,
         },
-        overviewAlerts: [],
         latestCycle: null,
         marketContext: null,
         warnings: [],

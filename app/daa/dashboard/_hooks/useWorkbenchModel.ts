@@ -4,14 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiClientError, getApiErrorMessage } from "@/src/daa/api/client";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
+import type { WorkbenchAllocationSummary, WorkbenchSignal } from "@/src/daa/modules/read/readModels";
+import type { StoreCashLedgerEntry, StoreEquitySnapshot } from "@/src/daa/modules/store/storeApi";
 import type { PreTradeRiskCheck, RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 const DAA_DASHBOARD_REFRESH_EVENT_ = "daa:dashboard:refresh";
 
-export type WorkbenchTab = "positions" | "watchlist" | "discovery" | "rebalance" | "cash";
+export type WorkbenchTab = "positions" | "watchlist" | "rebalance" | "cash";
 
 export function normalizeWorkbenchTab(input: string): WorkbenchTab {
-  if (input === "positions" || input === "watchlist" || input === "discovery" || input === "rebalance" || input === "cash") return input;
+  if (input === "positions" || input === "watchlist" || input === "rebalance" || input === "cash") return input;
   return "positions";
 }
 
@@ -30,6 +32,10 @@ export function useWorkbenchModel(input: {
   const [activeTab, setActiveTab] = useState<WorkbenchTab>(() => normalizeWorkbenchTab(String(input.initialTab || "")));
   const [bootstrap, setBootstrap] = useState<WorkbenchBootstrap | null>(null);
   const [cycles, setCycles] = useState<RebalanceCycle[]>([]);
+  const [snapshots, setSnapshots] = useState<StoreEquitySnapshot[]>([]);
+  const [cashLedger, setCashLedger] = useState<StoreCashLedgerEntry[]>([]);
+  const [signals, setSignals] = useState<WorkbenchSignal[]>([]);
+  const [allocationSummary, setAllocationSummary] = useState<WorkbenchAllocationSummary | null>(null);
   const [currentCycle, setCurrentCycle] = useState<RebalanceCycle | null>(null);
   const [riskCheck, setRiskCheck] = useState<PreTradeRiskCheck | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +69,10 @@ export function useWorkbenchModel(input: {
 
       setBootstrap(nextBootstrap);
       setCycles(nextCycles);
+      setSnapshots(nextData.snapshots || []);
+      setCashLedger(nextData.cashLedger || []);
+      setSignals(nextData.signals || []);
+      setAllocationSummary(nextData.allocationSummary || null);
       setCurrentCycle(nextCurrentCycle);
       setRiskCheck(nextCurrentCycle?.riskCheck || null);
     } catch (err) {
@@ -93,6 +103,10 @@ export function useWorkbenchModel(input: {
     setActiveTab,
     bootstrap,
     cycles,
+    snapshots,
+    cashLedger,
+    signals,
+    allocationSummary,
     setCycles,
     currentCycle,
     setCurrentCycle,

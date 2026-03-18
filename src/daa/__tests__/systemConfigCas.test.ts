@@ -25,7 +25,7 @@ describe("system-config-cas-v1", () => {
     resetPgMemRuntime();
   });
 
-  it("旧 schema 缺少 cash ledger 新列时会重新执行 schema ensure", async () => {
+  it("旧 cash ledger 会归档为 legacy 并切换到 V2 账本", async () => {
     await withDaaPgClient(async ({ query }) => {
       await query(`
         CREATE TABLE daa_asset_universe (
@@ -107,14 +107,22 @@ describe("system-config-cas-v1", () => {
     await expect(listDaaCashLedgerEntries(10)).resolves.toEqual([]);
 
     await withDaaPgClient(async ({ query }) => {
+      const legacyTables = await query(
+        `SELECT table_name FROM information_schema.tables WHERE table_name IN ('daa_cash_ledger', 'daa_cash_ledger_legacy_v1', 'daa_portfolio_ledger_events')`,
+      );
+      const tableNames = new Set(legacyTables.rows.map((row) => String((row as Record<string, unknown>).table_name)));
+      expect(tableNames.has("daa_cash_ledger")).toBe(false);
+      expect(tableNames.has("daa_cash_ledger_legacy_v1")).toBe(true);
+      expect(tableNames.has("daa_portfolio_ledger_events")).toBe(true);
+
       const columns = await query(
-        `SELECT column_name FROM information_schema.columns WHERE table_name = 'daa_cash_ledger'`,
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'daa_portfolio_ledger_events'`,
       );
       const names = new Set(columns.rows.map((row) => String((row as Record<string, unknown>).column_name)));
+      expect(names.has("event_kind")).toBe(true);
       expect(names.has("ticket_id")).toBe(true);
       expect(names.has("cycle_id")).toBe(true);
       expect(names.has("settlement_ts")).toBe(true);
-      expect(names.has("entry_kind")).toBe(true);
     });
   });
 
@@ -254,7 +262,7 @@ describe("system-config-cas-v1", () => {
       expect(persisted.rebalanceStrategy.analysisFocus).toBe("runtime-account-separated");
 
       const accountRows = await query(
-        "SELECT base_currency, cash, investable_cash, frozen_cash, total_equity FROM daa_account_state WHERE id = 'default' LIMIT 1",
+        "SELECT base_currency, cash, investable_cash, frozen_cash, total_equity FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
       );
       const account = accountRows.rows[0] as Record<string, unknown>;
       expect(String(account.base_currency)).toBe("USD");

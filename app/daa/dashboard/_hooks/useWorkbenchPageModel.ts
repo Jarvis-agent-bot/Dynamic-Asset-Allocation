@@ -21,6 +21,10 @@ export function useWorkbenchPageModel(input: {
     setActiveTab,
     bootstrap,
     cycles,
+    snapshots,
+    cashLedger,
+    signals,
+    allocationSummary,
     setCycles,
     currentCycle,
     setCurrentCycle,
@@ -79,11 +83,11 @@ export function useWorkbenchPageModel(input: {
     mergeCycleState,
   });
 
-  const totalEquity = bootstrap?.account.totalEquity ?? 0;
-  const holdingsValue = assetRows
+  const totalEquity = allocationSummary?.totalEquity ?? bootstrap?.account.totalEquity ?? 0;
+  const holdingsValue = allocationSummary?.holdingValue ?? assetRows
     .filter((row) => row.holdingQty > 0)
     .reduce((sum, row) => sum + (row.valuationBase ?? 0), 0);
-  const cashValue = bootstrap?.account.cash ?? 0;
+  const cashValue = allocationSummary?.cashValue ?? bootstrap?.account.cash ?? 0;
 
   const rebalanceSectionProps = bootstrap ? {
     bootstrap,
@@ -150,6 +154,10 @@ export function useWorkbenchPageModel(input: {
     activeTab,
     setActiveTab,
     bootstrap,
+    snapshots,
+    cashLedger,
+    signals,
+    allocationSummary,
     loading,
     refreshing,
     error,
@@ -162,7 +170,7 @@ export function useWorkbenchPageModel(input: {
     executionReceipt: executionFlow.executionReceipt as ExecutionReceipt | null,
     clearExecutionReceipt: executionFlow.clearExecutionReceipt,
     tableProps: assetActions.tableProps,
-    discoveryProps: assetActions.discoveryProps,
+    watchlistBuilderProps: assetActions.watchlistBuilderProps,
     rebalanceSectionProps,
     dialogProps,
   };

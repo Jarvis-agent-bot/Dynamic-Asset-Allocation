@@ -91,12 +91,12 @@ export function WorkbenchRebalanceSection(props: {
           title="首次调仓引导"
           action={(
             <div className="flex flex-wrap gap-2">
-              <DeepLedgerActionButton tone="primary" onClick={() => props.onNavigateTab("discovery")}>去资产发现</DeepLedgerActionButton>
+              <DeepLedgerActionButton tone="primary" onClick={() => props.onNavigateTab("watchlist")}>去观察列表添加标的</DeepLedgerActionButton>
               <DeepLedgerActionButton onClick={() => props.onNavigateTab("watchlist")}>去观察列表设权重</DeepLedgerActionButton>
             </div>
           )}
         >
-          <DeepLedgerNoticeBox tone="amber" title="推荐路径" description="资产发现添加标的 → 观察列表设置目标权重 → 生成建议 → 勾选并执行。" />
+          <DeepLedgerNoticeBox tone="amber" title="推荐路径" description="观察列表内添加标的并设置目标权重 → 生成建议 → 勾选并执行。" />
         </DeepLedgerPanel>
       ) : null}
 

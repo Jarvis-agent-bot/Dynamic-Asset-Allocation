@@ -4,13 +4,15 @@ import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchRe
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaTriggerEvent: vi.fn(async () => null),
   appendDaaRunHistory: vi.fn(async () => null),
-  appendPriceHistoryRows: vi.fn(async () => 0),
+  appendAssetPriceHistoryRows: vi.fn(async () => 0),
   createDaaRebalanceCycle: vi.fn(),
   createDaaRebalanceDecision: vi.fn(),
   createDaaTradeTicket: vi.fn(),
   executeDaaTradeTickets: vi.fn(),
+  getDaaAccountState: vi.fn(),
   getDaaCycleReport: vi.fn(),
   getDaaHumanIngestState: vi.fn(async () => null),
+  getDaaLedgerStartTs: vi.fn(async () => null),
   getDaaRebalanceCycle: vi.fn(),
   getDaaSystemConfig: vi.fn(),
   getDaaMarketCacheHealthStats: vi.fn(async () => ({ freshCount: 1, staleCount: 0, missingCount: 0, errorCount: 0, unsupportedCount: 0, totalSnapshots: 1, recentJobSuccessRatePct: 100, recentJobFailureRatePct: 0, provider: "yfinance" })),
@@ -52,7 +54,7 @@ vi.mock("@/src/daa/modules/workbench/assetUniverseService", () => ({
 
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildAssetUniverseViewRows } from "@/src/daa/modules/workbench/assetUniverseService";
-import { getDaaMarketCacheHealthStats, getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
+import { getDaaAccountState, getDaaMarketCacheHealthStats, getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
 
 describe("workbench-bootstrap-service-v1", () => {
   beforeEach(() => {
@@ -98,6 +100,14 @@ describe("workbench-bootstrap-service-v1", () => {
           autoGenerateEnabled: false,
         },
       },
+    } as any);
+    vi.mocked(getDaaAccountState).mockResolvedValue({
+      baseCurrency: "USD",
+      cash: 1000,
+      frozenCash: 0,
+      investableCash: 1000,
+      totalEquity: 1000,
+      updatedAt: "2026-03-06T14:00:00.000Z",
     } as any);
 
     vi.mocked(listDaaAssetUniverse).mockResolvedValue([

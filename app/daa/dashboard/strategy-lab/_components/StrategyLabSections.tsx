@@ -255,7 +255,7 @@ export function AssetPickerBlock({ model }: { model: StrategyLabModel }) {
                       className="border-0 bg-transparent px-0 py-2 text-left"
                       action={(
                         <div className="flex flex-wrap gap-2">
-                          <Link href="/daa/dashboard/workbench?tab=discovery" className="inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--text)]">去资产发现</Link>
+                          <Link href="/daa/dashboard/workbench?section=portfolio&tab=watchlist" className="inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--text)]">去观察列表加资产</Link>
                           <Link href="/daa/dashboard/workbench?tab=watchlist" className="inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--text)]">去观察列表</Link>
                         </div>
                       )}
@@ -525,7 +525,7 @@ export function StrategyLabEmptyStatePanel({ model }: { model: StrategyLabModel 
         : "先选研究范围，再调组合风格并运行；系统会生成理想/可执行两个场景，并支持把候选权重写回工作台。"}
       action={(
         <div className="flex flex-wrap justify-center gap-2">
-          {model.selectedAssetCount <= 0 ? <Link href="/daa/dashboard/workbench?tab=discovery" className="inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--text)]">去资产发现</Link> : null}
+          {model.selectedAssetCount <= 0 ? <Link href="/daa/dashboard/workbench?section=portfolio&tab=watchlist" className="inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--text)]">去观察列表加资产</Link> : null}
           {model.selectedTargetSumPct <= 0 ? <Link href="/daa/dashboard/workbench?tab=watchlist" className="inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--text)]">去观察列表看正式目标</Link> : null}
           <DeepLedgerActionButton tone="primary" onClick={() => void model.handleRun()} disabled={!model.canRun}>
             <FlaskConical className="h-4 w-4" />

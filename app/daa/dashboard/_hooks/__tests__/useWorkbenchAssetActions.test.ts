@@ -88,7 +88,7 @@ describe("useWorkbenchAssetActions", () => {
 
     let results: WorkbenchSearchAssetResult[] = [];
     await act(async () => {
-      results = await result.current.discoveryProps.onSearch({
+      results = await result.current.watchlistBuilderProps.onSearch({
         q: "apple",
         market: "US",
         assetClass: "stock",
@@ -106,13 +106,13 @@ describe("useWorkbenchAssetActions", () => {
     expect(results).toHaveLength(1);
   });
 
-  it("handleAddDiscoveredAsset upserts and reloads", async () => {
+  it("handleAddWatchlistAsset upserts and reloads", async () => {
     const { upsertWorkbenchAsset } = await import("@/src/daa/modules/workbench/workbenchApi");
     const input = makeInput();
     const { result } = renderHook(() => useWorkbenchAssetActions(input));
 
     await act(async () => {
-      await result.current.discoveryProps.onAddAsset({
+      await result.current.watchlistBuilderProps.onAddAsset({
         symbol: "AAPL",
         market: "US",
         currency: "USD",

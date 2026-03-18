@@ -11,7 +11,6 @@ import type {
   DaaMarketIndicatorScope,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type {
-  OverviewReadModel,
   StrategyLabSeedReadModel,
   TradesReadModel,
   WorkbenchReadModel,
@@ -79,7 +78,6 @@ export function buildDevMemWorkbenchBootstrap(): WorkbenchBootstrap {
       analysisFocus: config.rebalanceStrategy.analysisFocus,
     },
     rebalanceStrategy,
-    overviewAlerts: [],
     latestCycle: null,
     marketContext: null,
     warnings: [],
@@ -94,19 +92,21 @@ export function buildDevMemWorkbenchBootstrap(): WorkbenchBootstrap {
   };
 }
 
-export function buildDevMemOverviewReadModel(): OverviewReadModel {
-  return {
-    bootstrap: buildDevMemWorkbenchBootstrap(),
-    snapshots: [],
-    cashLedger: [],
-    loadedAt: new Date().toISOString(),
-  };
-}
-
 export function buildDevMemWorkbenchReadModel(): WorkbenchReadModel {
   return {
     bootstrap: buildDevMemWorkbenchBootstrap(),
     cycles: [],
+    snapshots: [],
+    cashLedger: [],
+    signals: [],
+    allocationSummary: {
+      holdingCount: 0,
+      watchlistCount: 0,
+      holdingValue: 0,
+      cashValue: 0,
+      totalEquity: 0,
+      topHoldings: [],
+    },
     loadedAt: new Date().toISOString(),
   };
 }
