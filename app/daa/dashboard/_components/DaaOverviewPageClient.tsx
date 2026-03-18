@@ -4,7 +4,6 @@ import { usePortfolioOverviewModel } from "@/app/daa/dashboard/_hooks/usePortfol
 import {
   OverviewAlertsPanel,
   OverviewAllocationPanel,
-  OverviewCashLedgerDialog,
   OverviewCashLedgerPanel,
   OverviewEquityTrendPanel,
   OverviewErrorState,
@@ -26,7 +25,6 @@ export default function DaaOverviewPageClient() {
       <OverviewEquityTrendPanel model={model} />
       <OverviewAllocationPanel model={model} />
       <OverviewCashLedgerPanel model={model} />
-      <OverviewCashLedgerDialog model={model} />
     </div>
   );
 }

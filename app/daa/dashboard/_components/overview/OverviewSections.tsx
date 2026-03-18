@@ -2,12 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Minus, Plus, RefreshCcw } from "lucide-react";
+import { RefreshCcw } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatCurrencyCompact } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DashboardEmptyState, DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
@@ -34,14 +31,6 @@ const MARKET_INDICATOR_LINE_META_: Record<DaaMarketIndicatorKey, { label: string
   btc_volatility: { label: "比特币波动率 (BTC)", color: "#A78BFA" },
   gold_silver_ratio: { label: "金银比 (GC/SI)", color: "#FBBF24" },
 };
-const CASH_CURRENCY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "USD", label: "美元 (USD)" },
-  { value: "EUR", label: "欧元 (EUR)" },
-  { value: "USDC", label: "稳定币 (USDC)" },
-  { value: "RMB", label: "人民币 (RMB/CNY)" },
-  { value: "HKD", label: "港元 (HKD)" },
-];
-
 function alertTone(level: "info" | "warn" | "success"): DeepLedgerTone {
   if (level === "warn") return "amber";
   if (level === "success") return "green";
@@ -119,14 +108,6 @@ export function OverviewSummaryHeader({ model }: { model: PortfolioOverviewModel
             <DeepLedgerActionButton tone="slate" onClick={() => void model.load(true)} disabled={model.refreshing || model.loading}>
               <RefreshCcw className={`h-4 w-4 ${model.refreshing ? "animate-spin" : ""}`} />
               刷新总览
-            </DeepLedgerActionButton>
-            <DeepLedgerActionButton tone="success" onClick={() => model.setCashDialogSide("deposit")}>
-              <Plus className="h-4 w-4" />
-              入金
-            </DeepLedgerActionButton>
-            <DeepLedgerActionButton tone="warning" onClick={() => model.setCashDialogSide("withdraw")}>
-              <Minus className="h-4 w-4" />
-              出金
             </DeepLedgerActionButton>
           </>
         )}
@@ -398,16 +379,9 @@ export function OverviewCashLedgerPanel({ model }: { model: PortfolioOverviewMod
       title="现金流水"
       subtitle="查看最近资金进出与备注，确认账户现金变化是否符合预期。"
       action={(
-        <div className="flex flex-wrap gap-2">
-          <DeepLedgerActionButton tone="success" onClick={() => model.setCashDialogSide("deposit")}>
-            <Plus className="h-4 w-4" />
-            入金
-          </DeepLedgerActionButton>
-          <DeepLedgerActionButton tone="warning" onClick={() => model.setCashDialogSide("withdraw")}>
-            <Minus className="h-4 w-4" />
-            出金
-          </DeepLedgerActionButton>
-        </div>
+        <Link href="/daa/dashboard/workbench?tab=cash" className="inline-flex items-center rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--text)]">
+          去工作台记录
+        </Link>
       )}
       bodyClassName="pt-0"
     >
@@ -454,44 +428,6 @@ export function OverviewCashLedgerPanel({ model }: { model: PortfolioOverviewMod
         </Table>
       </div>
     </DeepLedgerPanel>
-  );
-}
-
-export function OverviewCashLedgerDialog({ model }: { model: PortfolioOverviewModel }) {
-  return (
-    <Dialog open={model.cashDialogOpen} onOpenChange={(open) => { if (!open) model.closeCashDialog(); }}>
-      <DialogContent className="max-w-md border-[var(--border)] bg-[var(--surface)] text-[var(--text)]">
-        <DialogHeader>
-          <DialogTitle>{model.cashDialogSide === "withdraw" ? "记录出金" : "记录入金"}</DialogTitle>
-          <DialogDescription>仅记录现金流水并更新现金余额，不会触发自动交易。</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div className="space-y-1.5">
-            <Label>币种</Label>
-            <select
-              value={model.cashCurrency}
-              onChange={(e) => model.setCashCurrency(e.target.value)}
-              className="h-10 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--elevated)] px-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.16)]"
-            >
-              {CASH_CURRENCY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>金额（{model.normalizeCashCurrency(model.cashCurrency)}）</Label>
-            <Input type="number" min="0" step="0.01" value={model.cashAmount} onChange={(e) => model.setCashAmount(e.target.value)} placeholder={`请输入 ${model.normalizeCashCurrency(model.cashCurrency)} 金额`} className="border-[var(--border-strong)] bg-[var(--elevated)]" />
-            <p className="text-xs text-[var(--muted)]">系统会按最新汇率折算到账户基准币 {model.baseCurrency} 后更新现金余额。</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label>备注（可选）</Label>
-            <Input value={model.cashNote} onChange={(e) => model.setCashNote(e.target.value)} placeholder="例如：工资入账 / 提现" className="border-[var(--border-strong)] bg-[var(--elevated)]" />
-          </div>
-        </div>
-        <DialogFooter>
-          <button type="button" onClick={model.closeCashDialog} className="rounded-xl border border-[var(--border-strong)] px-4 py-2 text-sm text-[var(--muted)] transition-all hover:border-[var(--primary)]/30 hover:text-[var(--text)]">取消</button>
-          <button type="button" onClick={() => void model.handleSubmitCashLedger()} disabled={model.cashSubmitting} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--bg)] transition-opacity hover:opacity-90 disabled:opacity-50">{model.cashSubmitting ? "提交中..." : "确认提交"}</button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

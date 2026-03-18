@@ -8,10 +8,10 @@ import type { PreTradeRiskCheck, RebalanceCycle, WorkbenchBootstrap } from "@/sr
 
 const DAA_DASHBOARD_REFRESH_EVENT_ = "daa:dashboard:refresh";
 
-export type WorkbenchTab = "positions" | "watchlist" | "discovery" | "rebalance";
+export type WorkbenchTab = "positions" | "watchlist" | "discovery" | "rebalance" | "cash";
 
 export function normalizeWorkbenchTab(input: string): WorkbenchTab {
-  if (input === "positions" || input === "watchlist" || input === "discovery" || input === "rebalance") return input;
+  if (input === "positions" || input === "watchlist" || input === "discovery" || input === "rebalance" || input === "cash") return input;
   return "positions";
 }
 
