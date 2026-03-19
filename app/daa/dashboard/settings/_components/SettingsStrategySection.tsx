@@ -205,6 +205,9 @@ export function SettingsStrategySection(props: {
               }
               placeholder="00:20"
             />
+            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
+              当前调度按整点 UTC 轮询；如果填写 10:51，实际会在 11:00 UTC 的窗口执行。若希望执行时间更直观，建议直接填写整点。
+            </div>
           </div>
 
           <div>

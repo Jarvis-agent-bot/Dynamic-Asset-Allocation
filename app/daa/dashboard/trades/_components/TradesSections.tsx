@@ -117,11 +117,18 @@ export function TradesHeader({ model }: { model: TradesModel }) {
 
 export function TradesSummaryMetrics({ model }: { model: TradesModel }) {
   const activityLabel = model.latestActivityAt ? `最近活动 ${formatDateTime(model.latestActivityAt)}` : "等待首个执行周期";
+  const notionalLabel = model.executedOrderCount <= 0
+    ? "仅统计已执行订单"
+    : model.manualExecutedNotional > 0 && model.cycleExecutedNotional > 0
+      ? `周期 ${formatCurrency(model.cycleExecutedNotional, model.baseCurrency)} · 手工 ${formatCurrency(model.manualExecutedNotional, model.baseCurrency)}`
+      : model.manualExecutedNotional > 0
+        ? "当前全部来自手工成交"
+        : "当前全部来自再平衡周期";
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <DeepLedgerMetricCard label="再平衡周期" value={`${model.cycles.length}`} subLabel={`已完成 ${model.completedCycleCount} 个`} accent="cyan" />
       <DeepLedgerMetricCard label="订单记录" value={`${model.orders.length}`} subLabel={`成交 ${model.executedOrderCount} 笔`} accent="green" />
-      <DeepLedgerMetricCard label="执行金额" value={formatCurrency(model.totalNotional, model.baseCurrency)} subLabel="累计周期名义金额" accent="amber" />
+      <DeepLedgerMetricCard label="成交金额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} subLabel={notionalLabel} accent="amber" />
       <DeepLedgerMetricCard label="已实现收益" value={formatCurrency(model.realizedPnl, model.baseCurrency)} subLabel={activityLabel} accent="indigo" />
     </div>
   );

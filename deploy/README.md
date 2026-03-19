@@ -19,9 +19,13 @@ chmod +x deploy/start.sh
 Next.js 监听 `127.0.0.1:3000`，建议 Nginx 配置：
 
 ```nginx
+location = /icon.svg    { proxy_pass http://127.0.0.1:3000; }
+location = /favicon.ico { proxy_pass http://127.0.0.1:3000; }
 location /daa/     { proxy_pass http://127.0.0.1:3000/daa/; }
 location /api/daa/ { proxy_pass http://127.0.0.1:3000/api/daa/; }
 ```
+
+如果站点还有通用静态资源规则（例如 `location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$`），要确保上面的两个根路径图标规则写在它前面，否则浏览器请求 `/icon.svg` 和 `/favicon.ico` 时会被错误转发到其他上游并返回 `404`。
 
 ## 定时任务
 
