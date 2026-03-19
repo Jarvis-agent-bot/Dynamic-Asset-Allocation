@@ -1,0 +1,67 @@
+import type { DaaChatIntentKind } from "./chatTypes";
+
+export type DaaAssistantIntent =
+  | { kind: "help"; rawText: string }
+  | { kind: "portfolio_status"; rawText: string }
+  | { kind: "risk_status"; rawText: string }
+  | { kind: "market_status"; rawText: string }
+  | { kind: "latest_cycle"; rawText: string }
+  | { kind: "rebalance_generate"; rawText: string }
+  | { kind: "rebalance_execute"; rawText: string; executeMode: "all" }
+  | { kind: "trade"; rawText: string; side: "BUY" | "SELL"; symbol: string; qty: number | null; notional: number | null }
+  | { kind: "unknown"; rawText: string };
+
+const BUY_WORDS = /(^|[\s，,。.!?？；;])(买入|买|buy)\s+/i;
+const SELL_WORDS = /(^|[\s，,。.!?？；;])(卖出|卖|sell)\s+/i;
+const TRADE_PATTERN = /(买入|买|buy|卖出|卖|sell)\s+([A-Za-z][A-Za-z0-9.\-]{0,20})(?:\s+([\d.]+)\s*(股|份|usd|usdt|美元|刀|元)?)?/i;
+
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function toIntentKind(intent: DaaAssistantIntent): DaaChatIntentKind {
+  return intent.kind;
+}
+
+function parseTrade(text: string): DaaAssistantIntent | null {
+  const match = text.match(TRADE_PATTERN);
+  if (!match) return null;
+  const action = String(match[1] || "").toLowerCase();
+  const symbol = String(match[2] || "").trim().toUpperCase();
+  const amount = match[3] == null ? null : Number(match[3]);
+  const unit = String(match[4] || "").trim().toLowerCase();
+  if (!symbol) return null;
+  const side = (action === "卖" || action === "卖出" || action === "sell") ? "SELL" : "BUY";
+  const isNotional = unit === "usd" || unit === "usdt" || unit === "美元" || unit === "刀" || unit === "元";
+  return {
+    kind: "trade",
+    rawText: text,
+    side,
+    symbol,
+    qty: amount == null ? null : isNotional ? null : amount,
+    notional: amount == null ? null : isNotional ? amount : null,
+  };
+}
+
+export function parseAssistantIntent(raw: string): DaaAssistantIntent {
+  const text = normalizeText(raw);
+  if (!text) return { kind: "help", rawText: raw };
+
+  if (/^\/?(help|start|帮助|说明)$/i.test(text)) return { kind: "help", rawText: text };
+  if (/^\/?(status|portfolio|持仓|仓位|组合|账户|状态)$/i.test(text) || /组合.*(状态|仓位|持仓)/.test(text)) {
+    return { kind: "portfolio_status", rawText: text };
+  }
+  if (/风险|风控|risk/i.test(text)) return { kind: "risk_status", rawText: text };
+  if (/市场|行情|market/i.test(text) && !/买入|卖出|buy|sell/i.test(text)) return { kind: "market_status", rawText: text };
+  if (/最近.*(调仓|周期|再平衡)|latest cycle|最近一次/.test(text)) return { kind: "latest_cycle", rawText: text };
+  if (/生成.*(调仓|再平衡)|\/rebalance\s+generate/i.test(text)) return { kind: "rebalance_generate", rawText: text };
+  if (/执行.*(调仓|再平衡)|\/rebalance\s+(exec|execute)/i.test(text)) return { kind: "rebalance_execute", rawText: text, executeMode: "all" };
+  if (BUY_WORDS.test(text) || SELL_WORDS.test(text)) {
+    return parseTrade(text) || { kind: "unknown", rawText: text };
+  }
+  return { kind: "unknown", rawText: text };
+}
+
+export function assistantIntentKind(intent: DaaAssistantIntent): DaaChatIntentKind {
+  return toIntentKind(intent);
+}

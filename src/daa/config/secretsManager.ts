@@ -22,6 +22,8 @@ export const SECRET_KEY_DEFS_ = [
   { key: "llm_model", label: "LLM Model", group: "llm", envVars: ["DAA_LLM_MODEL"], sensitive: false },
   { key: "telegram_bot_token", label: "Telegram Bot Token", group: "telegram", envVars: ["TELEGRAM_BOT_TOKEN", "DAA_TELEGRAM_BOT_TOKEN"], sensitive: true },
   { key: "telegram_chat_id", label: "Telegram Chat ID", group: "telegram", envVars: ["TELEGRAM_CHAT_ID", "DAA_TELEGRAM_CHAT_ID"], sensitive: false },
+  { key: "telegram_webhook_secret", label: "Telegram Webhook Secret", group: "telegram", envVars: ["TELEGRAM_WEBHOOK_SECRET", "DAA_TELEGRAM_WEBHOOK_SECRET"], sensitive: true },
+  { key: "telegram_allowlist", label: "Telegram Allowlist", group: "telegram", envVars: ["TELEGRAM_ALLOWLIST", "DAA_TELEGRAM_ALLOWLIST"], sensitive: false },
   { key: "feishu_webhook_url", label: "Feishu Webhook URL", group: "feishu", envVars: ["FEISHU_WEBHOOK_URL", "DAA_FEISHU_WEBHOOK_URL"], sensitive: true },
   { key: "supabase_service_role_key", label: "Supabase Service Role Key", group: "supabase", envVars: ["SUPABASE_SERVICE_ROLE_KEY"], sensitive: true },
   { key: "supabase_url", label: "Supabase URL", group: "supabase", envVars: ["NEXT_PUBLIC_SUPABASE_URL"], sensitive: false, readOnly: true },

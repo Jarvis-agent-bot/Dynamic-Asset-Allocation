@@ -13,6 +13,7 @@ import {
   DeepLedgerStatusPill,
 } from "@/app/daa/dashboard/_components/DeepLedgerUI";
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
+import { WorkbenchAssistantPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchAssistantPanel";
 
 const PIE_COLORS = ["#38BDF8", "#818CF8", "#34D399", "#F6AD55", "#F87171", "#A78BFA"];
 
@@ -55,6 +56,8 @@ export function WorkbenchCockpitSection(props: {
 
   return (
     <div className="space-y-4">
+      <WorkbenchAssistantPanel assistant={model.assistant} />
+
       <div className="grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
         <DeepLedgerPanel
           accent="amber"

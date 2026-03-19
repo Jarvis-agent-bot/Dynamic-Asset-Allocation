@@ -18,7 +18,7 @@ type Props = {
 const SECTION_META = {
   workbench: {
     label: "工作台",
-    hint: "总览、组合、调仓和现金都在这里处理",
+    hint: "助手、组合、调仓和现金都在这里处理",
   },
   "strategy-lab": {
     label: "策略实验室",

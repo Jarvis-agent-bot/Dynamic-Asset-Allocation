@@ -21,7 +21,7 @@ import {
 
 const GROUP_META: Record<string, { label: string; order: number }> = {
   llm: { label: "LLM 分析 (DeepSeek)", order: 0 },
-  telegram: { label: "Telegram", order: 1 },
+  telegram: { label: "Telegram / 助手", order: 1 },
   feishu: { label: "飞书 (Lark)", order: 2 },
   supabase: { label: "Supabase 认证", order: 3 },
   cron: { label: "定时任务", order: 4 },
