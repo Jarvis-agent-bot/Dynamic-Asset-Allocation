@@ -2,6 +2,7 @@ import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
+import { syncActiveBrokerSnapshotToStore } from "@/src/daa/broker";
 import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
 import { runLlmDecision } from "@/src/daa/llm/llmDecision";
 import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
@@ -195,6 +196,12 @@ export async function buildUnifiedRequestFromStore(): Promise<{
   baseCurrency: string;
   assetRows: Awaited<ReturnType<typeof listDaaAssetUniverse>>;
 }> {
+  try {
+    await syncActiveBrokerSnapshotToStore();
+  } catch {
+    // 外部 broker 不可用时回退本地快照，避免阻塞策略生成
+  }
+
   const [systemRow, assetRows, fxRates, snapshots] = await Promise.all([
     getDaaSystemConfig(),
     listDaaAssetUniverse(),
@@ -303,9 +310,20 @@ export async function buildWorkbenchBootstrap(opts: {
   autoRiskCycle?: boolean;
   forceRefreshAllPrices?: boolean;
   maxSyncTargets?: number;
+  syncBroker?: boolean;
 } = {}): Promise<WorkbenchBootstrap> {
   const shouldSyncPrices = opts.syncPrices !== false;
   const shouldAutoRiskCycle = opts.autoRiskCycle === true;
+  const shouldSyncBroker = opts.syncBroker !== false;
+  let brokerSyncFailed = false;
+
+  if (shouldSyncBroker) {
+    try {
+      await syncActiveBrokerSnapshotToStore();
+    } catch {
+      brokerSyncFailed = true;
+    }
+  }
 
   if (shouldSyncPrices) {
     try {
@@ -420,6 +438,9 @@ export async function buildWorkbenchBootstrap(opts: {
     .slice(0, 200);
 
   const warnings: string[] = [];
+  if (brokerSyncFailed) {
+    warnings.push("外部 broker 账户快照同步失败，工作台已回退到本地快照。");
+  }
   const marketDataHealth = buildWorkbenchMarketDataHealth({
     cacheReadFailed: marketCacheReadFailed,
     stats: marketCacheStats,

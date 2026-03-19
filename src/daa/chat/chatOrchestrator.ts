@@ -165,8 +165,11 @@ function formatTradeReceipt(input: {
   execution: Awaited<ReturnType<typeof executeManualTrade>>;
 }): string {
   const previewWarnings = input.preview.warnings.slice(0, 3).map((item) => `- ${item}`).join("\n");
+  const brokerText = input.execution.broker?.kind === "ibkr_paper"
+    ? `已提交到 IBKR 模拟盘，远端状态 ${input.execution.broker.remoteStatus}。`
+    : "已提交模拟执行。";
   return [
-    `${input.side === "BUY" ? "买入" : "卖出"} ${input.symbol} 已提交模拟执行。`,
+    `${input.side === "BUY" ? "买入" : "卖出"} ${input.symbol} ${brokerText}`,
     `数量 ${input.qty.toFixed(6)}，价格 ${input.preview.price.toFixed(4)} ${input.preview.currency}，名义 ${formatMoney(input.preview.notionalInBase, input.preview.baseCurrency)}。`,
     `结果：${input.execution.result.status}，工单 ${input.execution.item.ticketId.slice(0, 8)}。`,
     previewWarnings ? `执行前提醒：\n${previewWarnings}` : "",

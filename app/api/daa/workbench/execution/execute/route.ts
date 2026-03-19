@@ -79,6 +79,11 @@ export async function POST(req: Request) {
             side: execution.side,
             qty: execution.item.qty,
             notionalInBase: execution.notionalInBase,
+            broker: execution.broker ? {
+              kind: execution.broker.kind,
+              remoteOrderId: execution.broker.remoteOrderId,
+              remoteStatus: execution.broker.remoteStatus,
+            } : null,
           },
         };
         await Promise.allSettled([
@@ -95,6 +100,7 @@ export async function POST(req: Request) {
       result: execution.result,
       summary: execution.summary,
       logs: execution.logs,
+      broker: execution.broker,
     });
   });
 }

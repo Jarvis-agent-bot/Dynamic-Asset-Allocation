@@ -1175,6 +1175,31 @@ export async function getDaaAccountState(): Promise<DaaStoreAccountState> {
   return withDaaPgClient(async ({ query }) => ensureAccountStateRowInTx(query as any));
 }
 
+export async function replaceDaaAccountState(input: {
+  baseCurrency?: string;
+  cash?: number;
+  investableCash?: number;
+  frozenCash?: number;
+  totalEquity?: number | null;
+}): Promise<DaaStoreAccountState> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      const account = await writeAccountStateInTx(query as any, input);
+      await query("COMMIT");
+      return account;
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
+}
+
 export async function saveDaaSystemConfig(input: {
   config: unknown;
   baseVersion?: number;

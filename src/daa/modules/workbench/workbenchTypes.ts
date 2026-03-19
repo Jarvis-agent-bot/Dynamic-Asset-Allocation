@@ -1,3 +1,4 @@
+import type { DaaBrokerKind } from "@/src/daa/broker";
 import type { TradeTicketSide, TradeTicketSource, TradeTicketStatus, TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 import type {
   DaaMarketContextAttribution,
@@ -504,6 +505,15 @@ export type WorkbenchExecutionExecuteResult = {
     total: number;
   };
   logs: TradeTicket[];
+  broker?: {
+    kind: DaaBrokerKind;
+    accountId: string;
+    accepted: boolean;
+    remoteStatus: string;
+    remoteOrderId: string;
+    messages: string[];
+    warnings: string[];
+  } | null;
 };
 
 export type WorkbenchSearchAssetResult = {

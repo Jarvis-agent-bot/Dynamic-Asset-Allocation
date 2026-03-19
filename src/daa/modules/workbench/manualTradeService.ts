@@ -1,8 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
+import { resolveActiveBrokerAdapter, syncActiveBrokerSnapshotToStore, type DaaBrokerBackedExecutionResult } from "@/src/daa/broker";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
+import type { TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 import {
   createDaaTradeTicket,
   executeDaaTradeTickets,
@@ -89,6 +93,8 @@ export type ExecuteManualTradeInput = {
   createdBy?: unknown;
 };
 
+export type ExecuteManualTradeResult = DaaBrokerBackedExecutionResult;
+
 function toPositive(v: unknown): number {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return 0;
@@ -108,6 +114,15 @@ function normalizeSource(v: unknown): "manual" | "decision" {
   return "manual";
 }
 
+function normalizePricingMode(v: unknown): "manual" | "market" {
+  return String(v || "").trim().toLowerCase() === "market" ? "market" : "manual";
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error || "unknown_error");
+}
+
 function throwManualTradeError(
   code: string,
   message: string,
@@ -121,12 +136,12 @@ export async function previewManualTrade(input: PreviewManualTradeInput): Promis
   const parsed = parseDaaAssetKey(input.assetKey);
   if (!parsed) throwManualTradeError("VALIDATION_FAILED", "assetKey is required", 400);
 
-  const [bootstrap, fxRows, universeRows, systemRow] = await Promise.all([
+  const [bootstrap, fxRows, systemRow] = await Promise.all([
     buildWorkbenchBootstrap({ syncPrices: false }),
     listDaaFxRates(),
-    listDaaAssetUniverse(),
     getDaaSystemConfig(),
   ]);
+  const universeRows = await listDaaAssetUniverse();
   const defaultFeeRateBps = getStrategyExecutionConfig(systemRow.config).feeRateBps;
   const feeRateBps = toNonNegative(input.feeRateBps) ?? defaultFeeRateBps;
 
@@ -339,6 +354,11 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
   const notionalInBase = qty * price * fxRateToBase;
   const feeInBase = fee * fxRateToBase;
   const totalCostInBase = side === "BUY" ? (notionalInBase + feeInBase) : Math.max(0, notionalInBase - feeInBase);
+  const pricingMode = normalizePricingMode(input.pricingMode);
+  const assetKey = String(input.assetKey || "").trim() || `${market}::${symbol}`;
+  const reasonTags = normalizeReasonTags(input.reasonTags);
+  const reasonText = String(input.reasonText || "").trim() || null;
+  const createdBy = String(input.createdBy || "").trim() || "admin";
   const accountConfig = systemRow.config.strategy.account;
   const investableCash = resolveInvestableCash({
     cash: accountConfig.cash,
@@ -356,7 +376,7 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
 
   const manualRiskCheck = await validateExecutionRisk({
     manualProposal: {
-      assetKey: String(input.assetKey || "").trim() || `${market}::${symbol}`,
+      assetKey,
       symbol,
       currency: instrumentCurrency,
       side,
@@ -376,52 +396,156 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
     });
   }
 
-  const item = await createDaaTradeTicket({
+  const broker = await resolveActiveBrokerAdapter();
+  if (broker.kind === "sim") {
+    const item = await createDaaTradeTicket({
+      source,
+      side,
+      assetKey,
+      cycleId: String(input.cycleId || "").trim() || undefined,
+      symbol,
+      market,
+      instrumentCurrency,
+      qty,
+      price,
+      fee,
+      pricingMode,
+      priceSource: String(input.priceSource || "").trim() || undefined,
+      priceSnapshotAt: String(input.priceSnapshotAt || "").trim() || undefined,
+      decisionRefId: String(input.decisionRefId || "").trim() || null,
+      reasonTags,
+      reasonText: reasonText || undefined,
+      createdBy,
+    });
+
+    const executed = await executeDaaTradeTickets({ ticketIds: [item.ticketId] });
+    const result = executed.results[0] || {
+      ticketId: item.ticketId,
+      status: "rejected" as const,
+      rejectCode: "UNKNOWN",
+      rejectMessage: "execution result missing",
+    };
+    const logs = await listDaaTradeTickets({ limit: 200 });
+    const responseItem = executed.tickets.find((ticket) => ticket.ticketId === item.ticketId) || item;
+    const responseLogs = logs.filter((row) => row.status !== "ready");
+    const summary = {
+      executed: executed.results.filter((row) => row.status === "executed").length,
+      rejected: executed.results.filter((row) => row.status === "rejected").length,
+      total: executed.results.length,
+    };
+
+    return {
+      item: responseItem,
+      result,
+      summary,
+      logs: responseLogs,
+      baseCurrency,
+      notionalInBase,
+      feeInBase,
+      source,
+      side,
+      symbol,
+      broker: null,
+    } satisfies ExecuteManualTradeResult;
+  }
+
+  let placed;
+  try {
+    placed = await broker.placeOrder({
+      assetKey,
+      symbol,
+      market,
+      currency: instrumentCurrency,
+      side,
+      qty,
+      orderType: pricingMode === "market" ? "MKT" : "LMT",
+      referencePrice: price,
+      limitPrice: pricingMode === "manual" ? price : null,
+      reasonText,
+      tags: reasonTags,
+      createdBy,
+    });
+  } catch (error) {
+    throwManualTradeError("BROKER_ORDER_FAILED", normalizeErrorMessage(error), 502);
+  }
+
+  try {
+    await syncActiveBrokerSnapshotToStore();
+  } catch {
+    // 远端 broker 已受理时，不因为同步失败阻断响应
+  }
+
+  const ticketId = `${broker.kind}:${placed.order.orderId || randomUUID()}`;
+  const nowIso = new Date().toISOString();
+  const acceptedStatus = placed.accepted ? "executed" : "rejected";
+  const mirrorTicket: TradeTicket = {
+    ticketId,
+    basketId: `${broker.kind}:remote`,
+    assetKey,
+    cycleId: String(input.cycleId || "").trim() || null,
     source,
-    side,
-    assetKey: String(input.assetKey || "").trim() || undefined,
-    cycleId: String(input.cycleId || "").trim() || undefined,
+    status: acceptedStatus,
     symbol,
     market,
     instrumentCurrency,
+    baseCurrency,
+    side,
     qty,
     price,
     fee,
-    pricingMode: String(input.pricingMode || "").trim().toLowerCase() === "market" ? "market" : "manual",
-    priceSource: String(input.priceSource || "").trim() || undefined,
-    priceSnapshotAt: String(input.priceSnapshotAt || "").trim() || undefined,
+    grossNotional: qty * price,
+    fxRateToBase,
+    notionalInBase,
     decisionRefId: String(input.decisionRefId || "").trim() || null,
-    reasonTags: normalizeReasonTags(input.reasonTags),
-    reasonText: String(input.reasonText || "").trim() || undefined,
-    createdBy: String(input.createdBy || "").trim() || "admin",
-  });
-
-  const executed = await executeDaaTradeTickets({ ticketIds: [item.ticketId] });
-  const result = executed.results[0] || {
-    ticketId: item.ticketId,
-    status: "rejected" as const,
-    rejectCode: "UNKNOWN",
-    rejectMessage: "execution result missing",
-  };
-  const logs = await listDaaTradeTickets({ limit: 200 });
-  const responseItem = executed.tickets.find((ticket) => ticket.ticketId === item.ticketId) || item;
-  const responseLogs = logs.filter((row) => row.status !== "ready");
-  const summary = {
-    executed: executed.results.filter((row) => row.status === "executed").length,
-    rejected: executed.results.filter((row) => row.status === "rejected").length,
-    total: executed.results.length,
+    reasonTags,
+    reasonText,
+    snapshotBefore: {},
+    snapshotAfter: null,
+    rejectCode: placed.accepted ? null : "BROKER_ORDER_REJECTED",
+    rejectMessage: placed.accepted ? null : (placed.warnings[0] || placed.messages[0] || "broker rejected"),
+    pricingMode,
+    priceSource: String(input.priceSource || "").trim() || null,
+    priceSnapshotAt: String(input.priceSnapshotAt || "").trim() || null,
+    createdBy,
+    createdAt: nowIso,
+    executedAt: placed.accepted ? nowIso : null,
+    canceledAt: null,
+    updatedAt: nowIso,
   };
 
   return {
-    item: responseItem,
-    result,
-    summary,
-    logs: responseLogs,
+    item: mirrorTicket,
+    result: placed.accepted
+      ? {
+        ticketId,
+        status: "executed",
+      }
+      : {
+        ticketId,
+        status: "rejected",
+        rejectCode: "BROKER_ORDER_REJECTED",
+        rejectMessage: placed.warnings[0] || placed.messages[0] || "broker rejected",
+      },
+    summary: {
+      executed: placed.accepted ? 1 : 0,
+      rejected: placed.accepted ? 0 : 1,
+      total: 1,
+    },
+    logs: [],
     baseCurrency,
     notionalInBase,
     feeInBase,
     source,
     side,
     symbol,
-  };
+    broker: {
+      kind: broker.kind,
+      accountId: placed.order.accountId,
+      accepted: placed.accepted,
+      remoteStatus: placed.order.status,
+      remoteOrderId: placed.order.orderId,
+      messages: placed.messages,
+      warnings: placed.warnings,
+    },
+  } satisfies ExecuteManualTradeResult;
 }
