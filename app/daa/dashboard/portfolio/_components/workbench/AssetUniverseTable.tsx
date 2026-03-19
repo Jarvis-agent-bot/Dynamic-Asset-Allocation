@@ -66,10 +66,43 @@ function passFilter(row: AssetUniverseView, view: AssetUniverseViewFilter): bool
 }
 
 function viewLabel(view: AssetUniverseViewFilter): string {
-  if (view === "holdings") return "持仓视图";
+  if (view === "holdings") return "当前持仓";
   if (view === "watchlist") return "观察列表";
-  if (view === "basket") return "再平衡篮子";
-  return "全部资产";
+  if (view === "basket") return "调仓范围";
+  return "全部标的";
+}
+
+function rowStatusTone(input: { holdingQty: number; watchEnabled: boolean; inBasket: boolean }): "green" | "cyan" | "indigo" | "slate" {
+  if (input.inBasket) return "indigo";
+  if (input.holdingQty > 0) return "green";
+  if (input.watchEnabled) return "cyan";
+  return "slate";
+}
+
+function rowStatusLabel(input: { holdingQty: number; watchEnabled: boolean; inBasket: boolean }): string {
+  if (input.inBasket && input.holdingQty > 0) return "已持仓，待调仓";
+  if (input.inBasket) return "观察中，待建仓";
+  if (input.holdingQty > 0 && input.watchEnabled) return "已持仓，已观察";
+  if (input.holdingQty > 0) return "已持仓";
+  if (input.watchEnabled) return "观察中";
+  return "未跟踪";
+}
+
+function rowMarketLine(row: AssetUniverseView): string {
+  const parts = [row.market, row.currency];
+  if (row.yfinanceSymbol && row.yfinanceSymbol !== row.symbol) {
+    parts.push(`映射 ${row.yfinanceSymbol}`);
+  }
+  return parts.join(" · ");
+}
+
+function rowTagSummary(row: AssetUniverseView): string | null {
+  const merged = [...row.watchTags, ...row.holdingTags]
+    .map((tag) => String(tag || "").trim())
+    .filter(Boolean);
+  const unique = Array.from(new Set(merged));
+  if (unique.length === 0) return null;
+  return unique.slice(0, 3).join(" / ");
 }
 
 function fxLabel(row: AssetUniverseView): string {
@@ -869,7 +902,7 @@ export default function AssetUniverseTable(props: {
                 {viewLabel(props.view)}
               </div>
               <div className="mt-3 max-w-2xl text-[13px] leading-6 text-[var(--muted)]">
-                先把标的加入观察列表，再维护研究目标；目标大于 0 即进入再平衡篮子，但这里只改目标，不会直接下单。
+                先把标的加入观察列表，再填写目标仓位；目标大于 0 就会进入调仓范围，但这里只改目标，不会直接下单。
               </div>
             </div>
             <DeepLedgerActionButton
@@ -879,7 +912,7 @@ export default function AssetUniverseTable(props: {
               disabled={props.disabled || props.updatingTarget}
             >
               {props.updatingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-{props.updatingTarget ? "处理中..." : "研究目标归一到 100%"}
+{props.updatingTarget ? "处理中..." : "目标仓位补齐到 100%"}
             </DeepLedgerActionButton>
           </div>
         </div>
@@ -890,7 +923,7 @@ export default function AssetUniverseTable(props: {
           <DeepLedgerMiniStat label="再平衡篮子" value={props.counts.basket} tone="indigo" />
           <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.74)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">搜索定位</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">搜索标的</div>
               {hasKeyword ? <DeepLedgerStatusPill tone="indigo">筛选中</DeepLedgerStatusPill> : null}
             </div>
             <div className={cn(deepLedgerSearchShellClassName, "mt-2 h-9")}>
@@ -900,7 +933,7 @@ export default function AssetUniverseTable(props: {
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
                 className="h-9 w-full bg-transparent text-xs text-[var(--text)] outline-none placeholder:text-[var(--faint)]"
-                placeholder="搜索代码/市场/行情标识"
+                placeholder="搜索代码、市场或行情映射"
               />
             </div>
             <div className="mt-2 flex min-h-5 items-center justify-end text-[11px]">
@@ -909,7 +942,7 @@ export default function AssetUniverseTable(props: {
                   清空搜索
                 </DeepLedgerActionButton>
               ) : (
-                <span className="text-[11px] text-[var(--faint)]">支持代码、市场、行情标识模糊过滤</span>
+                <span className="text-[11px] text-[var(--faint)]">支持代码、市场、行情映射模糊过滤</span>
               )}
             </div>
           </div>
@@ -918,7 +951,7 @@ export default function AssetUniverseTable(props: {
 
       <div className={cn(deepLedgerTableShellClassName, "overflow-x-auto")}>
         <div className="border-b border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-2.5 text-[11px] text-[var(--faint)]">
-          左侧信息区可横向浏览，右侧操作区固定；建议先看偏离和汇率折算，再决定买入或卖出。
+          表格较宽，右侧买卖区固定；建议先看偏离和汇率，再决定操作。
         </div>
         <TooltipProvider delayDuration={120}>
           <table className="min-w-[1320px] w-full border-collapse">
@@ -938,12 +971,12 @@ export default function AssetUniverseTable(props: {
             <thead>
               <tr>
                 <th className={deepLedgerTableHeadClassName}>标的 / 定位</th>
-                <th className={deepLedgerTableHeadClassName}>类别 / 标签</th>
+                <th className={deepLedgerTableHeadClassName}>类型 / 补充</th>
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>持仓 / 成本</th>
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>价格 / 刷新</th>
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>本币估值</th>
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>实际 / 浮盈亏</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>研究目标</th>
+                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>目标仓位</th>
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>偏离</th>
                 <th className={deepLedgerTableHeadClassName}>人因 / 观点</th>
                 <th className={cn(deepLedgerTableHeadClassName, "text-right")}>汇率</th>
@@ -984,6 +1017,7 @@ export default function AssetUniverseTable(props: {
                 const rowPnlPct = unrealizedPnlPct(row);
                 const valuationScore = props.insightDataByAssetKey[row.assetKey]?.valuation?.scorePct ?? null;
                 const valuationTemp = valuationTemperatureMeta(valuationScore);
+                const tagSummary = rowTagSummary(row);
 
                 const buyReason = disabledReason({
                   disabled: buyDisabled,
@@ -1011,12 +1045,12 @@ export default function AssetUniverseTable(props: {
                         <div className="max-w-[320px]">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="font-semibold tracking-[-0.01em] text-[var(--text)]">{row.symbol}</div>
-                            {row.holdingQty > 0 ? <DeepLedgerStatusPill tone="green">持仓</DeepLedgerStatusPill> : null}
-                            {row.watchEnabled ? <DeepLedgerStatusPill tone="cyan">观察</DeepLedgerStatusPill> : null}
-                            {inBasket ? <DeepLedgerStatusPill tone="indigo">再平衡</DeepLedgerStatusPill> : null}
+                            <DeepLedgerStatusPill tone={rowStatusTone({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}>
+                              {rowStatusLabel({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}
+                            </DeepLedgerStatusPill>
                           </div>
                           <div className="mt-1 truncate text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
-                            {row.market} · {row.currency} · 行情 {row.yfinanceSymbol || "-"}
+                            {rowMarketLine(row)}
                           </div>
                           {row.notes ? <div className="mt-2 truncate text-[11px] leading-5 text-[var(--muted)]">{row.notes}</div> : null}
                         </div>
@@ -1024,10 +1058,7 @@ export default function AssetUniverseTable(props: {
                       <td className="px-4 py-3 align-top text-[11px] text-[var(--muted)]">
                         <div className="truncate">{row.assetClass} · {row.region}</div>
                         <div className="mt-1 text-[11px] text-[var(--faint)]">{row.instrumentType || row.exchange || "类型待补充"}</div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {row.watchTags.slice(0, 2).map((tag) => <DeepLedgerStatusPill key={`${row.assetKey}-watch-${tag}`} tone="slate">{tag}</DeepLedgerStatusPill>)}
-                          {row.holdingTags.slice(0, 1).map((tag) => <DeepLedgerStatusPill key={`${row.assetKey}-holding-${tag}`} tone="slate">{tag}</DeepLedgerStatusPill>)}
-                        </div>
+                        {tagSummary ? <div className="mt-2 text-[11px] text-[var(--faint)]">标签：{tagSummary}</div> : null}
                       </td>
                       <td className="px-4 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
                         <div>{row.holdingQty.toFixed(4)}</div>

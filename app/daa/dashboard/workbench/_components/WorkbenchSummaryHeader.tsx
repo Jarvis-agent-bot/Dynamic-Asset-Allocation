@@ -64,12 +64,12 @@ export function WorkbenchSummaryHeader(props: {
     {
       label: "总权益",
       value: formatMetricValue(props.totalEquity, props.baseCurrency, props.loading),
-      hint: "持仓 + 可用现金 + 冻结现金",
+      hint: "持仓市值 + 可用现金 + 冻结现金",
     },
     {
-      label: "持仓",
+      label: "持仓市值",
       value: formatMetricValue(props.holdingsValue, props.baseCurrency, props.loading),
-      hint: "已持有资产当前估值",
+      hint: "当前持仓按最新价格估算",
     },
     {
       label: "可用现金",
@@ -113,24 +113,23 @@ export function WorkbenchSummaryHeader(props: {
         <div className="mt-4 grid gap-3 xl:grid-cols-3">
           <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">当前账本</div>
-              <DeepLedgerStatusPill tone="indigo">仅展示当前账本</DeepLedgerStatusPill>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">当前账本起点</div>
             </div>
             <div className="mt-3 text-sm text-[var(--text)]">
               {props.loading ? "正在同步账本元数据" : props.ledgerMeta?.ledgerStartTs ? formatDateTime(props.ledgerMeta.ledgerStartTs) : "尚未建立账本起点"}
             </div>
             <div className="mt-2 text-xs text-[var(--muted)]">
-              期初余额 {props.loading ? "—" : formatCurrency(props.ledgerMeta?.openingBalance || 0, props.baseCurrency)}
+              期初现金 {props.loading ? "—" : formatCurrency(props.ledgerMeta?.openingBalance || 0, props.baseCurrency)}
             </div>
             <div className="mt-3 text-xs leading-5 text-[var(--faint)]">
-              账本重置后，工作台与交易记录只展示这次起点之后的数据，避免历史测试数据继续污染当前判断。
+              从这个时间点之后的数据才会参与当前工作台和交易记录，旧测试记录不会继续混进来。
             </div>
           </div>
 
           <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">历史归档</div>
-              <DeepLedgerStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已归档" : "无历史噪音"}</DeepLedgerStatusPill>
+              <DeepLedgerStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已归档" : "暂无归档"}</DeepLedgerStatusPill>
             </div>
             <div className="mt-3 grid gap-2 text-sm text-[var(--text)] sm:grid-cols-3">
               <div>归档周期 {props.loading ? "—" : (props.ledgerMeta?.archivedCycleCount || 0).toString()}</div>
@@ -141,8 +140,8 @@ export function WorkbenchSummaryHeader(props: {
               {props.loading
                 ? "正在读取归档计数，避免在未加载完成前误判为“没有数据”。"
                 : archivedTotal > 0
-                  ? "如果当前交易页为空，先看这里是否已经把旧测试周期归档了。"
-                  : "当前环境还没有需要额外解释的历史归档。"}
+                  ? "如果交易页看起来偏空，先看这里；很可能是旧测试记录已经被收起。"
+                  : "当前环境还没有需要单独收起的历史记录。"}
             </div>
             <div className="mt-3">
               <Link href="/daa/dashboard/trades" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
@@ -153,9 +152,9 @@ export function WorkbenchSummaryHeader(props: {
 
           <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">通知链路</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">通知状态</div>
               <DeepLedgerStatusPill tone={props.notificationStatus?.cronConfigured ? "green" : "amber"}>
-                {props.notificationStatus?.cronConfigured ? "Cron 已配置" : "Cron 未配置"}
+                {props.notificationStatus?.cronConfigured ? "Cron 正常" : "Cron 待配置"}
               </DeepLedgerStatusPill>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -168,14 +167,14 @@ export function WorkbenchSummaryHeader(props: {
             </div>
             <div className="mt-3 text-xs leading-5 text-[var(--muted)]">
               {props.loading
-                ? "通知状态会在工作台初次同步完成后显示，避免把“未加载”误读成“没有推送”。"
+                ? "通知状态会在工作台初次同步完成后显示，不会把“未加载”误读成“没配置”。"
                 : telegramStatus?.lastFailureAt || feishuStatus?.lastFailureAt
                   ? `最近异常：${telegramStatus?.lastFailureAt && notificationTone(telegramStatus) === "amber"
                     ? `Telegram ${formatDateTime(telegramStatus.lastFailureAt)}`
                     : feishuStatus?.lastFailureAt
                       ? `飞书 ${formatDateTime(feishuStatus.lastFailureAt)}`
                       : "通知失败"}`
-                  : "这里会直接提示凭证缺失、最近失败和是否从未真正投递过。"}
+                  : "这里直接告诉你通知有没有接通、最近有没有真正发出去。"}
             </div>
             <div className="mt-3">
               <Link href="/daa/dashboard/settings#settings-notification" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">

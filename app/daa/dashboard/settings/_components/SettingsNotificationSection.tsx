@@ -167,14 +167,20 @@ function ChannelConfigCard(props: {
   tradeEnabled: boolean;
   dailyReportEnabled: boolean;
   summary: StoreNotificationStatusSummary["channels"]["telegram"] | StoreNotificationStatusSummary["channels"]["feishu"] | null;
+  statusLoading: boolean;
   onSendTest: () => void;
   testing: boolean;
   testDisabledReason?: string | null;
 }) {
-  const eventsText = props.summary?.deliveryEvents?.length
-    ? `已保存触发：${props.summary.deliveryEvents.join(" / ")}`
-    : "已保存触发：当前未开启任何事件";
-  const testDisabled = props.testing || Boolean(props.testDisabledReason);
+  const eventsText = props.statusLoading
+    ? "已保存触发：正在读取"
+    : props.summary?.deliveryEvents?.length
+      ? `已保存触发：${props.summary.deliveryEvents.join(" / ")}`
+      : "已保存触发：当前未开启任何事件";
+  const effectiveDisabledReason = props.statusLoading
+    ? "正在读取已保存状态，请稍后再试。"
+    : props.testDisabledReason || null;
+  const testDisabled = props.testing || Boolean(effectiveDisabledReason);
 
   return (
     <SubsectionCard
@@ -183,7 +189,7 @@ function ChannelConfigCard(props: {
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <DeepLedgerStatusPill tone={props.summary ? channelPillTone(props.summary) : "slate"}>
-          {props.summary ? channelPillText(props.summary) : "状态加载中"}
+          {props.statusLoading ? "加载中" : props.summary ? channelPillText(props.summary) : "状态未知"}
         </DeepLedgerStatusPill>
         <div style={{ fontSize: 11, color: "var(--faint)" }}>{eventsText}</div>
       </div>
@@ -192,19 +198,21 @@ function ChannelConfigCard(props: {
         <div style={statusTileStyle}>
           <div style={{ fontSize: 11, color: "var(--faint)" }}>凭证状态</div>
           <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)" }}>
-            {props.summary?.configured ? "已配置完整" : "缺少凭证"}
+            {props.statusLoading ? "加载中" : props.summary?.configured ? "已配置完整" : "缺少凭证"}
           </div>
           <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)" }}>
-            {props.summary?.secretStates?.length
+            {props.statusLoading
+              ? "正在读取凭证状态"
+              : props.summary?.secretStates?.length
               ? props.summary.secretStates.map((item) => `${item.key} ${item.configured ? "已配置" : "缺失"}`).join(" · ")
-              : "等待状态加载"}
+              : "暂无凭证状态"}
           </div>
         </div>
         <div style={statusTileStyle}>
           <div style={{ fontSize: 11, color: "var(--faint)" }}>最近投递</div>
-          <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)" }}>{formatSummaryTime(props.summary?.lastAttemptAt)}</div>
+          <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)" }}>{props.statusLoading ? "加载中" : formatSummaryTime(props.summary?.lastAttemptAt)}</div>
           <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)" }}>
-            {props.summary?.lastErrorMessage || "这里会显示最近一次失败原因或最近成功时间。"}
+            {props.statusLoading ? "正在读取最近一次投递结果" : props.summary?.lastErrorMessage || "这里会显示最近一次失败原因或最近成功时间。"}
           </div>
         </div>
       </div>
@@ -215,16 +223,16 @@ function ChannelConfigCard(props: {
           type="button"
           onClick={props.onSendTest}
           disabled={testDisabled}
-          title={props.testDisabledReason || "发送测试消息"}
+          title={effectiveDisabledReason || "发送测试消息"}
           style={{ ...secondaryButtonStyle, opacity: testDisabled ? 0.6 : 1, cursor: testDisabled ? "not-allowed" : "pointer" }}
         >
           <Send size={13} />
-          {props.testing ? "发送中…" : props.testDisabledReason ? "先配置凭证" : "发送测试消息"}
+          {props.testing ? "发送中…" : effectiveDisabledReason ? "暂不可用" : "发送测试消息"}
         </button>
       </div>
-      {props.testDisabledReason ? (
+      {effectiveDisabledReason ? (
         <div style={{ marginBottom: 12, fontSize: 11, lineHeight: 1.7, color: "var(--faint)" }}>
-          {props.testDisabledReason}
+          {effectiveDisabledReason}
         </div>
       ) : null}
 
@@ -308,6 +316,7 @@ export function SettingsNotificationSection(props: {
   const dailySchedule = formatDerivedDailySchedule(config.rebalanceStrategy.analysisTimeUtc);
   const telegramSummary = summary?.channels.telegram || null;
   const feishuSummary = summary?.channels.feishu || null;
+  const statusLoading = loading && !summary && !statusError;
 
   return (
     <section id="settings-notification" className="scroll-mt-28">
@@ -337,24 +346,24 @@ export function SettingsNotificationSection(props: {
           <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
             <RunningStatusTile
               title="Cron"
-              subtitle={summary?.cronConfigured ? "定时任务鉴权已配置" : "定时任务鉴权缺失"}
-              value={summary?.cronConfigured ? "已就绪" : "待配置"}
-              hint={latestJob ? `最近任务：${latestJob.jobType} · ${latestJob.status} · ${formatSummaryTime(latestJob.startedAt)}` : "当前还没有任何 job 执行记录。"}
-              pill={<DeepLedgerStatusPill tone={summary?.cronConfigured ? "green" : "amber"}>{summary?.cronConfigured ? "已配置" : "未配置"}</DeepLedgerStatusPill>}
+              subtitle={statusLoading ? "正在读取已保存的定时任务状态" : summary?.cronConfigured ? "定时任务鉴权已配置" : "定时任务鉴权缺失"}
+              value={statusLoading ? "加载中" : summary?.cronConfigured ? "已就绪" : "待配置"}
+              hint={statusLoading ? "这里只展示已经生效的运行状态，不会把“还没加载出来”误写成“未配置”。" : latestJob ? `最近任务：${latestJob.jobType} · ${latestJob.status} · ${formatSummaryTime(latestJob.startedAt)}` : "当前还没有任何 job 执行记录。"}
+              pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : summary?.cronConfigured ? "green" : "amber"}>{statusLoading ? "加载中" : summary?.cronConfigured ? "已配置" : "未配置"}</DeepLedgerStatusPill>}
             />
             <RunningStatusTile
               title="Telegram"
-              subtitle={telegramSummary?.enabled ? "运行中" : "当前关闭"}
-              value={telegramSummary?.configured ? "凭证完整" : "凭证不完整"}
-              hint={telegramSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(telegramSummary?.lastAttemptAt)}`}
-              pill={<DeepLedgerStatusPill tone={telegramSummary ? channelPillTone(telegramSummary) : "slate"}>{telegramSummary ? channelPillText(telegramSummary) : "加载中"}</DeepLedgerStatusPill>}
+              subtitle={statusLoading ? "正在读取已保存的 Telegram 状态" : telegramSummary?.enabled ? "运行中" : "当前关闭"}
+              value={statusLoading ? "加载中" : telegramSummary?.configured ? "凭证完整" : "凭证不完整"}
+              hint={statusLoading ? "会在读取完成后显示真实凭证状态和最近一次投递结果。" : telegramSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(telegramSummary?.lastAttemptAt)}`}
+              pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : telegramSummary ? channelPillTone(telegramSummary) : "slate"}>{statusLoading ? "加载中" : telegramSummary ? channelPillText(telegramSummary) : "未知"}</DeepLedgerStatusPill>}
             />
             <RunningStatusTile
               title="飞书"
-              subtitle={feishuSummary?.enabled ? "运行中" : "当前关闭"}
-              value={feishuSummary?.configured ? "凭证完整" : "凭证不完整"}
-              hint={feishuSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(feishuSummary?.lastAttemptAt)}`}
-              pill={<DeepLedgerStatusPill tone={feishuSummary ? channelPillTone(feishuSummary) : "slate"}>{feishuSummary ? channelPillText(feishuSummary) : "加载中"}</DeepLedgerStatusPill>}
+              subtitle={statusLoading ? "正在读取已保存的飞书状态" : feishuSummary?.enabled ? "运行中" : "当前关闭"}
+              value={statusLoading ? "加载中" : feishuSummary?.configured ? "凭证完整" : "凭证不完整"}
+              hint={statusLoading ? "会在读取完成后显示真实凭证状态和最近一次投递结果。" : feishuSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(feishuSummary?.lastAttemptAt)}`}
+              pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : feishuSummary ? channelPillTone(feishuSummary) : "slate"}>{statusLoading ? "加载中" : feishuSummary ? channelPillText(feishuSummary) : "未知"}</DeepLedgerStatusPill>}
             />
           </div>
 
@@ -469,6 +478,7 @@ export function SettingsNotificationSection(props: {
               tradeEnabled={config.notification.telegram.onTradeExecuted}
               dailyReportEnabled={config.notification.telegram.dailyReport}
               summary={telegramSummary}
+              statusLoading={statusLoading}
               onSendTest={() => void handleSendTest("telegram")}
               testing={testingChannel === "telegram"}
               testDisabledReason={telegramSummary?.configured ? null : "请先在“凭证”区保存 Telegram Bot Token 与 Chat ID，再发送测试消息。"}
@@ -563,6 +573,7 @@ export function SettingsNotificationSection(props: {
               tradeEnabled={config.notification.feishu.onTradeExecuted}
               dailyReportEnabled={config.notification.feishu.dailyReport}
               summary={feishuSummary}
+              statusLoading={statusLoading}
               onSendTest={() => void handleSendTest("feishu")}
               testing={testingChannel === "feishu"}
               testDisabledReason={feishuSummary?.configured ? null : "请先在“凭证”区保存飞书 Webhook，再发送测试消息。"}
