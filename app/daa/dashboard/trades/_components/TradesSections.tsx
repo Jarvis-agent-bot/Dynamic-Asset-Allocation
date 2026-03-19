@@ -154,9 +154,9 @@ export function TradesLedgerSummary({ model }: { model: TradesModel }) {
             <DeepLedgerStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已有归档" : "无归档历史"}</DeepLedgerStatusPill>
           </div>
           <div className="mt-3 grid gap-2 text-sm text-[var(--text)] sm:grid-cols-3">
-            <div>周期 {model.ledgerMeta.archivedCycleCount}</div>
-            <div>订单 {model.ledgerMeta.archivedTradeCount}</div>
-            <div>报告 {model.ledgerMeta.archivedReportCount}</div>
+            <div>归档周期 {model.ledgerMeta.archivedCycleCount}</div>
+            <div>归档订单 {model.ledgerMeta.archivedTradeCount}</div>
+            <div>归档报告 {model.ledgerMeta.archivedReportCount}</div>
           </div>
           <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
             {archivedTotal > 0 ? "如果当前列表为空，先看这里；很可能是旧历史已被归档，而不是数据没有落库。" : "当前环境下还没有被裁剪掉的历史测试记录。"}

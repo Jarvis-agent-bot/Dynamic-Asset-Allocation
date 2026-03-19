@@ -69,10 +69,21 @@ export function formatNotional(v: number): string {
 export function formatCurrency(v: number, currency = "USD"): string {
   if (!Number.isFinite(v)) return "$0";
   const displayCurrency = normalizeCurrencyCode(currency);
+  const normalized = Math.abs(v) < 0.000_001 ? 0 : v;
+  const roundedToCent = Math.round(normalized * 100) / 100;
+  const hasCents = Math.abs(roundedToCent - Math.trunc(roundedToCent)) > 0.000_001;
   try {
-    return v.toLocaleString("en-US", { style: "currency", currency: displayCurrency, maximumFractionDigits: 0 });
+    return roundedToCent.toLocaleString("en-US", {
+      style: "currency",
+      currency: displayCurrency,
+      minimumFractionDigits: hasCents ? 2 : 0,
+      maximumFractionDigits: hasCents ? 2 : 0,
+    });
   } catch {
-    return `${displayCurrency} ${Math.round(v).toLocaleString()}`;
+    return `${displayCurrency} ${roundedToCent.toLocaleString("en-US", {
+      minimumFractionDigits: hasCents ? 2 : 0,
+      maximumFractionDigits: hasCents ? 2 : 0,
+    })}`;
   }
 }
 
