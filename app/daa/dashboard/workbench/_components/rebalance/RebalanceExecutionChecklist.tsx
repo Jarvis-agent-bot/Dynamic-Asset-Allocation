@@ -3,7 +3,7 @@
 import { CheckCircle2, Circle } from "lucide-react";
 
 import {
-  DeepLedgerActionButton,
+  DeepLedgerNoticeBox,
   DeepLedgerPanel,
   DeepLedgerStatusPill,
   deepLedgerSubtlePanelClassName,
@@ -25,16 +25,30 @@ export function RebalanceExecutionChecklist(props: {
   bootstrap: WorkbenchBootstrap;
   currentCycle: RebalanceCycle | null;
   currentRiskCheck: PreTradeRiskCheck | null;
-  busy: boolean;
   selectedProposalCount: number;
   selectedProposalNotional: number;
-  canExecuteSelected: boolean;
   rebalanceChecklist: WorkbenchChecklistItem[];
   rebalanceChecklistAllPassed: boolean;
   firstUnmetChecklist?: WorkbenchChecklistItem;
-  onOpenExecuteDialog: (mode: "selected" | "all") => void;
-  onGenerateCycle: () => Promise<void>;
 }) {
+  const actionHint = !props.currentCycle
+    ? {
+        tone: "amber" as const,
+        title: "先在顶部工具条生成建议",
+        description: "这里保留执行摘要与检查条件，实际生成和执行操作统一放到上方主操作区，避免重复按钮。",
+      }
+    : props.rebalanceChecklistAllPassed
+      ? {
+          tone: "green" as const,
+          title: "条件已满足",
+          description: "确认勾选结果后，回到顶部工具条执行“执行选中”或“执行全部”。",
+        }
+      : {
+          tone: "amber" as const,
+          title: "先补齐执行条件",
+          description: `当前仍缺少「${props.firstUnmetChecklist?.label || "执行条件"}」，处理后再从顶部工具条继续。`,
+        };
+
   return (
     <DeepLedgerPanel
       accent={props.rebalanceChecklistAllPassed ? "green" : "amber"}
@@ -55,12 +69,7 @@ export function RebalanceExecutionChecklist(props: {
           </div>
         </div>
 
-        <DeepLedgerActionButton tone="success" className="w-full justify-center" onClick={() => props.onOpenExecuteDialog("selected")} disabled={!props.canExecuteSelected}>
-          执行选中{props.selectedProposalCount > 0 ? ` (${props.selectedProposalCount})` : ""}
-        </DeepLedgerActionButton>
-        <DeepLedgerActionButton tone="primary" className="w-full justify-center" onClick={() => void props.onGenerateCycle()} disabled={props.busy}>
-          {props.busy ? "处理中…" : "生成/刷新建议"}
-        </DeepLedgerActionButton>
+        <DeepLedgerNoticeBox tone={actionHint.tone} title={actionHint.title} description={actionHint.description} />
 
         <div className="border-t border-[var(--border)] pt-3">
           <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">执行条件</div>

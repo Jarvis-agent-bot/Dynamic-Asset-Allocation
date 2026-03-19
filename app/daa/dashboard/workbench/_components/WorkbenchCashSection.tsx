@@ -143,6 +143,9 @@ export function WorkbenchCashSection(props: {
               {cashLedger.map((row) => {
                 const side = row.side === "withdraw" ? "出金" : "入金";
                 const amount = row.amountInAccountBase ?? row.amount;
+                const displayCurrency = row.amountInAccountBase != null
+                  ? (row.accountBaseCurrency || baseCurrency)
+                  : (row.baseCurrency || baseCurrency);
                 const tags = formatCashMeta(row);
                 return (
                   <TableRow key={row.id} className="border-[var(--border)]">
@@ -151,7 +154,7 @@ export function WorkbenchCashSection(props: {
                       <DeepLedgerStatusPill tone={row.side === "withdraw" ? "amber" : "green"}>{side}</DeepLedgerStatusPill>
                     </TableCell>
                     <TableCell className="text-sm text-[var(--text)]">
-                      <div>{formatCurrency(amount, row.baseCurrency || baseCurrency)}</div>
+                      <div>{formatCurrency(amount, displayCurrency)}</div>
                       {row.amountInAccountBase != null && row.baseCurrency !== row.accountBaseCurrency ? (
                         <div className="mt-1 text-xs text-[var(--muted)]">原币 {formatCurrency(row.amount, row.baseCurrency || baseCurrency)}</div>
                       ) : null}

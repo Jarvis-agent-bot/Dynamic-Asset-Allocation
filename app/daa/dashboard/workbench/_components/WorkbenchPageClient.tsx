@@ -5,13 +5,20 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DeepLedgerSectionAnchor } from "@/app/daa/dashboard/_components/DeepLedgerUI";
-import { normalizeWorkbenchTab, type WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
+import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { WorkbenchActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchActiveTabPanel";
 import { WorkbenchBannerStack } from "@/app/daa/dashboard/workbench/_components/WorkbenchBannerStack";
 import { WorkbenchCockpitSection } from "@/app/daa/dashboard/workbench/_components/WorkbenchCockpitSection";
 import { WorkbenchDialogs } from "@/app/daa/dashboard/workbench/_components/WorkbenchDialogs";
 import { WorkbenchSummaryHeader } from "@/app/daa/dashboard/workbench/_components/WorkbenchSummaryHeader";
+import {
+  getWorkbenchSectionForTab,
+  getWorkbenchTabForSection,
+  normalizeWorkbenchSection,
+  shouldHandleWorkbenchAnchorClick,
+  type WorkbenchSection,
+} from "@/app/daa/dashboard/workbench/_components/workbenchNavigation";
 
 class WorkbenchErrorBoundary extends Component<
   { children: ReactNode },
@@ -46,18 +53,6 @@ class WorkbenchErrorBoundary extends Component<
   }
 }
 
-type WorkbenchSection = "cockpit" | "portfolio" | "rebalance" | "cash";
-
-function normalizeWorkbenchSection(input: string | null | undefined, fallbackTab: WorkbenchTab): WorkbenchSection {
-  const text = String(input || "").trim().toLowerCase();
-  if (text === "cockpit" || text === "portfolio" || text === "rebalance" || text === "cash") {
-    return text;
-  }
-  if (fallbackTab === "rebalance") return "rebalance";
-  if (fallbackTab === "cash") return "cash";
-  return "portfolio";
-}
-
 export default function WorkbenchPageClient(props: {
   initialTab?: string;
   initialSection?: string;
@@ -68,22 +63,24 @@ export default function WorkbenchPageClient(props: {
   const searchParams = useSearchParams();
   const cockpitRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const sectionParam = searchParams.get("section");
+  const tabParam = searchParams.get("tab");
   const activeSection = useMemo(
-    () => normalizeWorkbenchSection(searchParams.get("section") || props.initialSection, model.activeTab),
-    [model.activeTab, props.initialSection, searchParams],
+    () => normalizeWorkbenchSection(sectionParam || props.initialSection, model.activeTab),
+    [model.activeTab, props.initialSection, sectionParam],
   );
 
   useEffect(() => {
-    const nextSection = normalizeWorkbenchSection(searchParams.get("section") || props.initialSection, model.activeTab);
-    const nextTab = nextSection === "rebalance"
-      ? "rebalance"
-      : nextSection === "cash"
-        ? "cash"
-        : normalizeWorkbenchTab(searchParams.get("tab") || props.initialTab || (nextSection === "portfolio" ? "positions" : model.activeTab));
+    const nextSection = normalizeWorkbenchSection(sectionParam || props.initialSection, model.activeTab);
+    const nextTab = getWorkbenchTabForSection({
+      section: nextSection,
+      searchTab: tabParam || props.initialTab,
+      fallbackTab: model.activeTab,
+    });
     if (model.activeTab !== nextTab) {
       model.setActiveTab(nextTab);
     }
-  }, [model.activeTab, model.setActiveTab, props.initialSection, props.initialTab, searchParams]);
+  }, [model.activeTab, model.setActiveTab, props.initialSection, props.initialTab, sectionParam, tabParam]);
 
   function updateUrl(section: WorkbenchSection, tab?: WorkbenchTab) {
     const params = new URLSearchParams(searchParams.toString());
@@ -94,24 +91,34 @@ export default function WorkbenchPageClient(props: {
     router.replace(`${pathname}${query ? `?${query}` : ""}`, { scroll: false });
   }
 
-  function focusSection(section: WorkbenchSection, nextTab?: WorkbenchTab) {
-    if (nextTab) {
-      model.setActiveTab(nextTab);
-    }
-    updateUrl(section, nextTab);
+  function scrollToSection(section: WorkbenchSection) {
     const target = section === "cockpit" ? cockpitRef.current : workspaceRef.current;
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function navigateToSection(section: WorkbenchSection, nextTab?: WorkbenchTab) {
+    if (nextTab) {
+      model.setActiveTab(nextTab);
+    }
+    updateUrl(section, nextTab);
+    scrollToSection(section);
+  }
+
+  function navigateToTab(tab: WorkbenchTab) {
+    const section = getWorkbenchSectionForTab(tab);
+    navigateToSection(section, tab);
+  }
+
   function handleSectionAnchor(event: MouseEvent<HTMLAnchorElement>, section: WorkbenchSection) {
+    if (!shouldHandleWorkbenchAnchorClick(event)) return;
     event.preventDefault();
-    if (section === "rebalance") focusSection(section, "rebalance");
-    else if (section === "cash") focusSection(section, "cash");
+    if (section === "rebalance") navigateToTab("rebalance");
+    else if (section === "cash") navigateToTab("cash");
     else if (section === "portfolio") {
       const nextTab = model.activeTab === "watchlist" ? "watchlist" : "positions";
-      focusSection(section, nextTab);
+      navigateToSection(section, nextTab);
     } else {
-      focusSection("cockpit", model.activeTab);
+      navigateToSection("cockpit");
     }
   }
 
@@ -130,7 +137,8 @@ export default function WorkbenchPageClient(props: {
           baseCurrency={model.bootstrap?.baseCurrency || "USD"}
           totalEquity={model.totalEquity}
           holdingsValue={model.holdingsValue}
-          cashValue={model.cashValue}
+          availableCashValue={model.availableCashValue}
+          frozenCashValue={model.frozenCashValue}
           loading={model.loading && !model.bootstrap}
           refreshing={model.refreshing}
           onRefresh={() => void model.loadBootstrap(true)}
@@ -158,7 +166,7 @@ export default function WorkbenchPageClient(props: {
         </div>
 
         <div ref={workspaceRef}>
-          {model.bootstrap && activeSection !== "cockpit" ? <WorkbenchActiveTabPanel model={model} /> : null}
+          {model.bootstrap && activeSection !== "cockpit" ? <WorkbenchActiveTabPanel model={model} onNavigateTab={navigateToTab} /> : null}
         </div>
 
         <WorkbenchDialogs {...model.dialogProps} />

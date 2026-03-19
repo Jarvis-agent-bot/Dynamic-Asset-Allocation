@@ -83,11 +83,13 @@ export function useWorkbenchPageModel(input: {
     mergeCycleState,
   });
 
-  const totalEquity = allocationSummary?.totalEquity ?? bootstrap?.account.totalEquity ?? 0;
   const holdingsValue = allocationSummary?.holdingValue ?? assetRows
     .filter((row) => row.holdingQty > 0)
     .reduce((sum, row) => sum + (row.valuationBase ?? 0), 0);
-  const cashValue = allocationSummary?.cashValue ?? bootstrap?.account.cash ?? 0;
+  const totalCashValue = allocationSummary?.cashValue ?? bootstrap?.account.cash ?? 0;
+  const frozenCashValue = allocationSummary?.frozenCash ?? bootstrap?.account.frozenCash ?? 0;
+  const availableCashValue = Math.max(0, totalCashValue - frozenCashValue);
+  const totalEquity = allocationSummary?.totalEquity ?? (holdingsValue + totalCashValue);
 
   const rebalanceSectionProps = bootstrap ? {
     bootstrap,
@@ -166,7 +168,9 @@ export function useWorkbenchPageModel(input: {
     summary: rebalanceFlow.summary,
     totalEquity,
     holdingsValue,
-    cashValue,
+    cashValue: totalCashValue,
+    availableCashValue,
+    frozenCashValue,
     executionReceipt: executionFlow.executionReceipt as ExecutionReceipt | null,
     clearExecutionReceipt: executionFlow.clearExecutionReceipt,
     tableProps: assetActions.tableProps,

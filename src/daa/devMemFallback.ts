@@ -104,6 +104,8 @@ export function buildDevMemWorkbenchReadModel(): WorkbenchReadModel {
       watchlistCount: 0,
       holdingValue: 0,
       cashValue: 0,
+      investableCash: 0,
+      frozenCash: 0,
       totalEquity: 0,
       topHoldings: [],
     },

@@ -180,15 +180,11 @@ export function WorkbenchRebalanceSection(props: {
             bootstrap={props.bootstrap}
             currentCycle={props.currentCycle}
             currentRiskCheck={props.currentRiskCheck}
-            busy={props.busy}
             selectedProposalCount={props.selectedProposalCount}
             selectedProposalNotional={props.selectedProposalNotional}
-            canExecuteSelected={props.canExecuteSelected}
             rebalanceChecklist={props.rebalanceChecklist}
             rebalanceChecklistAllPassed={props.rebalanceChecklistAllPassed}
             firstUnmetChecklist={props.firstUnmetChecklist}
-            onOpenExecuteDialog={props.onOpenExecuteDialog}
-            onGenerateCycle={props.onGenerateCycle}
           />
 
           <RebalanceCycleHistory

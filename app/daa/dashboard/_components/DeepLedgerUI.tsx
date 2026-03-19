@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import type { ButtonHTMLAttributes, ComponentPropsWithoutRef, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ComponentPropsWithoutRef, MouseEventHandler, ReactNode } from "react";
 
 import { DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -96,7 +96,7 @@ export function DeepLedgerPageHeader({
     <div className={cn("flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between", className)}>
       <div className="space-y-3">
         {eyebrow ? (
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--faint)]">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted)]">
             <span className="h-px w-8 bg-[var(--primary)]/60" />
             <span>{eyebrow}</span>
           </div>
@@ -436,12 +436,13 @@ export function DeepLedgerSectionAnchor({
   label: ReactNode;
   active?: boolean;
   href: string;
-  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  onClick?: MouseEventHandler<HTMLAnchorElement>;
 }) {
   return (
     <a
       href={href}
       onClick={onClick}
+      aria-current={active ? "page" : undefined}
       className={cn(
         "group flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all",
         active

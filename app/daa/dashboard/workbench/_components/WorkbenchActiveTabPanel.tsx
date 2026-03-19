@@ -1,5 +1,6 @@
 "use client";
 
+import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,7 @@ import { WorkbenchRebalanceSection } from "./WorkbenchRebalanceSection";
 
 export function WorkbenchActiveTabPanel(props: {
   model: WorkbenchPageModel;
+  onNavigateTab?: (tab: WorkbenchTab) => void;
 }) {
   const { model } = props;
   const isPortfolioTab = model.activeTab === "positions" || model.activeTab === "watchlist";
@@ -25,7 +27,7 @@ export function WorkbenchActiveTabPanel(props: {
             <button
               key={item.key}
               type="button"
-              onClick={() => model.setActiveTab(item.key)}
+              onClick={() => (props.onNavigateTab ? props.onNavigateTab(item.key) : model.setActiveTab(item.key))}
               className={cn(
                 "rounded-[12px] px-3 py-2 text-sm transition-all",
                 model.activeTab === item.key
@@ -42,11 +44,16 @@ export function WorkbenchActiveTabPanel(props: {
       {model.activeTab === "positions" ? <AssetUniverseTable {...model.tableProps} view="holdings" /> : null}
       {model.activeTab === "watchlist" ? (
         <div className="space-y-4">
-          <WatchlistBuilderPanel {...model.watchlistBuilderProps} />
           <AssetUniverseTable {...model.tableProps} view="watchlist" />
+          <WatchlistBuilderPanel {...model.watchlistBuilderProps} />
         </div>
       ) : null}
-      {model.activeTab === "rebalance" && model.rebalanceSectionProps ? <WorkbenchRebalanceSection {...model.rebalanceSectionProps} /> : null}
+      {model.activeTab === "rebalance" && model.rebalanceSectionProps ? (
+        <WorkbenchRebalanceSection
+          {...model.rebalanceSectionProps}
+          onNavigateTab={props.onNavigateTab ?? model.rebalanceSectionProps.onNavigateTab}
+        />
+      ) : null}
       {model.activeTab === "cash" ? <WorkbenchCashSection baseCurrency={model.bootstrap?.baseCurrency || "USD"} onCashChanged={() => void model.loadBootstrap(true)} /> : null}
     </div>
   );
