@@ -1,4 +1,5 @@
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 /**
  * Build a daily report text from WorkbenchBootstrap data.
@@ -11,7 +12,7 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
   const lines: string[] = [];
 
   // --- Header ---
-  lines.push(`📊 *DeepLedger 每日报告* ${dateStr}`);
+  lines.push(`📊 *${DAA_BRAND_NAME} 每日报告* ${dateStr}`);
   lines.push("");
 
   // --- Portfolio overview ---

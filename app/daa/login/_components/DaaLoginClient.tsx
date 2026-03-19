@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
 import { fetchDaaAuthSession, type DaaAuthMePayload } from "@/app/daa/_components/daaAuthSessionClient";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 type Props = {
   returnTo: string;
@@ -223,7 +224,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             className="text-lg font-semibold tracking-tight"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            DeepLedger
+            {DAA_BRAND_NAME}
           </span>
         </div>
 
@@ -302,7 +303,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               D
             </div>
             <span className="text-base font-semibold" style={{ fontFamily: "var(--font-display)" }}>
-              DeepLedger
+              {DAA_BRAND_NAME}
             </span>
           </div>
 

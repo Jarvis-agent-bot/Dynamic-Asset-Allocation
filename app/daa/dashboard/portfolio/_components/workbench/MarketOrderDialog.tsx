@@ -71,6 +71,10 @@ export default function MarketOrderDialog(props: {
   const blockedRiskMessage = useMemo(() => {
     return preview?.riskCheck?.items.find((item) => item.status === "block")?.message || "";
   }, [preview]);
+  const inputIdBase = useMemo(() => {
+    const raw = props.row?.assetKey || `${props.side.toLowerCase()}-market-order`;
+    return `market-order-${raw.replace(/[^a-zA-Z0-9_-]+/g, "-").toLowerCase()}`;
+  }, [props.row?.assetKey, props.side]);
 
   const displayWarnings = useMemo(() => {
     if (!preview) return [] as string[];
@@ -152,9 +156,11 @@ export default function MarketOrderDialog(props: {
         )}
       >
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(168px,0.6fr)] lg:items-end">
-          <label className="space-y-2">
+          <label className="space-y-2" htmlFor={`${inputIdBase}-qty`}>
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">数量 Qty</span>
             <input
+              id={`${inputIdBase}-qty`}
+              name="qty"
               value={qty}
               onChange={(e) => {
                 const value = e.target.value;
@@ -169,9 +175,11 @@ export default function MarketOrderDialog(props: {
               className={cn(deepLedgerFieldClassName, "h-11")}
             />
           </label>
-          <label className="space-y-2">
+          <label className="space-y-2" htmlFor={`${inputIdBase}-notional`}>
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">金额 Notional</span>
             <input
+              id={`${inputIdBase}-notional`}
+              name="notional"
               value={notional}
               onChange={(e) => {
                 const value = e.target.value;

@@ -74,7 +74,7 @@ describe("buildDailyReportText", () => {
   it("generates report with all sections", () => {
     const text = buildDailyReportText(makeBootstrap());
 
-    expect(text).toContain("DeepLedger 每日报告");
+    expect(text).toContain("DAA Console 每日报告");
     expect(text).toContain("$52,300");
     expect(text).toContain("$3,200");
     expect(text).toContain("2 个标的");
@@ -90,7 +90,7 @@ describe("buildDailyReportText", () => {
   it("handles null marketContext", () => {
     const text = buildDailyReportText(makeBootstrap({ marketContext: null }));
 
-    expect(text).toContain("DeepLedger 每日报告");
+    expect(text).toContain("DAA Console 每日报告");
     expect(text).not.toContain("市场环境");
     expect(text).toContain("仅供参考");
   });

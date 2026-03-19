@@ -9,6 +9,7 @@ import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
 import { cn } from "@/lib/utils";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 type Props = {
   children: React.ReactNode;
@@ -90,7 +91,7 @@ export default function DashboardShell({ children }: Props) {
 
               {!sidebarCollapsed ? (
                 <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
-                  DeepLedger
+                  {DAA_BRAND_NAME}
                 </span>
               ) : null}
 

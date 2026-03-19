@@ -440,9 +440,6 @@ export async function buildWorkbenchBootstrap(opts: {
   if (missingCount > 0) {
     warnings.push(`存在 ${missingCount} 个资产暂时无可用价格，相关标的暂不可执行市价单。`);
   }
-  if (marketDataHealth.status !== "ok" && !warnings.includes(marketDataHealth.message)) {
-    warnings.push(marketDataHealth.message);
-  }
 
   let marketContext: DaaMarketContext | null = null;
   try {
