@@ -14,7 +14,7 @@ export const SETTINGS_NAV_ITEMS_ = [
   { id: "risk", label: "风控参数", desc: "集中度、仓位和止盈止损阈值。" },
   { id: "data", label: "数据源", desc: "行情、资讯、汇率、AI 解读与市场状态层。" },
   { id: "human-factor", label: "人因数据源", desc: "基金池范围与人工信号叠加。" },
-  { id: "notification", label: "通知", desc: "邮件、Telegram 和飞书触发策略。" },
+  { id: "notification", label: "通知", desc: "Telegram 与飞书的触发策略和运行状态。" },
   { id: "secrets", label: "凭证", desc: "API Key、Token 与连通性管理。" },
 ] as const;
 

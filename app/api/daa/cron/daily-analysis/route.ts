@@ -11,6 +11,39 @@ import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
+function resolveScheduledHourUtc(config: {
+  rebalanceStrategy?: { analysisTimeUtc?: unknown };
+  notification?: { dailyAnalysisHourUtc?: unknown };
+}): number {
+  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(config.rebalanceStrategy?.analysisTimeUtc || "").trim());
+  if (matched) {
+    const hour = Number(matched[1]);
+    const minute = Number(matched[2]);
+    if (Number.isFinite(hour) && Number.isFinite(minute)) {
+      return minute > 0 ? (hour + 1) % 24 : hour;
+    }
+  }
+  const fallbackHour = Number(config.notification?.dailyAnalysisHourUtc);
+  return Number.isFinite(fallbackHour)
+    ? Math.min(23, Math.max(0, Math.trunc(fallbackHour)))
+    : 1;
+}
+
+type DailyAnalysisJobResult = {
+  skipped: boolean;
+  created: boolean;
+  skippedByCooldown: boolean;
+  cooldownUntil: string | null;
+  message: string;
+  cycleId: string | null;
+  proposalCount: number;
+  telegram: { sent: boolean };
+  feishu: { sent: boolean };
+  marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string };
+  dailyReport: { sent: boolean; telegram: boolean; feishu: boolean };
+  at: string;
+};
+
 function buildNotifyText(input: {
   cycleId: string;
   triggerReason: string;
@@ -67,7 +100,7 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJob({
+    const execution = await runLoggedJob<DailyAnalysisJobResult>({
       req,
       jobType: "cron_daily_analysis",
       triggerSource: "cron_daily_analysis",
@@ -80,12 +113,12 @@ export async function POST(req: Request) {
         marketRefreshOk: result.marketRefresh?.ok,
         dailyReportSent: result.dailyReport?.sent,
       }),
-      handler: async () => {
+      handler: async ({ jobId }) => {
         const system = await getDaaSystemConfig();
 
         // Hour guard: skip if current UTC hour doesn't match configured hour.
         // Allows cron to run every hour while the actual trigger time is configurable.
-        const configuredHour = system.config.notification.dailyAnalysisHourUtc;
+        const configuredHour = resolveScheduledHourUtc(system.config);
         const currentHour = new Date().getUTCHours();
         const forcedByHeader = req.headers.get("x-daa-force") === "1";
         if (!forcedByHeader && currentHour !== configuredHour) {
@@ -108,18 +141,7 @@ export async function POST(req: Request) {
         const notif = system.config.notification;
 
         // ── Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled) ──
-        let autoGenerate: {
-          skipped: boolean;
-          created: boolean;
-          skippedByCooldown: boolean;
-          cooldownUntil: string | null;
-          message: string;
-          cycleId: string | null;
-          proposalCount: number;
-          telegram: { sent: boolean };
-          feishu: { sent: boolean };
-          marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string };
-        };
+        let autoGenerate: Omit<DailyAnalysisJobResult, "dailyReport" | "at">;
 
         if (strategy.autoGenerateEnabled) {
           let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
@@ -159,10 +181,28 @@ export async function POST(req: Request) {
 
             const sends: Promise<boolean>[] = [];
             if (notif.telegram.enabled && notif.telegram.onSuggestionGenerated) {
-              sends.push(sendTelegramByEnv(text).then((sent) => { telegramSent = sent; return sent; }));
+              sends.push(sendTelegramByEnv(text, {
+                eventType: "suggestion_generated",
+                triggerSource: "cron_daily_analysis",
+                jobId,
+                cycleId: cycle.cycleId,
+                requestJson: {
+                  proposalCount: cycle.proposals.length,
+                  riskStatus: cycle.riskCheck.overallStatus,
+                },
+              }).then((sent) => { telegramSent = sent; return sent; }));
             }
             if (notif.feishu.enabled && notif.feishu.onSuggestionGenerated) {
-              sends.push(sendFeishuByEnv(text).then((sent) => { feishuSent = sent; return sent; }));
+              sends.push(sendFeishuByEnv(text, {
+                eventType: "suggestion_generated",
+                triggerSource: "cron_daily_analysis",
+                jobId,
+                cycleId: cycle.cycleId,
+                requestJson: {
+                  proposalCount: cycle.proposals.length,
+                  riskStatus: cycle.riskCheck.overallStatus,
+                },
+              }).then((sent) => { feishuSent = sent; return sent; }));
             }
             try {
               await Promise.allSettled(sends);
@@ -215,12 +255,28 @@ export async function POST(req: Request) {
             const sends: Promise<void>[] = [];
             if (wantTgReport) {
               sends.push(
-                sendTelegramByEnv(reportText).then((sent) => { dailyReport.telegram = sent; }),
+                sendTelegramByEnv(reportText, {
+                  eventType: "daily_report",
+                  triggerSource: "cron_daily_analysis",
+                  jobId,
+                  cycleId: autoGenerate.cycleId,
+                  requestJson: {
+                    reportType: "daily_analysis",
+                  },
+                }).then((sent) => { dailyReport.telegram = sent; }),
               );
             }
             if (wantFsReport) {
               sends.push(
-                sendFeishuByEnv(reportText).then((sent) => { dailyReport.feishu = sent; }),
+                sendFeishuByEnv(reportText, {
+                  eventType: "daily_report",
+                  triggerSource: "cron_daily_analysis",
+                  jobId,
+                  cycleId: autoGenerate.cycleId,
+                  requestJson: {
+                    reportType: "daily_analysis",
+                  },
+                }).then((sent) => { dailyReport.feishu = sent; }),
               );
             }
             await Promise.allSettled(sends);

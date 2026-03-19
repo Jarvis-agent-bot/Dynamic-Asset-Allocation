@@ -70,7 +70,7 @@ export function SettingsRiskSection(props: {
       label: "最小交易金额",
       value: config.strategy.constraints.minNotional,
       min: 1,
-      step: 10,
+      step: 1,
       onChange: (value: number) =>
         setConfig((prev) =>
           prev

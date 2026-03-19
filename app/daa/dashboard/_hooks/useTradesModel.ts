@@ -80,8 +80,16 @@ export function useTradesModel(input: {
   ]);
 
   return {
+    baseCurrency: data?.baseCurrency ?? "USD",
     records: data?.records ?? { cycles: [], orders: [] },
     reports: data?.reports ?? [],
+    ledgerMeta: data?.ledgerMeta ?? {
+      ledgerStartTs: null,
+      openingBalance: 0,
+      archivedCycleCount: 0,
+      archivedTradeCount: 0,
+      archivedReportCount: 0,
+    },
     loading,
     refreshing,
     error,

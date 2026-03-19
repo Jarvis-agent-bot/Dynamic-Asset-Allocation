@@ -3,6 +3,9 @@ import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
+import { buildTradeExecutionNotifyText } from "@/src/daa/notify/tradeExecutionBuilder";
+import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
+import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { createDaaTradeTicket, executeDaaTradeTickets, getDaaSystemConfig, listDaaFxRates, listDaaTradeTickets } from "@/src/daa/store/daaStorePg";
 import { normalizeReasonTags, normalizeTradeSide, validateExecutionRisk } from "@/src/daa/modules/workbench/workbenchExecutionService";
 
@@ -159,15 +162,59 @@ export async function POST(req: Request) {
     };
     const logs = await listDaaTradeTickets({ limit: 200 });
 
+    const responseItem = executed.tickets.find((ticket) => ticket.ticketId === item.ticketId) || item;
+    const responseLogs = logs.filter((row) => row.status !== "ready");
+    const summary = {
+      executed: executed.results.filter((row) => row.status === "executed").length,
+      rejected: executed.results.filter((row) => row.status === "rejected").length,
+      total: executed.results.length,
+    };
+
+    try {
+      const notification = systemRow.config.notification;
+      if (
+        (notification.telegram.enabled && notification.telegram.onTradeExecuted)
+        || (notification.feishu.enabled && notification.feishu.onTradeExecuted)
+      ) {
+        const message = buildTradeExecutionNotifyText({
+          source: source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
+          baseCurrency,
+          executeMode: "single",
+          cycleId: responseItem.cycleId || null,
+          ticketId: responseItem.ticketId,
+          executedCount: summary.executed,
+          failedCount: summary.rejected,
+          totalCount: summary.total,
+          totalNotional: notionalInBase,
+          logs: responseLogs.filter((row) => row.ticketId === responseItem.ticketId),
+        });
+        const meta = {
+          eventType: "trade_executed",
+          triggerSource: source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
+          cycleId: responseItem.cycleId || null,
+          ticketId: responseItem.ticketId,
+          requestJson: {
+            status: result.status,
+            symbol,
+            side,
+            qty,
+            notionalInBase,
+          },
+        };
+        await Promise.allSettled([
+          notification.telegram.enabled && notification.telegram.onTradeExecuted ? sendTelegramByEnv(message, meta) : Promise.resolve(false),
+          notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
+        ]);
+      }
+    } catch {
+      // 忽略通知失败，避免阻塞交易执行
+    }
+
     return ok({
-      item: executed.tickets.find((ticket) => ticket.ticketId === item.ticketId) || item,
+      item: responseItem,
       result,
-      summary: {
-        executed: executed.results.filter((row) => row.status === "executed").length,
-        rejected: executed.results.filter((row) => row.status === "rejected").length,
-        total: executed.results.length,
-      },
-      logs: logs.filter((row) => row.status !== "ready"),
+      summary,
+      logs: responseLogs,
     });
   });
 }

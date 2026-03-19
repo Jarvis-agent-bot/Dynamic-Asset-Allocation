@@ -540,7 +540,7 @@ export type DaaStoreIngestJobLog = {
 };
 
 export type DaaStoreCashLedgerSide = "deposit" | "withdraw";
-export type DaaStoreCashLedgerEntryKind = "manual" | "trade_execution" | "dividend";
+export type DaaStoreCashLedgerEntryKind = "manual" | "trade_execution" | "dividend" | "opening_balance";
 
 export type DaaStoreCashLedgerEntry = {
   id: string;
@@ -557,6 +557,14 @@ export type DaaStoreCashLedgerEntry = {
   settlementTs: string | null;
   note: string | null;
   createdAt: string;
+};
+
+export type DaaCurrentLedgerMeta = {
+  ledgerStartTs: string | null;
+  openingBalance: number;
+  archivedCycleCount: number;
+  archivedTradeCount: number;
+  archivedReportCount: number;
 };
 
 export type DaaStoreCashLedgerApplyInput = {
@@ -1697,6 +1705,24 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
               JSON.stringify({ reason: "archive_reset", version: "v2" }),
             ],
           );
+          if (account.cash > 0) {
+            await query(
+              `INSERT INTO daa_portfolio_ledger_events (
+                 event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+                 amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
+               ) VALUES (
+                 $1,$2,'opening_balance','deposit',$3,$4,$4,$3,1,NULL,NULL,$2,$5,$6::jsonb,NOW()
+               )`,
+              [
+                randomUUID(),
+                resetTs,
+                account.cash,
+                account.baseCurrency,
+                "当前工作账本期初余额",
+                JSON.stringify({ entryKind: "opening_balance", reason: "archive_reset" }),
+              ],
+            );
+          }
           await query(
             "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
             [resetTs, account.cash, 0, account.cash, "ledger_reset"],
@@ -3294,6 +3320,8 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
     ? "trade_execution"
     : normalizedEntryKind === "dividend"
       ? "dividend"
+      : normalizedEntryKind === "opening_balance"
+        ? "opening_balance"
       : ((normalizedEntryKind === "cash_transfer" || normalizedEntryKind === "manual") ? "manual" : null);
   return {
     id: normalizeText(row.event_id),
@@ -3333,6 +3361,68 @@ export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCas
 export async function getDaaLedgerStartTs(): Promise<string | null> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => getCurrentLedgerStartTsInTx(query as DaaTxQueryFn));
+}
+
+export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const ledgerStartTs = await getCurrentLedgerStartTsInTx(query as DaaTxQueryFn);
+    if (!ledgerStartTs) {
+      return {
+        ledgerStartTs: null,
+        openingBalance: 0,
+        archivedCycleCount: 0,
+        archivedTradeCount: 0,
+        archivedReportCount: 0,
+      };
+    }
+
+    const [openingRes, cycleRes, tradeRes, reportRes] = await Promise.all([
+      query(
+        `SELECT amount_in_account_base, amount
+         FROM daa_portfolio_ledger_events
+         WHERE event_kind = 'opening_balance'
+           AND ts >= $1
+         ORDER BY ts ASC
+         LIMIT 1`,
+        [ledgerStartTs],
+      ),
+      query(
+        `SELECT COUNT(*)::int AS count
+         FROM daa_rebalance_cycles
+         WHERE created_at < $1`,
+        [ledgerStartTs],
+      ),
+      query(
+        `SELECT COUNT(*)::int AS count
+         FROM daa_trade_tickets
+         WHERE created_at < $1`,
+        [ledgerStartTs],
+      ),
+      query(
+        `SELECT COUNT(*)::int AS count
+         FROM daa_cycle_reports r
+         JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
+         WHERE c.created_at < $1`,
+        [ledgerStartTs],
+      ),
+    ]);
+
+    const openingRow = openingRes.rows[0] as Record<string, unknown> | undefined;
+    return {
+      ledgerStartTs,
+      openingBalance: Math.max(
+        0,
+        toFiniteNumber(
+          openingRow?.amount_in_account_base ?? openingRow?.amount,
+          0,
+        ),
+      ),
+      archivedCycleCount: Math.max(0, Math.trunc(toFiniteNumber(cycleRes.rows[0]?.count, 0))),
+      archivedTradeCount: Math.max(0, Math.trunc(toFiniteNumber(tradeRes.rows[0]?.count, 0))),
+      archivedReportCount: Math.max(0, Math.trunc(toFiniteNumber(reportRes.rows[0]?.count, 0))),
+    };
+  });
 }
 
 export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInput): Promise<{

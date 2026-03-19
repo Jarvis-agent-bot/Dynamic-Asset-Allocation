@@ -1,4 +1,6 @@
+import type { NotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import type {
+  DaaCurrentLedgerMeta,
   DaaStoreCashLedgerEntry,
   DaaStoreEquitySnapshot,
 } from "@/src/daa/store/daaStorePg";
@@ -17,12 +19,16 @@ export type WorkbenchReadModel = {
   cashLedger: DaaStoreCashLedgerEntry[];
   signals: WorkbenchSignal[];
   allocationSummary: WorkbenchAllocationSummary;
+  ledgerMeta: DaaCurrentLedgerMeta;
+  notificationStatus: NotificationStatusSummary;
   loadedAt: string;
 };
 
 export type TradesReadModel = {
+  baseCurrency: string;
   records: WorkbenchTradeRecords;
   reports: WorkbenchRebalanceCycleReport[];
+  ledgerMeta: DaaCurrentLedgerMeta;
   loadedAt: string;
 };
 

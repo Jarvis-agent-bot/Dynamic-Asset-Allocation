@@ -139,6 +139,8 @@ export default function WorkbenchPageClient(props: {
           holdingsValue={model.holdingsValue}
           availableCashValue={model.availableCashValue}
           frozenCashValue={model.frozenCashValue}
+          ledgerMeta={model.ledgerMeta}
+          notificationStatus={model.notificationStatus}
           loading={model.loading && !model.bootstrap}
           refreshing={model.refreshing}
           onRefresh={() => void model.loadBootstrap(true)}

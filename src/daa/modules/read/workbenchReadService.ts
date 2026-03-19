@@ -1,5 +1,5 @@
 import {
-  getDaaLedgerStartTs,
+  getDaaCurrentLedgerMeta,
   listDaaCashLedgerEntries,
   listDaaEquitySnapshots,
 } from "@/src/daa/store/daaStorePg";
@@ -7,6 +7,7 @@ import {
   buildWorkbenchBootstrap,
   listWorkbenchRebalanceCycles,
 } from "@/src/daa/modules/workbench/workbenchReadService";
+import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { nextCalendarDueDate } from "@/src/daa/modules/workbench/workbenchShared";
 
 import type {
@@ -24,6 +25,7 @@ function isAfterLedgerStart(ts: string | null | undefined, ledgerStartTs: string
 function buildSignals(input: {
   bootstrap: WorkbenchReadModel["bootstrap"];
   ledgerStartTs: string | null;
+  notificationStatus: WorkbenchReadModel["notificationStatus"];
 }): WorkbenchSignal[] {
   const createdAt = input.ledgerStartTs || new Date().toISOString();
   const items: WorkbenchSignal[] = [];
@@ -112,6 +114,63 @@ function buildSignals(input: {
     });
   }
 
+  const notificationStatus = input.notificationStatus;
+  const notificationEnabled = notificationStatus.channels.telegram.enabled || notificationStatus.channels.feishu.enabled;
+  if (!notificationStatus.cronConfigured && (input.bootstrap.rebalance.autoAnalysisEnabled || notificationEnabled)) {
+    push({
+      id: "warning:notification:cron-token",
+      level: "warn",
+      source: "warning",
+      text: "定时任务 Token 未配置，自动分析与每日报告类通知不会按计划触发。",
+      actionHref: "/daa/dashboard/settings#settings-notification",
+      createdAt,
+    });
+  }
+
+  for (const [channelKey, label] of [
+    ["telegram", "Telegram"],
+    ["feishu", "飞书"],
+  ] as const) {
+    const channel = notificationStatus.channels[channelKey];
+    if (!channel.enabled) continue;
+    if (!channel.configured) {
+      push({
+        id: `warning:notification:${channelKey}:secret-missing`,
+        level: "warn",
+        source: "warning",
+        text: `${label} 已启用，但凭证未配置完整；当前不会有实际推送。`,
+        actionHref: "/daa/dashboard/settings#settings-notification",
+        createdAt,
+      });
+      continue;
+    }
+
+    const lastFailureMs = channel.lastFailureAt ? Date.parse(channel.lastFailureAt) : Number.NaN;
+    const lastSuccessMs = channel.lastSuccessAt ? Date.parse(channel.lastSuccessAt) : Number.NaN;
+    if (Number.isFinite(lastFailureMs) && (!Number.isFinite(lastSuccessMs) || lastFailureMs >= lastSuccessMs)) {
+      push({
+        id: `warning:notification:${channelKey}:delivery-failed`,
+        level: "warn",
+        source: "warning",
+        text: `${label} 最近一次投递失败${channel.lastErrorMessage ? `：${channel.lastErrorMessage}` : ""}`,
+        actionHref: "/daa/dashboard/settings#settings-notification",
+        createdAt: channel.lastFailureAt || createdAt,
+      });
+      continue;
+    }
+
+    if (channel.deliveryEvents.length > 0 && !channel.lastAttemptAt) {
+      push({
+        id: `system:notification:${channelKey}:no-delivery-yet`,
+        level: "info",
+        source: "system",
+        text: `${label} 已启用，但当前还没有任何投递记录。`,
+        actionHref: "/daa/dashboard/settings#settings-notification",
+        createdAt,
+      });
+    }
+  }
+
   if (input.bootstrap.latestCycle) {
     push({
       id: `system:latest-cycle:${input.bootstrap.latestCycle.cycleId}`,
@@ -165,8 +224,7 @@ export async function buildWorkbenchReadModel(input: {
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
 } = {}): Promise<WorkbenchReadModel> {
-  const ledgerStartTs = await getDaaLedgerStartTs();
-  const [bootstrap, cycles, snapshots, cashLedger] = await Promise.all([
+  const [bootstrap, cycles, snapshots, cashLedger, ledgerMeta, notificationStatus] = await Promise.all([
     buildWorkbenchBootstrap({
       syncPrices: input.syncPrices ?? false,
       autoRiskCycle: input.autoRiskCycle ?? false,
@@ -174,7 +232,10 @@ export async function buildWorkbenchReadModel(input: {
     listWorkbenchRebalanceCycles(40),
     listDaaEquitySnapshots(120),
     listDaaCashLedgerEntries(20),
+    getDaaCurrentLedgerMeta(),
+    buildNotificationStatusSummary(),
   ]);
+  const ledgerStartTs = ledgerMeta.ledgerStartTs;
 
   const filteredCycles = cycles.filter((cycle) => isAfterLedgerStart(cycle.createdAt, ledgerStartTs));
   const filteredSnapshots = snapshots.filter((snapshot) => isAfterLedgerStart(snapshot.ts, ledgerStartTs));
@@ -197,8 +258,10 @@ export async function buildWorkbenchReadModel(input: {
     cycles: filteredCycles,
     snapshots: filteredSnapshots,
     cashLedger: filteredCashLedger,
-    signals: buildSignals({ bootstrap: nextBootstrap, ledgerStartTs }),
+    signals: buildSignals({ bootstrap: nextBootstrap, ledgerStartTs, notificationStatus }),
     allocationSummary: buildAllocationSummary({ bootstrap: nextBootstrap }),
+    ledgerMeta,
+    notificationStatus,
     loadedAt: new Date().toISOString(),
   };
 }

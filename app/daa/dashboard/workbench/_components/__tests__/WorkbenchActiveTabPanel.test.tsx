@@ -91,9 +91,33 @@ describe("WorkbenchActiveTabPanel", () => {
     render(<WorkbenchActiveTabPanel model={model} />);
 
     const table = screen.getAllByTestId("asset-table-watchlist")[0];
+    fireEvent.click(screen.getByRole("button", { name: "展开观察池工具" }));
     const builder = screen.getByTestId("watchlist-builder");
 
     expect(Boolean(table.compareDocumentPosition(builder) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
+  it("观察列表异步加载后如果已有标的，会自动收起补充面板避免首屏过长", () => {
+    const initialModel = createModel({
+      summary: {
+        holdingAssets: 0,
+        watchlistAssets: 0,
+      },
+    });
+    const { rerender } = render(<WorkbenchActiveTabPanel model={initialModel} />);
+
+    expect(screen.getByTestId("watchlist-builder")).toBeTruthy();
+
+    const loadedModel = createModel({
+      summary: {
+        holdingAssets: 2,
+        watchlistAssets: 5,
+      },
+    });
+    rerender(<WorkbenchActiveTabPanel model={loadedModel} />);
+
+    expect(screen.queryByTestId("watchlist-builder")).toBeNull();
+    expect(screen.getByRole("button", { name: "展开观察池工具" })).toBeTruthy();
   });
 
   it("调仓页的引导动作会复用页面级导航回调，而不是局部 setState", () => {

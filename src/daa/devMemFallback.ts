@@ -42,6 +42,47 @@ function buildRebalanceStrategyFallback(): RebalanceStrategyConfig {
   };
 }
 
+function buildDevMemLedgerMeta() {
+  return {
+    ledgerStartTs: null,
+    openingBalance: 0,
+    archivedCycleCount: 0,
+    archivedTradeCount: 0,
+    archivedReportCount: 0,
+  };
+}
+
+function buildDevMemNotificationStatusSummary() {
+  return {
+    cronConfigured: false,
+    recentJobs: [],
+    channels: {
+      telegram: {
+        channel: "telegram" as const,
+        enabled: false,
+        configured: false,
+        secretStates: [],
+        deliveryEvents: [],
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastFailureAt: null,
+        lastErrorMessage: null,
+      },
+      feishu: {
+        channel: "feishu" as const,
+        enabled: false,
+        configured: false,
+        secretStates: [],
+        deliveryEvents: [],
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastFailureAt: null,
+        lastErrorMessage: null,
+      },
+    },
+  };
+}
+
 export function isDevMemFallbackEnabled(): boolean {
   return isDaaPgMemRuntime() && (process.env.NODE_ENV || "development").toLowerCase() !== "production";
 }
@@ -109,17 +150,21 @@ export function buildDevMemWorkbenchReadModel(): WorkbenchReadModel {
       totalEquity: 0,
       topHoldings: [],
     },
+    ledgerMeta: buildDevMemLedgerMeta(),
+    notificationStatus: buildDevMemNotificationStatusSummary(),
     loadedAt: new Date().toISOString(),
   };
 }
 
 export function buildDevMemTradesReadModel(): TradesReadModel {
   return {
+    baseCurrency: "USD",
     records: {
       cycles: [],
       orders: [],
     },
     reports: [],
+    ledgerMeta: buildDevMemLedgerMeta(),
     loadedAt: new Date().toISOString(),
   };
 }

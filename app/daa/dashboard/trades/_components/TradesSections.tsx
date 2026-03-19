@@ -63,6 +63,18 @@ function triggerSourceLabel(triggerSource: string): string {
   return "手动触发";
 }
 
+function buildArchivedHint(input: {
+  title: string;
+  ledgerStartTs: string | null;
+  archivedCount: number;
+  emptyReason: string;
+}): string {
+  if (input.archivedCount > 0 && input.ledgerStartTs) {
+    return `${input.title} 当前只展示 ${formatDateTime(input.ledgerStartTs)} 之后的数据；更早的 ${input.archivedCount} 条历史记录已归档，所以这里会保持空白。`;
+  }
+  return input.emptyReason;
+}
+
 function TableHeadCell({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
   return (
     <th className="border-b border-[var(--border)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]" style={{ textAlign: align }}>
@@ -109,9 +121,49 @@ export function TradesSummaryMetrics({ model }: { model: TradesModel }) {
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <DeepLedgerMetricCard label="再平衡周期" value={`${model.cycles.length}`} subLabel={`已完成 ${model.completedCycleCount} 个`} accent="cyan" />
       <DeepLedgerMetricCard label="订单记录" value={`${model.orders.length}`} subLabel={`成交 ${model.executedOrderCount} 笔`} accent="green" />
-      <DeepLedgerMetricCard label="执行金额" value={formatCurrency(model.totalNotional, "USD")} subLabel="累计周期名义金额" accent="amber" />
-      <DeepLedgerMetricCard label="已实现收益" value={formatCurrency(model.realizedPnl, "USD")} subLabel={activityLabel} accent="indigo" />
+      <DeepLedgerMetricCard label="执行金额" value={formatCurrency(model.totalNotional, model.baseCurrency)} subLabel="累计周期名义金额" accent="amber" />
+      <DeepLedgerMetricCard label="已实现收益" value={formatCurrency(model.realizedPnl, model.baseCurrency)} subLabel={activityLabel} accent="indigo" />
     </div>
+  );
+}
+
+export function TradesLedgerSummary({ model }: { model: TradesModel }) {
+  const archivedTotal = model.ledgerMeta.archivedCycleCount + model.ledgerMeta.archivedTradeCount + model.ledgerMeta.archivedReportCount;
+  return (
+    <DeepLedgerPanel
+      accent="indigo"
+      title="当前账本窗口"
+      subtitle="交易页不再混展示旧测试历史；这里直接告诉你当前起点和已归档数量。"
+    >
+      <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <DeepLedgerStatusPill tone="indigo">当前账本</DeepLedgerStatusPill>
+            <span className="text-xs text-[var(--faint)]">
+              {model.ledgerMeta.ledgerStartTs ? `起点 ${formatDateTime(model.ledgerMeta.ledgerStartTs)}` : "尚未建立账本起点"}
+            </span>
+          </div>
+          <div className="mt-3 text-sm text-[var(--text)]">期初余额 {formatCurrency(model.ledgerMeta.openingBalance, model.baseCurrency)}</div>
+          <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
+            当前页的周期、订单和复盘都只统计这次账本起点之后的执行，避免旧测试数据继续混入审计视图。
+          </div>
+        </div>
+
+        <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <DeepLedgerStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已有归档" : "无归档历史"}</DeepLedgerStatusPill>
+          </div>
+          <div className="mt-3 grid gap-2 text-sm text-[var(--text)] sm:grid-cols-3">
+            <div>周期 {model.ledgerMeta.archivedCycleCount}</div>
+            <div>订单 {model.ledgerMeta.archivedTradeCount}</div>
+            <div>报告 {model.ledgerMeta.archivedReportCount}</div>
+          </div>
+          <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
+            {archivedTotal > 0 ? "如果当前列表为空，先看这里；很可能是旧历史已被归档，而不是数据没有落库。" : "当前环境下还没有被裁剪掉的历史测试记录。"}
+          </div>
+        </div>
+      </div>
+    </DeepLedgerPanel>
   );
 }
 
@@ -161,7 +213,12 @@ export function TradesCyclesPanel({ model }: { model: TradesModel }) {
     return (
       <DashboardEmptyState
         title="还没有再平衡周期"
-        description="先到工作台生成第一轮建议并确认执行，这里会自动沉淀完整的时间线与状态变化；如果当前只有目标写回、没有实际成交，这里仍会保持空白。"
+        description={buildArchivedHint({
+          title: "再平衡周期",
+          ledgerStartTs: model.ledgerMeta.ledgerStartTs,
+          archivedCount: model.ledgerMeta.archivedCycleCount,
+          emptyReason: "先到工作台生成第一轮建议并确认执行，这里会自动沉淀完整的时间线与状态变化；如果当前只有目标写回、没有实际成交，这里仍会保持空白。",
+        })}
         className="mt-4 px-5 py-14"
         action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>前往工作台生成建议</Link>}
       />
@@ -188,7 +245,7 @@ export function TradesCyclesPanel({ model }: { model: TradesModel }) {
               <TableCellText><DeepLedgerStatusPill tone={STATUS_TONE[cycle.status] ?? "slate"}>{cycleStatusLabel(cycle.status)}</DeepLedgerStatusPill></TableCellText>
               <TableCellText>{triggerSourceLabel(cycle.triggerSource)}</TableCellText>
               <TableCellMono align="right">{cycle.executionSummary?.ordersExecuted ?? cycle.executedOrders.length}</TableCellMono>
-              <TableCellMono align="right">{formatCurrency(cycle.executionSummary?.totalNotional ?? 0, "USD")}</TableCellMono>
+              <TableCellMono align="right">{formatCurrency(cycle.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</TableCellMono>
               <TableCellText align="right">{formatDateTime(cycle.createdAt)}</TableCellText>
             </tr>
           ))}
@@ -203,7 +260,12 @@ export function TradesOrdersPanel({ model }: { model: TradesModel }) {
     return (
       <DashboardEmptyState
         title="还没有订单记录"
-        description="订单会在你确认执行建议后自动写入；如果这轮只是写回目标权重、还没有实际成交，这里不会生成订单记录。"
+        description={buildArchivedHint({
+          title: "订单记录",
+          ledgerStartTs: model.ledgerMeta.ledgerStartTs,
+          archivedCount: model.ledgerMeta.archivedTradeCount,
+          emptyReason: "订单会在你确认执行建议后自动写入；如果这轮只是写回目标权重、还没有实际成交，这里不会生成订单记录。",
+        })}
         className="mt-4 px-5 py-14"
         action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
       />
@@ -264,19 +326,19 @@ export function TradesReportsPanel({ model }: { model: TradesModel }) {
 
             <div className="mt-3 grid gap-3 md:grid-cols-3">
               <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(24,34,54,0.72)] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">执行概览</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">执行概览</div>
                 <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
                   <div>订单数 {report.executionSummary?.ordersExecuted ?? 0}</div>
-                  <div>成交金额 {formatCurrency(report.executionSummary?.totalNotional ?? 0, "USD")}</div>
-                  <div>手续费 {formatCurrency(report.pnlAttribution.feeTotal, "USD")}</div>
+                  <div>成交金额 {formatCurrency(report.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</div>
+                  <div>手续费 {formatCurrency(report.pnlAttribution.feeTotal, model.baseCurrency)}</div>
                 </div>
               </div>
               <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(24,34,54,0.72)] p-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">收益归因</div>
                 <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
-                  <div>已实现 {formatCurrency(report.pnlAttribution.realizedPnl, "USD")}</div>
-                  <div>未实现 {formatCurrency(report.pnlAttribution.unrealizedPnl, "USD")}</div>
-                  <div>汇率影响 {formatCurrency(report.pnlAttribution.fxImpact, "USD")}</div>
+                  <div>已实现 {formatCurrency(report.pnlAttribution.realizedPnl, model.baseCurrency)}</div>
+                  <div>未实现 {formatCurrency(report.pnlAttribution.unrealizedPnl, model.baseCurrency)}</div>
+                  <div>汇率影响 {formatCurrency(report.pnlAttribution.fxImpact, model.baseCurrency)}</div>
                 </div>
               </div>
               <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(24,34,54,0.72)] p-4">
@@ -292,8 +354,8 @@ export function TradesReportsPanel({ model }: { model: TradesModel }) {
             {expanded ? (
               <div className="mt-4 rounded-[16px] border border-dashed border-[var(--border-strong)] bg-[rgba(8,12,20,0.28)] p-4 text-sm text-[var(--muted)]">
                 <div>触发源：{triggerSourceLabel(report.triggerSource)}</div>
-                <div className="mt-2">前后权益：{formatCurrency(report.beforeSnapshot.totalEquity, "USD")} → {formatCurrency(report.afterSnapshot.totalEquity, "USD")}</div>
-                <div className="mt-2">贡献前三：{report.pnlAttribution.topContributors.slice(0, 3).map((item) => `${item.symbol} ${formatCurrency(item.pnl, "USD")}`).join("；") || "-"}</div>
+                <div className="mt-2">前后权益：{formatCurrency(report.beforeSnapshot.totalEquity, model.baseCurrency)} → {formatCurrency(report.afterSnapshot.totalEquity, model.baseCurrency)}</div>
+                <div className="mt-2">贡献前三：{report.pnlAttribution.topContributors.slice(0, 3).map((item) => `${item.symbol} ${formatCurrency(item.pnl, model.baseCurrency)}`).join("；") || "-"}</div>
               </div>
             ) : null}
           </div>
@@ -301,7 +363,12 @@ export function TradesReportsPanel({ model }: { model: TradesModel }) {
       }) : (
         <DashboardEmptyState
           title="暂无复盘报告"
-          description="当前还没有可展示的执行复盘；如果这轮只有目标写回、没有真实执行，这里不会生成复盘报告。"
+          description={buildArchivedHint({
+            title: "复盘报告",
+            ledgerStartTs: model.ledgerMeta.ledgerStartTs,
+            archivedCount: model.ledgerMeta.archivedReportCount,
+            emptyReason: "当前还没有可展示的执行复盘；如果这轮只有目标写回、没有真实执行，这里不会生成复盘报告。",
+          })}
           className="px-5 py-16"
           action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
         />
