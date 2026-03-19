@@ -6,6 +6,7 @@ import type {
   SelectHTMLAttributes,
   SetStateAction,
 } from "react";
+import { useId } from "react";
 
 import type { DaaMarketIndicatorConfigKey, DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
@@ -70,9 +71,15 @@ const selectStyle: CSSProperties = {
 };
 
 export function FormInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  const generatedId = useId();
+  const controlId = props.id ?? generatedId;
+  const controlName = props.name ?? controlId;
+
   return (
     <input
       {...props}
+      id={controlId}
+      name={controlName}
       style={inputStyle}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = "var(--primary)";
@@ -89,9 +96,15 @@ export function FormInput(props: InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export function FormSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  const generatedId = useId();
+  const controlId = props.id ?? generatedId;
+  const controlName = props.name ?? controlId;
+
   return (
     <select
       {...props}
+      id={controlId}
+      name={controlName}
       style={selectStyle}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = "var(--primary)";
@@ -112,12 +125,16 @@ export function NumberInput(props: {
   min?: number;
   max?: number;
   step?: number;
+  id?: string;
+  name?: string;
   onChange: (value: number) => void;
   disabled?: boolean;
 }) {
   return (
     <FormInput
       type="number"
+      id={props.id}
+      name={props.name}
       value={Number.isFinite(props.value) ? props.value : 0}
       min={props.min}
       max={props.max}
@@ -153,6 +170,8 @@ export function CheckboxRow({
   onChange: (value: boolean) => void;
   children: ReactNode;
 }) {
+  const generatedId = useId();
+
   return (
     <label
       style={{
@@ -167,6 +186,8 @@ export function CheckboxRow({
     >
       <input
         type="checkbox"
+        id={generatedId}
+        name={generatedId}
         className="daa-checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}

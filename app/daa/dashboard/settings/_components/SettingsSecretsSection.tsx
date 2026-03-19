@@ -108,6 +108,8 @@ function SecretRow({
           <div className="mt-2 flex items-center gap-2">
             <div className="relative flex-1">
               <input
+                id={`secret-${secret.key}`}
+                name={`secret-${secret.key}`}
                 type={showValue ? "text" : "password"}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
