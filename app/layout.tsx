@@ -3,11 +3,12 @@ import type { ReactNode } from "react";
 import Script from "next/script";
 
 import { Toaster } from "@/components/ui/sonner";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Dynamic Asset Allocation",
+  title: DAA_BRAND_NAME,
   description: "DAA 资产配置与交易记录系统",
 };
 

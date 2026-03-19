@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 import { resolveSecret, SECRET_KEY_DEFS_, type DaaSecretKey } from "@/src/daa/config/secretsManager";
 import { sendFeishuMessage } from "@/src/daa/notify/feishu";
 import { sendTelegramMessage } from "@/src/daa/notify/telegram";
@@ -78,7 +79,7 @@ async function testTelegram(mode: TestMode): Promise<TestResult> {
 
   try {
     if (mode === "deliver") {
-      const text = `DeepLedger 测试消息\n时间: ${new Date().toISOString()}`;
+      const text = `${DAA_BRAND_NAME} 测试消息\n时间: ${new Date().toISOString()}`;
       const result = await sendTelegramMessage({
         botToken,
         chatId,
@@ -132,7 +133,7 @@ async function testFeishu(mode: TestMode): Promise<TestResult> {
   try {
     const result = await sendFeishuMessage({
       webhookUrl,
-      text: mode === "deliver" ? `DeepLedger 测试消息 ✅\n时间: ${new Date().toISOString()}` : "DeepLedger 连通性测试 ✅",
+      text: mode === "deliver" ? `${DAA_BRAND_NAME} 测试消息 ✅\n时间: ${new Date().toISOString()}` : `${DAA_BRAND_NAME} 连通性测试 ✅`,
     });
     if (mode === "deliver") {
       await appendNotificationDeliveryLog({

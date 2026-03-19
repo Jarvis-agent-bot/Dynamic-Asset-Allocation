@@ -1,6 +1,6 @@
 <div align="center">
 
-# DeepLedger · Dynamic Asset Allocation
+# DAA Console · Dynamic Asset Allocation
 
 **单组合动态资产配置系统 · 发现 → 洞察 → 再平衡 → 执行 → 复盘**
 
@@ -17,7 +17,7 @@
 
 ## 概述
 
-DeepLedger 是一个面向个人投资者的动态资产配置工作台。核心流程：
+DAA Console 是一个面向个人投资者的动态资产配置工作台。核心流程：
 
 1. **资产发现** — 全市场搜索 + 基金经理持仓跟踪 + 精选资产推荐
 2. **资产洞察** — 三维信号融合（技术指标 + 新闻 + LLM 分析）

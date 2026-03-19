@@ -2772,6 +2772,10 @@ function normalizeTradePricingMode(value: unknown): "manual" | "market" {
   return mode === "market" ? "market" : "manual";
 }
 
+function isPgUniqueViolation(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && (error as { code?: unknown }).code === "23505");
+}
+
 function mapTradeBasketRow(row: Record<string, unknown>): DaaStoreTradeBasket {
   return {
     basketId: normalizeText(row.basket_id),
@@ -4551,30 +4555,33 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         const ledgerAmountInBase = ticket.side === "BUY"
           ? (notionalInBase + feeInBase)
           : Math.max(0, notionalInBase - feeInBase);
-        await query(
-          `INSERT INTO daa_portfolio_ledger_events (
-             event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
-             amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
-           ) VALUES (
-             $1,$2,'trade_execution',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,NOW()
-           )
-           ON CONFLICT (ticket_id) DO NOTHING`,
-          [
-            randomUUID(),
-            nowIso,
-            ledgerSide,
-            ledgerAmountInBase,
-            baseCurrency,
-            baseCurrency,
-            ledgerAmountInBase,
-            1,
-            ticket.ticketId,
-            ticket.cycleId,
-            nowIso,
-            `${ticket.side} ${ticket.symbol} ${ticket.qty.toFixed(6)} @ ${ticket.price.toFixed(4)}`,
-            JSON.stringify({ entryKind: "trade_execution", side: ticket.side }),
-          ],
-        );
+        try {
+          await query(
+            `INSERT INTO daa_portfolio_ledger_events (
+               event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+               amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
+             ) VALUES (
+               $1,$2,'trade_execution',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,NOW()
+             )`,
+            [
+              randomUUID(),
+              nowIso,
+              ledgerSide,
+              ledgerAmountInBase,
+              baseCurrency,
+              baseCurrency,
+              ledgerAmountInBase,
+              1,
+              ticket.ticketId,
+              ticket.cycleId,
+              nowIso,
+              `${ticket.side} ${ticket.symbol} ${ticket.qty.toFixed(6)} @ ${ticket.price.toFixed(4)}`,
+              JSON.stringify({ entryKind: "trade_execution", side: ticket.side }),
+            ],
+          );
+        } catch (error) {
+          if (!isPgUniqueViolation(error)) throw error;
+        }
 
         results.push({
           ticketId: ticket.ticketId,

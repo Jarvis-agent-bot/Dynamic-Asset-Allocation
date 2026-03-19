@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 type NavKey = "workbench" | "strategy-lab" | "trades" | "settings";
 type IconType = ComponentType<{ className?: string }>;
@@ -144,7 +145,7 @@ export function DaaMobileNav() {
       >
         <SheetHeader className="border-b border-[var(--border)] px-4 pb-3 pt-4">
           <SheetTitle className="text-left text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
-            DeepLedger
+            {DAA_BRAND_NAME}
           </SheetTitle>
         </SheetHeader>
         <nav className="mt-2 flex flex-col gap-0.5 px-2" aria-label="DAA 主导航">
