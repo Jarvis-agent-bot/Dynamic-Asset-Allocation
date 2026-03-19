@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { RefreshCcw } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -77,6 +78,16 @@ export function WorkbenchCockpitSection(props: {
                     <span className="text-xs text-[var(--faint)]">{signal.source}</span>
                   </div>
                   <div className="mt-2 text-sm text-[var(--text)]">{signal.text}</div>
+                  {signal.actionHref ? (
+                    <div className="mt-3">
+                      <Link
+                        href={signal.actionHref}
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--primary)]/28 bg-[rgba(56,189,248,0.08)] px-3 py-1.5 text-xs font-medium text-[var(--primary)] transition-all hover:border-[var(--primary)]/42 hover:bg-[rgba(56,189,248,0.12)]"
+                      >
+                        前往处理
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>

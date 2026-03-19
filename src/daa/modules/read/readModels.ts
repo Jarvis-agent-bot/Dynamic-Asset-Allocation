@@ -64,6 +64,8 @@ export type WorkbenchAllocationSummary = {
   watchlistCount: number;
   holdingValue: number;
   cashValue: number;
+  investableCash: number;
+  frozenCash: number;
   totalEquity: number;
   topHoldings: Array<{
     assetKey: string;

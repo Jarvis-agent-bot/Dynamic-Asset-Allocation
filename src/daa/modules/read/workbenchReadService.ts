@@ -136,16 +136,21 @@ function buildAllocationSummary(input: {
 }): WorkbenchAllocationSummary {
   const assetUniverse = input.bootstrap.assetUniverse || [];
   const cashValue = input.bootstrap.account.cash ?? 0;
-  const totalEquity = input.bootstrap.account.totalEquity ?? 0;
+  const investableCash = input.bootstrap.account.investableCash ?? 0;
+  const frozenCash = input.bootstrap.account.frozenCash ?? 0;
   const holdingRows = assetUniverse
     .filter((row) => row.holdingQty > 0 && (row.valuationBase || 0) > 0)
     .sort((a, b) => (b.valuationBase || 0) - (a.valuationBase || 0));
+  const holdingValue = holdingRows.reduce((sum, row) => sum + (row.valuationBase || 0), 0);
+  const totalEquity = holdingValue + cashValue;
 
   return {
     holdingCount: assetUniverse.filter((row) => row.holdingQty > 0).length,
     watchlistCount: assetUniverse.filter((row) => row.watchEnabled).length,
-    holdingValue: holdingRows.reduce((sum, row) => sum + (row.valuationBase || 0), 0),
+    holdingValue,
     cashValue,
+    investableCash,
+    frozenCash,
     totalEquity,
     topHoldings: holdingRows.slice(0, 5).map((row) => ({
       assetKey: row.assetKey,

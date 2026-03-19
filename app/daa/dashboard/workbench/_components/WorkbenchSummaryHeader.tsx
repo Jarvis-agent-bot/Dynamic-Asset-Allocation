@@ -15,25 +15,50 @@ export function WorkbenchSummaryHeader(props: {
   baseCurrency: string;
   totalEquity: number;
   holdingsValue: number;
-  cashValue: number;
+  availableCashValue: number;
+  frozenCashValue: number;
   loading: boolean;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
+  const summaryItems = [
+    {
+      label: "总权益",
+      value: formatCurrency(props.totalEquity, props.baseCurrency),
+      tone: "cyan" as const,
+      hint: "持仓 + 可用现金 + 冻结现金",
+    },
+    {
+      label: "持仓",
+      value: formatCurrency(props.holdingsValue, props.baseCurrency),
+      tone: "indigo" as const,
+      hint: "已持有资产当前估值",
+    },
+    {
+      label: "可用现金",
+      value: formatCurrency(props.availableCashValue, props.baseCurrency),
+      tone: "green" as const,
+      hint: "未冻结，可继续操作",
+    },
+    {
+      label: "冻结现金",
+      value: formatCurrency(props.frozenCashValue, props.baseCurrency),
+      tone: "amber" as const,
+      hint: "待释放或执行中占用",
+    },
+  ];
+
   return (
     <>
       <div className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.96),rgba(13,19,32,0.98))] px-5 py-4 shadow-[0_22px_48px_rgba(0,0,0,0.24)] sm:px-6">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              { label: "总权益", value: formatCurrency(props.totalEquity, props.baseCurrency), tone: "cyan" as const },
-              { label: "持仓", value: formatCurrency(props.holdingsValue, props.baseCurrency), tone: "indigo" as const },
-              { label: "现金", value: formatCurrency(props.cashValue, props.baseCurrency), tone: "green" as const },
-            ].map((item) => (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {summaryItems.map((item) => (
               <div key={item.label} className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{item.label}</div>
                 <div className="mt-2 font-[var(--font-mono)] text-lg text-[var(--text)]">{item.value}</div>
-                <div className="mt-2"><DeepLedgerStatusPill tone={item.tone}>账户快照</DeepLedgerStatusPill></div>
+                <div className="mt-2 text-xs text-[var(--muted)]">{item.hint}</div>
+                <div className="mt-2"><DeepLedgerStatusPill tone={item.tone}>{item.label}</DeepLedgerStatusPill></div>
               </div>
             ))}
           </div>

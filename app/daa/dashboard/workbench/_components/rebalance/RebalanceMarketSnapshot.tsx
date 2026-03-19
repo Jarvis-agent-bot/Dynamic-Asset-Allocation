@@ -42,7 +42,7 @@ export function RebalanceMarketSnapshot(props: {
             买入系数 {Math.round((props.decisionMarketContext?.buyScale ?? props.activeMarketContext.buyScale) * 100)}% · 高波动 {Math.round((props.decisionMarketContext?.highRiskBuyScale ?? props.activeMarketContext.highRiskBuyScale) * 100)}%
           </span>
         </div>
-        <span className="shrink-0 text-[10px] text-[var(--faint)]">{props.marketContextExpanded ? "▲ 收起" : "▼ 展开详情"}</span>
+        <span className="shrink-0 text-[11px] font-medium text-[var(--muted)]">{props.marketContextExpanded ? "▲ 收起" : "▼ 展开详情"}</span>
       </button>
 
       {props.marketContextExpanded ? (
