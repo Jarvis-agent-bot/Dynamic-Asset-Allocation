@@ -196,17 +196,17 @@ function buildHfSignalSummary(input: {
         if (score > 60 && conviction > 50) {
             level = "bullish";
             icon = "🟢";
-            label = "看多共识";
+            label = "偏多共识";
         }
         else if (score < 40 || thesisDrift > 12) {
             level = "bearish";
             icon = "🔴";
-            label = "看空/减持";
+            label = "偏空/减持";
         }
         else {
             level = "neutral";
             icon = "🟡";
-            label = "信号中性";
+            label = "中性观察";
         }
     }
     const netChange = input.fundDetails.reduce((sum, row) => sum + row.changePct, 0);

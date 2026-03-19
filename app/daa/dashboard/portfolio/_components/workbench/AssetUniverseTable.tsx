@@ -230,6 +230,14 @@ function hfTrendLabel(trend: "adding" | "trimming" | "neutral" | "none"): string
   return "暂无趋势";
 }
 
+function hfSignalButtonLabel(signal: AssetUniverseView["hfSignal"]): string {
+  if (!signal) return "暂无人因";
+  if (signal.level === "bullish") return "人因偏多";
+  if (signal.level === "bearish") return "人因偏空";
+  if (signal.level === "neutral") return "人因中性";
+  return "暂无人因";
+}
+
 function normalizeFundLabel(fundName: string, fundCode: string): string {
   const name = String(fundName || "").trim();
   if (name) return name;
@@ -920,7 +928,7 @@ export default function AssetUniverseTable(props: {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
           <DeepLedgerMiniStat label="持仓资产" value={props.counts.holdings} tone="cyan" />
           <DeepLedgerMiniStat label="观察资产" value={props.counts.watchlist} tone="amber" />
-          <DeepLedgerMiniStat label="再平衡篮子" value={props.counts.basket} tone="indigo" />
+          <DeepLedgerMiniStat label="调仓范围" value={props.counts.basket} tone="indigo" />
           <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.74)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">搜索标的</div>
@@ -1158,7 +1166,7 @@ export default function AssetUniverseTable(props: {
                               className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-1.5 text-xs text-[var(--text)]"
                             >
                               <span className="text-base leading-none">{hfSignalIcon(row.hfSignal)}</span>
-                              <span>{row.hfSignal?.label || "暂无人因"}</span>
+                              <span>{hfSignalButtonLabel(row.hfSignal)}</span>
                             </button>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
