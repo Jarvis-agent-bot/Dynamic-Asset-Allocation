@@ -133,9 +133,9 @@ export function WorkbenchSummaryHeader(props: {
               <DeepLedgerStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已归档" : "无历史噪音"}</DeepLedgerStatusPill>
             </div>
             <div className="mt-3 grid gap-2 text-sm text-[var(--text)] sm:grid-cols-3">
-              <div>周期 {props.loading ? "—" : (props.ledgerMeta?.archivedCycleCount || 0).toString()}</div>
-              <div>订单 {props.loading ? "—" : (props.ledgerMeta?.archivedTradeCount || 0).toString()}</div>
-              <div>报告 {props.loading ? "—" : (props.ledgerMeta?.archivedReportCount || 0).toString()}</div>
+              <div>归档周期 {props.loading ? "—" : (props.ledgerMeta?.archivedCycleCount || 0).toString()}</div>
+              <div>归档订单 {props.loading ? "—" : (props.ledgerMeta?.archivedTradeCount || 0).toString()}</div>
+              <div>归档报告 {props.loading ? "—" : (props.ledgerMeta?.archivedReportCount || 0).toString()}</div>
             </div>
             <div className="mt-2 text-xs text-[var(--muted)]">
               {props.loading
