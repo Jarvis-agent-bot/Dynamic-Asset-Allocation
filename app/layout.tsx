@@ -1,47 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
-import { DM_Serif_Display, JetBrains_Mono, Noto_Sans_SC, Noto_Serif_SC, Sora } from "next/font/google";
 
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
-
-const dmSerifDisplay = DM_Serif_Display({
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  variable: "--font-dm-serif",
-  display: "swap",
-});
-
-const sora = Sora({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-sora",
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
-  variable: "--font-jetbrains",
-  display: "swap",
-});
-
-const notoSansSC = Noto_Sans_SC({
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-noto-sans-sc",
-  display: "swap",
-  preload: false,
-});
-
-const notoSerifSC = Noto_Serif_SC({
-  weight: ["400", "600", "700"],
-  variable: "--font-noto-serif-sc",
-  display: "swap",
-  preload: false,
-});
 
 export const metadata: Metadata = {
   title: "Dynamic Asset Allocation",
@@ -59,7 +22,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={`dark ${dmSerifDisplay.variable} ${sora.variable} ${jetbrainsMono.variable} ${notoSansSC.variable} ${notoSerifSC.variable}`}
+      className="dark"
       suppressHydrationWarning
     >
       <head>
