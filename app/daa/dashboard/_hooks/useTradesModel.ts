@@ -70,7 +70,13 @@ export function useTradesModel(input: {
   );
 
   const completedCycleCount = cycles.filter((cycle) => cycle.status === "completed").length;
-  const executedOrderCount = orders.filter((row) => row.status === "executed").length;
+  const executedOrders = orders.filter((row) => row.status === "executed");
+  const executedOrderCount = executedOrders.length;
+  const executedOrderNotional = executedOrders.reduce((sum, row) => sum + Math.max(0, row.notionalInBase || row.grossNotional || 0), 0);
+  const cycleExecutedNotional = executedOrders
+    .filter((row) => Boolean(row.cycleId))
+    .reduce((sum, row) => sum + Math.max(0, row.notionalInBase || row.grossNotional || 0), 0);
+  const manualExecutedNotional = Math.max(0, executedOrderNotional - cycleExecutedNotional);
   const totalNotional = cycles.reduce((sum, cycle) => sum + (cycle.executionSummary?.totalNotional ?? 0), 0);
   const realizedPnl = sortedReports.reduce((sum, report) => sum + report.pnlAttribution.realizedPnl, 0);
   const latestActivityAt = maxIso([
@@ -103,6 +109,9 @@ export function useTradesModel(input: {
     sortedReports,
     completedCycleCount,
     executedOrderCount,
+    executedOrderNotional,
+    cycleExecutedNotional,
+    manualExecutedNotional,
     totalNotional,
     realizedPnl,
     latestActivityAt,

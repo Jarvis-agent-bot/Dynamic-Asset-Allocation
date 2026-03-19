@@ -859,7 +859,7 @@ export default function AssetUniverseTable(props: {
       title="观察与再平衡"
       accent={props.view === "holdings" ? "cyan" : "amber"}
       bodyClassName="space-y-5"
-      action={<DeepLedgerStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>{viewLabel(props.view)}</DeepLedgerStatusPill>}
+      action={<DeepLedgerStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>当前 {filteredRows.length} 个标的</DeepLedgerStatusPill>}
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
         <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,38,0.98),rgba(9,14,24,0.94))] p-5">
