@@ -80,10 +80,26 @@ export async function POST(req: Request) {
 
         const sends: Promise<boolean>[] = [];
         if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
-          sends.push(sendTelegramByEnv(driftMsg));
+          sends.push(sendTelegramByEnv(driftMsg, {
+            eventType: "drift_triggered",
+            triggerSource: "cron_drift_check",
+            cycleId: cycle?.cycleId || null,
+            requestJson: {
+              driftedAssetCount: driftedAssets.length,
+              autoGenerateEnabled: strategy.autoGenerateEnabled,
+            },
+          }));
         }
         if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
-          sends.push(sendFeishuByEnv(driftMsg));
+          sends.push(sendFeishuByEnv(driftMsg, {
+            eventType: "drift_triggered",
+            triggerSource: "cron_drift_check",
+            cycleId: cycle?.cycleId || null,
+            requestJson: {
+              driftedAssetCount: driftedAssets.length,
+              autoGenerateEnabled: strategy.autoGenerateEnabled,
+            },
+          }));
         }
         await Promise.allSettled(sends);
       }

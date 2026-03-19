@@ -1,6 +1,9 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { resolveSecret, SECRET_KEY_DEFS_, type DaaSecretKey } from "@/src/daa/config/secretsManager";
+import { sendFeishuMessage } from "@/src/daa/notify/feishu";
+import { sendTelegramMessage } from "@/src/daa/notify/telegram";
+import { appendNotificationDeliveryLog } from "@/src/daa/store/notificationDeliveryLogRepo";
 
 export const runtime = "nodejs";
 
@@ -14,6 +17,12 @@ type TestResult = {
   message: string;
   latencyMs: number;
 };
+
+type TestMode = "connectivity" | "deliver";
+
+function normalizeMode(value: unknown): TestMode {
+  return String(value || "").trim().toLowerCase() === "deliver" ? "deliver" : "connectivity";
+}
 
 async function testLlm(): Promise<TestResult> {
   const start = Date.now();
@@ -55,7 +64,7 @@ async function testLlm(): Promise<TestResult> {
   }
 }
 
-async function testTelegram(): Promise<TestResult> {
+async function testTelegram(mode: TestMode): Promise<TestResult> {
   const start = Date.now();
   const botToken = await resolveSecret("telegram_bot_token");
   const chatId = await resolveSecret("telegram_chat_id");
@@ -68,6 +77,33 @@ async function testTelegram(): Promise<TestResult> {
   }
 
   try {
+    if (mode === "deliver") {
+      const text = `DeepLedger 测试消息\n时间: ${new Date().toISOString()}`;
+      const result = await sendTelegramMessage({
+        botToken,
+        chatId,
+        text,
+      });
+      await appendNotificationDeliveryLog({
+        channel: "telegram",
+        eventType: "test_message",
+        triggerSource: "settings_secret_test",
+        success: result.ok,
+        statusCode: result.statusCode,
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage,
+        recipientHint: result.recipientHint,
+        requestJson: { mode, preview: text },
+        responseJson: result.responseJson,
+      });
+      return {
+        key: "telegram_bot_token",
+        success: result.ok,
+        message: result.ok ? "已发送 Telegram 测试消息" : (result.errorMessage || "Telegram 测试消息发送失败"),
+        latencyMs: Date.now() - start,
+      };
+    }
+
     // Use getMe to validate bot token without sending a message
     const url = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/getMe`;
     const response = await fetch(url, { method: "GET" });
@@ -85,7 +121,7 @@ async function testTelegram(): Promise<TestResult> {
   }
 }
 
-async function testFeishu(): Promise<TestResult> {
+async function testFeishu(mode: TestMode): Promise<TestResult> {
   const start = Date.now();
   const webhookUrl = await resolveSecret("feishu_webhook_url");
 
@@ -94,35 +130,42 @@ async function testFeishu(): Promise<TestResult> {
   }
 
   try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        msg_type: "text",
-        content: { text: "DeepLedger 连通性测试 ✅" },
-      }),
+    const result = await sendFeishuMessage({
+      webhookUrl,
+      text: mode === "deliver" ? `DeepLedger 测试消息 ✅\n时间: ${new Date().toISOString()}` : "DeepLedger 连通性测试 ✅",
     });
-
-    if (!response.ok) {
-      return { key: "feishu_webhook_url", success: false, message: `HTTP ${response.status}`, latencyMs: Date.now() - start };
+    if (mode === "deliver") {
+      await appendNotificationDeliveryLog({
+        channel: "feishu",
+        eventType: "test_message",
+        triggerSource: "settings_secret_test",
+        success: result.ok,
+        statusCode: result.statusCode,
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage,
+        recipientHint: result.recipientHint,
+        requestJson: { mode },
+        responseJson: result.responseJson,
+      });
     }
-
-    const data = (await response.json().catch(() => ({}))) as { code?: number };
-    if (data.code !== 0) {
-      return { key: "feishu_webhook_url", success: false, message: `飞书返回 code=${data.code}`, latencyMs: Date.now() - start };
+    if (!result.ok) {
+      return {
+        key: "feishu_webhook_url",
+        success: false,
+        message: result.errorMessage || "飞书测试失败",
+        latencyMs: Date.now() - start,
+      };
     }
-
-    return { key: "feishu_webhook_url", success: true, message: "已发送测试消息", latencyMs: Date.now() - start };
+    return {
+      key: "feishu_webhook_url",
+      success: true,
+      message: mode === "deliver" ? "已发送飞书测试消息" : "飞书 webhook 连通正常",
+      latencyMs: Date.now() - start,
+    };
   } catch (e) {
     return { key: "feishu_webhook_url", success: false, message: e instanceof Error ? e.message : String(e), latencyMs: Date.now() - start };
   }
 }
-
-const TEST_HANDLERS: Record<string, () => Promise<TestResult>> = {
-  llm_api_key: testLlm,
-  telegram_bot_token: testTelegram,
-  feishu_webhook_url: testFeishu,
-};
 
 /** POST — test connectivity for a specific secret. */
 export async function POST(req: Request) {
@@ -130,17 +173,25 @@ export async function POST(req: Request) {
     const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBody<{ key?: unknown }>(req);
+    const body = await readJsonBody<{ key?: unknown; mode?: unknown }>(req);
     if (!body || !isValidSecretKey(body.key)) {
       return fail("VALIDATION_FAILED", "invalid or missing secret key", { status: 400 });
     }
 
-    const handler = TEST_HANDLERS[body.key];
-    if (!handler) {
+    const mode = normalizeMode(body.mode);
+    let result: TestResult | null = null;
+    if (body.key === "llm_api_key") {
+      result = await testLlm();
+    } else if (body.key === "telegram_bot_token") {
+      result = await testTelegram(mode);
+    } else if (body.key === "feishu_webhook_url") {
+      result = await testFeishu(mode);
+    }
+
+    if (!result) {
       return fail("VALIDATION_FAILED", `no connectivity test available for ${body.key}`, { status: 400 });
     }
 
-    const result = await handler();
-    return ok({ result });
+    return ok({ result, mode });
   });
 }

@@ -175,6 +175,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("cron-ops-routes-v1", () => {
@@ -391,5 +392,44 @@ describe("cron-ops-routes-v1", () => {
     expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
     expect(vi.mocked(sendFeishuByEnv)).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(sendFeishuByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
+  });
+
+  it("daily-analysis 会优先按 analysisTimeUtc 推导整点窗口，而不是继续依赖旧 hourly 字段", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-19T11:05:00.000Z"));
+    vi.mocked(getDaaSystemConfig).mockResolvedValue({
+      config: {
+        ...buildSystemConfig({ autoGenerateEnabled: false }).config,
+        rebalanceStrategy: {
+          analysisTimeUtc: "10:51",
+          autoGenerateEnabled: false,
+        },
+        notification: {
+          dailyAnalysisHourUtc: 1,
+          telegram: {
+            enabled: false,
+            onDriftTrigger: false,
+            onSuggestionGenerated: false,
+            onTradeExecuted: false,
+            dailyReport: false,
+          },
+          feishu: {
+            enabled: false,
+            onDriftTrigger: false,
+            onSuggestionGenerated: false,
+            onTradeExecuted: false,
+            dailyReport: false,
+          },
+        },
+      },
+    } as any);
+
+    const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.message).toBe("auto generate disabled");
+    expect(String(json.data.message)).not.toContain("hour guard");
   });
 });

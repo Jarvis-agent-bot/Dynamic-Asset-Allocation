@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { cn } from "@/lib/utils";
@@ -15,6 +17,13 @@ export function WorkbenchActiveTabPanel(props: {
 }) {
   const { model } = props;
   const isPortfolioTab = model.activeTab === "positions" || model.activeTab === "watchlist";
+  const [watchlistBuilderOpen, setWatchlistBuilderOpen] = useState(model.summary.watchlistAssets <= 0);
+  const [watchlistBuilderTouched, setWatchlistBuilderTouched] = useState(false);
+
+  useEffect(() => {
+    if (watchlistBuilderTouched) return;
+    setWatchlistBuilderOpen(model.summary.watchlistAssets <= 0);
+  }, [model.summary.watchlistAssets, watchlistBuilderTouched]);
 
   return (
     <div className="space-y-4">
@@ -45,7 +54,27 @@ export function WorkbenchActiveTabPanel(props: {
       {model.activeTab === "watchlist" ? (
         <div className="space-y-4">
           <AssetUniverseTable {...model.tableProps} view="watchlist" />
-          <WatchlistBuilderPanel {...model.watchlistBuilderProps} />
+          <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-[var(--text)]">观察池构建工具</div>
+                <div className="mt-1 text-sm leading-6 text-[var(--muted)]">
+                  推荐池与搜索补充保留在这里，但默认不长期占据主工作区；需要扩充观察列表时再展开即可。
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setWatchlistBuilderTouched(true);
+                  setWatchlistBuilderOpen((prev) => !prev);
+                }}
+                className="inline-flex items-center justify-center rounded-full border border-[var(--border-strong)] px-3.5 py-2 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]"
+              >
+                {watchlistBuilderOpen ? "收起观察池工具" : "展开观察池工具"}
+              </button>
+            </div>
+            {watchlistBuilderOpen ? <div className="mt-4"><WatchlistBuilderPanel {...model.watchlistBuilderProps} /></div> : null}
+          </div>
         </div>
       ) : null}
       {model.activeTab === "rebalance" && model.rebalanceSectionProps ? (
@@ -54,7 +83,14 @@ export function WorkbenchActiveTabPanel(props: {
           onNavigateTab={props.onNavigateTab ?? model.rebalanceSectionProps.onNavigateTab}
         />
       ) : null}
-      {model.activeTab === "cash" ? <WorkbenchCashSection baseCurrency={model.bootstrap?.baseCurrency || "USD"} onCashChanged={() => void model.loadBootstrap(true)} /> : null}
+      {model.activeTab === "cash" ? (
+        <WorkbenchCashSection
+          baseCurrency={model.bootstrap?.baseCurrency || "USD"}
+          entries={model.cashLedger}
+          ledgerMeta={model.ledgerMeta}
+          onCashChanged={() => void model.loadBootstrap(true)}
+        />
+      ) : null}
     </div>
   );
 }

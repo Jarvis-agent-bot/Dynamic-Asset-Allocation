@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Eye, EyeOff, KeyRound, Lock, Pencil, PlugZap, Trash2, X } from "lucide-react";
+import { Check, Eye, EyeOff, KeyRound, Lock, Pencil, PlugZap, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { SectionCard } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
@@ -11,6 +11,7 @@ import {
   testSecretConnectivity,
   writeSecretValue,
   type StoreSecretStatus,
+  type StoreSecretTestMode,
   type StoreSecretTestResult,
 } from "@/src/daa/modules/store/storeApi";
 
@@ -27,6 +28,7 @@ const GROUP_META: Record<string, { label: string; order: number }> = {
 };
 
 const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url"]);
+const DELIVERABLE_KEYS = new Set(["telegram_bot_token", "feishu_webhook_url"]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SecretRow
@@ -42,7 +44,7 @@ function SecretRow({
   secret: StoreSecretStatus;
   onSaved: (secrets: StoreSecretStatus[]) => void;
   testResult: StoreSecretTestResult | null;
-  onTest: (key: string) => void;
+  onTest: (key: string, mode: StoreSecretTestMode) => void;
   testing: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -81,6 +83,7 @@ function SecretRow({
 
   const sourceLabel = secret.source === "env" ? "环境变量" : secret.source === "db" ? "数据库" : "未配置";
   const isTestable = TESTABLE_KEYS.has(secret.key);
+  const isDeliverable = DELIVERABLE_KEYS.has(secret.key);
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 py-2.5">
@@ -160,12 +163,23 @@ function SecretRow({
           {isTestable && secret.source !== "empty" && (
             <button
               type="button"
-              onClick={() => onTest(secret.key)}
+              onClick={() => onTest(secret.key, "connectivity")}
               disabled={testing}
               title="连通性测试"
               className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--primary)] disabled:opacity-40"
             >
               <PlugZap className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
+            </button>
+          )}
+          {isDeliverable && secret.source !== "empty" && (
+            <button
+              type="button"
+              onClick={() => onTest(secret.key, "deliver")}
+              disabled={testing}
+              title="发送测试消息"
+              className="rounded-md p-1.5 text-[var(--faint)] transition-colors hover:bg-[var(--elevated)] hover:text-emerald-400 disabled:opacity-40"
+            >
+              <Send className={`h-3.5 w-3.5 ${testing ? "animate-pulse" : ""}`} />
             </button>
           )}
           {!secret.readOnly && (
@@ -221,10 +235,10 @@ export function SettingsSecretsSection() {
     void loadSecrets();
   }, [loadSecrets]);
 
-  const handleTest = useCallback(async (key: string) => {
+  const handleTest = useCallback(async (key: string, mode: StoreSecretTestMode = "connectivity") => {
     setTestingKey(key);
     try {
-      const result = await testSecretConnectivity(key);
+      const result = await testSecretConnectivity(key, mode);
       setTestResults((prev) => ({ ...prev, [key]: result }));
       if (result.success) {
         toast.success(`${result.message}`);

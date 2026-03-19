@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 
 type QueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
@@ -30,6 +32,28 @@ function normalizeBaseCurrency(value: unknown, fallback = "USD"): string {
 function toFiniteNumber(value: unknown, fallback = 0): number {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function toIsoTimestamp(value: unknown): string {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? new Date(value).toISOString() : "";
+  }
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return "";
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
+}
+
+async function tableExists(query: QueryFn, tableName: string): Promise<boolean> {
+  const result = await query(
+    "SELECT 1 FROM information_schema.tables WHERE table_name = $1 LIMIT 1",
+    [tableName],
+  );
+  return result.rows.length > 0;
 }
 
 async function ensureVersionTable(query: QueryFn): Promise<void> {
@@ -250,6 +274,114 @@ const MIGRATIONS_: Migration[] = [
       `);
       await query("CREATE INDEX IF NOT EXISTS idx_daa_job_execution_logs_type_started_desc ON daa_job_execution_logs(job_type, started_at DESC)");
       await query("CREATE INDEX IF NOT EXISTS idx_daa_job_execution_logs_request_id ON daa_job_execution_logs(request_id)");
+    },
+  },
+  {
+    id: "20260319_notification_delivery_logs",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_notification_delivery_logs (
+          id TEXT PRIMARY KEY,
+          channel TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          trigger_source TEXT NOT NULL DEFAULT 'unknown',
+          success BOOLEAN NOT NULL DEFAULT FALSE,
+          status_code INTEGER,
+          error_code TEXT,
+          error_message TEXT,
+          recipient_hint TEXT,
+          job_id TEXT,
+          cycle_id TEXT,
+          ticket_id TEXT,
+          request_json JSONB,
+          response_json JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_created_desc ON daa_notification_delivery_logs(created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_channel_created_desc ON daa_notification_delivery_logs(channel, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_job_id ON daa_notification_delivery_logs(job_id)");
+    },
+  },
+  {
+    id: "20260319_current_ledger_opening_balance",
+    async apply(query) {
+      const hasLedgerTable = await tableExists(query, "daa_portfolio_ledger_events");
+      if (!hasLedgerTable) return;
+
+      const ledgerStartRes = await query(
+        "SELECT MAX(ts) AS ledger_start_ts FROM daa_portfolio_ledger_events WHERE event_kind = 'ledger_reset'",
+      );
+      const ledgerStartTs = toIsoTimestamp(ledgerStartRes.rows[0]?.ledger_start_ts);
+      if (!ledgerStartTs) return;
+
+      const [openingExistsRes, snapshotRes, accountRes, activityRes, holdingRes] = await Promise.all([
+        query(
+          "SELECT 1 FROM daa_portfolio_ledger_events WHERE event_kind = 'opening_balance' AND ts >= $1 LIMIT 1",
+          [ledgerStartTs],
+        ),
+        query(
+          "SELECT cash FROM daa_equity_snapshots_v2 WHERE ts = $1 AND source = 'ledger_reset' ORDER BY ts DESC LIMIT 1",
+          [ledgerStartTs],
+        ),
+        query(
+          "SELECT base_currency, cash, frozen_cash, investable_cash FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
+        ),
+        query(
+          "SELECT COUNT(*) AS count FROM daa_portfolio_ledger_events WHERE event_kind <> 'ledger_reset' AND ts >= $1",
+          [ledgerStartTs],
+        ),
+        query(
+          "SELECT COUNT(*) AS count FROM daa_asset_universe WHERE holding_qty > 0 OR holding_price > 0 OR cost_basis IS NOT NULL",
+        ),
+      ]);
+
+      const accountRow = accountRes.rows[0] || {};
+      const baseCurrency = normalizeBaseCurrency(accountRow.base_currency, "USD");
+      const snapshotCash = Math.max(0, toFiniteNumber(snapshotRes.rows[0]?.cash, Number.NaN));
+      const currentCash = Math.max(0, toFiniteNumber(accountRow.cash, 0));
+      const frozenCash = Math.max(0, toFiniteNumber(accountRow.frozen_cash, 0));
+      const investableCash = resolveInvestableCash({
+        cash: currentCash,
+        frozenCash,
+        investableCash: accountRow.investable_cash,
+      });
+      const openingCash = Number.isFinite(snapshotCash) ? snapshotCash : currentCash;
+      const hasOpeningBalance = openingExistsRes.rows.length > 0;
+      const activityCount = Math.max(0, toFiniteNumber(activityRes.rows[0]?.count, 0));
+      const holdingCount = Math.max(0, toFiniteNumber(holdingRes.rows[0]?.count, 0));
+
+      if (!hasOpeningBalance && openingCash > 0) {
+        await query(
+          `INSERT INTO daa_portfolio_ledger_events (
+             event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+             amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
+           ) VALUES (
+             $1,$2,'opening_balance','deposit',$3,$4,$4,$3,1,NULL,NULL,$2,$5,$6::jsonb,NOW()
+           )`,
+          [
+            randomUUID(),
+            ledgerStartTs,
+            openingCash,
+            baseCurrency,
+            "当前工作账本期初余额",
+            JSON.stringify({ entryKind: "opening_balance", reason: "runtime_backfill" }),
+          ],
+        );
+      }
+
+      if (holdingCount === 0 && activityCount === 0) {
+        await query(
+          `UPDATE daa_account_state_v2
+           SET cash = $1,
+               investable_cash = $2,
+               frozen_cash = $3,
+               total_equity = $1,
+               updated_at = NOW()
+           WHERE id = 'default'`,
+          [openingCash, Math.min(openingCash, investableCash), frozenCash],
+        );
+      }
     },
   },
 ];

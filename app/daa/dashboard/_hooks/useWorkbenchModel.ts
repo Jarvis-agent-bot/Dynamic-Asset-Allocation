@@ -5,7 +5,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError, getApiErrorMessage } from "@/src/daa/api/client";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import type { WorkbenchAllocationSummary, WorkbenchSignal } from "@/src/daa/modules/read/readModels";
+import type { StoreNotificationStatusSummary } from "@/src/daa/modules/store/storeApi";
 import type { StoreCashLedgerEntry, StoreEquitySnapshot } from "@/src/daa/modules/store/storeApi";
+import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
 import type { PreTradeRiskCheck, RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 const DAA_DASHBOARD_REFRESH_EVENT_ = "daa:dashboard:refresh";
@@ -36,6 +38,8 @@ export function useWorkbenchModel(input: {
   const [cashLedger, setCashLedger] = useState<StoreCashLedgerEntry[]>([]);
   const [signals, setSignals] = useState<WorkbenchSignal[]>([]);
   const [allocationSummary, setAllocationSummary] = useState<WorkbenchAllocationSummary | null>(null);
+  const [ledgerMeta, setLedgerMeta] = useState<DaaCurrentLedgerMeta | null>(null);
+  const [notificationStatus, setNotificationStatus] = useState<StoreNotificationStatusSummary | null>(null);
   const [currentCycle, setCurrentCycle] = useState<RebalanceCycle | null>(null);
   const [riskCheck, setRiskCheck] = useState<PreTradeRiskCheck | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,6 +77,8 @@ export function useWorkbenchModel(input: {
       setCashLedger(nextData.cashLedger || []);
       setSignals(nextData.signals || []);
       setAllocationSummary(nextData.allocationSummary || null);
+      setLedgerMeta(nextData.ledgerMeta || null);
+      setNotificationStatus(nextData.notificationStatus || null);
       setCurrentCycle(nextCurrentCycle);
       setRiskCheck(nextCurrentCycle?.riskCheck || null);
     } catch (err) {
@@ -107,6 +113,8 @@ export function useWorkbenchModel(input: {
     cashLedger,
     signals,
     allocationSummary,
+    ledgerMeta,
+    notificationStatus,
     setCycles,
     currentCycle,
     setCurrentCycle,

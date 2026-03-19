@@ -4,12 +4,17 @@ import {
   type DaaSystemConfigPatch,
   type DaaSystemConfig,
 } from "@/src/daa/config/systemConfig";
+import type { NotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import type {
   DaaMarketContext,
   DaaMarketIndicatorKey,
   DaaMarketIndicatorScope,
   DaaMarketIndicatorSnapshot,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type {
+  DaaNotificationChannel,
+  DaaNotificationDeliveryLog,
+} from "@/src/daa/store/notificationDeliveryLogRepo";
 
 export type StoreEquitySnapshot = {
   ts: string;
@@ -138,6 +143,9 @@ export type StoreCashLedgerApplyResult = {
   };
   equitySnapshot: StoreEquitySnapshot;
 };
+
+export type StoreNotificationDeliveryEntry = DaaNotificationDeliveryLog;
+export type StoreNotificationStatusSummary = NotificationStatusSummary;
 
 export type StoreSystemConfigEnvelope = {
   version: number;
@@ -361,6 +369,25 @@ export async function appendCashLedgerEntry(input: StoreCashLedgerApplyInput): P
   });
 }
 
+export async function listNotificationDeliveries(input: {
+  limit?: number;
+  channel?: DaaNotificationChannel | null;
+} = {}): Promise<{
+  entries: StoreNotificationDeliveryEntry[];
+  summary: StoreNotificationStatusSummary;
+}> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(Math.max(1, Math.min(100, Math.trunc(Number(input.limit) || 10)))));
+  if (input.channel) qs.set("channel", input.channel);
+  return requestData<{
+    entries: StoreNotificationDeliveryEntry[];
+    summary: StoreNotificationStatusSummary;
+  }>(`/api/daa/store/notification-deliveries?${qs.toString()}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
 export async function refreshMarketIndicators(): Promise<StoreMarketIndicatorRefreshResult> {
   return requestData<StoreMarketIndicatorRefreshResult>("/api/daa/store/market-indicators/refresh", {
     method: "POST",
@@ -390,6 +417,8 @@ export type StoreSecretTestResult = {
   latencyMs: number;
 };
 
+export type StoreSecretTestMode = "connectivity" | "deliver";
+
 export async function listSecrets(): Promise<StoreSecretStatus[]> {
   const data = await requestData<{ secrets: StoreSecretStatus[] }>("/api/daa/store/secrets", {
     method: "GET",
@@ -416,11 +445,14 @@ export async function deleteSecretValue(key: string): Promise<StoreSecretStatus[
   return Array.isArray(data.secrets) ? data.secrets : [];
 }
 
-export async function testSecretConnectivity(key: string): Promise<StoreSecretTestResult> {
+export async function testSecretConnectivity(
+  key: string,
+  mode: StoreSecretTestMode = "connectivity",
+): Promise<StoreSecretTestResult> {
   const data = await requestData<{ result: StoreSecretTestResult }>("/api/daa/store/secrets/test", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key }),
+    body: JSON.stringify({ key, mode }),
   });
   return data.result;
 }

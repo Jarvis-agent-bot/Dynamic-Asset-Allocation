@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
   DeepLedgerActionButton,
   DeepLedgerPanel,
@@ -19,6 +19,7 @@ import {
   listCashLedger,
   type StoreCashLedgerEntry,
 } from "@/src/daa/modules/store/storeApi";
+import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
 
 const CASH_CURRENCY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "USD", label: "美元 (USD)" },
@@ -35,7 +36,13 @@ function normalizeCashCurrency(value: string): string {
 }
 
 function formatCashMeta(row: StoreCashLedgerEntry) {
-  const tags = [row.entryKind, row.baseCurrency, row.accountBaseCurrency].filter(Boolean);
+  const tags: string[] = [];
+  if (row.entryKind === "opening_balance") tags.push("期初余额");
+  else if (row.entryKind === "trade_execution") tags.push("成交入账");
+  else if (row.entryKind === "dividend") tags.push("分红");
+  else if (row.entryKind) tags.push("手工流水");
+  if (row.baseCurrency) tags.push(row.baseCurrency);
+  if (row.accountBaseCurrency && row.accountBaseCurrency !== row.baseCurrency) tags.push(`到账 ${row.accountBaseCurrency}`);
   if (row.ticketId) tags.push(`ticket:${row.ticketId}`);
   if (row.cycleId) tags.push(`cycle:${row.cycleId}`);
   return tags;
@@ -43,12 +50,14 @@ function formatCashMeta(row: StoreCashLedgerEntry) {
 
 export function WorkbenchCashSection(props: {
   baseCurrency: string;
+  entries?: StoreCashLedgerEntry[];
+  ledgerMeta?: DaaCurrentLedgerMeta | null;
   onCashChanged?: () => void;
 }) {
-  const { baseCurrency, onCashChanged } = props;
+  const { baseCurrency, entries, ledgerMeta, onCashChanged } = props;
 
-  const [cashLedger, setCashLedger] = useState<StoreCashLedgerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [cashLedger, setCashLedger] = useState<StoreCashLedgerEntry[]>(entries || []);
+  const [loading, setLoading] = useState(!entries);
   const [dialogSide, setDialogSide] = useState<"deposit" | "withdraw" | null>(null);
   const [cashAmount, setCashAmount] = useState("");
   const [cashCurrency, setCashCurrency] = useState(baseCurrency === "CNY" ? "RMB" : baseCurrency);
@@ -67,8 +76,16 @@ export function WorkbenchCashSection(props: {
   }, []);
 
   useEffect(() => {
-    void loadLedger();
-  }, [loadLedger]);
+    if (!entries) {
+      void loadLedger();
+    }
+  }, [entries, loadLedger]);
+
+  useEffect(() => {
+    if (!entries) return;
+    setCashLedger(entries);
+    setLoading(false);
+  }, [entries]);
 
   const dialogOpen = dialogSide != null;
 
@@ -129,6 +146,24 @@ export function WorkbenchCashSection(props: {
         )}
         bodyClassName="pt-0"
       >
+        <div className="grid gap-3 border-b border-[var(--border)] pb-4 md:grid-cols-3">
+          <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">当前账本起点</div>
+            <div className="mt-2 text-sm text-[var(--text)]">{ledgerMeta?.ledgerStartTs ? formatDateTime(ledgerMeta.ledgerStartTs) : "尚未建立"}</div>
+            <div className="mt-1 text-xs text-[var(--muted)]">现金流水表只保留这次账本起点之后的新记录。</div>
+          </div>
+          <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">期初余额</div>
+            <div className="mt-2 text-sm text-[var(--text)]">{formatCurrency(ledgerMeta?.openingBalance || 0, baseCurrency)}</div>
+            <div className="mt-1 text-xs text-[var(--muted)]">如果你之前做过历史入金，这里会显示账本重置后保留下来的起点现金。</div>
+          </div>
+          <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">当前流水说明</div>
+            <div className="mt-2 text-sm text-[var(--text)]">{cashLedger.length} 条记录</div>
+            <div className="mt-1 text-xs text-[var(--muted)]">入金、出金、成交扣款和期初余额都会统一落在这里，避免再分散到多个页面解释。</div>
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -160,7 +195,7 @@ export function WorkbenchCashSection(props: {
                       ) : null}
                     </TableCell>
                     <TableCell className="text-sm text-[var(--muted)]">
-                      <div>{row.note || (row.entryKind === "trade_execution" ? "成交自动入账" : "-")}</div>
+                      <div>{row.note || (row.entryKind === "trade_execution" ? "成交自动入账" : row.entryKind === "opening_balance" ? "账本重置后的期初余额" : "-")}</div>
                       {tags.length > 0 ? <div className="mt-1 text-xs text-[var(--faint)]">{tags.join(" · ")}</div> : null}
                     </TableCell>
                   </TableRow>

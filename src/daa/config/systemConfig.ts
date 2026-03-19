@@ -553,6 +553,15 @@ function normalizeAnalysisTimeUtc(value: unknown, fallback: string): string {
   return `${matched[1]}:${matched[2]}`;
 }
 
+function deriveDailyAnalysisHourUtc(analysisTimeUtc: string, fallback: number): number {
+  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(analysisTimeUtc || "").trim());
+  if (!matched) return fallback;
+  const hour = Number(matched[1]);
+  const minute = Number(matched[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return fallback;
+  return minute > 0 ? (hour + 1) % 24 : hour;
+}
+
 function normalizeStrategyExecutionTiming(value: unknown, fallback: DaaStrategyExecutionTiming = "t_plus_1_close"): DaaStrategyExecutionTiming {
   const text = String(value || "").trim().toLowerCase();
   if (text === "t_plus_1_close") return "t_plus_1_close";
@@ -611,6 +620,10 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const legacyAutomation = isRecord(source.automation) ? source.automation : {};
   const legacyDailyAnalysis = isRecord(legacyAutomation.dailyAnalysis) ? legacyAutomation.dailyAnalysis : {};
   const legacyNotification = isRecord(source.notification) ? source.notification : {};
+  const normalizedAnalysisTimeUtc = normalizeAnalysisTimeUtc(
+    rebalanceStrategy.analysisTimeUtc ?? legacyDailyAnalysis.analysisTimeUtc,
+    fallback.rebalanceStrategy.analysisTimeUtc,
+  );
 
   const normalized: DaaSystemConfig = {
     strategy: {
@@ -683,10 +696,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         checkFrequency: normalizeCheckFrequency(drift.checkFrequency, fallback.rebalanceStrategy.drift.checkFrequency),
       },
       cooldownHours: Math.max(1, Math.trunc(Number(rebalanceStrategy.cooldownHours) || fallback.rebalanceStrategy.cooldownHours)),
-      analysisTimeUtc: normalizeAnalysisTimeUtc(
-        rebalanceStrategy.analysisTimeUtc ?? legacyDailyAnalysis.analysisTimeUtc,
-        fallback.rebalanceStrategy.analysisTimeUtc,
-      ),
+      analysisTimeUtc: normalizedAnalysisTimeUtc,
       timezone: String(rebalanceStrategy.timezone || legacyDailyAnalysis.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
       analysisFocus: String(rebalanceStrategy.analysisFocus || legacyDailyAnalysis.analysisFocus || fallback.rebalanceStrategy.analysisFocus).trim() || fallback.rebalanceStrategy.analysisFocus,
       autoGenerateEnabled: toBool(
@@ -749,7 +759,10 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       marketIndicators: normalizeMarketIndicatorConfig(marketIndicators, fallback.dataSources.marketIndicators),
     },
     notification: {
-      dailyAnalysisHourUtc: Math.min(23, Math.max(0, Math.trunc(Number(notification.dailyAnalysisHourUtc) || fallback.notification.dailyAnalysisHourUtc))),
+      dailyAnalysisHourUtc: deriveDailyAnalysisHourUtc(
+        normalizedAnalysisTimeUtc,
+        Math.min(23, Math.max(0, Math.trunc(Number(notification.dailyAnalysisHourUtc) || fallback.notification.dailyAnalysisHourUtc))),
+      ),
       telegram: {
         enabled: toBool(notificationTelegram.enabled, fallback.notification.telegram.enabled),
         onDriftTrigger: toBool(

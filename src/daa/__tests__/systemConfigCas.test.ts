@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DEFAULT_SYSTEM_CONFIG_ } from "@/src/daa/config/systemConfig";
+import { DEFAULT_SYSTEM_CONFIG_, normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import {
   appendDaaCashLedgerEntry,
@@ -124,6 +124,20 @@ describe("system-config-cas-v1", () => {
       expect(names.has("cycle_id")).toBe(true);
       expect(names.has("settlement_ts")).toBe(true);
     });
+  });
+
+  it("notification.dailyAnalysisHourUtc 会从 analysisTimeUtc 自动推导，避免保留冲突旧值", () => {
+    const normalized = normalizeSystemConfig({
+      rebalanceStrategy: {
+        analysisTimeUtc: "10:51",
+      },
+      notification: {
+        dailyAnalysisHourUtc: 1,
+      },
+    });
+
+    expect(normalized.rebalanceStrategy.analysisTimeUtc).toBe("10:51");
+    expect(normalized.notification.dailyAnalysisHourUtc).toBe(11);
   });
 
   it("相同 baseVersion 并发保存时只允许一个成功", async () => {

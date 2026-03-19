@@ -1,284 +1,633 @@
+"use client";
+
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { RefreshCcw, Send } from "lucide-react";
+import { toast } from "sonner";
+
+import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
+import { DeepLedgerStatusPill } from "@/app/daa/dashboard/_components/DeepLedgerUI";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import {
+  listNotificationDeliveries,
+  testSecretConnectivity,
+  type StoreNotificationDeliveryEntry,
+  type StoreNotificationStatusSummary,
+} from "@/src/daa/modules/store/storeApi";
 
 import {
   CheckboxRow,
   FieldLabel,
-  FormSelect,
   SectionCard,
+  SubsectionCard,
   settingsGridCols2Style,
   type SettingsConfigSetter,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
 
-const UTC_HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => {
-  const beijingH = (h + 8) % 24;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return { value: h, label: `UTC ${pad(h)}:00（北京 ${pad(beijingH)}:00）` };
-});
+const statusTileStyle: CSSProperties = {
+  borderRadius: 12,
+  border: "1px solid var(--border)",
+  background: "rgba(255,255,255,0.02)",
+  padding: 14,
+};
+
+const actionButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid var(--border-strong)",
+  background: "var(--elevated)",
+  color: "var(--text)",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 600,
+};
+
+const secondaryButtonStyle: CSSProperties = {
+  ...actionButtonStyle,
+  padding: "7px 11px",
+  fontSize: 11,
+};
+
+function deliveryEventLabel(value: string): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "suggestion_generated") return "建议生成";
+  if (normalized === "daily_report") return "每日报告";
+  if (normalized === "drift_triggered") return "偏移触发";
+  if (normalized === "trade_executed") return "交易执行";
+  if (normalized === "test_message") return "测试消息";
+  return normalized || "未知事件";
+}
+
+function triggerSourceLabel(value: string): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "cron_daily_analysis") return "定时分析";
+  if (normalized === "cron_drift_check") return "漂移检查";
+  if (normalized === "manual_trade_execution") return "手工成交";
+  if (normalized === "decision_trade_execution") return "手工执行建议";
+  if (normalized === "rebalance_cycle_execution") return "周期执行";
+  if (normalized === "settings_secret_test") return "设置页测试";
+  return normalized || "未知来源";
+}
+
+function channelPillTone(input: {
+  enabled: boolean;
+  configured: boolean;
+  lastFailureAt: string | null;
+  lastSuccessAt: string | null;
+}): "slate" | "amber" | "green" {
+  if (!input.enabled) return "slate";
+  if (!input.configured) return "amber";
+  const failureTs = input.lastFailureAt ? Date.parse(input.lastFailureAt) : Number.NaN;
+  const successTs = input.lastSuccessAt ? Date.parse(input.lastSuccessAt) : Number.NaN;
+  if (Number.isFinite(failureTs) && (!Number.isFinite(successTs) || failureTs >= successTs)) return "amber";
+  return "green";
+}
+
+function channelPillText(input: {
+  enabled: boolean;
+  configured: boolean;
+  lastFailureAt: string | null;
+  lastSuccessAt: string | null;
+}): string {
+  if (!input.enabled) return "未启用";
+  if (!input.configured) return "待补凭证";
+  const failureTs = input.lastFailureAt ? Date.parse(input.lastFailureAt) : Number.NaN;
+  const successTs = input.lastSuccessAt ? Date.parse(input.lastSuccessAt) : Number.NaN;
+  if (Number.isFinite(failureTs) && (!Number.isFinite(successTs) || failureTs >= successTs)) return "最近失败";
+  if (input.lastSuccessAt) return "最近成功";
+  return "已启用";
+}
+
+function formatSummaryTime(value: string | null | undefined): string {
+  return value ? formatDateTime(value) : "暂无";
+}
+
+function formatDerivedDailySchedule(analysisTimeUtc: string): {
+  title: string;
+  hint: string;
+} {
+  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(analysisTimeUtc || "").trim());
+  if (!matched) {
+    return {
+      title: "未识别自动分析时间",
+      hint: "请先在“再平衡策略”里填写合法的 UTC 时间（HH:MM），通知和每日报告会跟随这一时间窗口。",
+    };
+  }
+  const hour = Number(matched[1]);
+  const minute = Number(matched[2]);
+  const scheduledHour = minute > 0 ? (hour + 1) % 24 : hour;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const beijingHour = (scheduledHour + 8) % 24;
+  const rawLabel = `自动分析时间 ${pad(hour)}:${pad(minute)} UTC`;
+  if (minute > 0) {
+    return {
+      title: `${rawLabel}，当前按 UTC ${pad(scheduledHour)}:00（北京 ${pad(beijingHour)}:00）后的首次轮询执行`,
+      hint: "系统当前是按整点 cron 轮询，所以分钟部分会向后归入下一个整点窗口；通知与每日报告共用这一调度口径。",
+    };
+  }
+  return {
+    title: `${rawLabel}，当前按 UTC ${pad(scheduledHour)}:00（北京 ${pad(beijingHour)}:00）执行`,
+    hint: "通知建议生成与每日报告跟随同一套自动分析时间，不再单独维护第二套通知时间。",
+  };
+}
+
+function RunningStatusTile(props: {
+  title: string;
+  subtitle: string;
+  value: string;
+  hint: string;
+  pill?: React.ReactNode;
+}) {
+  return (
+    <div style={statusTileStyle}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--faint)" }}>{props.title}</div>
+        {props.pill}
+      </div>
+      <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{props.value}</div>
+      <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted)" }}>{props.subtitle}</div>
+      <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>{props.hint}</div>
+    </div>
+  );
+}
+
+function ChannelConfigCard(props: {
+  title: string;
+  description: string;
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+  onDriftChange: (value: boolean) => void;
+  onSuggestionChange: (value: boolean) => void;
+  onTradeChange: (value: boolean) => void;
+  onDailyReportChange: (value: boolean) => void;
+  driftEnabled: boolean;
+  suggestionEnabled: boolean;
+  tradeEnabled: boolean;
+  dailyReportEnabled: boolean;
+  summary: StoreNotificationStatusSummary["channels"]["telegram"] | StoreNotificationStatusSummary["channels"]["feishu"] | null;
+  onSendTest: () => void;
+  testing: boolean;
+  testDisabledReason?: string | null;
+}) {
+  const eventsText = props.summary?.deliveryEvents?.length
+    ? `已保存触发：${props.summary.deliveryEvents.join(" / ")}`
+    : "已保存触发：当前未开启任何事件";
+  const testDisabled = props.testing || Boolean(props.testDisabledReason);
+
+  return (
+    <SubsectionCard
+      title={props.title}
+      description={props.description}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <DeepLedgerStatusPill tone={props.summary ? channelPillTone(props.summary) : "slate"}>
+          {props.summary ? channelPillText(props.summary) : "状态加载中"}
+        </DeepLedgerStatusPill>
+        <div style={{ fontSize: 11, color: "var(--faint)" }}>{eventsText}</div>
+      </div>
+
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 14 }}>
+        <div style={statusTileStyle}>
+          <div style={{ fontSize: 11, color: "var(--faint)" }}>凭证状态</div>
+          <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)" }}>
+            {props.summary?.configured ? "已配置完整" : "缺少凭证"}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)" }}>
+            {props.summary?.secretStates?.length
+              ? props.summary.secretStates.map((item) => `${item.key} ${item.configured ? "已配置" : "缺失"}`).join(" · ")
+              : "等待状态加载"}
+          </div>
+        </div>
+        <div style={statusTileStyle}>
+          <div style={{ fontSize: 11, color: "var(--faint)" }}>最近投递</div>
+          <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)" }}>{formatSummaryTime(props.summary?.lastAttemptAt)}</div>
+          <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)" }}>
+            {props.summary?.lastErrorMessage || "这里会显示最近一次失败原因或最近成功时间。"}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>待保存触发配置</div>
+        <button
+          type="button"
+          onClick={props.onSendTest}
+          disabled={testDisabled}
+          title={props.testDisabledReason || "发送测试消息"}
+          style={{ ...secondaryButtonStyle, opacity: testDisabled ? 0.6 : 1, cursor: testDisabled ? "not-allowed" : "pointer" }}
+        >
+          <Send size={13} />
+          {props.testing ? "发送中…" : props.testDisabledReason ? "先配置凭证" : "发送测试消息"}
+        </button>
+      </div>
+      {props.testDisabledReason ? (
+        <div style={{ marginBottom: 12, fontSize: 11, lineHeight: 1.7, color: "var(--faint)" }}>
+          {props.testDisabledReason}
+        </div>
+      ) : null}
+
+      <div style={settingsGridCols2Style}>
+        <CheckboxRow checked={props.enabled} onChange={props.onEnabledChange}>
+          启用 {props.title} 通知
+        </CheckboxRow>
+        <CheckboxRow checked={props.driftEnabled} onChange={props.onDriftChange}>
+          偏移触发时通知
+        </CheckboxRow>
+        <CheckboxRow checked={props.suggestionEnabled} onChange={props.onSuggestionChange}>
+          再平衡建议生成时通知
+        </CheckboxRow>
+        <CheckboxRow checked={props.tradeEnabled} onChange={props.onTradeChange}>
+          交易执行时通知
+        </CheckboxRow>
+        <CheckboxRow checked={props.dailyReportEnabled} onChange={props.onDailyReportChange}>
+          每日分析报告
+        </CheckboxRow>
+      </div>
+    </SubsectionCard>
+  );
+}
 
 export function SettingsNotificationSection(props: {
   config: DaaSystemConfig;
   setConfig: SettingsConfigSetter;
 }) {
   const { config, setConfig } = props;
+  const [summary, setSummary] = useState<StoreNotificationStatusSummary | null>(null);
+  const [entries, setEntries] = useState<StoreNotificationDeliveryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [statusError, setStatusError] = useState("");
+  const [testingChannel, setTestingChannel] = useState<"telegram" | "feishu" | null>(null);
+
+  const loadStatus = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true);
+    else setLoading(true);
+    setStatusError("");
+    try {
+      const data = await listNotificationDeliveries({ limit: 8 });
+      setEntries(data.entries || []);
+      setSummary(data.summary || null);
+    } catch (error) {
+      setStatusError(error instanceof Error ? error.message : "通知状态加载失败");
+    } finally {
+      if (silent) setRefreshing(false);
+      else setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStatus(false);
+  }, [loadStatus]);
+
+  useEffect(() => {
+    function onSaved() {
+      void loadStatus(true);
+    }
+    window.addEventListener("daa:dashboard:data-updated", onSaved);
+    return () => window.removeEventListener("daa:dashboard:data-updated", onSaved);
+  }, [loadStatus]);
+
+  const handleSendTest = useCallback(async (channel: "telegram" | "feishu") => {
+    const key = channel === "telegram" ? "telegram_bot_token" : "feishu_webhook_url";
+    setTestingChannel(channel);
+    try {
+      const result = await testSecretConnectivity(key, "deliver");
+      if (result.success) toast.success(result.message);
+      else toast.error(result.message);
+      await loadStatus(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "测试消息发送失败");
+    } finally {
+      setTestingChannel(null);
+    }
+  }, [loadStatus]);
+
+  const latestJob = summary?.recentJobs?.[0] || null;
+  const dailySchedule = formatDerivedDailySchedule(config.rebalanceStrategy.analysisTimeUtc);
+  const telegramSummary = summary?.channels.telegram || null;
+  const feishuSummary = summary?.channels.feishu || null;
 
   return (
     <section id="settings-notification" className="scroll-mt-28">
-      <SectionCard title="通知">
-        {/* Daily analysis time */}
-        <div style={{ marginBottom: 20 }}>
-          <FieldLabel>每日分析 &amp; 报告发送时间</FieldLabel>
-          <FormSelect
-            value={config.notification.dailyAnalysisHourUtc}
-            onChange={(e) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        dailyAnalysisHourUtc: Number(e.target.value),
-                      },
-                    }
-                  : prev,
-              )
-            }
-            style={{ maxWidth: 280 }}
-          >
-            {UTC_HOUR_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </FormSelect>
-          <div style={{ marginTop: 5, fontSize: 11, color: "var(--faint)" }}>
-            每日分析与每日报告在同一时刻触发，修改后次小时生效。
+      <SectionCard
+        title="通知"
+        description="上半区展示已保存配置对应的真实运行状态，下半区编辑待保存的触发开关，避免把表单和实际系统状态混在一起。"
+      >
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ maxWidth: 720 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>已保存运行态</div>
+              <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7, color: "var(--muted)" }}>
+                这里基于数据库中已保存的系统配置、凭证状态、最近 job 和最近投递结果；你在本页勾选的改动，只有点击页面底部“保存全部设置”后才会影响这一块。
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadStatus(true)}
+              disabled={loading || refreshing}
+              style={{ ...actionButtonStyle, opacity: loading || refreshing ? 0.6 : 1 }}
+            >
+              <RefreshCcw size={14} className={refreshing ? "animate-spin" : ""} />
+              {refreshing ? "刷新中…" : "刷新运行状态"}
+            </button>
           </div>
-        </div>
 
-        {/* Telegram */}
-        <h4 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "var(--text-secondary, #666)" }}>Telegram</h4>
-        <div style={settingsGridCols2Style}>
-          <CheckboxRow
-            checked={config.notification.telegram.enabled}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        telegram: {
-                          ...prev.notification.telegram,
-                          enabled: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            启用 Telegram 通知
-          </CheckboxRow>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+            <RunningStatusTile
+              title="Cron"
+              subtitle={summary?.cronConfigured ? "定时任务鉴权已配置" : "定时任务鉴权缺失"}
+              value={summary?.cronConfigured ? "已就绪" : "待配置"}
+              hint={latestJob ? `最近任务：${latestJob.jobType} · ${latestJob.status} · ${formatSummaryTime(latestJob.startedAt)}` : "当前还没有任何 job 执行记录。"}
+              pill={<DeepLedgerStatusPill tone={summary?.cronConfigured ? "green" : "amber"}>{summary?.cronConfigured ? "已配置" : "未配置"}</DeepLedgerStatusPill>}
+            />
+            <RunningStatusTile
+              title="Telegram"
+              subtitle={telegramSummary?.enabled ? "运行中" : "当前关闭"}
+              value={telegramSummary?.configured ? "凭证完整" : "凭证不完整"}
+              hint={telegramSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(telegramSummary?.lastAttemptAt)}`}
+              pill={<DeepLedgerStatusPill tone={telegramSummary ? channelPillTone(telegramSummary) : "slate"}>{telegramSummary ? channelPillText(telegramSummary) : "加载中"}</DeepLedgerStatusPill>}
+            />
+            <RunningStatusTile
+              title="飞书"
+              subtitle={feishuSummary?.enabled ? "运行中" : "当前关闭"}
+              value={feishuSummary?.configured ? "凭证完整" : "凭证不完整"}
+              hint={feishuSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(feishuSummary?.lastAttemptAt)}`}
+              pill={<DeepLedgerStatusPill tone={feishuSummary ? channelPillTone(feishuSummary) : "slate"}>{feishuSummary ? channelPillText(feishuSummary) : "加载中"}</DeepLedgerStatusPill>}
+            />
+          </div>
 
-          <CheckboxRow
-            checked={config.notification.telegram.onDriftTrigger}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        telegram: {
-                          ...prev.notification.telegram,
-                          onDriftTrigger: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            偏移触发时通知
-          </CheckboxRow>
+          {statusError ? (
+            <div style={{ borderRadius: 12, border: "1px solid rgba(248,113,113,0.28)", background: "rgba(127,29,29,0.18)", padding: 12, fontSize: 12, color: "#fecaca" }}>
+              {statusError}
+            </div>
+          ) : null}
 
-          <CheckboxRow
-            checked={config.notification.telegram.onSuggestionGenerated}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        telegram: {
-                          ...prev.notification.telegram,
-                          onSuggestionGenerated: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            再平衡建议生成时通知
-          </CheckboxRow>
+          <div style={{ marginTop: 4 }}>
+            <FieldLabel>每日分析 &amp; 报告发送时间</FieldLabel>
+            <div style={{ ...statusTileStyle, maxWidth: 520 }}>
+              <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
+                {dailySchedule.title}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 11, color: "var(--faint)", lineHeight: 1.7 }}>
+                {dailySchedule.hint}
+              </div>
+            </div>
+            <div style={{ marginTop: 5, fontSize: 11, color: "var(--faint)" }}>
+              如需调整，请在上方“再平衡策略”里修改自动分析时间；保存配置后下一次 cron 窗口生效。
+            </div>
+          </div>
 
-          <CheckboxRow
-            checked={config.notification.telegram.onTradeExecuted}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        telegram: {
-                          ...prev.notification.telegram,
-                          onTradeExecuted: value,
+          <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+            <ChannelConfigCard
+              title="Telegram"
+              description="适合即时消息提醒。这里既能编辑触发开关，也能查看真实凭证状态和最近一次投递。"
+              enabled={config.notification.telegram.enabled}
+              onEnabledChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          telegram: {
+                            ...prev.notification.telegram,
+                            enabled: value,
+                          },
                         },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            交易执行时通知
-          </CheckboxRow>
+                      }
+                    : prev,
+                )
+              }
+              onDriftChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          telegram: {
+                            ...prev.notification.telegram,
+                            onDriftTrigger: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              onSuggestionChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          telegram: {
+                            ...prev.notification.telegram,
+                            onSuggestionGenerated: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              onTradeChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          telegram: {
+                            ...prev.notification.telegram,
+                            onTradeExecuted: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              onDailyReportChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          telegram: {
+                            ...prev.notification.telegram,
+                            dailyReport: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              driftEnabled={config.notification.telegram.onDriftTrigger}
+              suggestionEnabled={config.notification.telegram.onSuggestionGenerated}
+              tradeEnabled={config.notification.telegram.onTradeExecuted}
+              dailyReportEnabled={config.notification.telegram.dailyReport}
+              summary={telegramSummary}
+              onSendTest={() => void handleSendTest("telegram")}
+              testing={testingChannel === "telegram"}
+              testDisabledReason={telegramSummary?.configured ? null : "请先在“凭证”区保存 Telegram Bot Token 与 Chat ID，再发送测试消息。"}
+            />
 
-          <CheckboxRow
-            checked={config.notification.telegram.dailyReport}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        telegram: {
-                          ...prev.notification.telegram,
-                          dailyReport: value,
+            <ChannelConfigCard
+              title="飞书"
+              description="适合团队群聊广播。优先用这张卡片确认 webhook 是否真正可投递，再决定是否开启对应事件。"
+              enabled={config.notification.feishu.enabled}
+              onEnabledChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          feishu: {
+                            ...prev.notification.feishu,
+                            enabled: value,
+                          },
                         },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            每日分析报告
-          </CheckboxRow>
-        </div>
+                      }
+                    : prev,
+                )
+              }
+              onDriftChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          feishu: {
+                            ...prev.notification.feishu,
+                            onDriftTrigger: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              onSuggestionChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          feishu: {
+                            ...prev.notification.feishu,
+                            onSuggestionGenerated: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              onTradeChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          feishu: {
+                            ...prev.notification.feishu,
+                            onTradeExecuted: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              onDailyReportChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        notification: {
+                          ...prev.notification,
+                          feishu: {
+                            ...prev.notification.feishu,
+                            dailyReport: value,
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              driftEnabled={config.notification.feishu.onDriftTrigger}
+              suggestionEnabled={config.notification.feishu.onSuggestionGenerated}
+              tradeEnabled={config.notification.feishu.onTradeExecuted}
+              dailyReportEnabled={config.notification.feishu.dailyReport}
+              summary={feishuSummary}
+              onSendTest={() => void handleSendTest("feishu")}
+              testing={testingChannel === "feishu"}
+              testDisabledReason={feishuSummary?.configured ? null : "请先在“凭证”区保存飞书 Webhook，再发送测试消息。"}
+            />
+          </div>
 
-        {/* Feishu */}
-        <h4 style={{ margin: "16px 0 8px", fontSize: 14, fontWeight: 600, color: "var(--text-secondary, #666)" }}>飞书</h4>
-        <div style={settingsGridCols2Style}>
-          <CheckboxRow
-            checked={config.notification.feishu.enabled}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        feishu: {
-                          ...prev.notification.feishu,
-                          enabled: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
+          <SubsectionCard
+            title="最近通知投递"
+            description="这里记录真实发出去的消息结果，而不是只看是否勾选了开关。若无记录，多半说明凭证、cron 或事件入口仍未真正生效。"
           >
-            启用飞书通知
-          </CheckboxRow>
-
-          <CheckboxRow
-            checked={config.notification.feishu.onDriftTrigger}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        feishu: {
-                          ...prev.notification.feishu,
-                          onDriftTrigger: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            偏移触发时通知
-          </CheckboxRow>
-
-          <CheckboxRow
-            checked={config.notification.feishu.onSuggestionGenerated}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        feishu: {
-                          ...prev.notification.feishu,
-                          onSuggestionGenerated: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            再平衡建议生成时通知
-          </CheckboxRow>
-
-          <CheckboxRow
-            checked={config.notification.feishu.onTradeExecuted}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        feishu: {
-                          ...prev.notification.feishu,
-                          onTradeExecuted: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            交易执行时通知
-          </CheckboxRow>
-
-          <CheckboxRow
-            checked={config.notification.feishu.dailyReport}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      notification: {
-                        ...prev.notification,
-                        feishu: {
-                          ...prev.notification.feishu,
-                          dailyReport: value,
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            每日分析报告
-          </CheckboxRow>
+            {loading ? (
+              <div style={{ padding: "12px 0", fontSize: 12, color: "var(--muted)" }}>加载通知投递记录…</div>
+            ) : entries.length > 0 ? (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {["时间", "渠道", "事件", "结果", "来源", "说明"].map((label) => (
+                        <th
+                          key={label}
+                          style={{
+                            textAlign: "left",
+                            padding: "10px 8px",
+                            borderBottom: "1px solid var(--border)",
+                            color: "var(--faint)",
+                            fontSize: 11,
+                            letterSpacing: "0.08em",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--text)" }}>{formatDateTime(entry.createdAt)}</td>
+                        <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>{entry.channel === "telegram" ? "Telegram" : "飞书"}</td>
+                        <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>{deliveryEventLabel(entry.eventType)}</td>
+                        <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)" }}>
+                          <DeepLedgerStatusPill tone={entry.success ? "green" : "amber"}>{entry.success ? "成功" : "失败"}</DeepLedgerStatusPill>
+                        </td>
+                        <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>{triggerSourceLabel(entry.triggerSource)}</td>
+                        <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)", lineHeight: 1.6 }}>
+                          {entry.errorMessage || entry.recipientHint || "已完成投递"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: "12px 0", fontSize: 12, lineHeight: 1.8, color: "var(--muted)" }}>
+                当前还没有任何通知投递记录。若你已经启用了开关但这里仍为空，优先检查：
+                <br />
+                1. 对应凭证是否已在“凭证”区保存。
+                <br />
+                2. 本页配置是否已经点击底部保存。
+                <br />
+                3. `cron_token` 是否存在，否则定时任务不会触发。
+              </div>
+            )}
+          </SubsectionCard>
         </div>
       </SectionCard>
     </section>
