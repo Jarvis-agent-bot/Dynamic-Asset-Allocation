@@ -88,6 +88,12 @@ export function WorkbenchActiveTabPanel(props: {
           baseCurrency={model.bootstrap?.baseCurrency || "USD"}
           entries={model.cashLedger}
           ledgerMeta={model.ledgerMeta}
+          accountSource={model.bootstrap?.account.source || "sim"}
+          cashMutationsAllowed={model.bootstrap?.account.cashMutationsAllowed ?? true}
+          brokerKind={model.bootstrap?.account.brokerKind || null}
+          brokerAccountId={model.bootstrap?.account.brokerAccountId || null}
+          readOnlyReason={model.bootstrap?.account.readOnlyReason || null}
+          accountBreakdown={model.bootstrap?.account.accountBreakdown || []}
           onCashChanged={() => void model.loadBootstrap(true)}
         />
       ) : null}

@@ -21,6 +21,8 @@ export const SECRET_KEY_DEFS_ = [
   { key: "llm_endpoint", label: "LLM Endpoint", group: "llm", envVars: ["DAA_LLM_ENDPOINT"], sensitive: false },
   { key: "llm_model", label: "LLM Model", group: "llm", envVars: ["DAA_LLM_MODEL"], sensitive: false },
   { key: "broker_mode", label: "Broker Mode", group: "broker", envVars: ["DAA_BROKER_MODE"], sensitive: false },
+  { key: "broker_connector_base_url", label: "Broker Connector Base URL", group: "broker", envVars: ["DAA_BROKER_CONNECTOR_BASE_URL", "BROKER_CONNECTOR_BASE_URL"], sensitive: false },
+  { key: "broker_connector_shared_secret", label: "Broker Connector Shared Secret", group: "broker", envVars: ["DAA_BROKER_CONNECTOR_SHARED_SECRET", "BROKER_CONNECTOR_SHARED_SECRET"], sensitive: true },
   { key: "ibkr_web_api_base_url", label: "IBKR Web API Base URL", group: "broker", envVars: ["IBKR_WEB_API_BASE_URL", "DAA_IBKR_WEB_API_BASE_URL"], sensitive: false },
   { key: "ibkr_account_id", label: "IBKR Account ID", group: "broker", envVars: ["IBKR_ACCOUNT_ID", "DAA_IBKR_ACCOUNT_ID"], sensitive: false },
   { key: "ibkr_web_api_session_cookie", label: "IBKR Session Cookie", group: "broker", envVars: ["IBKR_WEB_API_SESSION_COOKIE", "DAA_IBKR_WEB_API_SESSION_COOKIE"], sensitive: true },

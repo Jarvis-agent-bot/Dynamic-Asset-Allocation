@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { resolveBrokerRuntimeConfig } from "@/src/daa/broker";
 import { appendDaaCashLedgerEntry, listDaaCashLedgerEntries } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
@@ -40,6 +41,14 @@ export async function POST(req: Request) {
   return withApiHandler(async () => {
     const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
+    const brokerConfig = await resolveBrokerRuntimeConfig();
+    if (brokerConfig.kind === "ibkr_paper") {
+      return fail(
+        "BROKER_READ_ONLY",
+        "当前已切换到 IBKR 模拟盘模式，现金与持仓以券商快照为准，不能在本地手工记录入金或出金。",
+        { status: 409 },
+      );
+    }
 
     const body = await readJsonBody<CashLedgerBody>(req);
     const side = String(body?.side || "").trim().toLowerCase();

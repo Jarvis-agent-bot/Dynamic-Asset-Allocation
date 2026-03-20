@@ -47,10 +47,21 @@ export function useWorkbenchModel(input: {
   const [error, setError] = useState("");
   const [authRequired, setAuthRequired] = useState(false);
   const currentCycleIdRef = useRef<string | null>(null);
+  const autoSelectedPortfolioTabRef = useRef(false);
 
   useEffect(() => {
     currentCycleIdRef.current = currentCycle?.cycleId || null;
   }, [currentCycle?.cycleId]);
+
+  useEffect(() => {
+    if (input.initialTab) return;
+    if (autoSelectedPortfolioTabRef.current) return;
+    if (activeTab !== "positions") return;
+    if ((allocationSummary?.holdingCount || 0) > 0) return;
+    if ((allocationSummary?.watchlistCount || 0) <= 0) return;
+    autoSelectedPortfolioTabRef.current = true;
+    setActiveTab("watchlist");
+  }, [activeTab, allocationSummary?.holdingCount, allocationSummary?.watchlistCount, input.initialTab]);
 
   const loadBootstrap = useCallback(async (silent = false, preferredCycleId?: string | null) => {
     if (silent) setRefreshing(true);

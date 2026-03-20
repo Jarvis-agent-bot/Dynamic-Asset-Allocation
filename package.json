@@ -15,7 +15,8 @@
     "test:daa-e2e-chain-gate-v0": "pnpm run gates",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "gates": "pnpm test && pnpm run typecheck && pnpm run build:check",
-    "typecheck:core": "tsc -p tsconfig.core.json"
+    "typecheck:core": "tsc -p tsconfig.core.json",
+    "broker:connector": "node services/broker-connector/server.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

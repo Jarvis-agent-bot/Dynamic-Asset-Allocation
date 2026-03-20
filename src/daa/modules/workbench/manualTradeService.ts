@@ -1,13 +1,12 @@
-import { randomUUID } from "node:crypto";
-
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
-import { resolveActiveBrokerAdapter, syncActiveBrokerSnapshotToStore, type DaaBrokerBackedExecutionResult } from "@/src/daa/broker";
+import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionResult } from "@/src/daa/broker";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
 import type { TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 import {
+  applyDaaBrokerOrderSync,
   createDaaTradeTicket,
   executeDaaTradeTickets,
   getDaaSystemConfig,
@@ -396,8 +395,20 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
     });
   }
 
-  const broker = await resolveActiveBrokerAdapter();
-  if (broker.kind === "sim") {
+  const assetUniverseRows = await listDaaAssetUniverse();
+  const assetUniverse = Array.isArray(assetUniverseRows) ? assetUniverseRows : [];
+  const assetMeta = assetUniverse.find((row) => row.assetKey === assetKey) || null;
+  const route = await resolveExecutionRoute({
+    assetKey,
+    symbol,
+    market,
+    currency: instrumentCurrency,
+    assetClass: assetMeta?.assetClass || null,
+    instrumentType: assetMeta?.instrumentType || null,
+    marketGroup: assetMeta?.marketGroup || null,
+  });
+
+  if (!route.remote) {
     const item = await createDaaTradeTicket({
       source,
       side,
@@ -415,6 +426,10 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       decisionRefId: String(input.decisionRefId || "").trim() || null,
       reasonTags,
       reasonText: reasonText || undefined,
+      brokerKind: route.kind,
+      brokerAccountId: route.kind,
+      brokerOrderId: null,
+      brokerStatus: "ready",
       createdBy,
     });
 
@@ -445,13 +460,43 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       source,
       side,
       symbol,
-      broker: null,
+      broker: {
+        kind: route.kind,
+        accountId: route.kind,
+        accepted: result?.status === "executed",
+        remoteStatus: result?.status || "ready",
+        remoteOrderId: item.ticketId,
+        routeReason: route.routeReason,
+        messages: [route.kind === "crypto_paper" ? "Crypto Paper 本地执行成功" : "本地模拟执行成功"],
+        warnings: result?.status === "executed" ? [] : [result?.rejectMessage || "本地模拟执行失败"],
+      },
     } satisfies ExecuteManualTradeResult;
   }
 
   let placed;
+  const localTicket = await createDaaTradeTicket({
+    source,
+    side,
+    assetKey,
+    cycleId: String(input.cycleId || "").trim() || undefined,
+    symbol,
+    market,
+    instrumentCurrency,
+    qty,
+    price,
+    fee,
+    pricingMode,
+    priceSource: String(input.priceSource || "").trim() || undefined,
+    priceSnapshotAt: String(input.priceSnapshotAt || "").trim() || undefined,
+    decisionRefId: String(input.decisionRefId || "").trim() || null,
+    reasonTags,
+    reasonText: reasonText || undefined,
+    brokerKind: route.kind,
+    createdBy,
+  });
+
   try {
-    placed = await broker.placeOrder({
+    placed = await route.adapter.placeOrder({
       assetKey,
       symbol,
       market,
@@ -466,72 +511,100 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       createdBy,
     });
   } catch (error) {
-    throwManualTradeError("BROKER_ORDER_FAILED", normalizeErrorMessage(error), 502);
+    const message = normalizeErrorMessage(error);
+    const rejectedTicket = await applyDaaBrokerOrderSync({
+      ticketId: localTicket.ticketId,
+      order: {
+        broker: route.kind,
+        accountId: "",
+        orderId: "",
+        status: "Rejected",
+        filledQty: null,
+        avgFillPrice: null,
+        updatedAt: new Date().toISOString(),
+        raw: { text: message },
+      },
+    }) || localTicket;
+    const logs = await listDaaTradeTickets({ limit: 200 });
+    return {
+      item: rejectedTicket,
+      result: {
+        ticketId: rejectedTicket.ticketId,
+        status: "rejected",
+        rejectCode: "BROKER_ORDER_FAILED",
+        rejectMessage: message,
+      },
+      summary: {
+        executed: 0,
+        rejected: 1,
+        total: 1,
+      },
+      logs: logs.filter((row) => row.status !== "ready"),
+      baseCurrency,
+      notionalInBase,
+      feeInBase,
+      source,
+      side,
+      symbol,
+      broker: {
+        kind: route.kind,
+        accountId: "",
+        accepted: false,
+        remoteStatus: "Rejected",
+        remoteOrderId: "",
+        routeReason: route.routeReason,
+        messages: [],
+        warnings: [message],
+      },
+    } satisfies ExecuteManualTradeResult;
   }
+
+  let syncedTicket = await applyDaaBrokerOrderSync({
+    ticketId: localTicket.ticketId,
+    order: {
+      broker: route.kind,
+      accountId: placed.order.accountId,
+      orderId: placed.order.orderId,
+      status: placed.order.status,
+      filledQty: placed.order.filledQty,
+      avgFillPrice: placed.order.avgFillPrice,
+      updatedAt: placed.order.updatedAt,
+      raw: placed.order.raw,
+    },
+  }) || localTicket;
 
   try {
-    await syncActiveBrokerSnapshotToStore();
+    const synced = await syncBrokerOrders({
+      scope: "ticket",
+      ticketId: localTicket.ticketId,
+      limit: 50,
+    });
+    syncedTicket = synced.tickets[0] || syncedTicket;
   } catch {
-    // 远端 broker 已受理时，不因为同步失败阻断响应
+    // broker 已受理时，不因为首次同步失败阻断响应
   }
 
-  const ticketId = `${broker.kind}:${placed.order.orderId || randomUUID()}`;
-  const nowIso = new Date().toISOString();
-  const acceptedStatus = placed.accepted ? "executed" : "rejected";
-  const mirrorTicket: TradeTicket = {
-    ticketId,
-    basketId: `${broker.kind}:remote`,
-    assetKey,
-    cycleId: String(input.cycleId || "").trim() || null,
-    source,
-    status: acceptedStatus,
-    symbol,
-    market,
-    instrumentCurrency,
-    baseCurrency,
-    side,
-    qty,
-    price,
-    fee,
-    grossNotional: qty * price,
-    fxRateToBase,
-    notionalInBase,
-    decisionRefId: String(input.decisionRefId || "").trim() || null,
-    reasonTags,
-    reasonText,
-    snapshotBefore: {},
-    snapshotAfter: null,
-    rejectCode: placed.accepted ? null : "BROKER_ORDER_REJECTED",
-    rejectMessage: placed.accepted ? null : (placed.warnings[0] || placed.messages[0] || "broker rejected"),
-    pricingMode,
-    priceSource: String(input.priceSource || "").trim() || null,
-    priceSnapshotAt: String(input.priceSnapshotAt || "").trim() || null,
-    createdBy,
-    createdAt: nowIso,
-    executedAt: placed.accepted ? nowIso : null,
-    canceledAt: null,
-    updatedAt: nowIso,
-  };
-
+  const logs = await listDaaTradeTickets({ limit: 200 });
+  const resultStatus = syncedTicket.status;
   return {
-    item: mirrorTicket,
-    result: placed.accepted
+    item: syncedTicket,
+    result: resultStatus === "rejected"
       ? {
-        ticketId,
-        status: "executed",
+        ticketId: syncedTicket.ticketId,
+        status: "rejected",
+        rejectCode: syncedTicket.rejectCode || "BROKER_ORDER_REJECTED",
+        rejectMessage: syncedTicket.rejectMessage || placed.warnings[0] || placed.messages[0] || "broker rejected",
       }
       : {
-        ticketId,
-        status: "rejected",
-        rejectCode: "BROKER_ORDER_REJECTED",
-        rejectMessage: placed.warnings[0] || placed.messages[0] || "broker rejected",
+        ticketId: syncedTicket.ticketId,
+        status: resultStatus,
       },
     summary: {
-      executed: placed.accepted ? 1 : 0,
-      rejected: placed.accepted ? 0 : 1,
+      executed: resultStatus === "executed" ? 1 : 0,
+      rejected: resultStatus === "rejected" ? 1 : 0,
       total: 1,
     },
-    logs: [],
+    logs: logs.filter((row) => row.status !== "ready"),
     baseCurrency,
     notionalInBase,
     feeInBase,
@@ -539,11 +612,12 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
     side,
     symbol,
     broker: {
-      kind: broker.kind,
+      kind: route.kind,
       accountId: placed.order.accountId,
       accepted: placed.accepted,
-      remoteStatus: placed.order.status,
+      remoteStatus: syncedTicket.brokerStatus || placed.order.status,
       remoteOrderId: placed.order.orderId,
+      routeReason: route.routeReason,
       messages: placed.messages,
       warnings: placed.warnings,
     },

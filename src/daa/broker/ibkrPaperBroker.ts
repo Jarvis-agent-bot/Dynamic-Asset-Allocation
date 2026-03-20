@@ -1,13 +1,36 @@
-import type { BrokerAdapter, DaaBrokerOrder, DaaBrokerPlaceOrderInput, DaaBrokerPlaceOrderResult, DaaBrokerPreviewOrderInput, DaaBrokerPreviewOrderResult, DaaBrokerAccountSummary, DaaBrokerPosition } from "./brokerTypes";
+import type {
+  BrokerAdapter,
+  DaaBrokerAccountSummary,
+  DaaBrokerOrder,
+  DaaBrokerPlaceOrderInput,
+  DaaBrokerPlaceOrderResult,
+  DaaBrokerPosition,
+  DaaBrokerPreviewOrderInput,
+  DaaBrokerPreviewOrderResult,
+} from "./brokerTypes";
+import { BrokerConnectorClient } from "./brokerConnectorClient";
+import { isBrokerConnectorRuntimeConfig, type DaaIbkrPaperRuntimeConfig } from "./brokerConfig";
 import { IbkrWebClient } from "./ibkrWebClient";
-import type { DaaIbkrPaperRuntimeConfig } from "./brokerConfig";
 
 export class IbkrPaperBroker implements BrokerAdapter {
   readonly kind = "ibkr_paper" as const;
-  private readonly client: IbkrWebClient;
+  readonly remote = true as const;
+  private readonly connectorClient: BrokerConnectorClient | null;
+  private readonly webClient: IbkrWebClient | null;
 
   constructor(config: DaaIbkrPaperRuntimeConfig) {
-    this.client = new IbkrWebClient(config);
+    if (isBrokerConnectorRuntimeConfig(config)) {
+      this.connectorClient = new BrokerConnectorClient(config);
+      this.webClient = null;
+      return;
+    }
+
+    this.connectorClient = null;
+    this.webClient = new IbkrWebClient(config);
+  }
+
+  private get client(): BrokerConnectorClient | IbkrWebClient {
+    return this.connectorClient || this.webClient!;
   }
 
   async getAccountSummary(accountId?: string | null): Promise<DaaBrokerAccountSummary> {
@@ -42,6 +65,9 @@ export class IbkrPaperBroker implements BrokerAdapter {
   }
 
   async listOrders(input?: { accountId?: string | null; limit?: number }): Promise<DaaBrokerOrder[]> {
-    return this.client.listOrders(input);
+    if (this.connectorClient) {
+      return this.connectorClient.listOrders({ ...input, scope: "all" });
+    }
+    return this.webClient!.listOrders(input);
   }
 }

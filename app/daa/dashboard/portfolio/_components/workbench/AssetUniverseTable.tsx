@@ -96,6 +96,83 @@ function rowMarketLine(row: AssetUniverseView): string {
   return parts.join(" · ");
 }
 
+function assetClassLabel(value: string): string {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "EQUITY") return "股票";
+  if (normalized === "ETF") return "ETF";
+  if (normalized === "BOND") return "债券";
+  if (normalized === "COMMODITY") return "商品";
+  if (normalized === "CASH") return "现金";
+  if (normalized === "CRYPTO") return "加密资产";
+  if (normalized === "FUND") return "基金";
+  if (normalized === "INDEX") return "指数";
+  if (normalized === "OTHER") return "其他";
+  return normalized || "未分类";
+}
+
+function instrumentTypeLabel(value: string): string {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "STOCK") return "个股";
+  if (normalized === "ETF") return "ETF";
+  if (normalized === "BOND") return "债券";
+  if (normalized === "COMMODITY") return "商品";
+  if (normalized === "CASH") return "现金";
+  if (normalized === "CRYPTO") return "加密资产";
+  if (normalized === "FUND") return "基金";
+  if (normalized === "INDEX") return "指数";
+  if (normalized === "OTHER") return "其他类型";
+  return normalized || "";
+}
+
+function regionLabel(value: string): string {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "US") return "美股";
+  if (normalized === "HK") return "港股";
+  if (normalized === "CN") return "A股";
+  if (normalized === "JP") return "日股";
+  if (normalized === "EU") return "欧股";
+  if (normalized === "CRYPTO" || normalized === "GLOBAL") return "全球";
+  if (normalized === "OTHER") return "其他市场";
+  return normalized || "未知市场";
+}
+
+function exchangeLabel(value: string): string {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "HKEX") return "港交所";
+  if (normalized === "SSE") return "上交所";
+  if (normalized === "SZSE") return "深交所";
+  if (normalized === "NASDAQ" || normalized === "NMS" || normalized === "NGM") return "纳斯达克";
+  if (normalized === "NYSE" || normalized === "NYQ") return "纽交所";
+  if (normalized === "NYSE ARCA" || normalized === "ARCA" || normalized === "PCX") return "纽交所 Arca";
+  if (normalized === "CRYPTO") return "加密市场";
+  return String(value || "").trim();
+}
+
+function rowTypeSummary(row: AssetUniverseView): string {
+  return `${assetClassLabel(row.assetClass)} · ${regionLabel(row.region || row.market)}`;
+}
+
+function rowTypeDetail(row: AssetUniverseView): string {
+  const details: string[] = [];
+  const primaryType = assetClassLabel(row.assetClass);
+  const secondaryType = instrumentTypeLabel(row.instrumentType);
+  const exchange = exchangeLabel(row.exchange);
+  const exchangeUpper = exchange.toUpperCase();
+  const marketUpper = String(row.market || "").trim().toUpperCase();
+  const regionUpper = String(row.region || "").trim().toUpperCase();
+
+  if (secondaryType && secondaryType !== primaryType) {
+    details.push(secondaryType);
+  }
+  if (exchange && exchangeUpper !== marketUpper && exchangeUpper !== regionUpper) {
+    details.push(exchange);
+  }
+  if (details.length <= 0 && secondaryType) {
+    details.push(secondaryType);
+  }
+  return details.join(" · ") || "类型待补充";
+}
+
 function rowTagSummary(row: AssetUniverseView): string | null {
   const merged = [...row.watchTags, ...row.holdingTags]
     .map((tag) => String(tag || "").trim())
@@ -103,6 +180,55 @@ function rowTagSummary(row: AssetUniverseView): string | null {
   const unique = Array.from(new Set(merged));
   if (unique.length === 0) return null;
   return unique.slice(0, 3).join(" / ");
+}
+
+function viewDescription(view: AssetUniverseViewFilter): string {
+  if (view === "holdings") return "这里只展示已经持有的资产，便于继续调仓或直接买卖。";
+  if (view === "watchlist") return "先加入候选资产，再设目标仓位；这里只改目标，不会直接下单。";
+  if (view === "basket") return "这里只看目标大于 0 的标的，便于集中处理调仓范围。";
+  return "把持仓和观察标的一起放在这里统一处理。";
+}
+
+function emptyStateMeta(input: {
+  view: AssetUniverseViewFilter;
+  hasKeyword: boolean;
+  watchlistCount: number;
+  basketCount: number;
+}): { title: string; description: string } {
+  if (input.hasKeyword) {
+    return {
+      title: "当前筛选条件下暂无资产",
+      description: "可以清空搜索关键词，或切换到其他视图继续查看。",
+    };
+  }
+  if (input.view === "holdings" && input.watchlistCount > 0) {
+    return {
+      title: "当前还没有正式持仓",
+      description: "已有观察标的，切到“观察列表”继续设置目标或发起首笔买入。",
+    };
+  }
+  if (input.view === "watchlist") {
+    return {
+      title: "观察列表还是空的",
+      description: "先用观察池工具或搜索功能加入候选标的。",
+    };
+  }
+  if (input.view === "basket" && input.watchlistCount > 0) {
+    return {
+      title: "还没有进入调仓范围的标的",
+      description: "给观察标的设置大于 0 的目标仓位后，这里才会出现。",
+    };
+  }
+  if (input.view === "all" && input.basketCount <= 0 && input.watchlistCount <= 0) {
+    return {
+      title: "当前还没有可操作资产",
+      description: "先加入观察标的，工作台才会逐步形成组合和调仓范围。",
+    };
+  }
+  return {
+    title: "当前筛选条件下暂无资产",
+    description: "可以切换到其他视图继续检查持仓与观察池。",
+  };
 }
 
 function fxLabel(row: AssetUniverseView): string {
@@ -910,7 +1036,7 @@ export default function AssetUniverseTable(props: {
                 {viewLabel(props.view)}
               </div>
               <div className="mt-3 max-w-2xl text-[13px] leading-6 text-[var(--muted)]">
-                先把标的加入观察列表，再填写目标仓位；目标大于 0 就会进入调仓范围，但这里只改目标，不会直接下单。
+                {viewDescription(props.view)}
               </div>
             </div>
             <DeepLedgerActionButton
@@ -1064,8 +1190,8 @@ export default function AssetUniverseTable(props: {
                         </div>
                       </td>
                       <td className="px-4 py-3 align-top text-[11px] text-[var(--muted)]">
-                        <div className="truncate">{row.assetClass} · {row.region}</div>
-                        <div className="mt-1 text-[11px] text-[var(--faint)]">{row.instrumentType || row.exchange || "类型待补充"}</div>
+                        <div className="truncate">{rowTypeSummary(row)}</div>
+                        <div className="mt-1 text-[11px] text-[var(--faint)]">{rowTypeDetail(row)}</div>
                         {tagSummary ? <div className="mt-2 text-[11px] text-[var(--faint)]">标签：{tagSummary}</div> : null}
                       </td>
                       <td className="px-4 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
@@ -1283,12 +1409,22 @@ export default function AssetUniverseTable(props: {
               {tableEntries.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-10 text-center">
+                    {(() => {
+                      const emptyMeta = emptyStateMeta({
+                        view: props.view,
+                        hasKeyword,
+                        watchlistCount: props.counts.watchlist,
+                        basketCount: props.counts.basket,
+                      });
+                      return (
                     <DeepLedgerEmptyState
-                      title="当前筛选条件下暂无资产"
-                      description="可以清空搜索关键词，或切换到其他视图继续检查持仓与观察池。"
+                      title={emptyMeta.title}
+                      description={emptyMeta.description}
                       action={hasKeyword ? <DeepLedgerActionButton tone="slate" onClick={() => setKeyword("")}>清空搜索</DeepLedgerActionButton> : null}
                       className="border-0 bg-transparent px-0 py-0"
                     />
+                      );
+                    })()}
                   </td>
                 </tr>
               ) : null}

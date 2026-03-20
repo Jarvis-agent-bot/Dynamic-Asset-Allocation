@@ -28,6 +28,7 @@ import type {
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { buildFxLookupToBase, summarizeMarkToMarketPortfolio } from "@/src/daa/modules/portfolio/portfolioValuation";
 import type { ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
+import { mapBrokerOrderStatusToTradeTicketStatus } from "@/src/daa/broker/brokerOrderStatus";
 
 type DaaStoreState = {
   schemaInit: Promise<void> | null;
@@ -581,11 +582,50 @@ export type DaaStoreCashLedgerApplyInput = {
   settlementTs?: string | null;
 };
 
+export type DaaStoreBrokerKind = "sim" | "ibkr_paper" | "crypto_paper";
+export type DaaStoreBrokerSessionStatus = "disconnected" | "pending_login" | "authenticated" | "expiring" | "reauth_required" | "connector_down";
 export type DaaStoreTradeTicketSource = "manual" | "decision";
-export type DaaStoreTradeTicketStatus = "ready" | "executed" | "canceled" | "rejected";
+export type DaaStoreTradeTicketStatus = "ready" | "submitted" | "partially_filled" | "executed" | "canceled" | "rejected";
 export type DaaStoreTradeTicketSide = "BUY" | "SELL";
 export type DaaStoreTradeBasketStatus = "draft" | "executing" | "executed" | "partial" | "canceled";
 export type DaaStoreTradeBasketSource = "manual" | "decision" | "mixed" | "migration";
+
+export type DaaStoreBrokerSessionState = {
+  brokerKind: DaaStoreBrokerKind;
+  status: DaaStoreBrokerSessionStatus;
+  accountId: string | null;
+  loginUrl: string | null;
+  message: string | null;
+  lastCheckedAt: string | null;
+  lastAuthenticatedAt: string | null;
+  lastError: string | null;
+  sessionMeta: Record<string, unknown> | null;
+  updatedAt: string;
+};
+
+export type DaaStoreBrokerAccountState = {
+  brokerKind: DaaStoreBrokerKind;
+  accountId: string | null;
+  baseCurrency: string;
+  cash: number;
+  investableCash: number;
+  frozenCash: number;
+  totalEquity: number | null;
+  updatedAt: string;
+};
+
+export type DaaStoreBrokerOrderSnapshot = {
+  ticketId: string;
+  brokerKind: DaaStoreBrokerKind;
+  brokerAccountId: string | null;
+  brokerOrderId: string;
+  status: string;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+  raw: Record<string, unknown> | null;
+  syncedAt: string;
+  updatedAt: string;
+};
 
 export type DaaStoreTradeBasket = {
   basketId: string;
@@ -626,6 +666,16 @@ export type DaaStoreTradeTicket = {
   pricingMode: "manual" | "market";
   priceSource: string | null;
   priceSnapshotAt: string | null;
+  brokerKind: DaaStoreBrokerKind | null;
+  brokerAccountId: string | null;
+  brokerOrderId: string | null;
+  brokerStatus: string | null;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+  lastBrokerSyncAt: string | null;
+  lastAppliedFillQty: number;
+  brokerRejectReason: string | null;
+  brokerRaw: Record<string, unknown> | null;
   createdBy: string;
   createdAt: string;
   executedAt: string | null;
@@ -651,6 +701,17 @@ export type DaaStoreCreateTradeTicketInput = {
   pricingMode?: "manual" | "market";
   priceSource?: string;
   priceSnapshotAt?: string;
+  status?: DaaStoreTradeTicketStatus;
+  brokerKind?: DaaStoreBrokerKind | null;
+  brokerAccountId?: string | null;
+  brokerOrderId?: string | null;
+  brokerStatus?: string | null;
+  filledQty?: number | null;
+  avgFillPrice?: number | null;
+  lastBrokerSyncAt?: string | null;
+  lastAppliedFillQty?: number | null;
+  brokerRejectReason?: string | null;
+  brokerRaw?: Record<string, unknown> | null;
   createdBy?: string;
 };
 
@@ -887,6 +948,37 @@ function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState 
     investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
     frozenCash: Math.max(0, toFiniteNumber(row.frozen_cash, 0)),
     totalEquity: Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null,
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapBrokerAccountStateRow(row: Record<string, unknown>): DaaStoreBrokerAccountState {
+  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
+  return {
+    brokerKind: normalizeBrokerKind(row.broker_kind) || "ibkr_paper",
+    accountId: row.account_id == null ? null : normalizeText(row.account_id) || null,
+    baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
+    cash: Math.max(0, toFiniteNumber(row.cash, 0)),
+    investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
+    frozenCash: Math.max(0, toFiniteNumber(row.frozen_cash, 0)),
+    totalEquity: Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null,
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapBrokerPositionRow(row: Record<string, unknown>): DaaStorePosition {
+  const symbol = normalizeText(row.symbol).toUpperCase();
+  const market = normalizeText(row.market, "US").toUpperCase();
+  return {
+    id: buildPositionId(symbol, market),
+    assetKey: buildPositionKey(symbol, market),
+    symbol,
+    market,
+    currency: normalizeText(row.currency, "USD").toUpperCase(),
+    qty: Math.max(0, toFiniteNumber(row.qty)),
+    price: Math.max(0, toFiniteNumber(row.price)),
+    costBasis: row.cost_basis == null ? null : Math.max(0, toFiniteNumber(row.cost_basis)),
+    tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     updatedAt: toIsoString(row.updated_at),
   };
 }
@@ -1200,6 +1292,71 @@ export async function replaceDaaAccountState(input: {
   });
 }
 
+export async function getDaaBrokerAccountState(
+  brokerKind: DaaStoreBrokerKind = "ibkr_paper",
+): Promise<DaaStoreBrokerAccountState | null> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
+       FROM daa_broker_account_state
+       WHERE broker_kind = $1
+       LIMIT 1`,
+      [brokerKind],
+    );
+    if (!result.rows.length) return null;
+    return mapBrokerAccountStateRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function replaceDaaBrokerAccountState(input: {
+  brokerKind: DaaStoreBrokerKind;
+  accountId?: string | null;
+  baseCurrency?: string;
+  cash?: number;
+  investableCash?: number;
+  frozenCash?: number;
+  totalEquity?: number | null;
+}): Promise<DaaStoreBrokerAccountState> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const baseCurrency = normalizeCurrencyAlias(normalizeText(input.baseCurrency, "USD"), "USD");
+    const cash = Math.max(0, toFiniteNumber(input.cash, 0));
+    const frozenCash = Math.max(0, toFiniteNumber(input.frozenCash, 0));
+    const investableCash = resolveInvestableCash(cash, frozenCash, input.investableCash);
+    const totalEquityRaw = input.totalEquity == null ? Number.NaN : toFiniteNumber(input.totalEquity, Number.NaN);
+    const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
+
+    const result = await query(
+      `INSERT INTO daa_broker_account_state (
+         broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,NOW()
+       )
+       ON CONFLICT (broker_kind) DO UPDATE
+       SET
+         account_id = EXCLUDED.account_id,
+         base_currency = EXCLUDED.base_currency,
+         cash = EXCLUDED.cash,
+         investable_cash = EXCLUDED.investable_cash,
+         frozen_cash = EXCLUDED.frozen_cash,
+         total_equity = EXCLUDED.total_equity,
+         updated_at = NOW()
+       RETURNING broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
+      [
+        input.brokerKind,
+        input.accountId ?? null,
+        baseCurrency,
+        cash,
+        investableCash,
+        frozenCash,
+        totalEquity,
+      ],
+    );
+    return mapBrokerAccountStateRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
 export async function saveDaaSystemConfig(input: {
   config: unknown;
   baseVersion?: number;
@@ -1433,7 +1590,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             asset_key TEXT NOT NULL,
             cycle_id TEXT,
             source TEXT NOT NULL CHECK (source IN ('manual', 'decision')),
-            status TEXT NOT NULL CHECK (status IN ('ready', 'executed', 'canceled', 'rejected')),
+            status TEXT NOT NULL,
             symbol TEXT NOT NULL,
             market TEXT NOT NULL DEFAULT 'US',
             instrument_currency TEXT NOT NULL DEFAULT 'USD',
@@ -1455,11 +1612,22 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             pricing_mode TEXT NOT NULL DEFAULT 'manual',
             price_source TEXT,
             price_snapshot_at TIMESTAMPTZ,
+            broker_kind TEXT,
+            broker_account_id TEXT,
+            broker_order_id TEXT,
+            broker_status TEXT,
+            filled_qty NUMERIC,
+            avg_fill_price NUMERIC,
+            last_broker_sync_at TIMESTAMPTZ,
+            last_applied_fill_qty NUMERIC NOT NULL DEFAULT 0,
+            broker_reject_reason TEXT,
+            broker_raw_json JSONB,
             created_by TEXT NOT NULL DEFAULT 'admin',
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             executed_at TIMESTAMPTZ,
             canceled_at TIMESTAMPTZ,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))
           );
 
           CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_created_desc
@@ -1470,6 +1638,64 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
 
           CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc
             ON daa_trade_tickets(cycle_id, created_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_broker_session_state (
+            broker_kind TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            account_id TEXT,
+            login_url TEXT,
+            message TEXT,
+            last_checked_at TIMESTAMPTZ,
+            last_authenticated_at TIMESTAMPTZ,
+            last_error TEXT,
+            session_meta_json JSONB,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_broker_account_state (
+            broker_kind TEXT PRIMARY KEY,
+            account_id TEXT,
+            base_currency TEXT NOT NULL DEFAULT 'USD',
+            cash NUMERIC NOT NULL DEFAULT 0,
+            investable_cash NUMERIC NOT NULL DEFAULT 0,
+            frozen_cash NUMERIC NOT NULL DEFAULT 0,
+            total_equity NUMERIC,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_broker_positions (
+            broker_kind TEXT NOT NULL,
+            account_id TEXT,
+            asset_key TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'US',
+            currency TEXT NOT NULL DEFAULT 'USD',
+            qty NUMERIC NOT NULL DEFAULT 0,
+            price NUMERIC NOT NULL DEFAULT 0,
+            cost_basis NUMERIC,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (broker_kind, asset_key)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc
+            ON daa_broker_positions(broker_kind, updated_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
+            ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
+            broker_kind TEXT NOT NULL,
+            broker_account_id TEXT,
+            broker_order_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            filled_qty NUMERIC,
+            avg_fill_price NUMERIC,
+            raw_json JSONB,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique
+            ON daa_broker_order_snapshots(broker_kind, broker_order_id);
 
           CREATE TABLE IF NOT EXISTS daa_rebalance_cycles (
             cycle_id TEXT PRIMARY KEY,
@@ -1662,6 +1888,20 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await ensureTableColumn(query as any, "daa_trade_tickets", "pricing_mode", "TEXT NOT NULL DEFAULT 'manual'");
         await ensureTableColumn(query as any, "daa_trade_tickets", "price_source", "TEXT");
         await ensureTableColumn(query as any, "daa_trade_tickets", "price_snapshot_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_kind", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_account_id", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_order_id", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_status", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "filled_qty", "NUMERIC");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "avg_fill_price", "NUMERIC");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "last_broker_sync_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "last_applied_fill_qty", "NUMERIC NOT NULL DEFAULT 0");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_reject_reason", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_raw_json", "JSONB");
+        await query("ALTER TABLE daa_trade_tickets DROP CONSTRAINT IF EXISTS daa_trade_tickets_status_check");
+        await query(
+          "ALTER TABLE daa_trade_tickets ADD CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))",
+        ).catch(() => undefined);
         await ensureTableColumn(query as any, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_basket_status_created_desc ON daa_trade_tickets(basket_id, status, created_at DESC)",
@@ -1669,6 +1909,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc ON daa_trade_tickets(cycle_id, created_at DESC)",
         );
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_broker_order_id ON daa_trade_tickets(broker_order_id)");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN basket_id DROP NOT NULL");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN asset_key DROP NOT NULL");
         await query("UPDATE daa_trade_tickets SET asset_key = CONCAT(market, '::', symbol) WHERE asset_key IS NULL OR asset_key = ''");
@@ -1681,6 +1922,68 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query("ALTER TABLE daa_trade_tickets DROP CONSTRAINT IF EXISTS fk_daa_trade_tickets_basket");
         await query(
           "ALTER TABLE daa_trade_tickets ADD CONSTRAINT fk_daa_trade_tickets_basket FOREIGN KEY (basket_id) REFERENCES daa_trade_baskets(basket_id) ON DELETE RESTRICT",
+        );
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_broker_session_state (
+            broker_kind TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            account_id TEXT,
+            login_url TEXT,
+            message TEXT,
+            last_checked_at TIMESTAMPTZ,
+            last_authenticated_at TIMESTAMPTZ,
+            last_error TEXT,
+            session_meta_json JSONB,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_broker_account_state (
+            broker_kind TEXT PRIMARY KEY,
+            account_id TEXT,
+            base_currency TEXT NOT NULL DEFAULT 'USD',
+            cash NUMERIC NOT NULL DEFAULT 0,
+            investable_cash NUMERIC NOT NULL DEFAULT 0,
+            frozen_cash NUMERIC NOT NULL DEFAULT 0,
+            total_equity NUMERIC,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_broker_positions (
+            broker_kind TEXT NOT NULL,
+            account_id TEXT,
+            asset_key TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'US',
+            currency TEXT NOT NULL DEFAULT 'USD',
+            qty NUMERIC NOT NULL DEFAULT 0,
+            price NUMERIC NOT NULL DEFAULT 0,
+            cost_basis NUMERIC,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (broker_kind, asset_key)
+          )
+        `);
+        await query(
+          "CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc ON daa_broker_positions(broker_kind, updated_at DESC)",
+        );
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
+            ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
+            broker_kind TEXT NOT NULL,
+            broker_account_id TEXT,
+            broker_order_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            filled_qty NUMERIC,
+            avg_fill_price NUMERIC,
+            raw_json JSONB,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        await query(
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique ON daa_broker_order_snapshots(broker_kind, broker_order_id)",
         );
         await query("DROP TABLE IF EXISTS daa_watchlist_candidates");
 
@@ -2218,6 +2521,119 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
   });
 }
 
+export async function listDaaBrokerPositions(
+  brokerKind: DaaStoreBrokerKind = "ibkr_paper",
+): Promise<DaaStorePosition[]> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+       FROM daa_broker_positions
+       WHERE broker_kind = $1 AND qty > 0
+       ORDER BY symbol ASC, market ASC`,
+      [brokerKind],
+    );
+    return result.rows.map((row) => mapBrokerPositionRow(row as Record<string, unknown>));
+  });
+}
+
+export async function replaceDaaBrokerPositions(input: {
+  brokerKind: DaaStoreBrokerKind;
+  accountId?: string | null;
+  rows: Array<Partial<DaaStorePosition>>;
+}): Promise<DaaStorePosition[]> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      await query("DELETE FROM daa_broker_positions WHERE broker_kind = $1", [input.brokerKind]);
+      for (const raw of input.rows) {
+        const row = normalizePositionSnapshotRow(raw);
+        if (!row || !(row.qty > 0)) continue;
+
+        await query(
+          `INSERT INTO daa_broker_positions (
+             broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+           )
+           ON CONFLICT (broker_kind, asset_key) DO UPDATE
+           SET
+             account_id = EXCLUDED.account_id,
+             symbol = EXCLUDED.symbol,
+             market = EXCLUDED.market,
+             currency = EXCLUDED.currency,
+             qty = EXCLUDED.qty,
+             price = EXCLUDED.price,
+             cost_basis = EXCLUDED.cost_basis,
+             tags = EXCLUDED.tags,
+             updated_at = EXCLUDED.updated_at`,
+          [
+            input.brokerKind,
+            input.accountId ?? null,
+            row.assetKey,
+            row.symbol,
+            row.market,
+            row.currency,
+            row.qty,
+            row.price,
+            row.costBasis,
+            row.tags,
+            row.updatedAt,
+          ],
+        );
+
+        await query(
+          `INSERT INTO daa_asset_universe (
+             asset_key, symbol, market, currency, last_price, price_updated_at, created_at, updated_at
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, NOW(), NOW()
+           )
+           ON CONFLICT (asset_key) DO UPDATE
+           SET
+             symbol = EXCLUDED.symbol,
+             market = EXCLUDED.market,
+             currency = EXCLUDED.currency,
+             last_price = CASE
+               WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.last_price
+               ELSE daa_asset_universe.last_price
+             END,
+             price_updated_at = CASE
+               WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.price_updated_at
+               ELSE daa_asset_universe.price_updated_at
+             END,
+             updated_at = NOW()`,
+          [
+            row.assetKey,
+            row.symbol,
+            row.market,
+            row.currency,
+            row.price,
+            row.price > 0 ? row.updatedAt : null,
+          ],
+        );
+      }
+      await query("COMMIT");
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+
+    const result = await query(
+      `SELECT broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+       FROM daa_broker_positions
+       WHERE broker_kind = $1 AND qty > 0
+       ORDER BY symbol ASC, market ASC`,
+      [input.brokerKind],
+    );
+    return result.rows.map((row) => mapBrokerPositionRow(row as Record<string, unknown>));
+  });
+}
+
 export async function getDaaStrategyConfig(): Promise<DaaStoreStrategyConfig> {
   const row = await getDaaSystemConfig();
   return {
@@ -2746,10 +3162,30 @@ function normalizeTradeTicketSource(value: unknown): DaaStoreTradeTicketSource {
 
 function normalizeTradeTicketStatus(value: unknown): DaaStoreTradeTicketStatus {
   const text = normalizeText(value, "ready").toLowerCase();
+  if (text === "submitted") return "submitted";
+  if (text === "partially_filled") return "partially_filled";
   if (text === "executed") return "executed";
   if (text === "canceled") return "canceled";
   if (text === "rejected") return "rejected";
   return "ready";
+}
+
+function normalizeBrokerKind(value: unknown): DaaStoreBrokerKind | null {
+  const text = normalizeText(value).toLowerCase();
+  if (!text) return null;
+  if (text === "sim") return "sim";
+  if (text === "crypto" || text === "crypto_paper") return "crypto_paper";
+  return "ibkr_paper";
+}
+
+function normalizeBrokerSessionStatus(value: unknown): DaaStoreBrokerSessionStatus {
+  const text = normalizeText(value, "disconnected").toLowerCase();
+  if (text === "pending_login") return "pending_login";
+  if (text === "authenticated") return "authenticated";
+  if (text === "expiring") return "expiring";
+  if (text === "reauth_required") return "reauth_required";
+  if (text === "connector_down") return "connector_down";
+  return "disconnected";
 }
 
 function normalizeTradeBasketStatus(value: unknown): DaaStoreTradeBasketStatus {
@@ -2776,6 +3212,7 @@ function deriveDecisionStatusFromTradeTickets(
   if (statuses.every((status) => status === "ready")) return "pending";
   if (statuses.every((status) => status === "executed")) return "executed";
   if (statuses.every((status) => status === "canceled" || status === "rejected")) return "canceled";
+  if (statuses.every((status) => status === "submitted" || status === "partially_filled")) return "partial";
   return "partial";
 }
 
@@ -2784,6 +3221,7 @@ function deriveBasketStatusFromTickets(statuses: DaaStoreTradeTicketStatus[]): D
   if (statuses.every((status) => status === "ready")) return "draft";
   if (statuses.every((status) => status === "executed")) return "executed";
   if (statuses.every((status) => status === "canceled" || status === "rejected")) return "canceled";
+  if (statuses.every((status) => status === "ready" || status === "submitted" || status === "partially_filled")) return "executing";
   return "partial";
 }
 
@@ -2796,6 +3234,51 @@ function normalizeTradePricingMode(value: unknown): "manual" | "market" {
   const mode = normalizeText(value, "manual").toLowerCase();
   return mode === "market" ? "market" : "manual";
 }
+
+const TRADE_TICKET_SELECT_COLUMNS_ = [
+  "ticket_id",
+  "basket_id",
+  "asset_key",
+  "cycle_id",
+  "source",
+  "status",
+  "symbol",
+  "market",
+  "instrument_currency",
+  "base_currency",
+  "side",
+  "qty",
+  "price",
+  "fee",
+  "gross_notional",
+  "fx_rate_to_base",
+  "notional_in_base",
+  "decision_ref_id",
+  "reason_tags",
+  "reason_text",
+  "snapshot_before_json",
+  "snapshot_after_json",
+  "reject_code",
+  "reject_message",
+  "pricing_mode",
+  "price_source",
+  "price_snapshot_at",
+  "broker_kind",
+  "broker_account_id",
+  "broker_order_id",
+  "broker_status",
+  "filled_qty",
+  "avg_fill_price",
+  "last_broker_sync_at",
+  "last_applied_fill_qty",
+  "broker_reject_reason",
+  "broker_raw_json",
+  "created_by",
+  "created_at",
+  "executed_at",
+  "canceled_at",
+  "updated_at",
+].join(", ");
 
 function isPgUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && (error as { code?: unknown }).code === "23505");
@@ -2846,12 +3329,183 @@ function mapTradeTicketRow(row: Record<string, unknown>): DaaStoreTradeTicket {
     pricingMode: normalizeTradePricingMode(row.pricing_mode),
     priceSource: row.price_source == null ? null : normalizeText(row.price_source) || null,
     priceSnapshotAt: row.price_snapshot_at == null ? null : toIsoString(row.price_snapshot_at),
+    brokerKind: normalizeBrokerKind(row.broker_kind),
+    brokerAccountId: row.broker_account_id == null ? null : normalizeText(row.broker_account_id) || null,
+    brokerOrderId: row.broker_order_id == null ? null : normalizeText(row.broker_order_id) || null,
+    brokerStatus: row.broker_status == null ? null : normalizeText(row.broker_status) || null,
+    filledQty: row.filled_qty == null ? null : Math.max(0, toFiniteNumber(row.filled_qty)),
+    avgFillPrice: row.avg_fill_price == null ? null : Math.max(0, toFiniteNumber(row.avg_fill_price)),
+    lastBrokerSyncAt: row.last_broker_sync_at == null ? null : toIsoString(row.last_broker_sync_at),
+    lastAppliedFillQty: Math.max(0, toFiniteNumber(row.last_applied_fill_qty, 0)),
+    brokerRejectReason: row.broker_reject_reason == null ? null : normalizeText(row.broker_reject_reason) || null,
+    brokerRaw: row.broker_raw_json == null ? null : parseJsonb<Record<string, unknown>>(row.broker_raw_json, {}),
     createdBy: normalizeText(row.created_by, "admin"),
     createdAt: toIsoString(row.created_at),
     executedAt: row.executed_at == null ? null : toIsoString(row.executed_at),
     canceledAt: row.canceled_at == null ? null : toIsoString(row.canceled_at),
     updatedAt: toIsoString(row.updated_at),
   };
+}
+
+function mapBrokerSessionStateRow(row: Record<string, unknown>): DaaStoreBrokerSessionState {
+  return {
+    brokerKind: normalizeBrokerKind(row.broker_kind) || "ibkr_paper",
+    status: normalizeBrokerSessionStatus(row.status),
+    accountId: row.account_id == null ? null : normalizeText(row.account_id) || null,
+    loginUrl: row.login_url == null ? null : normalizeText(row.login_url) || null,
+    message: row.message == null ? null : normalizeText(row.message) || null,
+    lastCheckedAt: row.last_checked_at == null ? null : toIsoString(row.last_checked_at),
+    lastAuthenticatedAt: row.last_authenticated_at == null ? null : toIsoString(row.last_authenticated_at),
+    lastError: row.last_error == null ? null : normalizeText(row.last_error) || null,
+    sessionMeta: row.session_meta_json == null ? null : parseJsonb<Record<string, unknown>>(row.session_meta_json, {}),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapBrokerOrderSnapshotRow(row: Record<string, unknown>): DaaStoreBrokerOrderSnapshot {
+  return {
+    ticketId: normalizeText(row.ticket_id),
+    brokerKind: normalizeBrokerKind(row.broker_kind) || "ibkr_paper",
+    brokerAccountId: row.broker_account_id == null ? null : normalizeText(row.broker_account_id) || null,
+    brokerOrderId: normalizeText(row.broker_order_id),
+    status: normalizeText(row.status),
+    filledQty: row.filled_qty == null ? null : Math.max(0, toFiniteNumber(row.filled_qty)),
+    avgFillPrice: row.avg_fill_price == null ? null : Math.max(0, toFiniteNumber(row.avg_fill_price)),
+    raw: row.raw_json == null ? null : parseJsonb<Record<string, unknown>>(row.raw_json, {}),
+    syncedAt: toIsoString(row.synced_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+async function upsertBrokerOrderSnapshotInTx(
+  query: DaaTxQueryFn,
+  input: {
+    ticketId: string;
+    brokerKind: DaaStoreBrokerKind;
+    brokerAccountId?: string | null;
+    brokerOrderId: string;
+    status: string;
+    filledQty?: number | null;
+    avgFillPrice?: number | null;
+    raw?: Record<string, unknown> | null;
+    syncedAt?: string | null;
+  },
+): Promise<DaaStoreBrokerOrderSnapshot> {
+  const syncedAt = input.syncedAt ? toIsoString(input.syncedAt, new Date().toISOString()) : new Date().toISOString();
+  const result = await query(
+    `INSERT INTO daa_broker_order_snapshots (
+       ticket_id, broker_kind, broker_account_id, broker_order_id, status, filled_qty, avg_fill_price, raw_json, synced_at, updated_at
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,NOW()
+     )
+     ON CONFLICT (ticket_id) DO UPDATE
+     SET
+       broker_kind = EXCLUDED.broker_kind,
+       broker_account_id = EXCLUDED.broker_account_id,
+       broker_order_id = EXCLUDED.broker_order_id,
+       status = EXCLUDED.status,
+       filled_qty = EXCLUDED.filled_qty,
+       avg_fill_price = EXCLUDED.avg_fill_price,
+       raw_json = EXCLUDED.raw_json,
+       synced_at = EXCLUDED.synced_at,
+       updated_at = NOW()
+     RETURNING ticket_id, broker_kind, broker_account_id, broker_order_id, status, filled_qty, avg_fill_price, raw_json, synced_at, updated_at`,
+    [
+      normalizeText(input.ticketId),
+      input.brokerKind,
+      input.brokerAccountId ?? null,
+      normalizeText(input.brokerOrderId),
+      normalizeText(input.status) || "unknown",
+      input.filledQty == null ? null : Math.max(0, toFiniteNumber(input.filledQty)),
+      input.avgFillPrice == null ? null : Math.max(0, toFiniteNumber(input.avgFillPrice)),
+      JSON.stringify(input.raw ?? null),
+      syncedAt,
+    ],
+  );
+  return mapBrokerOrderSnapshotRow(result.rows[0] as Record<string, unknown>);
+}
+
+async function selectTradeTicketsByIdsInTx(
+  query: DaaTxQueryFn,
+  ticketIds: string[],
+  opts: {
+    forUpdate?: boolean;
+    orderByCreatedDesc?: boolean;
+  } = {},
+): Promise<DaaStoreTradeTicket[]> {
+  const ids = [...new Set(ticketIds.map((item) => normalizeText(item)).filter(Boolean))];
+  if (!ids.length) return [];
+  const placeholders = ids.map((_, idx) => `$${idx + 1}`).join(", ");
+  const result = await query(
+    `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+     FROM daa_trade_tickets
+     WHERE ticket_id IN (${placeholders})
+     ${opts.forUpdate ? "FOR UPDATE" : ""}
+     ${opts.orderByCreatedDesc ? "ORDER BY created_at DESC" : ""}`,
+    ids,
+  );
+  return result.rows.map((row) => mapTradeTicketRow(row as Record<string, unknown>));
+}
+
+async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: string[]): Promise<void> {
+  const touchedTickets = await selectTradeTicketsByIdsInTx(query, ticketIds);
+  const touchedDecisionIds = [...new Set(
+    touchedTickets
+      .map((ticket) => ticket.decisionRefId)
+      .filter((decisionId): decisionId is string => Boolean(decisionId)),
+  )];
+  if (touchedDecisionIds.length > 0) {
+    const decisionPlaceholders = touchedDecisionIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const decisionTicketRows = await query(
+      `SELECT decision_ref_id, status FROM daa_trade_tickets WHERE decision_ref_id IN (${decisionPlaceholders})`,
+      touchedDecisionIds,
+    );
+    const statusByDecision = new Map<string, DaaStoreTradeTicketStatus[]>();
+    for (const row of decisionTicketRows.rows as Array<Record<string, unknown>>) {
+      const decisionRefId = normalizeText(row.decision_ref_id);
+      if (!decisionRefId) continue;
+      const status = normalizeTradeTicketStatus(row.status);
+      if (!statusByDecision.has(decisionRefId)) statusByDecision.set(decisionRefId, []);
+      statusByDecision.get(decisionRefId)!.push(status);
+    }
+    for (const decisionId of touchedDecisionIds) {
+      const statuses = statusByDecision.get(decisionId) ?? [];
+      const nextStatus = deriveDecisionStatusFromTradeTickets(statuses);
+      await query(
+        "UPDATE daa_rebalance_decisions SET status = $1 WHERE id = $2",
+        [nextStatus, decisionId],
+      );
+    }
+  }
+
+  const touchedBasketIds = [...new Set(
+    touchedTickets
+      .map((ticket) => ticket.basketId)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  if (touchedBasketIds.length > 0) {
+    const basketPlaceholders = touchedBasketIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const basketTicketRows = await query(
+      `SELECT basket_id, status FROM daa_trade_tickets WHERE basket_id IN (${basketPlaceholders})`,
+      touchedBasketIds,
+    );
+    const statusByBasket = new Map<string, DaaStoreTradeTicketStatus[]>();
+    for (const row of basketTicketRows.rows as Array<Record<string, unknown>>) {
+      const id = normalizeText(row.basket_id);
+      if (!id) continue;
+      const status = normalizeTradeTicketStatus(row.status);
+      if (!statusByBasket.has(id)) statusByBasket.set(id, []);
+      statusByBasket.get(id)!.push(status);
+    }
+    for (const id of touchedBasketIds) {
+      const statuses = statusByBasket.get(id) ?? [];
+      const nextStatus = deriveBasketStatusFromTickets(statuses);
+      await query(
+        "UPDATE daa_trade_baskets SET status = $1, updated_at = NOW(), executed_at = CASE WHEN $1 IN ('executed','partial','canceled') THEN COALESCE(executed_at, NOW()) ELSE executed_at END WHERE basket_id = $2",
+        [nextStatus, id],
+      );
+    }
+  }
 }
 
 function normalizeRebalanceCycleStatus(value: unknown): DaaStoreRebalanceCycleStatus {
@@ -3712,7 +4366,7 @@ export async function listDaaTradeTickets(opts: {
 
     params.push(limit);
     const sql = [
-      "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at",
+      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}`,
       "FROM daa_trade_tickets",
       where.length ? `WHERE ${where.join(" AND ")}` : "",
       `ORDER BY created_at DESC LIMIT $${params.length}`,
@@ -3720,6 +4374,119 @@ export async function listDaaTradeTickets(opts: {
     const rows = await query(sql, params);
     return rows.rows.map((row) => mapTradeTicketRow(row as Record<string, unknown>));
   });
+}
+
+export async function getDaaTradeTicket(ticketIdRaw: string): Promise<DaaStoreTradeTicket | null> {
+  await ensureDaaStoreSchemaPg();
+  const ticketId = normalizeText(ticketIdRaw);
+  if (!ticketId) return null;
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
+      [ticketId],
+    );
+    if (!result.rows.length) return null;
+    return mapTradeTicketRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function listDaaBrokerOpenTradeTickets(brokerKind?: DaaStoreBrokerKind | null): Promise<DaaStoreTradeTicket[]> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const params: unknown[] = [];
+    const where = [
+      "broker_order_id IS NOT NULL",
+      "status IN ('submitted', 'partially_filled')",
+    ];
+    if (brokerKind) {
+      params.push(brokerKind);
+      where.push(`broker_kind = $${params.length}`);
+    }
+    const result = await query(
+      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+       FROM daa_trade_tickets
+       WHERE ${where.join(" AND ")}
+       ORDER BY updated_at DESC`,
+      params,
+    );
+    return result.rows.map((row) => mapTradeTicketRow(row as Record<string, unknown>));
+  });
+}
+
+export async function getDaaBrokerSessionState(
+  brokerKind: DaaStoreBrokerKind = "ibkr_paper",
+): Promise<DaaStoreBrokerSessionState | null> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      "SELECT broker_kind, status, account_id, login_url, message, last_checked_at, last_authenticated_at, last_error, session_meta_json, updated_at FROM daa_broker_session_state WHERE broker_kind = $1 LIMIT 1",
+      [brokerKind],
+    );
+    if (!result.rows.length) return null;
+    return mapBrokerSessionStateRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function saveDaaBrokerSessionState(input: {
+  brokerKind: DaaStoreBrokerKind;
+  status: DaaStoreBrokerSessionStatus;
+  accountId?: string | null;
+  loginUrl?: string | null;
+  message?: string | null;
+  lastCheckedAt?: string | null;
+  lastAuthenticatedAt?: string | null;
+  lastError?: string | null;
+  sessionMeta?: Record<string, unknown> | null;
+}): Promise<DaaStoreBrokerSessionState> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `INSERT INTO daa_broker_session_state (
+         broker_kind, status, account_id, login_url, message, last_checked_at, last_authenticated_at, last_error, session_meta_json, updated_at
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,NOW()
+       )
+       ON CONFLICT (broker_kind) DO UPDATE
+       SET
+         status = EXCLUDED.status,
+         account_id = EXCLUDED.account_id,
+         login_url = EXCLUDED.login_url,
+         message = EXCLUDED.message,
+         last_checked_at = EXCLUDED.last_checked_at,
+         last_authenticated_at = EXCLUDED.last_authenticated_at,
+         last_error = EXCLUDED.last_error,
+         session_meta_json = EXCLUDED.session_meta_json,
+         updated_at = NOW()
+       RETURNING broker_kind, status, account_id, login_url, message, last_checked_at, last_authenticated_at, last_error, session_meta_json, updated_at`,
+      [
+        input.brokerKind,
+        input.status,
+        input.accountId ?? null,
+        input.loginUrl ?? null,
+        input.message ?? null,
+        input.lastCheckedAt ? toIsoString(input.lastCheckedAt, new Date().toISOString()) : null,
+        input.lastAuthenticatedAt ? toIsoString(input.lastAuthenticatedAt, new Date().toISOString()) : null,
+        input.lastError ?? null,
+        JSON.stringify(input.sessionMeta ?? null),
+      ],
+    );
+    return mapBrokerSessionStateRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function upsertDaaBrokerOrderSnapshot(input: {
+  ticketId: string;
+  brokerKind: DaaStoreBrokerKind;
+  brokerAccountId?: string | null;
+  brokerOrderId: string;
+  status: string;
+  filledQty?: number | null;
+  avgFillPrice?: number | null;
+  raw?: Record<string, unknown> | null;
+  syncedAt?: string | null;
+}): Promise<DaaStoreBrokerOrderSnapshot> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => upsertBrokerOrderSnapshotInTx(query as DaaTxQueryFn, input));
 }
 
 const REBALANCE_CYCLE_SELECT_COLUMNS_ = [
@@ -4125,6 +4892,200 @@ export async function getDaaTradeBasket(basketId: string): Promise<DaaStoreTrade
   });
 }
 
+export async function applyDaaBrokerOrderSync(input: {
+  ticketId?: string | null;
+  order: {
+    broker: DaaStoreBrokerKind;
+    accountId: string;
+    orderId: string;
+    status: string;
+    filledQty: number | null;
+    avgFillPrice: number | null;
+    updatedAt?: string | null;
+    raw?: Record<string, unknown> | null;
+  };
+}): Promise<DaaStoreTradeTicket | null> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const ticketId = normalizeText(input.ticketId);
+    const orderId = normalizeText(input.order.orderId);
+    if (!ticketId && !orderId) return null;
+
+    await query("BEGIN");
+    try {
+      const whereSql = ticketId ? "ticket_id = $1" : "broker_order_id = $1";
+      const currentRes = await query(
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+         FROM daa_trade_tickets
+         WHERE ${whereSql}
+         LIMIT 1
+         FOR UPDATE`,
+        [ticketId || orderId],
+      );
+      if (!currentRes.rows.length) {
+        await query("ROLLBACK");
+        return null;
+      }
+
+      const current = mapTradeTicketRow(currentRes.rows[0] as Record<string, unknown>);
+      const nowIso = input.order.updatedAt ? toIsoString(input.order.updatedAt, new Date().toISOString()) : new Date().toISOString();
+      const nextStatus = normalizeTradeTicketStatus(mapBrokerOrderStatusToTradeTicketStatus(input.order.status));
+      const filledQty = input.order.filledQty == null ? (current.filledQty ?? 0) : Math.max(0, toFiniteNumber(input.order.filledQty));
+      const avgFillPrice = input.order.avgFillPrice == null
+        ? (current.avgFillPrice ?? null)
+        : Math.max(0, toFiniteNumber(input.order.avgFillPrice));
+      const lastAppliedFillQty = Math.max(0, current.lastAppliedFillQty);
+      const nextAppliedFillQty = Math.max(lastAppliedFillQty, Math.min(current.qty, filledQty));
+      const deltaFilledQty = Math.max(0, nextAppliedFillQty - lastAppliedFillQty);
+      const brokerRejectReason = nextStatus === "rejected"
+        ? normalizeText(
+          (input.order.raw as Record<string, unknown> | null)?.message
+          || (input.order.raw as Record<string, unknown> | null)?.text
+          || current.brokerRejectReason
+          || current.rejectMessage,
+        ) || null
+        : null;
+
+      if (deltaFilledQty > 0) {
+        const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
+        const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
+        const fxRateToBase = current.fxRateToBase && current.fxRateToBase > 0
+          ? current.fxRateToBase
+          : resolveFxRateToBase(current.baseCurrency, current.instrumentCurrency, fxMap);
+        const effectivePrice = avgFillPrice && avgFillPrice > 0 ? avgFillPrice : current.price;
+        const grossNotionalDelta = deltaFilledQty * effectivePrice;
+        const notionalInBaseDelta = fxRateToBase && fxRateToBase > 0
+          ? grossNotionalDelta * fxRateToBase
+          : grossNotionalDelta;
+        const ledgerSide: DaaStoreCashLedgerSide = current.side === "BUY" ? "withdraw" : "deposit";
+        const ledgerAmount = current.side === "BUY"
+          ? notionalInBaseDelta
+          : Math.max(0, notionalInBaseDelta);
+
+        await query(
+          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, notes, execution_order_id, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())",
+          [
+            randomUUID(),
+            current.symbol,
+            current.side,
+            deltaFilledQty,
+            effectivePrice,
+            grossNotionalDelta,
+            0,
+            nowIso,
+            current.source,
+            `broker_sync ${orderId} ${nextAppliedFillQty.toFixed(6)}`,
+            `${orderId}:${nextAppliedFillQty.toFixed(6)}`,
+          ],
+        );
+        try {
+          await query(
+            `INSERT INTO daa_portfolio_ledger_events (
+               event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+               amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
+             ) VALUES (
+               $1,$2,'trade_execution',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,NOW()
+             )`,
+            [
+              randomUUID(),
+              nowIso,
+              ledgerSide,
+              ledgerAmount,
+              current.baseCurrency,
+              current.baseCurrency,
+              ledgerAmount,
+              1,
+              current.ticketId,
+              current.cycleId,
+              nowIso,
+              `${current.side} ${current.symbol} 增量成交 ${deltaFilledQty.toFixed(6)} @ ${effectivePrice.toFixed(4)}`,
+              JSON.stringify({
+                entryKind: "trade_execution",
+                side: current.side,
+                brokerKind: input.order.broker,
+                brokerOrderId: orderId,
+                deltaFilledQty,
+              }),
+            ],
+          );
+        } catch (error) {
+          if (!isPgUniqueViolation(error)) throw error;
+        }
+      }
+
+      await query(
+        `UPDATE daa_trade_tickets
+         SET
+           status = $2,
+           broker_kind = $3,
+           broker_account_id = $4,
+           broker_order_id = $5,
+           broker_status = $6,
+           filled_qty = $7,
+           avg_fill_price = $8,
+           last_broker_sync_at = $9,
+           last_applied_fill_qty = $10,
+           broker_reject_reason = $11,
+           broker_raw_json = $12::jsonb,
+           reject_code = CASE WHEN $2 = 'rejected' THEN 'BROKER_REJECTED' ELSE NULL END,
+           reject_message = CASE WHEN $2 = 'rejected' THEN $11 ELSE NULL END,
+           gross_notional = CASE
+             WHEN COALESCE($7, 0) > 0 THEN COALESCE($7, 0) * COALESCE(NULLIF($8, 0), price)
+             ELSE gross_notional
+           END,
+           notional_in_base = CASE
+             WHEN COALESCE($7, 0) > 0 THEN (COALESCE($7, 0) * COALESCE(NULLIF($8, 0), price)) * COALESCE(NULLIF(fx_rate_to_base, 0), 1)
+             ELSE notional_in_base
+           END,
+           executed_at = CASE WHEN $2 = 'executed' THEN COALESCE(executed_at, $9) ELSE executed_at END,
+           canceled_at = CASE WHEN $2 = 'canceled' THEN COALESCE(canceled_at, $9) ELSE canceled_at END,
+           updated_at = NOW()
+         WHERE ticket_id = $1`,
+        [
+          current.ticketId,
+          nextStatus,
+          input.order.broker,
+          normalizeText(input.order.accountId) || current.brokerAccountId,
+          orderId || current.brokerOrderId,
+          normalizeText(input.order.status) || current.brokerStatus,
+          filledQty > 0 ? filledQty : null,
+          avgFillPrice && avgFillPrice > 0 ? avgFillPrice : null,
+          nowIso,
+          nextAppliedFillQty,
+          brokerRejectReason,
+          JSON.stringify(input.order.raw ?? null),
+        ],
+      );
+
+      if (orderId || current.brokerOrderId) {
+        await upsertBrokerOrderSnapshotInTx(query as DaaTxQueryFn, {
+          ticketId: current.ticketId,
+          brokerKind: input.order.broker,
+          brokerAccountId: normalizeText(input.order.accountId) || current.brokerAccountId,
+          brokerOrderId: orderId || current.brokerOrderId || current.ticketId,
+          status: normalizeText(input.order.status) || "unknown",
+          filledQty: filledQty > 0 ? filledQty : null,
+          avgFillPrice: avgFillPrice && avgFillPrice > 0 ? avgFillPrice : null,
+          raw: input.order.raw ?? null,
+          syncedAt: nowIso,
+        });
+      }
+
+      await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, [current.ticketId]);
+      const latestRows = await selectTradeTicketsByIdsInTx(query as DaaTxQueryFn, [current.ticketId], { orderByCreatedDesc: true });
+      await query("COMMIT");
+      return latestRows[0] ?? null;
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
+}
+
 export async function updateDaaTradeTicket(input: {
   ticketId: string;
   qty?: number;
@@ -4140,7 +5101,7 @@ export async function updateDaaTradeTicket(input: {
     await query("BEGIN");
     try {
       const existingRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE`,
         [ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
@@ -4168,7 +5129,7 @@ export async function updateDaaTradeTicket(input: {
       await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
 
       const updatedRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
         [ticketId],
       );
       await query("COMMIT");
@@ -4192,7 +5153,7 @@ export async function cancelDaaTradeTicket(ticketIdRaw: string): Promise<DaaStor
     await query("BEGIN");
     try {
       const existingRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE`,
         [ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
@@ -4204,7 +5165,7 @@ export async function cancelDaaTradeTicket(ticketIdRaw: string): Promise<DaaStor
       );
       await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
       const updatedRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
         [ticketId],
       );
       await query("COMMIT");
@@ -4249,6 +5210,17 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
     const pricingMode = normalizeTradePricingMode(input.pricingMode);
     const priceSource = normalizeText(input.priceSource, "") || null;
     const priceSnapshotAt = input.priceSnapshotAt ? toIsoString(input.priceSnapshotAt, new Date().toISOString()) : null;
+    const status = normalizeTradeTicketStatus(input.status);
+    const brokerKind = input.brokerKind ?? null;
+    const brokerAccountId = normalizeText(input.brokerAccountId, "") || null;
+    const brokerOrderId = normalizeText(input.brokerOrderId, "") || null;
+    const brokerStatus = normalizeText(input.brokerStatus, "") || null;
+    const filledQty = input.filledQty == null ? null : Math.max(0, toFiniteNumber(input.filledQty));
+    const avgFillPrice = input.avgFillPrice == null ? null : Math.max(0, toFiniteNumber(input.avgFillPrice));
+    const lastBrokerSyncAt = input.lastBrokerSyncAt ? toIsoString(input.lastBrokerSyncAt, new Date().toISOString()) : null;
+    const lastAppliedFillQty = input.lastAppliedFillQty == null ? 0 : Math.max(0, toFiniteNumber(input.lastAppliedFillQty));
+    const brokerRejectReason = normalizeText(input.brokerRejectReason, "") || null;
+    const brokerRaw = input.brokerRaw ?? null;
     const createdBy = normalizeText(input.createdBy, "admin");
 
     if (!symbol) throw new Error("symbol is required");
@@ -4330,13 +5302,26 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
       }
 
       await query(
-        "INSERT INTO daa_trade_tickets (ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, pricing_mode, price_source, price_snapshot_at, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,'ready',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,NOW(),NOW())",
+        `INSERT INTO daa_trade_tickets (
+           ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency,
+           side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text,
+           snapshot_before_json, pricing_mode, price_source, price_snapshot_at, broker_kind, broker_account_id, broker_order_id,
+           broker_status, filled_qty, avg_fill_price, last_broker_sync_at, last_applied_fill_qty, broker_reject_reason, broker_raw_json,
+           created_by, created_at, updated_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+           $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+           $21::jsonb,$22,$23,$24,$25,$26,$27,
+           $28,$29,$30,$31,$32,$33,$34::jsonb,
+           $35,NOW(),NOW()
+         )`,
         [
           ticketId,
           basketId,
           assetKey,
           cycleId,
           source,
+          status,
           symbol,
           market,
           instrumentCurrency,
@@ -4355,6 +5340,16 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
           pricingMode,
           priceSource,
           priceSnapshotAt,
+          brokerKind,
+          brokerAccountId,
+          brokerOrderId,
+          brokerStatus,
+          filledQty,
+          avgFillPrice,
+          lastBrokerSyncAt,
+          lastAppliedFillQty,
+          brokerRejectReason,
+          JSON.stringify(brokerRaw),
           createdBy,
         ],
       );
@@ -4362,9 +5357,12 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
         "UPDATE daa_trade_baskets SET updated_at = NOW(), source = CASE WHEN source <> $1 THEN 'mixed' ELSE source END WHERE basket_id = $2",
         [sourceForBasket, basketId],
       );
+      if (status !== "ready") {
+        await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, [ticketId]);
+      }
 
       const inserted = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
         [ticketId],
       );
       await query("COMMIT");
@@ -4399,7 +5397,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
     try {
       const placeholders = ticketIds.map((_, idx) => `$${idx + 1}`).join(", ");
       const ticketRows = await query(
-        `SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) FOR UPDATE`,
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) FOR UPDATE`,
         ticketIds,
       );
       const ticketMap = new Map<string, DaaStoreTradeTicket>();
@@ -4709,66 +5707,10 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ],
       );
 
-      const touchedDecisionIds = [...new Set(
-        ticketIds
-          .map((ticketId) => ticketMap.get(ticketId)?.decisionRefId ?? null)
-          .filter((decisionId): decisionId is string => Boolean(decisionId)),
-      )];
-      if (touchedDecisionIds.length > 0) {
-        const decisionPlaceholders = touchedDecisionIds.map((_, idx) => `$${idx + 1}`).join(", ");
-        const decisionTicketRows = await query(
-          `SELECT decision_ref_id, status FROM daa_trade_tickets WHERE decision_ref_id IN (${decisionPlaceholders})`,
-          touchedDecisionIds,
-        );
-        const statusByDecision = new Map<string, DaaStoreTradeTicketStatus[]>();
-        for (const row of decisionTicketRows.rows as Array<Record<string, unknown>>) {
-          const decisionRefId = normalizeText(row.decision_ref_id);
-          if (!decisionRefId) continue;
-          const status = normalizeTradeTicketStatus(row.status);
-          if (!statusByDecision.has(decisionRefId)) statusByDecision.set(decisionRefId, []);
-          statusByDecision.get(decisionRefId)!.push(status);
-        }
-        for (const decisionId of touchedDecisionIds) {
-          const statuses = statusByDecision.get(decisionId) ?? [];
-          const nextStatus = deriveDecisionStatusFromTradeTickets(statuses);
-          await query(
-            "UPDATE daa_rebalance_decisions SET status = $1 WHERE id = $2",
-            [nextStatus, decisionId],
-          );
-        }
-      }
-
-      const touchedBasketIds = [...new Set(
-        ticketIds
-          .map((ticketId) => ticketMap.get(ticketId)?.basketId ?? null)
-          .filter((id): id is string => Boolean(id)),
-      )];
-      if (touchedBasketIds.length > 0) {
-        const basketPlaceholders = touchedBasketIds.map((_, idx) => `$${idx + 1}`).join(", ");
-        const basketTicketRows = await query(
-          `SELECT basket_id, status FROM daa_trade_tickets WHERE basket_id IN (${basketPlaceholders})`,
-          touchedBasketIds,
-        );
-        const statusByBasket = new Map<string, DaaStoreTradeTicketStatus[]>();
-        for (const row of basketTicketRows.rows as Array<Record<string, unknown>>) {
-          const id = normalizeText(row.basket_id);
-          if (!id) continue;
-          const status = normalizeTradeTicketStatus(row.status);
-          if (!statusByBasket.has(id)) statusByBasket.set(id, []);
-          statusByBasket.get(id)!.push(status);
-        }
-        for (const id of touchedBasketIds) {
-          const statuses = statusByBasket.get(id) ?? [];
-          const nextStatus = deriveBasketStatusFromTickets(statuses);
-          await query(
-            "UPDATE daa_trade_baskets SET status = $1, updated_at = NOW(), executed_at = CASE WHEN $1 IN ('executed','partial','canceled') THEN COALESCE(executed_at, NOW()) ELSE executed_at END WHERE basket_id = $2",
-            [nextStatus, id],
-          );
-        }
-      }
+      await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, ticketIds);
 
       const latestTicketRows = await query(
-        `SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
         ticketIds,
       );
       const latestPositionsRows = await query(

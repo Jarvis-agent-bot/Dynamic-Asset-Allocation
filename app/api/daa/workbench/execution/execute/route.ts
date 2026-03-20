@@ -53,8 +53,11 @@ export async function POST(req: Request) {
       const systemRow = await getDaaSystemConfig();
       const notification = systemRow.config.notification;
       if (
+        execution.result.status === "executed"
+        && (
         (notification.telegram.enabled && notification.telegram.onTradeExecuted)
         || (notification.feishu.enabled && notification.feishu.onTradeExecuted)
+        )
       ) {
         const message = buildTradeExecutionNotifyText({
           source: execution.source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
@@ -62,6 +65,8 @@ export async function POST(req: Request) {
           executeMode: "single",
           cycleId: execution.item.cycleId || null,
           ticketId: execution.item.ticketId,
+          venueKind: execution.broker?.kind || execution.item.brokerKind || null,
+          venueAccountId: execution.broker?.accountId || execution.item.brokerAccountId || null,
           executedCount: execution.summary.executed,
           failedCount: execution.summary.rejected,
           totalCount: execution.summary.total,
@@ -81,8 +86,10 @@ export async function POST(req: Request) {
             notionalInBase: execution.notionalInBase,
             broker: execution.broker ? {
               kind: execution.broker.kind,
+              accountId: execution.broker.accountId,
               remoteOrderId: execution.broker.remoteOrderId,
               remoteStatus: execution.broker.remoteStatus,
+              routeReason: execution.broker.routeReason,
             } : null,
           },
         };

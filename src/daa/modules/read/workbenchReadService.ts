@@ -80,15 +80,17 @@ function buildSignals(input: {
     });
   }
 
-  for (const scope of input.bootstrap.marketContext?.scopes || []) {
-    if (scope.regime !== "risk_off") continue;
+  const riskOffScopes = (input.bootstrap.marketContext?.scopes || []).filter((scope) => scope.regime === "risk_off");
+  if (riskOffScopes.length > 0) {
+    const labels = riskOffScopes.map((scope) => scope.label).filter(Boolean);
+    const strongestScope = [...riskOffScopes].sort((a, b) => (b.buyScale + b.highRiskBuyScale) - (a.buyScale + a.highRiskBuyScale))[0] || riskOffScopes[0];
     push({
-      id: `alert:market:${scope.scope}`,
+      id: "alert:market:risk-off-summary",
       level: "warn",
       source: "alert",
-      text: `${scope.label}进入 偏防守，普通买入执行 ${Math.round(scope.buyScale * 100)}%，高波动买入执行 ${Math.round(scope.highRiskBuyScale * 100)}%`,
+      text: `${labels.join(" / ")}进入偏防守，普通买入执行 ${Math.round(strongestScope.buyScale * 100)}%，高波动资产买入执行 ${Math.round(strongestScope.highRiskBuyScale * 100)}%。`,
       actionHref: "/daa/dashboard/workbench?section=cockpit",
-      createdAt: scope.generatedAt || createdAt,
+      createdAt: strongestScope.generatedAt || createdAt,
     });
   }
 
@@ -110,6 +112,17 @@ function buildSignals(input: {
       source: "system",
       text: input.bootstrap.marketDataHealth.message,
       actionHref: "/daa/dashboard/workbench?section=cockpit",
+      createdAt,
+    });
+  }
+
+  if (input.bootstrap.account.source === "hybrid") {
+    push({
+      id: "system:account:hybrid",
+      level: "info",
+      source: "system",
+      text: "当前工作台按聚合账户口径展示：IBKR 资金只读，本地模拟 / Crypto Paper 资金继续走本地账本。",
+      actionHref: "/daa/dashboard/workbench?section=cash",
       createdAt,
     });
   }
@@ -201,7 +214,7 @@ function buildAllocationSummary(input: {
     .filter((row) => row.holdingQty > 0 && (row.valuationBase || 0) > 0)
     .sort((a, b) => (b.valuationBase || 0) - (a.valuationBase || 0));
   const holdingValue = holdingRows.reduce((sum, row) => sum + (row.valuationBase || 0), 0);
-  const totalEquity = holdingValue + cashValue;
+  const totalEquity = input.bootstrap.account.totalEquity ?? (holdingValue + cashValue);
 
   return {
     holdingCount: assetUniverse.filter((row) => row.holdingQty > 0).length,

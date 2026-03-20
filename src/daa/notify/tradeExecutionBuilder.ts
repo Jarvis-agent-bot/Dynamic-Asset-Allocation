@@ -33,6 +33,8 @@ export function buildTradeExecutionNotifyText(input: {
   executeMode?: "selected" | "all" | "single";
   cycleId?: string | null;
   ticketId?: string | null;
+  venueKind?: string | null;
+  venueAccountId?: string | null;
   executedCount: number;
   failedCount: number;
   totalCount: number;
@@ -44,6 +46,9 @@ export function buildTradeExecutionNotifyText(input: {
   lines.push(`来源：${executionSourceLabel(input.source)}`);
   if (input.executeMode) {
     lines.push(`执行模式：${input.executeMode === "selected" ? "仅已勾选" : input.executeMode === "all" ? "全部建议" : "单笔执行"}`);
+  }
+  if (input.venueKind) {
+    lines.push(`执行通道：${input.venueKind}${input.venueAccountId ? ` · ${input.venueAccountId}` : ""}`);
   }
   if (input.cycleId) lines.push(`周期 ID：${input.cycleId}`);
   if (input.ticketId) lines.push(`订单 ID：${input.ticketId}`);
@@ -58,7 +63,7 @@ export function buildTradeExecutionNotifyText(input: {
   } else {
     for (const row of rows) {
       lines.push(
-        `- ${row.symbol} ${tradeSideLabel(row.side)} ${Number(row.qty || 0).toFixed(4)} @ ${Number(row.price || 0).toFixed(4)} ${row.instrumentCurrency || input.baseCurrency} · ${tradeStatusLabel(row.status)}`,
+        `- ${row.symbol} ${tradeSideLabel(row.side)} ${Number(row.qty || 0).toFixed(4)} @ ${Number(row.price || 0).toFixed(4)} ${row.instrumentCurrency || input.baseCurrency} · ${tradeStatusLabel(row.status)}${row.brokerKind ? ` · ${row.brokerKind}${row.brokerAccountId ? `/${row.brokerAccountId}` : ""}` : ""}`,
       );
     }
   }

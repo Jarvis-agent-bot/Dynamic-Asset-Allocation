@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { StoreNotificationStatusSummary } from "@/src/daa/modules/store/storeApi";
 import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
+import type { WorkbenchAccountBreakdownItem, WorkbenchMarketDataHealth } from "@/src/daa/modules/workbench/workbenchTypes";
 
 function notificationTone(input: {
   enabled: boolean;
@@ -48,13 +49,31 @@ function formatMetricValue(value: number, currency: string, loading: boolean): s
   return formatCurrency(value, currency);
 }
 
+function buildMarketDataDetail(health: WorkbenchMarketDataHealth | null | undefined): string {
+  if (!health) return "当前未读取到市场数据健康摘要。";
+
+  const parts: string[] = [`近 24h 刷新失败率 ${health.recentJobFailureRatePct.toFixed(1)}%`];
+  parts.push(`最新 ${health.freshCount}`);
+  if (health.staleCount > 0) parts.push(`陈旧 ${health.staleCount}`);
+  if (health.missingCount > 0) parts.push(`缺失 ${health.missingCount}`);
+  if (health.message) parts.push(health.message);
+  return parts.join(" · ");
+}
+
 export function WorkbenchSummaryHeader(props: {
   baseCurrency: string;
   totalEquity: number;
   holdingsValue: number;
   availableCashValue: number;
   frozenCashValue: number;
+  accountSource?: "sim" | "broker" | "hybrid";
+  brokerKind?: string | null;
+  brokerAccountId?: string | null;
+  cashMutationsAllowed?: boolean;
+  readOnlyReason?: string | null;
+  accountBreakdown?: WorkbenchAccountBreakdownItem[];
   ledgerMeta: DaaCurrentLedgerMeta | null;
+  marketDataHealth?: WorkbenchMarketDataHealth | null;
   notificationStatus: StoreNotificationStatusSummary | null;
   loading: boolean;
   refreshing: boolean;
@@ -82,11 +101,15 @@ export function WorkbenchSummaryHeader(props: {
       hint: "待释放或执行中占用",
     },
   ];
-  const archivedTotal = (props.ledgerMeta?.archivedCycleCount || 0) + (props.ledgerMeta?.archivedTradeCount || 0) + (props.ledgerMeta?.archivedReportCount || 0);
   const telegramStatus = props.notificationStatus?.channels.telegram;
   const feishuStatus = props.notificationStatus?.channels.feishu;
   const syncTone = props.loading ? "slate" : props.refreshing ? "amber" : "green";
   const syncLabel = props.loading ? "准备中" : props.refreshing ? "同步中" : "数据已同步";
+  const accountSourceLabel = props.accountSource === "broker" ? "券商驱动" : props.accountSource === "hybrid" ? "聚合账户" : "本地模拟";
+  const accountSourceTone = props.accountSource === "broker" ? "amber" : props.accountSource === "hybrid" ? "cyan" : "slate";
+  const marketDataTone = props.marketDataHealth?.status === "down" ? "amber" : props.marketDataHealth?.status === "degraded" ? "amber" : "green";
+  const marketDataLabel = props.marketDataHealth?.status === "down" ? "不可用" : props.marketDataHealth?.status === "degraded" ? "已降级" : "正常";
+  const accountBreakdown = props.accountBreakdown || [];
 
   return (
     <>
@@ -102,6 +125,7 @@ export function WorkbenchSummaryHeader(props: {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <DeepLedgerStatusPill tone={accountSourceTone}>{accountSourceLabel}</DeepLedgerStatusPill>
             <DeepLedgerStatusPill tone={syncTone}>{syncLabel}</DeepLedgerStatusPill>
             <DeepLedgerActionButton onClick={props.onRefresh} disabled={props.loading || props.refreshing}>
               <RefreshCcw className={cn("h-3.5 w-3.5", props.refreshing ? "animate-spin" : "")} />
@@ -113,39 +137,66 @@ export function WorkbenchSummaryHeader(props: {
         <div className="mt-4 grid gap-3 xl:grid-cols-3">
           <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">当前账本起点</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">账户来源</div>
+              <DeepLedgerStatusPill tone={accountSourceTone}>
+                {props.accountSource === "hybrid" ? "聚合展示" : props.cashMutationsAllowed === false ? "余额只读" : "本地可编辑"}
+              </DeepLedgerStatusPill>
             </div>
             <div className="mt-3 text-sm text-[var(--text)]">
-              {props.loading ? "正在同步账本元数据" : props.ledgerMeta?.ledgerStartTs ? formatDateTime(props.ledgerMeta.ledgerStartTs) : "尚未建立账本起点"}
+              {props.loading ? "正在同步账户快照" : accountSourceLabel}
             </div>
-            <div className="mt-2 text-xs text-[var(--muted)]">
-              期初现金 {props.loading ? "—" : formatCurrency(props.ledgerMeta?.openingBalance || 0, props.baseCurrency)}
+            <div className="mt-3 space-y-2">
+              {props.loading ? (
+                <div className="text-xs text-[var(--muted)]">正在读取账户来源详情。</div>
+              ) : accountBreakdown.length > 0 ? (
+                accountBreakdown.slice(0, 3).map((item) => (
+                  <div key={`${item.venueKind}:${item.accountId || "default"}`} className="flex items-center justify-between gap-3 text-xs text-[var(--muted)]">
+                    <span>{item.label}{item.accountId ? ` · ${item.accountId}` : ""}</span>
+                    <span className="font-[var(--font-mono)] text-[var(--text)]">{formatCurrency(item.cash, item.baseCurrency)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-[var(--muted)]">
+                  {props.accountSource === "broker"
+                    ? `${props.brokerKind || "broker"}${props.brokerAccountId ? ` · ${props.brokerAccountId}` : ""}`
+                    : `当前账本起点 ${formatDateTime(props.ledgerMeta?.ledgerStartTs || "") || "-"}`}
+                </div>
+              )}
             </div>
             <div className="mt-3 text-xs leading-5 text-[var(--faint)]">
-              从这个时间点之后的数据才会参与当前工作台和交易记录，旧测试记录不会继续混进来。
+              {props.readOnlyReason || "工作台与交易记录统一按当前账本窗口统计；详细历史归档移到交易记录页查看。"}
+            </div>
+            <div className="mt-3">
+              <Link href="/daa/dashboard/trades" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
+                查看交易记录
+              </Link>
             </div>
           </div>
 
           <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">历史归档</div>
-              <DeepLedgerStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已归档" : "暂无归档"}</DeepLedgerStatusPill>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场数据</div>
+              <DeepLedgerStatusPill tone={marketDataTone}>{marketDataLabel}</DeepLedgerStatusPill>
             </div>
-            <div className="mt-3 grid gap-2 text-sm text-[var(--text)] sm:grid-cols-3">
-              <div>归档周期 {props.loading ? "—" : (props.ledgerMeta?.archivedCycleCount || 0).toString()}</div>
-              <div>归档订单 {props.loading ? "—" : (props.ledgerMeta?.archivedTradeCount || 0).toString()}</div>
-              <div>归档报告 {props.loading ? "—" : (props.ledgerMeta?.archivedReportCount || 0).toString()}</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <DeepLedgerStatusPill tone="green">
+                最新 {props.marketDataHealth?.freshCount ?? 0}
+              </DeepLedgerStatusPill>
+              <DeepLedgerStatusPill tone={(props.marketDataHealth?.staleCount || 0) > 0 ? "amber" : "slate"}>
+                陈旧 {props.marketDataHealth?.staleCount ?? 0}
+              </DeepLedgerStatusPill>
+              <DeepLedgerStatusPill tone={(props.marketDataHealth?.missingCount || 0) > 0 ? "amber" : "slate"}>
+                缺失 {props.marketDataHealth?.missingCount ?? 0}
+              </DeepLedgerStatusPill>
             </div>
-            <div className="mt-2 text-xs text-[var(--muted)]">
+            <div className="mt-3 text-xs leading-5 text-[var(--muted)]">
               {props.loading
-                ? "正在读取归档计数，避免在未加载完成前误判为“没有数据”。"
-                : archivedTotal > 0
-                  ? "如果交易页看起来偏空，先看这里；很可能是旧测试记录已经被收起。"
-                  : "当前环境还没有需要单独收起的历史记录。"}
+                ? "市场数据健康会在首次同步后显示。"
+                : buildMarketDataDetail(props.marketDataHealth)}
             </div>
             <div className="mt-3">
-              <Link href="/daa/dashboard/trades" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
-                查看交易记录
+              <Link href="/daa/dashboard/settings#settings-data" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
+                查看数据源设置
               </Link>
             </div>
           </div>
@@ -164,17 +215,6 @@ export function WorkbenchSummaryHeader(props: {
               <DeepLedgerStatusPill tone={feishuStatus ? notificationTone(feishuStatus) : "slate"}>
                 飞书 {feishuStatus ? notificationText(feishuStatus) : props.loading ? "加载中" : "未知"}
               </DeepLedgerStatusPill>
-            </div>
-            <div className="mt-3 text-xs leading-5 text-[var(--muted)]">
-              {props.loading
-                ? "通知状态会在工作台初次同步完成后显示，不会把“未加载”误读成“没配置”。"
-                : telegramStatus?.lastFailureAt || feishuStatus?.lastFailureAt
-                  ? `最近异常：${telegramStatus?.lastFailureAt && notificationTone(telegramStatus) === "amber"
-                    ? `Telegram ${formatDateTime(telegramStatus.lastFailureAt)}`
-                    : feishuStatus?.lastFailureAt
-                      ? `飞书 ${formatDateTime(feishuStatus.lastFailureAt)}`
-                      : "通知失败"}`
-                  : "这里直接告诉你通知有没有接通、最近有没有真正发出去。"}
             </div>
             <div className="mt-3">
               <Link href="/daa/dashboard/settings#settings-notification" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">

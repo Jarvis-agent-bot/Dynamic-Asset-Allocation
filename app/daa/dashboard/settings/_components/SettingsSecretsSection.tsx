@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Eye, EyeOff, KeyRound, Lock, Pencil, PlugZap, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,10 +20,10 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GROUP_META: Record<string, { label: string; order: number }> = {
-  llm: { label: "LLM 分析 (DeepSeek)", order: 0 },
-  broker: { label: "Broker / 交易通道", order: 1 },
-  telegram: { label: "Telegram / 助手", order: 2 },
-  feishu: { label: "飞书 (Lark)", order: 3 },
+  llm: { label: "LLM / 研究模型", order: 0 },
+  broker: { label: "Broker / 券商", order: 1 },
+  telegram: { label: "Telegram", order: 2 },
+  feishu: { label: "飞书", order: 3 },
   supabase: { label: "Supabase 认证", order: 4 },
   cron: { label: "定时任务", order: 5 },
 };
@@ -266,24 +266,51 @@ export function SettingsSecretsSection() {
   const sortedGroups = [...groups.entries()].sort(
     (a, b) => (GROUP_META[a[0]]?.order ?? 99) - (GROUP_META[b[0]]?.order ?? 99),
   );
+  const secretSummary = useMemo(() => {
+    const total = secrets.length;
+    const configured = secrets.filter((item) => item.source !== "empty").length;
+    const envCount = secrets.filter((item) => item.source === "env").length;
+    const dbCount = secrets.filter((item) => item.source === "db").length;
+    const missingCount = secrets.filter((item) => item.source === "empty").length;
+    return { total, configured, envCount, dbCount, missingCount };
+  }, [secrets]);
 
   return (
     <section id="settings-secrets" className="scroll-mt-28">
       <SectionCard
         title="凭证与密钥"
-        description="管理 API Key、Token 和 Webhook 等敏感凭证。环境变量 (env) 设定的值优先级最高，数据库值仅在无对应 env 时生效。"
+        description="这里只看密钥来源、是否已配置、是否可测试；具体运行成败请回上面的通知 / Broker 运行态确认。"
       >
         {loading ? (
           <div className="py-8 text-center text-sm text-[var(--muted)]">加载凭证状态…</div>
         ) : (
           <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "已配置", value: `${secretSummary.configured} / ${secretSummary.total}` },
+                { label: "环境变量", value: `${secretSummary.envCount}` },
+                { label: "数据库", value: `${secretSummary.dbCount}` },
+                { label: "未配置", value: `${secretSummary.missingCount}` },
+              ].map((item) => (
+                <div key={item.label} className="rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 py-2.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--faint)]">{item.label}</div>
+                  <div className="mt-2 text-sm font-semibold text-[var(--text)]">{item.value}</div>
+                </div>
+              ))}
+            </div>
+
             {sortedGroups.map(([group, items]) => (
-              <div key={group}>
-                <div className="mb-2 flex items-center gap-2">
-                  <KeyRound className="h-3.5 w-3.5 text-[var(--faint)]" />
-                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--faint)]">
-                    {GROUP_META[group]?.label || group}
-                  </span>
+              <div key={group} className="rounded-lg border border-[var(--border)] bg-[rgba(255,255,255,0.02)] p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="h-3.5 w-3.5 text-[var(--faint)]" />
+                    <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                      {GROUP_META[group]?.label || group}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[var(--muted)]">
+                    已配置 {items.filter((item) => item.source !== "empty").length} / {items.length}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {items.map((secret) => (
@@ -301,13 +328,7 @@ export function SettingsSecretsSection() {
             ))}
 
             <div className="rounded-lg border border-dashed border-[var(--border)] px-3 py-2.5 text-[12px] leading-5 text-[var(--faint)]">
-              <strong>来源说明：</strong>
-              <span className="ml-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-blue-400">环境变量</span>{" "}
-              通过 .env 文件配置，优先级最高，前端不可覆盖；
-              <span className="ml-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-emerald-400">数据库</span>{" "}
-              通过前端配置，AES-256 加密存储；
-              <span className="ml-1 rounded-full bg-zinc-500/10 px-1.5 py-0.5 text-zinc-500">未配置</span>{" "}
-              未设定任何值，相关功能将被禁用。
+              环境变量优先级最高，数据库值只在没有对应 env 时才会生效；删除数据库值不会影响已有 env 配置。
             </div>
           </div>
         )}

@@ -14,11 +14,10 @@ export default function WorkbenchPage({ searchParams }: Props) {
     <div className="space-y-6">
       <DeepLedgerPageHeader
         title="工作台"
-        description="助手、组合、调仓和现金管理都放在这里处理。"
+        description="驾驶舱、组合、调仓和现金都在这里统一处理。"
         actions={(
           <div className="flex flex-wrap items-center gap-2">
-            <DeepLedgerStatusPill tone="slate">不会自动下单</DeepLedgerStatusPill>
-            <DeepLedgerStatusPill tone="green">支持聊天执行模拟交易</DeepLedgerStatusPill>
+            <DeepLedgerStatusPill tone="green">支持聊天驱动模拟交易</DeepLedgerStatusPill>
           </div>
         )}
       />

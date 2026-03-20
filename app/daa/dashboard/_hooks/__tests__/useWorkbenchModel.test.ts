@@ -106,6 +106,32 @@ describe("useWorkbenchModel", () => {
     });
   });
 
+  it("在无持仓但有观察标的时默认切到 watchlist", async () => {
+    const { getWorkbenchReadModel } = await import("@/src/daa/modules/read/readApi");
+    (getWorkbenchReadModel as ReturnType<typeof vi.fn>).mockResolvedValue({
+      bootstrap: { baseCurrency: "USD", assetRows: [], latestCycle: null },
+      cycles: [],
+      allocationSummary: {
+        holdingCount: 0,
+        watchlistCount: 3,
+        holdingValue: 0,
+        cashValue: 1000,
+        investableCash: 1000,
+        frozenCash: 0,
+        totalEquity: 1000,
+        topHoldings: [],
+      },
+    });
+
+    const { result } = renderHook(() => useWorkbenchModel());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.activeTab).toBe("watchlist");
+  });
+
   it("picks latestCycle as currentCycle", async () => {
     const { getWorkbenchReadModel } = await import("@/src/daa/modules/read/readApi");
     const cycle = {

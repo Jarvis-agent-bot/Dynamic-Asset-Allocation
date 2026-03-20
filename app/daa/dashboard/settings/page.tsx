@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DashboardEmptyState, DashboardErrorNotice, DashboardSuccessNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { DeepLedgerActionButton, DeepLedgerPageHeader, DeepLedgerSectionAnchor, DeepLedgerStatusPill } from "@/app/daa/dashboard/_components/DeepLedgerUI";
+import { SettingsBrokerConnectionSection } from "@/app/daa/dashboard/settings/_components/SettingsBrokerConnectionSection";
 import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_components/SettingsDataSourcesSection";
 import {
   SETTINGS_NAV_ITEMS_,
@@ -192,12 +193,39 @@ export default function SettingsPage() {
         </aside>
 
         <div className="space-y-5">
-          <SettingsStrategySection config={config} setConfig={setConfig} />
-          <SettingsRiskSection config={config} setConfig={setConfig} />
-          <SettingsDataSourcesSection config={config} setConfig={setConfig} />
-          <SettingsHumanFactorSection config={config} setConfig={setConfig} />
-          <SettingsNotificationSection config={config} setConfig={setConfig} />
-          <SettingsSecretsSection />
+          <section className="space-y-5">
+            <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">行为配置</div>
+              <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                这里定义策略怎么运行、风险怎么约束、数据怎么解释，不直接代表当前系统是否已经接通外部服务。
+              </div>
+            </div>
+            <SettingsStrategySection config={config} setConfig={setConfig} />
+            <SettingsRiskSection config={config} setConfig={setConfig} />
+            <SettingsDataSourcesSection config={config} setConfig={setConfig} />
+            <SettingsHumanFactorSection config={config} setConfig={setConfig} />
+          </section>
+
+          <section className="space-y-5">
+            <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">运行状态与连接</div>
+              <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                先在这里确认通知、Broker 和最近同步是否真正生效；运行态与待保存表单配置分开看，能减少误判。
+              </div>
+            </div>
+            <SettingsNotificationSection config={config} setConfig={setConfig} />
+            <SettingsBrokerConnectionSection />
+          </section>
+
+          <section className="space-y-5">
+            <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">敏感凭证</div>
+              <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                这里只负责管理密钥、Webhook 和来源优先级；是否真的跑通，请回上面的运行状态区确认。
+              </div>
+            </div>
+            <SettingsSecretsSection />
+          </section>
         </div>
       </div>
 

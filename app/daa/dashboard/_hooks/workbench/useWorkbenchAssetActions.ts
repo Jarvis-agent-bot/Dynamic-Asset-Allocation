@@ -118,13 +118,18 @@ export function useWorkbenchAssetActions(input: {
         priceSnapshotAt: preview.priceSnapshotAt ?? undefined,
         reasonText: "来自工作台市价预览",
       });
-      if (result.result.status === "executed") {
+      if (result.result.status === "executed" || result.result.status === "submitted" || result.result.status === "partially_filled") {
         const successText = result.broker?.kind === "ibkr_paper"
-          ? `${preview.symbol} 已提交到 IBKR 模拟盘`
+          ? (
+            result.result.status === "executed"
+              ? `${preview.symbol} 已在 IBKR 模拟盘成交`
+              : `${preview.symbol} 已提交到 IBKR 模拟盘`
+          )
           : `${preview.symbol} 执行成功`;
         toast.success(successText);
+      } else {
+        toast.error(result.result.rejectMessage || `${preview.symbol} 执行失败`);
       }
-      else toast.error(result.result.rejectMessage || `${preview.symbol} 执行失败`);
       await input.loadBootstrap(true);
       setOrderDraft(null);
     } catch (err) {

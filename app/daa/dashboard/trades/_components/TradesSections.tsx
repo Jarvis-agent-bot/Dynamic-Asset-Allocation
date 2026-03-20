@@ -35,6 +35,8 @@ function cycleStatusLabel(status: string): string {
 
 function orderStatusLabel(status: string): string {
   if (status === "ready") return "待执行";
+  if (status === "submitted") return "已提交";
+  if (status === "partially_filled") return "部分成交";
   if (status === "executed") return "已执行";
   if (status === "rejected") return "已拒绝";
   if (status === "canceled") return "已取消";
@@ -43,6 +45,8 @@ function orderStatusLabel(status: string): string {
 
 function orderStatusTone(status: string): "cyan" | "amber" | "green" | "indigo" | "slate" {
   if (status === "ready") return "cyan";
+  if (status === "submitted") return "indigo";
+  if (status === "partially_filled") return "amber";
   if (status === "executed") return "green";
   if (status === "rejected") return "amber";
   if (status === "canceled") return "slate";
@@ -50,8 +54,9 @@ function orderStatusTone(status: string): "cyan" | "amber" | "green" | "indigo" 
 }
 
 function orderSideLabel(side: string): string {
-  if (side === "buy") return "买入";
-  if (side === "sell") return "卖出";
+  const normalized = String(side || "").trim().toLowerCase();
+  if (normalized === "buy") return "买入";
+  if (normalized === "sell") return "卖出";
   return side;
 }
 
@@ -299,7 +304,7 @@ export function TradesOrdersPanel({ model }: { model: TradesModel }) {
               <TableCellText>{orderSideLabel(order.side)}</TableCellText>
               <TableCellText><DeepLedgerStatusPill tone={orderStatusTone(order.status)}>{orderStatusLabel(order.status)}</DeepLedgerStatusPill></TableCellText>
               <TableCellMono align="right">{order.qty.toFixed(4)}</TableCellMono>
-              <TableCellMono align="right">{formatCurrency(order.price, order.instrumentCurrency || "USD")}</TableCellMono>
+              <TableCellMono align="right">{formatCurrency(order.avgFillPrice || order.price, order.instrumentCurrency || "USD")}</TableCellMono>
               <TableCellText align="right">{formatDateTime(order.updatedAt)}</TableCellText>
             </tr>
           ))}

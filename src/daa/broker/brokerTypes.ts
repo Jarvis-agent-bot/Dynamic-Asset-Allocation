@@ -1,6 +1,7 @@
 import type { TradeTicket, TradeTicketSide } from "@/src/daa/modules/trade/tradeTypes";
 
-export type DaaBrokerKind = "sim" | "ibkr_paper";
+export type DaaBrokerKind = "sim" | "ibkr_paper" | "crypto_paper";
+export type DaaExecutionVenue = DaaBrokerKind;
 export type DaaBrokerOrderType = "MKT" | "LMT";
 
 export type DaaBrokerAccountSummary = {
@@ -95,6 +96,7 @@ export type DaaBrokerExecutionMeta = {
   accepted: boolean;
   remoteStatus: string;
   remoteOrderId: string;
+  routeReason?: string;
   messages: string[];
   warnings: string[];
 };
@@ -124,6 +126,7 @@ export type DaaBrokerBackedExecutionResult = {
 
 export interface BrokerAdapter {
   readonly kind: DaaBrokerKind;
+  readonly remote?: boolean;
   getAccountSummary(accountId?: string | null): Promise<DaaBrokerAccountSummary>;
   getPositions(accountId?: string | null): Promise<DaaBrokerPosition[]>;
   previewOrder(input: DaaBrokerPreviewOrderInput): Promise<DaaBrokerPreviewOrderResult>;

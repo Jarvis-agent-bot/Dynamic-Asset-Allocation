@@ -1,5 +1,5 @@
 export type TradeTicketSource = "manual" | "decision";
-export type TradeTicketStatus = "ready" | "executed" | "canceled" | "rejected";
+export type TradeTicketStatus = "ready" | "submitted" | "partially_filled" | "executed" | "canceled" | "rejected";
 export type TradeTicketSide = "BUY" | "SELL";
 
 export type TradeTicket = {
@@ -30,6 +30,16 @@ export type TradeTicket = {
   pricingMode: "manual" | "market";
   priceSource: string | null;
   priceSnapshotAt: string | null;
+  brokerKind: "sim" | "ibkr_paper" | "crypto_paper" | null;
+  brokerAccountId: string | null;
+  brokerOrderId: string | null;
+  brokerStatus: string | null;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+  lastBrokerSyncAt: string | null;
+  lastAppliedFillQty: number;
+  brokerRejectReason: string | null;
+  brokerRaw: Record<string, unknown> | null;
   createdBy: string;
   createdAt: string;
   executedAt: string | null;

@@ -7,7 +7,7 @@ import type {
   DaaBrokerPlaceOrderResult,
   DaaBrokerPosition,
 } from "./brokerTypes";
-import type { DaaIbkrPaperRuntimeConfig } from "./brokerConfig";
+import type { DaaIbkrWebClientConfig } from "./brokerConfig";
 
 type JsonObject = Record<string, unknown>;
 
@@ -89,11 +89,11 @@ export class IbkrWebClientError extends Error {
 
 export class IbkrWebClient {
   private readonly baseUrl: string;
-  private readonly config: DaaIbkrPaperRuntimeConfig;
+  private readonly config: DaaIbkrWebClientConfig;
   private cachedAccountId: string | null = null;
   private cachedAccountAlias: string | null = null;
 
-  constructor(config: DaaIbkrPaperRuntimeConfig) {
+  constructor(config: DaaIbkrWebClientConfig) {
     this.config = config;
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
   }

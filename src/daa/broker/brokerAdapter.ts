@@ -1,4 +1,4 @@
-import { replaceDaaAccountState, replaceDaaPositions } from "@/src/daa/store/daaStorePg";
+import { replaceDaaBrokerAccountState, replaceDaaBrokerPositions } from "@/src/daa/store/daaStorePg";
 
 import { resolveBrokerRuntimeConfig } from "./brokerConfig";
 import { IbkrPaperBroker } from "./ibkrPaperBroker";
@@ -14,7 +14,7 @@ export async function resolveActiveBrokerAdapter(): Promise<BrokerAdapter> {
 }
 
 export async function syncActiveBrokerSnapshotToStore(): Promise<{
-  kind: "sim" | "ibkr_paper";
+  kind: "sim" | "ibkr_paper" | "crypto_paper";
   synced: boolean;
   positionCount: number;
 }> {
@@ -29,15 +29,19 @@ export async function syncActiveBrokerSnapshotToStore(): Promise<{
   ]);
 
   await Promise.all([
-    replaceDaaAccountState({
+    replaceDaaBrokerAccountState({
+      brokerKind: broker.kind,
+      accountId: account.accountId,
       baseCurrency: account.baseCurrency,
       cash: account.cash,
       investableCash: account.investableCash,
       frozenCash: account.frozenCash,
       totalEquity: account.totalEquity,
     }),
-    replaceDaaPositions(
-      positions
+    replaceDaaBrokerPositions({
+      brokerKind: broker.kind,
+      accountId: account.accountId,
+      rows: positions
         .filter((item) => item.qty > 0)
         .map((item) => ({
           assetKey: item.assetKey,
@@ -49,7 +53,7 @@ export async function syncActiveBrokerSnapshotToStore(): Promise<{
           costBasis: item.costBasis,
           tags: [],
         })),
-    ),
+    }),
   ]);
 
   return {

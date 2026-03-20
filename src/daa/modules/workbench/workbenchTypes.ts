@@ -391,6 +391,21 @@ export type WorkbenchMarketDataHealth = {
   message: string;
 };
 
+export type WorkbenchAccountSource = "sim" | "broker" | "hybrid";
+
+export type WorkbenchAccountBreakdownItem = {
+  venueKind: DaaBrokerKind;
+  accountId: string | null;
+  label: string;
+  baseCurrency: string;
+  cash: number;
+  investableCash: number;
+  frozenCash: number;
+  totalEquity: number | null;
+  cashMutationsAllowed: boolean;
+  readOnlyReason: string | null;
+};
+
 export type WorkbenchBootstrap = {
   baseCurrency: string;
   account: {
@@ -398,6 +413,12 @@ export type WorkbenchBootstrap = {
     investableCash: number;
     frozenCash: number;
     totalEquity: number | null;
+    source?: WorkbenchAccountSource;
+    brokerKind?: DaaBrokerKind | null;
+    brokerAccountId?: string | null;
+    cashMutationsAllowed?: boolean;
+    readOnlyReason?: string | null;
+    accountBreakdown?: WorkbenchAccountBreakdownItem[];
   };
   assetUniverse: AssetUniverseView[];
   execution: {

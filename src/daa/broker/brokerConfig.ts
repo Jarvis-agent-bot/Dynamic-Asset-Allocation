@@ -2,7 +2,13 @@ import { resolveSecret } from "@/src/daa/config/secretsManager";
 
 import type { DaaBrokerKind } from "./brokerTypes";
 
-export type DaaIbkrPaperRuntimeConfig = {
+export type DaaBrokerConnectorRuntimeConfig = {
+  connectorBaseUrl: string;
+  sharedSecret: string | null;
+  accountId: string | null;
+};
+
+export type DaaIbkrWebClientConfig = {
   baseUrl: string;
   accountId: string | null;
   sessionCookie: string | null;
@@ -10,11 +16,13 @@ export type DaaIbkrPaperRuntimeConfig = {
   csrfToken: string | null;
 };
 
+export type DaaIbkrPaperRuntimeConfig = DaaBrokerConnectorRuntimeConfig | DaaIbkrWebClientConfig;
+
 export type DaaBrokerRuntimeConfig =
   | { kind: "sim" }
   | {
     kind: "ibkr_paper";
-    ibkr: DaaIbkrPaperRuntimeConfig;
+    ibkr: DaaBrokerConnectorRuntimeConfig;
   };
 
 function normalizeText(value: string | null | undefined): string {
@@ -35,6 +43,10 @@ async function readSecret(key: Parameters<typeof resolveSecret>[0]): Promise<str
   return normalizeText(await resolveSecret(key));
 }
 
+export function isBrokerConnectorRuntimeConfig(value: DaaIbkrPaperRuntimeConfig): value is DaaBrokerConnectorRuntimeConfig {
+  return "connectorBaseUrl" in value;
+}
+
 export async function resolveBrokerRuntimeConfig(): Promise<DaaBrokerRuntimeConfig> {
   const kind = normalizeBrokerKind(await readSecret("broker_mode"));
   if (kind === "sim") {
@@ -44,11 +56,9 @@ export async function resolveBrokerRuntimeConfig(): Promise<DaaBrokerRuntimeConf
   return {
     kind: "ibkr_paper",
     ibkr: {
-      baseUrl: normalizeBaseUrl(await readSecret("ibkr_web_api_base_url") || "https://api.ibkr.com/v1/api"),
+      connectorBaseUrl: normalizeBaseUrl(await readSecret("broker_connector_base_url") || "http://127.0.0.1:8787"),
+      sharedSecret: normalizeText(await readSecret("broker_connector_shared_secret")) || null,
       accountId: normalizeText(await readSecret("ibkr_account_id")) || null,
-      sessionCookie: normalizeText(await readSecret("ibkr_web_api_session_cookie")) || null,
-      oauthToken: normalizeText(await readSecret("ibkr_web_api_oauth_token")) || null,
-      csrfToken: normalizeText(await readSecret("ibkr_web_api_csrf_token")) || null,
     },
   };
 }

@@ -15,6 +15,7 @@ import type {
   DaaNotificationChannel,
   DaaNotificationDeliveryLog,
 } from "@/src/daa/store/notificationDeliveryLogRepo";
+import type { TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 
 export type StoreEquitySnapshot = {
   ts: string;
@@ -168,6 +169,28 @@ export type StoreLlmEnvStatus = {
   checkedAt?: string | null;
 };
 
+export type StoreBrokerSessionState = {
+  brokerKind: "sim" | "ibkr_paper" | "crypto_paper";
+  status: "disconnected" | "pending_login" | "authenticated" | "expiring" | "reauth_required" | "connector_down";
+  accountId: string | null;
+  loginUrl: string | null;
+  message: string | null;
+  lastCheckedAt: string | null;
+  lastAuthenticatedAt: string | null;
+  lastError: string | null;
+  sessionMeta: Record<string, unknown> | null;
+  updatedAt: string;
+};
+
+export type StoreBrokerOrderSyncResult = {
+  kind: "sim" | "ibkr_paper" | "crypto_paper";
+  scope: "open" | "recent" | "ticket";
+  orderCount: number;
+  updatedCount: number;
+  positionCount: number;
+  tickets: TradeTicket[];
+};
+
 export async function getSystemConfig(): Promise<StoreSystemConfigEnvelope> {
   const data = await requestData<{ version?: unknown; updatedAt?: unknown; config?: unknown }>("/api/daa/store/system-config", {
     method: "GET",
@@ -185,6 +208,41 @@ export async function getLlmEnvStatus(): Promise<StoreLlmEnvStatus> {
   return requestData<StoreLlmEnvStatus>("/api/daa/workbench/llm/env-status", {
     method: "GET",
     cache: "no-store",
+  });
+}
+
+export async function getBrokerSessionState(): Promise<StoreBrokerSessionState> {
+  return requestData<StoreBrokerSessionState>("/api/daa/broker/session", {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
+export async function startBrokerSession(): Promise<StoreBrokerSessionState> {
+  return requestData<StoreBrokerSessionState>("/api/daa/broker/session/start", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function logoutBrokerSession(): Promise<StoreBrokerSessionState> {
+  return requestData<StoreBrokerSessionState>("/api/daa/broker/session/logout", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function syncBrokerOrdersNow(input: {
+  scope?: "open" | "recent" | "ticket";
+  ticketId?: string | null;
+  limit?: number;
+} = {}): Promise<StoreBrokerOrderSyncResult> {
+  return requestData<StoreBrokerOrderSyncResult>("/api/daa/broker/orders/sync", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
   });
 }
 

@@ -8,6 +8,7 @@ export type ApiErrorCode =
   | "VERSION_CONFLICT"
   | "ROUTE_DENIED"
   | "CRON_AUTH_FAILED"
+  | "BROKER_READ_ONLY"
   | "UNKNOWN";
 
 export type ApiSuccess<T> = {

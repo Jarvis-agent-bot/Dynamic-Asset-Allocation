@@ -139,7 +139,14 @@ export default function WorkbenchPageClient(props: {
           holdingsValue={model.holdingsValue}
           availableCashValue={model.availableCashValue}
           frozenCashValue={model.frozenCashValue}
+          accountSource={model.bootstrap?.account.source || "sim"}
+          brokerKind={model.bootstrap?.account.brokerKind || null}
+          brokerAccountId={model.bootstrap?.account.brokerAccountId || null}
+          cashMutationsAllowed={model.bootstrap?.account.cashMutationsAllowed ?? true}
+          readOnlyReason={model.bootstrap?.account.readOnlyReason || null}
+          accountBreakdown={model.bootstrap?.account.accountBreakdown || []}
           ledgerMeta={model.ledgerMeta}
+          marketDataHealth={model.bootstrap?.marketDataHealth || null}
           notificationStatus={model.notificationStatus}
           loading={model.loading && !model.bootstrap}
           refreshing={model.refreshing}
@@ -149,7 +156,7 @@ export default function WorkbenchPageClient(props: {
         <div ref={cockpitRef} className="space-y-4">
           <div className="grid gap-2 rounded-[18px] border border-[var(--border)] bg-[rgba(13,19,32,0.8)] p-2 md:grid-cols-4">
             {[
-              { key: "cockpit" as const, label: "助手" },
+              { key: "cockpit" as const, label: "驾驶舱" },
               { key: "portfolio" as const, label: "组合" },
               { key: "rebalance" as const, label: "调仓" },
               { key: "cash" as const, label: "现金" },

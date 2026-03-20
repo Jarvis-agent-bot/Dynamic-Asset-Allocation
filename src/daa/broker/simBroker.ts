@@ -50,6 +50,7 @@ function mapTicketToOrder(ticket: DaaStoreTradeTicket): DaaBrokerOrder {
 
 export class SimBroker implements BrokerAdapter {
   readonly kind = "sim" as const;
+  readonly remote = false as const;
 
   async getAccountSummary(): Promise<DaaBrokerAccountSummary> {
     const account = await getDaaAccountState();
