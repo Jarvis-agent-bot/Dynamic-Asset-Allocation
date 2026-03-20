@@ -18,8 +18,8 @@ export function RebalanceRiskAlerts(props: {
   return (
     <DeepLedgerPanel
       accent={riskOverallTone(props.currentRiskCheck.overallStatus)}
-      title="风控提示"
-      subtitle={`状态：${riskStatusLabel(props.currentRiskCheck.overallStatus)}（告警可执行，阻断不可执行）`}
+      title="执行前风控"
+      subtitle={`按当前勾选结果计算；状态：${riskStatusLabel(props.currentRiskCheck.overallStatus)}（告警可执行，阻断不可执行）`}
       action={<DeepLedgerStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>{riskStatusLabel(props.currentRiskCheck.overallStatus)}</DeepLedgerStatusPill>}
     >
       <div className="grid gap-3 lg:grid-cols-2">

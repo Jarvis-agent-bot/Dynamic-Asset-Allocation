@@ -335,32 +335,63 @@ function buildPreTradeRiskCheck(input: {
     const maxOrderPctOfNav = Math.max(0, input.constraints.maxOrderPctOfNav) * 100;
     const maxConcentrationPct = Math.max(0, input.risk.maxConcentrationPct) * 100;
     const stopLossPct = Math.max(0, input.risk.perAssetStopLossPct) * 100;
-    const targetWeights = input.assetUniverse
-        .filter((row) => row.watchEnabled && row.targetWeightPct > 0)
-        .map((row) => ({ symbol: row.symbol, targetWeightPct: row.targetWeightPct }));
-    const maxTarget = targetWeights.reduce((max, row) => Math.max(max, row.targetWeightPct), 0);
-    const maxTargetRow = targetWeights.find((row) => row.targetWeightPct === maxTarget);
+    const currentValueByAssetKey = new Map<string, number>();
+    const symbolByAssetKey = new Map<string, string>();
+    for (const row of input.assetUniverse) {
+        currentValueByAssetKey.set(row.assetKey, Math.max(0, toFinite(row.valuationBase, 0)));
+        symbolByAssetKey.set(row.assetKey, row.symbol);
+    }
+    for (const proposal of input.proposals) {
+        const currentValue = currentValueByAssetKey.get(proposal.assetKey) || 0;
+        const proposalNotional = Math.max(0, toFinite(proposal.suggestedNotional, 0));
+        const delta = proposal.side === "BUY" ? proposalNotional : -proposalNotional;
+        currentValueByAssetKey.set(proposal.assetKey, Math.max(0, currentValue + delta));
+        if (!symbolByAssetKey.has(proposal.assetKey)) {
+            symbolByAssetKey.set(proposal.assetKey, proposal.symbol);
+        }
+    }
+    const projectedAssetRows = Array.from(currentValueByAssetKey.entries())
+        .map(([assetKey, nextValue]) => ({
+        assetKey,
+        symbol: symbolByAssetKey.get(assetKey) || assetKey,
+        nextValue: Math.max(0, nextValue),
+    }))
+        .filter((row) => row.nextValue > 0);
+    const totalProjectedAssetValue = projectedAssetRows.reduce((sum, row) => sum + row.nextValue, 0);
+    const totalNotional = input.proposals.reduce((sum, row) => sum + Math.max(0, toFinite(row.suggestedNotional, 0)), 0);
+    const riskNavBase = input.totalEquity > 0
+        ? input.totalEquity
+        : Math.max(totalProjectedAssetValue, totalNotional, 1e-9);
+    const projectedWeights = projectedAssetRows.map((row) => ({
+        ...row,
+        weightPct: riskNavBase > 0 ? (row.nextValue / riskNavBase) * 100 : 0,
+    }));
+    const maxProjected = projectedWeights.reduce((max, row) => row.weightPct > max.weightPct ? row : max, {
+        assetKey: "",
+        symbol: "组合",
+        nextValue: 0,
+        weightPct: 0,
+    });
     items.push({
         rule: "max_position",
-        status: maxTarget > maxPositionLimitPct ? "block" : "pass",
-        current: maxTarget,
+        status: maxProjected.weightPct > maxPositionLimitPct ? "block" : "pass",
+        current: maxProjected.weightPct,
         limit: maxPositionLimitPct,
-        message: maxTarget > maxPositionLimitPct
-            ? `${maxTargetRow?.symbol || "标的"} 目标权重 ${maxTarget.toFixed(2)}% 超过上限 ${maxPositionLimitPct.toFixed(2)}%`
-            : `单一持仓目标权重不超过 ${maxPositionLimitPct.toFixed(2)}%`,
+        message: maxProjected.weightPct > maxPositionLimitPct
+            ? `${maxProjected.symbol || "标的"} 交易后仓位 ${maxProjected.weightPct.toFixed(2)}% 超过上限 ${maxPositionLimitPct.toFixed(2)}%`
+            : `最大单一持仓交易后仓位 ${maxProjected.weightPct.toFixed(2)}%`,
     });
-    const totalWeightPct = targetWeights.reduce((sum, row) => sum + row.targetWeightPct, 0);
+    const totalWeightPct = projectedWeights.reduce((sum, row) => sum + row.weightPct, 0);
     items.push({
         rule: "total_weight",
         status: totalWeightPct > 100.0001 ? "block" : "pass",
         current: totalWeightPct,
         limit: 100,
         message: totalWeightPct > 100.0001
-            ? `目标权重总和 ${totalWeightPct.toFixed(2)}% 超过 100%`
-            : `目标权重总和 ${totalWeightPct.toFixed(2)}%`,
+            ? `交易后已投资仓位 ${totalWeightPct.toFixed(2)}% 超过 100%`
+            : `交易后已投资仓位 ${totalWeightPct.toFixed(2)}%`,
     });
-    const totalNotional = input.proposals.reduce((sum, row) => sum + Math.max(0, row.suggestedNotional), 0);
-    const orderPctOfNav = input.totalEquity > 0 ? (totalNotional / input.totalEquity) * 100 : 0;
+    const orderPctOfNav = riskNavBase > 0 ? (totalNotional / riskNavBase) * 100 : 0;
     items.push({
         rule: "max_order_pct",
         status: orderPctOfNav > maxOrderPctOfNav ? "warn" : "pass",
@@ -370,15 +401,15 @@ function buildPreTradeRiskCheck(input: {
             ? `单日交易占比 ${orderPctOfNav.toFixed(2)}% 超过阈值 ${maxOrderPctOfNav.toFixed(2)}%`
             : `单日交易占比 ${orderPctOfNav.toFixed(2)}%`,
     });
-    const hhi = computeHhiPct(targetWeights.map((row) => row.targetWeightPct));
+    const hhi = computeHhiPct(projectedWeights.map((row) => row.weightPct));
     items.push({
         rule: "concentration",
         status: hhi > maxConcentrationPct ? "warn" : "pass",
         current: hhi,
         limit: maxConcentrationPct,
         message: hhi > maxConcentrationPct
-            ? `组合集中度(HHI) ${hhi.toFixed(2)} 超过警戒 ${maxConcentrationPct.toFixed(2)}`
-            : `组合集中度(HHI) ${hhi.toFixed(2)}`,
+            ? `交易后组合集中度(HHI) ${hhi.toFixed(2)} 超过警戒 ${maxConcentrationPct.toFixed(2)}`
+            : `交易后组合集中度(HHI) ${hhi.toFixed(2)}`,
     });
     const worstDrawdown = input.assetUniverse.reduce((worst, row) => {
         const costPerUnit = calcHoldingCostPerUnit(row);

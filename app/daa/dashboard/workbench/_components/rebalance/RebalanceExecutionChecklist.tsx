@@ -61,7 +61,7 @@ export function RebalanceExecutionChecklist(props: {
           <div className="text-right font-[var(--font-mono)] text-[var(--text)]">{props.selectedProposalCount} / {props.currentCycle?.proposals.length ?? 0}</div>
           <div className="text-[var(--faint)]">预计成交</div>
           <div className="text-right font-[var(--font-mono)] text-[var(--text)]">{formatCurrency(props.selectedProposalNotional, props.bootstrap.baseCurrency)}</div>
-          <div className="text-[var(--faint)]">风控状态</div>
+          <div className="text-[var(--faint)]">当前勾选风控</div>
           <div className="flex justify-end">
             {props.currentRiskCheck
               ? <DeepLedgerStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>{riskStatusLabel(props.currentRiskCheck.overallStatus)}</DeepLedgerStatusPill>

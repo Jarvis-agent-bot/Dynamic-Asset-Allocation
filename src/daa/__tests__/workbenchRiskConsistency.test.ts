@@ -182,4 +182,114 @@ describe("workbench-risk-consistency-v1", () => {
     const storedMaxOrderItem = stored?.riskCheck.items.find((item) => item.rule === "max_order_pct");
     expect(storedMaxOrderItem?.current).toBeCloseTo(14, 6);
   });
+
+  it("高目标权重资产在实际成交后未超限时，不应继续按目标权重阻断执行", async () => {
+    await upsertDaaAssetUniverseRow({
+      symbol: "AAPL",
+      market: "US",
+      currency: "USD",
+      assetClass: "EQUITY",
+      region: "US",
+      exchange: "NASDAQ",
+      instrumentType: "STOCK",
+      marketGroup: "US_EQUITY",
+      watchEnabled: true,
+      targetWeightHint: 0.0124,
+      lastPrice: 248.96,
+    });
+    await upsertDaaAssetUniverseRow({
+      symbol: "BND",
+      market: "US",
+      currency: "USD",
+      assetClass: "BOND",
+      region: "US",
+      exchange: "NASDAQ",
+      instrumentType: "ETF",
+      marketGroup: "US_BOND",
+      watchEnabled: true,
+      targetWeightHint: 0.7424,
+      lastPrice: 73.76,
+    });
+
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 923.89,
+            frozenCash: 0,
+            investableCash: 923.89,
+          },
+          targetWeights: {},
+        },
+      },
+    });
+
+    const cycle = await createDaaRebalanceCycle({
+      status: "generated",
+      triggerSource: "manual",
+      triggerReason: "selection scoped risk",
+      equitySnapshot: 923.89,
+      driftSnapshot: [],
+      proposals: [
+        {
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 0.0112,
+          suggestedNotional: 2.8,
+          price: 248.96,
+          reason: "small starter position",
+          selected: true,
+          hfContribution: null,
+        },
+        {
+          assetKey: "US::BND",
+          symbol: "BND",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 3.5801,
+          suggestedNotional: 264.07,
+          price: 73.76,
+          reason: "reduced allocation after market scaling",
+          selected: true,
+          hfContribution: null,
+        },
+      ],
+      riskCheck: {
+        overallStatus: "block",
+        items: [
+          {
+            rule: "max_position",
+            status: "block",
+            current: 74.24,
+            limit: 30,
+            message: "BND 目标权重 74.24% 超过上限 30.00%",
+          },
+        ],
+      },
+    });
+
+    const updated = await updateWorkbenchRebalanceCycle(cycle.cycleId, {
+      selectedSymbols: ["AAPL", "BND"],
+    });
+
+    expect(updated.riskCheck.overallStatus).not.toBe("block");
+    const maxPositionItem = updated.riskCheck.items.find((item) => item.rule === "max_position");
+    expect(maxPositionItem?.status).toBe("pass");
+    expect(maxPositionItem?.message).toContain("交易后仓位");
+    expect(updated.riskCheck.items.some((item) => item.message.includes("目标权重"))).toBe(false);
+
+    const stored = await getDaaRebalanceCycle(cycle.cycleId);
+    expect(stored?.riskCheck.overallStatus).not.toBe("block");
+    expect(stored?.riskCheck.items.some((item) => item.message.includes("目标权重"))).toBe(false);
+  });
 });
