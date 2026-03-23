@@ -100,6 +100,24 @@ function channelPillText(input: {
   return "已启用";
 }
 
+function telegramAssistantPillTone(input: {
+  ready: boolean;
+  lastSessionAt: string | null;
+}): "slate" | "amber" | "green" {
+  if (input.ready) return "green";
+  if (input.lastSessionAt) return "amber";
+  return "slate";
+}
+
+function telegramAssistantPillText(input: {
+  ready: boolean;
+  lastSessionAt: string | null;
+}): string {
+  if (input.ready) return "已就绪";
+  if (input.lastSessionAt) return "曾有会话";
+  return "未就绪";
+}
+
 function formatSummaryTime(value: string | null | undefined): string {
   return value ? formatDateTime(value) : "暂无";
 }
@@ -169,6 +187,7 @@ function ChannelConfigCard(props: {
   tradeEnabled: boolean;
   dailyReportEnabled: boolean;
   summary: StoreNotificationStatusSummary["channels"]["telegram"] | StoreNotificationStatusSummary["channels"]["feishu"] | null;
+  telegramAssistant?: StoreNotificationStatusSummary["telegramAssistant"] | null;
   statusLoading: boolean;
   onSendTest: () => void;
   testing: boolean;
@@ -217,6 +236,30 @@ function ChannelConfigCard(props: {
             {props.statusLoading ? "正在读取最近一次投递结果" : props.summary?.lastErrorMessage || "这里会显示最近一次失败原因或最近成功时间。"}
           </div>
         </div>
+        {props.telegramAssistant ? (
+          <div style={statusTileStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+              <div style={{ fontSize: 11, color: "var(--faint)" }}>对话助手</div>
+              <DeepLedgerStatusPill tone={telegramAssistantPillTone(props.telegramAssistant)}>
+                {telegramAssistantPillText(props.telegramAssistant)}
+              </DeepLedgerStatusPill>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)" }}>
+              {props.statusLoading
+                ? "加载中"
+                : props.telegramAssistant.ready
+                  ? "Web 与 Telegram 共用上下文"
+                  : "还不能稳定接收入站消息"}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)" }}>
+              {props.statusLoading
+                ? "正在读取对话助手状态"
+                : props.telegramAssistant.ready
+                  ? `最近会话：${formatSummaryTime(props.telegramAssistant.lastSessionAt)}`
+                  : props.telegramAssistant.secretStates.map((item) => `${item.key} ${item.configured ? "已配置" : "缺失"}`).join(" · ")}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
@@ -317,6 +360,7 @@ export function SettingsNotificationSection(props: {
   const latestJob = summary?.recentJobs?.[0] || null;
   const dailySchedule = formatDerivedDailySchedule(config.rebalanceStrategy.analysisTimeUtc);
   const telegramSummary = summary?.channels.telegram || null;
+  const telegramAssistant = summary?.telegramAssistant || null;
   const feishuSummary = summary?.channels.feishu || null;
   const statusLoading = loading && !summary && !statusError;
 
@@ -354,17 +398,30 @@ export function SettingsNotificationSection(props: {
               pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : summary?.cronConfigured ? "green" : "amber"}>{statusLoading ? "加载中" : summary?.cronConfigured ? "已配置" : "未配置"}</DeepLedgerStatusPill>}
             />
             <RunningStatusTile
-              title="Telegram"
+              title="Telegram 通知"
               value={statusLoading ? "加载中" : telegramSummary?.configured ? "凭证完整" : "凭证不完整"}
               detail={statusLoading ? "正在读取 Telegram 状态" : telegramSummary?.enabled ? "运行中" : "当前关闭"}
               meta={statusLoading ? "会在读取完成后显示最近一次投递结果。" : telegramSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(telegramSummary?.lastAttemptAt)}`}
               pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : telegramSummary ? channelPillTone(telegramSummary) : "slate"}>{statusLoading ? "加载中" : telegramSummary ? channelPillText(telegramSummary) : "未知"}</DeepLedgerStatusPill>}
             />
             <RunningStatusTile
-              title="飞书"
+              title="Telegram 对话"
+              value={statusLoading ? "加载中" : telegramAssistant?.ready ? "已就绪" : "待补配置"}
+              detail={statusLoading ? "正在读取 Telegram 对话状态" : telegramAssistant?.ready ? "入站消息、上下文和待确认执行已经接通" : "当前还不能稳定接收入站消息"}
+              meta={statusLoading
+                ? "会在读取完成后显示最近一次对话。"
+                : telegramAssistant?.lastSessionAt
+                  ? `最近会话：${formatSummaryTime(telegramAssistant.lastSessionAt)} · ${telegramAssistant.participantId || telegramAssistant.title || "Telegram"}`
+                  : telegramAssistant?.secretStates?.length
+                    ? telegramAssistant.secretStates.map((item) => `${item.key} ${item.configured ? "已配置" : "缺失"}`).join(" · ")
+                    : "当前还没有 Telegram 对话记录。"}
+              pill={<DeepLedgerStatusPill tone={statusLoading || !telegramAssistant ? "slate" : telegramAssistantPillTone(telegramAssistant)}>{statusLoading || !telegramAssistant ? "加载中" : telegramAssistantPillText(telegramAssistant)}</DeepLedgerStatusPill>}
+            />
+            <RunningStatusTile
+              title="飞书通知"
               value={statusLoading ? "加载中" : feishuSummary?.configured ? "凭证完整" : "凭证不完整"}
-              detail={statusLoading ? "正在读取飞书状态" : feishuSummary?.enabled ? "运行中" : "当前关闭"}
-              meta={statusLoading ? "会在读取完成后显示最近一次投递结果。" : feishuSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(feishuSummary?.lastAttemptAt)}`}
+              detail={statusLoading ? "正在读取飞书状态" : feishuSummary?.enabled ? "运行中（仅出站 webhook）" : "当前关闭"}
+              meta={statusLoading ? "会在读取完成后显示最近一次投递结果。" : feishuSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(feishuSummary?.lastAttemptAt)} · 当前未接飞书入站对话`}
               pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : feishuSummary ? channelPillTone(feishuSummary) : "slate"}>{statusLoading ? "加载中" : feishuSummary ? channelPillText(feishuSummary) : "未知"}</DeepLedgerStatusPill>}
             />
           </div>
@@ -393,7 +450,7 @@ export function SettingsNotificationSection(props: {
           <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
             <ChannelConfigCard
               title="Telegram"
-              description="即时提醒优先用这里。"
+              description="这里负责出站通知；下方额外显示入站对话助手是否真正可用。"
               enabled={config.notification.telegram.enabled}
               onEnabledChange={(value) =>
                 setConfig((prev) =>
@@ -480,6 +537,7 @@ export function SettingsNotificationSection(props: {
               tradeEnabled={config.notification.telegram.onTradeExecuted}
               dailyReportEnabled={config.notification.telegram.dailyReport}
               summary={telegramSummary}
+              telegramAssistant={telegramAssistant}
               statusLoading={statusLoading}
               onSendTest={() => void handleSendTest("telegram")}
               testing={testingChannel === "telegram"}
@@ -488,7 +546,7 @@ export function SettingsNotificationSection(props: {
 
             <ChannelConfigCard
               title="飞书"
-              description="适合团队群聊广播。"
+              description="当前只支持出站 webhook 广播；若要做飞书对话，需要补 App Bot 的入站事件、鉴权和回消息链路。"
               enabled={config.notification.feishu.enabled}
               onEnabledChange={(value) =>
                 setConfig((prev) =>

@@ -17,6 +17,7 @@ function executionReceiptMeta(status: ExecutionReceipt["status"]): {
   tone: DeepLedgerTone;
 } {
   if (status === "success") return { title: "执行成功", tone: "green" };
+  if (status === "submitted") return { title: "订单已提交", tone: "indigo" };
   if (status === "partial") return { title: "部分执行成功", tone: "amber" };
   if (status === "blocked") return { title: "执行被风控阻断", tone: "red" };
   return { title: "执行失败", tone: "red" };
@@ -68,10 +69,6 @@ export function WorkbenchBannerStack(props: {
         </DeepLedgerNoticeBox>
       ) : null}
 
-      {props.bootstrap?.warnings?.length ? (
-        <DeepLedgerNoticeBox tone="amber" title="风险提示" icon={<AlertCircle className="h-4 w-4" />} description={props.bootstrap.warnings.join("；")} />
-      ) : null}
-
       {props.executionReceipt ? (() => {
         const meta = executionReceiptMeta(props.executionReceipt.status);
         return (
@@ -81,7 +78,11 @@ export function WorkbenchBannerStack(props: {
             description={`周期 ${props.executionReceipt.cycleId.slice(0, 8)} · 模式 ${props.executionReceipt.mode === "all" ? "执行全部" : "执行选中"} · ${formatDateTime(props.executionReceipt.ts)}`}
           >
             <div className="text-sm text-[var(--text)]">{props.executionReceipt.summary}</div>
-            <div className="font-[var(--font-mono)] text-xs text-[var(--muted)]">成功 {props.executionReceipt.executed} 笔 · 失败 {props.executionReceipt.failed} 笔</div>
+            <div className="font-[var(--font-mono)] text-xs text-[var(--muted)]">
+              成交 {props.executionReceipt.executed} 笔
+              {props.executionReceipt.submitted ? ` · 已提交 ${props.executionReceipt.submitted} 笔` : ""}
+              · 失败 {props.executionReceipt.failed} 笔
+            </div>
             {props.executionReceipt.reason ? (
               <div className="rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[rgba(8,12,20,0.28)] px-3 py-2 text-xs text-[var(--faint)]">
                 详情：{props.executionReceipt.reason}

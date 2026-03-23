@@ -16,7 +16,6 @@ export const SETTINGS_NAV_ITEMS_ = [
   { id: "data", label: "数据源", desc: "行情、资讯、汇率、AI 解读与市场状态层。" },
   { id: "human-factor", label: "人因数据源", desc: "基金池范围与人工信号叠加。" },
   { id: "notification", label: "通知", desc: "Telegram 与飞书的触发策略和运行状态。" },
-  { id: "broker", label: "Broker 连接", desc: "IBKR 模拟盘连接状态、登录跳转与订单同步。" },
   { id: "secrets", label: "凭证", desc: "API Key、Token 与连通性管理。" },
 ] as const;
 

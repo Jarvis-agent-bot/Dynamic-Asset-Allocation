@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { Briefcase, ClipboardList, FlaskConical, Menu, Settings } from "lucide-react";
+import { Briefcase, ClipboardList, Menu, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -13,14 +13,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
-type NavKey = "workbench" | "strategy-lab" | "trades" | "settings";
+type NavKey = "workbench" | "trades" | "settings";
 type IconType = ComponentType<{ className?: string }>;
 type NavItem = { key: NavKey; href: string; label: string; shortLabel: string; Icon: IconType };
 
 function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
   if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench";
-  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
   return "workbench";
@@ -30,7 +29,6 @@ function useNavItems(): NavItem[] {
   return useMemo(
     () => [
       { key: "workbench" as const, href: "/daa/dashboard/workbench", label: "工作台", shortLabel: "工作台", Icon: Briefcase },
-      { key: "strategy-lab" as const, href: "/daa/dashboard/strategy-lab", label: "策略实验室", shortLabel: "策略", Icon: FlaskConical },
       { key: "trades" as const, href: "/daa/dashboard/trades", label: "交易记录", shortLabel: "交易", Icon: ClipboardList },
       { key: "settings" as const, href: "/daa/dashboard/settings", label: "设置", shortLabel: "设置", Icon: Settings },
     ],

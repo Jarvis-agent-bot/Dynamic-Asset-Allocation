@@ -33,7 +33,7 @@ import {
   deepLedgerSearchShellClassName,
   deepLedgerTableHeadClassName,
   deepLedgerTableShellClassName,
-} from "../../../_components/DeepLedgerUI";
+} from "../../_components/DeepLedgerUI";
 
 export type AssetUniverseViewFilter = "all" | "holdings" | "watchlist" | "basket";
 type HoldingGroupKey = "stock" | "etf" | "bond" | "crypto";

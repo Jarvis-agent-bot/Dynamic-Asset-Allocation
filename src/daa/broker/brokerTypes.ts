@@ -1,6 +1,6 @@
 import type { TradeTicket, TradeTicketSide } from "@/src/daa/modules/trade/tradeTypes";
 
-export type DaaBrokerKind = "sim" | "ibkr_paper" | "crypto_paper";
+export type DaaBrokerKind = "sim" | "crypto_paper";
 export type DaaExecutionVenue = DaaBrokerKind;
 export type DaaBrokerOrderType = "MKT" | "LMT";
 

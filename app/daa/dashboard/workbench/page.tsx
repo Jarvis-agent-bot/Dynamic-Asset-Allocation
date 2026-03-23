@@ -1,4 +1,4 @@
-import { DeepLedgerPageHeader, DeepLedgerStatusPill } from "../_components/DeepLedgerUI";
+import { DeepLedgerPageHeader } from "../_components/DeepLedgerUI";
 
 import WorkbenchPageClient from "./_components/WorkbenchPageClient";
 
@@ -14,12 +14,7 @@ export default function WorkbenchPage({ searchParams }: Props) {
     <div className="space-y-6">
       <DeepLedgerPageHeader
         title="工作台"
-        description="驾驶舱、组合、调仓和现金都在这里统一处理。"
-        actions={(
-          <div className="flex flex-wrap items-center gap-2">
-            <DeepLedgerStatusPill tone="green">支持聊天驱动模拟交易</DeepLedgerStatusPill>
-          </div>
-        )}
+        description="账户概览、风险信号、组合操作、调仓执行和现金流水都收在这里。"
       />
       <WorkbenchPageClient initialTab={searchParams?.tab} initialSection={searchParams?.section} />
     </div>

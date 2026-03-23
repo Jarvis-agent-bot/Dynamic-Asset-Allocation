@@ -9,6 +9,8 @@ export type DaaChatIntentKind =
   | "latest_cycle"
   | "rebalance_generate"
   | "rebalance_execute"
+  | "confirm_action"
+  | "cancel_action"
   | "trade"
   | "llm_answer"
   | "unknown";
@@ -58,3 +60,30 @@ export type DaaChatSessionPreview = Pick<
   | "latestMessageAt"
   | "updatedAt"
 >;
+
+export type DaaChatPendingAction =
+  | {
+      kind: "trade";
+      side: "BUY" | "SELL";
+      symbol: string;
+      qty: number | null;
+      notional: number | null;
+      createdAt: string;
+      expiresAt: string;
+    }
+  | {
+      kind: "rebalance_execute";
+      cycleId: string;
+      executeMode: "all";
+      createdAt: string;
+      expiresAt: string;
+    };
+
+export type DaaChatSessionMemory = {
+  sessionId: string;
+  summaryText: string;
+  updatedAt: string;
+  metaJson: Record<string, unknown> & {
+    pendingAction?: DaaChatPendingAction | null;
+  };
+};

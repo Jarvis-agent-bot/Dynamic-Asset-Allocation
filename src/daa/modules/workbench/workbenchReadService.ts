@@ -2,7 +2,6 @@ import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
-import { isIbkrSupportedAsset, resolveBrokerRuntimeConfig, syncActiveBrokerSnapshotToStore, type DaaBrokerKind } from "@/src/daa/broker";
 import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
 import { runLlmDecision } from "@/src/daa/llm/llmDecision";
 import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
@@ -23,7 +22,6 @@ import {
   createDaaTradeTicket,
   executeDaaTradeTickets,
   getDaaAccountState,
-  getDaaBrokerAccountState,
   getDaaCycleReport,
   getDaaLedgerStartTs,
   getDaaHumanIngestState,
@@ -31,7 +29,6 @@ import {
   getDaaSystemConfig,
   getDaaMarketCacheHealthStats,
   listDaaAssetUniverse,
-  listDaaBrokerPositions,
   listDaaCycleReports,
   listDaaEquitySnapshots,
   listDaaFxRates,
@@ -41,7 +38,6 @@ import {
   upsertDaaCycleReport,
   updateDaaAssetUniverseLastPrice,
   type DaaStoreAssetUniverseRow,
-  type DaaStorePosition,
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
 import { buildDaaUnifiedPlan, type DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
@@ -97,7 +93,6 @@ const PRICE_SYNC_CONCURRENCY = 4;
 const PRICE_SYNC_MAX_TARGETS = 30;
 const PRICE_STALE_SEC = 6 * 60 * 60;
 const PRICE_REFRESH_FRESH_SKIP_SEC = 120;
-const BROKER_CASH_READ_ONLY_REASON_ = "当前已切换到 IBKR 模拟盘模式，现金与持仓以券商快照为准，本地现金流水只保留审计记录。";
 
 type WorkbenchRuntimeAccountState = {
   baseCurrency: string;
@@ -105,9 +100,6 @@ type WorkbenchRuntimeAccountState = {
   investableCash: number;
   frozenCash: number;
   totalEquity: number | null;
-  source: "sim" | "broker" | "hybrid";
-  brokerKind: DaaBrokerKind | null;
-  brokerAccountId: string | null;
   cashMutationsAllowed: boolean;
   readOnlyReason: string | null;
   accountBreakdown: WorkbenchAccountBreakdownItem[];
@@ -126,245 +118,22 @@ function isWithinCurrentLedger(ts: string | null | undefined, ledgerStartTs: str
   return Date.parse(ts) >= Date.parse(ledgerStartTs);
 }
 
-function shouldUseBrokerSnapshotForRow(row: DaaStoreAssetUniverseRow): boolean {
-  return isIbkrSupportedAsset({
-    assetKey: row.assetKey,
-    symbol: row.symbol,
-    market: row.market,
-    currency: row.currency,
-    assetClass: row.assetClass,
-    instrumentType: row.instrumentType,
-    marketGroup: row.marketGroup,
-  });
-}
-
-function inferBrokerPositionAssetShape(position: DaaStorePosition): Pick<
-  DaaStoreAssetUniverseRow,
-  "assetClass" | "instrumentType" | "marketGroup" | "region" | "exchange"
-> {
-  const market = String(position.market || "US").trim().toUpperCase();
-  if (market === "CRYPTO") {
-    return {
-      assetClass: "CRYPTO",
-      instrumentType: "CRYPTO",
-      marketGroup: "CRYPTO",
-      region: "GLOBAL",
-      exchange: "CRYPTO",
-    };
-  }
-  if (market === "CN") {
-    return {
-      assetClass: "EQUITY",
-      instrumentType: "STOCK",
-      marketGroup: "CN_EQUITY",
-      region: "CN",
-      exchange: "",
-    };
-  }
-  if (market === "HK") {
-    return {
-      assetClass: "EQUITY",
-      instrumentType: "STOCK",
-      marketGroup: "HK_EQUITY",
-      region: "HK",
-      exchange: "",
-    };
-  }
-  return {
-    assetClass: "EQUITY",
-    instrumentType: "STOCK",
-    marketGroup: "GLOBAL_EQUITY",
-    region: market || "GLOBAL",
-    exchange: "",
-  };
-}
-
-function overlayBrokerPositionsOnAssetUniverse(
-  rows: DaaStoreAssetUniverseRow[],
-  positions: DaaStorePosition[],
-): DaaStoreAssetUniverseRow[] {
-  const baseRows = Array.isArray(rows) ? rows : [];
-  const brokerPositions = Array.isArray(positions) ? positions.filter((item) => item.qty > 0) : [];
-  const positionMap = new Map(brokerPositions.map((item) => [item.assetKey, item]));
-
-  const mergedRows = baseRows.map((row) => {
-    const shouldUseBroker = shouldUseBrokerSnapshotForRow(row);
-    if (!shouldUseBroker) {
-      return row;
-    }
-    const position = positionMap.get(row.assetKey);
-    return {
-      ...row,
-      holdingQty: position?.qty ?? 0,
-      holdingPrice: position?.price ?? 0,
-      costBasis: position?.costBasis ?? null,
-      holdingTags: position?.tags ?? [],
-      lastPrice: row.lastPrice > 0 ? row.lastPrice : (position?.price ?? 0),
-      priceUpdatedAt: row.priceUpdatedAt || position?.updatedAt || null,
-      updatedAt: position?.updatedAt || row.updatedAt,
-    } satisfies DaaStoreAssetUniverseRow;
-  });
-
-  for (const position of brokerPositions) {
-    if (baseRows.some((row) => row.assetKey === position.assetKey)) continue;
-    const inferred = inferBrokerPositionAssetShape(position);
-    mergedRows.push({
-      assetKey: position.assetKey,
-      symbol: position.symbol,
-      market: position.market,
-      currency: position.currency,
-      assetClass: inferred.assetClass,
-      region: inferred.region,
-      exchange: inferred.exchange,
-      instrumentType: inferred.instrumentType,
-      marketGroup: inferred.marketGroup,
-      holdingQty: position.qty,
-      holdingPrice: position.price,
-      costBasis: position.costBasis,
-      holdingTags: position.tags,
-      watchEnabled: false,
-      targetWeightHint: 0,
-      watchTags: [],
-      notes: null,
-      lastPrice: position.price,
-      priceUpdatedAt: position.updatedAt,
-      createdAt: position.updatedAt,
-      updatedAt: position.updatedAt,
-    });
-  }
-
-  return mergedRows;
-}
-
 async function loadRuntimePortfolioSnapshot(opts: {
   syncBroker?: boolean;
 } = {}): Promise<WorkbenchRuntimePortfolioSnapshot> {
-  const brokerConfig = await resolveBrokerRuntimeConfig();
-  let brokerSyncFailed = false;
-  if (brokerConfig.kind === "ibkr_paper" && opts.syncBroker !== false) {
-    try {
-      await syncActiveBrokerSnapshotToStore();
-    } catch {
-      brokerSyncFailed = true;
-    }
-  }
-
-  const [localAccountState, assetRows, brokerAccountState, brokerPositions] = await Promise.all([
+  void opts;
+  const [localAccountState, assetRows] = await Promise.all([
     getDaaAccountState(),
     listDaaAssetUniverse(),
-    brokerConfig.kind === "ibkr_paper" ? getDaaBrokerAccountState("ibkr_paper") : Promise.resolve(null),
-    brokerConfig.kind === "ibkr_paper" ? listDaaBrokerPositions("ibkr_paper") : Promise.resolve([]),
   ]);
-
-  if (brokerConfig.kind !== "ibkr_paper") {
-    const baseCurrency = normalizeDaaCurrencyCode(localAccountState.baseCurrency, "USD");
-    const cash = toPositive(localAccountState.cash, 0);
-    const frozenCash = toPositive(localAccountState.frozenCash, 0);
-    const investableCash = resolveInvestableCash({
-      cash,
-      frozenCash,
-      investableCash: localAccountState.investableCash,
-    });
-    return {
-      baseCurrency,
-      account: {
-        baseCurrency,
-        cash,
-        investableCash,
-        frozenCash,
-        totalEquity: localAccountState.totalEquity == null ? null : toPositive(localAccountState.totalEquity, 0),
-        source: "sim",
-        brokerKind: null,
-        brokerAccountId: null,
-        cashMutationsAllowed: true,
-        readOnlyReason: null,
-        accountBreakdown: [{
-          venueKind: "sim",
-          accountId: "local",
-          label: "本地模拟 / Crypto Paper",
-          baseCurrency,
-          cash,
-          investableCash,
-          frozenCash,
-          totalEquity: localAccountState.totalEquity == null ? null : toPositive(localAccountState.totalEquity, 0),
-          cashMutationsAllowed: true,
-          readOnlyReason: null,
-        }],
-      },
-      assetRows,
-      warnings: [],
-    };
-  }
-
-  const warnings: string[] = [];
-  if (brokerSyncFailed) {
-    warnings.push(
-      brokerAccountState
-        ? "外部 broker 最新快照同步失败，当前展示的是上一次同步到本地的券商快照。"
-        : "外部 broker 账户快照同步失败，当前还没有可用的券商账户快照。",
-    );
-  }
-  if (!brokerAccountState) {
-    warnings.push("当前已切换到 IBKR 模拟盘模式，但还没有同步到券商账户快照。");
-  }
-
-  const baseCurrency = normalizeDaaCurrencyCode(brokerAccountState?.baseCurrency || localAccountState.baseCurrency, "USD");
-  const localCash = toPositive(localAccountState.cash, 0);
-  const localFrozenCash = toPositive(localAccountState.frozenCash, 0);
-  const localInvestableCash = resolveInvestableCash({
-    cash: localCash,
-    frozenCash: localFrozenCash,
+  const baseCurrency = normalizeDaaCurrencyCode(localAccountState.baseCurrency, "USD");
+  const cash = toPositive(localAccountState.cash, 0);
+  const frozenCash = toPositive(localAccountState.frozenCash, 0);
+  const investableCash = resolveInvestableCash({
+    cash,
+    frozenCash,
     investableCash: localAccountState.investableCash,
   });
-  const brokerCash = toPositive(brokerAccountState?.cash, 0);
-  const brokerFrozenCash = toPositive(brokerAccountState?.frozenCash, 0);
-  const brokerInvestableCash = resolveInvestableCash({
-    cash: brokerCash,
-    frozenCash: brokerFrozenCash,
-    investableCash: brokerAccountState?.investableCash,
-  });
-  const mergedRows = overlayBrokerPositionsOnAssetUniverse(assetRows, brokerPositions);
-  const hasLocalManagedAssets = assetRows.some((row) => !shouldUseBrokerSnapshotForRow(row) && (row.holdingQty > 0 || row.watchEnabled || row.targetWeightHint > 0));
-  const hasLocalExposure = localCash > 0 || localFrozenCash > 0 || hasLocalManagedAssets;
-  const cash = brokerCash + localCash;
-  const frozenCash = brokerFrozenCash + localFrozenCash;
-  const investableCash = brokerInvestableCash + localInvestableCash;
-  const accountBreakdown: WorkbenchAccountBreakdownItem[] = [];
-  if (brokerAccountState) {
-    accountBreakdown.push({
-      venueKind: "ibkr_paper",
-      accountId: brokerAccountState.accountId || brokerConfig.ibkr.accountId || null,
-      label: "IBKR 模拟盘",
-      baseCurrency: normalizeDaaCurrencyCode(brokerAccountState.baseCurrency, baseCurrency),
-      cash: brokerCash,
-      investableCash: brokerInvestableCash,
-      frozenCash: brokerFrozenCash,
-      totalEquity: brokerAccountState.totalEquity == null ? null : toPositive(brokerAccountState.totalEquity, 0),
-      cashMutationsAllowed: false,
-      readOnlyReason: BROKER_CASH_READ_ONLY_REASON_,
-    });
-  }
-  if (hasLocalExposure || accountBreakdown.length <= 0) {
-    accountBreakdown.push({
-      venueKind: "sim",
-      accountId: "local",
-      label: "本地模拟 / Crypto Paper",
-      baseCurrency: normalizeDaaCurrencyCode(localAccountState.baseCurrency, baseCurrency),
-      cash: localCash,
-      investableCash: localInvestableCash,
-      frozenCash: localFrozenCash,
-      totalEquity: localAccountState.totalEquity == null ? null : toPositive(localAccountState.totalEquity, 0),
-      cashMutationsAllowed: true,
-      readOnlyReason: hasLocalExposure ? "这里维护本地模拟与 Crypto Paper 的资金与审计流水。" : null,
-    });
-  }
-  const source = hasLocalExposure ? "hybrid" as const : "broker" as const;
-  const readOnlyReason = source === "hybrid"
-    ? "当前为聚合账户视图：IBKR 资金只读，本地模拟 / Crypto Paper 资金仍可编辑。"
-    : BROKER_CASH_READ_ONLY_REASON_;
-  if (source === "hybrid") {
-    warnings.push("当前工作台已进入聚合账户模式：IBKR 资产按券商快照，本地模拟 / Crypto Paper 资产继续使用本地账本。");
-  }
 
   return {
     baseCurrency,
@@ -373,18 +142,24 @@ async function loadRuntimePortfolioSnapshot(opts: {
       cash,
       investableCash,
       frozenCash,
-      totalEquity: source === "hybrid"
-        ? null
-        : (brokerAccountState?.totalEquity == null ? null : toPositive(brokerAccountState.totalEquity, 0)),
-      source,
-      brokerKind: "ibkr_paper",
-      brokerAccountId: brokerAccountState?.accountId || brokerConfig.ibkr.accountId || null,
-      cashMutationsAllowed: source === "hybrid",
-      readOnlyReason,
-      accountBreakdown,
+      totalEquity: localAccountState.totalEquity == null ? null : toPositive(localAccountState.totalEquity, 0),
+      cashMutationsAllowed: true,
+      readOnlyReason: null,
+      accountBreakdown: [{
+        venueKind: "sim",
+        accountId: "local",
+        label: "本地模拟 / Crypto Paper",
+        baseCurrency,
+        cash,
+        investableCash,
+        frozenCash,
+        totalEquity: localAccountState.totalEquity == null ? null : toPositive(localAccountState.totalEquity, 0),
+        cashMutationsAllowed: true,
+        readOnlyReason: null,
+      }],
     },
-    assetRows: mergedRows,
-    warnings,
+    assetRows,
+    warnings: [],
   };
 }
 
@@ -840,9 +615,6 @@ export async function buildWorkbenchBootstrap(opts: {
       investableCash,
       frozenCash,
       totalEquity,
-      source: runtimePortfolio.account.source,
-      brokerKind: runtimePortfolio.account.brokerKind,
-      brokerAccountId: runtimePortfolio.account.brokerAccountId,
       cashMutationsAllowed: runtimePortfolio.account.cashMutationsAllowed,
       readOnlyReason: runtimePortfolio.account.readOnlyReason,
       accountBreakdown: runtimePortfolio.account.accountBreakdown,

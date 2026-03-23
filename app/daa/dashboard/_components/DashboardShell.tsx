@@ -18,11 +18,7 @@ type Props = {
 const SECTION_META = {
   workbench: {
     label: "工作台",
-    hint: "助手、组合、调仓和现金都在这里处理",
-  },
-  "strategy-lab": {
-    label: "策略实验室",
-    hint: "回测候选、净值曲线与目标写回",
+    hint: "账户概览、风险信号、组合操作与执行都在这里处理",
   },
   trades: {
     label: "交易记录",
@@ -36,7 +32,6 @@ const SECTION_META = {
 
 function resolveSection(pathname: string) {
   if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench" as const;
-  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab" as const;
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades" as const;
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings" as const;
   return "workbench" as const;

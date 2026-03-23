@@ -76,13 +76,15 @@ export async function POST(req: Request) {
         const ticketIds = new Set(data.cycle.executedOrders || []);
         const cycleLogs = data.logs.filter((row) => ticketIds.has(row.ticketId));
         const executedCount = cycleLogs.filter((row) => row.status === "executed").length;
-        const failedCount = cycleLogs.filter((row) => row.status !== "executed").length;
+        const submittedCount = cycleLogs.filter((row) => row.status === "submitted" || row.status === "partially_filled").length;
+        const failedCount = cycleLogs.filter((row) => row.status === "rejected" || row.status === "canceled").length;
         const message = buildTradeExecutionNotifyText({
           source: "rebalance_cycle_execution",
           baseCurrency: system.config.strategy.account.baseCurrency || "USD",
           executeMode,
           cycleId,
           executedCount,
+          submittedCount,
           failedCount,
           totalCount: cycleLogs.length,
           totalNotional: data.cycle.executionSummary?.totalNotional ?? cycleLogs.reduce((sum, row) => sum + (row.qty * row.price), 0),
@@ -95,6 +97,7 @@ export async function POST(req: Request) {
           requestJson: {
             executeMode,
             ordersExecuted: data.cycle.executionSummary?.ordersExecuted ?? executedCount,
+            ordersSubmitted: data.cycle.executionSummary?.ordersSubmitted ?? submittedCount,
             ordersFailed: data.cycle.executionSummary?.ordersFailed ?? failedCount,
           },
         };

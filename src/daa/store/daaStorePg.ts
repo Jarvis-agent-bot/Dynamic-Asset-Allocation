@@ -582,26 +582,12 @@ export type DaaStoreCashLedgerApplyInput = {
   settlementTs?: string | null;
 };
 
-export type DaaStoreBrokerKind = "sim" | "ibkr_paper" | "crypto_paper";
-export type DaaStoreBrokerSessionStatus = "disconnected" | "pending_login" | "authenticated" | "expiring" | "reauth_required" | "connector_down";
+export type DaaStoreBrokerKind = "sim" | "crypto_paper";
 export type DaaStoreTradeTicketSource = "manual" | "decision";
 export type DaaStoreTradeTicketStatus = "ready" | "submitted" | "partially_filled" | "executed" | "canceled" | "rejected";
 export type DaaStoreTradeTicketSide = "BUY" | "SELL";
 export type DaaStoreTradeBasketStatus = "draft" | "executing" | "executed" | "partial" | "canceled";
 export type DaaStoreTradeBasketSource = "manual" | "decision" | "mixed" | "migration";
-
-export type DaaStoreBrokerSessionState = {
-  brokerKind: DaaStoreBrokerKind;
-  status: DaaStoreBrokerSessionStatus;
-  accountId: string | null;
-  loginUrl: string | null;
-  message: string | null;
-  lastCheckedAt: string | null;
-  lastAuthenticatedAt: string | null;
-  lastError: string | null;
-  sessionMeta: Record<string, unknown> | null;
-  updatedAt: string;
-};
 
 export type DaaStoreBrokerAccountState = {
   brokerKind: DaaStoreBrokerKind;
@@ -796,6 +782,7 @@ export type DaaStoreRebalanceCycle = {
   executedOrders: string[];
   executionSummary: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     newMaxDriftPct: number;
@@ -835,6 +822,7 @@ export type DaaStoreCycleReport = {
   };
   executionStats: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     feeTotal: number;
@@ -955,7 +943,7 @@ function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState 
 function mapBrokerAccountStateRow(row: Record<string, unknown>): DaaStoreBrokerAccountState {
   const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
   return {
-    brokerKind: normalizeBrokerKind(row.broker_kind) || "ibkr_paper",
+    brokerKind: normalizeBrokerKind(row.broker_kind) || "sim",
     accountId: row.account_id == null ? null : normalizeText(row.account_id) || null,
     baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
     cash: Math.max(0, toFiniteNumber(row.cash, 0)),
@@ -1293,7 +1281,7 @@ export async function replaceDaaAccountState(input: {
 }
 
 export async function getDaaBrokerAccountState(
-  brokerKind: DaaStoreBrokerKind = "ibkr_paper",
+  brokerKind: DaaStoreBrokerKind = "sim",
 ): Promise<DaaStoreBrokerAccountState | null> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
@@ -1639,19 +1627,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc
             ON daa_trade_tickets(cycle_id, created_at DESC);
 
-          CREATE TABLE IF NOT EXISTS daa_broker_session_state (
-            broker_kind TEXT PRIMARY KEY,
-            status TEXT NOT NULL,
-            account_id TEXT,
-            login_url TEXT,
-            message TEXT,
-            last_checked_at TIMESTAMPTZ,
-            last_authenticated_at TIMESTAMPTZ,
-            last_error TEXT,
-            session_meta_json JSONB,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          );
-
           CREATE TABLE IF NOT EXISTS daa_broker_account_state (
             broker_kind TEXT PRIMARY KEY,
             account_id TEXT,
@@ -1923,20 +1898,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query(
           "ALTER TABLE daa_trade_tickets ADD CONSTRAINT fk_daa_trade_tickets_basket FOREIGN KEY (basket_id) REFERENCES daa_trade_baskets(basket_id) ON DELETE RESTRICT",
         );
-        await query(`
-          CREATE TABLE IF NOT EXISTS daa_broker_session_state (
-            broker_kind TEXT PRIMARY KEY,
-            status TEXT NOT NULL,
-            account_id TEXT,
-            login_url TEXT,
-            message TEXT,
-            last_checked_at TIMESTAMPTZ,
-            last_authenticated_at TIMESTAMPTZ,
-            last_error TEXT,
-            session_meta_json JSONB,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          )
-        `);
         await query(`
           CREATE TABLE IF NOT EXISTS daa_broker_account_state (
             broker_kind TEXT PRIMARY KEY,
@@ -2522,7 +2483,7 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
 }
 
 export async function listDaaBrokerPositions(
-  brokerKind: DaaStoreBrokerKind = "ibkr_paper",
+  brokerKind: DaaStoreBrokerKind = "sim",
 ): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
@@ -3175,17 +3136,7 @@ function normalizeBrokerKind(value: unknown): DaaStoreBrokerKind | null {
   if (!text) return null;
   if (text === "sim") return "sim";
   if (text === "crypto" || text === "crypto_paper") return "crypto_paper";
-  return "ibkr_paper";
-}
-
-function normalizeBrokerSessionStatus(value: unknown): DaaStoreBrokerSessionStatus {
-  const text = normalizeText(value, "disconnected").toLowerCase();
-  if (text === "pending_login") return "pending_login";
-  if (text === "authenticated") return "authenticated";
-  if (text === "expiring") return "expiring";
-  if (text === "reauth_required") return "reauth_required";
-  if (text === "connector_down") return "connector_down";
-  return "disconnected";
+  return "sim";
 }
 
 function normalizeTradeBasketStatus(value: unknown): DaaStoreTradeBasketStatus {
@@ -3223,6 +3174,10 @@ function deriveBasketStatusFromTickets(statuses: DaaStoreTradeTicketStatus[]): D
   if (statuses.every((status) => status === "canceled" || status === "rejected")) return "canceled";
   if (statuses.every((status) => status === "ready" || status === "submitted" || status === "partially_filled")) return "executing";
   return "partial";
+}
+
+function isTradeTicketOpenStatus(status: DaaStoreTradeTicketStatus): boolean {
+  return status === "ready" || status === "submitted" || status === "partially_filled";
 }
 
 function normalizeTradeTicketSide(value: unknown): DaaStoreTradeTicketSide {
@@ -3347,25 +3302,10 @@ function mapTradeTicketRow(row: Record<string, unknown>): DaaStoreTradeTicket {
   };
 }
 
-function mapBrokerSessionStateRow(row: Record<string, unknown>): DaaStoreBrokerSessionState {
-  return {
-    brokerKind: normalizeBrokerKind(row.broker_kind) || "ibkr_paper",
-    status: normalizeBrokerSessionStatus(row.status),
-    accountId: row.account_id == null ? null : normalizeText(row.account_id) || null,
-    loginUrl: row.login_url == null ? null : normalizeText(row.login_url) || null,
-    message: row.message == null ? null : normalizeText(row.message) || null,
-    lastCheckedAt: row.last_checked_at == null ? null : toIsoString(row.last_checked_at),
-    lastAuthenticatedAt: row.last_authenticated_at == null ? null : toIsoString(row.last_authenticated_at),
-    lastError: row.last_error == null ? null : normalizeText(row.last_error) || null,
-    sessionMeta: row.session_meta_json == null ? null : parseJsonb<Record<string, unknown>>(row.session_meta_json, {}),
-    updatedAt: toIsoString(row.updated_at),
-  };
-}
-
 function mapBrokerOrderSnapshotRow(row: Record<string, unknown>): DaaStoreBrokerOrderSnapshot {
   return {
     ticketId: normalizeText(row.ticket_id),
-    brokerKind: normalizeBrokerKind(row.broker_kind) || "ibkr_paper",
+    brokerKind: normalizeBrokerKind(row.broker_kind) || "sim",
     brokerAccountId: row.broker_account_id == null ? null : normalizeText(row.broker_account_id) || null,
     brokerOrderId: normalizeText(row.broker_order_id),
     status: normalizeText(row.status),
@@ -3503,6 +3443,108 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
       await query(
         "UPDATE daa_trade_baskets SET status = $1, updated_at = NOW(), executed_at = CASE WHEN $1 IN ('executed','partial','canceled') THEN COALESCE(executed_at, NOW()) ELSE executed_at END WHERE basket_id = $2",
         [nextStatus, id],
+      );
+    }
+  }
+
+  const touchedCycleIds = [...new Set(
+    touchedTickets
+      .map((ticket) => ticket.cycleId)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  if (touchedCycleIds.length > 0) {
+    const cyclePlaceholders = touchedCycleIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const cycleTicketRows = await query(
+      `SELECT cycle_id, ticket_id, status, qty, price
+       FROM daa_trade_tickets
+       WHERE cycle_id IN (${cyclePlaceholders})`,
+      touchedCycleIds,
+    );
+    const cycleStateRows = await query(
+      `SELECT cycle_id, executed_at, execution_summary_json
+       FROM daa_rebalance_cycles
+       WHERE cycle_id IN (${cyclePlaceholders})
+       FOR UPDATE`,
+      touchedCycleIds,
+    );
+
+    const currentCycleStateById = new Map<string, {
+      executedAt: string | null;
+      executionSummary: Record<string, unknown> | null;
+    }>();
+    for (const row of cycleStateRows.rows as Array<Record<string, unknown>>) {
+      currentCycleStateById.set(normalizeText(row.cycle_id), {
+        executedAt: row.executed_at == null ? null : toIsoString(row.executed_at),
+        executionSummary: row.execution_summary_json == null ? null : parseJsonb<Record<string, unknown>>(row.execution_summary_json, {}),
+      });
+    }
+
+    const cycleTicketStateById = new Map<string, {
+      ticketIds: string[];
+      statuses: DaaStoreTradeTicketStatus[];
+      totalNotional: number;
+    }>();
+    for (const row of cycleTicketRows.rows as Array<Record<string, unknown>>) {
+      const cycleId = normalizeText(row.cycle_id);
+      if (!cycleId) continue;
+      if (!cycleTicketStateById.has(cycleId)) {
+        cycleTicketStateById.set(cycleId, {
+          ticketIds: [],
+          statuses: [],
+          totalNotional: 0,
+        });
+      }
+      const current = cycleTicketStateById.get(cycleId)!;
+      current.ticketIds.push(normalizeText(row.ticket_id));
+      current.statuses.push(normalizeTradeTicketStatus(row.status));
+      current.totalNotional += Math.max(0, toFiniteNumber(row.qty, 0)) * Math.max(0, toFiniteNumber(row.price, 0));
+    }
+
+    for (const cycleId of touchedCycleIds) {
+      const current = currentCycleStateById.get(cycleId) || {
+        executedAt: null,
+        executionSummary: null,
+      };
+      const cycleState = cycleTicketStateById.get(cycleId) || {
+        ticketIds: [],
+        statuses: [],
+        totalNotional: 0,
+      };
+      const ordersExecuted = cycleState.statuses.filter((status) => status === "executed").length;
+      const ordersSubmitted = cycleState.statuses.filter((status) => status === "submitted" || status === "partially_filled").length;
+      const ordersFailed = cycleState.statuses.filter((status) => status === "rejected" || status === "canceled").length;
+      const hasOpenOrders = cycleState.statuses.some((status) => isTradeTicketOpenStatus(status));
+      const currentSummary = current.executionSummary || {};
+      const totalNotional = cycleState.totalNotional > 0
+        ? cycleState.totalNotional
+        : Math.max(0, toFiniteNumber(currentSummary.totalNotional, 0));
+      const newMaxDriftPct = Math.max(0, toFiniteNumber(currentSummary.newMaxDriftPct, 0));
+      const nextStatus: DaaStoreRebalanceCycleStatus = hasOpenOrders ? "executing" : "completed";
+      const nextExecutedAt = hasOpenOrders
+        ? current.executedAt
+        : (current.executedAt || new Date().toISOString());
+
+      await query(
+        `UPDATE daa_rebalance_cycles
+         SET
+           status = $2,
+           executed_at = $3,
+           executed_orders_json = $4::jsonb,
+           execution_summary_json = $5::jsonb
+         WHERE cycle_id = $1`,
+        [
+          cycleId,
+          nextStatus,
+          nextExecutedAt,
+          JSON.stringify(cycleState.ticketIds.filter(Boolean)),
+          JSON.stringify({
+            ordersExecuted,
+            ordersSubmitted,
+            ordersFailed,
+            totalNotional,
+            newMaxDriftPct,
+          }),
+        ],
       );
     }
   }
@@ -3757,6 +3799,7 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
   const executionSummary = executionSummaryRaw
     ? {
       ordersExecuted: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersExecuted, 0)),
+      ordersSubmitted: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersSubmitted, 0)),
       ordersFailed: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersFailed, 0)),
       totalNotional: Math.max(0, toFiniteNumber(executionSummaryRaw.totalNotional, 0)),
       newMaxDriftPct: Math.max(0, toFiniteNumber(executionSummaryRaw.newMaxDriftPct, 0)),
@@ -3821,6 +3864,7 @@ function mapCycleReportRow(row: Record<string, unknown>): DaaStoreCycleReport {
     reportCreatedAt: toIsoString(row.created_at),
     executionSummary: {
       ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
+      ordersSubmitted: Math.max(0, toFiniteNumber(executionStats.ordersSubmitted, 0)),
       ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
       totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
       newMaxDriftPct: Math.max(0, toFiniteNumber(executionStats.newMaxDriftPct, 0)),
@@ -3845,6 +3889,7 @@ function mapCycleReportRow(row: Record<string, unknown>): DaaStoreCycleReport {
     },
     executionStats: {
       ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
+      ordersSubmitted: Math.max(0, toFiniteNumber(executionStats.ordersSubmitted, 0)),
       ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
       totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
       feeTotal: Math.max(0, toFiniteNumber(executionStats.feeTotal, 0)),
@@ -4413,67 +4458,6 @@ export async function listDaaBrokerOpenTradeTickets(brokerKind?: DaaStoreBrokerK
   });
 }
 
-export async function getDaaBrokerSessionState(
-  brokerKind: DaaStoreBrokerKind = "ibkr_paper",
-): Promise<DaaStoreBrokerSessionState | null> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const result = await query(
-      "SELECT broker_kind, status, account_id, login_url, message, last_checked_at, last_authenticated_at, last_error, session_meta_json, updated_at FROM daa_broker_session_state WHERE broker_kind = $1 LIMIT 1",
-      [brokerKind],
-    );
-    if (!result.rows.length) return null;
-    return mapBrokerSessionStateRow(result.rows[0] as Record<string, unknown>);
-  });
-}
-
-export async function saveDaaBrokerSessionState(input: {
-  brokerKind: DaaStoreBrokerKind;
-  status: DaaStoreBrokerSessionStatus;
-  accountId?: string | null;
-  loginUrl?: string | null;
-  message?: string | null;
-  lastCheckedAt?: string | null;
-  lastAuthenticatedAt?: string | null;
-  lastError?: string | null;
-  sessionMeta?: Record<string, unknown> | null;
-}): Promise<DaaStoreBrokerSessionState> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const result = await query(
-      `INSERT INTO daa_broker_session_state (
-         broker_kind, status, account_id, login_url, message, last_checked_at, last_authenticated_at, last_error, session_meta_json, updated_at
-       ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,NOW()
-       )
-       ON CONFLICT (broker_kind) DO UPDATE
-       SET
-         status = EXCLUDED.status,
-         account_id = EXCLUDED.account_id,
-         login_url = EXCLUDED.login_url,
-         message = EXCLUDED.message,
-         last_checked_at = EXCLUDED.last_checked_at,
-         last_authenticated_at = EXCLUDED.last_authenticated_at,
-         last_error = EXCLUDED.last_error,
-         session_meta_json = EXCLUDED.session_meta_json,
-         updated_at = NOW()
-       RETURNING broker_kind, status, account_id, login_url, message, last_checked_at, last_authenticated_at, last_error, session_meta_json, updated_at`,
-      [
-        input.brokerKind,
-        input.status,
-        input.accountId ?? null,
-        input.loginUrl ?? null,
-        input.message ?? null,
-        input.lastCheckedAt ? toIsoString(input.lastCheckedAt, new Date().toISOString()) : null,
-        input.lastAuthenticatedAt ? toIsoString(input.lastAuthenticatedAt, new Date().toISOString()) : null,
-        input.lastError ?? null,
-        JSON.stringify(input.sessionMeta ?? null),
-      ],
-    );
-    return mapBrokerSessionStateRow(result.rows[0] as Record<string, unknown>);
-  });
-}
-
 export async function upsertDaaBrokerOrderSnapshot(input: {
   ticketId: string;
   brokerKind: DaaStoreBrokerKind;
@@ -4624,6 +4608,7 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
         : (input.executionSummary
           ? {
             ordersExecuted: Math.max(0, toFiniteNumber(input.executionSummary.ordersExecuted, 0)),
+            ordersSubmitted: Math.max(0, toFiniteNumber(input.executionSummary.ordersSubmitted, 0)),
             ordersFailed: Math.max(0, toFiniteNumber(input.executionSummary.ordersFailed, 0)),
             totalNotional: Math.max(0, toFiniteNumber(input.executionSummary.totalNotional, 0)),
             newMaxDriftPct: Math.max(0, toFiniteNumber(input.executionSummary.newMaxDriftPct, 0)),
@@ -5030,11 +5015,17 @@ export async function applyDaaBrokerOrderSync(input: {
            reject_code = CASE WHEN $2 = 'rejected' THEN 'BROKER_REJECTED' ELSE NULL END,
            reject_message = CASE WHEN $2 = 'rejected' THEN $11 ELSE NULL END,
            gross_notional = CASE
-             WHEN COALESCE($7, 0) > 0 THEN COALESCE($7, 0) * COALESCE(NULLIF($8, 0), price)
+             WHEN COALESCE(CAST($7 AS DOUBLE PRECISION), 0) > 0
+               THEN COALESCE(CAST($7 AS DOUBLE PRECISION), 0)
+                 * CASE WHEN COALESCE(CAST($8 AS DOUBLE PRECISION), 0) > 0 THEN CAST($8 AS DOUBLE PRECISION) ELSE price END
              ELSE gross_notional
            END,
            notional_in_base = CASE
-             WHEN COALESCE($7, 0) > 0 THEN (COALESCE($7, 0) * COALESCE(NULLIF($8, 0), price)) * COALESCE(NULLIF(fx_rate_to_base, 0), 1)
+             WHEN COALESCE(CAST($7 AS DOUBLE PRECISION), 0) > 0
+               THEN (
+                 COALESCE(CAST($7 AS DOUBLE PRECISION), 0)
+                 * CASE WHEN COALESCE(CAST($8 AS DOUBLE PRECISION), 0) > 0 THEN CAST($8 AS DOUBLE PRECISION) ELSE price END
+               ) * CASE WHEN COALESCE(fx_rate_to_base, 0) > 0 THEN fx_rate_to_base ELSE 1 END
              ELSE notional_in_base
            END,
            executed_at = CASE WHEN $2 = 'executed' THEN COALESCE(executed_at, $9) ELSE executed_at END,

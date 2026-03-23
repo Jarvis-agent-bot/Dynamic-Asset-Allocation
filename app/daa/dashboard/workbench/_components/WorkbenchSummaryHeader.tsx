@@ -44,6 +44,24 @@ function notificationText(input: {
   return "已启用";
 }
 
+function telegramAssistantTone(input: {
+  ready: boolean;
+  lastSessionAt: string | null;
+}): "slate" | "amber" | "green" {
+  if (input.ready) return "green";
+  if (input.lastSessionAt) return "amber";
+  return "slate";
+}
+
+function telegramAssistantText(input: {
+  ready: boolean;
+  lastSessionAt: string | null;
+}): string {
+  if (input.ready) return "已就绪";
+  if (input.lastSessionAt) return "未完成配置";
+  return "待配置";
+}
+
 function formatMetricValue(value: number, currency: string, loading: boolean): string {
   if (loading) return "—";
   return formatCurrency(value, currency);
@@ -52,10 +70,10 @@ function formatMetricValue(value: number, currency: string, loading: boolean): s
 function buildMarketDataDetail(health: WorkbenchMarketDataHealth | null | undefined): string {
   if (!health) return "当前未读取到市场数据健康摘要。";
 
-  const parts: string[] = [`近 24h 刷新失败率 ${health.recentJobFailureRatePct.toFixed(1)}%`];
-  parts.push(`最新 ${health.freshCount}`);
-  if (health.staleCount > 0) parts.push(`陈旧 ${health.staleCount}`);
-  if (health.missingCount > 0) parts.push(`缺失 ${health.missingCount}`);
+  const parts: string[] = [`近 24 小时失败率 ${health.recentJobFailureRatePct.toFixed(1)}%`];
+  parts.push(`可直接使用 ${health.freshCount}`);
+  if (health.staleCount > 0) parts.push(`需要复核 ${health.staleCount}`);
+  if (health.missingCount > 0) parts.push(`暂缺 ${health.missingCount}`);
   if (health.message) parts.push(health.message);
   return parts.join(" · ");
 }
@@ -66,9 +84,6 @@ export function WorkbenchSummaryHeader(props: {
   holdingsValue: number;
   availableCashValue: number;
   frozenCashValue: number;
-  accountSource?: "sim" | "broker" | "hybrid";
-  brokerKind?: string | null;
-  brokerAccountId?: string | null;
   cashMutationsAllowed?: boolean;
   readOnlyReason?: string | null;
   accountBreakdown?: WorkbenchAccountBreakdownItem[];
@@ -102,14 +117,17 @@ export function WorkbenchSummaryHeader(props: {
     },
   ];
   const telegramStatus = props.notificationStatus?.channels.telegram;
+  const telegramAssistant = props.notificationStatus?.telegramAssistant;
   const feishuStatus = props.notificationStatus?.channels.feishu;
   const syncTone = props.loading ? "slate" : props.refreshing ? "amber" : "green";
   const syncLabel = props.loading ? "准备中" : props.refreshing ? "同步中" : "数据已同步";
-  const accountSourceLabel = props.accountSource === "broker" ? "券商驱动" : props.accountSource === "hybrid" ? "聚合账户" : "本地模拟";
-  const accountSourceTone = props.accountSource === "broker" ? "amber" : props.accountSource === "hybrid" ? "cyan" : "slate";
+  const accountModeLabel = "本地模拟";
+  const accountModeTone = "slate" as const;
   const marketDataTone = props.marketDataHealth?.status === "down" ? "amber" : props.marketDataHealth?.status === "degraded" ? "amber" : "green";
   const marketDataLabel = props.marketDataHealth?.status === "down" ? "不可用" : props.marketDataHealth?.status === "degraded" ? "已降级" : "正常";
   const accountBreakdown = props.accountBreakdown || [];
+  const accountDetailTone = accountBreakdown.length > 1 ? "cyan" : props.cashMutationsAllowed === false ? "amber" : "slate";
+  const accountDetailLabel = accountBreakdown.length > 1 ? "本地分账户" : props.cashMutationsAllowed === false ? "余额只读" : "本地可编辑";
 
   return (
     <>
@@ -125,7 +143,7 @@ export function WorkbenchSummaryHeader(props: {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            <DeepLedgerStatusPill tone={accountSourceTone}>{accountSourceLabel}</DeepLedgerStatusPill>
+            <DeepLedgerStatusPill tone={accountModeTone}>{accountModeLabel}</DeepLedgerStatusPill>
             <DeepLedgerStatusPill tone={syncTone}>{syncLabel}</DeepLedgerStatusPill>
             <DeepLedgerActionButton onClick={props.onRefresh} disabled={props.loading || props.refreshing}>
               <RefreshCcw className={cn("h-3.5 w-3.5", props.refreshing ? "animate-spin" : "")} />
@@ -138,12 +156,10 @@ export function WorkbenchSummaryHeader(props: {
           <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">账户来源</div>
-              <DeepLedgerStatusPill tone={accountSourceTone}>
-                {props.accountSource === "hybrid" ? "聚合展示" : props.cashMutationsAllowed === false ? "余额只读" : "本地可编辑"}
-              </DeepLedgerStatusPill>
+              <DeepLedgerStatusPill tone={accountDetailTone}>{accountDetailLabel}</DeepLedgerStatusPill>
             </div>
             <div className="mt-3 text-sm text-[var(--text)]">
-              {props.loading ? "正在同步账户快照" : accountSourceLabel}
+              {props.loading ? "正在同步账户快照" : accountModeLabel}
             </div>
             <div className="mt-3 space-y-2">
               {props.loading ? (
@@ -157,14 +173,12 @@ export function WorkbenchSummaryHeader(props: {
                 ))
               ) : (
                 <div className="text-xs text-[var(--muted)]">
-                  {props.accountSource === "broker"
-                    ? `${props.brokerKind || "broker"}${props.brokerAccountId ? ` · ${props.brokerAccountId}` : ""}`
-                    : `当前账本起点 ${formatDateTime(props.ledgerMeta?.ledgerStartTs || "") || "-"}`}
+                  {`当前账本起点 ${formatDateTime(props.ledgerMeta?.ledgerStartTs || "") || "-"}`}
                 </div>
               )}
             </div>
             <div className="mt-3 text-xs leading-5 text-[var(--faint)]">
-              {props.readOnlyReason || "工作台与交易记录统一按当前账本窗口统计；详细历史归档移到交易记录页查看。"}
+              {props.readOnlyReason || "工作台与交易记录统一按当前账本窗口统计；不同执行通道的拆分只用于解释资金分布。"}
             </div>
             <div className="mt-3">
               <Link href="/daa/dashboard/trades" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
@@ -210,11 +224,23 @@ export function WorkbenchSummaryHeader(props: {
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <DeepLedgerStatusPill tone={telegramStatus ? notificationTone(telegramStatus) : "slate"}>
-                Telegram {telegramStatus ? notificationText(telegramStatus) : props.loading ? "加载中" : "未知"}
+                Telegram 通知 {telegramStatus ? notificationText(telegramStatus) : props.loading ? "加载中" : "未知"}
+              </DeepLedgerStatusPill>
+              <DeepLedgerStatusPill tone={telegramAssistant ? telegramAssistantTone(telegramAssistant) : "slate"}>
+                Telegram 对话 {telegramAssistant ? telegramAssistantText(telegramAssistant) : props.loading ? "加载中" : "未知"}
               </DeepLedgerStatusPill>
               <DeepLedgerStatusPill tone={feishuStatus ? notificationTone(feishuStatus) : "slate"}>
-                飞书 {feishuStatus ? notificationText(feishuStatus) : props.loading ? "加载中" : "未知"}
+                飞书通知 {feishuStatus ? notificationText(feishuStatus) : props.loading ? "加载中" : "未知"}
               </DeepLedgerStatusPill>
+            </div>
+            <div className="mt-3 text-xs leading-5 text-[var(--muted)]">
+              {props.loading
+                ? "通知与对话状态会在首次同步后显示。"
+                : telegramAssistant?.lastSessionAt
+                  ? `最近 Telegram 会话：${formatDateTime(telegramAssistant.lastSessionAt)}`
+                  : telegramAssistant?.ready
+                    ? "Telegram 对话入口已就绪，但当前还没有会话记录。"
+                    : "Telegram 入站对话尚未就绪；飞书当前只接了出站通知 webhook，请到通知设置页补齐凭证。"}
             </div>
             <div className="mt-3">
               <Link href="/daa/dashboard/settings#settings-notification" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">

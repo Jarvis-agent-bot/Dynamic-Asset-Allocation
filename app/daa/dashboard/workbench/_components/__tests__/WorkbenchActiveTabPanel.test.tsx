@@ -8,11 +8,11 @@ afterEach(() => {
   cleanup();
 });
 
-vi.mock("../../../portfolio/_components/workbench/AssetUniverseTable", () => ({
+vi.mock("../AssetUniverseTable", () => ({
   default: ({ view }: { view: string }) => <div data-testid={`asset-table-${view}`}>{view}</div>,
 }));
 
-vi.mock("../../../portfolio/_components/workbench/WatchlistBuilderPanel", () => ({
+vi.mock("../WatchlistBuilderPanel", () => ({
   default: () => <div data-testid="watchlist-builder">watchlist-builder</div>,
 }));
 

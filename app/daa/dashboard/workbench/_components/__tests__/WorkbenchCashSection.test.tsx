@@ -46,17 +46,14 @@ describe("WorkbenchCashSection", () => {
     expect(screen.queryByText("€108")).toBeNull();
   });
 
-  it("broker 模式下隐藏入金出金操作，并提示只读来源", async () => {
+  it("只读模式下隐藏入金出金操作，并展示原因", async () => {
     mockListCashLedger.mockResolvedValue([]);
 
     render(
       <WorkbenchCashSection
         baseCurrency="USD"
-        accountSource="broker"
         cashMutationsAllowed={false}
-        brokerKind="ibkr_paper"
-        brokerAccountId="DU123456"
-        readOnlyReason="余额以券商快照为准。"
+        readOnlyReason="当前现金由外部校准结果锁定。"
       />,
     );
 
@@ -66,30 +63,29 @@ describe("WorkbenchCashSection", () => {
 
     expect(screen.queryByText("入金")).toBeNull();
     expect(screen.queryByText("出金")).toBeNull();
-    expect(screen.getByText("券商驱动 / 只读")).toBeTruthy();
-    expect(screen.getByText("余额以券商快照为准。")).toBeTruthy();
+    expect(screen.getByText("只读")).toBeTruthy();
+    expect(screen.getByText("当前现金由外部校准结果锁定。")).toBeTruthy();
   });
 
-  it("hybrid 模式下会拆开展示各资金来源，并区分只读与可编辑账户", async () => {
+  it("存在多个本地执行通道时会拆开展示资金分布", async () => {
     mockListCashLedger.mockResolvedValue([]);
 
     render(
       <WorkbenchCashSection
         baseCurrency="USD"
-        accountSource="hybrid"
         cashMutationsAllowed
         accountBreakdown={[
           {
-            venueKind: "ibkr_paper",
-            accountId: "DU123456",
-            label: "IBKR 模拟盘",
+            venueKind: "sim",
+            accountId: "READ-ONLY-1",
+            label: "外部只读账户",
             baseCurrency: "USD",
             cash: 1200,
             investableCash: 1100,
             frozenCash: 100,
             totalEquity: 4500,
             cashMutationsAllowed: false,
-            readOnlyReason: "以券商快照为准。",
+            readOnlyReason: "余额由外部只读来源维护。",
           },
           {
             venueKind: "crypto_paper",
@@ -108,16 +104,16 @@ describe("WorkbenchCashSection", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("现金与资金流水")).toBeTruthy();
+      expect(screen.getByText("现金流水")).toBeTruthy();
     });
 
-    expect(screen.getAllByText("聚合账户").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("IBKR 模拟盘")).toBeTruthy();
+    expect(screen.getByText("分账户展示")).toBeTruthy();
+    expect(screen.getByText("外部只读账户")).toBeTruthy();
     expect(screen.getByText("Crypto Paper / 本地")).toBeTruthy();
-    expect(screen.getByText("账户 DU123456")).toBeTruthy();
+    expect(screen.getByText("账户 READ-ONLY-1")).toBeTruthy();
     expect(screen.getByText("现金 $1,200")).toBeTruthy();
     expect(screen.getByText("可投资 $260")).toBeTruthy();
-    expect(screen.getByText("以券商快照为准。")).toBeTruthy();
+    expect(screen.getByText("余额由外部只读来源维护。")).toBeTruthy();
     expect(screen.getAllByText("只读")).toHaveLength(1);
     expect(screen.getAllByText("可编辑").length).toBeGreaterThanOrEqual(1);
   });

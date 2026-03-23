@@ -6,8 +6,8 @@ import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel"
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { cn } from "@/lib/utils";
 
-import AssetUniverseTable from "../../portfolio/_components/workbench/AssetUniverseTable";
-import WatchlistBuilderPanel from "../../portfolio/_components/workbench/WatchlistBuilderPanel";
+import AssetUniverseTable from "./AssetUniverseTable";
+import WatchlistBuilderPanel from "./WatchlistBuilderPanel";
 import { WorkbenchCashSection } from "./WorkbenchCashSection";
 import { WorkbenchRebalanceSection } from "./WorkbenchRebalanceSection";
 
@@ -88,10 +88,7 @@ export function WorkbenchActiveTabPanel(props: {
           baseCurrency={model.bootstrap?.baseCurrency || "USD"}
           entries={model.cashLedger}
           ledgerMeta={model.ledgerMeta}
-          accountSource={model.bootstrap?.account.source || "sim"}
           cashMutationsAllowed={model.bootstrap?.account.cashMutationsAllowed ?? true}
-          brokerKind={model.bootstrap?.account.brokerKind || null}
-          brokerAccountId={model.bootstrap?.account.brokerAccountId || null}
           readOnlyReason={model.bootstrap?.account.readOnlyReason || null}
           accountBreakdown={model.bootstrap?.account.accountBreakdown || []}
           onCashChanged={() => void model.loadBootstrap(true)}

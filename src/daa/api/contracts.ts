@@ -9,6 +9,7 @@ export type ApiErrorCode =
   | "ROUTE_DENIED"
   | "CRON_AUTH_FAILED"
   | "BROKER_READ_ONLY"
+  | "BROKER_SESSION_NOT_READY"
   | "UNKNOWN";
 
 export type ApiSuccess<T> = {

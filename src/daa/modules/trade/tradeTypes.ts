@@ -30,7 +30,7 @@ export type TradeTicket = {
   pricingMode: "manual" | "market";
   priceSource: string | null;
   priceSnapshotAt: string | null;
-  brokerKind: "sim" | "ibkr_paper" | "crypto_paper" | null;
+  brokerKind: "sim" | "crypto_paper" | null;
   brokerAccountId: string | null;
   brokerOrderId: string | null;
   brokerStatus: string | null;

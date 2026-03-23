@@ -237,6 +237,15 @@ export function TradesCyclesPanel({ model }: { model: TradesModel }) {
     );
   }
 
+  const cycleOrderCount = (cycle: TradesModel["cycles"][number]): number => {
+    if (!cycle.executionSummary) return cycle.executedOrders.length;
+    return (
+      (cycle.executionSummary.ordersExecuted ?? 0)
+      + (cycle.executionSummary.ordersSubmitted ?? 0)
+      + (cycle.executionSummary.ordersFailed ?? 0)
+    );
+  };
+
   return (
     <div className="mt-4 overflow-hidden rounded-[18px] border border-[var(--border)]">
       <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
@@ -256,7 +265,7 @@ export function TradesCyclesPanel({ model }: { model: TradesModel }) {
               <TableCellMono>{cycle.cycleId.slice(0, 8)}</TableCellMono>
               <TableCellText><DeepLedgerStatusPill tone={STATUS_TONE[cycle.status] ?? "slate"}>{cycleStatusLabel(cycle.status)}</DeepLedgerStatusPill></TableCellText>
               <TableCellText>{triggerSourceLabel(cycle.triggerSource)}</TableCellText>
-              <TableCellMono align="right">{cycle.executionSummary?.ordersExecuted ?? cycle.executedOrders.length}</TableCellMono>
+              <TableCellMono align="right">{cycleOrderCount(cycle)}</TableCellMono>
               <TableCellMono align="right">{formatCurrency(cycle.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</TableCellMono>
               <TableCellText align="right">{formatDateTime(cycle.createdAt)}</TableCellText>
             </tr>
@@ -338,9 +347,9 @@ export function TradesReportsPanel({ model }: { model: TradesModel }) {
 
             <div className="mt-3 grid gap-3 md:grid-cols-3">
               <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(24,34,54,0.72)] p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">执行概览</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">执行概览</div>
                 <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
-                  <div>订单数 {report.executionSummary?.ordersExecuted ?? 0}</div>
+                  <div>订单数 {(report.executionSummary?.ordersExecuted ?? 0) + (report.executionSummary?.ordersSubmitted ?? 0) + (report.executionSummary?.ordersFailed ?? 0)}</div>
                   <div>成交金额 {formatCurrency(report.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</div>
                   <div>手续费 {formatCurrency(report.pnlAttribution.feeTotal, model.baseCurrency)}</div>
                 </div>

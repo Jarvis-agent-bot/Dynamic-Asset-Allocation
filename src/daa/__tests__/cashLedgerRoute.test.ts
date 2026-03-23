@@ -5,10 +5,6 @@ vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminEditorAuth: vi.fn(async () => null),
 }));
 
-vi.mock("@/src/daa/broker", () => ({
-  resolveBrokerRuntimeConfig: vi.fn(),
-}));
-
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaCashLedgerEntry: vi.fn(async () => ({
     entry: { id: "cash-1" },
@@ -19,13 +15,11 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
 }));
 
 import { GET, POST } from "@/app/api/daa/store/cash-ledger/route";
-import { resolveBrokerRuntimeConfig } from "@/src/daa/broker";
 import { appendDaaCashLedgerEntry } from "@/src/daa/store/daaStorePg";
 
 describe("cash-ledger-route-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(resolveBrokerRuntimeConfig).mockResolvedValue({ kind: "sim" });
   });
 
   it("GET 返回现金流水", async () => {
@@ -37,16 +31,7 @@ describe("cash-ledger-route-v1", () => {
     expect(Array.isArray(json.data.entries)).toBe(true);
   });
 
-  it("ibkr_paper 下禁止本地手工入金出金", async () => {
-    vi.mocked(resolveBrokerRuntimeConfig).mockResolvedValueOnce({
-      kind: "ibkr_paper",
-      ibkr: {
-        connectorBaseUrl: "http://127.0.0.1:8787",
-        sharedSecret: null,
-        accountId: "DU123456",
-      },
-    });
-
+  it("POST 正常写入现金流水", async () => {
     const response = await POST(new Request("http://localhost/api/daa/store/cash-ledger", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -54,9 +39,13 @@ describe("cash-ledger-route-v1", () => {
     }));
     const json = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(json.ok).toBe(false);
-    expect(json.error.code).toBe("BROKER_READ_ONLY");
-    expect(vi.mocked(appendDaaCashLedgerEntry)).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(vi.mocked(appendDaaCashLedgerEntry)).toHaveBeenCalledWith({
+      side: "deposit",
+      amount: 100,
+      baseCurrency: "USD",
+      note: undefined,
+    });
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bot, MessageSquareText, SendHorizonal, Sparkles, TerminalSquare } from "lucide-react";
+import { Bot, SendHorizonal, Sparkles } from "lucide-react";
 
 import {
   DeepLedgerActionButton,
@@ -22,6 +22,12 @@ const QUICK_PROMPTS = [
   "生成调仓建议",
 ];
 
+const COMMAND_HINTS = [
+  "执行类命令先进入待确认，回复“确认”后才真正执行。",
+  "支持查询组合、市场、风险、最近调仓与生成调仓建议。",
+  "支持自然语言买入/卖出模拟单，例如“买入 QQQ 10股”。",
+];
+
 function messageTone(role: "user" | "assistant" | "system") {
   if (role === "assistant") return "cyan" as const;
   if (role === "system") return "amber" as const;
@@ -32,7 +38,7 @@ export function WorkbenchAssistantPanel(props: {
   assistant: AssistantChatModel;
 }) {
   const [draft, setDraft] = useState("");
-  const recentSessions = useMemo(() => props.assistant.sessions.slice(0, 4), [props.assistant.sessions]);
+  const latestSession = useMemo(() => props.assistant.sessions[0] || null, [props.assistant.sessions]);
 
   function submit(text: string) {
     const next = String(text || "").trim();
@@ -45,7 +51,7 @@ export function WorkbenchAssistantPanel(props: {
     <DeepLedgerPanel
       accent="green"
       title="交易助手"
-      subtitle="把查询、生成调仓、模拟买卖和最近会话直接收进工作台，不再让 Telegram 和 Dashboard 各说各话。"
+      subtitle="把查询、调仓建议和待确认执行收进工作台，Web 与 Telegram 共用同一套上下文。"
       action={(
         <div className="flex flex-wrap items-center gap-2">
           <DeepLedgerStatusPill tone={props.assistant.loading ? "slate" : props.assistant.error ? "amber" : "green"}>
@@ -58,18 +64,17 @@ export function WorkbenchAssistantPanel(props: {
         </div>
       )}
     >
-      <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.18fr_0.82fr]">
         <div className="space-y-3">
           <div className={cn(deepLedgerSubtlePanelClassName, "p-4")}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
                   <Bot className="h-3.5 w-3.5" />
-                  Assistant Input
+                  助手输入
                 </div>
                 <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                  直接输入自然语言，或者用明确命令。
-                  目前支持：状态查询、生成调仓、执行调仓、模拟买卖。
+                  直接输入自然语言即可。当前以查询、生成调仓和待确认执行为主，不再要求记住一长串固定命令。
                 </div>
               </div>
               <DeepLedgerStatusPill tone="indigo">Web + Telegram 共用会话</DeepLedgerStatusPill>
@@ -98,7 +103,7 @@ export function WorkbenchAssistantPanel(props: {
               <input
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="例如：买入 QQQ 10股 / 生成调仓建议 / 当前风险状态"
+                placeholder="例如：生成调仓建议 / 当前风险状态 / 买入 QQQ 10股"
                 className={cn(deepLedgerDenseFieldClassName, "h-10 flex-1 rounded-[14px] text-sm")}
               />
               <DeepLedgerActionButton type="submit" disabled={props.assistant.sending || !draft.trim()}>
@@ -111,7 +116,7 @@ export function WorkbenchAssistantPanel(props: {
 
           <div className={cn(deepLedgerSubtlePanelClassName, "p-4")}>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">Recent Messages</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">最近消息</div>
               <DeepLedgerStatusPill tone="cyan">
                 {(props.assistant.messages || []).length} 条
               </DeepLedgerStatusPill>
@@ -142,43 +147,31 @@ export function WorkbenchAssistantPanel(props: {
 
         <div className="space-y-3">
           <div className={cn(deepLedgerSubtlePanelClassName, "p-4")}>
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
-              <MessageSquareText className="h-3.5 w-3.5" />
-              Recent Sessions
-            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">当前上下文</div>
             <div className="mt-3 space-y-3">
-              {recentSessions.length > 0 ? (
-                recentSessions.map((session) => (
-                  <div key={session.sessionId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <DeepLedgerStatusPill tone={session.channel === "telegram" ? "indigo" : "green"}>
-                        {session.channel === "telegram" ? "Telegram" : "Web"}
-                      </DeepLedgerStatusPill>
-                      {session.lastIntentKind ? <DeepLedgerStatusPill tone="slate">{session.lastIntentKind}</DeepLedgerStatusPill> : null}
-                    </div>
-                    <div className="mt-2 text-sm text-[var(--text)]">{session.title || "未命名会话"}</div>
-                    <div className="mt-2 text-xs leading-5 text-[var(--muted)]">
-                      {session.lastAssistantText || session.lastUserText || "还没有有效消息内容"}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-sm text-[var(--muted)]">当前还没有任何会话记录。</div>
-              )}
+              <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <DeepLedgerStatusPill tone={latestSession?.channel === "telegram" ? "indigo" : "green"}>
+                    {latestSession ? (latestSession.channel === "telegram" ? "Telegram" : "Web") : "暂无会话"}
+                  </DeepLedgerStatusPill>
+                  {latestSession?.lastIntentKind ? <DeepLedgerStatusPill tone="slate">{latestSession.lastIntentKind}</DeepLedgerStatusPill> : null}
+                </div>
+                <div className="mt-2 text-sm text-[var(--text)]">
+                  {latestSession?.title || "还没有可复用的会话标题"}
+                </div>
+                <div className="mt-2 text-xs leading-5 text-[var(--muted)]">
+                  {latestSession?.lastAssistantText || latestSession?.lastUserText || "首次对话后，这里会显示最近一轮会话摘要。"}
+                </div>
+              </div>
             </div>
           </div>
 
           <div className={cn(deepLedgerSubtlePanelClassName, "p-4")}>
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
-              <TerminalSquare className="h-3.5 w-3.5" />
-              Direct Commands
-            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">操作说明</div>
             <div className="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-              <div>`组合状态` 查看组合与现金。</div>
-              <div>`市场状态` 查看市场状态层和行情健康。</div>
-              <div>`生成调仓建议` 生成一轮新的再平衡周期。</div>
-              <div>`执行调仓` 直接执行最近一轮周期。</div>
-              <div>`买入 QQQ 10股` / `卖出 AAPL 5股` 直接走模拟执行。</div>
+              {COMMAND_HINTS.map((item) => (
+                <div key={item}>{item}</div>
+              ))}
             </div>
           </div>
         </div>

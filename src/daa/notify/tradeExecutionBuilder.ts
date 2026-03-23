@@ -13,6 +13,8 @@ function tradeSideLabel(side: string): string {
 function tradeStatusLabel(status: string): string {
   const normalized = String(status || "").trim().toLowerCase();
   if (normalized === "executed") return "已执行";
+  if (normalized === "submitted") return "已提交";
+  if (normalized === "partially_filled") return "部分成交";
   if (normalized === "rejected") return "已拒绝";
   if (normalized === "canceled") return "已取消";
   if (normalized === "ready") return "待执行";
@@ -36,6 +38,7 @@ export function buildTradeExecutionNotifyText(input: {
   venueKind?: string | null;
   venueAccountId?: string | null;
   executedCount: number;
+  submittedCount?: number;
   failedCount: number;
   totalCount: number;
   totalNotional: number;
@@ -52,7 +55,7 @@ export function buildTradeExecutionNotifyText(input: {
   }
   if (input.cycleId) lines.push(`周期 ID：${input.cycleId}`);
   if (input.ticketId) lines.push(`订单 ID：${input.ticketId}`);
-  lines.push(`结果：成功 ${input.executedCount} / 失败 ${input.failedCount} / 总计 ${input.totalCount}`);
+  lines.push(`结果：成交 ${input.executedCount} / 已提交 ${input.submittedCount ?? 0} / 失败 ${input.failedCount} / 总计 ${input.totalCount}`);
   lines.push(`名义金额：${formatMoney(input.totalNotional, input.baseCurrency)}`);
 
   lines.push("");
@@ -74,6 +77,9 @@ export function buildTradeExecutionNotifyText(input: {
   if (input.failedCount > 0) {
     lines.push("");
     lines.push("备注：本次执行存在失败订单，请回到交易记录页面查看拒单原因。");
+  } else if ((input.submittedCount ?? 0) > 0) {
+    lines.push("");
+    lines.push("备注：存在已提交但未成交的订单，需等待后续状态同步。");
   }
 
   return lines.join("\n");

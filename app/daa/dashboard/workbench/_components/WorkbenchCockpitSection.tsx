@@ -62,7 +62,7 @@ export function WorkbenchCockpitSection(props: {
         <DeepLedgerPanel
           accent="amber"
           title="统一信号"
-          subtitle="把告警、市场健康、运行状态与总览提示收束成一条可操作的列表。"
+          subtitle="把告警、市场健康和运行状态收束成一条可操作的列表。"
           action={(
             <DeepLedgerActionButton tone="slate" onClick={() => void model.loadBootstrap(true)} disabled={model.refreshing}>
               <RefreshCcw className={`h-4 w-4 ${model.refreshing ? "animate-spin" : ""}`} />
@@ -102,7 +102,7 @@ export function WorkbenchCockpitSection(props: {
         <DeepLedgerPanel
           accent="indigo"
           title="运行摘要"
-          subtitle="把权益变化、资产分布与最近一轮市场状态放在同一视图内，减少在总览和工作台之间来回切换。"
+          subtitle="把权益变化、资产分布与最近一轮市场状态放在同一视图内，避免在多个区域之间来回切换。"
         >
           <div className="grid gap-3 md:grid-cols-3">
             <DeepLedgerMiniStat

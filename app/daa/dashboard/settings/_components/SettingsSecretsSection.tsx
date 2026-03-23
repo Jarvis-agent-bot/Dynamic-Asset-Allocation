@@ -21,11 +21,10 @@ import {
 
 const GROUP_META: Record<string, { label: string; order: number }> = {
   llm: { label: "LLM / 研究模型", order: 0 },
-  broker: { label: "Broker / 券商", order: 1 },
-  telegram: { label: "Telegram", order: 2 },
-  feishu: { label: "飞书", order: 3 },
-  supabase: { label: "Supabase 认证", order: 4 },
-  cron: { label: "定时任务", order: 5 },
+  telegram: { label: "Telegram", order: 1 },
+  feishu: { label: "飞书", order: 2 },
+  supabase: { label: "Supabase 认证", order: 3 },
+  cron: { label: "定时任务", order: 4 },
 };
 
 const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url"]);

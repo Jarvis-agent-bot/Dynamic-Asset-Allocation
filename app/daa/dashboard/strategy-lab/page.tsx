@@ -1,5 +1,5 @@
-import StrategyLabPageClient from "./_components/StrategyLabPageClient";
+import { redirect } from "next/navigation";
 
 export default function StrategyLabPage() {
-  return <StrategyLabPageClient />;
+  redirect("/daa/dashboard/workbench?section=portfolio&tab=watchlist");
 }

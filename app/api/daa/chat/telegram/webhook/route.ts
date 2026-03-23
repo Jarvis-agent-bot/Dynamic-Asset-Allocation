@@ -1,5 +1,6 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { runAssistantTurn, isTelegramSenderAllowed } from "@/src/daa/chat/chatOrchestrator";
+import { findChatMessageByExternalMessageId, getOrCreateChatSession } from "@/src/daa/chat/chatRepo";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { sendTelegramMessage } from "@/src/daa/notify/telegram";
 
@@ -45,16 +46,42 @@ export async function POST(req: Request) {
     }
 
     const sessionKey = `telegram:${chatId}:${userId}:${threadId || "main"}`;
-    const result = await runAssistantTurn({
+    const session = await getOrCreateChatSession({
       channel: "telegram",
       sessionKey,
-      userText: text,
       title: message?.chat?.title || message?.from?.username || message?.from?.first_name || "Telegram 助手",
       participantId: message?.from?.username || [message?.from?.first_name, message?.from?.last_name].filter(Boolean).join(" ") || userId,
       externalChatId: chatId,
       externalUserId: userId,
       threadId: threadId || null,
-      externalMessageId: message?.message_id == null ? null : String(message.message_id),
+    });
+    const externalMessageId = message?.message_id == null ? "" : String(message.message_id).trim();
+    if (externalMessageId) {
+      const duplicated = await findChatMessageByExternalMessageId({
+        sessionId: session.sessionId,
+        externalMessageId,
+        role: "user",
+      });
+      if (duplicated) {
+        return ok({
+          handled: true,
+          duplicate: true,
+          sessionId: session.sessionId,
+          updateId: update.update_id || null,
+        });
+      }
+    }
+
+    const result = await runAssistantTurn({
+      channel: "telegram",
+      sessionKey,
+      userText: text,
+      title: session.title,
+      participantId: session.participantId,
+      externalChatId: session.externalChatId,
+      externalUserId: session.externalUserId,
+      threadId: session.threadId,
+      externalMessageId: externalMessageId || null,
       allowExecution: true,
     });
 

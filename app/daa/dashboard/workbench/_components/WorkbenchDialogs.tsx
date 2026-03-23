@@ -16,7 +16,7 @@ import {
 } from "@/app/daa/dashboard/_components/DeepLedgerUI";
 import { cn } from "@/lib/utils";
 
-import MarketOrderDialog from "../../portfolio/_components/workbench/MarketOrderDialog";
+import MarketOrderDialog from "./MarketOrderDialog";
 
 export function WorkbenchDialogs(props: WorkbenchPageModel["dialogProps"]) {
   return (

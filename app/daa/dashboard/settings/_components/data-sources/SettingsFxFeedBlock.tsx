@@ -17,7 +17,7 @@ export function SettingsFxFeedBlock(props: {
   return (
     <SubsectionCard
       title="汇率换算"
-      description="决定跨币种估值要跟踪哪些汇率，保证总览、工作台和策略实验室使用同一套换算口径。"
+      description="决定跨币种估值要跟踪哪些汇率，保证工作台、交易记录和研究输出使用同一套换算口径。"
     >
       <div>
         <CheckboxRow

@@ -60,29 +60,66 @@ export function useWorkbenchExecutionFlow(input: {
       });
       input.mergeCycleState(result.cycle);
       const executed = result.cycle.executionSummary?.ordersExecuted || 0;
+      const submitted = result.cycle.executionSummary?.ordersSubmitted || 0;
       const failed = result.cycle.executionSummary?.ordersFailed || 0;
-      if (executed > 0 && failed <= 0) {
+      if (executed > 0 && submitted <= 0 && failed <= 0) {
         setExecutionReceipt({
           cycleId: result.cycle.cycleId,
           mode,
           status: "success",
           executed,
+          submitted,
           failed,
           summary: `执行完成：${executed} 笔成功。`,
           ts: new Date().toISOString(),
         });
         toast.success(`执行完成：${executed} 笔成功`);
-      } else if (executed > 0 && failed > 0) {
+      } else if (submitted > 0 && executed <= 0 && failed <= 0) {
+        setExecutionReceipt({
+          cycleId: result.cycle.cycleId,
+          mode,
+          status: "submitted",
+          executed,
+          submitted,
+          failed,
+          summary: `订单已提交：${submitted} 笔等待后续成交或撤单更新。`,
+          ts: new Date().toISOString(),
+        });
+        toast.message(`订单已提交：${submitted} 笔等待后续成交或撤单更新`);
+      } else if ((executed > 0 || submitted > 0) && failed > 0) {
+        const summary = submitted > 0
+          ? `部分完成：成交 ${executed} 笔，已提交 ${submitted} 笔，失败 ${failed} 笔。`
+          : `部分执行成功：成功 ${executed} 笔，失败 ${failed} 笔。`;
         setExecutionReceipt({
           cycleId: result.cycle.cycleId,
           mode,
           status: "partial",
           executed,
+          submitted,
           failed,
-          summary: `部分执行成功：成功 ${executed} 笔，失败 ${failed} 笔。`,
+          summary,
           ts: new Date().toISOString(),
         });
-        toast.message(`部分执行成功：成功 ${executed} 笔，失败 ${failed} 笔`);
+        toast.message(summary);
+      } else if (executed > 0 || submitted > 0) {
+        const summary = submitted > 0
+          ? `本轮已成交 ${executed} 笔，另有 ${submitted} 笔仍在等待成交。`
+          : `执行完成：${executed} 笔成功。`;
+        setExecutionReceipt({
+          cycleId: result.cycle.cycleId,
+          mode,
+          status: submitted > 0 ? "partial" : "success",
+          executed,
+          submitted,
+          failed,
+          summary,
+          ts: new Date().toISOString(),
+        });
+        if (submitted > 0) {
+          toast.message(summary);
+        } else {
+          toast.success(summary);
+        }
       } else {
         const ticketSet = new Set(result.cycle.executedOrders || []);
         const rejected = result.logs.filter((row) => ticketSet.has(row.ticketId) && row.status === "rejected");
@@ -92,6 +129,7 @@ export function useWorkbenchExecutionFlow(input: {
           mode,
           status: "failed",
           executed: 0,
+          submitted: 0,
           failed: failed || rejected.length || 0,
           summary: `执行失败：${failed || rejected.length || 0} 笔被拒绝。`,
           reason,
@@ -107,6 +145,7 @@ export function useWorkbenchExecutionFlow(input: {
         mode,
         status: "failed",
         executed: 0,
+        submitted: 0,
         failed: 0,
         summary: "执行请求失败，未完成下单。",
         reason: message,

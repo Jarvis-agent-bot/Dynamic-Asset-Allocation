@@ -1,3 +1,4 @@
+import { listRecentChatSessions } from "@/src/daa/chat/chatRepo";
 import { listSecretStatuses } from "@/src/daa/config/secretsManager";
 import { listJobExecutionLogs } from "@/src/daa/store/jobExecutionLogRepo";
 import {
@@ -19,6 +20,17 @@ export type NotificationChannelStatusSummary = {
   lastErrorMessage: string | null;
 };
 
+export type TelegramAssistantStatusSummary = {
+  ready: boolean;
+  secretStates: Array<{ key: string; configured: boolean }>;
+  lastSessionAt: string | null;
+  lastUserText: string | null;
+  lastAssistantText: string | null;
+  lastIntentKind: string | null;
+  participantId: string | null;
+  title: string | null;
+};
+
 export type NotificationStatusSummary = {
   cronConfigured: boolean;
   recentJobs: Array<{
@@ -28,6 +40,7 @@ export type NotificationStatusSummary = {
     finishedAt: string | null;
   }>;
   channels: Record<DaaNotificationChannel, NotificationChannelStatusSummary>;
+  telegramAssistant: TelegramAssistantStatusSummary;
 };
 
 function buildChannelSummary(input: {
@@ -54,16 +67,23 @@ function buildChannelSummary(input: {
 }
 
 export async function buildNotificationStatusSummary(): Promise<NotificationStatusSummary> {
-  const [system, secrets, jobs, deliveryLogs] = await Promise.all([
+  const [system, secrets, jobs, deliveryLogs, recentChatSessions] = await Promise.all([
     getDaaSystemConfig(),
     listSecretStatuses(),
     listJobExecutionLogs(10),
     listNotificationDeliveryLogs({ limit: 30 }),
+    listRecentChatSessions(12),
   ]);
 
   const secretConfigured = new Map(secrets.map((item) => [item.key, item.source !== "empty"] as const));
   const telegramLogs = deliveryLogs.filter((item) => item.channel === "telegram");
   const feishuLogs = deliveryLogs.filter((item) => item.channel === "feishu");
+  const latestTelegramSession = recentChatSessions.find((item) => item.channel === "telegram") || null;
+  const telegramAssistantSecretStates = [
+    { key: "telegram_bot_token", configured: Boolean(secretConfigured.get("telegram_bot_token")) },
+    { key: "telegram_webhook_secret", configured: Boolean(secretConfigured.get("telegram_webhook_secret")) },
+    { key: "telegram_allowlist", configured: Boolean(secretConfigured.get("telegram_allowlist")) },
+  ];
 
   return {
     cronConfigured: Boolean(secretConfigured.get("cron_token")),
@@ -103,6 +123,16 @@ export async function buildNotificationStatusSummary(): Promise<NotificationStat
         ].filter(Boolean),
         logs: feishuLogs,
       }),
+    },
+    telegramAssistant: {
+      ready: telegramAssistantSecretStates.every((item) => item.configured),
+      secretStates: telegramAssistantSecretStates,
+      lastSessionAt: latestTelegramSession?.latestMessageAt || null,
+      lastUserText: latestTelegramSession?.lastUserText || null,
+      lastAssistantText: latestTelegramSession?.lastAssistantText || null,
+      lastIntentKind: latestTelegramSession?.lastIntentKind || null,
+      participantId: latestTelegramSession?.participantId || null,
+      title: latestTelegramSession?.title || null,
     },
   };
 }

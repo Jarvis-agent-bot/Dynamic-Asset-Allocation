@@ -36,6 +36,11 @@ export function normalizeDaaReturnTo(raw: unknown): string {
       return `/daa/dashboard${qs ? `?${qs}` : ""}${u.hash || ""}`;
     }
 
+    // Collapse the hidden legacy research page back into the workbench.
+    if (u.pathname === "/daa/dashboard/strategy-lab" || u.pathname === "/daa/dashboard/strategy-lab/") {
+      return `/daa/dashboard/workbench?tab=watchlist${u.hash || ""}`;
+    }
+
     // Allow deep links inside the authenticated dashboard shell.
     if (u.pathname.startsWith("/daa/dashboard/")) {
       return `${u.pathname}${u.search}${u.hash}`;

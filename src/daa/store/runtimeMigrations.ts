@@ -404,21 +404,6 @@ const MIGRATIONS_: Migration[] = [
       await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_broker_order_id ON daa_trade_tickets(broker_order_id)");
 
       await query(`
-        CREATE TABLE IF NOT EXISTS daa_broker_session_state (
-          broker_kind TEXT PRIMARY KEY,
-          status TEXT NOT NULL,
-          account_id TEXT,
-          login_url TEXT,
-          message TEXT,
-          last_checked_at TIMESTAMPTZ,
-          last_authenticated_at TIMESTAMPTZ,
-          last_error TEXT,
-          session_meta_json JSONB,
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-
-      await query(`
         CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
           ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
           broker_kind TEXT NOT NULL,

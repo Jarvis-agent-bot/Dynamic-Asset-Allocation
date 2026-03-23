@@ -25,7 +25,7 @@ import {
   deepLedgerTableCellClassName,
   deepLedgerTableHeadClassName,
   deepLedgerTableShellClassName,
-} from "../../../_components/DeepLedgerUI";
+} from "../../_components/DeepLedgerUI";
 
 const ASSET_CLASS_OPTIONS_ = [
   { value: "ALL", label: "全部" },

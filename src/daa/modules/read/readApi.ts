@@ -1,7 +1,6 @@
 import { requestData } from "@/src/daa/api/client";
 
 import type {
-  StrategyLabSeedReadModel,
   TradesReadModel,
   WorkbenchReadModel,
 } from "./readModels";
@@ -26,8 +25,4 @@ export async function getTradesReadModel(input: {
   if (input.reportLimit != null) qs.set("reportLimit", String(input.reportLimit));
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return requestData<TradesReadModel>(`/api/daa/read/trades${suffix}`, { method: "GET", cache: "no-store" });
-}
-
-export async function getStrategyLabSeedReadModel(): Promise<StrategyLabSeedReadModel> {
-  return requestData<StrategyLabSeedReadModel>("/api/daa/read/strategy-lab-seed", { method: "GET", cache: "no-store" });
 }

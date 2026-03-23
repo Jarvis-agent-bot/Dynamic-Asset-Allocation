@@ -2,10 +2,32 @@ import { randomUUID } from "node:crypto";
 
 import { daaPgPool } from "@/src/daa/pg/daaPg";
 
-import type { DaaChatChannel, DaaChatIntentKind, DaaChatMessage, DaaChatRole, DaaChatSession, DaaChatSessionPreview } from "./chatTypes";
+import type {
+  DaaChatChannel,
+  DaaChatIntentKind,
+  DaaChatMessage,
+  DaaChatRole,
+  DaaChatSession,
+  DaaChatSessionMemory,
+  DaaChatSessionPreview,
+} from "./chatTypes";
 
 function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function toIsoString(value: unknown): string {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
+  }
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return "";
+    const ms = Date.parse(text);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : text;
+  }
+  return "";
 }
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -79,6 +101,11 @@ async function ensureChatTables() {
     )
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS daa_chat_messages_session_created_idx ON daa_chat_messages(session_id, created_at DESC)");
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS daa_chat_messages_session_role_external_uidx
+      ON daa_chat_messages(session_id, role, external_message_id)
+      WHERE external_message_id IS NOT NULL
+  `);
   await pool.query("CREATE INDEX IF NOT EXISTS daa_chat_sessions_latest_idx ON daa_chat_sessions(latest_message_at DESC)");
 }
 
@@ -99,9 +126,9 @@ function mapSessionRow(row: Record<string, unknown>): DaaChatSession {
     lastIntentKind: normalizeText(row.last_intent_kind) as DaaChatIntentKind || null,
     lastUserText: normalizeText(row.last_user_text) || null,
     lastAssistantText: normalizeText(row.last_assistant_text) || null,
-    latestMessageAt: normalizeText(row.latest_message_at),
-    createdAt: normalizeText(row.created_at),
-    updatedAt: normalizeText(row.updated_at),
+    latestMessageAt: toIsoString(row.latest_message_at),
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
     metaJson: parseJsonObject(row.meta_json),
   };
 }
@@ -115,8 +142,18 @@ function mapMessageRow(row: Record<string, unknown>): DaaChatMessage {
     intentKind: normalizeText(row.intent_kind) as DaaChatIntentKind || null,
     status: normalizeText(row.status) === "received" ? "received" : normalizeText(row.status) === "failed" ? "failed" : "completed",
     externalMessageId: normalizeText(row.external_message_id) || null,
-    createdAt: normalizeText(row.created_at),
+    createdAt: toIsoString(row.created_at),
     metaJson: parseJsonObject(row.meta_json),
+  };
+}
+
+function mapMemoryRow(row: Record<string, unknown>): DaaChatSessionMemory {
+  const metaJson = parseJsonObject(row.meta_json);
+  return {
+    sessionId: normalizeText(row.session_id),
+    summaryText: normalizeText(row.summary_text),
+    updatedAt: toIsoString(row.updated_at),
+    metaJson,
   };
 }
 
@@ -267,6 +304,60 @@ export async function getChatSessionByKey(sessionKey: string): Promise<DaaChatSe
     [sessionKey],
   );
   return result.rows[0] ? mapSessionRow(result.rows[0] as Record<string, unknown>) : null;
+}
+
+export async function getChatSessionMemory(sessionId: string): Promise<DaaChatSessionMemory | null> {
+  await ensureReady();
+  const pool = daaPgPool();
+  const result = await pool.query(
+    "SELECT session_id, summary_text, updated_at, meta_json FROM daa_chat_session_memory WHERE session_id = $1 LIMIT 1",
+    [sessionId],
+  );
+  return result.rows[0] ? mapMemoryRow(result.rows[0] as Record<string, unknown>) : null;
+}
+
+export async function saveChatSessionMemory(input: {
+  sessionId: string;
+  summaryText?: string | null;
+  metaJson?: Record<string, unknown>;
+}): Promise<DaaChatSessionMemory> {
+  await ensureReady();
+  const pool = daaPgPool();
+  const result = await pool.query(
+    `INSERT INTO daa_chat_session_memory (session_id, summary_text, updated_at, meta_json)
+     VALUES ($1, $2, NOW(), $3::jsonb)
+     ON CONFLICT (session_id) DO UPDATE
+       SET summary_text = EXCLUDED.summary_text,
+           updated_at = NOW(),
+           meta_json = EXCLUDED.meta_json
+     RETURNING session_id, summary_text, updated_at, meta_json`,
+    [
+      input.sessionId,
+      normalizeText(input.summaryText),
+      JSON.stringify(input.metaJson || {}),
+    ],
+  );
+  return mapMemoryRow(result.rows[0] as Record<string, unknown>);
+}
+
+export async function findChatMessageByExternalMessageId(input: {
+  sessionId: string;
+  externalMessageId: string;
+  role?: DaaChatRole;
+}): Promise<DaaChatMessage | null> {
+  await ensureReady();
+  const pool = daaPgPool();
+  const result = await pool.query(
+    `SELECT *
+     FROM daa_chat_messages
+     WHERE session_id = $1
+       AND external_message_id = $2
+       AND ($3::text IS NULL OR role = $3)
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [input.sessionId, input.externalMessageId, input.role || null],
+  );
+  return result.rows[0] ? mapMessageRow(result.rows[0] as Record<string, unknown>) : null;
 }
 
 export async function appendChatToolCall(input: {

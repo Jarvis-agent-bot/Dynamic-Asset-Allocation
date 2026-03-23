@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DashboardEmptyState, DashboardErrorNotice, DashboardSuccessNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { DeepLedgerActionButton, DeepLedgerPageHeader, DeepLedgerSectionAnchor, DeepLedgerStatusPill } from "@/app/daa/dashboard/_components/DeepLedgerUI";
-import { SettingsBrokerConnectionSection } from "@/app/daa/dashboard/settings/_components/SettingsBrokerConnectionSection";
 import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_components/SettingsDataSourcesSection";
 import {
   SETTINGS_NAV_ITEMS_,
@@ -210,11 +209,10 @@ export default function SettingsPage() {
             <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">运行状态与连接</div>
               <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                先在这里确认通知、Broker 和最近同步是否真正生效；运行态与待保存表单配置分开看，能减少误判。
+                先在这里确认通知链路与最近运行状态是否真正生效；运行态与待保存表单配置分开看，能减少误判。
               </div>
             </div>
             <SettingsNotificationSection config={config} setConfig={setConfig} />
-            <SettingsBrokerConnectionSection />
           </section>
 
           <section className="space-y-5">

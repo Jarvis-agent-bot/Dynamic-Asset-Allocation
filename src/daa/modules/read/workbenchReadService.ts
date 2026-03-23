@@ -48,7 +48,7 @@ function buildSignals(input: {
       level: "warn",
       source: "alert",
       text: `${maxDriftRow.symbol} 偏移 ${Number(maxDriftRow.gapPct || 0).toFixed(2)}%，超过阈值 ${driftThresholdPct.toFixed(2)}%`,
-      actionHref: "/daa/dashboard/workbench?section=portfolio&tab=watchlist",
+      actionHref: "/daa/dashboard/workbench?tab=watchlist",
       createdAt,
     });
   }
@@ -60,7 +60,7 @@ function buildSignals(input: {
       level: highlightedHf.hfSignal.level === "bearish" ? "warn" : "info",
       source: "alert",
       text: `人因信号：${highlightedHf.symbol} ${highlightedHf.hfSignal.icon} ${highlightedHf.hfSignal.label}`,
-      actionHref: "/daa/dashboard/workbench?section=portfolio&tab=watchlist",
+      actionHref: "/daa/dashboard/workbench?tab=watchlist",
       createdAt,
     });
   }
@@ -75,7 +75,7 @@ function buildSignals(input: {
       level: "success",
       source: "alert",
       text: `下次定期再平衡：${nextDueAt.slice(0, 10)}`,
-      actionHref: "/daa/dashboard/workbench?section=rebalance",
+      actionHref: "/daa/dashboard/workbench?tab=rebalance",
       createdAt,
     });
   }
@@ -89,7 +89,7 @@ function buildSignals(input: {
       level: "warn",
       source: "alert",
       text: `${labels.join(" / ")}进入偏防守，普通买入执行 ${Math.round(strongestScope.buyScale * 100)}%，高波动资产买入执行 ${Math.round(strongestScope.highRiskBuyScale * 100)}%。`,
-      actionHref: "/daa/dashboard/workbench?section=cockpit",
+      actionHref: "/daa/dashboard/workbench",
       createdAt: strongestScope.generatedAt || createdAt,
     });
   }
@@ -100,29 +100,18 @@ function buildSignals(input: {
       level: "warn",
       source: "warning",
       text: warning,
-      actionHref: "/daa/dashboard/workbench?section=cockpit",
+      actionHref: "/daa/dashboard/workbench",
       createdAt,
     });
   }
 
-  if (input.bootstrap.marketDataHealth?.message) {
+  if (input.bootstrap.marketDataHealth?.message && input.bootstrap.marketDataHealth.status !== "ok") {
     push({
       id: "system:market-data-health",
-      level: input.bootstrap.marketDataHealth.status === "ok" ? "success" : "warn",
+      level: "warn",
       source: "system",
       text: input.bootstrap.marketDataHealth.message,
-      actionHref: "/daa/dashboard/workbench?section=cockpit",
-      createdAt,
-    });
-  }
-
-  if (input.bootstrap.account.source === "hybrid") {
-    push({
-      id: "system:account:hybrid",
-      level: "info",
-      source: "system",
-      text: "当前工作台按聚合账户口径展示：IBKR 资金只读，本地模拟 / Crypto Paper 资金继续走本地账本。",
-      actionHref: "/daa/dashboard/workbench?section=cash",
+      actionHref: "/daa/dashboard/workbench",
       createdAt,
     });
   }
@@ -184,13 +173,28 @@ function buildSignals(input: {
     }
   }
 
+  if (notificationStatus.channels.telegram.configured && !notificationStatus.telegramAssistant.ready) {
+    const missing = notificationStatus.telegramAssistant.secretStates
+      .filter((item) => !item.configured)
+      .map((item) => item.key)
+      .join(" / ");
+    push({
+      id: "warning:telegram-assistant:not-ready",
+      level: "warn",
+      source: "warning",
+      text: `Telegram 通知已可用，但对话助手还没就绪${missing ? `；缺少 ${missing}` : ""}。`,
+      actionHref: "/daa/dashboard/settings#settings-notification",
+      createdAt,
+    });
+  }
+
   if (input.bootstrap.latestCycle) {
     push({
       id: `system:latest-cycle:${input.bootstrap.latestCycle.cycleId}`,
       level: input.bootstrap.latestCycle.status === "completed" ? "success" : "info",
       source: "system",
       text: `最近周期 ${input.bootstrap.latestCycle.cycleId.slice(0, 8)} · ${input.bootstrap.latestCycle.triggerSource} · ${input.bootstrap.latestCycle.status}`,
-      actionHref: "/daa/dashboard/workbench?section=rebalance",
+      actionHref: "/daa/dashboard/workbench?tab=rebalance",
       createdAt: input.bootstrap.latestCycle.createdAt,
     });
   }

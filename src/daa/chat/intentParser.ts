@@ -8,6 +8,8 @@ export type DaaAssistantIntent =
   | { kind: "latest_cycle"; rawText: string }
   | { kind: "rebalance_generate"; rawText: string }
   | { kind: "rebalance_execute"; rawText: string; executeMode: "all" }
+  | { kind: "confirm_action"; rawText: string }
+  | { kind: "cancel_action"; rawText: string }
   | { kind: "trade"; rawText: string; side: "BUY" | "SELL"; symbol: string; qty: number | null; notional: number | null }
   | { kind: "unknown"; rawText: string };
 
@@ -48,6 +50,8 @@ export function parseAssistantIntent(raw: string): DaaAssistantIntent {
   if (!text) return { kind: "help", rawText: raw };
 
   if (/^\/?(help|start|帮助|说明)$/i.test(text)) return { kind: "help", rawText: text };
+  if (/^\/?(confirm|确认|确认执行|继续执行|yes|ok)$/i.test(text)) return { kind: "confirm_action", rawText: text };
+  if (/^\/?(cancel|取消|停止|放弃|no)$/i.test(text)) return { kind: "cancel_action", rawText: text };
   if (/^\/?(status|portfolio|持仓|仓位|组合|账户|状态)$/i.test(text) || /组合.*(状态|仓位|持仓)/.test(text)) {
     return { kind: "portfolio_status", rawText: text };
   }

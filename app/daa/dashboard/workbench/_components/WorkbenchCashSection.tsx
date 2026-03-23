@@ -53,10 +53,7 @@ export function WorkbenchCashSection(props: {
   baseCurrency: string;
   entries?: StoreCashLedgerEntry[];
   ledgerMeta?: DaaCurrentLedgerMeta | null;
-  accountSource?: "sim" | "broker" | "hybrid";
   cashMutationsAllowed?: boolean;
-  brokerKind?: string | null;
-  brokerAccountId?: string | null;
   readOnlyReason?: string | null;
   accountBreakdown?: WorkbenchAccountBreakdownItem[];
   onCashChanged?: () => void;
@@ -65,10 +62,7 @@ export function WorkbenchCashSection(props: {
     baseCurrency,
     entries,
     ledgerMeta,
-    accountSource = "sim",
     cashMutationsAllowed = true,
-    brokerKind,
-    brokerAccountId,
     readOnlyReason,
     accountBreakdown = [],
     onCashChanged,
@@ -152,12 +146,12 @@ export function WorkbenchCashSection(props: {
     <>
       <DeepLedgerPanel
         accent="indigo"
-        title={accountSource === "hybrid" ? "现金与资金流水" : cashMutationsAllowed ? "现金流水" : "现金流水（只读）"}
-        subtitle={accountSource === "hybrid"
-          ? "顶部展示聚合现金，下方拆开显示 IBKR 与本地模拟 / Crypto Paper 的资金来源；只有本地部分允许手工入金出金。"
+        title={cashMutationsAllowed ? "现金流水" : "现金流水（只读）"}
+        subtitle={accountBreakdown.length > 1
+          ? "这里保留当前账本现金流水，并拆开显示各本地执行通道的资金分布，方便核对现金去向。"
           : cashMutationsAllowed
             ? "记录入金出金并查看最近资金进出，确认账户现金变化是否符合预期。"
-            : "当前余额以券商快照为准，这里只保留本地资金流水作为审计记录。"}
+            : "当前余额为只读状态，这里只保留本地资金流水作为审计记录。"}
         action={cashMutationsAllowed ? (
           <div className="flex flex-wrap gap-2">
             <DeepLedgerActionButton tone="success" onClick={() => setDialogSide("deposit")}>
@@ -172,18 +166,6 @@ export function WorkbenchCashSection(props: {
         ) : undefined}
         bodyClassName="pt-0"
       >
-        {accountSource !== "sim" ? (
-          <div className="mb-4 rounded-[16px] border border-amber-500/24 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
-            <div className="flex flex-wrap items-center gap-2">
-              <DeepLedgerStatusPill tone="amber">{accountSource === "hybrid" ? "聚合账户" : "券商驱动 / 只读"}</DeepLedgerStatusPill>
-              {brokerKind ? <span className="text-xs text-amber-200/90">来源 {brokerKind}</span> : null}
-              {brokerAccountId ? <span className="text-xs text-amber-200/90">账户 {brokerAccountId}</span> : null}
-            </div>
-            <div className="mt-2 text-xs leading-5 text-amber-100/90">
-              {readOnlyReason || "当前现金余额不再由本地流水直接驱动。"}
-            </div>
-          </div>
-        ) : null}
         <div className="grid gap-3 border-b border-[var(--border)] pb-4 md:grid-cols-3">
           <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">当前账本起点</div>
@@ -198,18 +180,19 @@ export function WorkbenchCashSection(props: {
           <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">数据来源</div>
             <div className="mt-2 flex items-center gap-2 text-sm text-[var(--text)]">
-              <span>{accountSource === "broker" ? "券商驱动" : accountSource === "hybrid" ? "聚合账户" : "本地模拟"}</span>
-              <DeepLedgerStatusPill tone={accountSource === "broker" ? "amber" : accountSource === "hybrid" ? "cyan" : "slate"}>
-                {accountSource === "broker" ? "余额只读" : accountSource === "hybrid" ? "部分可编辑" : "可编辑"}
+              <span>本地模拟账本</span>
+              <DeepLedgerStatusPill tone={accountBreakdown.length > 1 ? "cyan" : cashMutationsAllowed ? "slate" : "amber"}>
+                {accountBreakdown.length > 1 ? "分账户展示" : cashMutationsAllowed ? "可编辑" : "只读"}
               </DeepLedgerStatusPill>
             </div>
             <div className="mt-1 text-xs text-[var(--muted)]">
-              {accountSource === "broker"
-                ? `当前展示 ${cashLedger.length} 条本地流水，仅用于解释资金轨迹，不直接决定余额。`
-                : accountSource === "hybrid"
-                  ? `当前展示 ${cashLedger.length} 条本地流水；IBKR 余额仍以券商快照为准，本地模拟 / Crypto Paper 会继续写入这里。`
-                  : `当前展示 ${cashLedger.length} 条本地流水，入金、出金和成交现金变化都会统一记录在这里。`}
+              {accountBreakdown.length > 1
+                ? `当前展示 ${cashLedger.length} 条本地流水；下方拆分仅用于解释不同执行通道的现金分布。`
+                : `当前展示 ${cashLedger.length} 条本地流水，入金、出金和成交现金变化都会统一记录在这里。`}
             </div>
+            {!cashMutationsAllowed && readOnlyReason ? (
+              <div className="mt-2 text-xs leading-5 text-[var(--faint)]">{readOnlyReason}</div>
+            ) : null}
           </div>
         </div>
 
@@ -281,7 +264,7 @@ export function WorkbenchCashSection(props: {
                   <TableCell colSpan={4} className="py-12 text-center text-sm text-[var(--faint)]">
                     {cashMutationsAllowed
                       ? "当前还没有入金或出金记录，先记录一笔资金变动后这里才会出现流水。"
-                      : "当前没有可展示的本地现金流水；券商模式下余额仍以远端账户快照为准。"}
+                      : "当前没有可展示的本地现金流水；只读模式下余额不会由这里的流水直接驱动。"}
                   </TableCell>
                 </TableRow>
               ) : null}

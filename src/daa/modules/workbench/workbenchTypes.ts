@@ -171,6 +171,7 @@ export type RebalanceCycle = {
   executedOrders: string[];
   executionSummary: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     newMaxDriftPct: number;
@@ -248,6 +249,7 @@ export type WorkbenchRebalanceCycleReport = {
   reportCreatedAt: string;
   executionSummary: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     newMaxDriftPct: number;
@@ -391,8 +393,6 @@ export type WorkbenchMarketDataHealth = {
   message: string;
 };
 
-export type WorkbenchAccountSource = "sim" | "broker" | "hybrid";
-
 export type WorkbenchAccountBreakdownItem = {
   venueKind: DaaBrokerKind;
   accountId: string | null;
@@ -413,9 +413,6 @@ export type WorkbenchBootstrap = {
     investableCash: number;
     frozenCash: number;
     totalEquity: number | null;
-    source?: WorkbenchAccountSource;
-    brokerKind?: DaaBrokerKind | null;
-    brokerAccountId?: string | null;
     cashMutationsAllowed?: boolean;
     readOnlyReason?: string | null;
     accountBreakdown?: WorkbenchAccountBreakdownItem[];

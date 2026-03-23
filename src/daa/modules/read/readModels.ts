@@ -32,30 +32,6 @@ export type TradesReadModel = {
   loadedAt: string;
 };
 
-export type StrategyLabSeedReadModel = {
-  bootstrap: WorkbenchBootstrap;
-  baseCurrency: string;
-  initialEquity: number;
-  constraints: {
-    maxPositionPct: number;
-    minNotional: number;
-    maxOrderPctOfNav: number;
-  };
-  policy: {
-    thresholdPct: number;
-    minTradeNotional: number;
-    cooldownSeconds: number;
-  };
-  execution: {
-    feeRateBps: number;
-    slippageBps: number;
-    maxOrderPctOfNav: number;
-  };
-  availableAssets: AssetUniverseView[];
-  selectedAssetKeys: string[];
-  loadedAt: string;
-};
-
 export type WorkbenchSignal = {
   id: string;
   level: "info" | "warn" | "success";
