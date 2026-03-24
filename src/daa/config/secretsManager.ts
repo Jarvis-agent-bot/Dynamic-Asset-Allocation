@@ -11,6 +11,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import { daaPgPool } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Secret key definitions
@@ -170,8 +171,8 @@ export async function resolveSecret(key: DaaSecretKey): Promise<string> {
       const row = result.rows[0] as { value: string; iv: string };
       return decrypt(row.value, row.iv);
     }
-  } catch {
-    // DB not available — fall through
+  } catch (err) {
+    logSwallowed("secretsManager.resolveSecret", err);
   }
 
   return "";
@@ -189,8 +190,8 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
       const r = row as { key: string; value: string; iv: string; updated_at: string };
       dbRows.set(r.key, r);
     }
-  } catch {
-    // DB not available
+  } catch (err) {
+    logSwallowed("secretsManager.listSecretStatuses", err);
   }
 
   return SECRET_KEY_DEFS_.map((def) => {
@@ -215,8 +216,8 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
       let plaintext = "";
       try {
         plaintext = decrypt(dbRow.value, dbRow.iv);
-      } catch {
-        // decryption failed — treat as empty
+      } catch (err) {
+        logSwallowed("secretsManager.decrypt", err);
       }
       if (plaintext) {
         return {

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 export type DaaJobExecutionLog = {
   jobId: string;
@@ -17,11 +18,6 @@ export type DaaJobExecutionLog = {
   errorText: string | null;
   createdAt: string;
 };
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
 
 function toIsoString(value: unknown, fallback = new Date().toISOString()): string {
   if (value instanceof Date) {

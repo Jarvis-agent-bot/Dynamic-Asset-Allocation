@@ -9,6 +9,7 @@ import { getDaaSystemConfig, listDaaAssetUniverse, listDaaFxRates, updateDaaAsse
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { validateExecutionRisk } from "@/src/daa/modules/workbench/workbenchExecutionService";
+import { toPositive } from "@/src/daa/utils/normalize";
 
 export const runtime = "nodejs";
 
@@ -19,12 +20,6 @@ type Body = {
   notional?: unknown;
   feeRateBps?: unknown;
 };
-
-function toPositive(v: unknown): number {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return n;
-}
 
 function toNonNegative(v: unknown): number | null {
   if (v == null || String(v).trim() === "") return null;

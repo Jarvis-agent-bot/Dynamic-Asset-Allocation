@@ -1,4 +1,5 @@
 import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
 import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
@@ -17,19 +18,6 @@ import { buildAssetUniverseViewRows } from "./assetUniverseService";
 import { computeCorrelationMatrix } from "./correlationService";
 import type { ExecuteRebalanceSummary, ExecuteRebalanceCycleResult, GenerateRebalanceCycleInput, GenerateRebalanceCycleResult, HfSignalSummary, PortfolioHealthyInsight, PreTradeRiskRule, PreTradeRiskCheckItem, PreTradeRiskCheck, RebalanceCycle, RebalanceProposal, RebalanceTriggerSource, UpdateRebalanceCycleInput, WorkbenchBootstrap, WorkbenchRebalanceCycleReport, WorkbenchRecommendation, WorkbenchRecommendationsResult, WorkbenchTradeRecords, } from "./workbenchTypes";
 import { WorkbenchDomainError, type WorkbenchDomainErrorCode } from "./workbenchErrors";
-
-function toFinite(value: unknown, fallback = 0): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
-function toPositive(value: unknown, fallback = 0): number {
-    return Math.max(0, toFinite(value, fallback));
-}
-
-function normalizeText(value: unknown): string {
-    return String(value ?? "").trim();
-}
 
 function pickArray(value: unknown): string[] {
     if (!Array.isArray(value))

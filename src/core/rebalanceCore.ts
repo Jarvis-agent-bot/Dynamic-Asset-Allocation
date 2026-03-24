@@ -114,16 +114,13 @@ export type RebalanceCoreResponse = {
   trigger: RebalanceTriggerDecision;
 };
 
+import { toFinite } from "@/src/daa/utils/normalize";
+
 function clamp01(x: number) {
   if (!Number.isFinite(x)) return 0;
   if (x < 0) return 0;
   if (x > 1) return 1;
   return x;
-}
-
-function toFiniteNumber(x: unknown, fallback: number): number {
-  const n = typeof x === "number" ? x : Number(x);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 function normalizeSymbolKey(x: unknown): string {
@@ -148,7 +145,7 @@ function normalizeHoldings(
     const out: Record<string, number> = {};
     for (const h of holdings) {
       const symbol = String((h as any)?.symbol ?? "").trim();
-      const qty = toFiniteNumber((h as any)?.qty, 0);
+      const qty = toFinite((h as any)?.qty, 0);
       if (!symbol) continue;
 
       if (blacklist.has(normalizeSymbolKey(symbol))) {
@@ -180,7 +177,7 @@ function normalizeHoldings(
       continue;
     }
 
-    const qty = toFiniteNumber(qtyRaw, 0);
+    const qty = toFinite(qtyRaw, 0);
     if (!Number.isFinite(qty)) {
       warnings.push(`warning: holding qty for ${symbol} is non-finite; treated as 0`);
       continue;
@@ -207,7 +204,7 @@ function normalizePrices(
     const out: Record<string, number> = {};
     for (const p of prices) {
       const symbol = String((p as any)?.symbol ?? "").trim();
-      const price = toFiniteNumber((p as any)?.price, Number.NaN);
+      const price = toFinite((p as any)?.price, Number.NaN);
       if (!symbol) continue;
 
       if (blacklist.has(normalizeSymbolKey(symbol))) {
@@ -239,7 +236,7 @@ function normalizePrices(
       continue;
     }
 
-    const price = toFiniteNumber(priceRaw, Number.NaN);
+    const price = toFinite(priceRaw, Number.NaN);
     if (!Number.isFinite(price) || price <= 0) {
       warnings.push(`warning: price for ${symbol} must be > 0; got ${String(priceRaw)}`);
       continue;
@@ -282,7 +279,7 @@ function normalizeTargetWeights(
 
       const label = String((w as any)?.label ?? id).trim() || id;
       const targetPctRaw = (w as any)?.targetPct ?? (w as any)?.target_pct ?? (w as any)?.weight;
-      const targetPctNum = toFiniteNumber(targetPctRaw, 0);
+      const targetPctNum = toFinite(targetPctRaw, 0);
 
       if (!Number.isFinite(targetPctNum)) {
         warnings.push(`warning: targetPct for ${id} is non-finite; treated as 0`);
@@ -303,7 +300,7 @@ function normalizeTargetWeights(
         excluded.push(id);
         continue;
       }
-      const targetPctNum = toFiniteNumber(targetPctRaw, 0);
+      const targetPctNum = toFinite(targetPctRaw, 0);
       if (!Number.isFinite(targetPctNum)) {
         warnings.push(`warning: targetPct for ${id} is non-finite; treated as 0`);
         raw.push({ id, label: id, targetPct: 0 });
@@ -358,7 +355,7 @@ function normalizeTargetWeights(
 export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse {
   const warnings: string[] = [];
 
-  const cashStart = Math.max(0, toFiniteNumber(req?.account?.cash, 0));
+  const cashStart = Math.max(0, toFinite(req?.account?.cash, 0));
   const notes: string[] = [];
 
   // Funds hub rebalance E2E: allow excluding symbols from holdings/prices/targets.
@@ -376,18 +373,18 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   if (assetBlacklist.length) notes.push(`assetBlacklist: ${assetBlacklist.join(", ")}`);
 
   const constraints: Required<RebalanceCoreConstraints> = {
-    maxPositionPct: clamp01(toFiniteNumber(req?.constraints?.maxPositionPct, 1)),
-    maxIn: Math.max(0, toFiniteNumber(req?.constraints?.maxIn, Number.POSITIVE_INFINITY)),
-    maxOut: Math.max(0, toFiniteNumber(req?.constraints?.maxOut, Number.POSITIVE_INFINITY)),
-    maxOrderPctOfNav: Math.max(0, toFiniteNumber(req?.constraints?.maxOrderPctOfNav, 1)),
-    minNotional: Math.max(0, toFiniteNumber(req?.constraints?.minNotional, 1e-6)),
+    maxPositionPct: clamp01(toFinite(req?.constraints?.maxPositionPct, 1)),
+    maxIn: Math.max(0, toFinite(req?.constraints?.maxIn, Number.POSITIVE_INFINITY)),
+    maxOut: Math.max(0, toFinite(req?.constraints?.maxOut, Number.POSITIVE_INFINITY)),
+    maxOrderPctOfNav: Math.max(0, toFinite(req?.constraints?.maxOrderPctOfNav, 1)),
+    minNotional: Math.max(0, toFinite(req?.constraints?.minNotional, 1e-6)),
     assetBlacklist,
   };
 
   const policy: RebalanceTriggerPolicy = req?.policy && typeof req.policy === "object" && !Array.isArray(req.policy) ? req.policy : {};
-  const thresholdPct = clamp01(toFiniteNumber(policy.thresholdPct, 0));
-  const minTradeNotional = Math.max(0, toFiniteNumber(policy.minTradeNotional, 0));
-  const cooldownSeconds = Math.max(0, toFiniteNumber(policy.cooldownSeconds, 0));
+  const thresholdPct = clamp01(toFinite(policy.thresholdPct, 0));
+  const minTradeNotional = Math.max(0, toFinite(policy.minTradeNotional, 0));
+  const cooldownSeconds = Math.max(0, toFinite(policy.cooldownSeconds, 0));
   const lastRebalanceAt = typeof policy.lastRebalanceAt === "string" ? policy.lastRebalanceAt : "";
   const now = typeof policy.now === "string" ? policy.now : "";
 
@@ -416,7 +413,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
   const holdingsValue = Object.values(currentValues).reduce((acc, v) => acc + v, 0);
 
-  const equityInput = toFiniteNumber(req?.account?.totalEquity, Number.NaN);
+  const equityInput = toFinite(req?.account?.totalEquity, Number.NaN);
   const equity = Number.isFinite(equityInput) && equityInput > 0 ? equityInput : holdingsValue + cashStart;
 
   // notes accumulated above (blacklist + targetWeights normalization)
@@ -696,7 +693,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
       for (const o of orders) {
         const sym = String((o as any)?.symbol ?? "").trim();
         if (!sym) continue;
-        const n = toFiniteNumber((o as any)?.notional, 0);
+        const n = toFinite((o as any)?.notional, 0);
         if (!Number.isFinite(n) || n <= 0) continue;
         if ((o as any)?.side === "SELL") postValues[sym] = Math.max(0, (postValues[sym] ?? 0) - n);
         if ((o as any)?.side === "BUY") postValues[sym] = (postValues[sym] ?? 0) + n;
@@ -814,7 +811,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   // UX hint: if the drift threshold is met but the engine produces no eligible orders,
   // it's usually because minTradeNotional/lot sizing (or caps/cash) suppresses them.
   if (!eligibleOrders.length && Number.isFinite(minN) && minN > 0 && maxAbsDriftSymbol) {
-    const maxAbsDeltaNotional = Math.abs(toFiniteNumber(deltas[maxAbsDriftSymbol], 0));
+    const maxAbsDeltaNotional = Math.abs(toFinite(deltas[maxAbsDriftSymbol], 0));
 
     // If even the largest delta is smaller than the min trade size, nothing can be emitted.
     if (Number.isFinite(maxAbsDeltaNotional) && maxAbsDeltaNotional > 0 && maxAbsDeltaNotional < minN) {

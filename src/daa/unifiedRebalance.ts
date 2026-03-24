@@ -6,6 +6,7 @@ import {
   normalizeDaaMarket,
   parseDaaAssetKey,
 } from "@/src/daa/assetKey";
+import { toFinite } from "@/src/daa/utils/normalize";
 
 export type DaaRiskTier = "low" | "mid" | "high";
 export type DaaMomentumRegime = "strong" | "neutral" | "weak";
@@ -176,11 +177,6 @@ export type DaaUnifiedResponse = {
   warnings: string[];
 };
 
-function toFiniteNumber(v: unknown, fallback: number): number {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 function clamp01(v: number): number {
   if (!Number.isFinite(v)) return 0;
   if (v <= 0) return 0;
@@ -203,10 +199,10 @@ function normalizeTags(tags: unknown): string[] {
 }
 
 function analystScorePct(a: DaaUnifiedAnalyst): number {
-  const accuracy = clamp01(toFiniteNumber(a.accuracyPct, 0) / 100);
-  const riskControl = clamp01(toFiniteNumber(a.riskControlPct, 0) / 100);
-  const discipline = clamp01(toFiniteNumber(a.disciplinePct, 0) / 100);
-  const transparency = clamp01(toFiniteNumber(a.transparencyPct, 0) / 100);
+  const accuracy = clamp01(toFinite(a.accuracyPct, 0) / 100);
+  const riskControl = clamp01(toFinite(a.riskControlPct, 0) / 100);
+  const discipline = clamp01(toFinite(a.disciplinePct, 0) / 100);
+  const transparency = clamp01(toFinite(a.transparencyPct, 0) / 100);
 
   const score = accuracy * 0.4 + riskControl * 0.25 + discipline * 0.2 + transparency * 0.15;
   return score * 100;
@@ -236,7 +232,7 @@ function normalizeTargetWeights(weights: Record<string, number>): Record<string,
   for (const [symbolRaw, valueRaw] of Object.entries(weights ?? {})) {
     const symbol = normalizeSymbol(symbolRaw);
     if (!symbol) continue;
-    const value = clamp01(toFiniteNumber(valueRaw, 0));
+    const value = clamp01(toFinite(valueRaw, 0));
     if (value <= 0) continue;
     out[symbol] = value;
     sum += value;
@@ -276,7 +272,7 @@ function buildFxLookup(fxRates: DaaUnifiedFxRate[]): Map<string, FxLookupValue> 
   for (const row of fxRates) {
     const base = normalizeCcyCode(row.baseCcy);
     const quote = normalizeCcyCode(row.quoteCcy);
-    const rate = Math.max(0, toFiniteNumber(row.rate, 0));
+    const rate = Math.max(0, toFinite(row.rate, 0));
     if (!base || !quote || rate <= 0) continue;
     const key = normalizeFxPair(base, quote);
     const asOfMs = toIsoMs(row.asOfTs);
@@ -318,7 +314,7 @@ function collectCrossMarketExposure(positions: DaaUnifiedPosition[]): Record<str
   const out: Record<string, number> = {};
   for (const p of positions) {
     const market = String(p.market ?? "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
-    const notional = Math.max(0, toFiniteNumber(p.qty, 0)) * Math.max(0, toFiniteNumber(p.price, 0));
+    const notional = Math.max(0, toFinite(p.qty, 0)) * Math.max(0, toFinite(p.price, 0));
     if (notional <= 0) continue;
     out[market] = (out[market] ?? 0) + notional;
   }
@@ -405,15 +401,15 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
 
   const fxMap = buildFxLookup(req.fxRates ?? []);
 
-  const baseDriftTriggerPct = clamp01(toFiniteNumber(req.policy?.baseDriftTriggerPct, 0.05));
-  const strongTrendDriftTriggerPct = clamp01(toFiniteNumber(req.policy?.strongTrendDriftTriggerPct, 0.1));
-  const riskOffConsensusPct = clamp01(toFiniteNumber(req.policy?.riskOffConsensusPct, 0.6));
-  const riskOffScalePct = clamp01(toFiniteNumber(req.policy?.riskOffScalePct, 0.7));
-  const valueTrapThesisDriftPct = clamp01(toFiniteNumber(req.policy?.valueTrapThesisDriftPct, 0.12));
-  const sbIsolationScorePct = clamp01(toFiniteNumber(req.policy?.sbIsolationScorePct, 0.35));
+  const baseDriftTriggerPct = clamp01(toFinite(req.policy?.baseDriftTriggerPct, 0.05));
+  const strongTrendDriftTriggerPct = clamp01(toFinite(req.policy?.strongTrendDriftTriggerPct, 0.1));
+  const riskOffConsensusPct = clamp01(toFinite(req.policy?.riskOffConsensusPct, 0.6));
+  const riskOffScalePct = clamp01(toFinite(req.policy?.riskOffScalePct, 0.7));
+  const valueTrapThesisDriftPct = clamp01(toFinite(req.policy?.valueTrapThesisDriftPct, 0.12));
+  const sbIsolationScorePct = clamp01(toFinite(req.policy?.sbIsolationScorePct, 0.35));
 
-  const maxOrderPctOfNav = clamp01(toFiniteNumber(req.constraints?.maxOrderPctOfNav, 0.1));
-  const minNotional = Math.max(1, toFiniteNumber(req.constraints?.minNotional, 200));
+  const maxOrderPctOfNav = clamp01(toFinite(req.constraints?.maxOrderPctOfNav, 0.1));
+  const minNotional = Math.max(1, toFinite(req.constraints?.minNotional, 200));
   const fxMaxAgeHours = 48;
   const fxMaxAgeMs = fxMaxAgeHours * 3600000;
 
@@ -425,8 +421,8 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
     const symbol = normalizeSymbol(p.symbol);
     const market = normalizeDaaMarket(p.market, "US");
     const currency = normalizeCcyCode(p.currency, baseCurrency);
-    const localPrice = Math.max(0, toFiniteNumber(p.price, 0));
-    const localCostBasis = Math.max(0, toFiniteNumber(p.costBasisPerUnit ?? p.costBasis, 0));
+    const localPrice = Math.max(0, toFinite(p.price, 0));
+    const localCostBasis = Math.max(0, toFinite(p.costBasisPerUnit ?? p.costBasis, 0));
     const fxResolved = resolveLocalToBaseRate(fxMap, currency, baseCurrency);
     const fxRate = fxResolved?.rate ?? null;
     const priceInBase = fxRate != null ? localPrice * fxRate : 0;
@@ -456,7 +452,7 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
       symbol,
       market,
       currency,
-      qty: Math.max(0, toFiniteNumber(p.qty, 0)),
+      qty: Math.max(0, toFinite(p.qty, 0)),
       price: Math.max(0, priceInBase),
       costBasis: Math.max(0, costBasisInBase),
       tags: normalizeTags(p.tags),
@@ -555,9 +551,9 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
     warnings.push(`跨币种汇率时效覆盖率 ${(fxFreshCoveragePct * 100).toFixed(1)}%，已启用开仓保护`);
   }
 
-  const cash = Math.max(0, toFiniteNumber(req.account?.cash, 0));
-  const frozenCash = Math.max(0, toFiniteNumber(req.account?.frozenCash, 0));
-  const investableRaw = toFiniteNumber(req.account?.investableCash, Number.NaN);
+  const cash = Math.max(0, toFinite(req.account?.cash, 0));
+  const frozenCash = Math.max(0, toFinite(req.account?.frozenCash, 0));
+  const investableRaw = toFinite(req.account?.investableCash, Number.NaN);
   const investableCashInput = Number.isFinite(investableRaw)
     ? ((investableRaw <= 0 && cash > 0 && frozenCash < cash) ? (cash - frozenCash) : investableRaw)
     : (cash - frozenCash);
@@ -567,8 +563,8 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
   }
 
   const impliedEquity = Object.entries(holdings).reduce((sum, [symbol, qty]) => sum + qty * (prices[symbol] ?? 0), 0) + cash;
-  const totalEquity = Math.max(0, toFiniteNumber(req.account?.totalEquity, impliedEquity));
-  const equityPeak = Math.max(totalEquity, toFiniteNumber(req.account?.equityPeak, totalEquity));
+  const totalEquity = Math.max(0, toFinite(req.account?.totalEquity, impliedEquity));
+  const equityPeak = Math.max(totalEquity, toFinite(req.account?.equityPeak, totalEquity));
 
   const signalAnalysts: DaaUnifiedAnalyst[] = [];
   const signalViews: DaaUnifiedAssetView[] = [];
@@ -576,10 +572,10 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
     const symbol = normalizeSymbol(raw.symbol);
     if (!symbol) continue;
 
-    const aggregatedScorePct = clamp01(toFiniteNumber(raw.aggregatedScorePct, 50) / 100) * 100;
-    const convictionPct = clamp01(toFiniteNumber(raw.convictionPct, 50) / 100) * 100;
-    const thesisDriftPct = clamp01(toFiniteNumber(raw.thesisDriftPct, 0) / 100) * 100;
-    const confidencePct = clamp01(toFiniteNumber(raw.confidencePct, 75) / 100) * 100;
+    const aggregatedScorePct = clamp01(toFinite(raw.aggregatedScorePct, 50) / 100) * 100;
+    const convictionPct = clamp01(toFinite(raw.convictionPct, 50) / 100) * 100;
+    const thesisDriftPct = clamp01(toFinite(raw.thesisDriftPct, 0) / 100) * 100;
+    const confidencePct = clamp01(toFinite(raw.confidencePct, 75) / 100) * 100;
     const analystId = `hf_auto__${symbol}`;
 
     signalAnalysts.push({
@@ -649,8 +645,8 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
     const view: DaaUnifiedAssetView = {
       symbol,
       analystId,
-      convictionPct: clamp01(toFiniteNumber(raw.convictionPct, 0) / 100) * 100,
-      thesisDriftPct: clamp01(toFiniteNumber(raw.thesisDriftPct, 0) / 100) * 100,
+      convictionPct: clamp01(toFinite(raw.convictionPct, 0) / 100) * 100,
+      thesisDriftPct: clamp01(toFinite(raw.thesisDriftPct, 0) / 100) * 100,
       momentumRegime: normalizeMomentum(raw.momentumRegime),
     };
     if (!viewsBySymbol.has(symbol)) viewsBySymbol.set(symbol, []);
@@ -763,11 +759,11 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
   }
   const coreTargetWeights = normalizeTargetWeights(adjustedTargetWeightsForCore);
 
-  const riskMaxDrawdownPct = clamp01(toFiniteNumber(req.risk?.maxDrawdownPct, 0.15));
-  const riskStopLossPct = clamp01(toFiniteNumber(req.risk?.perAssetStopLossPct, 0.2));
-  const riskMaxConcentrationPct = clamp01(toFiniteNumber(req.risk?.maxConcentrationPct, 0.3));
-  const riskCorrelationCapPct = clamp01(toFiniteNumber(req.risk?.correlationCapPct, 0.6));
-  const riskTotalExposurePct = clamp01(toFiniteNumber(req.risk?.maxTotalRiskExposurePct, 0.7));
+  const riskMaxDrawdownPct = clamp01(toFinite(req.risk?.maxDrawdownPct, 0.15));
+  const riskStopLossPct = clamp01(toFinite(req.risk?.perAssetStopLossPct, 0.2));
+  const riskMaxConcentrationPct = clamp01(toFinite(req.risk?.maxConcentrationPct, 0.3));
+  const riskCorrelationCapPct = clamp01(toFinite(req.risk?.correlationCapPct, 0.6));
+  const riskTotalExposurePct = clamp01(toFinite(req.risk?.maxTotalRiskExposurePct, 0.7));
 
   let riskOffReason: string | null = null;
   const concentrationWarnings: string[] = [];
@@ -819,7 +815,7 @@ export function buildDaaUnifiedPlan(req: DaaUnifiedRequest): DaaUnifiedResponse 
       totalEquity,
     },
     constraints: {
-      maxPositionPct: clamp01(toFiniteNumber(req.constraints?.maxPositionPct, 1)),
+      maxPositionPct: clamp01(toFinite(req.constraints?.maxPositionPct, 1)),
       minNotional,
       maxIn: Number.POSITIVE_INFINITY,
       maxOut: Number.POSITIVE_INFINITY,

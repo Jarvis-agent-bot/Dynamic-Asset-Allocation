@@ -13,6 +13,7 @@ import {
 import { appendStrategyLabRunSnapshot } from "@/src/daa/store/strategyLabSnapshotRepo";
 import { createMarketDataClient, type MarketDataClient } from "@/src/market/marketDataClient";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { normalizeText, toPositive } from "@/src/daa/utils/normalize";
 
 import {
   prepareAlignedSeriesBySymbolWithDiagnostics,
@@ -76,10 +77,6 @@ export class StrategyLabValidationError extends Error {
   }
 }
 
-function normalizeText(value: unknown): string {
-  return String(value || "").trim();
-}
-
 function joinStrategyLabList(values: string[]): string {
   return values.map((value) => normalizeText(value)).filter(Boolean).join("、");
 }
@@ -101,12 +98,6 @@ function assertRunDateField(value: string, label: "startDate" | "endDate") {
       },
     );
   }
-}
-
-function toPositive(value: unknown, fallback = 0): number {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return n;
 }
 
 function toWeight01(value: unknown): number {

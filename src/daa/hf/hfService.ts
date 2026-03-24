@@ -16,6 +16,7 @@ import {
   upsertDaaHfSignalSnapshots,
 } from "@/src/daa/store/daaStorePg";
 import { HF_DEFAULT_MARKET_SCOPE_, HF_SEED_ACTORS_, HF_SEED_HOLDINGS_ } from "@/src/daa/hf/hfSeedData";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type {
   DaaActorHoldingSnapshot,
   DaaHumanActor,
@@ -542,8 +543,8 @@ async function fetchDanjuanRows(opts: {
         };
       })
       .filter((item) => item.fundCode.length > 0 && item.enabled);
-  } catch {
-    // 数据源读取失败时回退到本地默认配置，避免采集中断。
+  } catch (err) {
+    logSwallowed("hfService.resolveRegistry", err);
   }
 
   const requestedCodes = normalizeFundCodes(opts.fundCodes);
@@ -746,8 +747,8 @@ async function ensureRuntimeHydratedFromStore(): Promise<void> {
         runtimeState.latestActors = sanitizeActorsFromStore(persisted.latestActors);
         runtimeState.latestHoldings = sanitizeHoldingsFromStore(persisted.latestHoldings);
       }
-    } catch {
-      // ignore store hydration failures and fall back to in-memory/seed.
+    } catch (err) {
+      logSwallowed("hfService.hydrateFromStore", err);
     } finally {
       runtimeState.hydratedFromStore = true;
       runtimeHydrationPromise = null;

@@ -10,6 +10,7 @@
 
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { appendNotificationDeliveryLog } from "@/src/daa/store/notificationDeliveryLogRepo";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type FeishuSendResult = {
   ok: boolean;
@@ -113,7 +114,8 @@ export async function sendFeishuRichMessage(opts: {
     if (!response.ok) return false;
     const data = (await response.json().catch(() => ({}))) as { code?: number };
     return data.code === 0;
-  } catch {
+  } catch (err) {
+    logSwallowed("feishu.sendFeishuRichMessage", err);
     return false;
   }
 }
@@ -161,8 +163,8 @@ export async function sendFeishuByEnv(message: string, meta?: {
         },
         responseJson: result.responseJson,
       });
-    } catch {
-      // 忽略通知日志失败
+    } catch (err) {
+      logSwallowed("feishu.sendFeishuByEnv", err);
     }
   }
 

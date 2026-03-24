@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { createRequire } from "node:module";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type PgState = {
   pool: Pool | null;
@@ -182,8 +183,8 @@ export async function ensureDaaAuthSchemaPg(): Promise<void> {
       } catch (e) {
         try {
           await query("ROLLBACK");
-        } catch {
-          // ignore
+        } catch (err) {
+          logSwallowed("daaPg.ensureDaaAuthSchemaPg.rollback", err);
         }
         throw e;
       }

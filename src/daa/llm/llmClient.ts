@@ -13,6 +13,9 @@
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
+export { normalizeText, toFinite } from "@/src/daa/utils/normalize";
+import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,20 +29,6 @@ export type LlmRuntimeConfig = {
   apiKey: string;
   timeoutMs: number;
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
-
-export function toFinite(value: unknown, fallback: number): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider defaults

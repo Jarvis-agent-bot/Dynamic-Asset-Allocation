@@ -6,6 +6,7 @@ import {
   upsertDaaNewsItemSnapshots,
   upsertDaaNewsSignalSnapshots,
 } from "@/src/daa/store/daaStorePg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaNewsSignalItem = {
   symbol: string;
@@ -41,7 +42,8 @@ function domainFromLink(link: string | null | undefined): string {
   if (!text) return "";
   try {
     return new URL(text).hostname.toLowerCase();
-  } catch {
+  } catch (err) {
+    logSwallowed("newsSignal.domainFromLink", err);
     return "";
   }
 }
@@ -160,8 +162,8 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
         };
       }
     }
-  } catch {
-    // ignore cache errors and continue to fetch upstream
+  } catch (err) {
+    logSwallowed("newsSignal.fetchNewsSignal.cache", err);
   }
 
   const feedResult = await fetchYahooRssFeedBySymbol(normalized, 25);
@@ -187,7 +189,8 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
         expireAt: new Date(Date.now() + NEWS_RAW_RETENTION_DAYS_ * 24 * 3600 * 1000).toISOString(),
       });
       rawRefId = raw.id;
-    } catch {
+    } catch (err) {
+      logSwallowed("newsSignal.appendRawPayload", err);
       rawRefId = null;
     }
   }
@@ -274,8 +277,8 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
       freshness: item.freshness,
       rawRefId,
     })));
-  } catch {
-    // ignore persist errors to keep signal path robust
+  } catch (err) {
+    logSwallowed("newsSignal.persistSignal", err);
   }
 
   return signal;

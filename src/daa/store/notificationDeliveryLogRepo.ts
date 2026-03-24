@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 export type DaaNotificationChannel = "telegram" | "feishu";
 
@@ -22,11 +23,6 @@ export type DaaNotificationDeliveryLog = {
   responseJson: Record<string, unknown> | null;
   createdAt: string;
 };
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
 
 function toIsoString(value: unknown, fallback = new Date().toISOString()): string {
   if (value instanceof Date) {

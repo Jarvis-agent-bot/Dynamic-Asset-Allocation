@@ -6,15 +6,11 @@ import {
 } from "@/src/daa/modules/portfolio/portfolioValuation";
 import type { DaaStoreAssetUniverseRow, DaaStoreFxRate } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { toFinite } from "@/src/daa/utils/normalize";
 
 import type { AssetUniverseView, WorkbenchPriceStatus } from "./workbenchTypes";
 
 const PRICE_STALE_SECONDS = 6 * 60 * 60;
-
-function toFinite(value: unknown): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
 
 function toAgeSeconds(value: string | null): number | null {
   const text = String(value || "").trim();

@@ -7,69 +7,25 @@ import { buildTradeExecutionNotifyText } from "@/src/daa/notify/tradeExecutionBu
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { createDaaTradeTicket, executeDaaTradeTickets, getDaaSystemConfig, listDaaFxRates, listDaaTradeTickets } from "@/src/daa/store/daaStorePg";
-import { normalizeReasonTags, normalizeTradeSide, validateExecutionRisk } from "@/src/daa/modules/workbench/workbenchExecutionService";
+import { validateExecutionRisk } from "@/src/daa/modules/workbench/workbenchExecutionService";
+import { parseExecuteTradeBody } from "@/src/daa/modules/workbench/workbenchTypes";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
-
-type Body = {
-  source?: unknown;
-  origin?: unknown;
-  side?: unknown;
-  assetKey?: unknown;
-  cycleId?: unknown;
-  symbol?: unknown;
-  market?: unknown;
-  currency?: unknown;
-  qty?: unknown;
-  price?: unknown;
-  notionalInBase?: unknown;
-  fee?: unknown;
-  pricingMode?: unknown;
-  priceSource?: unknown;
-  priceSnapshotAt?: unknown;
-  decisionRefId?: unknown;
-  reasonTags?: unknown;
-  reasonText?: unknown;
-  createdBy?: unknown;
-};
-
-function normalizeSource(v: unknown): "manual" | "decision" {
-  const source = String(v || "").trim().toLowerCase();
-  if (source === "decision" || source === "recommendation") return "decision";
-  return "manual";
-}
 
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBody<Body>(req);
-    const side = normalizeTradeSide(body?.side);
-    if (!side) {
-      return fail("VALIDATION_FAILED", "side must be BUY or SELL", { status: 400 });
+    const body = await readJsonBody(req);
+    const parsed = parseExecuteTradeBody(body);
+    if (!parsed.ok) {
+      return fail("VALIDATION_FAILED", parsed.message, { status: 400 });
     }
+    const input = parsed.value;
 
-    const symbol = String(body?.symbol || "").trim().toUpperCase();
-    const market = String(body?.market || "US").trim().toUpperCase() || "US";
-    const qty = Number(body?.qty);
-    const price = Number(body?.price);
-    const fee = Number(body?.fee || 0);
-    if (!symbol) {
-      return fail("VALIDATION_FAILED", "symbol is required", { status: 400 });
-    }
-    if (!Number.isFinite(qty) || qty <= 0) {
-      return fail("VALIDATION_FAILED", "qty must be > 0", { status: 400 });
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      return fail("VALIDATION_FAILED", "price must be > 0", { status: 400 });
-    }
-    if (!Number.isFinite(fee) || fee < 0) {
-      return fail("VALIDATION_FAILED", "fee must be >= 0", { status: 400 });
-    }
-
-    const source = normalizeSource(body?.source ?? body?.origin);
-    const instrumentCurrency = normalizeDaaCurrencyCode(body?.currency, "USD");
+    const instrumentCurrency = normalizeDaaCurrencyCode(input.currency, "USD");
     const [systemRow, fxRows] = await Promise.all([
       getDaaSystemConfig(),
       listDaaFxRates(),
@@ -88,16 +44,16 @@ export async function POST(req: Request) {
       });
     }
 
-    const notionalInBase = qty * price * fxRateToBase;
-    const feeInBase = fee * fxRateToBase;
-    const totalCostInBase = side === "BUY" ? (notionalInBase + feeInBase) : Math.max(0, notionalInBase - feeInBase);
+    const notionalInBase = input.qty * input.price * fxRateToBase;
+    const feeInBase = input.fee * fxRateToBase;
+    const totalCostInBase = input.side === "BUY" ? (notionalInBase + feeInBase) : Math.max(0, notionalInBase - feeInBase);
     const accountConfig = systemRow.config.strategy.account;
     const investableCash = resolveInvestableCash({
       cash: accountConfig.cash,
       frozenCash: accountConfig.frozenCash,
       investableCash: accountConfig.investableCash,
     });
-    if (side === "BUY" && investableCash + 1e-9 < totalCostInBase) {
+    if (input.side === "BUY" && investableCash + 1e-9 < totalCostInBase) {
       return fail("VALIDATION_FAILED", `可投资现金不足：需要 ${totalCostInBase.toFixed(2)} ${baseCurrency}，当前可投资现金 ${investableCash.toFixed(2)} ${baseCurrency}`, {
         status: 409,
         details: {
@@ -110,13 +66,13 @@ export async function POST(req: Request) {
     }
     const manualRiskCheck = await validateExecutionRisk({
       manualProposal: {
-        assetKey: String(body?.assetKey || "").trim() || `${market}::${symbol}`,
-        symbol,
+        assetKey: input.assetKey,
+        symbol: input.symbol,
         currency: instrumentCurrency,
-        side,
-        suggestedQty: qty,
+        side: input.side,
+        suggestedQty: input.qty,
         suggestedNotional: notionalInBase,
-        price,
+        price: input.price,
         reason: "manual_execution",
       },
     });
@@ -134,23 +90,23 @@ export async function POST(req: Request) {
     }
 
     const item = await createDaaTradeTicket({
-      source,
-      side,
-      assetKey: String(body?.assetKey || "").trim() || undefined,
-      cycleId: String(body?.cycleId || "").trim() || undefined,
-      symbol,
-      market,
+      source: input.source,
+      side: input.side,
+      assetKey: input.assetKey || undefined,
+      cycleId: input.cycleId,
+      symbol: input.symbol,
+      market: input.market,
       instrumentCurrency,
-      qty,
-      price,
-      fee,
-      pricingMode: String(body?.pricingMode || "").trim().toLowerCase() === "market" ? "market" : "manual",
-      priceSource: String(body?.priceSource || "").trim() || undefined,
-      priceSnapshotAt: String(body?.priceSnapshotAt || "").trim() || undefined,
-      decisionRefId: String(body?.decisionRefId || "").trim() || null,
-      reasonTags: normalizeReasonTags(body?.reasonTags),
-      reasonText: String(body?.reasonText || "").trim() || undefined,
-      createdBy: String(body?.createdBy || "").trim() || "admin",
+      qty: input.qty,
+      price: input.price,
+      fee: input.fee,
+      pricingMode: input.pricingMode,
+      priceSource: input.priceSource,
+      priceSnapshotAt: input.priceSnapshotAt,
+      decisionRefId: input.decisionRefId,
+      reasonTags: input.reasonTags,
+      reasonText: input.reasonText,
+      createdBy: input.createdBy,
     });
 
     const executed = await executeDaaTradeTickets({ ticketIds: [item.ticketId] });
@@ -177,7 +133,7 @@ export async function POST(req: Request) {
         || (notification.feishu.enabled && notification.feishu.onTradeExecuted)
       ) {
         const message = buildTradeExecutionNotifyText({
-          source: source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
+          source: input.source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
           baseCurrency,
           executeMode: "single",
           cycleId: responseItem.cycleId || null,
@@ -190,14 +146,14 @@ export async function POST(req: Request) {
         });
         const meta = {
           eventType: "trade_executed",
-          triggerSource: source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
+          triggerSource: input.source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
           cycleId: responseItem.cycleId || null,
           ticketId: responseItem.ticketId,
           requestJson: {
             status: result.status,
-            symbol,
-            side,
-            qty,
+            symbol: input.symbol,
+            side: input.side,
+            qty: input.qty,
             notionalInBase,
           },
         };
@@ -206,8 +162,8 @@ export async function POST(req: Request) {
           notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
         ]);
       }
-    } catch {
-      // 忽略通知失败，避免阻塞交易执行
+    } catch (err) {
+      logSwallowed("executeRoute.notify", err);
     }
 
     return ok({

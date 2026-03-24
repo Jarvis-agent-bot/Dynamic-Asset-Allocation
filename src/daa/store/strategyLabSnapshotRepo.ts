@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 export type DaaStrategyLabRunSnapshot = {
   runId: string;
@@ -12,11 +13,6 @@ export type DaaStrategyLabRunSnapshot = {
   requestJson: Record<string, unknown>;
   summaryJson: Record<string, unknown>;
 };
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
 
 function toIsoString(value: unknown, fallback = new Date().toISOString()): string {
   if (value instanceof Date) {

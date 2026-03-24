@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 /**
  * Create a Supabase server client for use in API route handlers and
@@ -22,9 +23,8 @@ export function createSupabaseServerClient() {
             for (const { name, value, options } of cookiesToSet) {
               cookieStore.set(name, value, options);
             }
-          } catch {
-            // setAll can throw in Server Components (read-only context).
-            // Middleware handles refresh in that case.
+          } catch (err) {
+            logSwallowed("supabaseServer.setAll", err);
           }
         },
       },
@@ -71,7 +71,8 @@ function parseCookieHeader(header: string): Record<string, string> {
     if (!k) continue;
     try {
       out[k] = decodeURIComponent(v);
-    } catch {
+    } catch (err) {
+      logSwallowed("supabaseServer.parseCookieHeader", err);
       out[k] = v;
     }
   }

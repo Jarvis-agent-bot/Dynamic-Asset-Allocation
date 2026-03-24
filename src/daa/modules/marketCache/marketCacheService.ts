@@ -10,6 +10,7 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { addDaysIsoUtc } from "@/src/market/yfinance";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 
 export type MarketCachePriceStatus = "fresh" | "stale" | "missing";
 
@@ -66,18 +67,8 @@ type YfinanceChartPayload = {
   };
 };
 
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
-
 function normalizeUpper(value: unknown, fallback = ""): string {
   return normalizeText(value, fallback).toUpperCase();
-}
-
-function toFinite(value: unknown, fallback = 0): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 function sleep(ms: number): Promise<void> {

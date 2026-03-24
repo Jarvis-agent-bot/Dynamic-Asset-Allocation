@@ -1,4 +1,5 @@
 import type { TradeTicketSide, TradeTicketSource, TradeTicketStatus, TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
+import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
 import type {
   DaaMarketContextAttribution,
   DaaMarketContext,
@@ -489,6 +490,100 @@ export type WorkbenchExecutionExecuteInput = {
   reasonTags?: string[];
   reasonText?: string;
 };
+
+// ---------------------------------------------------------------------------
+// Runtime parser — validates unknown request body into typed input
+// ---------------------------------------------------------------------------
+
+export type ParsedExecuteTradeInput = {
+  source: "manual" | "decision";
+  side: TradeTicketSide;
+  assetKey: string;
+  cycleId: string | undefined;
+  symbol: string;
+  market: string;
+  currency: string;
+  qty: number;
+  price: number;
+  fee: number;
+  pricingMode: "manual" | "market";
+  priceSource: string | undefined;
+  priceSnapshotAt: string | undefined;
+  decisionRefId: string | null;
+  reasonTags: string[];
+  reasonText: string | undefined;
+  createdBy: string;
+};
+
+function normalizeTradeSource(v: unknown): "manual" | "decision" {
+  const s = normalizeText(v).toLowerCase();
+  if (s === "decision" || s === "recommendation") return "decision";
+  return "manual";
+}
+
+function normalizePricingMode(v: unknown): "manual" | "market" {
+  return normalizeText(v).toLowerCase() === "market" ? "market" : "manual";
+}
+
+function normalizeSide(v: unknown): TradeTicketSide | null {
+  const s = normalizeText(v).toUpperCase();
+  if (s === "BUY" || s === "SELL") return s;
+  return null;
+}
+
+function pickStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
+  return [];
+}
+
+export function parseExecuteTradeBody(
+  raw: unknown,
+): { ok: true; value: ParsedExecuteTradeInput } | { ok: false; field: string; message: string } {
+  if (!raw || typeof raw !== "object") {
+    return { ok: false, field: "body", message: "request body must be a JSON object" };
+  }
+  const b = raw as Record<string, unknown>;
+
+  const side = normalizeSide(b.side);
+  if (!side) return { ok: false, field: "side", message: "side must be BUY or SELL" };
+
+  const symbol = normalizeText(b.symbol).toUpperCase();
+  if (!symbol) return { ok: false, field: "symbol", message: "symbol is required" };
+
+  const qty = toPositive(b.qty);
+  if (qty <= 0) return { ok: false, field: "qty", message: "qty must be > 0" };
+
+  const price = toPositive(b.price);
+  if (price <= 0) return { ok: false, field: "price", message: "price must be > 0" };
+
+  const fee = toFinite(b.fee, 0);
+  if (fee < 0) return { ok: false, field: "fee", message: "fee must be >= 0" };
+
+  const market = normalizeText(b.market, "US").toUpperCase();
+
+  return {
+    ok: true,
+    value: {
+      source: normalizeTradeSource(b.source ?? b.origin),
+      side,
+      assetKey: normalizeText(b.assetKey) || `${market}::${symbol}`,
+      cycleId: normalizeText(b.cycleId) || undefined,
+      symbol,
+      market,
+      currency: normalizeText(b.currency, "USD").toUpperCase(),
+      qty,
+      price,
+      fee,
+      pricingMode: normalizePricingMode(b.pricingMode),
+      priceSource: normalizeText(b.priceSource) || undefined,
+      priceSnapshotAt: normalizeText(b.priceSnapshotAt) || undefined,
+      decisionRefId: normalizeText(b.decisionRefId) || null,
+      reasonTags: pickStringArray(b.reasonTags).map((t) => t.toLowerCase()),
+      reasonText: normalizeText(b.reasonText) || undefined,
+      createdBy: normalizeText(b.createdBy, "admin"),
+    },
+  };
+}
 
 export type WorkbenchExecutionExecuteResult = {
   item: TradeTicket;

@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
 import { ensureDaaAuthSchemaPg, isDaaPgEnabled, isDaaPgMemRuntime, withDaaPgClient } from "../pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaAuthRole = "viewer" | "editor";
 export type DaaAuthAccountStatus = "active" | "inactive";
@@ -89,7 +90,8 @@ function parseJsonArrayOrEmpty(raw: unknown): any[] {
   try {
     const v = JSON.parse(raw);
     return Array.isArray(v) ? v : [];
-  } catch {
+  } catch (err) {
+    logSwallowed("daaAuthStore.parseJsonArrayOrEmpty", err);
     return [];
   }
 }
@@ -143,7 +145,8 @@ export function verifyPassword(passwordRaw: unknown, storedHashRaw: unknown): bo
   const actual = scryptSync(password, salt, expect.length, { N, r, p });
   try {
     return timingSafeEqual(actual, expect);
-  } catch {
+  } catch (err) {
+    logSwallowed("daaAuthStore.verifyPassword", err);
     return false;
   }
 }
@@ -182,7 +185,8 @@ function rowToAuthAuditEvent(row: any): DaaAuthAuditEventListRow {
   if (row?.payload_json && typeof row.payload_json === "string") {
     try {
       payload = JSON.parse(row.payload_json);
-    } catch {
+    } catch (err) {
+      logSwallowed("daaAuthStore.rowToAuthAuditEvent", err);
       payload = {};
     }
   }
@@ -439,8 +443,8 @@ export async function bootstrapCreateFirstDaaAuthAccount(args: {
         } catch (e) {
           try {
             await query("ROLLBACK");
-          } catch {
-            // ignore
+          } catch (err) {
+            logSwallowed("daaAuthStore.createAccount.rollback", err);
           }
           throw e;
         }

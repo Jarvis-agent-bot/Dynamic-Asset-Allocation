@@ -1,4 +1,6 @@
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { toFinite } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaTechnicalSpecificMetric = {
   key: string;
@@ -39,11 +41,6 @@ export type DaaTechnicalSignal = {
   specific: DaaTechnicalSpecificMetric[];
   reasons: string[];
 };
-
-function toFinite(v: unknown, fallback = Number.NaN): number {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 function clamp(v: number, lo: number, hi: number): number {
   if (!Number.isFinite(v)) return lo;
@@ -158,9 +155,10 @@ async function fetchDailyCloses(symbolRaw: string, days = 180): Promise<number[]
       : [];
 
     return closesRaw
-      .map((item: unknown) => toFinite(item))
+      .map((item: unknown) => toFinite(item, NaN))
       .filter((item: number) => Number.isFinite(item) && item > 0);
-  } catch {
+  } catch (err) {
+    logSwallowed("technicalSignal.fetchDailyCloses", err);
     return [];
   }
 }

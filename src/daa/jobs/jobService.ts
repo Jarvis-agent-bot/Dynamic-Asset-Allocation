@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { appendJobExecutionLog } from "@/src/daa/store/jobExecutionLogRepo";
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 function buildRequestId(req?: Request): string {
   if (!req) return randomUUID();

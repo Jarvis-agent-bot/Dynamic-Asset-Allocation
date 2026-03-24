@@ -12,6 +12,7 @@ import {
   normalizeInstrumentType,
   normalizeRegion,
 } from "@/src/daa/modules/workbench/assetTaxonomy";
+import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 import {
   applySystemConfigPatches,
   DEFAULT_SYSTEM_CONFIG_,
@@ -52,11 +53,6 @@ function getStoreState(): DaaStoreState {
   return g[STORE_GLOBAL_KEY_] as DaaStoreState;
 }
 
-function toFiniteNumber(v: unknown, fallback = 0): number {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 function toIsoString(v: unknown, fallback = "1970-01-01T00:00:00.000Z"): string {
   if (v instanceof Date) {
     const ms = v.getTime();
@@ -83,11 +79,6 @@ function parseJsonb<T>(v: unknown, fallback: T): T {
   }
   if (typeof v === "object") return v as T;
   return fallback;
-}
-
-function normalizeText(v: unknown, fallback = ""): string {
-  const text = typeof v === "string" ? v.trim() : "";
-  return text || fallback;
 }
 
 function toBoolean(v: unknown, fallback = false): boolean {
@@ -879,13 +870,13 @@ export type DaaStoreAccountState = {
 };
 
 function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState {
-  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
+  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFinite(row.total_equity, Number.NaN);
   return {
     id: "default",
     baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
-    cash: Math.max(0, toFiniteNumber(row.cash, 0)),
-    investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
-    frozenCash: Math.max(0, toFiniteNumber(row.frozen_cash, 0)),
+    cash: Math.max(0, toFinite(row.cash, 0)),
+    investableCash: Math.max(0, toFinite(row.investable_cash, 0)),
+    frozenCash: Math.max(0, toFinite(row.frozen_cash, 0)),
     totalEquity: Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null,
     updatedAt: toIsoString(row.updated_at),
   };
@@ -903,10 +894,10 @@ function mergeRuntimeAccountIntoSystemConfig(
       account: {
         ...normalized.strategy.account,
         baseCurrency: normalizeCurrencyAlias(account.baseCurrency, normalized.strategy.account.baseCurrency) as DaaSystemConfig["strategy"]["account"]["baseCurrency"],
-        cash: Math.max(0, toFiniteNumber(account.cash, 0)),
-        investableCash: Math.max(0, toFiniteNumber(account.investableCash, 0)),
-        frozenCash: Math.max(0, toFiniteNumber(account.frozenCash, 0)),
-        totalEquity: account.totalEquity == null ? null : Math.max(0, toFiniteNumber(account.totalEquity, 0)),
+        cash: Math.max(0, toFinite(account.cash, 0)),
+        investableCash: Math.max(0, toFinite(account.investableCash, 0)),
+        frozenCash: Math.max(0, toFinite(account.frozenCash, 0)),
+        totalEquity: account.totalEquity == null ? null : Math.max(0, toFinite(account.totalEquity, 0)),
       },
     },
   };
@@ -990,10 +981,10 @@ async function ensureAccountStateRowInTx(
   const strategyRaw = (isRecord(systemRow.config.strategy) ? systemRow.config.strategy : {}) as Record<string, unknown>;
   const accountRaw = (isRecord(strategyRaw.account) ? strategyRaw.account : {}) as Record<string, unknown>;
   const baseCurrency = normalizeCurrencyAlias(normalizeText(accountRaw.baseCurrency, "USD"), "USD");
-  const cash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
-  const frozenCash = Math.max(0, toFiniteNumber(accountRaw.frozenCash, 0));
+  const cash = Math.max(0, toFinite(accountRaw.cash, 0));
+  const frozenCash = Math.max(0, toFinite(accountRaw.frozenCash, 0));
   const investableCash = resolveInvestableCash(cash, frozenCash, accountRaw.investableCash);
-  const totalEquityRaw = accountRaw.totalEquity == null ? Number.NaN : toFiniteNumber(accountRaw.totalEquity, Number.NaN);
+  const totalEquityRaw = accountRaw.totalEquity == null ? Number.NaN : toFinite(accountRaw.totalEquity, Number.NaN);
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 
   const inserted = await query(
@@ -1032,14 +1023,14 @@ async function writeAccountStateInTx(
 ): Promise<DaaStoreAccountState> {
   const current = await getAccountStateForUpdateInTx(query);
   const cash = Object.prototype.hasOwnProperty.call(nextRaw, "cash")
-    ? Math.max(0, toFiniteNumber(nextRaw.cash, current.cash))
+    ? Math.max(0, toFinite(nextRaw.cash, current.cash))
     : current.cash;
   const baseCurrency = normalizeCurrencyAlias(
     normalizeText(nextRaw.baseCurrency, current.baseCurrency),
     current.baseCurrency,
   );
   const frozenCash = Object.prototype.hasOwnProperty.call(nextRaw, "frozenCash")
-    ? Math.max(0, Math.min(cash, toFiniteNumber(nextRaw.frozenCash, current.frozenCash)))
+    ? Math.max(0, Math.min(cash, toFinite(nextRaw.frozenCash, current.frozenCash)))
     : current.frozenCash;
   const investableSource = Object.prototype.hasOwnProperty.call(nextRaw, "investableCash")
     ? nextRaw.investableCash
@@ -1050,7 +1041,7 @@ async function writeAccountStateInTx(
     if (nextRaw.totalEquity == null) {
       totalEquity = null;
     } else {
-      const totalEquityRaw = toFiniteNumber(nextRaw.totalEquity, Number.NaN);
+      const totalEquityRaw = toFinite(nextRaw.totalEquity, Number.NaN);
       totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : current.totalEquity;
     }
   }
@@ -1766,9 +1757,9 @@ function mapPositionRow(row: Record<string, unknown>): DaaStorePosition {
     symbol,
     market,
     currency: normalizeText(row.currency, "USD").toUpperCase(),
-    qty: toFiniteNumber(row.qty),
-    price: toFiniteNumber(row.price),
-    costBasis: row.cost_basis == null ? null : toFiniteNumber(row.cost_basis),
+    qty: toFinite(row.qty),
+    price: toFinite(row.price),
+    costBasis: row.cost_basis == null ? null : toFinite(row.cost_basis),
     tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x)).filter(Boolean) : [],
     updatedAt: toIsoString(row.updated_at),
   };
@@ -1790,15 +1781,15 @@ function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUnivers
     exchange: normalizeText(row.exchange, ""),
     instrumentType,
     marketGroup: normalizeText(row.market_group, inferMarketGroup({ market, assetClass })),
-    holdingQty: Math.max(0, toFiniteNumber(row.holding_qty)),
-    holdingPrice: Math.max(0, toFiniteNumber(row.holding_price)),
-    costBasis: row.cost_basis == null ? null : Math.max(0, toFiniteNumber(row.cost_basis)),
+    holdingQty: Math.max(0, toFinite(row.holding_qty)),
+    holdingPrice: Math.max(0, toFinite(row.holding_price)),
+    costBasis: row.cost_basis == null ? null : Math.max(0, toFinite(row.cost_basis)),
     holdingTags: Array.isArray(row.holding_tags) ? row.holding_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     watchEnabled: Boolean(row.watch_enabled),
-    targetWeightHint: Math.max(0, toFiniteNumber(row.target_weight_hint)),
+    targetWeightHint: Math.max(0, toFinite(row.target_weight_hint)),
     watchTags: Array.isArray(row.watch_tags) ? row.watch_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
-    lastPrice: Math.max(0, toFiniteNumber(row.last_price)),
+    lastPrice: Math.max(0, toFinite(row.last_price)),
     priceUpdatedAt: row.price_updated_at == null ? null : toIsoString(row.price_updated_at),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
@@ -1859,7 +1850,7 @@ export async function updateDaaAssetUniverseLastPrice(input: {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const assetKey = normalizeText(input.assetKey).toUpperCase();
-    const lastPrice = Math.max(0, toFiniteNumber(input.lastPrice));
+    const lastPrice = Math.max(0, toFinite(input.lastPrice));
     if (!assetKey) throw new Error("assetKey is required");
     if (!(lastPrice > 0)) throw new Error("lastPrice must be > 0");
     const priceUpdatedAt = toIsoString(input.priceUpdatedAt, new Date().toISOString());
@@ -1905,10 +1896,10 @@ export async function upsertDaaAssetUniverseRow(input: {
     const instrumentType = normalizeInstrumentType(input.instrumentType, "STOCK");
     const marketGroup = normalizeText(input.marketGroup, inferMarketGroup({ market, assetClass }));
     const watchEnabled = input.watchEnabled !== false;
-    const targetWeightHint = Math.max(0, toFiniteNumber(input.targetWeightHint));
+    const targetWeightHint = Math.max(0, toFinite(input.targetWeightHint));
     const watchTags = Array.isArray(input.watchTags) ? input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
     const notes = input.notes == null ? null : normalizeText(input.notes) || null;
-    const lastPrice = Math.max(0, toFiniteNumber(input.lastPrice));
+    const lastPrice = Math.max(0, toFinite(input.lastPrice));
     const priceUpdatedAt = lastPrice > 0 ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null;
 
     const result = await query(
@@ -1998,13 +1989,13 @@ export async function patchDaaAssetUniverseRow(input: {
       instrumentType: normalizeInstrumentType(input.instrumentType, current.instrumentType as any),
       marketGroup: normalizeText(input.marketGroup, current.marketGroup || inferMarketGroup({ market, assetClass })),
       watchEnabled: input.watchEnabled == null ? current.watchEnabled : Boolean(input.watchEnabled),
-      targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFiniteNumber(input.targetWeightHint)),
-      holdingQty: input.holdingQty == null ? current.holdingQty : Math.max(0, toFiniteNumber(input.holdingQty)),
-      holdingPrice: input.holdingPrice == null ? current.holdingPrice : Math.max(0, toFiniteNumber(input.holdingPrice)),
-      costBasis: input.costBasis === undefined ? current.costBasis : (input.costBasis == null ? null : Math.max(0, toFiniteNumber(input.costBasis))),
+      targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFinite(input.targetWeightHint)),
+      holdingQty: input.holdingQty == null ? current.holdingQty : Math.max(0, toFinite(input.holdingQty)),
+      holdingPrice: input.holdingPrice == null ? current.holdingPrice : Math.max(0, toFinite(input.holdingPrice)),
+      costBasis: input.costBasis === undefined ? current.costBasis : (input.costBasis == null ? null : Math.max(0, toFinite(input.costBasis))),
       watchTags: input.watchTags == null ? current.watchTags : input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
       notes: input.notes === undefined ? current.notes : (input.notes == null ? null : normalizeText(input.notes) || null),
-      lastPrice: input.lastPrice == null ? current.lastPrice : Math.max(0, toFiniteNumber(input.lastPrice)),
+      lastPrice: input.lastPrice == null ? current.lastPrice : Math.max(0, toFinite(input.lastPrice)),
       priceUpdatedAt: input.priceUpdatedAt === undefined ? current.priceUpdatedAt : (input.priceUpdatedAt ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null),
     };
 
@@ -2079,9 +2070,9 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
         symbol,
         market,
         currency: normalizeText(item.currency, "USD").toUpperCase(),
-        qty: Math.max(0, toFiniteNumber(item.qty)),
-        price: Math.max(0, toFiniteNumber(item.price)),
-        costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
+        qty: Math.max(0, toFinite(item.qty)),
+        price: Math.max(0, toFinite(item.price)),
+        costBasis: item.cost_basis == null ? null : Math.max(0, toFinite(item.cost_basis)),
         tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
@@ -2103,11 +2094,11 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
         const market = normalizeText(raw.market, "US").toUpperCase();
         const assetKey = buildPositionKey(symbol, market);
         const currency = normalizeText(raw.currency, "USD").toUpperCase();
-        const qty = Math.max(0, toFiniteNumber(raw.qty));
-        const price = Math.max(0, toFiniteNumber(raw.price));
+        const qty = Math.max(0, toFinite(raw.qty));
+        const price = Math.max(0, toFinite(raw.price));
         const lastPrice = price > 0 ? price : 0;
         const priceUpdatedAt = price > 0 ? new Date().toISOString() : null;
-        const costBasis = raw.costBasis == null ? null : Math.max(0, toFiniteNumber(raw.costBasis));
+        const costBasis = raw.costBasis == null ? null : Math.max(0, toFinite(raw.costBasis));
         const tags = Array.isArray(raw.tags)
           ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
           : [];
@@ -2183,9 +2174,9 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
         symbol,
         market,
         currency: normalizeText(item.currency, "USD").toUpperCase(),
-        qty: Math.max(0, toFiniteNumber(item.qty)),
-        price: Math.max(0, toFiniteNumber(item.price)),
-        costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
+        qty: Math.max(0, toFinite(item.qty)),
+        price: Math.max(0, toFinite(item.price)),
+        costBasis: item.cost_basis == null ? null : Math.max(0, toFinite(item.cost_basis)),
         tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
@@ -2245,13 +2236,13 @@ function applyAccountCashDeltaToConfig(
   const baseConfig = isRecord(configJson) ? configJson : {};
   const accountRaw = isRecord(baseConfig.account) ? baseConfig.account : {};
   const baseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
-  const previousCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
-  const frozenCash = Math.max(0, toFiniteNumber(accountRaw.frozenCash, 0));
+  const previousCash = Math.max(0, toFinite(accountRaw.cash, 0));
+  const frozenCash = Math.max(0, toFinite(accountRaw.frozenCash, 0));
   const previousInvestable = resolveInvestableCash(previousCash, frozenCash, accountRaw.investableCash);
-  const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, 0));
+  const normalizedNextCash = Math.max(0, toFinite(nextCash, 0));
   const delta = normalizedNextCash - previousCash;
   const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
-  const totalEquityRaw = nextTotalEquity == null ? Number.NaN : toFiniteNumber(nextTotalEquity, Number.NaN);
+  const totalEquityRaw = nextTotalEquity == null ? Number.NaN : toFinite(nextTotalEquity, Number.NaN);
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 
   const account = {
@@ -2291,7 +2282,7 @@ async function syncStrategyAccountCashInTx(
   totalEquity: number | null;
 }> {
   const currentAccount = await getAccountStateForUpdateInTx(query as any);
-  const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, currentAccount.cash));
+  const normalizedNextCash = Math.max(0, toFinite(nextCash, currentAccount.cash));
   const previousInvestable = resolveInvestableCash(currentAccount.cash, currentAccount.frozenCash, currentAccount.investableCash);
   const delta = normalizedNextCash - currentAccount.cash;
   const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
@@ -2311,16 +2302,16 @@ async function syncStrategyAccountCashInTx(
 function mapEquitySnapshotRow(row: Record<string, unknown>): DaaStoreEquitySnapshot {
   return {
     ts: toIsoString(row.ts),
-    totalEquity: toFiniteNumber(row.total_equity),
-    holdingsValue: toFiniteNumber(row.holdings_value),
-    cash: toFiniteNumber(row.cash),
+    totalEquity: toFinite(row.total_equity),
+    holdingsValue: toFinite(row.holdings_value),
+    cash: toFinite(row.cash),
     source: normalizeText(row.source, "cron"),
   };
 }
 
 export async function listDaaEquitySnapshots(limit = 200): Promise<DaaStoreEquitySnapshot[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(2000, Math.trunc(toFiniteNumber(limit, 200))));
+  const n = Math.max(1, Math.min(2000, Math.trunc(toFinite(limit, 200))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 ORDER BY ts DESC LIMIT $1",
@@ -2334,9 +2325,9 @@ export async function appendDaaEquitySnapshot(snapshot: Partial<DaaStoreEquitySn
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const ts = toIsoString(snapshot.ts, new Date().toISOString());
-    const totalEquity = Math.max(0, toFiniteNumber(snapshot.totalEquity));
-    const holdingsValue = Math.max(0, toFiniteNumber(snapshot.holdingsValue));
-    const cash = Math.max(0, toFiniteNumber(snapshot.cash));
+    const totalEquity = Math.max(0, toFinite(snapshot.totalEquity));
+    const holdingsValue = Math.max(0, toFinite(snapshot.holdingsValue));
+    const cash = Math.max(0, toFinite(snapshot.cash));
     const source = normalizeText(snapshot.source, "manual");
 
     await query(
@@ -2356,7 +2347,7 @@ function mapHumanIngestStateRow(row: Record<string, unknown>): DaaStoreHumanInge
   return {
     id: "default",
     lastIngestAt: row.last_ingest_at == null ? null : toIsoString(row.last_ingest_at, new Date().toISOString()),
-    ingestCount: Math.max(0, Math.trunc(toFiniteNumber(row.ingest_count, 0))),
+    ingestCount: Math.max(0, Math.trunc(toFinite(row.ingest_count, 0))),
     latestBatch: parseJsonb<Record<string, unknown> | null>(row.latest_batch_json, null),
     latestActors: parseJsonb<Array<Record<string, unknown>>>(row.latest_actors_json, []),
     latestHoldings: parseJsonb<Array<Record<string, unknown>>>(row.latest_holdings_json, []),
@@ -2385,7 +2376,7 @@ export async function saveDaaHumanIngestState(input: {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const lastIngestAt = input.lastIngestAt ? toIsoString(input.lastIngestAt, new Date().toISOString()) : null;
-    const ingestCount = Math.max(0, Math.trunc(toFiniteNumber(input.ingestCount, 0)));
+    const ingestCount = Math.max(0, Math.trunc(toFinite(input.ingestCount, 0)));
     const latestBatch = input.latestBatch && typeof input.latestBatch === "object" ? input.latestBatch : null;
     const latestActors = Array.isArray(input.latestActors) ? input.latestActors : [];
     const latestHoldings = Array.isArray(input.latestHoldings) ? input.latestHoldings : [];
@@ -2409,7 +2400,7 @@ function mapCandidateAssetRow(row: Record<string, unknown>): DaaStoreCandidateAs
     market: normalizeText(row.market, "US").toUpperCase(),
     currency: normalizeText(row.currency, "USD").toUpperCase(),
     enabled: Boolean(row.enabled),
-    targetWeightHint: Math.max(0, toFiniteNumber(row.target_weight_hint)),
+    targetWeightHint: Math.max(0, toFinite(row.target_weight_hint)),
     tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
     createdAt: toIsoString(row.created_at),
@@ -2458,7 +2449,7 @@ export async function replaceDaaCandidateAssets(
         const currency = normalizeText(raw.currency, "USD").toUpperCase();
         const assetKey = buildPositionKey(symbol, market);
         const enabled = raw.enabled !== false;
-        const targetWeightHint = Math.max(0, toFiniteNumber(raw.targetWeightHint));
+        const targetWeightHint = Math.max(0, toFinite(raw.targetWeightHint));
         const tags = Array.isArray(raw.tags) ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
         const notes = normalizeText(raw.notes || "");
 
@@ -2554,9 +2545,9 @@ function normalizePositionSnapshotRow(row: Partial<DaaPositionSnapshotRow>): Daa
     symbol,
     market,
     currency: normalizeCcyCode(row.currency, "USD"),
-    qty: Math.max(0, toFiniteNumber(row.qty, 0)),
-    price: Math.max(0, toFiniteNumber(row.price, 0)),
-    costBasis: row.costBasis == null ? null : Math.max(0, toFiniteNumber(row.costBasis, 0)),
+    qty: Math.max(0, toFinite(row.qty, 0)),
+    price: Math.max(0, toFinite(row.price, 0)),
+    costBasis: row.costBasis == null ? null : Math.max(0, toFinite(row.costBasis, 0)),
     tags: Array.isArray(row.tags) ? row.tags.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean) : [],
     updatedAt: toIsoString(row.updatedAt, new Date().toISOString()),
   };
@@ -2650,7 +2641,7 @@ function buildFxLookupMap(rows: Array<Record<string, unknown>>): DaaFxLookupMap 
   for (const row of rows) {
     const base = normalizeCcyCode(row.base_ccy, "USD");
     const quote = normalizeCcyCode(row.quote_ccy, "USD");
-    const rate = Math.max(0, toFiniteNumber(row.rate, 0));
+    const rate = Math.max(0, toFinite(row.rate, 0));
     if (!base || !quote || rate <= 0) continue;
     out.set(normalizeFxPair(base, quote), rate);
   }
@@ -2696,9 +2687,9 @@ async function buildPortfolioSnapshotFromAssetUniverseInTx(
       symbol: normalizeText(row.symbol).toUpperCase(),
       market: normalizeText(row.market, "US").toUpperCase(),
       currency: normalizeCcyCode(row.currency, input.baseCurrency),
-      qty: Math.max(0, toFiniteNumber(row.holding_qty, 0)),
-      holdingPrice: Math.max(0, toFiniteNumber(row.holding_price, 0)),
-      lastPrice: Math.max(0, toFiniteNumber(row.last_price, 0)),
+      qty: Math.max(0, toFinite(row.holding_qty, 0)),
+      holdingPrice: Math.max(0, toFinite(row.holding_price, 0)),
+      lastPrice: Math.max(0, toFinite(row.last_price, 0)),
     })),
     baseCurrency: input.baseCurrency,
     cash: input.cash,
@@ -2805,12 +2796,12 @@ function mapTradeTicketRow(row: Record<string, unknown>): DaaStoreTradeTicket {
     instrumentCurrency: normalizeCcyCode(row.instrument_currency, "USD"),
     baseCurrency: normalizeCcyCode(row.base_currency, "USD"),
     side: normalizeTradeTicketSide(row.side),
-    qty: Math.max(0, toFiniteNumber(row.qty)),
-    price: Math.max(0, toFiniteNumber(row.price)),
-    fee: Math.max(0, toFiniteNumber(row.fee)),
-    grossNotional: Math.max(0, toFiniteNumber(row.gross_notional)),
-    fxRateToBase: row.fx_rate_to_base == null ? null : Math.max(0, toFiniteNumber(row.fx_rate_to_base)),
-    notionalInBase: Math.max(0, toFiniteNumber(row.notional_in_base)),
+    qty: Math.max(0, toFinite(row.qty)),
+    price: Math.max(0, toFinite(row.price)),
+    fee: Math.max(0, toFinite(row.fee)),
+    grossNotional: Math.max(0, toFinite(row.gross_notional)),
+    fxRateToBase: row.fx_rate_to_base == null ? null : Math.max(0, toFinite(row.fx_rate_to_base)),
+    notionalInBase: Math.max(0, toFinite(row.notional_in_base)),
     decisionRefId: row.decision_ref_id == null ? null : normalizeText(row.decision_ref_id) || null,
     reasonTags: Array.isArray(row.reason_tags) ? row.reason_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     reasonText: row.reason_text == null ? null : normalizeText(row.reason_text) || null,
@@ -2896,13 +2887,13 @@ function normalizeProposalDecisionContext(value: unknown): ProposalDecisionConte
     signalAction: value.signalAction === "open_or_add" || value.signalAction === "watch" || value.signalAction === "reduce_or_avoid"
       ? value.signalAction
       : null,
-    signalScore: value.signalScore == null ? null : clampNumber(toFiniteNumber(value.signalScore, 0), 0, 100),
-    signalConfidence: value.signalConfidence == null ? null : clampNumber(toFiniteNumber(value.signalConfidence, 0), 0, 100),
+    signalScore: value.signalScore == null ? null : clampNumber(toFinite(value.signalScore, 0), 0, 100),
+    signalConfidence: value.signalConfidence == null ? null : clampNumber(toFinite(value.signalConfidence, 0), 0, 100),
     signalConflict: toBoolean(value.signalConflict, false),
     llmAdjustment: value.llmAdjustment === "execute" || value.llmAdjustment === "reduce_size" || value.llmAdjustment === "skip" || value.llmAdjustment === "increase_priority"
       ? value.llmAdjustment
       : null,
-    llmConfidence: value.llmConfidence == null ? null : clampNumber(toFiniteNumber(value.llmConfidence, 0), 0, 100),
+    llmConfidence: value.llmConfidence == null ? null : clampNumber(toFinite(value.llmConfidence, 0), 0, 100),
     llmRationale: value.llmRationale == null ? null : normalizeText(value.llmRationale) || null,
     marketRegime: normalizeMarketRegimeStore(value.marketRegime || value.effectiveMarketRegime) === "neutral"
       ? null
@@ -2918,7 +2909,7 @@ function normalizeProposalDecisionContext(value: unknown): ProposalDecisionConte
       : (normalizeMarketRegimeStore(value.effectiveMarketRegime) as DaaMarketRegime),
     marketIndicatorFlags: normalizeStringArray(value.marketIndicatorFlags),
     conflictFlags: normalizeStringArray(value.conflictFlags),
-    finalQtyMultiplier: clampNumber(toFiniteNumber(value.finalQtyMultiplier, 1), 0, 1),
+    finalQtyMultiplier: clampNumber(toFinite(value.finalQtyMultiplier, 1), 0, 1),
   };
 }
 
@@ -2940,15 +2931,15 @@ function normalizeMarketIndicatorSnapshotJson(value: unknown): DaaMarketIndicato
     category: value.category === "relative_value" || value.category === "sentiment" ? value.category : "volatility",
     scope: normalizeMarketIndicatorScopeStore(value.scope),
     stance: normalizeMarketRegimeStore(value.stance),
-    riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
-    confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
-    rawValue: value.rawValue == null ? null : toFiniteNumber(value.rawValue, 0),
+    riskOffScorePct: clampNumber(toFinite(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumber(toFinite(value.confidencePct, 40), 0, 100),
+    rawValue: value.rawValue == null ? null : toFinite(value.rawValue, 0),
     unit: value.unit == null ? undefined : normalizeText(value.unit) || undefined,
-    percentile252: value.percentile252 == null ? null : toFiniteNumber(value.percentile252, 0),
-    zscore60: value.zscore60 == null ? null : toFiniteNumber(value.zscore60, 0),
-    trend1dPct: value.trend1dPct == null ? null : toFiniteNumber(value.trend1dPct, 0),
-    trend7dPct: value.trend7dPct == null ? null : toFiniteNumber(value.trend7dPct, 0),
-    trend30dPct: value.trend30dPct == null ? null : toFiniteNumber(value.trend30dPct, 0),
+    percentile252: value.percentile252 == null ? null : toFinite(value.percentile252, 0),
+    zscore60: value.zscore60 == null ? null : toFinite(value.zscore60, 0),
+    trend1dPct: value.trend1dPct == null ? null : toFinite(value.trend1dPct, 0),
+    trend7dPct: value.trend7dPct == null ? null : toFinite(value.trend7dPct, 0),
+    trend30dPct: value.trend30dPct == null ? null : toFinite(value.trend30dPct, 0),
     reason: normalizeText(value.reason, ""),
     source: normalizeText(value.source, "market_cache"),
     generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
@@ -2967,10 +2958,10 @@ function normalizeMarketScopeContextJson(value: unknown): DaaMarketContext["scop
     label: normalizeText(value.label, scope),
     generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
     regime: normalizeMarketRegimeStore(value.regime) === "neutral" ? "transitional" : (normalizeMarketRegimeStore(value.regime) as DaaMarketRegime),
-    riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
-    confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
-    buyScale: clampNumber(toFiniteNumber(value.buyScale, 1), 0, 1),
-    highRiskBuyScale: clampNumber(toFiniteNumber(value.highRiskBuyScale, 0.95), 0, 1),
+    riskOffScorePct: clampNumber(toFinite(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumber(toFinite(value.confidencePct, 40), 0, 100),
+    buyScale: clampNumber(toFinite(value.buyScale, 1), 0, 1),
+    highRiskBuyScale: clampNumber(toFinite(value.highRiskBuyScale, 0.95), 0, 1),
     reasons: normalizeStringArray(value.reasons),
     indicators,
   };
@@ -2996,10 +2987,10 @@ function normalizeMarketContextJson(value: unknown): DaaMarketContext | null {
   return {
     generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
     regime: normalizeMarketRegimeStore(value.regime) === "neutral" ? "transitional" : (normalizeMarketRegimeStore(value.regime) as DaaMarketRegime),
-    riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
-    confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
-    buyScale: clampNumber(toFiniteNumber(value.buyScale, 1), 0, 1),
-    highRiskBuyScale: clampNumber(toFiniteNumber(value.highRiskBuyScale, 0.95), 0, 1),
+    riskOffScorePct: clampNumber(toFinite(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumber(toFinite(value.confidencePct, 40), 0, 100),
+    buyScale: clampNumber(toFinite(value.buyScale, 1), 0, 1),
+    highRiskBuyScale: clampNumber(toFinite(value.highRiskBuyScale, 0.95), 0, 1),
     reasons,
     indicators,
     scopes,
@@ -3015,8 +3006,8 @@ function normalizePreTradeRiskCheck(value: unknown): DaaStorePreTradeRiskCheck {
     items.push({
       rule: normalizeRiskRule(item.rule),
       status: normalizeRiskStatus(item.status),
-      current: toFiniteNumber(item.current, 0),
-      limit: toFiniteNumber(item.limit, 0),
+      current: toFinite(item.current, 0),
+      limit: toFinite(item.limit, 0),
       message: normalizeText(item.message, ""),
     });
   }
@@ -3038,9 +3029,9 @@ function normalizeDriftSnapshot(value: unknown): DaaStoreRebalanceCycle["driftSn
     out.push({
       assetKey,
       symbol,
-      actualPct: toFiniteNumber(row.actualPct, 0),
-      targetPct: toFiniteNumber(row.targetPct, 0),
-      driftPct: toFiniteNumber(row.driftPct, 0),
+      actualPct: toFinite(row.actualPct, 0),
+      targetPct: toFinite(row.targetPct, 0),
+      driftPct: toFinite(row.driftPct, 0),
     });
   }
   return out;
@@ -3059,11 +3050,11 @@ function normalizeCycleProposals(value: unknown): DaaStoreRebalanceCycle["propos
       assetKey,
       symbol,
       currency: normalizeCcyCode(row.currency, "USD"),
-      fxRateToBase: row.fxRateToBase == null ? null : Math.max(0, toFiniteNumber(row.fxRateToBase, 0)),
+      fxRateToBase: row.fxRateToBase == null ? null : Math.max(0, toFinite(row.fxRateToBase, 0)),
       side,
-      suggestedQty: Math.max(0, toFiniteNumber(row.suggestedQty, 0)),
-      suggestedNotional: Math.max(0, toFiniteNumber(row.suggestedNotional, 0)),
-      price: Math.max(0, toFiniteNumber(row.price, 0)),
+      suggestedQty: Math.max(0, toFinite(row.suggestedQty, 0)),
+      suggestedNotional: Math.max(0, toFinite(row.suggestedNotional, 0)),
+      price: Math.max(0, toFinite(row.price, 0)),
       reason: normalizeText(row.reason, ""),
       selected: toBoolean(row.selected, true),
       hfContribution: normalizeText(row.hfContribution, "") || null,
@@ -3077,10 +3068,10 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
   const executionSummaryRaw = row.execution_summary_json == null ? null : parseJsonb<Record<string, unknown>>(row.execution_summary_json, {});
   const executionSummary = executionSummaryRaw
     ? {
-      ordersExecuted: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersExecuted, 0)),
-      ordersFailed: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersFailed, 0)),
-      totalNotional: Math.max(0, toFiniteNumber(executionSummaryRaw.totalNotional, 0)),
-      newMaxDriftPct: Math.max(0, toFiniteNumber(executionSummaryRaw.newMaxDriftPct, 0)),
+      ordersExecuted: Math.max(0, toFinite(executionSummaryRaw.ordersExecuted, 0)),
+      ordersFailed: Math.max(0, toFinite(executionSummaryRaw.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFinite(executionSummaryRaw.totalNotional, 0)),
+      newMaxDriftPct: Math.max(0, toFinite(executionSummaryRaw.newMaxDriftPct, 0)),
     }
     : null;
 
@@ -3095,7 +3086,7 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
     triggerSource: normalizeRebalanceTriggerSource(row.trigger_source),
     triggerReason: normalizeText(row.trigger_reason),
     snapshotAt: toIsoString(row.snapshot_at),
-    equitySnapshot: Math.max(0, toFiniteNumber(row.equity_snapshot, 0)),
+    equitySnapshot: Math.max(0, toFinite(row.equity_snapshot, 0)),
     driftSnapshot: normalizeDriftSnapshot(parseJsonb<unknown[]>(row.drift_snapshot_json, [])),
     proposals: normalizeCycleProposals(parseJsonb<unknown[]>(row.proposals_json, [])),
     riskCheck: normalizePreTradeRiskCheck(row.risk_check_json),
@@ -3129,7 +3120,7 @@ function mapCycleReportRow(row: Record<string, unknown>): DaaStoreCycleReport {
     const side = sideRaw === "BUY" || sideRaw === "SELL" ? sideRaw : "HOLD";
     return {
       symbol: normalizeText(item.symbol, "UNKNOWN").toUpperCase(),
-      pnl: toFiniteNumber(item.pnl, 0),
+      pnl: toFinite(item.pnl, 0),
       side: side as "BUY" | "SELL" | "HOLD",
     };
   });
@@ -3141,51 +3132,51 @@ function mapCycleReportRow(row: Record<string, unknown>): DaaStoreCycleReport {
     cycleCreatedAt: toIsoString(row.cycle_created_at),
     reportCreatedAt: toIsoString(row.created_at),
     executionSummary: {
-      ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
-      ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
-      totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
-      newMaxDriftPct: Math.max(0, toFiniteNumber(executionStats.newMaxDriftPct, 0)),
+      ordersExecuted: Math.max(0, toFinite(executionStats.ordersExecuted, 0)),
+      ordersFailed: Math.max(0, toFinite(executionStats.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFinite(executionStats.totalNotional, 0)),
+      newMaxDriftPct: Math.max(0, toFinite(executionStats.newMaxDriftPct, 0)),
     },
     beforeSnapshot: {
-      totalEquity: Math.max(0, toFiniteNumber(before.totalEquity, 0)),
-      holdingsValue: Math.max(0, toFiniteNumber(before.holdingsValue, 0)),
-      cash: Math.max(0, toFiniteNumber(before.cash, 0)),
-      hhiPct: Math.max(0, toFiniteNumber(before.hhiPct, 0)),
-      maxWeightPct: Math.max(0, toFiniteNumber(before.maxWeightPct, 0)),
-      maxDriftPct: Math.max(0, toFiniteNumber(before.maxDriftPct, 0)),
-      maxDrawdownPct: Math.max(0, toFiniteNumber(before.maxDrawdownPct, 0)),
+      totalEquity: Math.max(0, toFinite(before.totalEquity, 0)),
+      holdingsValue: Math.max(0, toFinite(before.holdingsValue, 0)),
+      cash: Math.max(0, toFinite(before.cash, 0)),
+      hhiPct: Math.max(0, toFinite(before.hhiPct, 0)),
+      maxWeightPct: Math.max(0, toFinite(before.maxWeightPct, 0)),
+      maxDriftPct: Math.max(0, toFinite(before.maxDriftPct, 0)),
+      maxDrawdownPct: Math.max(0, toFinite(before.maxDrawdownPct, 0)),
     },
     afterSnapshot: {
-      totalEquity: Math.max(0, toFiniteNumber(after.totalEquity, 0)),
-      holdingsValue: Math.max(0, toFiniteNumber(after.holdingsValue, 0)),
-      cash: Math.max(0, toFiniteNumber(after.cash, 0)),
-      hhiPct: Math.max(0, toFiniteNumber(after.hhiPct, 0)),
-      maxWeightPct: Math.max(0, toFiniteNumber(after.maxWeightPct, 0)),
-      maxDriftPct: Math.max(0, toFiniteNumber(after.maxDriftPct, 0)),
-      maxDrawdownPct: Math.max(0, toFiniteNumber(after.maxDrawdownPct, 0)),
+      totalEquity: Math.max(0, toFinite(after.totalEquity, 0)),
+      holdingsValue: Math.max(0, toFinite(after.holdingsValue, 0)),
+      cash: Math.max(0, toFinite(after.cash, 0)),
+      hhiPct: Math.max(0, toFinite(after.hhiPct, 0)),
+      maxWeightPct: Math.max(0, toFinite(after.maxWeightPct, 0)),
+      maxDriftPct: Math.max(0, toFinite(after.maxDriftPct, 0)),
+      maxDrawdownPct: Math.max(0, toFinite(after.maxDrawdownPct, 0)),
     },
     executionStats: {
-      ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
-      ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
-      totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
-      feeTotal: Math.max(0, toFiniteNumber(executionStats.feeTotal, 0)),
+      ordersExecuted: Math.max(0, toFinite(executionStats.ordersExecuted, 0)),
+      ordersFailed: Math.max(0, toFinite(executionStats.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFinite(executionStats.totalNotional, 0)),
+      feeTotal: Math.max(0, toFinite(executionStats.feeTotal, 0)),
     },
     pnlAttribution: {
-      realizedPnl: toFiniteNumber(pnl.realizedPnl, 0),
-      unrealizedPnl: toFiniteNumber(pnl.unrealizedPnl, 0),
-      feeTotal: Math.max(0, toFiniteNumber(pnl.feeTotal, 0)),
-      fxImpact: toFiniteNumber(pnl.fxImpact, 0),
+      realizedPnl: toFinite(pnl.realizedPnl, 0),
+      unrealizedPnl: toFinite(pnl.unrealizedPnl, 0),
+      feeTotal: Math.max(0, toFinite(pnl.feeTotal, 0)),
+      fxImpact: toFinite(pnl.fxImpact, 0),
       topContributors,
     },
     riskDelta: {
-      maxDrawdownBefore: Math.max(0, toFiniteNumber(riskDelta.maxDrawdownBefore, 0)),
-      maxDrawdownAfter: Math.max(0, toFiniteNumber(riskDelta.maxDrawdownAfter, 0)),
-      hhiBefore: Math.max(0, toFiniteNumber(riskDelta.hhiBefore, 0)),
-      hhiAfter: Math.max(0, toFiniteNumber(riskDelta.hhiAfter, 0)),
-      maxWeightBefore: Math.max(0, toFiniteNumber(riskDelta.maxWeightBefore, 0)),
-      maxWeightAfter: Math.max(0, toFiniteNumber(riskDelta.maxWeightAfter, 0)),
-      maxDriftBefore: Math.max(0, toFiniteNumber(riskDelta.maxDriftBefore, 0)),
-      maxDriftAfter: Math.max(0, toFiniteNumber(riskDelta.maxDriftAfter, 0)),
+      maxDrawdownBefore: Math.max(0, toFinite(riskDelta.maxDrawdownBefore, 0)),
+      maxDrawdownAfter: Math.max(0, toFinite(riskDelta.maxDrawdownAfter, 0)),
+      hhiBefore: Math.max(0, toFinite(riskDelta.hhiBefore, 0)),
+      hhiAfter: Math.max(0, toFinite(riskDelta.hhiAfter, 0)),
+      maxWeightBefore: Math.max(0, toFinite(riskDelta.maxWeightBefore, 0)),
+      maxWeightAfter: Math.max(0, toFinite(riskDelta.maxWeightAfter, 0)),
+      maxDriftBefore: Math.max(0, toFinite(riskDelta.maxDriftBefore, 0)),
+      maxDriftAfter: Math.max(0, toFinite(riskDelta.maxDriftAfter, 0)),
     },
   };
 }
@@ -3223,7 +3214,7 @@ function mapFxRateRow(row: Record<string, unknown>): DaaStoreFxRate {
     id: normalizeText(row.id),
     baseCcy: normalizeCcyCode(row.base_ccy),
     quoteCcy: normalizeCcyCode(row.quote_ccy),
-    rate: Math.max(0, toFiniteNumber(row.rate)),
+    rate: Math.max(0, toFinite(row.rate)),
     source: normalizeText(row.source, "manual"),
     asOfTs: toIsoString(row.as_of_ts),
     updatedAt: toIsoString(row.updated_at),
@@ -3250,7 +3241,7 @@ export async function replaceDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): P
       for (const raw of rows) {
         const baseCcy = normalizeCcyCode(raw.baseCcy, "USD");
         const quoteCcy = normalizeCcyCode(raw.quoteCcy, "USD");
-        const rate = Math.max(0, toFiniteNumber(raw.rate));
+        const rate = Math.max(0, toFinite(raw.rate));
         if (rate <= 0) continue;
         const pair = normalizeFxPair(baseCcy, quoteCcy);
         const id = normalizeText(raw.id, pair);
@@ -3289,7 +3280,7 @@ export async function upsertDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Pr
       for (const raw of rows) {
         const baseCcy = normalizeCcyCode(raw.baseCcy, "USD");
         const quoteCcy = normalizeCcyCode(raw.quoteCcy, "USD");
-        const rate = Math.max(0, toFiniteNumber(raw.rate));
+        const rate = Math.max(0, toFinite(raw.rate));
         if (rate <= 0) continue;
         const id = normalizeText(raw.id, normalizeFxPair(baseCcy, quoteCcy));
         const source = normalizeText(raw.source, "manual");
@@ -3331,12 +3322,12 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
     id: normalizeText(row.event_id),
     ts: toIsoString(row.ts),
     side,
-    amount: Math.max(0, toFiniteNumber(row.amount)),
+    amount: Math.max(0, toFinite(row.amount)),
     baseCurrency: normalizeCcyCode(row.base_currency, "USD"),
     entryKind,
     accountBaseCurrency: row.account_base_currency == null ? null : normalizeCcyCode(row.account_base_currency, "USD"),
-    amountInAccountBase: row.amount_in_account_base == null ? null : Math.max(0, toFiniteNumber(row.amount_in_account_base)),
-    fxRateToAccount: row.fx_rate_to_account == null ? null : Math.max(0, toFiniteNumber(row.fx_rate_to_account)),
+    amountInAccountBase: row.amount_in_account_base == null ? null : Math.max(0, toFinite(row.amount_in_account_base)),
+    fxRateToAccount: row.fx_rate_to_account == null ? null : Math.max(0, toFinite(row.fx_rate_to_account)),
     ticketId: row.ticket_id == null ? null : normalizeText(row.ticket_id) || null,
     cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
     settlementTs: row.settlement_ts == null ? null : toIsoString(row.settlement_ts),
@@ -3347,7 +3338,7 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
 
 export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCashLedgerEntry[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
+  const n = Math.max(1, Math.min(1000, Math.trunc(toFinite(limit, 100))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
@@ -3417,14 +3408,14 @@ export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
       ledgerStartTs,
       openingBalance: Math.max(
         0,
-        toFiniteNumber(
+        toFinite(
           openingRow?.amount_in_account_base ?? openingRow?.amount,
           0,
         ),
       ),
-      archivedCycleCount: Math.max(0, Math.trunc(toFiniteNumber(cycleRes.rows[0]?.count, 0))),
-      archivedTradeCount: Math.max(0, Math.trunc(toFiniteNumber(tradeRes.rows[0]?.count, 0))),
-      archivedReportCount: Math.max(0, Math.trunc(toFiniteNumber(reportRes.rows[0]?.count, 0))),
+      archivedCycleCount: Math.max(0, Math.trunc(toFinite(cycleRes.rows[0]?.count, 0))),
+      archivedTradeCount: Math.max(0, Math.trunc(toFinite(tradeRes.rows[0]?.count, 0))),
+      archivedReportCount: Math.max(0, Math.trunc(toFinite(reportRes.rows[0]?.count, 0))),
     };
   });
 }
@@ -3444,7 +3435,7 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
   return withDaaPgClient(async ({ query }) => {
     const sideRaw = normalizeText(input.side, "deposit").toLowerCase();
     const side: DaaStoreCashLedgerSide = sideRaw === "withdraw" ? "withdraw" : "deposit";
-    const amount = Math.max(0, toFiniteNumber(input.amount));
+    const amount = Math.max(0, toFinite(input.amount));
     if (amount <= 0) throw new Error("cash ledger amount must be greater than 0");
 
     const rawEntryKind = normalizeText(input.entryKind, "manual").toLowerCase();
@@ -3456,13 +3447,13 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
     await query("BEGIN");
     try {
       const accountState = await getAccountStateForUpdateInTx(query as any);
-      const currentCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
+      const currentCash = Math.max(0, toFinite(accountState.cash, 0));
       const accountBaseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
       const entryCurrency = normalizeCcyCode(input.baseCurrency, accountBaseCurrency);
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
 
-      let fxRateToAccount = input.fxRateToAccount != null ? Math.max(0, toFiniteNumber(input.fxRateToAccount, 0)) : 0;
+      let fxRateToAccount = input.fxRateToAccount != null ? Math.max(0, toFinite(input.fxRateToAccount, 0)) : 0;
       if (!(fxRateToAccount > 0)) {
         fxRateToAccount = resolveFxRateToBase(accountBaseCurrency, entryCurrency, fxMap) ?? 0;
       }
@@ -3473,8 +3464,8 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
         throw new Error(`missing fx rate for cash-ledger: ${entryCurrency}/${accountBaseCurrency}`);
       }
 
-      const amountInAccountBase = input.amountInAccountBase != null && toFiniteNumber(input.amountInAccountBase, 0) > 0
-        ? Math.max(0, toFiniteNumber(input.amountInAccountBase, 0))
+      const amountInAccountBase = input.amountInAccountBase != null && toFinite(input.amountInAccountBase, 0) > 0
+        ? Math.max(0, toFinite(input.amountInAccountBase, 0))
         : amount * fxRateToAccount;
       const nextCash = side === "deposit" ? currentCash + amountInAccountBase : currentCash - amountInAccountBase;
       if (nextCash < -1e-9) {
@@ -3637,7 +3628,7 @@ export async function listDaaTradeBaskets(opts: {
 } = {}): Promise<DaaStoreTradeBasket[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(opts.limit, 100))));
+    const limit = Math.max(1, Math.min(200, Math.trunc(toFinite(opts.limit, 100))));
     const params: unknown[] = [];
     const where: string[] = [];
     if (opts.status) {
@@ -3664,7 +3655,7 @@ export async function listDaaTradeTickets(opts: {
 } = {}): Promise<DaaStoreTradeTicket[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(opts.limit, 100))));
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(opts.limit, 100))));
     const where: string[] = [];
     const params: unknown[] = [];
 
@@ -3720,7 +3711,7 @@ const REBALANCE_CYCLE_SELECT_COLUMNS_ = [
 export async function listDaaRebalanceCycles(limit = 100): Promise<DaaStoreRebalanceCycle[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 100))));
+    const n = Math.max(1, Math.min(500, Math.trunc(toFinite(limit, 100))));
     const result = await query(
       `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles ORDER BY created_at DESC LIMIT $1`,
       [n],
@@ -3751,7 +3742,7 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
     const triggerSource = normalizeRebalanceTriggerSource(input.triggerSource);
     const triggerReason = normalizeText(input.triggerReason, "");
     const snapshotAt = toIsoString(input.snapshotAt, new Date().toISOString());
-    const equitySnapshot = Math.max(0, toFiniteNumber(input.equitySnapshot, 0));
+    const equitySnapshot = Math.max(0, toFinite(input.equitySnapshot, 0));
     const driftSnapshot = normalizeDriftSnapshot(input.driftSnapshot);
     const proposals = normalizeCycleProposals(input.proposals);
     const riskCheck = normalizePreTradeRiskCheck(input.riskCheck);
@@ -3831,10 +3822,10 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
         ? current.executionSummary
         : (input.executionSummary
           ? {
-            ordersExecuted: Math.max(0, toFiniteNumber(input.executionSummary.ordersExecuted, 0)),
-            ordersFailed: Math.max(0, toFiniteNumber(input.executionSummary.ordersFailed, 0)),
-            totalNotional: Math.max(0, toFiniteNumber(input.executionSummary.totalNotional, 0)),
-            newMaxDriftPct: Math.max(0, toFiniteNumber(input.executionSummary.newMaxDriftPct, 0)),
+            ordersExecuted: Math.max(0, toFinite(input.executionSummary.ordersExecuted, 0)),
+            ordersFailed: Math.max(0, toFinite(input.executionSummary.ordersFailed, 0)),
+            totalNotional: Math.max(0, toFinite(input.executionSummary.totalNotional, 0)),
+            newMaxDriftPct: Math.max(0, toFinite(input.executionSummary.newMaxDriftPct, 0)),
           }
           : null);
       const nextCancelledAt = input.cancelledAt === undefined
@@ -3980,7 +3971,7 @@ export async function getDaaCycleReport(cycleIdRaw: string): Promise<DaaStoreCyc
 export async function listDaaCycleReports(limit = 50): Promise<DaaStoreCycleReport[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const n = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(limit, 50))));
+    const n = Math.max(1, Math.min(200, Math.trunc(toFinite(limit, 50))));
     const result = await query(
       `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
        FROM daa_cycle_reports r
@@ -4067,7 +4058,7 @@ export async function listDaaLlmFeedback(input: {
 } = {}): Promise<DaaStoreLlmFeedback[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(input.limit, 100))));
     const params: unknown[] = [];
     const where: string[] = [];
     if (input.type) {
@@ -4122,9 +4113,9 @@ export async function updateDaaTradeTicket(input: {
       const current = mapTradeTicketRow(existingRes.rows[0] as Record<string, unknown>);
       if (current.status !== "ready") throw new Error(`ticket status not editable: ${current.status}`);
 
-      const qty = input.qty == null ? current.qty : Math.max(0, toFiniteNumber(input.qty, 0));
-      const price = input.price == null ? current.price : Math.max(0, toFiniteNumber(input.price, 0));
-      const fee = input.fee == null ? current.fee : Math.max(0, toFiniteNumber(input.fee, 0));
+      const qty = input.qty == null ? current.qty : Math.max(0, toFinite(input.qty, 0));
+      const price = input.price == null ? current.price : Math.max(0, toFinite(input.price, 0));
+      const fee = input.fee == null ? current.fee : Math.max(0, toFinite(input.fee, 0));
       if (qty <= 0) throw new Error("qty must be greater than 0");
       if (price <= 0) throw new Error("price must be greater than 0");
 
@@ -4211,9 +4202,9 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
     const side = normalizeTradeTicketSide(input.side);
     const source = normalizeTradeTicketSource(input.source);
     const sourceForBasket = source === "decision" ? "decision" : "manual";
-    const qty = Math.max(0, toFiniteNumber(input.qty, 0));
-    const price = Math.max(0, toFiniteNumber(input.price, 0));
-    const fee = Math.max(0, toFiniteNumber(input.fee, 0));
+    const qty = Math.max(0, toFinite(input.qty, 0));
+    const price = Math.max(0, toFinite(input.price, 0));
+    const fee = Math.max(0, toFinite(input.fee, 0));
     const basketIdInput = normalizeText(input.basketId);
     const cycleId = normalizeText(input.cycleId, "") || null;
     const decisionRefId = normalizeText(input.decisionRefId, "") || null;
@@ -4244,7 +4235,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
     try {
       const accountState = await ensureAccountStateRowInTx(query as any);
       const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
-      const cash = Math.max(0, toFiniteNumber(accountState.cash, 0));
+      const cash = Math.max(0, toFinite(accountState.cash, 0));
 
       let basketId = basketIdInput;
       if (!basketId) {
@@ -4279,7 +4270,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
         "SELECT qty FROM daa_positions_v2 WHERE asset_key = $1 LIMIT 1 FOR UPDATE",
         [assetKey],
       );
-      const positionQty = Math.max(0, toFiniteNumber((posRes.rows[0] as Record<string, unknown> | undefined)?.qty, 0));
+      const positionQty = Math.max(0, toFinite((posRes.rows[0] as Record<string, unknown> | undefined)?.qty, 0));
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
@@ -4392,7 +4383,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
 
       const accountState = await getAccountStateForUpdateInTx(query as any);
       const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
-      let accountCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
+      let accountCash = Math.max(0, toFinite(accountState.cash, 0));
       let accountInvestableCash = resolveInvestableCash(accountState.cash, accountState.frozenCash, accountState.investableCash);
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
@@ -4481,7 +4472,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           const prevQty = Math.max(0, existingPosition.qty);
           const nextQty = prevQty + ticket.qty;
           const prevCostBasis = prevQty > 0
-            ? Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)))
+            ? Math.max(0, toFinite(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)))
             : 0;
           const nextCostBasis = prevCostBasis + grossNotional;
           positionsMap.set(positionKey, {
@@ -4514,7 +4505,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           if (nextQty <= 0) {
             positionsMap.delete(positionKey);
           } else {
-            const prevCostBasis = Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)));
+            const prevCostBasis = Math.max(0, toFinite(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)));
             const costPerUnit = prevQty > 0 ? prevCostBasis / prevQty : 0;
             positionsMap.set(positionKey, {
               ...existingPosition,
@@ -4765,9 +4756,9 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             symbol,
             market,
             currency: normalizeText(item.currency, "USD").toUpperCase(),
-            qty: Math.max(0, toFiniteNumber(item.qty)),
-            price: Math.max(0, toFiniteNumber(item.price)),
-            costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
+            qty: Math.max(0, toFinite(item.qty)),
+            price: Math.max(0, toFinite(item.price)),
+            costBasis: item.cost_basis == null ? null : Math.max(0, toFinite(item.cost_basis)),
             tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
             updatedAt: toIsoString(item.updated_at),
           } satisfies DaaStorePosition;
@@ -4891,7 +4882,7 @@ export async function appendDaaRunHistory(input: {
 
 export async function listDaaRunHistory(limit = 50): Promise<DaaStoreRunHistoryEntry[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 50))));
+  const n = Math.max(1, Math.min(500, Math.trunc(toFinite(limit, 50))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       "SELECT id, ts, trigger_source, request_json, response_json, summary_json FROM daa_run_history ORDER BY ts DESC LIMIT $1",
@@ -4929,7 +4920,7 @@ export async function appendDaaOpLog(input: {
 
 export async function listDaaOpLog(limit = 100): Promise<DaaStoreOpLogEntry[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 100))));
+  const n = Math.max(1, Math.min(500, Math.trunc(toFinite(limit, 100))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       "SELECT id, ts, level, message, context_json FROM daa_op_log ORDER BY ts DESC LIMIT $1",
@@ -4952,7 +4943,7 @@ export async function appendAssetPriceHistoryRows(rows: Array<{ assetKey: string
           throw new Error(`price history assetKey invalid: ${normalizeText(row.assetKey) || "unknown"}`);
         }
         const assetKey = buildDaaAssetKey(parsedAssetKey.symbol, parsedAssetKey.market);
-        const price = Math.max(0, toFiniteNumber(row.price));
+        const price = Math.max(0, toFinite(row.price));
         if (!assetKey || price <= 0) continue;
         const ts = toIsoString(row.ts, new Date().toISOString());
         const source = normalizeText(row.source, "yfinance");
@@ -5058,7 +5049,7 @@ export async function listDaaRebalanceDecisions(opts?: {
   status?: DaaStoreRebalanceDecision["status"];
 }): Promise<Array<DaaStoreRebalanceDecision & { orders: DaaStoreExecutionOrder[] }>> {
   await ensureDaaStoreSchemaPg();
-  const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(opts?.limit, 50))));
+  const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(opts?.limit, 50))));
   const status = normalizeText(opts?.status);
 
   return withDaaPgClient(async ({ query }) => {
@@ -5251,7 +5242,7 @@ function hashToken(value: string): string {
 }
 
 function mapMarketPriceSnapshotRow(row: Record<string, unknown>): DaaStoreMarketPriceSnapshot {
-  const price = Math.max(0, toFiniteNumber(row.price, 0));
+  const price = Math.max(0, toFinite(row.price, 0));
   const status = normalizeMarketPriceStatus(row.status, "missing");
   const semanticUpdatedAt = row.as_of_ts == null ? null : toIsoString(row.as_of_ts, new Date().toISOString());
   const persistedFetchedAt = row.fetched_at == null ? null : toIsoString(row.fetched_at, new Date().toISOString());
@@ -5281,7 +5272,7 @@ function mapMarketPriceHistoryRow(row: Record<string, unknown>): DaaStoreMarketP
     market: normalizeUpper(row.market, "US"),
     symbol: normalizeUpper(row.symbol),
     ts: toIsoString(row.as_of_ts, new Date().toISOString()),
-    price: Math.max(0, toFiniteNumber(row.price, 0)),
+    price: Math.max(0, toFinite(row.price, 0)),
     currency: normalizeUpper(row.currency, "USD"),
     source: normalizeText(row.source, "market_cache"),
     rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
@@ -5297,9 +5288,9 @@ function mapNewsItemSnapshotRow(row: Record<string, unknown>): DaaStoreNewsItemS
     link: row.link == null ? null : normalizeText(row.link) || null,
     publishedAt: row.published_at == null ? null : toIsoString(row.published_at, new Date().toISOString()),
     fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
-    sentimentScore: toFiniteNumber(row.sentiment_score, 0),
-    sourceCredibility: clampNumber(toFiniteNumber(row.source_credibility, 0), 0, 1),
-    freshness: clampNumber(toFiniteNumber(row.freshness, 0), 0, 1),
+    sentimentScore: toFinite(row.sentiment_score, 0),
+    sourceCredibility: clampNumber(toFinite(row.source_credibility, 0), 0, 1),
+    freshness: clampNumber(toFinite(row.freshness, 0), 0, 1),
     rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
   };
 }
@@ -5308,9 +5299,9 @@ function mapNewsSignalSnapshotRow(row: Record<string, unknown>): DaaStoreNewsSig
   return {
     provider: normalizeText(row.provider, "yahoo_rss"),
     symbol: normalizeUpper(row.symbol),
-    scorePct: clampNumber(toFiniteNumber(row.score_pct, 50), 0, 100),
-    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 0), 0, 100),
-    evidenceCount: Math.max(0, Math.trunc(toFiniteNumber(row.evidence_count, 0))),
+    scorePct: clampNumber(toFinite(row.score_pct, 50), 0, 100),
+    confidencePct: clampNumber(toFinite(row.confidence_pct, 0), 0, 100),
+    evidenceCount: Math.max(0, Math.trunc(toFinite(row.evidence_count, 0))),
     reasonsJson: parseJsonb<string[]>(row.reasons_json, []).map((item) => String(item || "").trim()).filter(Boolean),
     generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
     updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
@@ -5324,15 +5315,15 @@ function mapMarketIndicatorSnapshotRow(row: Record<string, unknown>): DaaStoreMa
     scope: normalizeText(row.scope, "us_equity"),
     subjectKey: normalizeText(row.subject_key, "GLOBAL"),
     stance: normalizeMarketRegimeStore(row.stance),
-    riskOffScorePct: clampNumber(toFiniteNumber(row.risk_off_score_pct, 50), 0, 100),
-    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 40), 0, 100),
-    rawValue: row.raw_value == null ? null : toFiniteNumber(row.raw_value, 0),
+    riskOffScorePct: clampNumber(toFinite(row.risk_off_score_pct, 50), 0, 100),
+    confidencePct: clampNumber(toFinite(row.confidence_pct, 40), 0, 100),
+    rawValue: row.raw_value == null ? null : toFinite(row.raw_value, 0),
     unit: row.unit == null ? null : normalizeText(row.unit) || null,
-    percentile252: row.percentile_252 == null ? null : toFiniteNumber(row.percentile_252, 0),
-    zscore60: row.zscore_60 == null ? null : toFiniteNumber(row.zscore_60, 0),
-    trend1dPct: row.trend_1d_pct == null ? null : toFiniteNumber(row.trend_1d_pct, 0),
-    trend7dPct: row.trend_7d_pct == null ? null : toFiniteNumber(row.trend_7d_pct, 0),
-    trend30dPct: row.trend_30d_pct == null ? null : toFiniteNumber(row.trend_30d_pct, 0),
+    percentile252: row.percentile_252 == null ? null : toFinite(row.percentile_252, 0),
+    zscore60: row.zscore_60 == null ? null : toFinite(row.zscore_60, 0),
+    trend1dPct: row.trend_1d_pct == null ? null : toFinite(row.trend_1d_pct, 0),
+    trend7dPct: row.trend_7d_pct == null ? null : toFinite(row.trend_7d_pct, 0),
+    trend30dPct: row.trend_30d_pct == null ? null : toFinite(row.trend_30d_pct, 0),
     source: normalizeText(row.source, "market_cache"),
     reasonsJson: normalizeStringArray(parseJsonb<unknown[]>(row.reasons_json, [])),
     componentsJson: parseJsonb<Record<string, unknown>>(row.components_json, {}),
@@ -5350,10 +5341,10 @@ function mapHfHoldingSnapshotRow(row: Record<string, unknown>): DaaStoreHfHoldin
     reportDate: /^\d{4}-\d{2}-\d{2}$/.test(reportDate) ? reportDate : toIsoString(row.report_date, new Date().toISOString()).slice(0, 10),
     symbol: normalizeUpper(row.symbol),
     market: normalizeUpper(row.market, "UNKNOWN"),
-    weightPct: Math.max(0, toFiniteNumber(row.weight_pct, 0)),
-    prevWeightPct: Math.max(0, toFiniteNumber(row.prev_weight_pct, 0)),
+    weightPct: Math.max(0, toFinite(row.weight_pct, 0)),
+    prevWeightPct: Math.max(0, toFinite(row.prev_weight_pct, 0)),
     disclosedAt: row.disclosed_at == null ? null : toIsoString(row.disclosed_at, new Date().toISOString()),
-    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 0), 0, 100),
+    confidencePct: clampNumber(toFinite(row.confidence_pct, 0), 0, 100),
     sourceRef: row.source_ref == null ? null : normalizeText(row.source_ref) || null,
     fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
     rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
@@ -5364,10 +5355,10 @@ function mapHfSignalSnapshotRow(row: Record<string, unknown>): DaaStoreHfSignalS
   return {
     provider: normalizeText(row.provider, "human_signal"),
     symbol: normalizeUpper(row.symbol),
-    aggregatedScorePct: clampNumber(toFiniteNumber(row.aggregated_score_pct, 0), 0, 100),
-    convictionPct: clampNumber(toFiniteNumber(row.conviction_pct, 0), 0, 100),
-    thesisDriftPct: clampNumber(toFiniteNumber(row.thesis_drift_pct, 0), 0, 100),
-    fundCount: Math.max(0, Math.trunc(toFiniteNumber(row.fund_count, 0))),
+    aggregatedScorePct: clampNumber(toFinite(row.aggregated_score_pct, 0), 0, 100),
+    convictionPct: clampNumber(toFinite(row.conviction_pct, 0), 0, 100),
+    thesisDriftPct: clampNumber(toFinite(row.thesis_drift_pct, 0), 0, 100),
+    fundCount: Math.max(0, Math.trunc(toFinite(row.fund_count, 0))),
     fundsJson: parseJsonb<Array<Record<string, unknown>>>(row.funds_json, []),
     generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
     updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
@@ -5382,7 +5373,7 @@ function mapExternalPayloadRawRow(row: Record<string, unknown>): DaaStoreExterna
     subjectKey: normalizeText(row.subject_key),
     requestUrl: normalizeText(row.request_url),
     requestJson: parseJsonb<Record<string, unknown>>(row.request_json, {}),
-    responseStatus: Math.max(0, Math.trunc(toFiniteNumber(row.response_status, 0))),
+    responseStatus: Math.max(0, Math.trunc(toFinite(row.response_status, 0))),
     responseHeadersJson: parseJsonb<Record<string, unknown>>(row.response_headers_json, {}),
     payloadJson: row.payload_json == null ? null : parseJsonb<Record<string, unknown>>(row.payload_json, {}),
     payloadText: row.payload_text == null ? null : String(row.payload_text),
@@ -5400,9 +5391,9 @@ function mapIngestJobLogRow(row: Record<string, unknown>): DaaStoreIngestJobLog 
     status: normalizeIngestJobStatus(row.status, "ok"),
     startedAt: toIsoString(row.started_at, new Date().toISOString()),
     finishedAt: toIsoString(row.finished_at, new Date().toISOString()),
-    totalCount: Math.max(0, Math.trunc(toFiniteNumber(row.total_count, 0))),
-    successCount: Math.max(0, Math.trunc(toFiniteNumber(row.success_count, 0))),
-    failureCount: Math.max(0, Math.trunc(toFiniteNumber(row.failure_count, 0))),
+    totalCount: Math.max(0, Math.trunc(toFinite(row.total_count, 0))),
+    successCount: Math.max(0, Math.trunc(toFinite(row.success_count, 0))),
+    failureCount: Math.max(0, Math.trunc(toFinite(row.failure_count, 0))),
     diagnosticsJson: parseJsonb<Record<string, unknown>>(row.diagnostics_json, {}),
   };
 }
@@ -5643,7 +5634,7 @@ export async function appendDaaExternalPayloadRaw(input: {
     const subjectKey = normalizeText(input.subjectKey, "");
     const requestUrl = normalizeText(input.requestUrl, "");
     const requestJson = input.requestJson && typeof input.requestJson === "object" ? input.requestJson : {};
-    const responseStatus = Math.max(0, Math.trunc(toFiniteNumber(input.responseStatus, 0)));
+    const responseStatus = Math.max(0, Math.trunc(toFinite(input.responseStatus, 0)));
     const responseHeadersJson = input.responseHeadersJson && typeof input.responseHeadersJson === "object" ? input.responseHeadersJson : {};
     const payloadJson = input.payloadJson && typeof input.payloadJson === "object" ? input.payloadJson : null;
     const payloadText = input.payloadText == null ? null : String(input.payloadText);
@@ -5671,7 +5662,7 @@ export async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toI
       "DELETE FROM daa_external_payload_raw_v1 WHERE expire_at <= $1",
       [toIsoString(nowIso, new Date().toISOString())],
     );
-    return Math.max(0, Math.trunc(toFiniteNumber(result.rowCount, 0)));
+    return Math.max(0, Math.trunc(toFinite(result.rowCount, 0)));
   });
 }
 
@@ -5688,7 +5679,7 @@ export async function upsertDaaMarketPriceSnapshots(rows: Array<Partial<DaaStore
         if (!symbol) continue;
         const normalizedSymbol = normalizeUpper(row.normalizedSymbol, symbol);
         const currency = normalizeUpper(row.currency, "USD");
-        const price = Math.max(0, toFiniteNumber(row.price, 0));
+        const price = Math.max(0, toFinite(row.price, 0));
         const status = normalizeMarketPriceStatus(row.status, price > 0 ? "fresh" : "missing");
         const priceUpdatedAt = row.priceUpdatedAt ? toIsoString(row.priceUpdatedAt, new Date().toISOString()) : (price > 0 ? new Date().toISOString() : null);
         const persistedFetchedAt = priceUpdatedAt || new Date().toISOString();
@@ -5777,7 +5768,7 @@ export async function listDaaMarketPriceSnapshots(input: {
       params.push(symbols);
       where.push(`symbol = ANY($${params.length})`);
     }
-    const limit = Math.max(1, Math.min(5000, Math.trunc(toFiniteNumber(input.limit, 2000))));
+    const limit = Math.max(1, Math.min(5000, Math.trunc(toFinite(input.limit, 2000))));
     params.push(limit);
     const result = await query(
       `SELECT ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_}
@@ -5819,7 +5810,7 @@ export async function listLatestDaaMarketPriceHistoryRows(input: {
       params.push(symbols);
       where.push(`symbol = ANY($${params.length})`);
     }
-    const limit = Math.max(1, Math.min(5000, Math.trunc(toFiniteNumber(input.limit, 2000))));
+    const limit = Math.max(1, Math.min(5000, Math.trunc(toFinite(input.limit, 2000))));
     params.push(limit);
     const result = await query(
       `SELECT provider, market, symbol, as_of_ts, price, currency, source, raw_ref_id
@@ -5848,7 +5839,7 @@ export async function appendDaaMarketPriceHistoryRows(rows: Array<Partial<DaaSto
         const provider = normalizeText(row.provider, "yfinance");
         const market = normalizeUpper(row.market, "US");
         const symbol = normalizeUpper(row.symbol);
-        const price = Math.max(0, toFiniteNumber(row.price, 0));
+        const price = Math.max(0, toFinite(row.price, 0));
         if (!symbol || !(price > 0)) continue;
         const ts = toIsoString(row.ts, new Date().toISOString());
         const currency = normalizeUpper(row.currency, "USD");
@@ -5885,7 +5876,7 @@ export async function appendDaaFxRateHistoryRows(rows: Array<Partial<DaaStoreFxR
         const baseCcy = normalizeUpper(row.baseCcy, "USD");
         const quoteCcy = normalizeUpper(row.quoteCcy, "USD");
         const status = normalizeFxHistoryStatus(row.status, "fresh");
-        const rate = Math.max(0, toFiniteNumber(row.rate, 0));
+        const rate = Math.max(0, toFinite(row.rate, 0));
         if (!baseCcy || !quoteCcy) continue;
         if (!(rate > 0) && status !== "error" && status !== "missing") continue;
         const asOfTs = toIsoString(row.asOfTs, new Date().toISOString());
@@ -5930,9 +5921,9 @@ export async function upsertDaaNewsItemSnapshots(rows: Array<Partial<DaaStoreNew
         const publishedAt = row.publishedAt ? toIsoString(row.publishedAt, new Date().toISOString()) : null;
         const itemHash = normalizeText(row.itemHash) || hashToken(`${symbol}::${title}::${link || ""}::${publishedAt || ""}`);
         const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
-        const sentimentScore = toFiniteNumber(row.sentimentScore, 0);
-        const sourceCredibility = clampNumber(toFiniteNumber(row.sourceCredibility, 0), 0, 1);
-        const freshness = clampNumber(toFiniteNumber(row.freshness, 0), 0, 1);
+        const sentimentScore = toFinite(row.sentimentScore, 0);
+        const sourceCredibility = clampNumber(toFinite(row.sourceCredibility, 0), 0, 1);
+        const freshness = clampNumber(toFinite(row.freshness, 0), 0, 1);
         const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
         await query(
           `INSERT INTO daa_news_item_snapshot_v1
@@ -5967,7 +5958,7 @@ export async function listDaaNewsItemsBySymbol(input: {
     const provider = normalizeText(input.provider, "yahoo_rss");
     const symbol = normalizeUpper(input.symbol);
     if (!symbol) return [];
-    const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(input.limit, 20))));
+    const limit = Math.max(1, Math.min(200, Math.trunc(toFinite(input.limit, 20))));
     const result = await query(
       `SELECT ${NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_}
        FROM daa_news_item_snapshot_v1
@@ -5990,9 +5981,9 @@ export async function upsertDaaNewsSignalSnapshots(rows: Array<Partial<DaaStoreN
         const provider = normalizeText(row.provider, "yahoo_rss");
         const symbol = normalizeUpper(row.symbol);
         if (!symbol) continue;
-        const scorePct = clampNumber(toFiniteNumber(row.scorePct, 50), 0, 100);
-        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 0), 0, 100);
-        const evidenceCount = Math.max(0, Math.trunc(toFiniteNumber(row.evidenceCount, 0)));
+        const scorePct = clampNumber(toFinite(row.scorePct, 50), 0, 100);
+        const confidencePct = clampNumber(toFinite(row.confidencePct, 0), 0, 100);
+        const evidenceCount = Math.max(0, Math.trunc(toFinite(row.evidenceCount, 0)));
         const reasonsJson = Array.isArray(row.reasonsJson) ? row.reasonsJson.map((item) => String(item || "").trim()).filter(Boolean) : [];
         const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
         const result = await query(
@@ -6052,15 +6043,15 @@ export async function upsertDaaMarketIndicatorSnapshots(rows: Array<Partial<DaaS
         const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
         const id = normalizeText(row.id, "") || hashToken(`${indicatorKey}::${scope}::${subjectKey}::${generatedAt}`);
         const stance = normalizeMarketRegimeStore(row.stance);
-        const riskOffScorePct = clampNumber(toFiniteNumber(row.riskOffScorePct, 50), 0, 100);
-        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 40), 0, 100);
-        const rawValue = row.rawValue == null ? null : toFiniteNumber(row.rawValue, 0);
+        const riskOffScorePct = clampNumber(toFinite(row.riskOffScorePct, 50), 0, 100);
+        const confidencePct = clampNumber(toFinite(row.confidencePct, 40), 0, 100);
+        const rawValue = row.rawValue == null ? null : toFinite(row.rawValue, 0);
         const unit = row.unit == null ? null : normalizeText(row.unit) || null;
-        const percentile252 = row.percentile252 == null ? null : toFiniteNumber(row.percentile252, 0);
-        const zscore60 = row.zscore60 == null ? null : toFiniteNumber(row.zscore60, 0);
-        const trend1dPct = row.trend1dPct == null ? null : toFiniteNumber(row.trend1dPct, 0);
-        const trend7dPct = row.trend7dPct == null ? null : toFiniteNumber(row.trend7dPct, 0);
-        const trend30dPct = row.trend30dPct == null ? null : toFiniteNumber(row.trend30dPct, 0);
+        const percentile252 = row.percentile252 == null ? null : toFinite(row.percentile252, 0);
+        const zscore60 = row.zscore60 == null ? null : toFinite(row.zscore60, 0);
+        const trend1dPct = row.trend1dPct == null ? null : toFinite(row.trend1dPct, 0);
+        const trend7dPct = row.trend7dPct == null ? null : toFinite(row.trend7dPct, 0);
+        const trend30dPct = row.trend30dPct == null ? null : toFinite(row.trend30dPct, 0);
         const source = normalizeText(row.source, "market_cache");
         const reasonsJson = normalizeStringArray(Array.isArray(row.reasonsJson) ? row.reasonsJson : []);
         const componentsJson = row.componentsJson && typeof row.componentsJson === "object" ? row.componentsJson as Record<string, unknown> : {};
@@ -6140,7 +6131,7 @@ export async function listDaaMarketIndicatorHistory(input: {
   return withDaaPgClient(async ({ query }) => {
     const keys = [...new Set((input.keys || []).map((item) => normalizeMarketIndicatorKey(item)).filter(Boolean))] as DaaMarketIndicatorKey[];
     if (!keys.length) return [];
-    const days = Math.max(1, Math.min(365, Math.trunc(toFiniteNumber(input.days, 90))));
+    const days = Math.max(1, Math.min(365, Math.trunc(toFinite(input.days, 90))));
     const since = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
     const scope = normalizeText(input.scope, "");
     const result = scope
@@ -6179,10 +6170,10 @@ export async function replaceDaaHfHoldingSnapshots(rows: Array<Partial<DaaStoreH
         const reportDate = normalizeText(row.reportDate);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) continue;
         const market = normalizeUpper(row.market, "UNKNOWN");
-        const weightPct = Math.max(0, toFiniteNumber(row.weightPct, 0));
-        const prevWeightPct = Math.max(0, toFiniteNumber(row.prevWeightPct, 0));
+        const weightPct = Math.max(0, toFinite(row.weightPct, 0));
+        const prevWeightPct = Math.max(0, toFinite(row.prevWeightPct, 0));
         const disclosedAt = row.disclosedAt ? toIsoString(row.disclosedAt, new Date().toISOString()) : null;
-        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 0), 0, 100);
+        const confidencePct = clampNumber(toFinite(row.confidencePct, 0), 0, 100);
         const sourceRef = row.sourceRef == null ? null : normalizeText(row.sourceRef) || null;
         const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
         const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
@@ -6219,10 +6210,10 @@ export async function upsertDaaHfSignalSnapshots(rows: Array<Partial<DaaStoreHfS
         const provider = normalizeText(row.provider, "human_signal");
         const symbol = normalizeUpper(row.symbol);
         if (!symbol) continue;
-        const aggregatedScorePct = clampNumber(toFiniteNumber(row.aggregatedScorePct, 0), 0, 100);
-        const convictionPct = clampNumber(toFiniteNumber(row.convictionPct, 0), 0, 100);
-        const thesisDriftPct = clampNumber(toFiniteNumber(row.thesisDriftPct, 0), 0, 100);
-        const fundCount = Math.max(0, Math.trunc(toFiniteNumber(row.fundCount, 0)));
+        const aggregatedScorePct = clampNumber(toFinite(row.aggregatedScorePct, 0), 0, 100);
+        const convictionPct = clampNumber(toFinite(row.convictionPct, 0), 0, 100);
+        const thesisDriftPct = clampNumber(toFinite(row.thesisDriftPct, 0), 0, 100);
+        const fundCount = Math.max(0, Math.trunc(toFinite(row.fundCount, 0)));
         const fundsJson = Array.isArray(row.fundsJson) ? row.fundsJson : [];
         const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
         await query(
@@ -6266,9 +6257,9 @@ export async function appendDaaIngestJobLog(input: {
     const status = normalizeIngestJobStatus(input.status, "ok");
     const startedAt = toIsoString(input.startedAt, new Date().toISOString());
     const finishedAt = toIsoString(input.finishedAt, new Date().toISOString());
-    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(input.totalCount, 0)));
-    const successCount = Math.max(0, Math.trunc(toFiniteNumber(input.successCount, 0)));
-    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(input.failureCount, 0)));
+    const totalCount = Math.max(0, Math.trunc(toFinite(input.totalCount, 0)));
+    const successCount = Math.max(0, Math.trunc(toFinite(input.successCount, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFinite(input.failureCount, 0)));
     const diagnosticsJson = input.diagnosticsJson && typeof input.diagnosticsJson === "object" ? input.diagnosticsJson : {};
     await query(
       `INSERT INTO daa_ingest_job_log_v1
@@ -6293,7 +6284,7 @@ export async function listDaaIngestJobLogs(input: {
 } = {}): Promise<DaaStoreIngestJobLog[]> {
   await ensureDaaMarketCacheSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(input.limit, 100))));
     if (input.jobType) {
       const result = await query(
         `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
@@ -6355,21 +6346,21 @@ export async function getDaaMarketCacheHealthStats(provider = "yfinance"): Promi
       [],
     );
     const jobs = jobsRes.rows[0] as Record<string, unknown> | undefined;
-    const successCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.success_count, 0)));
-    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.failure_count, 0)));
-    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.total_count, successCount + failureCount)));
+    const successCount = Math.max(0, Math.trunc(toFinite(jobs?.success_count, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFinite(jobs?.failure_count, 0)));
+    const totalCount = Math.max(0, Math.trunc(toFinite(jobs?.total_count, successCount + failureCount)));
     const safeDenominator = totalCount > 0 ? totalCount : Math.max(1, successCount + failureCount);
     const successRate = safeDenominator > 0 ? (successCount / safeDenominator) * 100 : 100;
     const failureRate = safeDenominator > 0 ? (failureCount / safeDenominator) * 100 : 0;
 
     return {
       provider: providerNormalized,
-      totalSnapshots: Math.max(0, Math.trunc(toFiniteNumber(summary?.total_count, 0))),
-      freshCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.fresh_count, 0))),
-      staleCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.stale_count, 0))),
-      missingCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.missing_count, 0))),
-      errorCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.error_count, 0))),
-      unsupportedCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.unsupported_count, 0))),
+      totalSnapshots: Math.max(0, Math.trunc(toFinite(summary?.total_count, 0))),
+      freshCount: Math.max(0, Math.trunc(toFinite(summary?.fresh_count, 0))),
+      staleCount: Math.max(0, Math.trunc(toFinite(summary?.stale_count, 0))),
+      missingCount: Math.max(0, Math.trunc(toFinite(summary?.missing_count, 0))),
+      errorCount: Math.max(0, Math.trunc(toFinite(summary?.error_count, 0))),
+      unsupportedCount: Math.max(0, Math.trunc(toFinite(summary?.unsupported_count, 0))),
       recentJobSuccessRatePct: Number(successRate.toFixed(2)),
       recentJobFailureRatePct: Number(failureRate.toFixed(2)),
     };
