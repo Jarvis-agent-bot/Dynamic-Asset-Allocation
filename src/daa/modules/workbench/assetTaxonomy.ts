@@ -1,10 +1,10 @@
-export type AssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "OTHER";
+export type AssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
 export type Region = "US" | "HK" | "CN" | "EU" | "JP" | "GLOBAL" | "OTHER";
-export type InstrumentType = "STOCK" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "OTHER";
+export type InstrumentType = "STOCK" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
 
 export function normalizeAssetClass(value: unknown, fallback: AssetClass = "OTHER"): AssetClass {
   const v = String(value || "").trim().toUpperCase();
-  if (v === "EQUITY" || v === "ETF" || v === "BOND" || v === "COMMODITY" || v === "CASH" || v === "CRYPTO" || v === "FUND" || v === "INDEX" || v === "OTHER") {
+  if (v === "EQUITY" || v === "ETF" || v === "BOND" || v === "COMMODITY" || v === "CASH" || v === "CRYPTO" || v === "FUND" || v === "INDEX" || v === "CURRENCY" || v === "OTHER") {
     return v;
   }
   return fallback;
@@ -20,7 +20,7 @@ export function normalizeRegion(value: unknown, fallback: Region = "GLOBAL"): Re
 
 export function normalizeInstrumentType(value: unknown, fallback: InstrumentType = "OTHER"): InstrumentType {
   const v = String(value || "").trim().toUpperCase();
-  if (v === "STOCK" || v === "ETF" || v === "BOND" || v === "COMMODITY" || v === "CASH" || v === "CRYPTO" || v === "FUND" || v === "INDEX" || v === "OTHER") {
+  if (v === "STOCK" || v === "ETF" || v === "BOND" || v === "COMMODITY" || v === "CASH" || v === "CRYPTO" || v === "FUND" || v === "INDEX" || v === "CURRENCY" || v === "OTHER") {
     return v;
   }
   return fallback;
@@ -50,6 +50,7 @@ export function inferAssetClassByQuoteType(input: { quoteType?: unknown; symbol?
 
   if (quoteType === "COMMODITY") return "COMMODITY";
   if (/GC=F|SI=F|CL=F|BZ=F|HG=F|NG=F|XAU|XAG/.test(symbol)) return "COMMODITY";
+  if (quoteType === "CURRENCY" || /^DX-Y\.NYB$|^DXY$|^UUP$|^FXE$|^FXY$|^FXB$|^FXA$|^FXC$|^CYB$|^CEW$|^UDN$/.test(symbol)) return "CURRENCY";
   if (quoteType === "ETF") return "ETF";
   if (quoteType === "MUTUALFUND") return "FUND";
   if (quoteType === "INDEX") return "INDEX";
@@ -68,6 +69,7 @@ export function inferInstrumentTypeByAssetClass(assetClassRaw: unknown): Instrum
   if (assetClass === "CASH") return "CASH";
   if (assetClass === "CRYPTO") return "CRYPTO";
   if (assetClass === "INDEX") return "INDEX";
+  if (assetClass === "CURRENCY") return "CURRENCY";
   if (assetClass === "EQUITY") return "STOCK";
   return "OTHER";
 }
