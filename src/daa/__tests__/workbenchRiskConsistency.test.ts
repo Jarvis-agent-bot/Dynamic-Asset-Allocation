@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
 
 vi.mock("@/src/daa/modules/workbench/decisionFusion", async () => {
   const actual = await vi.importActual<typeof import("@/src/daa/modules/workbench/decisionFusion")>(
@@ -6,7 +7,7 @@ vi.mock("@/src/daa/modules/workbench/decisionFusion", async () => {
   );
   return {
     ...actual,
-    fuseDecision: vi.fn((input: import("@/src/daa/modules/workbench/decisionFusion").DecisionFusionInput) => ({
+    fuseDecision: vi.fn((input: Parameters<typeof actual.fuseDecision>[0]) => ({
       proposals: input.draftProposals.map((proposal) => ({
         ...proposal,
         suggestedQty: proposal.suggestedQty * 0.7,
@@ -51,17 +52,6 @@ import {
   generateWorkbenchRebalanceCycle,
   updateWorkbenchRebalanceCycle,
 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
-
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMemRuntime() {
-  process.env.DAA_PG_MEM = "1";
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-  delete (globalThis as any)[PG_GLOBAL_KEY];
-  delete (globalThis as any)[STORE_GLOBAL_KEY];
-}
 
 describe("workbench-risk-consistency-v1", () => {
   beforeEach(async () => {

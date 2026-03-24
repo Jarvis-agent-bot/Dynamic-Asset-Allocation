@@ -4,7 +4,7 @@ import { useEffect, type MouseEvent } from "react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { DeepLedgerSectionAnchor } from "@/app/daa/dashboard/_components/DeepLedgerUI";
+import { DaaSurfaceSectionAnchor } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { WorkbenchActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchActiveTabPanel";
@@ -143,7 +143,7 @@ export default function WorkbenchPageClient(props: {
         <div className="space-y-4">
           <div className="grid gap-2 rounded-[18px] border border-[var(--border)] bg-[rgba(13,19,32,0.8)] p-2 md:grid-cols-3">
             {navigationItems.map((item) => (
-              <DeepLedgerSectionAnchor
+              <DaaSurfaceSectionAnchor
                 key={item.key}
                 href={getWorkbenchHref(item.key)}
                 label={item.label}

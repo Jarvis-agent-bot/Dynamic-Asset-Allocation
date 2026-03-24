@@ -24,18 +24,18 @@ import type {
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
-  DeepLedgerActionButton,
-  DeepLedgerEmptyState,
-  DeepLedgerMiniStat,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-  deepLedgerDenseFieldClassName,
-  deepLedgerSearchShellClassName,
-  deepLedgerTableHeadClassName,
-  deepLedgerTableShellClassName,
-} from "../../_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceEmptyState,
+  DaaSurfaceMiniStat,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+  daaSurfaceDenseFieldClassName,
+  daaSurfaceSearchShellClassName,
+  daaSurfaceTableHeadClassName,
+  daaSurfaceTableShellClassName,
+} from "../../_components/DaaSurfaceUI";
 
-export type AssetUniverseViewFilter = "all" | "holdings" | "watchlist" | "basket";
+type AssetUniverseViewFilter = "all" | "holdings" | "watchlist" | "basket";
 type HoldingGroupKey = "stock" | "etf" | "bond" | "crypto";
 
 const HOLDING_GROUP_META_: Array<{ key: HoldingGroupKey; label: string }> = [
@@ -430,7 +430,7 @@ function ActionButton(props: {
   onClick?: () => void;
 }) {
   const button = (
-    <DeepLedgerActionButton
+    <DaaSurfaceActionButton
       tone={props.tone || "slate"}
       className={cn("h-8 rounded-full px-3 text-xs", props.className)}
       data-testid={props.testId}
@@ -438,7 +438,7 @@ function ActionButton(props: {
       onClick={props.onClick}
     >
       {props.label}
-    </DeepLedgerActionButton>
+    </DaaSurfaceActionButton>
   );
   if (!props.disabled || !props.reason) return button;
   return (
@@ -552,9 +552,9 @@ function InlineInsights(props: {
             <div className="mt-1 text-xs text-[var(--muted)]">行情更新时间：{formatDateTime(priceSnapshot.priceUpdatedAt)}</div>
             <div className="mt-1 text-xs text-[var(--muted)]">来源：{priceSnapshot.priceSource || "-"}</div>
           </div>
-          <DeepLedgerStatusPill tone={priceStatusTone(priceSnapshot.priceStatus)}>
+          <DaaSurfaceStatusPill tone={priceStatusTone(priceSnapshot.priceStatus)}>
             {priceStatusText(priceSnapshot.priceStatus)}
-          </DeepLedgerStatusPill>
+          </DaaSurfaceStatusPill>
         </div>
       ) : null}
 
@@ -583,9 +583,9 @@ function InlineInsights(props: {
             {opportunity ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <DeepLedgerStatusPill tone="cyan">{opportunity.actionLabelZh}</DeepLedgerStatusPill>
-                  <DeepLedgerStatusPill tone="indigo">强度 {opportunity.finalScorePct.toFixed(1)}%</DeepLedgerStatusPill>
-                  <DeepLedgerStatusPill tone="slate">一致性 {opportunity.confidencePct.toFixed(1)}%</DeepLedgerStatusPill>
+                  <DaaSurfaceStatusPill tone="cyan">{opportunity.actionLabelZh}</DaaSurfaceStatusPill>
+                  <DaaSurfaceStatusPill tone="indigo">强度 {opportunity.finalScorePct.toFixed(1)}%</DaaSurfaceStatusPill>
+                  <DaaSurfaceStatusPill tone="slate">一致性 {opportunity.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
                 </div>
                 {opportunity.scores ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -612,7 +612,7 @@ function InlineInsights(props: {
                 ) : null}
               </>
             ) : (
-              <DeepLedgerEmptyState
+              <DaaSurfaceEmptyState
                 title="暂无机会评分"
                 description="当前资产尚未形成完整的机会判断，建议等待数据刷新或展开其他洞察页签查看上下文。"
                 className="border-0 bg-transparent px-0 py-2 text-left"
@@ -625,9 +625,9 @@ function InlineInsights(props: {
           {technical ? (
             <div className="space-y-3 text-sm text-[var(--muted)]">
               <div className="flex flex-wrap items-center gap-2">
-                <DeepLedgerStatusPill tone="cyan">动量 {technical.momentumRegime}</DeepLedgerStatusPill>
-                <DeepLedgerStatusPill tone="indigo">评分 {technical.scorePct.toFixed(1)}%</DeepLedgerStatusPill>
-                <DeepLedgerStatusPill tone="slate">置信 {technical.confidencePct.toFixed(1)}%</DeepLedgerStatusPill>
+                <DaaSurfaceStatusPill tone="cyan">动量 {technical.momentumRegime}</DaaSurfaceStatusPill>
+                <DaaSurfaceStatusPill tone="indigo">评分 {technical.scorePct.toFixed(1)}%</DaaSurfaceStatusPill>
+                <DaaSurfaceStatusPill tone="slate">置信 {technical.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[...technical.common, ...technical.specific].slice(0, 8).map((item) => (
@@ -636,7 +636,7 @@ function InlineInsights(props: {
               </div>
             </div>
           ) : (
-            <DeepLedgerEmptyState
+            <DaaSurfaceEmptyState
               title="暂无技术面数据"
               description="技术指标尚未生成，通常是行情缓存刷新未完成或该资产暂无可计算信号。"
               className="border-0 bg-transparent px-0 py-2 text-left"
@@ -648,9 +648,9 @@ function InlineInsights(props: {
           {valuation ? (
             <div className="space-y-3 text-sm text-[var(--muted)]">
               <div className="flex flex-wrap items-center gap-2">
-                <DeepLedgerStatusPill tone="amber">估值 {valuation.temperature === "cheap" ? "偏便宜" : valuation.temperature === "expensive" ? "偏贵" : "中性"}</DeepLedgerStatusPill>
-                <DeepLedgerStatusPill tone="indigo">评分 {valuation.scorePct.toFixed(1)}%</DeepLedgerStatusPill>
-                <DeepLedgerStatusPill tone="slate">置信 {valuation.confidencePct.toFixed(1)}%</DeepLedgerStatusPill>
+                <DaaSurfaceStatusPill tone="amber">估值 {valuation.temperature === "cheap" ? "偏便宜" : valuation.temperature === "expensive" ? "偏贵" : "中性"}</DaaSurfaceStatusPill>
+                <DaaSurfaceStatusPill tone="indigo">评分 {valuation.scorePct.toFixed(1)}%</DaaSurfaceStatusPill>
+                <DaaSurfaceStatusPill tone="slate">置信 {valuation.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
               </div>
               {valuation.reasons.length ? (
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">{valuation.reasons.slice(0, 3).join("；")}</div>
@@ -674,7 +674,7 @@ function InlineInsights(props: {
               ) : null}
             </div>
           ) : (
-            <DeepLedgerEmptyState
+            <DaaSurfaceEmptyState
               title="暂无估值信号"
               description="估值数据暂不可用，建议结合技术面、新闻面以及实际持仓权重综合判断。"
               className="border-0 bg-transparent px-0 py-2 text-left"
@@ -690,7 +690,7 @@ function InlineInsights(props: {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{displayMarketLabel === "组合摘要" ? "组合摘要环境" : `${displayMarketLabel}环境`}</div>
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="font-[var(--font-mono)] text-base text-[var(--text)]">{marketRegimeLabel(displayMarketContext.regime)}</div>
-                    <DeepLedgerStatusPill tone={marketRegimeTone(displayMarketContext.regime)}>{marketRegimeLabel(displayMarketContext.regime)}</DeepLedgerStatusPill>
+                    <DaaSurfaceStatusPill tone={marketRegimeTone(displayMarketContext.regime)}>{marketRegimeLabel(displayMarketContext.regime)}</DaaSurfaceStatusPill>
                   </div>
                 </div>
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
@@ -708,7 +708,7 @@ function InlineInsights(props: {
               <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">相关指标</div>
-                  {marketAttribution?.relevantKeys?.length ? <DeepLedgerStatusPill tone="indigo">{displayMarketLabel}</DeepLedgerStatusPill> : null}
+                  {marketAttribution?.relevantKeys?.length ? <DaaSurfaceStatusPill tone="indigo">{displayMarketLabel}</DaaSurfaceStatusPill> : null}
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {(marketIndicators.length > 0 ? marketIndicators : displayMarketContext.indicators).map((indicator) => {
@@ -717,9 +717,9 @@ function InlineInsights(props: {
                       <div key={indicator.key} className="rounded-[14px] border border-[rgba(129,140,248,0.18)] bg-[rgba(8,12,20,0.46)] px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="text-sm font-semibold text-[var(--text)]">{indicator.label}</div>
-                          <DeepLedgerStatusPill tone={marketRegimeTone(indicator.stance === "neutral" ? null : indicator.stance)}>
+                          <DaaSurfaceStatusPill tone={marketRegimeTone(indicator.stance === "neutral" ? null : indicator.stance)}>
                             {indicator.stance === "neutral" ? "中性" : marketRegimeLabel(indicator.stance)}
-                          </DeepLedgerStatusPill>
+                          </DaaSurfaceStatusPill>
                         </div>
                         <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">{formatMarketIndicatorValue(indicator.rawValue, indicator.unit)}</div>
                         <div className="mt-1 text-xs text-[var(--muted)]">
@@ -741,7 +741,7 @@ function InlineInsights(props: {
                       ? marketAttribution.relevantKeys
                       : (marketIndicators.length > 0 ? marketIndicators.map((item) => item.key) : displayMarketContext.indicators.map((item) => item.key))
                     ).map((key) => (
-                      <DeepLedgerStatusPill key={key} tone="slate">{marketIndicatorKeyLabel(key)}</DeepLedgerStatusPill>
+                      <DaaSurfaceStatusPill key={key} tone="slate">{marketIndicatorKeyLabel(key)}</DaaSurfaceStatusPill>
                     ))}
                   </div>
                 </div>
@@ -759,7 +759,7 @@ function InlineInsights(props: {
               </div>
             </div>
           ) : (
-            <DeepLedgerEmptyState
+            <DaaSurfaceEmptyState
               title="暂无市场上下文"
               description="市场状态层还没有可用快照，稍后刷新后可查看该资产受哪些市场指标影响。"
               className="border-0 bg-transparent px-0 py-2 text-left"
@@ -771,9 +771,9 @@ function InlineInsights(props: {
           {news ? (
             <div className="space-y-3 text-sm text-[var(--muted)]">
               <div className="flex flex-wrap items-center gap-2">
-                <DeepLedgerStatusPill tone="cyan">新闻评分 {news.scorePct.toFixed(1)}%</DeepLedgerStatusPill>
-                <DeepLedgerStatusPill tone="slate">置信 {news.confidencePct.toFixed(1)}%</DeepLedgerStatusPill>
-                <DeepLedgerStatusPill tone="indigo">证据 {news.evidenceCount}</DeepLedgerStatusPill>
+                <DaaSurfaceStatusPill tone="cyan">新闻评分 {news.scorePct.toFixed(1)}%</DaaSurfaceStatusPill>
+                <DaaSurfaceStatusPill tone="slate">置信 {news.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
+                <DaaSurfaceStatusPill tone="indigo">证据 {news.evidenceCount}</DaaSurfaceStatusPill>
               </div>
               {news.aiSummary?.summary ? (
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">{news.aiSummary.summary}</div>
@@ -794,7 +794,7 @@ function InlineInsights(props: {
               </div>
             </div>
           ) : (
-            <DeepLedgerEmptyState
+            <DaaSurfaceEmptyState
               title="暂无新闻洞察"
               description="可以稍后重试，或者先关注其他页签中已经就绪的结构化信号。"
               className="border-0 bg-transparent px-0 py-2 text-left"
@@ -808,12 +808,12 @@ function InlineInsights(props: {
               <div className="rounded-[14px] border border-[rgba(129,140,248,0.18)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">AI 依据</div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <DeepLedgerStatusPill tone={marketRegimeTone(marketContext?.regime || null)}>
+                  <DaaSurfaceStatusPill tone={marketRegimeTone(marketContext?.regime || null)}>
                     规则环境 {marketRegimeLabel(marketContext?.regime || null)}
-                  </DeepLedgerStatusPill>
-                  <DeepLedgerStatusPill tone={marketRegimeTone(aiMarketRegime)}>
+                  </DaaSurfaceStatusPill>
+                  <DaaSurfaceStatusPill tone={marketRegimeTone(aiMarketRegime)}>
                     AI 分析环境 {marketRegimeLabel(aiMarketRegime)}
-                  </DeepLedgerStatusPill>
+                  </DaaSurfaceStatusPill>
                 </div>
                 {aiMarketFacts.length > 0 ? (
                   <ul className="mt-3 space-y-1.5 text-sm text-[var(--text)]">
@@ -833,13 +833,13 @@ function InlineInsights(props: {
             {llm && llm.status === "ok" ? (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <DeepLedgerStatusPill tone="indigo">分析模型 {llm.provider}/{llm.model}</DeepLedgerStatusPill>
-                  <DeepLedgerStatusPill tone="slate">生成于 {formatDateTime(llm.generatedAt)}</DeepLedgerStatusPill>
+                  <DaaSurfaceStatusPill tone="indigo">分析模型 {llm.provider}/{llm.model}</DaaSurfaceStatusPill>
+                  <DaaSurfaceStatusPill tone="slate">生成于 {formatDateTime(llm.generatedAt)}</DaaSurfaceStatusPill>
                 </div>
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 text-[var(--text)]">{llm.summary}</div>
                 {props.feedbackContextId ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <DeepLedgerActionButton
+                    <DaaSurfaceActionButton
                       tone={props.feedbackScore === "up" ? "success" : "slate"}
                       className="h-8 rounded-full px-3 text-xs"
                       disabled={props.feedbackSubmitting}
@@ -850,8 +850,8 @@ function InlineInsights(props: {
                       })}
                     >
                       有用
-                    </DeepLedgerActionButton>
-                    <DeepLedgerActionButton
+                    </DaaSurfaceActionButton>
+                    <DaaSurfaceActionButton
                       tone={props.feedbackScore === "down" ? "danger" : "slate"}
                       className="h-8 rounded-full px-3 text-xs"
                       disabled={props.feedbackSubmitting}
@@ -862,7 +862,7 @@ function InlineInsights(props: {
                       })}
                     >
                       无用
-                    </DeepLedgerActionButton>
+                    </DaaSurfaceActionButton>
                     <span className="text-xs text-[var(--muted)]">
                       {props.feedbackSubmitting ? "提交中..." : props.feedbackScore ? "已记录反馈" : "请反馈本次 AI 解读质量"}
                     </span>
@@ -894,7 +894,7 @@ function InlineInsights(props: {
                 </div>
               </>
             ) : (
-              <DeepLedgerEmptyState
+              <DaaSurfaceEmptyState
                 title="暂无 AI 解读"
                 description="如果其他页签已有结构化信号，可以先据此判断；AI 解读生成后会同步展示在这里。"
                 className="border-0 bg-transparent px-0 py-2 text-left"
@@ -1022,11 +1022,11 @@ export default function AssetUniverseTable(props: {
   }
 
   return (
-    <DeepLedgerPanel
+    <DaaSurfacePanel
       title="观察与再平衡"
       accent={props.view === "holdings" ? "cyan" : "amber"}
       bodyClassName="space-y-5"
-      action={<DeepLedgerStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>当前 {filteredRows.length} 个标的</DeepLedgerStatusPill>}
+      action={<DaaSurfaceStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>当前 {filteredRows.length} 个标的</DaaSurfaceStatusPill>}
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
         <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,38,0.98),rgba(9,14,24,0.94))] p-5">
@@ -1039,7 +1039,7 @@ export default function AssetUniverseTable(props: {
                 {viewDescription(props.view)}
               </div>
             </div>
-            <DeepLedgerActionButton
+            <DaaSurfaceActionButton
               tone="slate"
               className="h-9 rounded-full px-4 text-xs"
               onClick={() => void props.onNormalizeTargetWeights()}
@@ -1047,20 +1047,20 @@ export default function AssetUniverseTable(props: {
             >
               {props.updatingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
 {props.updatingTarget ? "处理中..." : "目标仓位补齐到 100%"}
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-          <DeepLedgerMiniStat label="持仓资产" value={props.counts.holdings} tone="cyan" />
-          <DeepLedgerMiniStat label="观察资产" value={props.counts.watchlist} tone="amber" />
-          <DeepLedgerMiniStat label="调仓范围" value={props.counts.basket} tone="indigo" />
+          <DaaSurfaceMiniStat label="持仓资产" value={props.counts.holdings} tone="cyan" />
+          <DaaSurfaceMiniStat label="观察资产" value={props.counts.watchlist} tone="amber" />
+          <DaaSurfaceMiniStat label="调仓范围" value={props.counts.basket} tone="indigo" />
           <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.74)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">搜索标的</div>
-              {hasKeyword ? <DeepLedgerStatusPill tone="indigo">筛选中</DeepLedgerStatusPill> : null}
+              {hasKeyword ? <DaaSurfaceStatusPill tone="indigo">筛选中</DaaSurfaceStatusPill> : null}
             </div>
-            <div className={cn(deepLedgerSearchShellClassName, "mt-2 h-9")}>
+            <div className={cn(daaSurfaceSearchShellClassName, "mt-2 h-9")}>
               <Search className="h-3.5 w-3.5 text-[var(--faint)]" />
               <input
                 name="asset-search-keyword"
@@ -1072,9 +1072,9 @@ export default function AssetUniverseTable(props: {
             </div>
             <div className="mt-2 flex min-h-5 items-center justify-end text-[11px]">
               {hasKeyword ? (
-                <DeepLedgerActionButton tone="slate" className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setKeyword("")}>
+                <DaaSurfaceActionButton tone="slate" className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setKeyword("")}>
                   清空搜索
-                </DeepLedgerActionButton>
+                </DaaSurfaceActionButton>
               ) : (
                 <span className="text-[11px] text-[var(--faint)]">支持代码、市场、行情映射模糊过滤</span>
               )}
@@ -1083,7 +1083,7 @@ export default function AssetUniverseTable(props: {
         </div>
       </div>
 
-      <div className={cn(deepLedgerTableShellClassName, "overflow-x-auto")}>
+      <div className={cn(daaSurfaceTableShellClassName, "overflow-x-auto")}>
         <div className="border-b border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-2.5 text-[11px] text-[var(--faint)]">
           表格较宽，右侧买卖区固定；建议先看偏离和汇率，再决定操作。
         </div>
@@ -1104,16 +1104,16 @@ export default function AssetUniverseTable(props: {
             </colgroup>
             <thead>
               <tr>
-                <th className={deepLedgerTableHeadClassName}>标的 / 定位</th>
-                <th className={deepLedgerTableHeadClassName}>类型 / 补充</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>持仓 / 成本</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>价格 / 刷新</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>本币估值</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>实际 / 浮盈亏</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>目标仓位</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>偏离</th>
-                <th className={deepLedgerTableHeadClassName}>人因 / 观点</th>
-                <th className={cn(deepLedgerTableHeadClassName, "text-right")}>汇率</th>
+                <th className={daaSurfaceTableHeadClassName}>标的 / 定位</th>
+                <th className={daaSurfaceTableHeadClassName}>类型 / 补充</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>持仓 / 成本</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>价格 / 刷新</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>本币估值</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>实际 / 浮盈亏</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>目标仓位</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>偏离</th>
+                <th className={daaSurfaceTableHeadClassName}>人因 / 观点</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>汇率</th>
                 <th className="sticky right-0 z-20 border-b border-[var(--border)] bg-[rgba(7,10,18,0.98)] px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">操作区</th>
               </tr>
             </thead>
@@ -1179,9 +1179,9 @@ export default function AssetUniverseTable(props: {
                         <div className="max-w-[320px]">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="font-semibold tracking-[-0.01em] text-[var(--text)]">{row.symbol}</div>
-                            <DeepLedgerStatusPill tone={rowStatusTone({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}>
+                            <DaaSurfaceStatusPill tone={rowStatusTone({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}>
                               {rowStatusLabel({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}
-                            </DeepLedgerStatusPill>
+                            </DaaSurfaceStatusPill>
                           </div>
                           <div className="mt-1 truncate text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
                             {rowMarketLine(row)}
@@ -1207,7 +1207,7 @@ export default function AssetUniverseTable(props: {
                           <TooltipTrigger asChild>
                             <div className="inline-flex cursor-default flex-col items-end">
                               <div>{priceLabel(row)}</div>
-                              <div className="mt-1"><DeepLedgerStatusPill tone={priceStatusTone(row.priceStatus)}>{priceStatusLabel(row)}</DeepLedgerStatusPill></div>
+                              <div className="mt-1"><DaaSurfaceStatusPill tone={priceStatusTone(row.priceStatus)}>{priceStatusLabel(row)}</DaaSurfaceStatusPill></div>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
@@ -1251,14 +1251,14 @@ export default function AssetUniverseTable(props: {
                               const value = event.target.value;
                               setTargetDrafts((prev) => ({ ...prev, [row.assetKey]: value }));
                             }}
-                            className={cn(deepLedgerDenseFieldClassName, "w-24 text-right font-[var(--font-mono)] text-[12px]")}
+                            className={cn(daaSurfaceDenseFieldClassName, "w-24 text-right font-[var(--font-mono)] text-[12px]")}
                             type="number"
                             min="0"
                             step="0.01"
                             disabled={props.disabled || props.updatingTarget}
                             data-testid={`workbench-target-${row.assetKey}`}
                           />
-                          <DeepLedgerActionButton
+                          <DaaSurfaceActionButton
                             tone="slate"
                             className="h-9 min-w-[64px] rounded-[12px] px-3 text-[11px]"
                             onClick={() => void handleSaveTarget(row)}
@@ -1266,7 +1266,7 @@ export default function AssetUniverseTable(props: {
                             data-testid={`workbench-target-save-${row.assetKey}`}
                           >
                             保存
-                          </DeepLedgerActionButton>
+                          </DaaSurfaceActionButton>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right align-top">
@@ -1346,14 +1346,14 @@ export default function AssetUniverseTable(props: {
                           />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <DeepLedgerActionButton
+                              <DaaSurfaceActionButton
                                 tone="slate"
                                 className="h-8 w-full justify-center rounded-full px-3 text-[11px]"
                                 disabled={Boolean(props.disabled)}
                               >
                                 <MoreHorizontal className="h-3.5 w-3.5" />
                                 更多
-                              </DeepLedgerActionButton>
+                              </DaaSurfaceActionButton>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
                               <DropdownMenuLabel className="text-xs text-[var(--faint)]">低频操作</DropdownMenuLabel>
@@ -1417,10 +1417,10 @@ export default function AssetUniverseTable(props: {
                         basketCount: props.counts.basket,
                       });
                       return (
-                    <DeepLedgerEmptyState
+                    <DaaSurfaceEmptyState
                       title={emptyMeta.title}
                       description={emptyMeta.description}
-                      action={hasKeyword ? <DeepLedgerActionButton tone="slate" onClick={() => setKeyword("")}>清空搜索</DeepLedgerActionButton> : null}
+                      action={hasKeyword ? <DaaSurfaceActionButton tone="slate" onClick={() => setKeyword("")}>清空搜索</DaaSurfaceActionButton> : null}
                       className="border-0 bg-transparent px-0 py-0"
                     />
                       );
@@ -1432,6 +1432,6 @@ export default function AssetUniverseTable(props: {
           </table>
         </TooltipProvider>
       </div>
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }

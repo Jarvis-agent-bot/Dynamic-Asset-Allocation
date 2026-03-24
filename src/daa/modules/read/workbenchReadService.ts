@@ -4,8 +4,7 @@ import {
   listDaaEquitySnapshots,
 } from "@/src/daa/store/daaStorePg";
 import {
-  buildWorkbenchBootstrap,
-  listWorkbenchRebalanceCycles,
+  buildWorkbenchBootstrapBundle,
 } from "@/src/daa/modules/workbench/workbenchReadService";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { nextCalendarDueDate } from "@/src/daa/modules/workbench/workbenchShared";
@@ -241,12 +240,11 @@ export async function buildWorkbenchReadModel(input: {
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
 } = {}): Promise<WorkbenchReadModel> {
-  const [bootstrap, cycles, snapshots, cashLedger, ledgerMeta, notificationStatus] = await Promise.all([
-    buildWorkbenchBootstrap({
+  const [{ bootstrap, cycles }, snapshots, cashLedger, ledgerMeta, notificationStatus] = await Promise.all([
+    buildWorkbenchBootstrapBundle({
       syncPrices: input.syncPrices ?? false,
       autoRiskCycle: input.autoRiskCycle ?? false,
     }),
-    listWorkbenchRebalanceCycles(40),
     listDaaEquitySnapshots(120),
     listDaaCashLedgerEntries(20),
     getDaaCurrentLedgerMeta(),

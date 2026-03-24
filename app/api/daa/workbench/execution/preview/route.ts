@@ -1,6 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { ManualTradeServiceError, previewManualTrade } from "@/src/daa/modules/workbench/manualTradeService";
+import { previewTradeViaGateway } from "@/src/daa/gateway";
+import { ManualTradeServiceError } from "@/src/daa/modules/workbench/manualTradeService";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
       if (side !== "BUY" && side !== "SELL") {
         return fail("VALIDATION_FAILED", "side must be BUY or SELL", { status: 400 });
       }
-      return ok(await previewManualTrade({
+      return ok(await previewTradeViaGateway({
         assetKey: String(body?.assetKey || ""),
         side,
         qty: body?.qty == null ? null : Number(body.qty),

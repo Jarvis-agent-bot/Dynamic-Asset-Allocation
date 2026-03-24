@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  DaaStoreMarketPriceHistory,
+  DaaStoreMarketPriceSnapshot,
+} from "@/src/daa/store/daaStorePg";
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaExternalPayloadRaw: vi.fn(async () => ({ id: "raw_test_1" })),
@@ -43,6 +47,43 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 
+function buildSnapshotFixture(
+  overrides?: Partial<DaaStoreMarketPriceSnapshot>,
+): DaaStoreMarketPriceSnapshot {
+  return {
+    provider: "yfinance",
+    market: "US",
+    symbol: "AAPL",
+    normalizedSymbol: "AAPL",
+    currency: "USD",
+    price: 188.12,
+    status: "fresh",
+    priceUpdatedAt: new Date().toISOString(),
+    source: "test",
+    errorCode: null,
+    errorMessage: null,
+    rawRefId: null,
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function buildHistoryFixture(
+  overrides?: Partial<DaaStoreMarketPriceHistory>,
+): DaaStoreMarketPriceHistory {
+  return {
+    provider: "yfinance",
+    market: "US",
+    symbol: "AAPL",
+    ts: "2026-03-06T00:00:00.000Z",
+    price: 188.12,
+    currency: "USD",
+    source: "market_cache",
+    rawRefId: null,
+    ...overrides,
+  };
+}
+
 function buildChartPayload(price: number, ts = "2026-03-06T00:00:00.000Z"): string {
   const unix = Math.floor(Date.parse(ts) / 1000);
   return JSON.stringify({
@@ -73,21 +114,9 @@ describe("market-cache-service-v1", () => {
 
   it("快照状态为 stale 时即使较新也返回 stale", async () => {
     vi.mocked(listDaaMarketPriceSnapshots).mockResolvedValue([
-      {
-        provider: "yfinance",
-        market: "US",
-        symbol: "AAPL",
-        normalizedSymbol: "AAPL",
-        currency: "USD",
-        price: 188.12,
+      buildSnapshotFixture({
         status: "stale",
-        priceUpdatedAt: new Date().toISOString(),
-        source: "test",
-        errorCode: null,
-        errorMessage: null,
-        rawRefId: null,
-        updatedAt: new Date().toISOString(),
-      } as any,
+      }),
     ]);
 
     const result = await getMarketPricesWithCache({
@@ -101,21 +130,11 @@ describe("market-cache-service-v1", () => {
 
   it("stale 超过可服务窗口返回 missing", async () => {
     vi.mocked(listDaaMarketPriceSnapshots).mockResolvedValue([
-      {
-        provider: "yfinance",
-        market: "US",
-        symbol: "AAPL",
-        normalizedSymbol: "AAPL",
-        currency: "USD",
+      buildSnapshotFixture({
         price: 199,
         status: "stale",
         priceUpdatedAt: "2026-03-01T00:00:00.000Z",
-        source: "test",
-        errorCode: null,
-        errorMessage: null,
-        rawRefId: null,
-        updatedAt: new Date().toISOString(),
-      } as any,
+      }),
     ]);
 
     const result = await getMarketPricesWithCache({
@@ -151,33 +170,25 @@ describe("market-cache-service-v1", () => {
   it("刷新失败时会从 history 回捞最后成功价并标记 stale", async () => {
     const fallbackPriceUpdatedAt = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
     vi.mocked(listDaaMarketPriceSnapshots).mockResolvedValue([
-      {
-        provider: "yfinance",
+      buildSnapshotFixture({
         market: "US",
         symbol: "NVDA",
         normalizedSymbol: "NVDA",
-        currency: "USD",
         price: 0,
         status: "missing",
         priceUpdatedAt: null,
-        source: "test",
         errorCode: "upstream_error",
         errorMessage: "quote unavailable",
-        rawRefId: null,
-        updatedAt: new Date().toISOString(),
-      } as any,
+      }),
     ]);
     vi.mocked(listLatestDaaMarketPriceHistoryRows).mockResolvedValue([
-      {
-        provider: "yfinance",
+      buildHistoryFixture({
         market: "US",
         symbol: "NVDA",
         ts: fallbackPriceUpdatedAt,
         price: 700.11,
-        currency: "USD",
-        source: "market_cache",
         rawRefId: "raw_hist_1",
-      } as any,
+      }),
     ]);
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 500 })));
 
@@ -201,16 +212,13 @@ describe("market-cache-service-v1", () => {
   it("禁用刷新时也会回捞 history 的最后成功价", async () => {
     const fallbackPriceUpdatedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     vi.mocked(listLatestDaaMarketPriceHistoryRows).mockResolvedValue([
-      {
-        provider: "yfinance",
+      buildHistoryFixture({
         market: "US",
         symbol: "AMD",
         ts: fallbackPriceUpdatedAt,
         price: 188.88,
-        currency: "USD",
-        source: "market_cache",
         rawRefId: "raw_hist_2",
-      } as any,
+      }),
     ]);
 
     const result = await getMarketPricesWithCache({

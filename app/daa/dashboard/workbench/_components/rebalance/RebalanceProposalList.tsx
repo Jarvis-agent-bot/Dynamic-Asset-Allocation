@@ -4,13 +4,13 @@ import type { Dispatch, SetStateAction } from "react";
 import { AlertCircle, CheckSquare2, TriangleAlert, XSquare } from "lucide-react";
 
 import {
-  DeepLedgerActionButton,
-  DeepLedgerEmptyState,
-  DeepLedgerNoticeBox,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-  deepLedgerSubtlePanelClassName,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceEmptyState,
+  DaaSurfaceNoticeBox,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+  daaSurfaceSubtlePanelClassName,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import type {
@@ -40,7 +40,7 @@ export function RebalanceProposalList(props: {
   onSubmitLlmFeedback: (input: { contextId: string; type: "decision"; score: WorkbenchLlmFeedbackScore; comment?: string }) => Promise<void>;
 }) {
   return (
-    <DeepLedgerPanel
+    <DaaSurfacePanel
       accent={props.currentCycle ? cycleStatusTone(props.currentCycle.status) : "slate"}
       title="本次建议"
       subtitle={props.currentCycle
@@ -49,14 +49,14 @@ export function RebalanceProposalList(props: {
       action={(
         <div className="flex flex-wrap gap-2">
           {props.currentRiskCheck ? (
-            <DeepLedgerStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>
+            <DaaSurfaceStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>
               风控 {riskStatusLabel(props.currentRiskCheck.overallStatus)}
-            </DeepLedgerStatusPill>
+            </DaaSurfaceStatusPill>
           ) : null}
           {props.selectedProposalNotional > 0 ? (
-            <DeepLedgerStatusPill tone="cyan">
+            <DaaSurfaceStatusPill tone="cyan">
               已选 {formatCurrency(props.selectedProposalNotional, props.bootstrap.baseCurrency)}
-            </DeepLedgerStatusPill>
+            </DaaSurfaceStatusPill>
           ) : null}
         </div>
       )}
@@ -64,23 +64,23 @@ export function RebalanceProposalList(props: {
       {props.currentCycle ? (
         <div className="space-y-4">
           {props.isCurrentCycleTerminal ? (
-            <DeepLedgerNoticeBox tone="slate" icon={<AlertCircle className="h-4 w-4" />} title="当前周期已终态" description="该周期只读；如需继续调仓，请生成新周期。" />
+            <DaaSurfaceNoticeBox tone="slate" icon={<AlertCircle className="h-4 w-4" />} title="当前周期已终态" description="该周期只读；如需继续调仓，请生成新周期。" />
           ) : null}
           {props.currentCycle.triggerSource === "risk" ? (
-            <DeepLedgerNoticeBox tone="amber" icon={<TriangleAlert className="h-4 w-4" />} title="风险触发建议待处理" description="该周期由止盈/止损阈值触发，请先看理由和风控，再决定是否执行。" />
+            <DaaSurfaceNoticeBox tone="amber" icon={<TriangleAlert className="h-4 w-4" />} title="风险触发建议待处理" description="该周期由止盈/止损阈值触发，请先看理由和风控，再决定是否执行。" />
           ) : null}
 
           {props.currentCycle.proposals.length > 0 ? (
             <>
               <div className="flex flex-wrap gap-2">
-                <DeepLedgerActionButton tone="success" onClick={() => void props.onSelectAllProposals(true)} disabled={!props.canEditCurrentCycle}>
+                <DaaSurfaceActionButton tone="success" onClick={() => void props.onSelectAllProposals(true)} disabled={!props.canEditCurrentCycle}>
                   <CheckSquare2 className="h-3.5 w-3.5" />
                   一键全选
-                </DeepLedgerActionButton>
-                <DeepLedgerActionButton tone="danger" onClick={() => void props.onSelectAllProposals(false)} disabled={!props.canEditCurrentCycle}>
+                </DaaSurfaceActionButton>
+                <DaaSurfaceActionButton tone="danger" onClick={() => void props.onSelectAllProposals(false)} disabled={!props.canEditCurrentCycle}>
                   <XSquare className="h-3.5 w-3.5" />
                   清空勾选
-                </DeepLedgerActionButton>
+                </DaaSurfaceActionButton>
               </div>
 
               <div className="space-y-3">
@@ -109,21 +109,21 @@ export function RebalanceProposalList(props: {
                         <div className="min-w-0 flex-1 space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-[var(--font-mono)] text-[15px] font-semibold text-[var(--text)]">{row.symbol}</span>
-                            <DeepLedgerStatusPill tone={row.side === "BUY" ? "green" : "amber"}>{row.side === "BUY" ? "买入" : "卖出"}</DeepLedgerStatusPill>
-                            {row.currency !== props.bootstrap.baseCurrency ? <DeepLedgerStatusPill tone="slate">{row.currency}</DeepLedgerStatusPill> : null}
-                            <DeepLedgerStatusPill tone={row.selected ? "cyan" : "slate"}>{row.selected ? "已纳入执行" : "未勾选"}</DeepLedgerStatusPill>
+                            <DaaSurfaceStatusPill tone={row.side === "BUY" ? "green" : "amber"}>{row.side === "BUY" ? "买入" : "卖出"}</DaaSurfaceStatusPill>
+                            {row.currency !== props.bootstrap.baseCurrency ? <DaaSurfaceStatusPill tone="slate">{row.currency}</DaaSurfaceStatusPill> : null}
+                            <DaaSurfaceStatusPill tone={row.selected ? "cyan" : "slate"}>{row.selected ? "已纳入执行" : "未勾选"}</DaaSurfaceStatusPill>
                           </div>
 
                           <div className="grid gap-2 sm:grid-cols-3">
-                            <div className={cn(deepLedgerSubtlePanelClassName, "px-3 py-2.5")}>
+                            <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>
                               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">建议数量</div>
                               <div className="mt-1.5 font-[var(--font-mono)] text-[15px] text-[var(--text)]">{row.suggestedQty.toFixed(4)}</div>
                             </div>
-                            <div className={cn(deepLedgerSubtlePanelClassName, "px-3 py-2.5")}>
+                            <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>
                               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">建议金额</div>
                               <div className="mt-1.5 font-[var(--font-mono)] text-[15px] text-[var(--text)]">{formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)}</div>
                             </div>
-                            <div className={cn(deepLedgerSubtlePanelClassName, "px-3 py-2.5")}>
+                            <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>
                               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">参考价格</div>
                               <div className="mt-1.5 font-[var(--font-mono)] text-[15px] text-[var(--text)]">{formatCurrency(row.price, row.currency)}</div>
                             </div>
@@ -138,7 +138,7 @@ export function RebalanceProposalList(props: {
                             执行说明与决策上下文
                           </button>
                           {decisionExpanded ? (
-                            <div className={cn(deepLedgerSubtlePanelClassName, "space-y-2.5 px-4 py-3.5")}>
+                            <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-2.5 px-4 py-3.5")}>
                               <div className="text-sm leading-6 text-[var(--text)]">{row.reason}</div>
                               {row.hfContribution ? (
                                 <div className="text-xs text-[var(--muted)]">人因贡献：{row.hfContribution}</div>
@@ -166,14 +166,14 @@ export function RebalanceProposalList(props: {
                                   const isSelected = props.llmFeedbackScoreByContext[contextId] === score;
                                   const isSubmitting = Boolean(props.llmFeedbackSubmittingByContext[contextId]);
                                   return (
-                                    <DeepLedgerActionButton
+                                    <DaaSurfaceActionButton
                                       key={score}
                                       tone={isSelected ? (score === "up" ? "primary" : "danger") : "slate"}
                                       disabled={isSubmitting}
                                       onClick={() => void props.onSubmitLlmFeedback({ contextId, type: "decision", score })}
                                     >
                                       {score === "up" ? "👍 有用" : "👎 无用"}
-                                    </DeepLedgerActionButton>
+                                    </DaaSurfaceActionButton>
                                   );
                                 })}
                               </div>
@@ -187,12 +187,12 @@ export function RebalanceProposalList(props: {
               </div>
             </>
           ) : (
-            <DeepLedgerEmptyState title="当前周期没有生成建议" description="可以先调整观察列表目标权重，再重新生成建议。" />
+            <DaaSurfaceEmptyState title="当前周期没有生成建议" description="可以先调整观察列表目标权重，再重新生成建议。" />
           )}
         </div>
       ) : (
-        <DeepLedgerEmptyState title="尚无再平衡周期" description="请先点击「生成/刷新建议」，再勾选建议并执行。" />
+        <DaaSurfaceEmptyState title="尚无再平衡周期" description="请先点击「生成/刷新建议」，再勾选建议并执行。" />
       )}
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }

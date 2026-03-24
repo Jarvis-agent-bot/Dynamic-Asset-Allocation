@@ -13,19 +13,18 @@ import type {
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
-  DeepLedgerActionButton,
-  DeepLedgerEmptyState,
-  DeepLedgerFilterChip,
-  DeepLedgerMiniStat,
-  DeepLedgerNoticeBox,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-  deepLedgerFieldClassName,
-  deepLedgerSearchShellClassName,
-  deepLedgerTableCellClassName,
-  deepLedgerTableHeadClassName,
-  deepLedgerTableShellClassName,
-} from "../../_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceEmptyState,
+  DaaSurfaceFilterChip,
+  DaaSurfaceMiniStat,
+  DaaSurfaceNoticeBox,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+  daaSurfaceSearchShellClassName,
+  daaSurfaceTableCellClassName,
+  daaSurfaceTableHeadClassName,
+  daaSurfaceTableShellClassName,
+} from "../../_components/DaaSurfaceUI";
 
 const ASSET_CLASS_OPTIONS_ = [
   { value: "ALL", label: "全部" },
@@ -193,15 +192,15 @@ export default function WatchlistBuilderPanel(props: {
   }
 
   return (
-    <DeepLedgerPanel
+    <DaaSurfacePanel
       title="添加观察标的"
       subtitle="在观察列表里直接完成推荐挑选、搜索补充与加入观察，减少在不同页面之间跳转。"
       accent="indigo"
       bodyClassName="space-y-5"
       action={
-        <DeepLedgerStatusPill tone="indigo">
+        <DaaSurfaceStatusPill tone="indigo">
           {featuredCollapsed ? "推荐已折叠" : "观察池构建"}
-        </DeepLedgerStatusPill>
+        </DaaSurfaceStatusPill>
       }
     >
       <div className="relative overflow-hidden rounded-[18px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,38,0.98),rgba(10,15,25,0.94))] p-5">
@@ -223,9 +222,9 @@ export default function WatchlistBuilderPanel(props: {
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-            <DeepLedgerMiniStat label="当前市场" value={marketLabelZh(market)} tone="cyan" />
-            <DeepLedgerMiniStat label="资产类型" value={assetClassLabelZh(assetClass)} tone="amber" />
-            <DeepLedgerMiniStat label="已纳入观察" value={Object.keys(props.joinedAssetKeys).length} tone="indigo" />
+            <DaaSurfaceMiniStat label="当前市场" value={marketLabelZh(market)} tone="cyan" />
+            <DaaSurfaceMiniStat label="资产类型" value={assetClassLabelZh(assetClass)} tone="amber" />
+            <DaaSurfaceMiniStat label="已纳入观察" value={Object.keys(props.joinedAssetKeys).length} tone="indigo" />
           </div>
         </div>
 
@@ -234,13 +233,13 @@ export default function WatchlistBuilderPanel(props: {
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">资产类筛选</div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {ASSET_CLASS_OPTIONS_.map((option) => (
-                <DeepLedgerFilterChip
+                <DaaSurfaceFilterChip
                   key={option.value}
                   active={assetClass === option.value}
                   onClick={() => setAssetClass(option.value)}
                 >
                   {option.label}
-                </DeepLedgerFilterChip>
+                </DaaSurfaceFilterChip>
               ))}
             </div>
           </div>
@@ -248,13 +247,13 @@ export default function WatchlistBuilderPanel(props: {
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">市场筛选</div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {MARKET_OPTIONS_.map((option) => (
-                <DeepLedgerFilterChip
+                <DaaSurfaceFilterChip
                   key={option.value}
                   active={market === option.value}
                   onClick={() => setMarket(option.value)}
                 >
                   {option.label}
-                </DeepLedgerFilterChip>
+                </DaaSurfaceFilterChip>
               ))}
             </div>
           </div>
@@ -274,20 +273,20 @@ export default function WatchlistBuilderPanel(props: {
           </div>
           <div className="flex items-center gap-2">
             {featuredLoading ? <Loader2 className="h-4 w-4 animate-spin text-[var(--faint)]" /> : null}
-            <DeepLedgerActionButton
+            <DaaSurfaceActionButton
               tone="slate"
               className="rounded-full px-3 py-1.5 text-xs"
               onClick={() => setFeaturedCollapsed((prev) => !prev)}
             >
               {featuredCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
               {featuredCollapsed ? "展开推荐" : "收起推荐"}
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           </div>
         </div>
 
         <div className="mt-4">
           {featuredCollapsed ? (
-            <DeepLedgerEmptyState
+            <DaaSurfaceEmptyState
               title="推荐池已折叠"
               description="保持当前筛选条件，重新展开即可查看分市场推荐名单。"
             />
@@ -296,14 +295,14 @@ export default function WatchlistBuilderPanel(props: {
           {!featuredCollapsed ? (
             <>
               {featuredError ? (
-                <DeepLedgerNoticeBox tone="red" title="推荐加载失败" description={featuredError} />
+                <DaaSurfaceNoticeBox tone="red" title="推荐加载失败" description={featuredError} />
               ) : null}
 
               {!featuredLoading && !featuredError && featuredGroups.length <= 0 ? (
-                <DeepLedgerEmptyState
+                <DaaSurfaceEmptyState
                   title="当前筛选下暂无推荐资产"
                   description="可以切换市场与资产类型，或者直接使用下方搜索快速定位目标。"
-                  action={hasActiveFilters ? <DeepLedgerActionButton tone="slate" onClick={resetFilters}>重置筛选</DeepLedgerActionButton> : null}
+                  action={hasActiveFilters ? <DaaSurfaceActionButton tone="slate" onClick={resetFilters}>重置筛选</DaaSurfaceActionButton> : null}
                 />
               ) : null}
 
@@ -336,7 +335,7 @@ export default function WatchlistBuilderPanel(props: {
                                   {item.symbol} · {marketLabelZh(item.market)}
                                 </div>
                               </div>
-                              <DeepLedgerActionButton
+                              <DaaSurfaceActionButton
                                 tone={joined ? "slate" : "primary"}
                                 data-testid={`featured-asset-add-${testId}`}
                                 className="h-8 shrink-0 rounded-full px-3 text-xs"
@@ -345,14 +344,14 @@ export default function WatchlistBuilderPanel(props: {
                               >
                                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="h-3.5 w-3.5" />}
                                 {joined ? "已加入" : "加入"}
-                              </DeepLedgerActionButton>
+                              </DaaSurfaceActionButton>
                             </div>
 
                             <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <DeepLedgerStatusPill tone="slate">{assetClassLabelZh(item.assetClass)}</DeepLedgerStatusPill>
-                              <DeepLedgerStatusPill tone={priceTone(item.priceStatus)}>
+                              <DaaSurfaceStatusPill tone="slate">{assetClassLabelZh(item.assetClass)}</DaaSurfaceStatusPill>
+                              <DaaSurfaceStatusPill tone={priceTone(item.priceStatus)}>
                                 {item.price > 0 ? `${currencySymbol(item.currency)} ${item.price.toFixed(2)}` : "待补行情"}
-                              </DeepLedgerStatusPill>
+                              </DaaSurfaceStatusPill>
                             </div>
 
                             <div className="mt-3 space-y-1 text-xs text-[var(--muted)]">
@@ -379,9 +378,9 @@ export default function WatchlistBuilderPanel(props: {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-sm font-semibold text-[var(--text)]">精准搜索</div>
-            <DeepLedgerStatusPill tone="slate">{marketLabelZh(market)}</DeepLedgerStatusPill>
-            <DeepLedgerStatusPill tone="slate">{assetClassLabelZh(assetClass)}</DeepLedgerStatusPill>
-            {hasSearched ? <DeepLedgerStatusPill tone="indigo">结果 {items.length}</DeepLedgerStatusPill> : null}
+            <DaaSurfaceStatusPill tone="slate">{marketLabelZh(market)}</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone="slate">{assetClassLabelZh(assetClass)}</DaaSurfaceStatusPill>
+            {hasSearched ? <DaaSurfaceStatusPill tone="indigo">结果 {items.length}</DaaSurfaceStatusPill> : null}
           </div>
           <div className="text-xs leading-5 text-[var(--muted)]">
             输入代码、名称或常用简称，例如 `NVDA`、`0700`、`BTC`，系统会按当前筛选条件返回匹配资产。
@@ -389,7 +388,7 @@ export default function WatchlistBuilderPanel(props: {
         </div>
         <div className="flex flex-col gap-2 lg:min-w-[460px]">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <div className={cn(deepLedgerSearchShellClassName, "h-11 flex-1")}>
+            <div className={cn(daaSurfaceSearchShellClassName, "h-11 flex-1")}>
               <Search className="h-4 w-4 text-[var(--faint)]" />
               <input
                 value={q}
@@ -404,7 +403,7 @@ export default function WatchlistBuilderPanel(props: {
                 className="h-11 w-full bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--faint)]"
               />
             </div>
-            <DeepLedgerActionButton
+            <DaaSurfaceActionButton
               tone="primary"
               className="h-11 justify-center rounded-[14px] px-4"
               onClick={() => void handleSearch()}
@@ -412,11 +411,11 @@ export default function WatchlistBuilderPanel(props: {
             >
               {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               {searching ? "搜索中..." : "搜索资产"}
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {q ? (
-              <DeepLedgerActionButton
+              <DaaSurfaceActionButton
                 tone="slate"
                 className="rounded-full px-3 py-1.5 text-xs"
                 onClick={() => {
@@ -426,29 +425,29 @@ export default function WatchlistBuilderPanel(props: {
                 }}
               >
                 清空关键词
-              </DeepLedgerActionButton>
+              </DaaSurfaceActionButton>
             ) : null}
             {hasActiveFilters ? (
-              <DeepLedgerActionButton
+              <DaaSurfaceActionButton
                 tone="slate"
                 className="rounded-full px-3 py-1.5 text-xs"
                 onClick={resetFilters}
               >
                 重置筛选
-              </DeepLedgerActionButton>
+              </DaaSurfaceActionButton>
             ) : null}
           </div>
         </div>
       </div>
 
-      <div className={cn(deepLedgerTableShellClassName, "overflow-x-auto")}>
+      <div className={cn(daaSurfaceTableShellClassName, "overflow-x-auto")}>
         <table className="min-w-[780px] w-full border-collapse">
           <thead>
             <tr>
-              <th className={deepLedgerTableHeadClassName}>资产</th>
-              <th className={deepLedgerTableHeadClassName}>分类 / 地域</th>
-              <th className={cn(deepLedgerTableHeadClassName, "text-right")}>价格</th>
-              <th className={cn(deepLedgerTableHeadClassName, "text-right")}>操作</th>
+              <th className={daaSurfaceTableHeadClassName}>资产</th>
+              <th className={daaSurfaceTableHeadClassName}>分类 / 地域</th>
+              <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>价格</th>
+              <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -464,7 +463,7 @@ export default function WatchlistBuilderPanel(props: {
                   data-asset-key={assetKey(item)}
                   className="border-b border-[var(--border)]/70 text-[13px] transition-colors hover:bg-[rgba(56,189,248,0.04)]"
                 >
-                  <td className={deepLedgerTableCellClassName}>
+                  <td className={daaSurfaceTableCellClassName}>
                     <div className="max-w-[320px]">
                       <div className="truncate font-semibold text-[var(--text)]" title={displayName}>
                         {displayName}
@@ -477,23 +476,23 @@ export default function WatchlistBuilderPanel(props: {
                       </div>
                     </div>
                   </td>
-                  <td className={cn(deepLedgerTableCellClassName, "text-xs text-[var(--muted)]")}>
+                  <td className={cn(daaSurfaceTableCellClassName, "text-xs text-[var(--muted)]")}>
                     <div>{assetClassLabelZh(item.assetClass)} · {regionLabelZh(item.region)}</div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <DeepLedgerStatusPill tone="slate">{marketLabelZh(item.market)}</DeepLedgerStatusPill>
-                      <DeepLedgerStatusPill tone={priceTone(item.priceStatus)}>
+                      <DaaSurfaceStatusPill tone="slate">{marketLabelZh(item.market)}</DaaSurfaceStatusPill>
+                      <DaaSurfaceStatusPill tone={priceTone(item.priceStatus)}>
                         {item.priceStatus === "stale" ? "价格偏旧" : item.price > 0 ? "可交易" : "待补行情"}
-                      </DeepLedgerStatusPill>
+                      </DaaSurfaceStatusPill>
                     </div>
                   </td>
-                  <td className={cn(deepLedgerTableCellClassName, "text-right font-[var(--font-mono)] text-[var(--text)]")}>
+                  <td className={cn(daaSurfaceTableCellClassName, "text-right font-[var(--font-mono)] text-[var(--text)]")}>
                     {item.price > 0 ? `${currencySymbol(item.currency)} ${item.price.toFixed(4)}` : "待补行情"}
                     {item.price > 0 && item.priceStatus === "stale" ? (
                       <div className="mt-1 text-[11px] text-[var(--amber)]">缓存稍旧</div>
                     ) : null}
                   </td>
-                  <td className={cn(deepLedgerTableCellClassName, "text-right")}>
-                    <DeepLedgerActionButton
+                  <td className={cn(daaSurfaceTableCellClassName, "text-right")}>
+                    <DaaSurfaceActionButton
                       tone={joined ? "slate" : "primary"}
                       data-testid={`search-asset-add-${testId}`}
                       className="h-8 rounded-full px-3 text-xs"
@@ -502,7 +501,7 @@ export default function WatchlistBuilderPanel(props: {
                     >
                       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="h-3.5 w-3.5" />}
                       {joined ? "已加入" : "加入观察"}
-                    </DeepLedgerActionButton>
+                    </DaaSurfaceActionButton>
                   </td>
                 </tr>
               );
@@ -511,13 +510,13 @@ export default function WatchlistBuilderPanel(props: {
             {items.length <= 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-10 text-center">
-                  <DeepLedgerEmptyState
+                  <DaaSurfaceEmptyState
                     title={hasSearched ? "未找到匹配资产" : "等待输入搜索指令"}
                     description={hasSearched ? "可以尝试更短的代码、正式英文名称，或放宽当前市场与资产类筛选。" : "输入关键词后点击搜索按钮，结果会显示在这里。"}
                     action={hasSearched ? (
                       <div className="flex flex-wrap justify-center gap-2">
-                        {q ? <DeepLedgerActionButton tone="slate" onClick={() => { setQ(""); setItems([]); setHasSearched(false); }}>清空关键词</DeepLedgerActionButton> : null}
-                        {hasActiveFilters ? <DeepLedgerActionButton tone="slate" onClick={resetFilters}>重置筛选</DeepLedgerActionButton> : null}
+                        {q ? <DaaSurfaceActionButton tone="slate" onClick={() => { setQ(""); setItems([]); setHasSearched(false); }}>清空关键词</DaaSurfaceActionButton> : null}
+                        {hasActiveFilters ? <DaaSurfaceActionButton tone="slate" onClick={resetFilters}>重置筛选</DaaSurfaceActionButton> : null}
                       </div>
                     ) : null}
                     className="border-0 bg-transparent px-0 py-0"
@@ -528,6 +527,6 @@ export default function WatchlistBuilderPanel(props: {
           </tbody>
         </table>
       </div>
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }

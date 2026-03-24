@@ -1,67 +1,38 @@
-import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "@/src/daa/assetKey";
-import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { normalizeDaaCurrencyCode, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
-import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
 import { runLlmDecision } from "@/src/daa/llm/llmDecision";
 import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
 import { hydrateUnifiedRequestWithSignals } from "@/src/daa/modules/decision/hydrateUnifiedRequest";
-import type { UnifiedDecisionResult } from "@/src/daa/modules/decision/decisionResultTypes";
-import {
-  buildMarketContextAttribution,
-  getCurrentMarketContext,
-  marketRegimeLabelZh,
-} from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { classifyCash } from "./cashClassification";
 import { fuseDecision } from "./decisionFusion";
 import {
   applyDaaBrokerOrderSync,
-  appendDaaTriggerEvent,
-  appendDaaRunHistory,
-  appendAssetPriceHistoryRows,
   createDaaRebalanceCycle,
-  createDaaRebalanceDecision,
   createDaaTradeTicket,
   executeDaaTradeTickets,
-  getDaaHumanIngestState,
   getDaaRebalanceCycle,
   getDaaSystemConfig,
-  getDaaMarketCacheHealthStats,
-  listDaaAssetUniverse,
-  listDaaEquitySnapshots,
-  listDaaFxRates,
   listDaaRebalanceCycles,
   listDaaTradeTickets,
   patchDaaRebalanceCycle,
   upsertDaaCycleReport,
-  updateDaaAssetUniverseLastPrice,
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
-import { buildDaaUnifiedPlan, type DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
-import {
-  buildFxLookupToBase,
-  summarizeMarkToMarketPortfolio,
-} from "@/src/daa/modules/portfolio/portfolioValuation";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { resolveExecutionRoute, syncBrokerOrders } from "@/src/daa/broker";
 
 import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
-import { buildAssetUniverseViewRows } from "./assetUniverseService";
 import type {
-  ExecuteRebalanceSummary,
   ExecuteRebalanceCycleResult,
   GenerateRebalanceCycleInput,
   GenerateRebalanceCycleResult,
-  HfSignalSummary,
   PortfolioHealthyInsight,
-  PreTradeRiskCheckItem,
-  PreTradeRiskCheck,
   RebalanceCycle,
   RebalanceProposal,
   RebalanceTriggerSource,
   UpdateRebalanceCycleInput,
-  WorkbenchBootstrap,
-  WorkbenchRecommendation,
-  WorkbenchRecommendationsResult,
 } from "./workbenchTypes";
 
 import { buildUnifiedRequestFromStore, buildWorkbenchBootstrap } from "./workbenchReadService";
@@ -73,10 +44,8 @@ import {
   buildCalendarPeriodKey,
   buildMarketFacts,
   buildCycleDraftFromBootstrap,
-  buildPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
-  buildRiskCycleDraft,
   calcHoldingCostPerUnit,
   getZonedYmd,
   isCalendarMonthDue,
@@ -84,7 +53,6 @@ import {
   mapStoreCycleToView,
   normalizeText,
   normalizeTimeZoneOrUtc,
-  pickCycleMarketRegimes,
   toCycleReportSnapshot,
   toFinite,
   toIsoByMs,
@@ -101,6 +69,7 @@ export async function generateWorkbenchRebalanceCycle(
     getDaaSystemConfig(),
     listDaaRebalanceCycles(120),
   ]);
+  const recentLearningsText = await buildAgentLearningDigest(6);
 
   const latestCycle = recentCycles[0] || null;
   const strategy = systemRow.config.rebalanceStrategy;
@@ -312,6 +281,7 @@ export async function generateWorkbenchRebalanceCycle(
         warnings: bootstrap.warnings,
         analysisFocus,
         marketContext,
+        recentLearningsText,
       });
 
       healthyInsight = {
@@ -385,6 +355,7 @@ export async function generateWorkbenchRebalanceCycle(
     warnings: bootstrap.warnings,
     analysisFocus,
     marketContext,
+    recentLearningsText,
   });
 
   // ── Step E: 三层决策融合（drift × signal × LLM）──────────────────

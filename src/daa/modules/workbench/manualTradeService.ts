@@ -4,7 +4,6 @@ import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionR
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
-import type { TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 import {
   applyDaaBrokerOrderSync,
   createDaaTradeTicket,
@@ -18,7 +17,8 @@ import {
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
-import { normalizeReasonTags, normalizeTradeSide, validateExecutionRisk } from "./workbenchExecutionService";
+import { validateExecutionRisk } from "./workbenchExecutionService";
+import { normalizeReasonTags, normalizeTradeSide } from "./workbenchShared";
 
 export class ManualTradeServiceError extends Error {
   code: string;

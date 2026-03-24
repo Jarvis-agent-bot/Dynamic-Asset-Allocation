@@ -1,7 +1,7 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { getDaaAuthContextFromRequest } from "@/src/daa/auth/daaAuthRequest";
 import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { getChatSessionByKey, listChatMessages, listRecentChatSessions } from "@/src/daa/chat/chatRepo";
+import { loadWebAssistantConversationReadModel } from "@/src/daa/chat/chatConversationReadService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,15 +11,22 @@ export async function GET(req: Request) {
     const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
     if (denied) return denied;
 
+    const url = new URL(req.url);
     const auth = await getDaaAuthContextFromRequest(req);
-    const sessionKey = auth ? `web:${auth.account.accountId}` : "";
-    const currentSession = sessionKey ? await getChatSessionByKey(sessionKey) : null;
-    const messages = currentSession ? await listChatMessages(currentSession.sessionId, 16) : [];
-    const sessions = await listRecentChatSessions(8);
+    const sessionId = (url.searchParams.get("sessionId") || "").trim();
+    const conversation = await loadWebAssistantConversationReadModel({
+      accountId: auth?.account.accountId || "",
+      username: auth?.account.username || "",
+      sessionId: sessionId || null,
+      messageLimit: 16,
+      sessionLimit: 8,
+    });
     return ok({
-      session: currentSession,
-      messages,
-      sessions,
+      session: conversation.selectedSession,
+      messages: conversation.messages,
+      sessions: conversation.sessions,
+      threads: conversation.threads,
+      conversation,
     });
   });
 }

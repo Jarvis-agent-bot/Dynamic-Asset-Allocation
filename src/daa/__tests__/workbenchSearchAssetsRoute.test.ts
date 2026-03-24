@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildMarketPriceResolved,
+  buildSystemConfigRow,
+} from "@/src/daa/__tests__/testDataFactories";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -19,19 +23,17 @@ import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 describe("workbench-search-assets-route-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        dataSources: {
-          priceFeed: {
-            marketCache: {
-              freshMinutes: 15,
-              serveStaleHours: 48,
-              rawRetentionDays: 90,
-            },
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      dataSources: {
+        priceFeed: {
+          marketCache: {
+            freshMinutes: 15,
+            serveStaleHours: 48,
+            rawRetentionDays: 90,
           },
         },
       },
-    } as any);
+    }));
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({});
   });
 
@@ -109,7 +111,7 @@ describe("workbench-search-assets-route-v1", () => {
     vi.stubGlobal("fetch", fetchMock);
     const updatedAt = new Date().toISOString();
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({
-      "US::AAPL": {
+      "US::AAPL": buildMarketPriceResolved({
         provider: "yfinance",
         symbol: "AAPL",
         market: "US",
@@ -119,7 +121,7 @@ describe("workbench-search-assets-route-v1", () => {
         priceUpdatedAt: updatedAt,
         priceAgeSec: 3,
         priceSource: "search_assets:yfinance:AAPL",
-      },
+      }),
     });
 
     const response = await GET(new Request("http://localhost/api/daa/workbench/search-assets?q=aapl&market=US&assetClass=EQUITY&region=US&limit=10"));
@@ -144,20 +146,18 @@ describe("workbench-search-assets-route-v1", () => {
   });
 
   it("行情源关闭时仍可搜索，但价格富化只读缓存不触发实时刷新", async () => {
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        dataSources: {
-          priceFeed: {
-            enabled: false,
-            marketCache: {
-              freshMinutes: 15,
-              serveStaleHours: 48,
-              rawRetentionDays: 90,
-            },
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      dataSources: {
+        priceFeed: {
+          enabled: false,
+          marketCache: {
+            freshMinutes: 15,
+            serveStaleHours: 48,
+            rawRetentionDays: 90,
           },
         },
       },
-    } as any);
+    }));
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       quotes: [
         {

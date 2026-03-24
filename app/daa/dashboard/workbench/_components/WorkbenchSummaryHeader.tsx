@@ -5,11 +5,11 @@ import { RefreshCcw } from "lucide-react";
 
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
-  DeepLedgerActionButton,
-  DeepLedgerEmptyState,
-  DeepLedgerStatusPill,
-  deepLedgerSubtlePanelClassName,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceEmptyState,
+  DaaSurfaceStatusPill,
+  daaSurfaceSubtlePanelClassName,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
 import type { StoreNotificationStatusSummary } from "@/src/daa/modules/store/storeApi";
 import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
@@ -135,7 +135,7 @@ export function WorkbenchSummaryHeader(props: {
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {summaryItems.map((item) => (
-              <div key={item.label} className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
+              <div key={item.label} className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{item.label}</div>
                 <div className="mt-2 font-[var(--font-mono)] text-lg text-[var(--text)]">{item.value}</div>
                 <div className="mt-2 text-xs text-[var(--muted)]">{item.hint}</div>
@@ -143,20 +143,20 @@ export function WorkbenchSummaryHeader(props: {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            <DeepLedgerStatusPill tone={accountModeTone}>{accountModeLabel}</DeepLedgerStatusPill>
-            <DeepLedgerStatusPill tone={syncTone}>{syncLabel}</DeepLedgerStatusPill>
-            <DeepLedgerActionButton onClick={props.onRefresh} disabled={props.loading || props.refreshing}>
+            <DaaSurfaceStatusPill tone={accountModeTone}>{accountModeLabel}</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone={syncTone}>{syncLabel}</DaaSurfaceStatusPill>
+            <DaaSurfaceActionButton onClick={props.onRefresh} disabled={props.loading || props.refreshing}>
               <RefreshCcw className={cn("h-3.5 w-3.5", props.refreshing ? "animate-spin" : "")} />
               {props.loading ? "准备中…" : props.refreshing ? "刷新中…" : "刷新"}
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           </div>
         </div>
 
         <div className="mt-4 grid gap-3 xl:grid-cols-3">
-          <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
+          <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">账户来源</div>
-              <DeepLedgerStatusPill tone={accountDetailTone}>{accountDetailLabel}</DeepLedgerStatusPill>
+              <DaaSurfaceStatusPill tone={accountDetailTone}>{accountDetailLabel}</DaaSurfaceStatusPill>
             </div>
             <div className="mt-3 text-sm text-[var(--text)]">
               {props.loading ? "正在同步账户快照" : accountModeLabel}
@@ -187,21 +187,21 @@ export function WorkbenchSummaryHeader(props: {
             </div>
           </div>
 
-          <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
+          <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场数据</div>
-              <DeepLedgerStatusPill tone={marketDataTone}>{marketDataLabel}</DeepLedgerStatusPill>
+              <DaaSurfaceStatusPill tone={marketDataTone}>{marketDataLabel}</DaaSurfaceStatusPill>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <DeepLedgerStatusPill tone="green">
+              <DaaSurfaceStatusPill tone="green">
                 最新 {props.marketDataHealth?.freshCount ?? 0}
-              </DeepLedgerStatusPill>
-              <DeepLedgerStatusPill tone={(props.marketDataHealth?.staleCount || 0) > 0 ? "amber" : "slate"}>
+              </DaaSurfaceStatusPill>
+              <DaaSurfaceStatusPill tone={(props.marketDataHealth?.staleCount || 0) > 0 ? "amber" : "slate"}>
                 陈旧 {props.marketDataHealth?.staleCount ?? 0}
-              </DeepLedgerStatusPill>
-              <DeepLedgerStatusPill tone={(props.marketDataHealth?.missingCount || 0) > 0 ? "amber" : "slate"}>
+              </DaaSurfaceStatusPill>
+              <DaaSurfaceStatusPill tone={(props.marketDataHealth?.missingCount || 0) > 0 ? "amber" : "slate"}>
                 缺失 {props.marketDataHealth?.missingCount ?? 0}
-              </DeepLedgerStatusPill>
+              </DaaSurfaceStatusPill>
             </div>
             <div className="mt-3 text-xs leading-5 text-[var(--muted)]">
               {props.loading
@@ -215,23 +215,23 @@ export function WorkbenchSummaryHeader(props: {
             </div>
           </div>
 
-          <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3")}>
+          <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">通知状态</div>
-              <DeepLedgerStatusPill tone={props.notificationStatus?.cronConfigured ? "green" : "amber"}>
+              <DaaSurfaceStatusPill tone={props.notificationStatus?.cronConfigured ? "green" : "amber"}>
                 {props.notificationStatus?.cronConfigured ? "Cron 正常" : "Cron 待配置"}
-              </DeepLedgerStatusPill>
+              </DaaSurfaceStatusPill>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <DeepLedgerStatusPill tone={telegramStatus ? notificationTone(telegramStatus) : "slate"}>
+              <DaaSurfaceStatusPill tone={telegramStatus ? notificationTone(telegramStatus) : "slate"}>
                 Telegram 通知 {telegramStatus ? notificationText(telegramStatus) : props.loading ? "加载中" : "未知"}
-              </DeepLedgerStatusPill>
-              <DeepLedgerStatusPill tone={telegramAssistant ? telegramAssistantTone(telegramAssistant) : "slate"}>
+              </DaaSurfaceStatusPill>
+              <DaaSurfaceStatusPill tone={telegramAssistant ? telegramAssistantTone(telegramAssistant) : "slate"}>
                 Telegram 对话 {telegramAssistant ? telegramAssistantText(telegramAssistant) : props.loading ? "加载中" : "未知"}
-              </DeepLedgerStatusPill>
-              <DeepLedgerStatusPill tone={feishuStatus ? notificationTone(feishuStatus) : "slate"}>
+              </DaaSurfaceStatusPill>
+              <DaaSurfaceStatusPill tone={feishuStatus ? notificationTone(feishuStatus) : "slate"}>
                 飞书通知 {feishuStatus ? notificationText(feishuStatus) : props.loading ? "加载中" : "未知"}
-              </DeepLedgerStatusPill>
+              </DaaSurfaceStatusPill>
             </div>
             <div className="mt-3 text-xs leading-5 text-[var(--muted)]">
               {props.loading
@@ -252,7 +252,7 @@ export function WorkbenchSummaryHeader(props: {
       </div>
 
       {props.loading ? (
-        <DeepLedgerEmptyState title="正在准备工作台…" description="正在同步账户、观察列表与再平衡周期，请稍候。" />
+        <DaaSurfaceEmptyState title="正在准备工作台…" description="正在同步账户、观察列表与再平衡周期，请稍候。" />
       ) : null}
     </>
   );

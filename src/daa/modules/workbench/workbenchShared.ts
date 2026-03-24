@@ -1,21 +1,27 @@
-import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "@/src/daa/assetKey";
-import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
-import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
-import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
-import { runLlmDecision } from "@/src/daa/llm/llmDecision";
-import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
-import { hydrateUnifiedRequestWithSignals } from "@/src/daa/modules/decision/hydrateUnifiedRequest";
-import type { UnifiedDecisionResult } from "@/src/daa/modules/decision/decisionResultTypes";
-import { buildMarketContextAttribution, getCurrentMarketContext, marketRegimeLabelZh, } from "@/src/daa/modules/marketContext/marketIndicatorService";
-import { classifyCash } from "./cashClassification";
-import { fuseDecision } from "./decisionFusion";
-import { appendDaaTriggerEvent, appendDaaRunHistory, appendAssetPriceHistoryRows, createDaaRebalanceCycle, createDaaRebalanceDecision, createDaaTradeTicket, executeDaaTradeTickets, getDaaCycleReport, getDaaHumanIngestState, getDaaRebalanceCycle, getDaaSystemConfig, getDaaMarketCacheHealthStats, listDaaAssetUniverse, listDaaCycleReports, listDaaEquitySnapshots, listDaaFxRates, listDaaRebalanceCycles, listDaaTradeTickets, patchDaaRebalanceCycle, upsertDaaCycleReport, updateDaaAssetUniverseLastPrice, type DaaStoreRebalanceCycle, } from "@/src/daa/store/daaStorePg";
-import { buildDaaUnifiedPlan, type DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
-import { buildFxLookupToBase, summarizeMarkToMarketPortfolio, } from "@/src/daa/modules/portfolio/portfolioValuation";
-import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
-import { buildAssetUniverseViewRows } from "./assetUniverseService";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import {
+  appendDaaTriggerEvent,
+  getDaaCycleReport,
+  getDaaHumanIngestState,
+  getDaaSystemConfig,
+  getDaaMarketCacheHealthStats,
+  type DaaStoreRebalanceCycle,
+} from "@/src/daa/store/daaStorePg";
+import { buildFxLookupToBase, summarizeMarkToMarketPortfolio } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { computeCorrelationMatrix } from "./correlationService";
-import type { ExecuteRebalanceSummary, ExecuteRebalanceCycleResult, GenerateRebalanceCycleInput, GenerateRebalanceCycleResult, HfSignalSummary, PortfolioHealthyInsight, PreTradeRiskRule, PreTradeRiskCheckItem, PreTradeRiskCheck, RebalanceCycle, RebalanceProposal, RebalanceTriggerSource, UpdateRebalanceCycleInput, WorkbenchBootstrap, WorkbenchRebalanceCycleReport, WorkbenchRecommendation, WorkbenchRecommendationsResult, WorkbenchTradeRecords, } from "./workbenchTypes";
+import type {
+  HfSignalSummary,
+  PreTradeRiskRule,
+  PreTradeRiskCheckItem,
+  PreTradeRiskCheck,
+  RebalanceCycle,
+  RebalanceProposal,
+  RebalanceTriggerSource,
+  WorkbenchBootstrap,
+  WorkbenchRebalanceCycleReport,
+} from "./workbenchTypes";
 import { WorkbenchDomainError, type WorkbenchDomainErrorCode } from "./workbenchErrors";
 
 function toFinite(value: unknown, fallback = 0): number {
@@ -279,7 +285,7 @@ function isCycleTerminal(status: RebalanceCycle["status"] | DaaStoreRebalanceCyc
   return status === "completed" || status === "cancelled";
 }
 
-export function isCycleExecutable(status: RebalanceCycle["status"] | DaaStoreRebalanceCycle["status"]): boolean {
+function isCycleExecutable(status: RebalanceCycle["status"] | DaaStoreRebalanceCycle["status"]): boolean {
     return status === "generated" || status === "reviewing";
 }
 
@@ -627,19 +633,6 @@ function buildMarketFacts(marketContext: DaaMarketContext | null | undefined): s
     });
 }
 
-function pickCycleMarketRegimes(cycle: RebalanceCycle | null, fallback: DaaMarketContext | null): {
-    ruleBasedMarketRegime: DaaMarketRegime | null;
-    llmMarketRegime: DaaMarketRegime | null;
-    effectiveMarketRegime: DaaMarketRegime | null;
-} {
-    const firstDecision = cycle?.proposals.find((item) => item.decisionContext)?.decisionContext || null;
-    return {
-        ruleBasedMarketRegime: firstDecision?.ruleBasedMarketRegime || cycle?.marketContext?.regime || fallback?.regime || null,
-        llmMarketRegime: firstDecision?.llmMarketRegime || null,
-        effectiveMarketRegime: firstDecision?.effectiveMarketRegime || firstDecision?.marketRegime || cycle?.marketContext?.regime || fallback?.regime || null,
-    };
-}
-
 function mapStoreCycleReportToView(report: Awaited<ReturnType<typeof getDaaCycleReport>>): WorkbenchRebalanceCycleReport | null {
     if (!report)
         return null;
@@ -749,68 +742,6 @@ function priceAgeSec(ts: string | null): number | null {
     if (!Number.isFinite(ms))
         return null;
     return Math.max(0, Math.floor((Date.now() - ms) / 1000));
-}
-
-function buildRecommendationRows(input: {
-    result: UnifiedDecisionResult;
-    decisionId: string | null;
-    assetRows: Awaited<ReturnType<typeof listDaaAssetUniverse>>;
-}): WorkbenchRecommendation[] {
-    const priceByAssetKey = new Map<string, number>();
-    for (const row of input.assetRows) {
-        const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-        if (price > 0)
-            priceByAssetKey.set(row.assetKey, price);
-    }
-    const opportunityByAssetKey = new Map<string, UnifiedDecisionResult["opportunityPanel"]["opportunities"][number]>();
-    for (const opp of input.result.opportunityPanel.opportunities) {
-        const symbol = normalizeDaaSymbol(opp.symbol);
-        if (!symbol)
-            continue;
-        const matched = input.assetRows.find((row) => normalizeDaaSymbol(row.symbol) === symbol);
-        if (matched) {
-            opportunityByAssetKey.set(matched.assetKey, opp);
-        }
-    }
-    return input.result.plan.executableOrders.map((order, index) => {
-        const parsed = parseDaaAssetKey(order.assetKey || order.symbol);
-        const symbol = normalizeDaaSymbol(parsed?.symbol || order.symbol);
-        const market = normalizeText(parsed?.market || order.market || "US").toUpperCase() || "US";
-        const assetKey = parsed ? `${parsed.market}::${parsed.symbol}` : `${market}::${symbol}`;
-        const currency = normalizeDaaCurrencyCode(order.instrumentCurrency, "USD");
-        const suggestedNotional = toPositive(order.notional, 0);
-        const price = toPositive(order.price, 0) || priceByAssetKey.get(assetKey) || 0;
-        const suggestedQty = toPositive(order.qty, 0) || (price > 0 ? suggestedNotional / price : 0);
-        const opp = opportunityByAssetKey.get(assetKey);
-        return {
-            id: `${assetKey}-${order.side}-${index + 1}`,
-            assetKey,
-            symbol,
-            market,
-            currency,
-            side: order.side,
-            suggestedNotional,
-            suggestedQty,
-            price,
-            reasons: Array.isArray(order.cappedBy) ? order.cappedBy.slice(0, 4) : [],
-            decisionRefId: input.decisionId,
-            action: opp?.action || "watch",
-            actionLabelZh: actionLabelZh(opp?.action || "watch"),
-            reasonZh: reasonZh(opp?.reasons || []),
-            riskZh: riskZh(toPositive(opp?.riskScorePct, 50), opp?.reasons || []),
-        } satisfies WorkbenchRecommendation;
-    });
-}
-
-function buildBlockedReasons(result: UnifiedDecisionResult): string[] {
-    const byReason = new Map<string, number>();
-    for (const row of result.plan.blockedOrders || []) {
-        const reason = normalizeText(row.blockedBy);
-        if (!reason)
-            continue;
-        byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
-    }
-    return [...byReason.entries()].map(([reason, count]) => `${reason} (${count})`);
 }
 
 function buildWorkbenchMarketDataHealth(input: {
@@ -1110,26 +1041,6 @@ function toCycleReportSnapshot(bootstrap: WorkbenchBootstrap) {
     };
 }
 
-export function normalizeExecutionLogFilters(input: {
-    status?: unknown;
-    source?: unknown;
-    limit?: unknown;
-}): {
-    status?: "ready" | "executed" | "canceled" | "rejected";
-    source?: "manual" | "decision";
-    limit: number;
-} {
-    const statusText = normalizeText(input.status).toLowerCase();
-    const status = statusText === "ready" || statusText === "executed" || statusText === "canceled" || statusText === "rejected"
-        ? statusText
-        : undefined;
-    const sourceText = normalizeText(input.source).toLowerCase();
-    const source = sourceText === "manual" || sourceText === "decision" ? sourceText : undefined;
-    const limitRaw = Math.trunc(toFinite(input.limit, 200));
-    const limit = Math.max(1, Math.min(500, limitRaw || 200));
-    return { status, source, limit };
-}
-
 export function normalizeTradeSide(value: unknown): "BUY" | "SELL" | null {
     const side = normalizeText(value).toUpperCase();
     if (side === "BUY" || side === "SELL")
@@ -1234,44 +1145,28 @@ export {
   toFinite,
   toPositive,
   normalizeText,
-  pickArray,
-  actionLabelZh,
-  reasonZh,
-  riskZh,
-  toPct,
   toIsoByMs,
   normalizeTimeZoneOrUtc,
-  toUtcMinuteOfDay,
   isPastUtcTime,
   getZonedYmd,
   isCalendarMonthDue,
   buildCalendarPeriodKey,
   nextCalendarDueDate,
-  buildHfSignalSummary,
   buildHfSignalMap,
-  computeHhiPct,
   buildPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
   buildManualPreTradeRiskCheck,
   mapStoreCycleToView,
   buildMarketFacts,
-  pickCycleMarketRegimes,
   mapStoreCycleReportToView,
   buildTargetWeightsFromConfig,
   computeTotalEquity,
   priceAgeSec,
-  buildRecommendationRows,
-  buildBlockedReasons,
   buildWorkbenchMarketDataHealth,
   buildCycleDraftFromBootstrap,
-  buildTriggerEventIdempotencyKey,
   appendTriggerEventSafe,
   calcHoldingCostPerUnit,
   buildRiskCycleDraft,
-  calcPortfolioHhiPct,
-  calcMaxWeightPct,
-  calcMaxDriftPct,
-  calcMaxDrawdownPct,
   toCycleReportSnapshot,
 };

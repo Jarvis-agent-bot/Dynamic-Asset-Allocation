@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, RefreshCcw } from "lucide-react";
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DashboardEmptyState, DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import type { TradesModel, TradeTab } from "@/app/daa/dashboard/_hooks/useTradesModel";
-import { DeepLedgerActionButton, DeepLedgerMetricCard, DeepLedgerPageHeader, DeepLedgerPanel, DeepLedgerStatusPill } from "@/app/daa/dashboard/_components/DeepLedgerUI";
+import { DaaSurfaceActionButton, DaaSurfaceMetricCard, DaaSurfacePageHeader, DaaSurfacePanel, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
 const TAB_META: Record<TradeTab, { label: string; subtitle: string }> = {
   cycles: { label: "再平衡周期", subtitle: "用时间线回顾每一次触发、状态与执行规模。" },
@@ -106,15 +106,15 @@ function TableCellText({ children, align = "left", className = "" }: { children:
 
 export function TradesHeader({ model }: { model: TradesModel }) {
   return (
-    <DeepLedgerPageHeader
+    <DaaSurfacePageHeader
       eyebrow="交易审计"
       title="交易记录"
       description="集中查看再平衡周期、订单与复盘结果，便于回顾执行质量和风险变化。"
       actions={(
-        <DeepLedgerActionButton onClick={() => void model.load(true)} disabled={model.loading || model.refreshing}>
+        <DaaSurfaceActionButton onClick={() => void model.load(true)} disabled={model.loading || model.refreshing}>
           <RefreshCcw className={`h-4 w-4 ${model.refreshing ? "animate-spin" : ""}`} />
           {model.refreshing ? "刷新中…" : "刷新数据"}
-        </DeepLedgerActionButton>
+        </DaaSurfaceActionButton>
       )}
     />
   );
@@ -131,10 +131,10 @@ export function TradesSummaryMetrics({ model }: { model: TradesModel }) {
         : "当前全部来自再平衡周期";
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <DeepLedgerMetricCard label="再平衡周期" value={`${model.cycles.length}`} subLabel={`已完成 ${model.completedCycleCount} 个`} accent="cyan" />
-      <DeepLedgerMetricCard label="订单记录" value={`${model.orders.length}`} subLabel={`成交 ${model.executedOrderCount} 笔`} accent="green" />
-      <DeepLedgerMetricCard label="成交金额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} subLabel={notionalLabel} accent="amber" />
-      <DeepLedgerMetricCard label="已实现收益" value={formatCurrency(model.realizedPnl, model.baseCurrency)} subLabel={activityLabel} accent="indigo" />
+      <DaaSurfaceMetricCard label="再平衡周期" value={`${model.cycles.length}`} subLabel={`已完成 ${model.completedCycleCount} 个`} accent="cyan" />
+      <DaaSurfaceMetricCard label="订单记录" value={`${model.orders.length}`} subLabel={`成交 ${model.executedOrderCount} 笔`} accent="green" />
+      <DaaSurfaceMetricCard label="成交金额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} subLabel={notionalLabel} accent="amber" />
+      <DaaSurfaceMetricCard label="已实现收益" value={formatCurrency(model.realizedPnl, model.baseCurrency)} subLabel={activityLabel} accent="indigo" />
     </div>
   );
 }
@@ -142,7 +142,7 @@ export function TradesSummaryMetrics({ model }: { model: TradesModel }) {
 export function TradesLedgerSummary({ model }: { model: TradesModel }) {
   const archivedTotal = model.ledgerMeta.archivedCycleCount + model.ledgerMeta.archivedTradeCount + model.ledgerMeta.archivedReportCount;
   return (
-    <DeepLedgerPanel
+    <DaaSurfacePanel
       accent="indigo"
       title="当前账本窗口"
       subtitle="交易页不再混展示旧测试历史；这里直接告诉你当前起点和已归档数量。"
@@ -150,7 +150,7 @@ export function TradesLedgerSummary({ model }: { model: TradesModel }) {
       <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            <DeepLedgerStatusPill tone="indigo">当前账本</DeepLedgerStatusPill>
+            <DaaSurfaceStatusPill tone="indigo">当前账本</DaaSurfaceStatusPill>
             <span className="text-xs text-[var(--faint)]">
               {model.ledgerMeta.ledgerStartTs ? `起点 ${formatDateTime(model.ledgerMeta.ledgerStartTs)}` : "尚未建立账本起点"}
             </span>
@@ -163,7 +163,7 @@ export function TradesLedgerSummary({ model }: { model: TradesModel }) {
 
         <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            <DeepLedgerStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已有归档" : "无归档历史"}</DeepLedgerStatusPill>
+            <DaaSurfaceStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已有归档" : "无归档历史"}</DaaSurfaceStatusPill>
           </div>
           <div className="mt-3 grid gap-2 text-sm text-[var(--text)] sm:grid-cols-3">
             <div>归档周期 {model.ledgerMeta.archivedCycleCount}</div>
@@ -175,7 +175,7 @@ export function TradesLedgerSummary({ model }: { model: TradesModel }) {
           </div>
         </div>
       </div>
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }
 
@@ -186,7 +186,7 @@ export function TradesErrorState({ error }: { error: string }) {
 export function TradesTabsPanel({ model }: { model: TradesModel }) {
   const tabMeta = TAB_META[model.activeTab];
   return (
-    <DeepLedgerPanel accent="slate" title="视图切换" subtitle="周期是一级视角，订单与复盘是二级明细。">
+    <DaaSurfacePanel accent="slate" title="视图切换" subtitle="周期是一级视角，订单与复盘是二级明细。">
       <div className="grid gap-2 rounded-2xl border border-[var(--border)] bg-[rgba(8,12,20,0.45)] p-2 sm:grid-cols-3">
         {(Object.keys(TAB_META) as TradeTab[]).map((tab) => {
           const active = tab === model.activeTab;
@@ -216,11 +216,11 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
       {model.activeTab === "cycles" ? <TradesCyclesPanel model={model} /> : null}
       {model.activeTab === "orders" ? <TradesOrdersPanel model={model} /> : null}
       {model.activeTab === "reports" ? <TradesReportsPanel model={model} /> : null}
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }
 
-export function TradesCyclesPanel({ model }: { model: TradesModel }) {
+function TradesCyclesPanel({ model }: { model: TradesModel }) {
   if (model.cycles.length <= 0) {
     return (
       <DashboardEmptyState
@@ -263,7 +263,7 @@ export function TradesCyclesPanel({ model }: { model: TradesModel }) {
           {model.cycles.map((cycle) => (
             <tr key={cycle.cycleId}>
               <TableCellMono>{cycle.cycleId.slice(0, 8)}</TableCellMono>
-              <TableCellText><DeepLedgerStatusPill tone={STATUS_TONE[cycle.status] ?? "slate"}>{cycleStatusLabel(cycle.status)}</DeepLedgerStatusPill></TableCellText>
+              <TableCellText><DaaSurfaceStatusPill tone={STATUS_TONE[cycle.status] ?? "slate"}>{cycleStatusLabel(cycle.status)}</DaaSurfaceStatusPill></TableCellText>
               <TableCellText>{triggerSourceLabel(cycle.triggerSource)}</TableCellText>
               <TableCellMono align="right">{cycleOrderCount(cycle)}</TableCellMono>
               <TableCellMono align="right">{formatCurrency(cycle.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</TableCellMono>
@@ -276,7 +276,7 @@ export function TradesCyclesPanel({ model }: { model: TradesModel }) {
   );
 }
 
-export function TradesOrdersPanel({ model }: { model: TradesModel }) {
+function TradesOrdersPanel({ model }: { model: TradesModel }) {
   if (model.orders.length <= 0) {
     return (
       <DashboardEmptyState
@@ -311,7 +311,7 @@ export function TradesOrdersPanel({ model }: { model: TradesModel }) {
             <tr key={order.ticketId}>
               <TableCellMono>{order.symbol}</TableCellMono>
               <TableCellText>{orderSideLabel(order.side)}</TableCellText>
-              <TableCellText><DeepLedgerStatusPill tone={orderStatusTone(order.status)}>{orderStatusLabel(order.status)}</DeepLedgerStatusPill></TableCellText>
+              <TableCellText><DaaSurfaceStatusPill tone={orderStatusTone(order.status)}>{orderStatusLabel(order.status)}</DaaSurfaceStatusPill></TableCellText>
               <TableCellMono align="right">{order.qty.toFixed(4)}</TableCellMono>
               <TableCellMono align="right">{formatCurrency(order.avgFillPrice || order.price, order.instrumentCurrency || "USD")}</TableCellMono>
               <TableCellText align="right">{formatDateTime(order.updatedAt)}</TableCellText>
@@ -323,7 +323,7 @@ export function TradesOrdersPanel({ model }: { model: TradesModel }) {
   );
 }
 
-export function TradesReportsPanel({ model }: { model: TradesModel }) {
+function TradesReportsPanel({ model }: { model: TradesModel }) {
   return (
     <div className="mt-4 space-y-3">
       {model.sortedReports.length > 0 ? model.sortedReports.map((report) => {
@@ -340,7 +340,7 @@ export function TradesReportsPanel({ model }: { model: TradesModel }) {
                 <div className="mt-1 text-xs text-[var(--faint)]">{formatDateTime(report.reportCreatedAt)}</div>
               </div>
               <div className="flex items-center gap-2">
-                <DeepLedgerStatusPill tone={STATUS_TONE[report.status] ?? "slate"}>{cycleStatusLabel(report.status)}</DeepLedgerStatusPill>
+                <DaaSurfaceStatusPill tone={STATUS_TONE[report.status] ?? "slate"}>{cycleStatusLabel(report.status)}</DaaSurfaceStatusPill>
                 {expanded ? <ChevronUp className="h-4 w-4 text-[var(--faint)]" /> : <ChevronDown className="h-4 w-4 text-[var(--faint)]" />}
               </div>
             </button>

@@ -1,16 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { ApiClientError, getApiErrorMessage } from "@/src/daa/api/client";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
-import type { WorkbenchAllocationSummary, WorkbenchSignal } from "@/src/daa/modules/read/readModels";
-import type { StoreNotificationStatusSummary } from "@/src/daa/modules/store/storeApi";
-import type { StoreCashLedgerEntry, StoreEquitySnapshot } from "@/src/daa/modules/store/storeApi";
-import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
-import type { PreTradeRiskCheck, RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
-
-const DAA_DASHBOARD_REFRESH_EVENT_ = "daa:dashboard:refresh";
+import type { WorkbenchReadModel } from "@/src/daa/modules/read/readModels";
+import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 
 export type WorkbenchTab = "positions" | "watchlist" | "rebalance" | "cash";
 
@@ -32,14 +28,7 @@ export function useWorkbenchModel(input: {
   autoRiskCycle?: boolean;
 } = {}) {
   const [activeTab, setActiveTab] = useState<WorkbenchTab>(() => normalizeWorkbenchTab(String(input.initialTab || "")));
-  const [bootstrap, setBootstrap] = useState<WorkbenchBootstrap | null>(null);
-  const [cycles, setCycles] = useState<RebalanceCycle[]>([]);
-  const [snapshots, setSnapshots] = useState<StoreEquitySnapshot[]>([]);
-  const [cashLedger, setCashLedger] = useState<StoreCashLedgerEntry[]>([]);
-  const [signals, setSignals] = useState<WorkbenchSignal[]>([]);
-  const [allocationSummary, setAllocationSummary] = useState<WorkbenchAllocationSummary | null>(null);
-  const [ledgerMeta, setLedgerMeta] = useState<DaaCurrentLedgerMeta | null>(null);
-  const [notificationStatus, setNotificationStatus] = useState<StoreNotificationStatusSummary | null>(null);
+  const [data, setData] = useState<WorkbenchReadModel | null>(null);
   const [currentCycle, setCurrentCycle] = useState<RebalanceCycle | null>(null);
   const [riskCheck, setRiskCheck] = useState<PreTradeRiskCheck | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +41,30 @@ export function useWorkbenchModel(input: {
   useEffect(() => {
     currentCycleIdRef.current = currentCycle?.cycleId || null;
   }, [currentCycle?.cycleId]);
+
+  const bootstrap = data?.bootstrap ?? null;
+  const cycles = data?.cycles ?? [];
+  const snapshots = data?.snapshots ?? [];
+  const cashLedger = data?.cashLedger ?? [];
+  const signals = data?.signals ?? [];
+  const allocationSummary = data?.allocationSummary ?? null;
+  const ledgerMeta = data?.ledgerMeta ?? null;
+  const notificationStatus = data?.notificationStatus ?? null;
+
+  const setCycles = useCallback<Dispatch<SetStateAction<RebalanceCycle[]>>>((nextValue) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      const nextCycles = typeof nextValue === "function" ? nextValue(prev.cycles) : nextValue;
+      return {
+        ...prev,
+        cycles: nextCycles,
+        bootstrap: {
+          ...prev.bootstrap,
+          latestCycle: nextCycles[0] || prev.bootstrap.latestCycle || null,
+        },
+      };
+    });
+  }, []);
 
   useEffect(() => {
     if (input.initialTab) return;
@@ -82,14 +95,7 @@ export function useWorkbenchModel(input: {
         : null;
       const nextCurrentCycle = preferredCycle || latestCycle;
 
-      setBootstrap(nextBootstrap);
-      setCycles(nextCycles);
-      setSnapshots(nextData.snapshots || []);
-      setCashLedger(nextData.cashLedger || []);
-      setSignals(nextData.signals || []);
-      setAllocationSummary(nextData.allocationSummary || null);
-      setLedgerMeta(nextData.ledgerMeta || null);
-      setNotificationStatus(nextData.notificationStatus || null);
+      setData(nextData);
       setCurrentCycle(nextCurrentCycle);
       setRiskCheck(nextCurrentCycle?.riskCheck || null);
     } catch (err) {
@@ -103,21 +109,12 @@ export function useWorkbenchModel(input: {
   }, [input.autoRiskCycle, input.syncPrices]);
 
 
-  useEffect(() => {
-    void loadBootstrap(false);
-  }, [loadBootstrap]);
-
-  useEffect(() => {
-    function onRefresh() {
-      void loadBootstrap(true);
-    }
-    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_, onRefresh);
-    return () => window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_, onRefresh);
-  }, [loadBootstrap]);
+  useDashboardAutoRefresh(loadBootstrap);
 
   return {
     activeTab,
     setActiveTab,
+    data,
     bootstrap,
     cycles,
     snapshots,
@@ -138,5 +135,3 @@ export function useWorkbenchModel(input: {
     loadBootstrap,
   };
 }
-
-export type WorkbenchModel = ReturnType<typeof useWorkbenchModel>;

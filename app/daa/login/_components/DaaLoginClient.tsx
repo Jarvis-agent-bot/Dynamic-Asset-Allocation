@@ -23,8 +23,8 @@ type SessionModel =
 function parseApiError(json: any, fallback: string): string {
   const message = typeof json?.error?.message === "string" ? json.error.message.trim() : "";
   if (message) return message;
-  const legacy = typeof json?.error === "string" ? json.error.trim() : "";
-  if (legacy) return legacy;
+  const fallbackError = typeof json?.error === "string" ? json.error.trim() : "";
+  if (fallbackError) return fallbackError;
   const detail = typeof json?.error?.details?.message === "string" ? json.error.details.message.trim() : "";
   if (detail) return detail;
   return fallback;

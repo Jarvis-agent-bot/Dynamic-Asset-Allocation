@@ -1,31 +1,12 @@
-import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
-import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
-import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
-import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
-import { runLlmDecision } from "@/src/daa/llm/llmDecision";
-import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
-import { hydrateUnifiedRequestWithSignals } from "@/src/daa/modules/decision/hydrateUnifiedRequest";
-import type { UnifiedDecisionResult } from "@/src/daa/modules/decision/decisionResultTypes";
+import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { getCurrentMarketContext } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import {
-  buildMarketContextAttribution,
-  getCurrentMarketContext,
-} from "@/src/daa/modules/marketContext/marketIndicatorService";
-import { classifyCash } from "./cashClassification";
-import { fuseDecision } from "./decisionFusion";
-import {
-  appendDaaTriggerEvent,
-  appendDaaRunHistory,
   appendAssetPriceHistoryRows,
   createDaaRebalanceCycle,
-  createDaaRebalanceDecision,
-  createDaaTradeTicket,
-  executeDaaTradeTickets,
   getDaaAccountState,
-  getDaaCycleReport,
   getDaaLedgerStartTs,
-  getDaaHumanIngestState,
-  getDaaRebalanceCycle,
   getDaaSystemConfig,
   getDaaMarketCacheHealthStats,
   listDaaAssetUniverse,
@@ -34,45 +15,24 @@ import {
   listDaaFxRates,
   listDaaRebalanceCycles,
   listDaaTradeTickets,
-  patchDaaRebalanceCycle,
-  upsertDaaCycleReport,
   updateDaaAssetUniverseLastPrice,
   type DaaStoreAssetUniverseRow,
-  type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
-import { buildDaaUnifiedPlan, type DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
-import {
-  buildFxLookupToBase,
-  summarizeMarkToMarketPortfolio,
-} from "@/src/daa/modules/portfolio/portfolioValuation";
+import type { DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 
 import { buildAssetUniverseViewRows } from "./assetUniverseService";
 import type {
-  ExecuteRebalanceSummary,
-  ExecuteRebalanceCycleResult,
-  GenerateRebalanceCycleInput,
-  GenerateRebalanceCycleResult,
-  HfSignalSummary,
-  PortfolioHealthyInsight,
-  PreTradeRiskCheckItem,
-  PreTradeRiskCheck,
   RebalanceCycle,
-  RebalanceProposal,
-  RebalanceTriggerSource,
-  UpdateRebalanceCycleInput,
   WorkbenchBootstrap,
   WorkbenchAccountBreakdownItem,
   WorkbenchRebalanceCycleReport,
-  WorkbenchRecommendation,
-  WorkbenchRecommendationsResult,
   WorkbenchTradeRecords,
 } from "./workbenchTypes";
 
 import {
   appendTriggerEventSafe,
   buildHfSignalMap,
-  buildMarketFacts,
   buildPreTradeRiskCheck,
   buildRiskCycleDraft,
   buildTargetWeightsFromConfig,
@@ -81,8 +41,6 @@ import {
   computeTotalEquity,
   mapStoreCycleReportToView,
   mapStoreCycleToView,
-  normalizeText,
-  pickCycleMarketRegimes,
   priceAgeSec,
   toFinite,
   toPositive,
@@ -112,16 +70,25 @@ type WorkbenchRuntimePortfolioSnapshot = {
   warnings: string[];
 };
 
+type WorkbenchBootstrapOptions = {
+  syncPrices?: boolean;
+  autoRiskCycle?: boolean;
+  forceRefreshAllPrices?: boolean;
+  maxSyncTargets?: number;
+};
+
+type WorkbenchBootstrapBundle = {
+  bootstrap: WorkbenchBootstrap;
+  cycles: RebalanceCycle[];
+};
+
 function isWithinCurrentLedger(ts: string | null | undefined, ledgerStartTs: string | null): boolean {
   if (!ledgerStartTs) return true;
   if (!ts) return false;
   return Date.parse(ts) >= Date.parse(ledgerStartTs);
 }
 
-async function loadRuntimePortfolioSnapshot(opts: {
-  syncBroker?: boolean;
-} = {}): Promise<WorkbenchRuntimePortfolioSnapshot> {
-  void opts;
+async function loadRuntimePortfolioSnapshot(): Promise<WorkbenchRuntimePortfolioSnapshot> {
   const [localAccountState, assetRows] = await Promise.all([
     getDaaAccountState(),
     listDaaAssetUniverse(),
@@ -163,7 +130,7 @@ async function loadRuntimePortfolioSnapshot(opts: {
   };
 }
 
-export async function syncWorkbenchPrices(opts: {
+async function syncWorkbenchPrices(opts: {
   maxTargets?: number;
   timeoutMs?: number;
   concurrency?: number;
@@ -262,7 +229,7 @@ export async function buildUnifiedRequestFromStore(): Promise<{
 }> {
   const [systemRow, runtimePortfolio, fxRates, snapshots] = await Promise.all([
     getDaaSystemConfig(),
-    loadRuntimePortfolioSnapshot({ syncBroker: true }),
+    loadRuntimePortfolioSnapshot(),
     listDaaFxRates(),
     listDaaEquitySnapshots(365),
   ]);
@@ -362,17 +329,10 @@ export async function buildUnifiedRequestFromStore(): Promise<{
   return { request, baseCurrency, assetRows };
 }
 
-export async function buildWorkbenchBootstrap(opts: {
-  syncPrices?: boolean;
-  autoRiskCycle?: boolean;
-  forceRefreshAllPrices?: boolean;
-  maxSyncTargets?: number;
-  syncBroker?: boolean;
-} = {}): Promise<WorkbenchBootstrap> {
+export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOptions = {}): Promise<WorkbenchBootstrapBundle> {
   const shouldSyncPrices = opts.syncPrices !== false;
   const shouldAutoRiskCycle = opts.autoRiskCycle === true;
-  const shouldSyncBroker = opts.syncBroker !== false;
-  const runtimePortfolio = await loadRuntimePortfolioSnapshot({ syncBroker: shouldSyncBroker });
+  const runtimePortfolio = await loadRuntimePortfolioSnapshot();
 
   if (shouldSyncPrices) {
     try {
@@ -606,55 +566,55 @@ export async function buildWorkbenchBootstrap(opts: {
       }
     }
   }
-  const latestCycle = mapStoreCycleToView(rebalanceCycles[0] || null);
+  const cycles = rebalanceCycles
+    .map((row) => mapStoreCycleToView(row))
+    .filter(Boolean) as RebalanceCycle[];
+  const latestCycle = cycles[0] || null;
 
   return {
-    baseCurrency,
-    account: {
-      cash,
-      investableCash,
-      frozenCash,
-      totalEquity,
-      cashMutationsAllowed: runtimePortfolio.account.cashMutationsAllowed,
-      readOnlyReason: runtimePortfolio.account.readOnlyReason,
-      accountBreakdown: runtimePortfolio.account.accountBreakdown,
+    bootstrap: {
+      baseCurrency,
+      account: {
+        cash,
+        investableCash,
+        frozenCash,
+        totalEquity,
+        cashMutationsAllowed: runtimePortfolio.account.cashMutationsAllowed,
+        readOnlyReason: runtimePortfolio.account.readOnlyReason,
+        accountBreakdown: runtimePortfolio.account.accountBreakdown,
+      },
+      assetUniverse,
+      execution: {
+        logs,
+      },
+      rebalance: {
+        mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",
+        autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
+        analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
+        timezone: rebalanceStrategy.timezone,
+        analysisFocus: rebalanceStrategy.analysisFocus,
+      },
+      rebalanceStrategy: {
+        calendar: rebalanceStrategy.calendar,
+        drift: rebalanceStrategy.drift,
+        cooldownHours: rebalanceStrategy.cooldownHours,
+        analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
+        timezone: rebalanceStrategy.timezone,
+        analysisFocus: rebalanceStrategy.analysisFocus,
+        autoGenerateEnabled: rebalanceStrategy.autoGenerateEnabled,
+      },
+      latestCycle,
+      marketContext,
+      warnings,
+      marketDataHealth,
     },
-    assetUniverse,
-    execution: {
-      logs,
-    },
-    rebalance: {
-      mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",
-      autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
-      analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
-      timezone: rebalanceStrategy.timezone,
-      analysisFocus: rebalanceStrategy.analysisFocus,
-    },
-    rebalanceStrategy: {
-      calendar: rebalanceStrategy.calendar,
-      drift: rebalanceStrategy.drift,
-      cooldownHours: rebalanceStrategy.cooldownHours,
-      analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
-      timezone: rebalanceStrategy.timezone,
-      analysisFocus: rebalanceStrategy.analysisFocus,
-      autoGenerateEnabled: rebalanceStrategy.autoGenerateEnabled,
-    },
-    latestCycle,
-    marketContext,
-    warnings,
-    marketDataHealth,
+    cycles,
   };
 }
 
-export async function listWorkbenchRebalanceCycles(limit = 120): Promise<RebalanceCycle[]> {
-  const [cycles, ledgerStartTs] = await Promise.all([
-    listDaaRebalanceCycles(limit),
-    getDaaLedgerStartTs(),
-  ]);
-  return cycles
-    .filter((row) => isWithinCurrentLedger(row.createdAt, ledgerStartTs))
-    .map((row) => mapStoreCycleToView(row))
-    .filter(Boolean) as RebalanceCycle[];
+export async function buildWorkbenchBootstrap(opts: WorkbenchBootstrapOptions = {}): Promise<WorkbenchBootstrap> {
+  const result = await buildWorkbenchBootstrapBundle(opts);
+  return result.bootstrap;
 }
 
 export async function listWorkbenchTradeRecords(limit = 120): Promise<WorkbenchTradeRecords> {
@@ -678,9 +638,4 @@ export async function listWorkbenchRebalanceReports(limit = 50): Promise<Workben
     .filter((item) => isWithinCurrentLedger(item.cycleCreatedAt, ledgerStartTs))
     .map((item) => mapStoreCycleReportToView(item))
     .filter(Boolean) as WorkbenchRebalanceCycleReport[];
-}
-
-export async function getWorkbenchRebalanceCycleReport(cycleId: string): Promise<WorkbenchRebalanceCycleReport | null> {
-  const report = await getDaaCycleReport(cycleId);
-  return mapStoreCycleReportToView(report);
 }

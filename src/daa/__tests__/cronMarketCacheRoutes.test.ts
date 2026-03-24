@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildSystemConfigRow } from "@/src/daa/__tests__/testDataFactories";
 
 vi.mock("@/src/daa/cron/auth", () => ({
   requireCronAuth: vi.fn(async () => null),
@@ -58,59 +59,41 @@ import { POST as cacheCleanupPost } from "@/app/api/daa/cron/cache-cleanup/route
 import { cleanupMarketCacheRawPayload, refreshMarketPrices } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
+function buildMarketCacheConfig(input?: {
+  priceFeedEnabled?: boolean;
+}) {
+  return buildSystemConfigRow({
+    dataSources: {
+      priceFeed: {
+        enabled: input?.priceFeedEnabled ?? true,
+        symbols: ["AAPL"],
+        marketCache: {
+          rawRetentionDays: 90,
+        },
+      },
+      marketIndicators: {
+        indicators: {
+          vix: { enabled: false, weight: 1 },
+          qqqSpyRatio: { enabled: false, weight: 1 },
+          fxiVolatility: { enabled: false, weight: 1 },
+          kwebFxiRatio: { enabled: false, weight: 1 },
+          btcEthRatio: { enabled: false, weight: 1 },
+          btcVolatility: { enabled: false, weight: 1 },
+          goldSilverRatio: { enabled: false, weight: 1 },
+        },
+      },
+    },
+  });
+}
+
 describe("cron-market-cache-routes-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        dataSources: {
-          priceFeed: {
-            symbols: ["AAPL"],
-            marketCache: {
-              rawRetentionDays: 90,
-            },
-          },
-          marketIndicators: {
-            indicators: {
-              vix: { enabled: false, weight: 1 },
-              qqqSpyRatio: { enabled: false, weight: 1 },
-              fxiVolatility: { enabled: false, weight: 1 },
-              kwebFxiRatio: { enabled: false, weight: 1 },
-              btcEthRatio: { enabled: false, weight: 1 },
-              btcVolatility: { enabled: false, weight: 1 },
-              goldSilverRatio: { enabled: false, weight: 1 },
-            },
-          },
-        },
-      },
-    } as any);
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildMarketCacheConfig());
   });
 
   it("price-refresh 在行情源关闭时直接跳过", async () => {
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        dataSources: {
-          priceFeed: {
-            enabled: false,
-            symbols: ["AAPL"],
-            marketCache: {
-              rawRetentionDays: 90,
-            },
-          },
-          marketIndicators: {
-            indicators: {
-              vix: { enabled: false, weight: 1 },
-              qqqSpyRatio: { enabled: false, weight: 1 },
-              fxiVolatility: { enabled: false, weight: 1 },
-              kwebFxiRatio: { enabled: false, weight: 1 },
-              btcEthRatio: { enabled: false, weight: 1 },
-              btcVolatility: { enabled: false, weight: 1 },
-              goldSilverRatio: { enabled: false, weight: 1 },
-            },
-          },
-        },
-      },
-    } as any);
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildMarketCacheConfig({ priceFeedEnabled: false }));
 
     const response = await priceRefreshPost(new Request("http://localhost/api/daa/cron/price-refresh", { method: "POST" }));
     const json = await response.json();

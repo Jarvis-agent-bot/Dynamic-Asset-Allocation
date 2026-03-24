@@ -6,15 +6,15 @@ import { AlertCircle } from "lucide-react";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
-  DeepLedgerActionButton,
-  DeepLedgerNoticeBox,
-  type DeepLedgerTone,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceNoticeBox,
+  type DaaSurfaceTone,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 function executionReceiptMeta(status: ExecutionReceipt["status"]): {
   title: string;
-  tone: DeepLedgerTone;
+  tone: DaaSurfaceTone;
 } {
   if (status === "success") return { title: "执行成功", tone: "green" };
   if (status === "submitted") return { title: "订单已提交", tone: "indigo" };
@@ -35,7 +35,7 @@ export function WorkbenchBannerStack(props: {
   return (
     <>
       {props.error ? (
-        <DeepLedgerNoticeBox
+        <DaaSurfaceNoticeBox
           tone="red"
           title="工作台加载失败"
           icon={<AlertCircle className="h-4 w-4" />}
@@ -49,7 +49,7 @@ export function WorkbenchBannerStack(props: {
       ) : null}
 
       {props.bootstrap?.marketDataHealth && props.bootstrap.marketDataHealth.status !== "ok" ? (
-        <DeepLedgerNoticeBox
+        <DaaSurfaceNoticeBox
           tone={props.bootstrap.marketDataHealth.status === "down" ? "red" : "amber"}
           title={props.bootstrap.marketDataHealth.status === "down" ? "市场数据不可用" : "市场数据已降级"}
           icon={<AlertCircle className="h-4 w-4" />}
@@ -66,13 +66,13 @@ export function WorkbenchBannerStack(props: {
               return `新鲜 ${props.bootstrap.marketDataHealth.freshCount} · 过期 ${props.bootstrap.marketDataHealth.staleCount} · 缺失 ${props.bootstrap.marketDataHealth.missingCount} · ${jobSummary}`;
             })()}
           </div>
-        </DeepLedgerNoticeBox>
+        </DaaSurfaceNoticeBox>
       ) : null}
 
       {props.executionReceipt ? (() => {
         const meta = executionReceiptMeta(props.executionReceipt.status);
         return (
-          <DeepLedgerNoticeBox
+          <DaaSurfaceNoticeBox
             tone={meta.tone}
             title={meta.title}
             description={`周期 ${props.executionReceipt.cycleId.slice(0, 8)} · 模式 ${props.executionReceipt.mode === "all" ? "执行全部" : "执行选中"} · ${formatDateTime(props.executionReceipt.ts)}`}
@@ -90,9 +90,9 @@ export function WorkbenchBannerStack(props: {
             ) : null}
             <div className="flex flex-wrap gap-2 pt-1">
               <Link href="/daa/dashboard/trades" className={actionLinkClassName}>查看交易记录</Link>
-              <DeepLedgerActionButton tone="slate" onClick={props.onClearExecutionReceipt}>关闭回执</DeepLedgerActionButton>
+              <DaaSurfaceActionButton tone="slate" onClick={props.onClearExecutionReceipt}>关闭回执</DaaSurfaceActionButton>
             </div>
-          </DeepLedgerNoticeBox>
+          </DaaSurfaceNoticeBox>
         );
       })() : null}
     </>

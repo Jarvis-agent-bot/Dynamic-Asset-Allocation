@@ -31,4 +31,22 @@ describe("assistant-intent-parser", () => {
       kind: "rebalance_generate",
     });
   });
+
+  it("只读会话下会把执行命令降级成 llm_answer", () => {
+    const intent = parseAssistantIntent("买入 QQQ 10股", {
+      allowExecution: false,
+    });
+    expect(intent).toMatchObject({
+      kind: "llm_answer",
+      answer: null,
+    });
+  });
+
+  it("对分析型问题优先落到 llm_answer", () => {
+    const intent = parseAssistantIntent("你觉得当前这个组合还合理吗，给我一个优化建议");
+    expect(intent).toMatchObject({
+      kind: "llm_answer",
+      answer: null,
+    });
+  });
 });

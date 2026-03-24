@@ -5,7 +5,6 @@ import type {
   DaaStoreEquitySnapshot,
 } from "@/src/daa/store/daaStorePg";
 import type {
-  AssetUniverseView,
   RebalanceCycle,
   WorkbenchBootstrap,
   WorkbenchRebalanceCycleReport,

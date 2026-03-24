@@ -3,11 +3,11 @@
 import { CheckCircle2, Circle } from "lucide-react";
 
 import {
-  DeepLedgerNoticeBox,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-  deepLedgerSubtlePanelClassName,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceNoticeBox,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+  daaSurfaceSubtlePanelClassName,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import type { PreTradeRiskCheck, RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -50,13 +50,13 @@ export function RebalanceExecutionChecklist(props: {
         };
 
   return (
-    <DeepLedgerPanel
+    <DaaSurfacePanel
       accent={props.rebalanceChecklistAllPassed ? "green" : "amber"}
       title="执行确认"
       subtitle={props.rebalanceChecklistAllPassed ? "条件已满足，可以执行。" : `还差：${props.firstUnmetChecklist?.hint || "请按清单检查"}`}
     >
       <div className="space-y-3">
-        <div className={cn(deepLedgerSubtlePanelClassName, "grid grid-cols-2 gap-x-4 gap-y-2.5 px-4 py-3.5 text-sm")}>
+        <div className={cn(daaSurfaceSubtlePanelClassName, "grid grid-cols-2 gap-x-4 gap-y-2.5 px-4 py-3.5 text-sm")}>
           <div className="text-[var(--faint)]">已选建议</div>
           <div className="text-right font-[var(--font-mono)] text-[var(--text)]">{props.selectedProposalCount} / {props.currentCycle?.proposals.length ?? 0}</div>
           <div className="text-[var(--faint)]">预计成交</div>
@@ -64,12 +64,12 @@ export function RebalanceExecutionChecklist(props: {
           <div className="text-[var(--faint)]">当前勾选风控</div>
           <div className="flex justify-end">
             {props.currentRiskCheck
-              ? <DeepLedgerStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>{riskStatusLabel(props.currentRiskCheck.overallStatus)}</DeepLedgerStatusPill>
+              ? <DaaSurfaceStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>{riskStatusLabel(props.currentRiskCheck.overallStatus)}</DaaSurfaceStatusPill>
               : <span className="text-xs text-[var(--faint)]">待勾选后检查</span>}
           </div>
         </div>
 
-        <DeepLedgerNoticeBox tone={actionHint.tone} title={actionHint.title} description={actionHint.description} />
+        <DaaSurfaceNoticeBox tone={actionHint.tone} title={actionHint.title} description={actionHint.description} />
 
         <div className="border-t border-[var(--border)] pt-3">
           <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">执行条件</div>
@@ -85,6 +85,6 @@ export function RebalanceExecutionChecklist(props: {
           </div>
         </div>
       </div>
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }

@@ -1,6 +1,5 @@
 import {
   DEFAULT_SYSTEM_CONFIG_,
-  getStrategyExecutionConfig,
   normalizeSystemConfig,
   type DaaSystemConfigEnvelope,
 } from "@/src/daa/config/systemConfig";

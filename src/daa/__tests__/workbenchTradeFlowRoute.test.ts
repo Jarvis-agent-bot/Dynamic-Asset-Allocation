@@ -5,22 +5,12 @@ vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminEditorAuth: vi.fn(async () => null),
 }));
 
-import { GET as getWorkbenchBootstrap } from "@/app/api/daa/workbench/bootstrap/route";
+import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { GET as getWorkbenchReadModel } from "@/app/api/daa/read/workbench/route";
 import { POST as upsertAsset } from "@/app/api/daa/workbench/assets/upsert/route";
 import { POST as executeOrder } from "@/app/api/daa/workbench/execution/execute/route";
 import { POST as previewExecution } from "@/app/api/daa/workbench/execution/preview/route";
-import { getDaaSystemConfig, listDaaCashLedgerEntries, saveDaaSystemConfig, upsertDaaFxRates } from "@/src/daa/store/daaStorePg";
-
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMemRuntime() {
-  process.env.DAA_PG_MEM = "1";
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-  delete (globalThis as any)[PG_GLOBAL_KEY];
-  delete (globalThis as any)[STORE_GLOBAL_KEY];
-}
+import { getDaaSystemConfig, listDaaCashLedgerEntries, replaceDaaAccountState, saveDaaSystemConfig, upsertDaaFxRates } from "@/src/daa/store/daaStorePg";
 
 describe("workbench-trade-flow-route-v1", () => {
   beforeEach(async () => {
@@ -112,21 +102,21 @@ describe("workbench-trade-flow-route-v1", () => {
     expect(executeJson.data.summary.executed).toBe(1);
     expect(executeJson.data.summary.rejected).toBe(0);
 
-    const bootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const bootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const bootstrapJson = await bootstrapResponse.json();
 
     expect(bootstrapResponse.status).toBe(200);
     expect(bootstrapJson.ok).toBe(true);
 
-    const assetRow = bootstrapJson.data.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
+    const assetRow = bootstrapJson.data.bootstrap.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
     expect(assetRow).toBeTruthy();
     expect(Number(assetRow.holdingQty)).toBeCloseTo(2, 6);
     const initialTotalCost = Number(previewJson.data.qty) * Number(previewJson.data.price);
     expect(Number(assetRow.costBasis)).toBeCloseTo(initialTotalCost, 6);
 
     const expectedCash = 10000 - Number(previewJson.data.notionalInBase) - Number(previewJson.data.fee);
-    expect(Number(bootstrapJson.data.account.cash)).toBeCloseTo(expectedCash, 6);
-    expect(bootstrapJson.data.execution.logs.some((item: { status: string }) => item.status === "executed")).toBe(true);
+    expect(Number(bootstrapJson.data.bootstrap.account.cash)).toBeCloseTo(expectedCash, 6);
+    expect(bootstrapJson.data.bootstrap.execution.logs.some((item: { status: string }) => item.status === "executed")).toBe(true);
 
     const cashLedger = await listDaaCashLedgerEntries(10);
     expect(cashLedger).toHaveLength(1);
@@ -182,13 +172,13 @@ describe("workbench-trade-flow-route-v1", () => {
     expect(sellExecuteJson.data.summary.executed).toBe(1);
     expect(sellExecuteJson.data.summary.rejected).toBe(0);
 
-    const bootstrapAfterSellResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const bootstrapAfterSellResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const bootstrapAfterSellJson = await bootstrapAfterSellResponse.json();
 
     expect(bootstrapAfterSellResponse.status).toBe(200);
     expect(bootstrapAfterSellJson.ok).toBe(true);
 
-    const assetRowAfterSell = bootstrapAfterSellJson.data.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
+    const assetRowAfterSell = bootstrapAfterSellJson.data.bootstrap.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
     expect(assetRowAfterSell).toBeTruthy();
     expect(Number(assetRowAfterSell.holdingQty)).toBeCloseTo(1, 6);
     expect(Number(assetRowAfterSell.costBasis)).toBeCloseTo(initialTotalCost / 2, 6);
@@ -289,13 +279,13 @@ describe("workbench-trade-flow-route-v1", () => {
     expect(executeJson.ok).toBe(false);
     expect(executeJson.error.details.code).toBe("INSUFFICIENT_INVESTABLE_CASH");
 
-    const bootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const bootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const bootstrapJson = await bootstrapResponse.json();
     expect(bootstrapResponse.status).toBe(200);
-    expect(bootstrapJson.data.account.cash).toBeCloseTo(1000, 6);
-    expect(bootstrapJson.data.account.investableCash).toBeCloseTo(200, 6);
-    expect(bootstrapJson.data.account.frozenCash).toBeCloseTo(800, 6);
-    expect(bootstrapJson.data.assetUniverse.every((item: { holdingQty: number }) => Number(item.holdingQty) === 0)).toBe(true);
+    expect(bootstrapJson.data.bootstrap.account.cash).toBeCloseTo(1000, 6);
+    expect(bootstrapJson.data.bootstrap.account.investableCash).toBeCloseTo(200, 6);
+    expect(bootstrapJson.data.bootstrap.account.frozenCash).toBeCloseTo(800, 6);
+    expect(bootstrapJson.data.bootstrap.assetUniverse.every((item: { holdingQty: number }) => Number(item.holdingQty) === 0)).toBe(true);
   });
 
   it("直接执行外币订单时会按服务端 FX 换算基准币风控金额", async () => {
@@ -371,16 +361,115 @@ describe("workbench-trade-flow-route-v1", () => {
     expect(executeJson.ok).toBe(true);
     expect(executeJson.data.summary.executed).toBe(1);
 
-    const bootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const bootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const bootstrapJson = await bootstrapResponse.json();
 
     expect(bootstrapResponse.status).toBe(200);
-    expect(Number(bootstrapJson.data.account.cash)).toBeCloseTo(8500, 6);
+    expect(Number(bootstrapJson.data.bootstrap.account.cash)).toBeCloseTo(8500, 6);
 
     const cashLedger = await listDaaCashLedgerEntries(10);
     expect(cashLedger).toHaveLength(1);
     expect(Number(cashLedger[0].amountInAccountBase)).toBeCloseTo(1500, 6);
     expect(Number(cashLedger[0].fxRateToAccount)).toBeCloseTo(1, 6);
+  });
+
+  it("手工交易会按运行时账本现金校验，而不是只看保存时的配置快照", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 10000,
+            frozenCash: 0,
+            investableCash: 10000,
+          },
+          targetWeights: {},
+        },
+        dataSources: {
+          ...current.config.dataSources,
+          priceFeed: {
+            ...current.config.dataSources.priceFeed,
+            enabled: false,
+          },
+        },
+      },
+    });
+    await replaceDaaAccountState({
+      baseCurrency: "USD",
+      cash: 100,
+      frozenCash: 0,
+      investableCash: 100,
+      totalEquity: 100,
+    });
+
+    const upsertResponse = await upsertAsset(new Request("http://localhost/api/daa/workbench/assets/upsert", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        symbol: "MSFT",
+        market: "US",
+        currency: "USD",
+        assetClass: "EQUITY",
+        region: "US",
+        exchange: "NASDAQ",
+        instrumentType: "STOCK",
+        marketGroup: "US_EQUITY",
+        watchEnabled: true,
+        lastPrice: 100,
+      }),
+    }));
+    expect(upsertResponse.status).toBe(200);
+
+    const previewResponse = await previewExecution(new Request("http://localhost/api/daa/workbench/execution/preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        assetKey: "US::MSFT",
+        side: "BUY",
+        qty: 2,
+      }),
+    }));
+    const previewJson = await previewResponse.json();
+
+    expect(previewResponse.status).toBe(200);
+    expect(previewJson.ok).toBe(true);
+    expect(previewJson.data.canSubmit).toBe(false);
+    expect(previewJson.data.warnings.some((item: string) => item.includes("可投资现金不足"))).toBe(true);
+
+    const executeResponse = await executeOrder(new Request("http://localhost/api/daa/workbench/execution/execute", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: "manual",
+        side: "BUY",
+        assetKey: "US::MSFT",
+        symbol: "MSFT",
+        market: "US",
+        currency: "USD",
+        qty: 2,
+        price: 100,
+        fee: 0,
+        pricingMode: "manual",
+        reasonText: "运行时现金校验测试",
+      }),
+    }));
+    const executeJson = await executeResponse.json();
+
+    expect(executeResponse.status).toBe(409);
+    expect(executeJson.ok).toBe(false);
+    expect(executeJson.error.details.code).toBe("INSUFFICIENT_INVESTABLE_CASH");
+
+    const bootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
+    const bootstrapJson = await bootstrapResponse.json();
+
+    expect(bootstrapResponse.status).toBe(200);
+    expect(Number(bootstrapJson.data.bootstrap.account.cash)).toBeCloseTo(100, 6);
+    expect(Number(bootstrapJson.data.bootstrap.account.investableCash)).toBeCloseTo(100, 6);
   });
 
 });

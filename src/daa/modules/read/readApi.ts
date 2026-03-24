@@ -5,24 +5,36 @@ import type {
   WorkbenchReadModel,
 } from "./readModels";
 
+function buildQueryString(params: Record<string, string | null | undefined>): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === "") continue;
+    qs.set(key, value);
+  }
+  const encoded = qs.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
+async function requestReadModel<T>(path: string, params: Record<string, string | null | undefined>): Promise<T> {
+  return requestData<T>(`${path}${buildQueryString(params)}`, { method: "GET", cache: "no-store" });
+}
+
 export async function getWorkbenchReadModel(input: {
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
 } = {}): Promise<WorkbenchReadModel> {
-  const qs = new URLSearchParams();
-  if (input.syncPrices != null) qs.set("syncPrices", input.syncPrices ? "1" : "0");
-  if (input.autoRiskCycle != null) qs.set("autoRiskCycle", input.autoRiskCycle ? "1" : "0");
-  const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return requestData<WorkbenchReadModel>(`/api/daa/read/workbench${suffix}`, { method: "GET", cache: "no-store" });
+  return requestReadModel<WorkbenchReadModel>("/api/daa/read/workbench", {
+    syncPrices: input.syncPrices == null ? null : (input.syncPrices ? "1" : "0"),
+    autoRiskCycle: input.autoRiskCycle == null ? null : (input.autoRiskCycle ? "1" : "0"),
+  });
 }
 
 export async function getTradesReadModel(input: {
   tradeLimit?: number;
   reportLimit?: number;
 } = {}): Promise<TradesReadModel> {
-  const qs = new URLSearchParams();
-  if (input.tradeLimit != null) qs.set("tradeLimit", String(input.tradeLimit));
-  if (input.reportLimit != null) qs.set("reportLimit", String(input.reportLimit));
-  const suffix = qs.toString() ? `?${qs.toString()}` : "";
-  return requestData<TradesReadModel>(`/api/daa/read/trades${suffix}`, { method: "GET", cache: "no-store" });
+  return requestReadModel<TradesReadModel>("/api/daa/read/trades", {
+    tradeLimit: input.tradeLimit == null ? null : String(input.tradeLimit),
+    reportLimit: input.reportLimit == null ? null : String(input.reportLimit),
+  });
 }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { resetPgMemRuntime, setPgMemStoreState } from "@/src/daa/__tests__/pgMemTestUtils";
 import { DEFAULT_SYSTEM_CONFIG_, normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import {
@@ -9,23 +10,12 @@ import {
   saveDaaSystemConfig,
 } from "@/src/daa/store/daaStorePg";
 
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMemRuntime() {
-  process.env.DAA_PG_MEM = "1";
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-  delete (globalThis as Record<string, unknown>)[PG_GLOBAL_KEY];
-  delete (globalThis as Record<string, unknown>)[STORE_GLOBAL_KEY];
-}
-
 describe("system-config-cas-v1", () => {
   beforeEach(() => {
     resetPgMemRuntime();
   });
 
-  it("旧 cash ledger 会归档为 legacy 并切换到 V2 账本", async () => {
+  it("旧 cash ledger 会归档为 archived_v1 并切换到 V2 账本", async () => {
     await withDaaPgClient(async ({ query }) => {
       await query(`
         CREATE TABLE daa_asset_universe (
@@ -99,20 +89,20 @@ describe("system-config-cas-v1", () => {
       `);
     });
 
-    (globalThis as Record<string, unknown>)[STORE_GLOBAL_KEY] = {
+    setPgMemStoreState({
       schemaInit: Promise.resolve(),
       marketCacheSchemaInit: null,
-    };
+    });
 
     await expect(listDaaCashLedgerEntries(10)).resolves.toEqual([]);
 
     await withDaaPgClient(async ({ query }) => {
-      const legacyTables = await query(
-        `SELECT table_name FROM information_schema.tables WHERE table_name IN ('daa_cash_ledger', 'daa_cash_ledger_legacy_v1', 'daa_portfolio_ledger_events')`,
+      const archivedTables = await query(
+        `SELECT table_name FROM information_schema.tables WHERE table_name IN ('daa_cash_ledger', 'daa_cash_ledger_archived_v1', 'daa_portfolio_ledger_events')`,
       );
-      const tableNames = new Set(legacyTables.rows.map((row) => String((row as Record<string, unknown>).table_name)));
+      const tableNames = new Set(archivedTables.rows.map((row) => String((row as Record<string, unknown>).table_name)));
       expect(tableNames.has("daa_cash_ledger")).toBe(false);
-      expect(tableNames.has("daa_cash_ledger_legacy_v1")).toBe(true);
+      expect(tableNames.has("daa_cash_ledger_archived_v1")).toBe(true);
       expect(tableNames.has("daa_portfolio_ledger_events")).toBe(true);
 
       const columns = await query(
@@ -178,7 +168,7 @@ describe("system-config-cas-v1", () => {
     expect(["focus-A", "focus-B"]).toContain(latest.config.rebalanceStrategy.analysisFocus);
   });
 
-  it("会清理 legacy system config 重复行并保留最新配置", async () => {
+  it("会清理重复的 system config 行并保留最新配置", async () => {
     await withDaaPgClient(async ({ query }) => {
       await query(`
         CREATE TABLE IF NOT EXISTS daa_system_config_v2 (
@@ -193,14 +183,14 @@ describe("system-config-cas-v1", () => {
         ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
         rebalanceStrategy: {
           ...structuredClone(DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy),
-          analysisFocus: "legacy-older",
+          analysisFocus: "duplicate-older",
         },
       };
       const latestConfig = {
         ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
         rebalanceStrategy: {
           ...structuredClone(DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy),
-          analysisFocus: "legacy-latest",
+          analysisFocus: "duplicate-latest",
         },
       };
 
@@ -219,7 +209,7 @@ describe("system-config-cas-v1", () => {
 
     const current = await getDaaSystemConfig();
     expect(current.version).toBe(2);
-    expect(current.config.rebalanceStrategy.analysisFocus).toBe("legacy-latest");
+    expect(current.config.rebalanceStrategy.analysisFocus).toBe("duplicate-latest");
 
     await withDaaPgClient(async ({ query }) => {
       const rows = await query("SELECT id, version FROM daa_system_config_v2 WHERE id = 'default' ORDER BY version DESC");

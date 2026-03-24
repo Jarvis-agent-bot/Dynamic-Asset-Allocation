@@ -278,7 +278,7 @@ export function SettingsSecretsSection() {
     <section id="settings-secrets" className="scroll-mt-28">
       <SectionCard
         title="凭证与密钥"
-        description="这里只看密钥来源、是否已配置、是否可测试；具体运行成败请回上面的通知 / Broker 运行态确认。"
+        description="这里只看密钥来源、是否已配置、是否可测试；具体运行成败请回上面的通知状态确认。"
       >
         {loading ? (
           <div className="py-8 text-center text-sm text-[var(--muted)]">加载凭证状态…</div>

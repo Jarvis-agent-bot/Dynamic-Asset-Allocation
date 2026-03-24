@@ -10,10 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
-  DeepLedgerActionButton,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import {
   appendCashLedgerEntry,
   listCashLedger,
@@ -144,7 +144,7 @@ export function WorkbenchCashSection(props: {
 
   return (
     <>
-      <DeepLedgerPanel
+      <DaaSurfacePanel
         accent="indigo"
         title={cashMutationsAllowed ? "现金流水" : "现金流水（只读）"}
         subtitle={accountBreakdown.length > 1
@@ -154,14 +154,14 @@ export function WorkbenchCashSection(props: {
             : "当前余额为只读状态，这里只保留本地资金流水作为审计记录。"}
         action={cashMutationsAllowed ? (
           <div className="flex flex-wrap gap-2">
-            <DeepLedgerActionButton tone="success" onClick={() => setDialogSide("deposit")}>
+            <DaaSurfaceActionButton tone="success" onClick={() => setDialogSide("deposit")}>
               <Plus className="h-4 w-4" />
               入金
-            </DeepLedgerActionButton>
-            <DeepLedgerActionButton tone="warning" onClick={() => setDialogSide("withdraw")}>
+            </DaaSurfaceActionButton>
+            <DaaSurfaceActionButton tone="warning" onClick={() => setDialogSide("withdraw")}>
               <Minus className="h-4 w-4" />
               出金
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           </div>
         ) : undefined}
         bodyClassName="pt-0"
@@ -181,9 +181,9 @@ export function WorkbenchCashSection(props: {
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">数据来源</div>
             <div className="mt-2 flex items-center gap-2 text-sm text-[var(--text)]">
               <span>本地模拟账本</span>
-              <DeepLedgerStatusPill tone={accountBreakdown.length > 1 ? "cyan" : cashMutationsAllowed ? "slate" : "amber"}>
+              <DaaSurfaceStatusPill tone={accountBreakdown.length > 1 ? "cyan" : cashMutationsAllowed ? "slate" : "amber"}>
                 {accountBreakdown.length > 1 ? "分账户展示" : cashMutationsAllowed ? "可编辑" : "只读"}
-              </DeepLedgerStatusPill>
+              </DaaSurfaceStatusPill>
             </div>
             <div className="mt-1 text-xs text-[var(--muted)]">
               {accountBreakdown.length > 1
@@ -202,9 +202,9 @@ export function WorkbenchCashSection(props: {
               <div key={`${item.venueKind}:${item.accountId || "default"}`} className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">{item.label}</div>
-                  <DeepLedgerStatusPill tone={item.cashMutationsAllowed ? "cyan" : "amber"}>
+                  <DaaSurfaceStatusPill tone={item.cashMutationsAllowed ? "cyan" : "amber"}>
                     {item.cashMutationsAllowed ? "可编辑" : "只读"}
-                  </DeepLedgerStatusPill>
+                  </DaaSurfaceStatusPill>
                 </div>
                 <div className="mt-3 text-sm text-[var(--text)]">
                   {item.accountId ? `账户 ${item.accountId}` : "默认账户"}
@@ -244,7 +244,7 @@ export function WorkbenchCashSection(props: {
                   <TableRow key={row.id} className="border-[var(--border)]">
                     <TableCell className="text-sm text-[var(--text)]">{(row.ts || row.createdAt || "").slice(0, 16).replace("T", " ")}</TableCell>
                     <TableCell>
-                      <DeepLedgerStatusPill tone={row.side === "withdraw" ? "amber" : "green"}>{side}</DeepLedgerStatusPill>
+                      <DaaSurfaceStatusPill tone={row.side === "withdraw" ? "amber" : "green"}>{side}</DaaSurfaceStatusPill>
                     </TableCell>
                     <TableCell className="text-sm text-[var(--text)]">
                       <div>{formatCurrency(amount, displayCurrency)}</div>
@@ -276,7 +276,7 @@ export function WorkbenchCashSection(props: {
             </TableBody>
           </Table>
         </div>
-      </DeepLedgerPanel>
+      </DaaSurfacePanel>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
         <DialogContent className="max-w-md border-[var(--border)] bg-[var(--surface)] text-[var(--text)]">

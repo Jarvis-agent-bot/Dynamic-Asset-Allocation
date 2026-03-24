@@ -9,9 +9,9 @@ import type {
 
 export type WorkbenchPriceStatus = "fresh" | "stale" | "missing" | "unsupported";
 
-export type HfSignalLevel = "bullish" | "neutral" | "bearish" | "none";
+type HfSignalLevel = "bullish" | "neutral" | "bearish" | "none";
 
-export type HfSignalFundDetail = {
+type HfSignalFundDetail = {
   fundCode: string;
   fundName: string;
   weightPct: number;
@@ -65,7 +65,7 @@ export type AssetUniverseView = {
 
 export type RebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle";
 
-export type RebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
+type RebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
 
 /**
  * 每个 proposal 上的决策上下文（由 decisionFusion 注入）。
@@ -91,7 +91,7 @@ export type ProposalDecisionContext = {
   llmConfidence: number | null;
   /** LLM 调整原因 */
   llmRationale: string | null;
-  /** 兼容旧版展示的市场环境字段，等同于最终生效环境 */
+  /** 兼容历史快照的市场环境字段，等同于最终生效环境 */
   marketRegime?: DaaMarketRegime | null;
   /** 规则层市场环境 */
   ruleBasedMarketRegime?: DaaMarketRegime | null;
@@ -201,7 +201,7 @@ export type RebalanceCycle = {
  * P1-2: 现金分类配置（对应 classifyCash 中的 config 参数）。
  * 放入 RebalanceStrategyConfig.cash，避免 (strategy as any).cash 不安全访问。
  */
-export type RebalanceCashConfig = {
+type RebalanceCashConfig = {
   /** 运营储备占比（0-1），默认 0 */
   operationalReservePct?: number;
   /** 闲置触发阈值占比（0-1），默认 0.1 */
@@ -232,7 +232,7 @@ export type RebalanceStrategyConfig = {
   cash?: RebalanceCashConfig;
 };
 
-export type WorkbenchTradeOrderView = TradeTicket & {
+type WorkbenchTradeOrderView = TradeTicket & {
   cycleId: string | null;
 };
 
@@ -429,63 +429,14 @@ export type WorkbenchBootstrap = {
   marketDataHealth?: WorkbenchMarketDataHealth;
 };
 
-export type WorkbenchRebalanceMode = "manual" | "auto";
+type WorkbenchRebalanceMode = "manual" | "auto";
 
-export type WorkbenchRebalanceConfig = {
+type WorkbenchRebalanceConfig = {
   mode: WorkbenchRebalanceMode;
   autoAnalysisEnabled: boolean;
   analysisTimeUtc: string;
   timezone: string;
   analysisFocus: string;
-};
-
-export type WorkbenchRecommendation = {
-  id: string;
-  assetKey: string;
-  symbol: string;
-  market: string;
-  currency: string;
-  side: TradeTicketSide;
-  suggestedNotional: number;
-  suggestedQty: number;
-  price: number;
-  reasons: string[];
-  decisionRefId: string | null;
-  action: string;
-  actionLabelZh: string;
-  reasonZh: string;
-  riskZh: string;
-};
-
-export type WorkbenchRecommendationsResult = {
-  decisionId: string | null;
-  decisionStatus: string | null;
-  summary: {
-    shouldRebalance: boolean;
-    executableOrderCount: number;
-    blockedOrderCount: number;
-    totalEquity: number;
-    baseCurrency: string;
-  };
-  recommendations: WorkbenchRecommendation[];
-  blockedReasons: string[];
-  warnings: string[];
-  insightDigest: {
-    topOpportunities: Array<{
-      symbol: string;
-      action: string;
-      actionLabelZh: string;
-      finalScorePct: number;
-      confidencePct: number;
-      reasons: string[];
-      reasonZh: string;
-    }>;
-  };
-  riskDigest: {
-    warnings: string[];
-    blockedReasons: string[];
-  };
-  marketContext: DaaMarketContext | null;
 };
 
 export type WorkbenchExecutionExecuteInput = {
@@ -572,7 +523,7 @@ export type WorkbenchFeaturedAssetsResult = {
   generatedAt: string;
 };
 
-export type WorkbenchAssetInsightMetricItem = {
+type WorkbenchAssetInsightMetricItem = {
   key: string;
   label: string;
   value: number | string;
@@ -581,7 +532,7 @@ export type WorkbenchAssetInsightMetricItem = {
   description?: string;
 };
 
-export type WorkbenchAssetPriceSnapshot = {
+type WorkbenchAssetPriceSnapshot = {
   price: number;
   currency: string;
   priceStatus: WorkbenchPriceStatus;
@@ -590,7 +541,7 @@ export type WorkbenchAssetPriceSnapshot = {
   priceAgeSec: number | null;
 };
 
-export type WorkbenchLlmAnalysisView = {
+type WorkbenchLlmAnalysisView = {
   status: "skipped" | "ok" | "error";
   provider: string;
   model: string;

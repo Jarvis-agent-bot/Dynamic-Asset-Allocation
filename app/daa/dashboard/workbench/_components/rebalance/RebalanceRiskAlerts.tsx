@@ -1,10 +1,9 @@
 "use client";
 
 import {
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-  type DeepLedgerTone,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
 import type { PreTradeRiskCheck } from "@/src/daa/modules/workbench/workbenchTypes";
 
@@ -16,11 +15,11 @@ export function RebalanceRiskAlerts(props: {
   if (props.currentRiskCheck.overallStatus === "pass") return null;
 
   return (
-    <DeepLedgerPanel
+    <DaaSurfacePanel
       accent={riskOverallTone(props.currentRiskCheck.overallStatus)}
       title="执行前风控"
       subtitle={`按当前勾选结果计算；状态：${riskStatusLabel(props.currentRiskCheck.overallStatus)}（告警可执行，阻断不可执行）`}
-      action={<DeepLedgerStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>{riskStatusLabel(props.currentRiskCheck.overallStatus)}</DeepLedgerStatusPill>}
+      action={<DaaSurfaceStatusPill tone={riskOverallTone(props.currentRiskCheck.overallStatus)}>{riskStatusLabel(props.currentRiskCheck.overallStatus)}</DaaSurfaceStatusPill>}
     >
       <div className="grid gap-3 lg:grid-cols-2">
         {props.currentRiskCheck.items.filter((item) => item.status !== "pass").map((item) => (
@@ -34,7 +33,7 @@ export function RebalanceRiskAlerts(props: {
             )}
           >
             <div className="flex flex-wrap items-center gap-2">
-              <DeepLedgerStatusPill tone={riskItemTone(item.status)}>{riskItemStatusLabel(item.status)}</DeepLedgerStatusPill>
+              <DaaSurfaceStatusPill tone={riskItemTone(item.status)}>{riskItemStatusLabel(item.status)}</DaaSurfaceStatusPill>
               <span className="text-sm font-semibold text-[var(--text)]">{riskRuleLabel(item.rule)}</span>
             </div>
             <div className="mt-2 text-sm leading-6 text-[var(--muted)]">{item.message}</div>
@@ -42,6 +41,6 @@ export function RebalanceRiskAlerts(props: {
           </div>
         ))}
       </div>
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }

@@ -1,20 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
 import { appendChatMessage, getOrCreateChatSession } from "@/src/daa/chat/chatRepo";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { getDaaSystemConfig, saveDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { appendNotificationDeliveryLog } from "@/src/daa/store/notificationDeliveryLogRepo";
-
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMemRuntime() {
-  process.env.DAA_PG_MEM = "1";
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-  delete (globalThis as any)[PG_GLOBAL_KEY];
-  delete (globalThis as any)[STORE_GLOBAL_KEY];
-}
 
 function clearTelegramEnv() {
   delete process.env.TELEGRAM_BOT_TOKEN;

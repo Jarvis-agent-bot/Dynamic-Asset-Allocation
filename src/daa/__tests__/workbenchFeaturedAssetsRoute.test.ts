@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildMarketPriceResolved,
+  buildSystemConfigRow,
+} from "@/src/daa/__tests__/testDataFactories";
+import type { MarketPriceResolved } from "@/src/daa/modules/marketCache/marketCacheService";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -19,23 +24,21 @@ import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 describe("workbench-featured-assets-route-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        dataSources: {
-          priceFeed: {
-            marketCache: {
-              freshMinutes: 15,
-              serveStaleHours: 48,
-              rawRetentionDays: 90,
-            },
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      dataSources: {
+        priceFeed: {
+          marketCache: {
+            freshMinutes: 15,
+            serveStaleHours: 48,
+            rawRetentionDays: 90,
           },
         },
       },
-    } as any);
+    }));
     vi.mocked(getMarketPricesWithCache).mockImplementation(async (input: { assets?: Array<{ market: string; symbol: string; currency?: string }> }) => {
-      const out: Record<string, unknown> = {};
+      const out: Record<string, MarketPriceResolved> = {};
       for (const row of input.assets || []) {
-        out[`${String(row.market || "").toUpperCase()}::${String(row.symbol || "").toUpperCase()}`] = {
+        out[`${String(row.market || "").toUpperCase()}::${String(row.symbol || "").toUpperCase()}`] = buildMarketPriceResolved({
           provider: "yfinance",
           market: String(row.market || "").toUpperCase(),
           symbol: String(row.symbol || "").toUpperCase(),
@@ -45,9 +48,9 @@ describe("workbench-featured-assets-route-v1", () => {
           priceUpdatedAt: "2026-03-06T08:00:00.000Z",
           priceAgeSec: 0,
           priceSource: "test",
-        };
+        });
       }
-      return out as any;
+      return out;
     });
   });
 
@@ -123,8 +126,7 @@ describe("workbench-featured-assets-route-v1", () => {
 
   it("行情失败时仍返回推荐项且价格置 0", async () => {
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({
-      "US::AAPL": {
-        provider: "yfinance",
+      "US::AAPL": buildMarketPriceResolved({
         market: "US",
         symbol: "AAPL",
         currency: "USD",
@@ -133,8 +135,8 @@ describe("workbench-featured-assets-route-v1", () => {
         priceUpdatedAt: null,
         priceAgeSec: null,
         priceSource: "test",
-      },
-    } as any);
+      }),
+    });
 
     const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?market=US&limitPerMarket=1"));
     const json = await response.json();

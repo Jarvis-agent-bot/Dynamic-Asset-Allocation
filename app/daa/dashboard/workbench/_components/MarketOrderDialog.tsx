@@ -9,15 +9,15 @@ import { Dialog } from "@/components/ui/dialog";
 import type { AssetUniverseView, WorkbenchMarketOrderPreviewResult } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
-  DeepLedgerActionButton,
-  DeepLedgerDialogShell,
-  DeepLedgerMiniStat,
-  DeepLedgerNoticeBox,
-  DeepLedgerStatusPill,
-  deepLedgerFieldClassName,
-  deepLedgerMonoPanelClassName,
-  deepLedgerSubtlePanelClassName,
-} from "../../_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceDialogShell,
+  DaaSurfaceMiniStat,
+  DaaSurfaceNoticeBox,
+  DaaSurfaceStatusPill,
+  daaSurfaceFieldClassName,
+  daaSurfaceMonoPanelClassName,
+  daaSurfaceSubtlePanelClassName,
+} from "../../_components/DaaSurfaceUI";
 
 function formatMaybeAmount(currency: string, value: number | null | undefined, digits = 4): string {
   if (value == null || !Number.isFinite(value)) return `${currency} --`;
@@ -124,26 +124,26 @@ export default function MarketOrderDialog(props: {
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DeepLedgerDialogShell
+      <DaaSurfaceDialogShell
         accent={props.side === "BUY" ? "green" : "amber"}
         className="max-w-[940px] max-h-[min(88dvh,860px)] sm:max-h-[min(90dvh,860px)]"
         title={`${props.side === "BUY" ? "市价买入" : "市价卖出"} ${props.row?.symbol || ""}`}
         description="系统优先使用最近一次成功写入的可用行情做预览；修改输入后会自动清空旧预览，避免旧价格或旧数量被误提交。"
         badges={(
           <>
-            <DeepLedgerStatusPill tone={props.side === "BUY" ? "green" : "amber"}>
+            <DaaSurfaceStatusPill tone={props.side === "BUY" ? "green" : "amber"}>
               {props.side === "BUY" ? "BUY TICKET" : "SELL TICKET"}
-            </DeepLedgerStatusPill>
-            {props.row ? <DeepLedgerStatusPill tone="slate">{props.row.market} · {props.row.currency}</DeepLedgerStatusPill> : null}
+            </DaaSurfaceStatusPill>
+            {props.row ? <DaaSurfaceStatusPill tone="slate">{props.row.market} · {props.row.currency}</DaaSurfaceStatusPill> : null}
           </>
         )}
         bodyClassName="min-h-0 space-y-4 pr-1 sm:pr-2"
         footer={(
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <DeepLedgerActionButton tone="slate" className="justify-center rounded-[12px] px-4 py-2.5" onClick={() => props.onOpenChange(false)}>
+            <DaaSurfaceActionButton tone="slate" className="justify-center rounded-[12px] px-4 py-2.5" onClick={() => props.onOpenChange(false)}>
               取消
-            </DeepLedgerActionButton>
-            <DeepLedgerActionButton
+            </DaaSurfaceActionButton>
+            <DaaSurfaceActionButton
               tone={sideTone}
               className="justify-center rounded-[12px] px-4 py-2.5"
               onClick={() => void handleSubmit()}
@@ -151,7 +151,7 @@ export default function MarketOrderDialog(props: {
             >
               {props.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {props.loading ? "执行中..." : "确认执行"}
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           </div>
         )}
       >
@@ -172,7 +172,7 @@ export default function MarketOrderDialog(props: {
               type="number"
               min="0"
               step="0.000001"
-              className={cn(deepLedgerFieldClassName, "h-11")}
+              className={cn(daaSurfaceFieldClassName, "h-11")}
             />
           </label>
           <label className="space-y-2" htmlFor={`${inputIdBase}-notional`}>
@@ -191,10 +191,10 @@ export default function MarketOrderDialog(props: {
               type="number"
               min="0"
               step="0.01"
-              className={cn(deepLedgerFieldClassName, "h-11")}
+              className={cn(daaSurfaceFieldClassName, "h-11")}
             />
           </label>
-          <DeepLedgerActionButton
+          <DaaSurfaceActionButton
             tone="primary"
             className="h-11 justify-center rounded-[14px] px-4"
             onClick={() => void handlePreview()}
@@ -202,14 +202,14 @@ export default function MarketOrderDialog(props: {
           >
             {previewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {previewLoading ? "预览中..." : "生成预览"}
-          </DeepLedgerActionButton>
+          </DaaSurfaceActionButton>
         </div>
 
-        <div className={cn(deepLedgerSubtlePanelClassName, "space-y-3 px-4 py-3.5")}>
+        <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-3 px-4 py-3.5")}>
           <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-            <DeepLedgerStatusPill tone={inputModeTone}>{inputModeLabel}</DeepLedgerStatusPill>
-            <DeepLedgerStatusPill tone={props.side === "BUY" ? "green" : "amber"}>{props.side === "BUY" ? "买入建仓" : "卖出减仓"}</DeepLedgerStatusPill>
-            {preview ? <DeepLedgerStatusPill tone="slate">输入变更将自动清空旧预览</DeepLedgerStatusPill> : null}
+            <DaaSurfaceStatusPill tone={inputModeTone}>{inputModeLabel}</DaaSurfaceStatusPill>
+            <DaaSurfaceStatusPill tone={props.side === "BUY" ? "green" : "amber"}>{props.side === "BUY" ? "买入建仓" : "卖出减仓"}</DaaSurfaceStatusPill>
+            {preview ? <DaaSurfaceStatusPill tone="slate">输入变更将自动清空旧预览</DaaSurfaceStatusPill> : null}
             <span>数量和金额二选一；继续输入另一项时，当前项会自动清空，避免与后端预览优先级冲突。</span>
           </div>
 
@@ -232,7 +232,7 @@ export default function MarketOrderDialog(props: {
                   hint: "颜色之外还会显示明确文字提示",
                 },
               ].map((item) => (
-                <div key={item.label} className={cn(deepLedgerSubtlePanelClassName, "px-3.5 py-3")}>
+                <div key={item.label} className={cn(daaSurfaceSubtlePanelClassName, "px-3.5 py-3")}>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{item.label}</div>
                   <div className="mt-2 text-sm font-semibold leading-5 text-[var(--text)]">{item.value}</div>
                   <div className="mt-1 text-[11px] leading-5 text-[var(--muted)]">{item.hint}</div>
@@ -246,12 +246,12 @@ export default function MarketOrderDialog(props: {
           )}
         </div>
 
-        {error ? <DeepLedgerNoticeBox tone="red" title="预览失败" description={error} /> : null}
+        {error ? <DaaSurfaceNoticeBox tone="red" title="预览失败" description={error} /> : null}
 
         {preview ? (
           <div className="space-y-3 rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.94),rgba(8,12,20,0.96))] p-4 sm:p-5">
             <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.95fr)] xl:items-start">
-              <div className={cn(deepLedgerSubtlePanelClassName, "space-y-3 px-4 py-4")}>
+              <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-3 px-4 py-4")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">Preview Ledger</div>
@@ -263,19 +263,19 @@ export default function MarketOrderDialog(props: {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <DeepLedgerStatusPill tone={preview.canSubmit ? "green" : "red"}>
+                    <DaaSurfaceStatusPill tone={preview.canSubmit ? "green" : "red"}>
                       {preview.canSubmit ? "可执行" : "执行受限"}
-                    </DeepLedgerStatusPill>
-                    <DeepLedgerStatusPill tone={inputModeTone}>{inputModeLabel}</DeepLedgerStatusPill>
+                    </DaaSurfaceStatusPill>
+                    <DaaSurfaceStatusPill tone={inputModeTone}>{inputModeLabel}</DaaSurfaceStatusPill>
                   </div>
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <div className={cn(deepLedgerMonoPanelClassName, "min-h-[82px] px-3 py-2 leading-5")}>
+                  <div className={cn(daaSurfaceMonoPanelClassName, "min-h-[82px] px-3 py-2 leading-5")}>
                     <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">行情来源</div>
                     <div className="mt-1 break-all font-[var(--font-body)] text-xs leading-5 text-[var(--text)]">{preview.priceSource}</div>
                   </div>
-                  <div className={cn(deepLedgerMonoPanelClassName, "min-h-[82px] px-3 py-2 leading-5")}>
+                  <div className={cn(daaSurfaceMonoPanelClassName, "min-h-[82px] px-3 py-2 leading-5")}>
                     <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">快照时间</div>
                     <div className="mt-1 font-[var(--font-body)] text-xs leading-5 text-[var(--text)]">{formatDateTime(preview.priceSnapshotAt)}</div>
                   </div>
@@ -287,15 +287,15 @@ export default function MarketOrderDialog(props: {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <DeepLedgerMiniStat label="成交数量" value={preview.qty.toFixed(6)} tone="cyan" />
-                <DeepLedgerMiniStat label="名义金额" value={`${preview.currency} ${preview.grossNotional.toFixed(4)}`} tone="amber" />
-                <DeepLedgerMiniStat
+                <DaaSurfaceMiniStat label="成交数量" value={preview.qty.toFixed(6)} tone="cyan" />
+                <DaaSurfaceMiniStat label="名义金额" value={`${preview.currency} ${preview.grossNotional.toFixed(4)}`} tone="amber" />
+                <DaaSurfaceMiniStat
                   label="基准币折算"
                   value={formatMaybeAmount(preview.baseCurrency, preview.notionalInBase)}
                   hint={preview.fxRateToBase == null ? "缺少有效汇率，当前仅可预览不可执行" : `汇率 ${preview.fxRateToBase.toFixed(6)}` }
                   tone="indigo"
                 />
-                <DeepLedgerMiniStat
+                <DaaSurfaceMiniStat
                   label="手续费"
                   value={`${preview.currency} ${preview.fee.toFixed(4)}`}
                   hint={preview.feeRateBps != null ? `费率 ${preview.feeRateBps.toFixed(2)} bps` : "使用默认费率"}
@@ -305,7 +305,7 @@ export default function MarketOrderDialog(props: {
             </div>
 
             {blockedRiskMessage || displayWarnings.length ? (
-              <DeepLedgerNoticeBox
+              <DaaSurfaceNoticeBox
                 tone={blockedRiskMessage ? "red" : "amber"}
                 title={blockedRiskMessage ? "当前交易将被风控阻断" : "风险提示（执行前建议复核）"}
                 description={blockedRiskMessage || undefined}
@@ -329,11 +329,11 @@ export default function MarketOrderDialog(props: {
                     ))}
                   </ul>
                 ) : null}
-              </DeepLedgerNoticeBox>
+              </DaaSurfaceNoticeBox>
             ) : null}
           </div>
         ) : null}
-      </DeepLedgerDialogShell>
+      </DaaSurfaceDialogShell>
     </Dialog>
   );
 }

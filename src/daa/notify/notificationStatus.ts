@@ -1,4 +1,4 @@
-import { listRecentChatSessions } from "@/src/daa/chat/chatRepo";
+import { getLatestAssistantSessionByChannel } from "@/src/daa/chat/chatSessionService";
 import { listSecretStatuses } from "@/src/daa/config/secretsManager";
 import { listJobExecutionLogs } from "@/src/daa/store/jobExecutionLogRepo";
 import {
@@ -67,18 +67,17 @@ function buildChannelSummary(input: {
 }
 
 export async function buildNotificationStatusSummary(): Promise<NotificationStatusSummary> {
-  const [system, secrets, jobs, deliveryLogs, recentChatSessions] = await Promise.all([
+  const [system, secrets, jobs, deliveryLogs, latestTelegramSession] = await Promise.all([
     getDaaSystemConfig(),
     listSecretStatuses(),
     listJobExecutionLogs(10),
     listNotificationDeliveryLogs({ limit: 30 }),
-    listRecentChatSessions(12),
+    getLatestAssistantSessionByChannel("telegram"),
   ]);
 
   const secretConfigured = new Map(secrets.map((item) => [item.key, item.source !== "empty"] as const));
   const telegramLogs = deliveryLogs.filter((item) => item.channel === "telegram");
   const feishuLogs = deliveryLogs.filter((item) => item.channel === "feishu");
-  const latestTelegramSession = recentChatSessions.find((item) => item.channel === "telegram") || null;
   const telegramAssistantSecretStates = [
     { key: "telegram_bot_token", configured: Boolean(secretConfigured.get("telegram_bot_token")) },
     { key: "telegram_webhook_secret", configured: Boolean(secretConfigured.get("telegram_webhook_secret")) },

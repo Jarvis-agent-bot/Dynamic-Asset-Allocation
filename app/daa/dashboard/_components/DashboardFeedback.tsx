@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
-import { DeepLedgerEmptyState, DeepLedgerNoticeBox } from "@/app/daa/dashboard/_components/DeepLedgerUI";
+import { DaaSurfaceEmptyState, DaaSurfaceNoticeBox } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
 type DashboardFeedbackProps = {
   title?: string;
@@ -19,7 +19,7 @@ export function DashboardErrorNotice({
   if (!description) return null;
   return (
     <div role="alert" aria-live="assertive">
-      <DeepLedgerNoticeBox
+      <DaaSurfaceNoticeBox
         tone="red"
         title={title}
         description={description}
@@ -40,7 +40,7 @@ export function DashboardSuccessNotice({
   if (!description) return null;
   return (
     <div role="status" aria-live="polite">
-      <DeepLedgerNoticeBox
+      <DaaSurfaceNoticeBox
         tone="green"
         title={title}
         description={description}
@@ -59,7 +59,7 @@ export function DashboardEmptyState({
   action,
 }: DashboardFeedbackProps) {
   return (
-    <DeepLedgerEmptyState
+    <DaaSurfaceEmptyState
       title={title}
       description={description}
       className={className}

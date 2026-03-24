@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
+import { buildSystemConfigRow } from '@/src/daa/__tests__/testDataFactories';
 
 vi.mock('@/src/daa/cron/auth', () => ({
   requireCronAuth: vi.fn(async () => null),
@@ -115,6 +116,78 @@ import { generateWorkbenchRebalanceCycle } from '@/src/daa/modules/workbench/wor
 import { runHumanIngest } from '@/src/daa/hf/hfService';
 import { appendDaaIngestJobLog, getDaaSystemConfig } from '@/src/daa/store/daaStorePg';
 
+function buildDriftConfig(input: {
+  autoGenerateEnabled: boolean;
+  telegramEnabled?: boolean;
+  feishuEnabled?: boolean;
+}) {
+  return buildSystemConfigRow({
+    rebalanceStrategy: {
+      autoGenerateEnabled: input.autoGenerateEnabled,
+      drift: { enabled: true, thresholdPct: 0.05, checkFrequency: 'daily' },
+    },
+    notification: {
+      telegram: {
+        enabled: input.telegramEnabled ?? true,
+        onDriftTrigger: input.telegramEnabled ?? true,
+      },
+      feishu: {
+        enabled: input.feishuEnabled ?? false,
+        onDriftTrigger: input.feishuEnabled ?? false,
+      },
+    },
+  });
+}
+
+function buildHumanIngestResult(input: {
+  sourceStatus: 'live' | 'fallback_seed';
+  signalCount: number;
+  diagnostics?: string[];
+}): Awaited<ReturnType<typeof runHumanIngest>> {
+  const signals = Array.from({ length: input.signalCount }, (_, index) => ({
+    symbol: `SYM${index + 1}`,
+    market: 'US',
+    aggregatedScorePct: 70,
+    convictionPct: 60,
+    thesisDriftPct: 4,
+    momentumRegime: 'neutral' as const,
+    stance: 'neutral' as const,
+    confidencePct: 55,
+    evidenceCount: 1,
+    actorIds: [`actor-${index + 1}`],
+    sourceRefs: [`human://sym${index + 1}`],
+    riskTags: [],
+  }));
+  return {
+    summary: {
+      ingestedAt: '2026-03-10T08:00:00.000Z',
+      marketScope: ['US'],
+      actorCount: input.signalCount,
+      holdingCount: input.signalCount,
+      signalCount: input.signalCount,
+      mode: 'official_first',
+      sourceStatus: input.sourceStatus,
+      diagnostics: input.diagnostics ?? [],
+    },
+    batch: {
+      generatedAt: '2026-03-10T08:00:00.000Z',
+      asOfDate: '2026-03-10',
+      marketScope: ['US'],
+      mode: 'official_first',
+      sourceStatus: input.sourceStatus,
+      diagnostics: input.diagnostics ?? [],
+      actorCount: input.signalCount,
+      holdingCount: input.signalCount,
+      signals,
+      sources: [{
+        channel: 'official_fund_house',
+        sourceName: 'fixture',
+        itemCount: input.signalCount,
+      }],
+    },
+  };
+}
+
 describe('cron-remaining-routes-v1', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -139,18 +212,11 @@ describe('cron-remaining-routes-v1', () => {
   });
 
   it('drift-check 在自动生成关闭时仍检测偏移并发送通知', async () => {
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        rebalanceStrategy: {
-          autoGenerateEnabled: false,
-          drift: { enabled: true, thresholdPct: 0.05 },
-        },
-        notification: {
-          telegram: { enabled: true, onDriftTrigger: true },
-          feishu: { enabled: false, onDriftTrigger: false },
-        },
-      },
-    } as any);
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildDriftConfig({
+      autoGenerateEnabled: false,
+      telegramEnabled: true,
+      feishuEnabled: false,
+    }));
 
     const response = await driftCheckGet(new Request('http://localhost/api/daa/cron/drift-check', { method: 'GET' }));
     const json = await response.json();
@@ -170,18 +236,11 @@ describe('cron-remaining-routes-v1', () => {
   });
 
   it('drift-check 成功创建周期时会预热 bootstrap 并发送通知', async () => {
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        rebalanceStrategy: {
-          autoGenerateEnabled: true,
-          drift: { enabled: true, thresholdPct: 0.05 },
-        },
-        notification: {
-          telegram: { enabled: true, onDriftTrigger: true },
-          feishu: { enabled: false, onDriftTrigger: false },
-        },
-      },
-    } as any);
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildDriftConfig({
+      autoGenerateEnabled: true,
+      telegramEnabled: true,
+      feishuEnabled: false,
+    }));
 
     const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
     const json = await response.json();
@@ -206,18 +265,11 @@ describe('cron-remaining-routes-v1', () => {
   });
 
   it('hf-ingest 在 fallback_seed 时记录 partial job log', async () => {
-    vi.mocked(runHumanIngest).mockResolvedValue({
-      summary: {
-        sourceStatus: 'fallback_seed',
-        signalCount: 3,
-        diagnostics: { source: 'seed' },
-      },
-      batch: {
-        signals: [{ id: 's1' }, { id: 's2' }, { id: 's3' }],
-        asOfDate: '2026-03-10',
-        generatedAt: '2026-03-10T08:00:00.000Z',
-      },
-    } as any);
+    vi.mocked(runHumanIngest).mockResolvedValue(buildHumanIngestResult({
+      sourceStatus: 'fallback_seed',
+      signalCount: 3,
+      diagnostics: ['source:seed'],
+    }));
 
     const response = await hfIngestPost(new Request('http://localhost/api/daa/cron/hf-ingest', { method: 'POST' }));
     const json = await response.json();

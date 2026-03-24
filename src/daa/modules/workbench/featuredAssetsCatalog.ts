@@ -1,7 +1,7 @@
 export type WorkbenchFeaturedMarket = "US" | "HK" | "CN" | "CRYPTO";
 export type WorkbenchFeaturedAssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CRYPTO";
 
-export type WorkbenchFeaturedCatalogItem = {
+type WorkbenchFeaturedCatalogItem = {
   symbol: string;
   market: WorkbenchFeaturedMarket;
   assetClass: WorkbenchFeaturedAssetClass;

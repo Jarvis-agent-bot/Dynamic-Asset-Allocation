@@ -1,8 +1,9 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { getDaaAuthContextFromRequest } from "@/src/daa/auth/daaAuthRequest";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { getChatSessionByKey, listChatMessages, listRecentChatSessions } from "@/src/daa/chat/chatRepo";
+import { buildWebAssistantSessionDescriptor } from "@/src/daa/chat/channelAdapters";
 import { runAssistantTurn } from "@/src/daa/chat/chatOrchestrator";
+import { loadWebAssistantConversationReadModel } from "@/src/daa/chat/chatConversationReadService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,24 +28,28 @@ export async function POST(req: Request) {
       return fail("UNAUTHORIZED", "auth required", { status: 401 });
     }
 
-    const sessionKey = `web:${auth.account.accountId}`;
+    const descriptor = buildWebAssistantSessionDescriptor({
+      accountId: auth.account.accountId,
+      username: auth.account.username,
+    });
     const result = await runAssistantTurn({
-      channel: "web",
-      sessionKey,
+      ...descriptor,
       userText: text,
-      title: `Web 助手 · ${auth.account.username}`,
-      participantId: auth.account.username,
-      externalUserId: auth.account.accountId,
       allowExecution: true,
     });
-    const session = await getChatSessionByKey(sessionKey);
-    const messages = session ? await listChatMessages(session.sessionId, 16) : [];
-    const sessions = await listRecentChatSessions(8);
+    const conversation = await loadWebAssistantConversationReadModel({
+      accountId: auth.account.accountId,
+      username: auth.account.username,
+      messageLimit: 16,
+      sessionLimit: 8,
+    });
 
     return ok({
-      session,
-      messages,
-      sessions,
+      session: conversation.selectedSession,
+      messages: conversation.messages,
+      sessions: conversation.sessions,
+      threads: conversation.threads,
+      conversation,
       reply: {
         intentKind: result.intentKind,
         text: result.assistantText,

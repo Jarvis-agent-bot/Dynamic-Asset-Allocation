@@ -16,7 +16,6 @@ import {
   applySystemConfigPatches,
   DEFAULT_SYSTEM_CONFIG_,
   normalizeSystemConfig,
-  type DaaSystemConfigEnvelope,
   type DaaSystemConfigPatch,
   type DaaSystemConfig,
 } from "@/src/daa/config/systemConfig";
@@ -111,8 +110,8 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
 
 type SchemaQueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
 
-function buildLegacyTableName(tableName: string): string {
-  return `${normalizeText(tableName).toLowerCase()}_legacy_v1`;
+function buildArchivedV1TableName(tableName: string): string {
+  return `${normalizeText(tableName).toLowerCase()}_archived_v1`;
 }
 
 async function hasTable(query: SchemaQueryFn, tableName: string): Promise<boolean> {
@@ -127,15 +126,15 @@ async function hasTable(query: SchemaQueryFn, tableName: string): Promise<boolea
   return result.rows.length > 0;
 }
 
-async function archiveTableToLegacy(query: SchemaQueryFn, tableName: string): Promise<boolean> {
+async function archiveTableAsV1Snapshot(query: SchemaQueryFn, tableName: string): Promise<boolean> {
   const normalized = normalizeText(tableName).toLowerCase();
   if (!normalized) return false;
   if (!(await hasTable(query, normalized))) return false;
-  const legacyTableName = buildLegacyTableName(normalized);
-  if (await hasTable(query, legacyTableName)) {
-    throw new Error(`legacy table already exists: ${legacyTableName}`);
+  const archivedTableName = buildArchivedV1TableName(normalized);
+  if (await hasTable(query, archivedTableName)) {
+    throw new Error(`archived table already exists: ${archivedTableName}`);
   }
-  await query(`ALTER TABLE ${normalized} RENAME TO ${legacyTableName}`);
+  await query(`ALTER TABLE ${normalized} RENAME TO ${archivedTableName}`);
   return true;
 }
 
@@ -289,15 +288,6 @@ export type DaaStoreEquitySnapshot = {
   holdingsValue: number;
   cash: number;
   source: string;
-};
-
-export type DaaStoreNotificationConfig = {
-  id: "default";
-  enabled: boolean;
-  notifyOnDrift: boolean;
-  notifyOnRebalance: boolean;
-  notifyOnPriceAlert: boolean;
-  updatedAt: string;
 };
 
 export type DaaStoreRebalanceDecision = {
@@ -1436,10 +1426,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
       await query("BEGIN");
       try {
         const archivedLedgerV1 = ([
-          await archiveTableToLegacy(query as any, "daa_account_state"),
-          await archiveTableToLegacy(query as any, "daa_cash_ledger"),
-          await archiveTableToLegacy(query as any, "daa_equity_snapshots"),
-          await archiveTableToLegacy(query as any, "daa_positions"),
+          await archiveTableAsV1Snapshot(query as any, "daa_account_state"),
+          await archiveTableAsV1Snapshot(query as any, "daa_cash_ledger"),
+          await archiveTableAsV1Snapshot(query as any, "daa_equity_snapshots"),
+          await archiveTableAsV1Snapshot(query as any, "daa_positions"),
         ]).some(Boolean);
 
         await query(`
@@ -1990,7 +1980,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
               randomUUID(),
               resetTs,
               account.baseCurrency,
-              "账本 V2 已启用，旧现金流水/权益快照/账户状态已归档到 legacy_v1，当前账本从空状态重新开始。",
+              "账本 V2 已启用，旧现金流水/权益快照/账户状态已归档到 archived_v1，当前账本从空状态重新开始。",
               JSON.stringify({ reason: "archive_reset", version: "v2" }),
             ],
           );
@@ -2628,52 +2618,6 @@ function resolveInvestableCash(cash: number, frozenCash: number, investableCashR
     frozenCash,
     investableCash: investableCashRaw,
   });
-}
-
-function applyAccountCashDeltaToConfig(
-  configJson: Record<string, unknown>,
-  nextCash: number,
-  nextTotalEquity?: number | null,
-): {
-  configJson: Record<string, unknown>;
-  account: {
-    baseCurrency: string;
-    cash: number;
-    investableCash: number;
-    frozenCash: number;
-    totalEquity: number | null;
-  };
-} {
-  const baseConfig = isRecord(configJson) ? configJson : {};
-  const accountRaw = isRecord(baseConfig.account) ? baseConfig.account : {};
-  const baseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
-  const previousCash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
-  const frozenCash = Math.max(0, toFiniteNumber(accountRaw.frozenCash, 0));
-  const previousInvestable = resolveInvestableCash(previousCash, frozenCash, accountRaw.investableCash);
-  const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, 0));
-  const delta = normalizedNextCash - previousCash;
-  const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
-  const totalEquityRaw = nextTotalEquity == null ? Number.NaN : toFiniteNumber(nextTotalEquity, Number.NaN);
-  const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
-
-  const account = {
-    baseCurrency,
-    cash: normalizedNextCash,
-    investableCash: nextInvestable,
-    frozenCash,
-    totalEquity,
-  };
-
-  return {
-    configJson: {
-      ...baseConfig,
-      account: {
-        ...accountRaw,
-        ...account,
-      },
-    },
-    account,
-  };
 }
 
 type DaaQueryRowResult = { rows: Array<Record<string, unknown>> };
@@ -5750,51 +5694,6 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
   });
 }
 
-export async function getDaaNotificationConfig(): Promise<DaaStoreNotificationConfig> {
-  const system = await getDaaSystemConfig();
-  const telegram = system.config.notification.telegram;
-  const feishu = system.config.notification.feishu;
-  return {
-    id: "default",
-    enabled: Boolean(telegram.enabled || feishu.enabled),
-    notifyOnDrift: Boolean(telegram.onDriftTrigger || feishu.onDriftTrigger),
-    notifyOnRebalance: Boolean(telegram.onSuggestionGenerated || feishu.onSuggestionGenerated || telegram.onTradeExecuted || feishu.onTradeExecuted),
-    notifyOnPriceAlert: false,
-    updatedAt: system.updatedAt,
-  };
-}
-
-export async function saveDaaNotificationConfig(input: Partial<DaaStoreNotificationConfig>): Promise<DaaStoreNotificationConfig> {
-  const current = await getDaaSystemConfig();
-  const currentTelegram = current.config.notification.telegram;
-  const currentFeishu = current.config.notification.feishu;
-  const next = normalizeSystemConfig({
-    ...current.config,
-    notification: {
-      telegram: {
-        ...currentTelegram,
-        enabled: input.enabled ?? currentTelegram.enabled,
-        onDriftTrigger: input.notifyOnDrift ?? currentTelegram.onDriftTrigger,
-        onTradeExecuted: input.notifyOnRebalance ?? currentTelegram.onTradeExecuted,
-      },
-      feishu: {
-        ...currentFeishu,
-      },
-    },
-  });
-  const saved = await saveDaaSystemConfig({ config: next, baseVersion: current.version });
-  const telegram = saved.config.notification.telegram;
-  const feishu = saved.config.notification.feishu;
-  return {
-    id: "default",
-    enabled: Boolean(telegram.enabled || feishu.enabled),
-    notifyOnDrift: Boolean(telegram.onDriftTrigger || feishu.onDriftTrigger),
-    notifyOnRebalance: Boolean(telegram.onSuggestionGenerated || feishu.onSuggestionGenerated || telegram.onTradeExecuted || feishu.onTradeExecuted),
-    notifyOnPriceAlert: false,
-    updatedAt: saved.updatedAt,
-  };
-}
-
 function mapRunHistoryRow(row: Record<string, unknown>): DaaStoreRunHistoryEntry {
   return {
     id: normalizeText(row.id),
@@ -6105,33 +6004,6 @@ const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_ = [
   "created_at",
 ].join(", ");
 
-const HF_HOLDING_SNAPSHOT_SELECT_COLUMNS_ = [
-  "provider",
-  "fund_code",
-  "report_date",
-  "symbol",
-  "market",
-  "weight_pct",
-  "prev_weight_pct",
-  "disclosed_at",
-  "confidence_pct",
-  "source_ref",
-  "fetched_at",
-  "raw_ref_id",
-].join(", ");
-
-const HF_SIGNAL_SNAPSHOT_SELECT_COLUMNS_ = [
-  "provider",
-  "symbol",
-  "aggregated_score_pct",
-  "conviction_pct",
-  "thesis_drift_pct",
-  "fund_count",
-  "funds_json",
-  "generated_at",
-  "updated_at",
-].join(", ");
-
 const RAW_PAYLOAD_SELECT_COLUMNS_ = [
   "id",
   "provider",
@@ -6297,38 +6169,6 @@ function mapMarketIndicatorSnapshotRow(row: Record<string, unknown>): DaaStoreMa
     generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
     expireAt: row.expire_at == null ? null : toIsoString(row.expire_at, new Date().toISOString()),
     createdAt: toIsoString(row.created_at, new Date().toISOString()),
-  };
-}
-
-function mapHfHoldingSnapshotRow(row: Record<string, unknown>): DaaStoreHfHoldingSnapshot {
-  const reportDate = String(row.report_date || "").trim();
-  return {
-    provider: normalizeText(row.provider, "danjuan"),
-    fundCode: normalizeText(row.fund_code),
-    reportDate: /^\d{4}-\d{2}-\d{2}$/.test(reportDate) ? reportDate : toIsoString(row.report_date, new Date().toISOString()).slice(0, 10),
-    symbol: normalizeUpper(row.symbol),
-    market: normalizeUpper(row.market, "UNKNOWN"),
-    weightPct: Math.max(0, toFiniteNumber(row.weight_pct, 0)),
-    prevWeightPct: Math.max(0, toFiniteNumber(row.prev_weight_pct, 0)),
-    disclosedAt: row.disclosed_at == null ? null : toIsoString(row.disclosed_at, new Date().toISOString()),
-    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 0), 0, 100),
-    sourceRef: row.source_ref == null ? null : normalizeText(row.source_ref) || null,
-    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
-    rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
-  };
-}
-
-function mapHfSignalSnapshotRow(row: Record<string, unknown>): DaaStoreHfSignalSnapshot {
-  return {
-    provider: normalizeText(row.provider, "human_signal"),
-    symbol: normalizeUpper(row.symbol),
-    aggregatedScorePct: clampNumber(toFiniteNumber(row.aggregated_score_pct, 0), 0, 100),
-    convictionPct: clampNumber(toFiniteNumber(row.conviction_pct, 0), 0, 100),
-    thesisDriftPct: clampNumber(toFiniteNumber(row.thesis_drift_pct, 0), 0, 100),
-    fundCount: Math.max(0, Math.trunc(toFiniteNumber(row.fund_count, 0))),
-    fundsJson: parseJsonb<Array<Record<string, unknown>>>(row.funds_json, []),
-    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
-    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
   };
 }
 

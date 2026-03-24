@@ -1,10 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { buildTradeExecutionNotifyText } from "@/src/daa/notify/tradeExecutionBuilder";
-import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
-import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
-import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
-import { executeManualTrade, ManualTradeServiceError } from "@/src/daa/modules/workbench/manualTradeService";
+import { executeTradeViaGateway } from "@/src/daa/gateway";
+import { ManualTradeServiceError } from "@/src/daa/modules/workbench/manualTradeService";
 
 export const runtime = "nodejs";
 
@@ -38,7 +35,7 @@ export async function POST(req: Request) {
     const body = await readJsonBody<Body>(req);
     let execution;
     try {
-      execution = await executeManualTrade(body || {});
+      execution = await executeTradeViaGateway({ request: body || {} });
     } catch (error) {
       if (error instanceof ManualTradeServiceError) {
         return fail(error.code as never, error.message, {
@@ -47,59 +44,6 @@ export async function POST(req: Request) {
         });
       }
       throw error;
-    }
-
-    try {
-      const systemRow = await getDaaSystemConfig();
-      const notification = systemRow.config.notification;
-      if (
-        execution.result.status === "executed"
-        && (
-        (notification.telegram.enabled && notification.telegram.onTradeExecuted)
-        || (notification.feishu.enabled && notification.feishu.onTradeExecuted)
-        )
-      ) {
-        const message = buildTradeExecutionNotifyText({
-          source: execution.source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
-          baseCurrency: execution.baseCurrency,
-          executeMode: "single",
-          cycleId: execution.item.cycleId || null,
-          ticketId: execution.item.ticketId,
-          venueKind: execution.broker?.kind || execution.item.brokerKind || null,
-          venueAccountId: execution.broker?.accountId || execution.item.brokerAccountId || null,
-          executedCount: execution.summary.executed,
-          failedCount: execution.summary.rejected,
-          totalCount: execution.summary.total,
-          totalNotional: execution.notionalInBase,
-          logs: execution.logs.filter((row) => row.ticketId === execution.item.ticketId),
-        });
-        const meta = {
-          eventType: "trade_executed",
-          triggerSource: execution.source === "decision" ? "decision_trade_execution" : "manual_trade_execution",
-          cycleId: execution.item.cycleId || null,
-          ticketId: execution.item.ticketId,
-          requestJson: {
-            status: execution.result.status,
-            symbol: execution.symbol,
-            side: execution.side,
-            qty: execution.item.qty,
-            notionalInBase: execution.notionalInBase,
-            broker: execution.broker ? {
-              kind: execution.broker.kind,
-              accountId: execution.broker.accountId,
-              remoteOrderId: execution.broker.remoteOrderId,
-              remoteStatus: execution.broker.remoteStatus,
-              routeReason: execution.broker.routeReason,
-            } : null,
-          },
-        };
-        await Promise.allSettled([
-          notification.telegram.enabled && notification.telegram.onTradeExecuted ? sendTelegramByEnv(message, meta) : Promise.resolve(false),
-          notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
-        ]);
-      }
-    } catch {
-      // 忽略通知失败，避免阻塞交易执行
     }
 
     return ok({

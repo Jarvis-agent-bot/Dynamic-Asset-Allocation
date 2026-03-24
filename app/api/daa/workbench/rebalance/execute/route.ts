@@ -1,11 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { executeRebalanceViaGateway } from "@/src/daa/gateway";
 import { WorkbenchDomainError } from "@/src/daa/modules/workbench/workbenchErrors";
-import { executeWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
-import { buildTradeExecutionNotifyText } from "@/src/daa/notify/tradeExecutionBuilder";
-import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
-import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
-import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 export const runtime = "nodejs";
 
@@ -28,7 +24,7 @@ export async function POST(req: Request) {
     const executeMode = String(payload.executeMode || "").trim().toLowerCase() === "selected" ? "selected" : "all";
     let data;
     try {
-      data = await executeWorkbenchRebalanceCycle({ cycleId, executeMode });
+      data = await executeRebalanceViaGateway({ cycleId, executeMode });
     } catch (error) {
       if (error instanceof WorkbenchDomainError) {
         return fail("VALIDATION_FAILED", error.message, {
@@ -64,50 +60,6 @@ export async function POST(req: Request) {
         return fail("VALIDATION_FAILED", reason, { status: 409, details });
       }
       throw error;
-    }
-
-    try {
-      const system = await getDaaSystemConfig();
-      const notification = system.config.notification;
-      if (
-        (notification.telegram.enabled && notification.telegram.onTradeExecuted)
-        || (notification.feishu.enabled && notification.feishu.onTradeExecuted)
-      ) {
-        const ticketIds = new Set(data.cycle.executedOrders || []);
-        const cycleLogs = data.logs.filter((row) => ticketIds.has(row.ticketId));
-        const executedCount = cycleLogs.filter((row) => row.status === "executed").length;
-        const submittedCount = cycleLogs.filter((row) => row.status === "submitted" || row.status === "partially_filled").length;
-        const failedCount = cycleLogs.filter((row) => row.status === "rejected" || row.status === "canceled").length;
-        const message = buildTradeExecutionNotifyText({
-          source: "rebalance_cycle_execution",
-          baseCurrency: system.config.strategy.account.baseCurrency || "USD",
-          executeMode,
-          cycleId,
-          executedCount,
-          submittedCount,
-          failedCount,
-          totalCount: cycleLogs.length,
-          totalNotional: data.cycle.executionSummary?.totalNotional ?? cycleLogs.reduce((sum, row) => sum + (row.qty * row.price), 0),
-          logs: cycleLogs,
-        });
-        const meta = {
-          eventType: "trade_executed",
-          triggerSource: "rebalance_cycle_execution",
-          cycleId,
-          requestJson: {
-            executeMode,
-            ordersExecuted: data.cycle.executionSummary?.ordersExecuted ?? executedCount,
-            ordersSubmitted: data.cycle.executionSummary?.ordersSubmitted ?? submittedCount,
-            ordersFailed: data.cycle.executionSummary?.ordersFailed ?? failedCount,
-          },
-        };
-        await Promise.allSettled([
-          notification.telegram.enabled && notification.telegram.onTradeExecuted ? sendTelegramByEnv(message, meta) : Promise.resolve(false),
-          notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
-        ]);
-      }
-    } catch {
-      // 通知异常不阻塞主执行流
     }
 
     return ok(data);

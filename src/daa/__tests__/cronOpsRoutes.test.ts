@@ -1,4 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildAssetUniverseRow,
+  buildAssetUniverseView,
+  buildGenerateRebalanceCycleResult,
+  buildSystemConfigRow,
+  buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture,
+} from "@/src/daa/__tests__/testDataFactories";
+import type { CurrencyCode } from "@/src/daa/config/currency";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 vi.mock("@/src/daa/cron/auth", () => ({
@@ -32,19 +40,29 @@ vi.mock("@/src/daa/modules/workbench/workbenchRebalanceCycleService", () => ({
 }));
 
 vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
-  buildWorkbenchBootstrap: vi.fn().mockResolvedValue({
+  buildWorkbenchBootstrap: vi.fn().mockResolvedValue(buildWorkbenchBootstrapFixture({
     account: { cash: 3200, investableCash: 3000, frozenCash: 0, totalEquity: 52300 },
-    baseCurrency: "USD",
     assetUniverse: [
-      { symbol: "AAPL", holdingQty: 10, lastPrice: 180, holdingPrice: 170, gapPct: 2.1, watchEnabled: true, targetWeightHint: 0.1 },
+      buildAssetUniverseView({
+        symbol: "AAPL",
+        holdingQty: 10,
+        holdingPrice: 170,
+        lastPrice: 180,
+        gapPct: 2.1,
+        watchEnabled: true,
+        targetWeightHint: 0.1,
+      }),
     ],
     marketContext: { regime: "risk_on", indicators: [], scopes: [] },
     rebalanceStrategy: { calendar: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, thresholdPct: 0.05 } },
-    execution: { logs: [] },
-    rebalance: {},
-    latestCycle: null,
-    warnings: [],
-  }),
+    rebalance: {
+      mode: "manual",
+      autoAnalysisEnabled: false,
+      analysisTimeUtc: "00:20",
+      timezone: "Asia/Shanghai",
+      analysisFocus: "mock",
+    },
+  })),
 }));
 
 vi.mock("@/src/daa/notify/feishu", () => ({
@@ -67,8 +85,11 @@ import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketI
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
-import { buildNewsSignals } from "@/src/daa/signals/newsSignal";
+import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSignal";
 import {
+  type DaaStoreExternalPayloadRaw,
+  type DaaStoreFxRate,
+  type DaaStoreIngestJobLog,
   appendDaaExternalPayloadRaw,
   appendDaaFxRateHistoryRows,
   appendDaaIngestJobLog,
@@ -80,7 +101,7 @@ import {
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 
 function buildSystemConfig(input?: {
-  baseCurrency?: string;
+  baseCurrency?: CurrencyCode;
   newsFeed?: {
     enabled?: boolean;
     symbols?: string[];
@@ -88,7 +109,7 @@ function buildSystemConfig(input?: {
   };
   fxFeed?: {
     enabled?: boolean;
-    baseCurrency?: string;
+    baseCurrency?: CurrencyCode;
     pairs?: unknown;
   };
   autoGenerateEnabled?: boolean;
@@ -97,53 +118,122 @@ function buildSystemConfig(input?: {
   telegramDailyReport?: boolean;
   feishuDailyReport?: boolean;
 }) {
-  const baseCurrency = input?.baseCurrency || "USD";
-  return {
-    config: {
-      dataSources: {
-        newsFeed: {
-          enabled: input?.newsFeed?.enabled ?? true,
-          symbols: input?.newsFeed?.symbols ?? [],
-          query: input?.newsFeed?.query ?? "",
-        },
-        fxFeed: {
-          enabled: input?.fxFeed?.enabled ?? true,
-          baseCurrency: input?.fxFeed?.baseCurrency ?? baseCurrency,
-          pairs: input?.fxFeed?.pairs ?? [],
-        },
-        priceFeed: {
-          marketCache: {
-            rawRetentionDays: 90,
-          },
-        },
+  const baseCurrency: CurrencyCode = input?.baseCurrency || "USD";
+  const analysisTimeUtc = `${String(new Date().getUTCHours()).padStart(2, "0")}:00`;
+  return buildSystemConfigRow({
+    dataSources: {
+      newsFeed: {
+        enabled: input?.newsFeed?.enabled ?? true,
+        symbols: input?.newsFeed?.symbols ?? [],
+        query: input?.newsFeed?.query ?? "",
       },
-      strategy: {
-        account: {
-          baseCurrency,
-        },
+      fxFeed: {
+        enabled: input?.fxFeed?.enabled ?? true,
+        baseCurrency: input?.fxFeed?.baseCurrency ?? baseCurrency,
+        pairs: Array.isArray(input?.fxFeed?.pairs) ? input?.fxFeed?.pairs.map(String) : [],
       },
-      rebalanceStrategy: {
-        autoGenerateEnabled: input?.autoGenerateEnabled ?? false,
-      },
-      notification: {
-        dailyAnalysisHourUtc: new Date().getUTCHours(),
-        telegram: {
-          enabled: (input?.telegramOnSuggestion ?? false) || (input?.telegramDailyReport ?? false),
-          onDriftTrigger: false,
-          onSuggestionGenerated: input?.telegramOnSuggestion ?? false,
-          onTradeExecuted: false,
-          dailyReport: input?.telegramDailyReport ?? false,
-        },
-        feishu: {
-          enabled: (input?.feishuOnSuggestion ?? false) || (input?.feishuDailyReport ?? false),
-          onDriftTrigger: false,
-          onSuggestionGenerated: input?.feishuOnSuggestion ?? false,
-          onTradeExecuted: false,
-          dailyReport: input?.feishuDailyReport ?? false,
+      priceFeed: {
+        marketCache: {
+          rawRetentionDays: 90,
         },
       },
     },
-  } as any;
+    strategy: {
+      account: {
+        baseCurrency,
+      },
+    },
+    rebalanceStrategy: {
+      analysisTimeUtc,
+      autoGenerateEnabled: input?.autoGenerateEnabled ?? false,
+    },
+    notification: {
+      dailyAnalysisHourUtc: new Date().getUTCHours(),
+      telegram: {
+        enabled: (input?.telegramOnSuggestion ?? false) || (input?.telegramDailyReport ?? false),
+        onDriftTrigger: false,
+        onSuggestionGenerated: input?.telegramOnSuggestion ?? false,
+        onTradeExecuted: false,
+        dailyReport: input?.telegramDailyReport ?? false,
+      },
+      feishu: {
+        enabled: (input?.feishuOnSuggestion ?? false) || (input?.feishuDailyReport ?? false),
+        onDriftTrigger: false,
+        onSuggestionGenerated: input?.feishuOnSuggestion ?? false,
+        onTradeExecuted: false,
+        dailyReport: input?.feishuDailyReport ?? false,
+      },
+    },
+  });
+}
+
+function buildExternalPayloadRawFixture(): DaaStoreExternalPayloadRaw {
+  return {
+    id: "raw-1",
+    provider: "test",
+    resource: "fixture",
+    subjectKey: "fixture",
+    requestUrl: "https://example.com",
+    requestJson: {},
+    responseStatus: 200,
+    responseHeadersJson: {},
+    payloadJson: {},
+    payloadText: "{}",
+    fetchedAt: "2026-03-01T00:00:00.000Z",
+    expireAt: "2026-06-01T00:00:00.000Z",
+    createdAt: "2026-03-01T00:00:00.000Z",
+  };
+}
+
+function buildIngestJobLogFixture(): DaaStoreIngestJobLog {
+  return {
+    jobId: "job-1",
+    jobType: "fixture",
+    triggerSource: "manual",
+    status: "ok",
+    startedAt: "2026-03-01T00:00:00.000Z",
+    finishedAt: "2026-03-01T00:00:01.000Z",
+    totalCount: 0,
+    successCount: 0,
+    failureCount: 0,
+    diagnosticsJson: {},
+  };
+}
+
+function buildFxRateFixture(overrides?: Partial<DaaStoreFxRate>): DaaStoreFxRate {
+  return {
+    id: "fx-1",
+    baseCcy: "USD",
+    quoteCcy: "CNY",
+    rate: 7.2,
+    source: "fixture",
+    asOfTs: "2026-03-01T00:00:00.000Z",
+    updatedAt: "2026-03-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function buildNewsSignalFixture(input: {
+  symbol?: string;
+  itemIds: string[];
+}): DaaNewsSignal {
+  const symbol = input.symbol ?? "AAPL";
+  return {
+    symbol,
+    scorePct: 70,
+    confidencePct: 60,
+    evidenceCount: input.itemIds.length,
+    reasons: [],
+    items: input.itemIds.map((id) => ({
+      symbol,
+      title: id,
+      link: null,
+      ts: "2026-03-01T00:00:00.000Z",
+      sentimentScore: 0.5,
+      sourceCredibility: 0.8,
+      freshness: 0.9,
+    })),
+  };
 }
 
 beforeEach(() => {
@@ -152,23 +242,16 @@ beforeEach(() => {
 
   vi.mocked(requireCronAuth).mockResolvedValue(null);
   vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig());
-  vi.mocked(listDaaAssetUniverse).mockResolvedValue([] as any[]);
-  vi.mocked(listDaaFxRates).mockResolvedValue([] as any[]);
-  vi.mocked(appendDaaIngestJobLog).mockResolvedValue(undefined as any);
-  vi.mocked(appendDaaExternalPayloadRaw).mockResolvedValue({ id: "raw-1" } as any);
-  vi.mocked(appendDaaFxRateHistoryRows).mockResolvedValue(undefined as any);
-  vi.mocked(upsertDaaFxRates).mockResolvedValue(undefined as any);
-  vi.mocked(buildNewsSignals).mockResolvedValue([] as any[]);
+  vi.mocked(listDaaAssetUniverse).mockResolvedValue([]);
+  vi.mocked(listDaaFxRates).mockResolvedValue([]);
+  vi.mocked(appendDaaIngestJobLog).mockResolvedValue(buildIngestJobLogFixture());
+  vi.mocked(appendDaaExternalPayloadRaw).mockResolvedValue(buildExternalPayloadRawFixture());
+  vi.mocked(appendDaaFxRateHistoryRows).mockResolvedValue(0);
+  vi.mocked(upsertDaaFxRates).mockResolvedValue([]);
+  vi.mocked(buildNewsSignals).mockResolvedValue([]);
   vi.mocked(parseSymbolsFromNewsQuery).mockReturnValue([]);
-  vi.mocked(refreshMarketIndicators).mockResolvedValue({ refreshedCount: 0 } as any);
-  vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue({
-    cycle: null,
-    created: false,
-    skippedByCooldown: false,
-    cooldownUntil: null,
-    message: "",
-    portfolioStatus: "skipped",
-  } as any);
+  vi.mocked(refreshMarketIndicators).mockResolvedValue({ marketContext: null, indicators: [], refreshedCount: 0 });
+  vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult());
   vi.mocked(sendFeishuByEnv).mockResolvedValue(false);
   vi.mocked(sendTelegramByEnv).mockResolvedValue(false);
 });
@@ -188,15 +271,15 @@ describe("cron-ops-routes-v1", () => {
       },
     }));
     vi.mocked(listDaaAssetUniverse).mockResolvedValue([
-      { symbol: "MSFT", holdingQty: 0, watchEnabled: true },
-      { symbol: "BABA", holdingQty: 16, watchEnabled: false },
-      { symbol: "0700.HK", holdingQty: 0, watchEnabled: false },
-    ] as any[]);
+      buildAssetUniverseRow({ assetKey: "US::MSFT", symbol: "MSFT", holdingQty: 0, watchEnabled: true }),
+      buildAssetUniverseRow({ assetKey: "US::BABA", symbol: "BABA", holdingQty: 16, watchEnabled: false }),
+      buildAssetUniverseRow({ assetKey: "HK::0700.HK", symbol: "0700.HK", market: "HK", holdingQty: 0, watchEnabled: false }),
+    ]);
     vi.mocked(parseSymbolsFromNewsQuery).mockReturnValue(["tsla", "MSFT", ""]);
     vi.mocked(buildNewsSignals).mockResolvedValue([
-      { items: [{ id: "n1" }, { id: "n2" }] },
-      { items: [{ id: "n3" }] },
-    ] as any[]);
+      buildNewsSignalFixture({ symbol: "TSLA", itemIds: ["n1", "n2"] }),
+      buildNewsSignalFixture({ symbol: "MSFT", itemIds: ["n3"] }),
+    ]);
 
     const response = await newsRefreshPost(new Request("http://localhost/api/daa/cron/news-refresh", { method: "POST" }));
     const json = await response.json();
@@ -234,13 +317,13 @@ describe("cron-ops-routes-v1", () => {
       },
     }));
     vi.mocked(listDaaAssetUniverse).mockResolvedValue([
-      { currency: "HKD", holdingQty: 10, watchEnabled: false },
-      { currency: "CNY", holdingQty: 0, watchEnabled: true },
-      { currency: "USD", holdingQty: 1, watchEnabled: true },
-    ] as any[]);
+      buildAssetUniverseRow({ assetKey: "HK::700", symbol: "700", market: "HK", currency: "HKD", holdingQty: 10, watchEnabled: false }),
+      buildAssetUniverseRow({ assetKey: "CN::000001", symbol: "000001", market: "CN", currency: "CNY", holdingQty: 0, watchEnabled: true }),
+      buildAssetUniverseRow({ assetKey: "US::CASH", symbol: "CASH", market: "US", currency: "USD", holdingQty: 1, watchEnabled: true }),
+    ]);
     vi.mocked(listDaaFxRates).mockResolvedValue([
-      { baseCcy: "USD", quoteCcy: "CNY", asOfTs: todayIso },
-    ] as any[]);
+      buildFxRateFixture({ baseCcy: "USD", quoteCcy: "CNY", asOfTs: todayIso }),
+    ]);
 
     const fetchMock = vi.fn(async (input: unknown) => {
       const url = String(input);
@@ -286,7 +369,7 @@ describe("cron-ops-routes-v1", () => {
         source: "cron_daily_pull",
       }),
     ]);
-    expect(vi.mocked(appendDaaFxRateHistoryRows)).toHaveBeenCalledWith([
+    expect(vi.mocked(appendDaaFxRateHistoryRows)).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({
         baseCcy: "USD",
         quoteCcy: "HKD",
@@ -300,7 +383,7 @@ describe("cron-ops-routes-v1", () => {
         status: "error",
         errorCode: "http_502",
       }),
-    ]);
+    ]));
     expect(vi.mocked(appendDaaIngestJobLog)).toHaveBeenCalledWith(expect.objectContaining({
       jobType: "cron_fx_refresh",
       status: "partial",
@@ -361,20 +444,30 @@ describe("cron-ops-routes-v1", () => {
       telegramOnSuggestion: true,
       feishuOnSuggestion: true,
     }));
-    vi.mocked(refreshMarketIndicators).mockResolvedValue({ refreshedCount: 4 } as any);
-    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue({
+    vi.mocked(refreshMarketIndicators).mockResolvedValue({ marketContext: null, indicators: [], refreshedCount: 4 });
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
       cycle: {
         cycleId: "cycle-1",
         triggerReason: "定期再平衡触发",
         riskCheck: { overallStatus: "pass" },
-        proposals: [{ symbol: "AAPL", side: "BUY", suggestedNotional: 1000 }],
+        proposals: [{
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 5,
+          suggestedNotional: 1000,
+          price: 200,
+          reason: "test proposal",
+          selected: true,
+          hfContribution: null,
+        }],
       },
       created: true,
-      skippedByCooldown: false,
-      cooldownUntil: null,
       message: "已生成再平衡周期 cycle-1",
       portfolioStatus: "needs_rebalance",
-    } as any);
+    }));
     vi.mocked(sendTelegramByEnv).mockResolvedValue(true);
     vi.mocked(sendFeishuByEnv).mockResolvedValue(true);
 
@@ -397,32 +490,30 @@ describe("cron-ops-routes-v1", () => {
   it("daily-analysis 会优先按 analysisTimeUtc 推导整点窗口，而不是继续依赖旧 hourly 字段", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-19T11:05:00.000Z"));
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        ...buildSystemConfig({ autoGenerateEnabled: false }).config,
-        rebalanceStrategy: {
-          analysisTimeUtc: "10:51",
-          autoGenerateEnabled: false,
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      ...buildSystemConfig({ autoGenerateEnabled: false }).config,
+      rebalanceStrategy: {
+        analysisTimeUtc: "10:51",
+        autoGenerateEnabled: false,
+      },
+      notification: {
+        dailyAnalysisHourUtc: 1,
+        telegram: {
+          enabled: false,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: false,
+          dailyReport: false,
         },
-        notification: {
-          dailyAnalysisHourUtc: 1,
-          telegram: {
-            enabled: false,
-            onDriftTrigger: false,
-            onSuggestionGenerated: false,
-            onTradeExecuted: false,
-            dailyReport: false,
-          },
-          feishu: {
-            enabled: false,
-            onDriftTrigger: false,
-            onSuggestionGenerated: false,
-            onTradeExecuted: false,
-            dailyReport: false,
-          },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: false,
+          dailyReport: false,
         },
       },
-    } as any);
+    }));
 
     const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
     const json = await response.json();

@@ -172,31 +172,3 @@ export function DaaMobileNav() {
     </Sheet>
   );
 }
-
-export function DaaInlineNav() {
-  const items = useNavItems();
-  const active = useActiveNav();
-  return (
-    <nav className="flex flex-wrap items-center gap-1.5" aria-label="DAA">
-      {items.map((item) => {
-        const isActive = active === item.key;
-        return (
-          <Link
-            key={item.key}
-            href={item.href}
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-all duration-200",
-              isActive
-                ? "border-[rgba(56,189,248,0.24)] bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-                : "border-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[rgba(255,255,255,0.03)] hover:text-[var(--text)]",
-            )}
-          >
-            <item.Icon className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}

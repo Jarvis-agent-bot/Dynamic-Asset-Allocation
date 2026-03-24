@@ -6,11 +6,11 @@ import { MoreHorizontal } from "lucide-react";
 
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import {
-  DeepLedgerActionButton,
-  DeepLedgerNoticeBox,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceNoticeBox,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import type { DaaMarketContext, DaaMarketScopeContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type {
   PreTradeRiskCheck,
@@ -86,18 +85,18 @@ export function WorkbenchRebalanceSection(props: {
   return (
     <div className="space-y-4">
       {props.summary.holdingAssets <= 0 ? (
-        <DeepLedgerPanel
+        <DaaSurfacePanel
           accent="amber"
           title="首次调仓引导"
           action={(
             <div className="flex flex-wrap gap-2">
-              <DeepLedgerActionButton tone="primary" onClick={() => props.onNavigateTab("watchlist")}>去观察列表添加标的</DeepLedgerActionButton>
-              <DeepLedgerActionButton onClick={() => props.onNavigateTab("watchlist")}>去观察列表设权重</DeepLedgerActionButton>
+              <DaaSurfaceActionButton tone="primary" onClick={() => props.onNavigateTab("watchlist")}>去观察列表添加标的</DaaSurfaceActionButton>
+              <DaaSurfaceActionButton onClick={() => props.onNavigateTab("watchlist")}>去观察列表设权重</DaaSurfaceActionButton>
             </div>
           )}
         >
-          <DeepLedgerNoticeBox tone="amber" title="推荐路径" description="观察列表内添加标的并设置目标权重 → 生成建议 → 勾选并执行。" />
-        </DeepLedgerPanel>
+          <DaaSurfaceNoticeBox tone="amber" title="推荐路径" description="观察列表内添加标的并设置目标权重 → 生成建议 → 勾选并执行。" />
+        </DaaSurfacePanel>
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.96),rgba(13,19,32,0.98))] px-5 py-3.5 shadow-[0_4px_24px_rgba(0,0,0,0.18)]">
@@ -105,8 +104,8 @@ export function WorkbenchRebalanceSection(props: {
           {props.currentCycle ? (
             <>
               <span className="font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">{props.currentCycle.cycleId.slice(0, 8)}</span>
-              <DeepLedgerStatusPill tone={cycleStatusTone(props.currentCycle.status)}>{cycleStatusLabel(props.currentCycle.status)}</DeepLedgerStatusPill>
-              <DeepLedgerStatusPill tone="slate">{triggerSourceLabel(props.currentCycle.triggerSource)}</DeepLedgerStatusPill>
+              <DaaSurfaceStatusPill tone={cycleStatusTone(props.currentCycle.status)}>{cycleStatusLabel(props.currentCycle.status)}</DaaSurfaceStatusPill>
+              <DaaSurfaceStatusPill tone="slate">{triggerSourceLabel(props.currentCycle.triggerSource)}</DaaSurfaceStatusPill>
               <span className="hidden text-xs text-[var(--muted)] sm:inline">{props.cycleProgressText}</span>
             </>
           ) : (
@@ -114,16 +113,16 @@ export function WorkbenchRebalanceSection(props: {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <DeepLedgerActionButton tone="primary" onClick={() => void props.onGenerateCycle()} disabled={props.busy}>生成/刷新建议</DeepLedgerActionButton>
-          <DeepLedgerActionButton tone="success" onClick={() => props.onOpenExecuteDialog("selected")} disabled={!props.canExecuteSelected}>
+          <DaaSurfaceActionButton tone="primary" onClick={() => void props.onGenerateCycle()} disabled={props.busy}>生成/刷新建议</DaaSurfaceActionButton>
+          <DaaSurfaceActionButton tone="success" onClick={() => props.onOpenExecuteDialog("selected")} disabled={!props.canExecuteSelected}>
             执行选中{props.selectedProposalCount > 0 ? ` (${props.selectedProposalCount})` : ""}
-          </DeepLedgerActionButton>
+          </DaaSurfaceActionButton>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <DeepLedgerActionButton disabled={props.busy}>
+              <DaaSurfaceActionButton disabled={props.busy}>
                 <MoreHorizontal className="h-3.5 w-3.5" />
                 更多
-              </DeepLedgerActionButton>
+              </DaaSurfaceActionButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
               <DropdownMenuItem onClick={() => props.onOpenExecuteDialog("all")} disabled={!props.canExecuteAll}>执行全部（需确认）</DropdownMenuItem>

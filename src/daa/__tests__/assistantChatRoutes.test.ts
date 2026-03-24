@@ -50,21 +50,17 @@ vi.mock("@/src/daa/notify/telegram", async () => {
 });
 
 import { POST as upsertAsset } from "@/app/api/daa/workbench/assets/upsert/route";
-import { GET as getWorkbenchBootstrap } from "@/app/api/daa/workbench/bootstrap/route";
+import { GET as getWorkbenchReadModel } from "@/app/api/daa/read/workbench/route";
 import { GET as getSessions } from "@/app/api/daa/chat/sessions/route";
 import { POST as postMessage } from "@/app/api/daa/chat/messages/route";
 import { POST as telegramWebhook } from "@/app/api/daa/chat/telegram/webhook/route";
+import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
 import { getDaaSystemConfig, saveDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMemRuntime() {
-  process.env.DAA_PG_MEM = "1";
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-  delete (globalThis as any)[PG_GLOBAL_KEY];
-  delete (globalThis as any)[STORE_GLOBAL_KEY];
+function getTelegramReplyText(callIndex: number): string {
+  const calls = vi.mocked(sendTelegramMessageMock).mock.calls as Array<Array<{ text?: string }>>;
+  const [input] = calls[callIndex] || [];
+  return typeof input?.text === "string" ? input.text : "";
 }
 
 describe("assistant-chat-routes", () => {
@@ -133,9 +129,9 @@ describe("assistant-chat-routes", () => {
     expect(previewJson.ok).toBe(true);
     expect(String(previewJson.data.reply.text)).toContain("已进入待确认");
 
-    const previewBootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const previewBootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const previewBootstrapJson = await previewBootstrapResponse.json();
-    const previewAssetRow = previewBootstrapJson.data.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
+    const previewAssetRow = previewBootstrapJson.data.bootstrap.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
     expect(Number(previewAssetRow.holdingQty)).toBeCloseTo(0, 6);
 
     const confirmResponse = await postMessage(new Request("http://localhost/api/daa/chat/messages", {
@@ -147,12 +143,12 @@ describe("assistant-chat-routes", () => {
 
     expect(confirmResponse.status).toBe(200);
     expect(confirmJson.ok).toBe(true);
-    expect(String(confirmJson.data.reply.text)).toContain("买入 AAPL 已提交模拟执行");
+    expect(String(confirmJson.data.reply.text)).toContain("买入 AAPL 已在本地模拟账本成交");
     expect(confirmJson.data.messages.length).toBeGreaterThanOrEqual(4);
 
-    const bootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const bootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const bootstrapJson = await bootstrapResponse.json();
-    const assetRow = bootstrapJson.data.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
+    const assetRow = bootstrapJson.data.bootstrap.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
     expect(Number(assetRow.holdingQty)).toBeCloseTo(2, 6);
 
     const sessionResponse = await getSessions(new Request("http://localhost/api/daa/chat/sessions"));
@@ -160,6 +156,11 @@ describe("assistant-chat-routes", () => {
     expect(sessionResponse.status).toBe(200);
     expect(sessionJson.ok).toBe(true);
     expect(sessionJson.data.sessions.length).toBeGreaterThan(0);
+    expect(sessionJson.data.threads.length).toBeGreaterThan(0);
+    expect(sessionJson.data.threads[0]).toMatchObject({
+      channel: "web",
+      sourceLabel: "Web",
+    });
   });
 
   it("telegram webhook 可读取组合状态并回发消息", async () => {
@@ -181,8 +182,59 @@ describe("assistant-chat-routes", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(sendTelegramMessageMock).toHaveBeenCalledTimes(1);
-    const firstCall = (((sendTelegramMessageMock as any).mock?.calls?.[0] || [])[0] || {}) as { text?: string };
-    expect(String(firstCall.text || "")).toContain("当前组合状态");
+    expect(getTelegramReplyText(0)).toContain("当前组合状态");
+
+    const sessionResponse = await getSessions(new Request(`http://localhost/api/daa/chat/sessions?sessionId=${json.data.sessionId}`));
+    const sessionJson = await sessionResponse.json();
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionJson.ok).toBe(true);
+    expect(sessionJson.data.session?.sessionId).toBe(json.data.sessionId);
+    expect(sessionJson.data.messages.at(-1)?.body).toContain("当前组合状态");
+    expect(sessionJson.data.conversation.selectedThread?.channel).toBe("telegram");
+  });
+
+  it("查看其他线程时仍会保留当前 Web 会话作为输入目标", async () => {
+    const webResponse = await postMessage(new Request("http://localhost/api/daa/chat/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "组合状态" }),
+    }));
+    const webJson = await webResponse.json();
+
+    const telegramResponse = await telegramWebhook(new Request("http://localhost/api/daa/chat/telegram/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        update_id: 2,
+        message: {
+          message_id: 10,
+          text: "市场状态",
+          chat: { id: 777, type: "private" },
+          from: { id: 111, username: "tester" },
+        },
+      }),
+    }));
+    const telegramJson = await telegramResponse.json();
+
+    expect(webResponse.status).toBe(200);
+    expect(webJson.ok).toBe(true);
+    expect(telegramResponse.status).toBe(200);
+    expect(telegramJson.ok).toBe(true);
+
+    const sessionResponse = await getSessions(new Request(`http://localhost/api/daa/chat/sessions?sessionId=${telegramJson.data.sessionId}`));
+    const sessionJson = await sessionResponse.json();
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionJson.ok).toBe(true);
+    expect(sessionJson.data.conversation.activeThread).toMatchObject({
+      channel: "web",
+      sourceLabel: "Web",
+    });
+    expect(sessionJson.data.conversation.selectedThread).toMatchObject({
+      channel: "telegram",
+      sourceLabel: "Telegram",
+    });
+    expect(sessionJson.data.conversation.isPreviewingOtherThread).toBe(true);
   });
 
   it("telegram webhook 的执行类命令需要二次确认后才会真正成交", async () => {
@@ -204,12 +256,11 @@ describe("assistant-chat-routes", () => {
     expect(previewResponse.status).toBe(200);
     expect(previewJson.ok).toBe(true);
     expect(sendTelegramMessageMock).toHaveBeenCalledTimes(1);
-    const previewCall = (((sendTelegramMessageMock as any).mock?.calls?.[0] || [])[0] || {}) as { text?: string };
-    expect(String(previewCall.text || "")).toContain("已进入待确认");
+    expect(getTelegramReplyText(0)).toContain("已进入待确认");
 
-    const previewBootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const previewBootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const previewBootstrapJson = await previewBootstrapResponse.json();
-    const previewAssetRow = previewBootstrapJson.data.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
+    const previewAssetRow = previewBootstrapJson.data.bootstrap.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
     expect(Number(previewAssetRow.holdingQty)).toBeCloseTo(0, 6);
 
     const confirmResponse = await telegramWebhook(new Request("http://localhost/api/daa/chat/telegram/webhook", {
@@ -230,12 +281,11 @@ describe("assistant-chat-routes", () => {
     expect(confirmResponse.status).toBe(200);
     expect(confirmJson.ok).toBe(true);
     expect(sendTelegramMessageMock).toHaveBeenCalledTimes(2);
-    const confirmCall = (((sendTelegramMessageMock as any).mock?.calls?.[1] || [])[0] || {}) as { text?: string };
-    expect(String(confirmCall.text || "")).toContain("买入 AAPL 已提交模拟执行");
+    expect(getTelegramReplyText(1)).toContain("买入 AAPL 已在本地模拟账本成交");
 
-    const bootstrapResponse = await getWorkbenchBootstrap(new Request("http://localhost/api/daa/workbench/bootstrap"));
+    const bootstrapResponse = await getWorkbenchReadModel(new Request("http://localhost/api/daa/read/workbench"));
     const bootstrapJson = await bootstrapResponse.json();
-    const assetRow = bootstrapJson.data.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
+    const assetRow = bootstrapJson.data.bootstrap.assetUniverse.find((item: { assetKey: string }) => item.assetKey === "US::AAPL");
     expect(Number(assetRow.holdingQty)).toBeCloseTo(2, 6);
   });
 
