@@ -3,8 +3,9 @@ import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTyp
 export type ExecutionReceipt = {
   cycleId: string;
   mode: "selected" | "all";
-  status: "success" | "partial" | "failed" | "blocked";
+  status: "success" | "submitted" | "partial" | "failed" | "blocked";
   executed: number;
+  submitted?: number;
   failed: number;
   summary: string;
   reason?: string;

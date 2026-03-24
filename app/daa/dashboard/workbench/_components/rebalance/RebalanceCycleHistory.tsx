@@ -3,9 +3,9 @@
 import Link from "next/link";
 
 import {
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -18,7 +18,7 @@ export function RebalanceCycleHistory(props: {
   onSelectCycle: (cycle: RebalanceCycle) => void;
 }) {
   return (
-    <DeepLedgerPanel accent="slate" title="历史周期" subtitle="最近 8 个">
+    <DaaSurfacePanel accent="slate" title="历史周期" subtitle="最近 8 个">
       <div className="space-y-2">
         {props.cycles.slice(0, 8).map((cycle) => {
           const active = cycle.cycleId === props.currentCycleId;
@@ -36,7 +36,7 @@ export function RebalanceCycleHistory(props: {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">{cycle.cycleId.slice(0, 8)}</div>
-                <DeepLedgerStatusPill tone={cycleStatusTone(cycle.status)}>{cycleStatusLabel(cycle.status)}</DeepLedgerStatusPill>
+                <DaaSurfaceStatusPill tone={cycleStatusTone(cycle.status)}>{cycleStatusLabel(cycle.status)}</DaaSurfaceStatusPill>
               </div>
               <div className="mt-1.5 text-xs text-[var(--faint)]">{triggerSourceLabel(cycle.triggerSource)} · {formatDateTime(cycle.createdAt)}</div>
             </button>
@@ -51,6 +51,6 @@ export function RebalanceCycleHistory(props: {
           查看完整历史 →
         </Link>
       </div>
-    </DeepLedgerPanel>
+    </DaaSurfacePanel>
   );
 }

@@ -1,6 +1,5 @@
 import {
   DEFAULT_SYSTEM_CONFIG_,
-  getStrategyExecutionConfig,
   normalizeSystemConfig,
   type DaaSystemConfigEnvelope,
 } from "@/src/daa/config/systemConfig";
@@ -11,7 +10,6 @@ import type {
   DaaMarketIndicatorScope,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type {
-  StrategyLabSeedReadModel,
   TradesReadModel,
   WorkbenchReadModel,
 } from "@/src/daa/modules/read/readModels";
@@ -79,6 +77,16 @@ function buildDevMemNotificationStatusSummary() {
         lastFailureAt: null,
         lastErrorMessage: null,
       },
+    },
+    telegramAssistant: {
+      ready: false,
+      secretStates: [],
+      lastSessionAt: null,
+      lastUserText: null,
+      lastAssistantText: null,
+      lastIntentKind: null,
+      participantId: null,
+      title: null,
     },
   };
 }
@@ -165,35 +173,6 @@ export function buildDevMemTradesReadModel(): TradesReadModel {
     },
     reports: [],
     ledgerMeta: buildDevMemLedgerMeta(),
-    loadedAt: new Date().toISOString(),
-  };
-}
-
-export function buildDevMemStrategyLabSeedReadModel(): StrategyLabSeedReadModel {
-  const config = normalizedDefaultConfig();
-  const bootstrap = buildDevMemWorkbenchBootstrap();
-  const execution = getStrategyExecutionConfig(config);
-  return {
-    bootstrap,
-    baseCurrency: bootstrap.baseCurrency,
-    initialEquity: 100000,
-    constraints: {
-      maxPositionPct: Number(config.strategy.constraints.maxPositionPct) || 0.3,
-      minNotional: Number(config.strategy.constraints.minNotional) || 200,
-      maxOrderPctOfNav: execution.maxOrderPctOfNav,
-    },
-    policy: {
-      thresholdPct: Number(config.rebalanceStrategy.drift.thresholdPct) || 0.05,
-      minTradeNotional: Number(config.strategy.constraints.minNotional) || 200,
-      cooldownSeconds: (Number(config.rebalanceStrategy.cooldownHours) || 72) * 3600,
-    },
-    execution: {
-      feeRateBps: execution.feeRateBps,
-      slippageBps: execution.slippageBps,
-      maxOrderPctOfNav: execution.maxOrderPctOfNav,
-    },
-    availableAssets: [],
-    selectedAssetKeys: [],
     loadedAt: new Date().toISOString(),
   };
 }

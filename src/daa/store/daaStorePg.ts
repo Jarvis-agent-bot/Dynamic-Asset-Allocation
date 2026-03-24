@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { daaPgPool, withDaaPgClient } from "@/src/daa/pg/daaPg";
+import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 import { resolveInvestableCash as resolveRuntimeInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import { runDaaStoreRuntimeMigrations } from "@/src/daa/store/runtimeMigrations";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
@@ -12,12 +13,10 @@ import {
   normalizeInstrumentType,
   normalizeRegion,
 } from "@/src/daa/modules/workbench/assetTaxonomy";
-import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 import {
   applySystemConfigPatches,
   DEFAULT_SYSTEM_CONFIG_,
   normalizeSystemConfig,
-  type DaaSystemConfigEnvelope,
   type DaaSystemConfigPatch,
   type DaaSystemConfig,
 } from "@/src/daa/config/systemConfig";
@@ -29,6 +28,7 @@ import type {
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { buildFxLookupToBase, summarizeMarkToMarketPortfolio } from "@/src/daa/modules/portfolio/portfolioValuation";
 import type { ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
+import { mapBrokerOrderStatusToTradeTicketStatus } from "@/src/daa/broker/brokerOrderStatus";
 
 type DaaStoreState = {
   schemaInit: Promise<void> | null;
@@ -52,6 +52,8 @@ function getStoreState(): DaaStoreState {
   }
   return g[STORE_GLOBAL_KEY_] as DaaStoreState;
 }
+
+const toFiniteNumber = toFinite;
 
 function toIsoString(v: unknown, fallback = "1970-01-01T00:00:00.000Z"): string {
   if (v instanceof Date) {
@@ -81,6 +83,8 @@ function parseJsonb<T>(v: unknown, fallback: T): T {
   return fallback;
 }
 
+// normalizeText imported from @/src/daa/utils/normalize
+
 function toBoolean(v: unknown, fallback = false): boolean {
   if (typeof v === "boolean") return v;
   if (typeof v === "number") return v !== 0;
@@ -101,8 +105,8 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
 
 type SchemaQueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
 
-function buildLegacyTableName(tableName: string): string {
-  return `${normalizeText(tableName).toLowerCase()}_legacy_v1`;
+function buildArchivedV1TableName(tableName: string): string {
+  return `${normalizeText(tableName).toLowerCase()}_archived_v1`;
 }
 
 async function hasTable(query: SchemaQueryFn, tableName: string): Promise<boolean> {
@@ -117,15 +121,15 @@ async function hasTable(query: SchemaQueryFn, tableName: string): Promise<boolea
   return result.rows.length > 0;
 }
 
-async function archiveTableToLegacy(query: SchemaQueryFn, tableName: string): Promise<boolean> {
+async function archiveTableAsV1Snapshot(query: SchemaQueryFn, tableName: string): Promise<boolean> {
   const normalized = normalizeText(tableName).toLowerCase();
   if (!normalized) return false;
   if (!(await hasTable(query, normalized))) return false;
-  const legacyTableName = buildLegacyTableName(normalized);
-  if (await hasTable(query, legacyTableName)) {
-    throw new Error(`legacy table already exists: ${legacyTableName}`);
+  const archivedTableName = buildArchivedV1TableName(normalized);
+  if (await hasTable(query, archivedTableName)) {
+    throw new Error(`archived table already exists: ${archivedTableName}`);
   }
-  await query(`ALTER TABLE ${normalized} RENAME TO ${legacyTableName}`);
+  await query(`ALTER TABLE ${normalized} RENAME TO ${archivedTableName}`);
   return true;
 }
 
@@ -279,15 +283,6 @@ export type DaaStoreEquitySnapshot = {
   holdingsValue: number;
   cash: number;
   source: string;
-};
-
-export type DaaStoreNotificationConfig = {
-  id: "default";
-  enabled: boolean;
-  notifyOnDrift: boolean;
-  notifyOnRebalance: boolean;
-  notifyOnPriceAlert: boolean;
-  updatedAt: string;
 };
 
 export type DaaStoreRebalanceDecision = {
@@ -572,11 +567,36 @@ export type DaaStoreCashLedgerApplyInput = {
   settlementTs?: string | null;
 };
 
+export type DaaStoreBrokerKind = "sim" | "crypto_paper";
 export type DaaStoreTradeTicketSource = "manual" | "decision";
-export type DaaStoreTradeTicketStatus = "ready" | "executed" | "canceled" | "rejected";
+export type DaaStoreTradeTicketStatus = "ready" | "submitted" | "partially_filled" | "executed" | "canceled" | "rejected";
 export type DaaStoreTradeTicketSide = "BUY" | "SELL";
 export type DaaStoreTradeBasketStatus = "draft" | "executing" | "executed" | "partial" | "canceled";
 export type DaaStoreTradeBasketSource = "manual" | "decision" | "mixed" | "migration";
+
+export type DaaStoreBrokerAccountState = {
+  brokerKind: DaaStoreBrokerKind;
+  accountId: string | null;
+  baseCurrency: string;
+  cash: number;
+  investableCash: number;
+  frozenCash: number;
+  totalEquity: number | null;
+  updatedAt: string;
+};
+
+export type DaaStoreBrokerOrderSnapshot = {
+  ticketId: string;
+  brokerKind: DaaStoreBrokerKind;
+  brokerAccountId: string | null;
+  brokerOrderId: string;
+  status: string;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+  raw: Record<string, unknown> | null;
+  syncedAt: string;
+  updatedAt: string;
+};
 
 export type DaaStoreTradeBasket = {
   basketId: string;
@@ -617,6 +637,16 @@ export type DaaStoreTradeTicket = {
   pricingMode: "manual" | "market";
   priceSource: string | null;
   priceSnapshotAt: string | null;
+  brokerKind: DaaStoreBrokerKind | null;
+  brokerAccountId: string | null;
+  brokerOrderId: string | null;
+  brokerStatus: string | null;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+  lastBrokerSyncAt: string | null;
+  lastAppliedFillQty: number;
+  brokerRejectReason: string | null;
+  brokerRaw: Record<string, unknown> | null;
   createdBy: string;
   createdAt: string;
   executedAt: string | null;
@@ -642,6 +672,17 @@ export type DaaStoreCreateTradeTicketInput = {
   pricingMode?: "manual" | "market";
   priceSource?: string;
   priceSnapshotAt?: string;
+  status?: DaaStoreTradeTicketStatus;
+  brokerKind?: DaaStoreBrokerKind | null;
+  brokerAccountId?: string | null;
+  brokerOrderId?: string | null;
+  brokerStatus?: string | null;
+  filledQty?: number | null;
+  avgFillPrice?: number | null;
+  lastBrokerSyncAt?: string | null;
+  lastAppliedFillQty?: number | null;
+  brokerRejectReason?: string | null;
+  brokerRaw?: Record<string, unknown> | null;
   createdBy?: string;
 };
 
@@ -726,6 +767,7 @@ export type DaaStoreRebalanceCycle = {
   executedOrders: string[];
   executionSummary: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     newMaxDriftPct: number;
@@ -765,6 +807,7 @@ export type DaaStoreCycleReport = {
   };
   executionStats: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     feeTotal: number;
@@ -870,14 +913,45 @@ export type DaaStoreAccountState = {
 };
 
 function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState {
-  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFinite(row.total_equity, Number.NaN);
+  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
   return {
     id: "default",
     baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
-    cash: Math.max(0, toFinite(row.cash, 0)),
-    investableCash: Math.max(0, toFinite(row.investable_cash, 0)),
-    frozenCash: Math.max(0, toFinite(row.frozen_cash, 0)),
+    cash: Math.max(0, toFiniteNumber(row.cash, 0)),
+    investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
+    frozenCash: Math.max(0, toFiniteNumber(row.frozen_cash, 0)),
     totalEquity: Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null,
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapBrokerAccountStateRow(row: Record<string, unknown>): DaaStoreBrokerAccountState {
+  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
+  return {
+    brokerKind: normalizeBrokerKind(row.broker_kind) || "sim",
+    accountId: row.account_id == null ? null : normalizeText(row.account_id) || null,
+    baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
+    cash: Math.max(0, toFiniteNumber(row.cash, 0)),
+    investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
+    frozenCash: Math.max(0, toFiniteNumber(row.frozen_cash, 0)),
+    totalEquity: Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null,
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapBrokerPositionRow(row: Record<string, unknown>): DaaStorePosition {
+  const symbol = normalizeText(row.symbol).toUpperCase();
+  const market = normalizeText(row.market, "US").toUpperCase();
+  return {
+    id: buildPositionId(symbol, market),
+    assetKey: buildPositionKey(symbol, market),
+    symbol,
+    market,
+    currency: normalizeText(row.currency, "USD").toUpperCase(),
+    qty: Math.max(0, toFiniteNumber(row.qty)),
+    price: Math.max(0, toFiniteNumber(row.price)),
+    costBasis: row.cost_basis == null ? null : Math.max(0, toFiniteNumber(row.cost_basis)),
+    tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     updatedAt: toIsoString(row.updated_at),
   };
 }
@@ -894,10 +968,10 @@ function mergeRuntimeAccountIntoSystemConfig(
       account: {
         ...normalized.strategy.account,
         baseCurrency: normalizeCurrencyAlias(account.baseCurrency, normalized.strategy.account.baseCurrency) as DaaSystemConfig["strategy"]["account"]["baseCurrency"],
-        cash: Math.max(0, toFinite(account.cash, 0)),
-        investableCash: Math.max(0, toFinite(account.investableCash, 0)),
-        frozenCash: Math.max(0, toFinite(account.frozenCash, 0)),
-        totalEquity: account.totalEquity == null ? null : Math.max(0, toFinite(account.totalEquity, 0)),
+        cash: Math.max(0, toFiniteNumber(account.cash, 0)),
+        investableCash: Math.max(0, toFiniteNumber(account.investableCash, 0)),
+        frozenCash: Math.max(0, toFiniteNumber(account.frozenCash, 0)),
+        totalEquity: account.totalEquity == null ? null : Math.max(0, toFiniteNumber(account.totalEquity, 0)),
       },
     },
   };
@@ -981,10 +1055,10 @@ async function ensureAccountStateRowInTx(
   const strategyRaw = (isRecord(systemRow.config.strategy) ? systemRow.config.strategy : {}) as Record<string, unknown>;
   const accountRaw = (isRecord(strategyRaw.account) ? strategyRaw.account : {}) as Record<string, unknown>;
   const baseCurrency = normalizeCurrencyAlias(normalizeText(accountRaw.baseCurrency, "USD"), "USD");
-  const cash = Math.max(0, toFinite(accountRaw.cash, 0));
-  const frozenCash = Math.max(0, toFinite(accountRaw.frozenCash, 0));
+  const cash = Math.max(0, toFiniteNumber(accountRaw.cash, 0));
+  const frozenCash = Math.max(0, toFiniteNumber(accountRaw.frozenCash, 0));
   const investableCash = resolveInvestableCash(cash, frozenCash, accountRaw.investableCash);
-  const totalEquityRaw = accountRaw.totalEquity == null ? Number.NaN : toFinite(accountRaw.totalEquity, Number.NaN);
+  const totalEquityRaw = accountRaw.totalEquity == null ? Number.NaN : toFiniteNumber(accountRaw.totalEquity, Number.NaN);
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 
   const inserted = await query(
@@ -1023,14 +1097,14 @@ async function writeAccountStateInTx(
 ): Promise<DaaStoreAccountState> {
   const current = await getAccountStateForUpdateInTx(query);
   const cash = Object.prototype.hasOwnProperty.call(nextRaw, "cash")
-    ? Math.max(0, toFinite(nextRaw.cash, current.cash))
+    ? Math.max(0, toFiniteNumber(nextRaw.cash, current.cash))
     : current.cash;
   const baseCurrency = normalizeCurrencyAlias(
     normalizeText(nextRaw.baseCurrency, current.baseCurrency),
     current.baseCurrency,
   );
   const frozenCash = Object.prototype.hasOwnProperty.call(nextRaw, "frozenCash")
-    ? Math.max(0, Math.min(cash, toFinite(nextRaw.frozenCash, current.frozenCash)))
+    ? Math.max(0, Math.min(cash, toFiniteNumber(nextRaw.frozenCash, current.frozenCash)))
     : current.frozenCash;
   const investableSource = Object.prototype.hasOwnProperty.call(nextRaw, "investableCash")
     ? nextRaw.investableCash
@@ -1041,7 +1115,7 @@ async function writeAccountStateInTx(
     if (nextRaw.totalEquity == null) {
       totalEquity = null;
     } else {
-      const totalEquityRaw = toFinite(nextRaw.totalEquity, Number.NaN);
+      const totalEquityRaw = toFiniteNumber(nextRaw.totalEquity, Number.NaN);
       totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : current.totalEquity;
     }
   }
@@ -1166,6 +1240,96 @@ export async function getDaaAccountState(): Promise<DaaStoreAccountState> {
   return withDaaPgClient(async ({ query }) => ensureAccountStateRowInTx(query as any));
 }
 
+export async function replaceDaaAccountState(input: {
+  baseCurrency?: string;
+  cash?: number;
+  investableCash?: number;
+  frozenCash?: number;
+  totalEquity?: number | null;
+}): Promise<DaaStoreAccountState> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      const account = await writeAccountStateInTx(query as any, input);
+      await query("COMMIT");
+      return account;
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
+}
+
+export async function getDaaBrokerAccountState(
+  brokerKind: DaaStoreBrokerKind = "sim",
+): Promise<DaaStoreBrokerAccountState | null> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
+       FROM daa_broker_account_state
+       WHERE broker_kind = $1
+       LIMIT 1`,
+      [brokerKind],
+    );
+    if (!result.rows.length) return null;
+    return mapBrokerAccountStateRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function replaceDaaBrokerAccountState(input: {
+  brokerKind: DaaStoreBrokerKind;
+  accountId?: string | null;
+  baseCurrency?: string;
+  cash?: number;
+  investableCash?: number;
+  frozenCash?: number;
+  totalEquity?: number | null;
+}): Promise<DaaStoreBrokerAccountState> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const baseCurrency = normalizeCurrencyAlias(normalizeText(input.baseCurrency, "USD"), "USD");
+    const cash = Math.max(0, toFiniteNumber(input.cash, 0));
+    const frozenCash = Math.max(0, toFiniteNumber(input.frozenCash, 0));
+    const investableCash = resolveInvestableCash(cash, frozenCash, input.investableCash);
+    const totalEquityRaw = input.totalEquity == null ? Number.NaN : toFiniteNumber(input.totalEquity, Number.NaN);
+    const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
+
+    const result = await query(
+      `INSERT INTO daa_broker_account_state (
+         broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,NOW()
+       )
+       ON CONFLICT (broker_kind) DO UPDATE
+       SET
+         account_id = EXCLUDED.account_id,
+         base_currency = EXCLUDED.base_currency,
+         cash = EXCLUDED.cash,
+         investable_cash = EXCLUDED.investable_cash,
+         frozen_cash = EXCLUDED.frozen_cash,
+         total_equity = EXCLUDED.total_equity,
+         updated_at = NOW()
+       RETURNING broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
+      [
+        input.brokerKind,
+        input.accountId ?? null,
+        baseCurrency,
+        cash,
+        investableCash,
+        frozenCash,
+        totalEquity,
+      ],
+    );
+    return mapBrokerAccountStateRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
 export async function saveDaaSystemConfig(input: {
   config: unknown;
   baseVersion?: number;
@@ -1257,10 +1421,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
       await query("BEGIN");
       try {
         const archivedLedgerV1 = ([
-          await archiveTableToLegacy(query as any, "daa_account_state"),
-          await archiveTableToLegacy(query as any, "daa_cash_ledger"),
-          await archiveTableToLegacy(query as any, "daa_equity_snapshots"),
-          await archiveTableToLegacy(query as any, "daa_positions"),
+          await archiveTableAsV1Snapshot(query as any, "daa_account_state"),
+          await archiveTableAsV1Snapshot(query as any, "daa_cash_ledger"),
+          await archiveTableAsV1Snapshot(query as any, "daa_equity_snapshots"),
+          await archiveTableAsV1Snapshot(query as any, "daa_positions"),
         ]).some(Boolean);
 
         await query(`
@@ -1399,7 +1563,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             asset_key TEXT NOT NULL,
             cycle_id TEXT,
             source TEXT NOT NULL CHECK (source IN ('manual', 'decision')),
-            status TEXT NOT NULL CHECK (status IN ('ready', 'executed', 'canceled', 'rejected')),
+            status TEXT NOT NULL,
             symbol TEXT NOT NULL,
             market TEXT NOT NULL DEFAULT 'US',
             instrument_currency TEXT NOT NULL DEFAULT 'USD',
@@ -1421,11 +1585,22 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             pricing_mode TEXT NOT NULL DEFAULT 'manual',
             price_source TEXT,
             price_snapshot_at TIMESTAMPTZ,
+            broker_kind TEXT,
+            broker_account_id TEXT,
+            broker_order_id TEXT,
+            broker_status TEXT,
+            filled_qty NUMERIC,
+            avg_fill_price NUMERIC,
+            last_broker_sync_at TIMESTAMPTZ,
+            last_applied_fill_qty NUMERIC NOT NULL DEFAULT 0,
+            broker_reject_reason TEXT,
+            broker_raw_json JSONB,
             created_by TEXT NOT NULL DEFAULT 'admin',
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             executed_at TIMESTAMPTZ,
             canceled_at TIMESTAMPTZ,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))
           );
 
           CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_created_desc
@@ -1436,6 +1611,51 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
 
           CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc
             ON daa_trade_tickets(cycle_id, created_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_broker_account_state (
+            broker_kind TEXT PRIMARY KEY,
+            account_id TEXT,
+            base_currency TEXT NOT NULL DEFAULT 'USD',
+            cash NUMERIC NOT NULL DEFAULT 0,
+            investable_cash NUMERIC NOT NULL DEFAULT 0,
+            frozen_cash NUMERIC NOT NULL DEFAULT 0,
+            total_equity NUMERIC,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE TABLE IF NOT EXISTS daa_broker_positions (
+            broker_kind TEXT NOT NULL,
+            account_id TEXT,
+            asset_key TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'US',
+            currency TEXT NOT NULL DEFAULT 'USD',
+            qty NUMERIC NOT NULL DEFAULT 0,
+            price NUMERIC NOT NULL DEFAULT 0,
+            cost_basis NUMERIC,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (broker_kind, asset_key)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc
+            ON daa_broker_positions(broker_kind, updated_at DESC);
+
+          CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
+            ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
+            broker_kind TEXT NOT NULL,
+            broker_account_id TEXT,
+            broker_order_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            filled_qty NUMERIC,
+            avg_fill_price NUMERIC,
+            raw_json JSONB,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique
+            ON daa_broker_order_snapshots(broker_kind, broker_order_id);
 
           CREATE TABLE IF NOT EXISTS daa_rebalance_cycles (
             cycle_id TEXT PRIMARY KEY,
@@ -1628,6 +1848,20 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await ensureTableColumn(query as any, "daa_trade_tickets", "pricing_mode", "TEXT NOT NULL DEFAULT 'manual'");
         await ensureTableColumn(query as any, "daa_trade_tickets", "price_source", "TEXT");
         await ensureTableColumn(query as any, "daa_trade_tickets", "price_snapshot_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_kind", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_account_id", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_order_id", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_status", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "filled_qty", "NUMERIC");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "avg_fill_price", "NUMERIC");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "last_broker_sync_at", "TIMESTAMPTZ");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "last_applied_fill_qty", "NUMERIC NOT NULL DEFAULT 0");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_reject_reason", "TEXT");
+        await ensureTableColumn(query as any, "daa_trade_tickets", "broker_raw_json", "JSONB");
+        await query("ALTER TABLE daa_trade_tickets DROP CONSTRAINT IF EXISTS daa_trade_tickets_status_check");
+        await query(
+          "ALTER TABLE daa_trade_tickets ADD CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))",
+        ).catch(() => undefined);
         await ensureTableColumn(query as any, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_basket_status_created_desc ON daa_trade_tickets(basket_id, status, created_at DESC)",
@@ -1635,6 +1869,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc ON daa_trade_tickets(cycle_id, created_at DESC)",
         );
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_broker_order_id ON daa_trade_tickets(broker_order_id)");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN basket_id DROP NOT NULL");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN asset_key DROP NOT NULL");
         await query("UPDATE daa_trade_tickets SET asset_key = CONCAT(market, '::', symbol) WHERE asset_key IS NULL OR asset_key = ''");
@@ -1647,6 +1882,54 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query("ALTER TABLE daa_trade_tickets DROP CONSTRAINT IF EXISTS fk_daa_trade_tickets_basket");
         await query(
           "ALTER TABLE daa_trade_tickets ADD CONSTRAINT fk_daa_trade_tickets_basket FOREIGN KEY (basket_id) REFERENCES daa_trade_baskets(basket_id) ON DELETE RESTRICT",
+        );
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_broker_account_state (
+            broker_kind TEXT PRIMARY KEY,
+            account_id TEXT,
+            base_currency TEXT NOT NULL DEFAULT 'USD',
+            cash NUMERIC NOT NULL DEFAULT 0,
+            investable_cash NUMERIC NOT NULL DEFAULT 0,
+            frozen_cash NUMERIC NOT NULL DEFAULT 0,
+            total_equity NUMERIC,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_broker_positions (
+            broker_kind TEXT NOT NULL,
+            account_id TEXT,
+            asset_key TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'US',
+            currency TEXT NOT NULL DEFAULT 'USD',
+            qty NUMERIC NOT NULL DEFAULT 0,
+            price NUMERIC NOT NULL DEFAULT 0,
+            cost_basis NUMERIC,
+            tags TEXT[] NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (broker_kind, asset_key)
+          )
+        `);
+        await query(
+          "CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc ON daa_broker_positions(broker_kind, updated_at DESC)",
+        );
+        await query(`
+          CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
+            ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
+            broker_kind TEXT NOT NULL,
+            broker_account_id TEXT,
+            broker_order_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            filled_qty NUMERIC,
+            avg_fill_price NUMERIC,
+            raw_json JSONB,
+            synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        await query(
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique ON daa_broker_order_snapshots(broker_kind, broker_order_id)",
         );
         await query("DROP TABLE IF EXISTS daa_watchlist_candidates");
 
@@ -1692,7 +1975,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
               randomUUID(),
               resetTs,
               account.baseCurrency,
-              "账本 V2 已启用，旧现金流水/权益快照/账户状态已归档到 legacy_v1，当前账本从空状态重新开始。",
+              "账本 V2 已启用，旧现金流水/权益快照/账户状态已归档到 archived_v1，当前账本从空状态重新开始。",
               JSON.stringify({ reason: "archive_reset", version: "v2" }),
             ],
           );
@@ -1757,9 +2040,9 @@ function mapPositionRow(row: Record<string, unknown>): DaaStorePosition {
     symbol,
     market,
     currency: normalizeText(row.currency, "USD").toUpperCase(),
-    qty: toFinite(row.qty),
-    price: toFinite(row.price),
-    costBasis: row.cost_basis == null ? null : toFinite(row.cost_basis),
+    qty: toFiniteNumber(row.qty),
+    price: toFiniteNumber(row.price),
+    costBasis: row.cost_basis == null ? null : toFiniteNumber(row.cost_basis),
     tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x)).filter(Boolean) : [],
     updatedAt: toIsoString(row.updated_at),
   };
@@ -1781,15 +2064,15 @@ function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUnivers
     exchange: normalizeText(row.exchange, ""),
     instrumentType,
     marketGroup: normalizeText(row.market_group, inferMarketGroup({ market, assetClass })),
-    holdingQty: Math.max(0, toFinite(row.holding_qty)),
-    holdingPrice: Math.max(0, toFinite(row.holding_price)),
-    costBasis: row.cost_basis == null ? null : Math.max(0, toFinite(row.cost_basis)),
+    holdingQty: Math.max(0, toFiniteNumber(row.holding_qty)),
+    holdingPrice: Math.max(0, toFiniteNumber(row.holding_price)),
+    costBasis: row.cost_basis == null ? null : Math.max(0, toFiniteNumber(row.cost_basis)),
     holdingTags: Array.isArray(row.holding_tags) ? row.holding_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     watchEnabled: Boolean(row.watch_enabled),
-    targetWeightHint: Math.max(0, toFinite(row.target_weight_hint)),
+    targetWeightHint: Math.max(0, toFiniteNumber(row.target_weight_hint)),
     watchTags: Array.isArray(row.watch_tags) ? row.watch_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
-    lastPrice: Math.max(0, toFinite(row.last_price)),
+    lastPrice: Math.max(0, toFiniteNumber(row.last_price)),
     priceUpdatedAt: row.price_updated_at == null ? null : toIsoString(row.price_updated_at),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),
@@ -1850,7 +2133,7 @@ export async function updateDaaAssetUniverseLastPrice(input: {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const assetKey = normalizeText(input.assetKey).toUpperCase();
-    const lastPrice = Math.max(0, toFinite(input.lastPrice));
+    const lastPrice = Math.max(0, toFiniteNumber(input.lastPrice));
     if (!assetKey) throw new Error("assetKey is required");
     if (!(lastPrice > 0)) throw new Error("lastPrice must be > 0");
     const priceUpdatedAt = toIsoString(input.priceUpdatedAt, new Date().toISOString());
@@ -1896,10 +2179,10 @@ export async function upsertDaaAssetUniverseRow(input: {
     const instrumentType = normalizeInstrumentType(input.instrumentType, "STOCK");
     const marketGroup = normalizeText(input.marketGroup, inferMarketGroup({ market, assetClass }));
     const watchEnabled = input.watchEnabled !== false;
-    const targetWeightHint = Math.max(0, toFinite(input.targetWeightHint));
+    const targetWeightHint = Math.max(0, toFiniteNumber(input.targetWeightHint));
     const watchTags = Array.isArray(input.watchTags) ? input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
     const notes = input.notes == null ? null : normalizeText(input.notes) || null;
-    const lastPrice = Math.max(0, toFinite(input.lastPrice));
+    const lastPrice = Math.max(0, toFiniteNumber(input.lastPrice));
     const priceUpdatedAt = lastPrice > 0 ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null;
 
     const result = await query(
@@ -1989,13 +2272,13 @@ export async function patchDaaAssetUniverseRow(input: {
       instrumentType: normalizeInstrumentType(input.instrumentType, current.instrumentType as any),
       marketGroup: normalizeText(input.marketGroup, current.marketGroup || inferMarketGroup({ market, assetClass })),
       watchEnabled: input.watchEnabled == null ? current.watchEnabled : Boolean(input.watchEnabled),
-      targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFinite(input.targetWeightHint)),
-      holdingQty: input.holdingQty == null ? current.holdingQty : Math.max(0, toFinite(input.holdingQty)),
-      holdingPrice: input.holdingPrice == null ? current.holdingPrice : Math.max(0, toFinite(input.holdingPrice)),
-      costBasis: input.costBasis === undefined ? current.costBasis : (input.costBasis == null ? null : Math.max(0, toFinite(input.costBasis))),
+      targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFiniteNumber(input.targetWeightHint)),
+      holdingQty: input.holdingQty == null ? current.holdingQty : Math.max(0, toFiniteNumber(input.holdingQty)),
+      holdingPrice: input.holdingPrice == null ? current.holdingPrice : Math.max(0, toFiniteNumber(input.holdingPrice)),
+      costBasis: input.costBasis === undefined ? current.costBasis : (input.costBasis == null ? null : Math.max(0, toFiniteNumber(input.costBasis))),
       watchTags: input.watchTags == null ? current.watchTags : input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
       notes: input.notes === undefined ? current.notes : (input.notes == null ? null : normalizeText(input.notes) || null),
-      lastPrice: input.lastPrice == null ? current.lastPrice : Math.max(0, toFinite(input.lastPrice)),
+      lastPrice: input.lastPrice == null ? current.lastPrice : Math.max(0, toFiniteNumber(input.lastPrice)),
       priceUpdatedAt: input.priceUpdatedAt === undefined ? current.priceUpdatedAt : (input.priceUpdatedAt ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null),
     };
 
@@ -2070,9 +2353,9 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
         symbol,
         market,
         currency: normalizeText(item.currency, "USD").toUpperCase(),
-        qty: Math.max(0, toFinite(item.qty)),
-        price: Math.max(0, toFinite(item.price)),
-        costBasis: item.cost_basis == null ? null : Math.max(0, toFinite(item.cost_basis)),
+        qty: Math.max(0, toFiniteNumber(item.qty)),
+        price: Math.max(0, toFiniteNumber(item.price)),
+        costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
         tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
@@ -2094,11 +2377,11 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
         const market = normalizeText(raw.market, "US").toUpperCase();
         const assetKey = buildPositionKey(symbol, market);
         const currency = normalizeText(raw.currency, "USD").toUpperCase();
-        const qty = Math.max(0, toFinite(raw.qty));
-        const price = Math.max(0, toFinite(raw.price));
+        const qty = Math.max(0, toFiniteNumber(raw.qty));
+        const price = Math.max(0, toFiniteNumber(raw.price));
         const lastPrice = price > 0 ? price : 0;
         const priceUpdatedAt = price > 0 ? new Date().toISOString() : null;
-        const costBasis = raw.costBasis == null ? null : Math.max(0, toFinite(raw.costBasis));
+        const costBasis = raw.costBasis == null ? null : Math.max(0, toFiniteNumber(raw.costBasis));
         const tags = Array.isArray(raw.tags)
           ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
           : [];
@@ -2174,13 +2457,126 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
         symbol,
         market,
         currency: normalizeText(item.currency, "USD").toUpperCase(),
-        qty: Math.max(0, toFinite(item.qty)),
-        price: Math.max(0, toFinite(item.price)),
-        costBasis: item.cost_basis == null ? null : Math.max(0, toFinite(item.cost_basis)),
+        qty: Math.max(0, toFiniteNumber(item.qty)),
+        price: Math.max(0, toFiniteNumber(item.price)),
+        costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
         tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
     });
+  });
+}
+
+export async function listDaaBrokerPositions(
+  brokerKind: DaaStoreBrokerKind = "sim",
+): Promise<DaaStorePosition[]> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+       FROM daa_broker_positions
+       WHERE broker_kind = $1 AND qty > 0
+       ORDER BY symbol ASC, market ASC`,
+      [brokerKind],
+    );
+    return result.rows.map((row) => mapBrokerPositionRow(row as Record<string, unknown>));
+  });
+}
+
+export async function replaceDaaBrokerPositions(input: {
+  brokerKind: DaaStoreBrokerKind;
+  accountId?: string | null;
+  rows: Array<Partial<DaaStorePosition>>;
+}): Promise<DaaStorePosition[]> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    await query("BEGIN");
+    try {
+      await query("DELETE FROM daa_broker_positions WHERE broker_kind = $1", [input.brokerKind]);
+      for (const raw of input.rows) {
+        const row = normalizePositionSnapshotRow(raw);
+        if (!row || !(row.qty > 0)) continue;
+
+        await query(
+          `INSERT INTO daa_broker_positions (
+             broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+           )
+           ON CONFLICT (broker_kind, asset_key) DO UPDATE
+           SET
+             account_id = EXCLUDED.account_id,
+             symbol = EXCLUDED.symbol,
+             market = EXCLUDED.market,
+             currency = EXCLUDED.currency,
+             qty = EXCLUDED.qty,
+             price = EXCLUDED.price,
+             cost_basis = EXCLUDED.cost_basis,
+             tags = EXCLUDED.tags,
+             updated_at = EXCLUDED.updated_at`,
+          [
+            input.brokerKind,
+            input.accountId ?? null,
+            row.assetKey,
+            row.symbol,
+            row.market,
+            row.currency,
+            row.qty,
+            row.price,
+            row.costBasis,
+            row.tags,
+            row.updatedAt,
+          ],
+        );
+
+        await query(
+          `INSERT INTO daa_asset_universe (
+             asset_key, symbol, market, currency, last_price, price_updated_at, created_at, updated_at
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, NOW(), NOW()
+           )
+           ON CONFLICT (asset_key) DO UPDATE
+           SET
+             symbol = EXCLUDED.symbol,
+             market = EXCLUDED.market,
+             currency = EXCLUDED.currency,
+             last_price = CASE
+               WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.last_price
+               ELSE daa_asset_universe.last_price
+             END,
+             price_updated_at = CASE
+               WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.price_updated_at
+               ELSE daa_asset_universe.price_updated_at
+             END,
+             updated_at = NOW()`,
+          [
+            row.assetKey,
+            row.symbol,
+            row.market,
+            row.currency,
+            row.price,
+            row.price > 0 ? row.updatedAt : null,
+          ],
+        );
+      }
+      await query("COMMIT");
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+
+    const result = await query(
+      `SELECT broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+       FROM daa_broker_positions
+       WHERE broker_kind = $1 AND qty > 0
+       ORDER BY symbol ASC, market ASC`,
+      [input.brokerKind],
+    );
+    return result.rows.map((row) => mapBrokerPositionRow(row as Record<string, unknown>));
   });
 }
 
@@ -2219,52 +2615,6 @@ function resolveInvestableCash(cash: number, frozenCash: number, investableCashR
   });
 }
 
-function applyAccountCashDeltaToConfig(
-  configJson: Record<string, unknown>,
-  nextCash: number,
-  nextTotalEquity?: number | null,
-): {
-  configJson: Record<string, unknown>;
-  account: {
-    baseCurrency: string;
-    cash: number;
-    investableCash: number;
-    frozenCash: number;
-    totalEquity: number | null;
-  };
-} {
-  const baseConfig = isRecord(configJson) ? configJson : {};
-  const accountRaw = isRecord(baseConfig.account) ? baseConfig.account : {};
-  const baseCurrency = normalizeCcyCode(accountRaw.baseCurrency, "USD");
-  const previousCash = Math.max(0, toFinite(accountRaw.cash, 0));
-  const frozenCash = Math.max(0, toFinite(accountRaw.frozenCash, 0));
-  const previousInvestable = resolveInvestableCash(previousCash, frozenCash, accountRaw.investableCash);
-  const normalizedNextCash = Math.max(0, toFinite(nextCash, 0));
-  const delta = normalizedNextCash - previousCash;
-  const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
-  const totalEquityRaw = nextTotalEquity == null ? Number.NaN : toFinite(nextTotalEquity, Number.NaN);
-  const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
-
-  const account = {
-    baseCurrency,
-    cash: normalizedNextCash,
-    investableCash: nextInvestable,
-    frozenCash,
-    totalEquity,
-  };
-
-  return {
-    configJson: {
-      ...baseConfig,
-      account: {
-        ...accountRaw,
-        ...account,
-      },
-    },
-    account,
-  };
-}
-
 type DaaQueryRowResult = { rows: Array<Record<string, unknown>> };
 type DaaTxQueryFn = (sql: string, params?: unknown[]) => Promise<DaaQueryRowResult>;
 
@@ -2282,7 +2632,7 @@ async function syncStrategyAccountCashInTx(
   totalEquity: number | null;
 }> {
   const currentAccount = await getAccountStateForUpdateInTx(query as any);
-  const normalizedNextCash = Math.max(0, toFinite(nextCash, currentAccount.cash));
+  const normalizedNextCash = Math.max(0, toFiniteNumber(nextCash, currentAccount.cash));
   const previousInvestable = resolveInvestableCash(currentAccount.cash, currentAccount.frozenCash, currentAccount.investableCash);
   const delta = normalizedNextCash - currentAccount.cash;
   const nextInvestable = Math.max(0, Math.min(normalizedNextCash, previousInvestable + delta));
@@ -2302,16 +2652,16 @@ async function syncStrategyAccountCashInTx(
 function mapEquitySnapshotRow(row: Record<string, unknown>): DaaStoreEquitySnapshot {
   return {
     ts: toIsoString(row.ts),
-    totalEquity: toFinite(row.total_equity),
-    holdingsValue: toFinite(row.holdings_value),
-    cash: toFinite(row.cash),
+    totalEquity: toFiniteNumber(row.total_equity),
+    holdingsValue: toFiniteNumber(row.holdings_value),
+    cash: toFiniteNumber(row.cash),
     source: normalizeText(row.source, "cron"),
   };
 }
 
 export async function listDaaEquitySnapshots(limit = 200): Promise<DaaStoreEquitySnapshot[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(2000, Math.trunc(toFinite(limit, 200))));
+  const n = Math.max(1, Math.min(2000, Math.trunc(toFiniteNumber(limit, 200))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 ORDER BY ts DESC LIMIT $1",
@@ -2325,9 +2675,9 @@ export async function appendDaaEquitySnapshot(snapshot: Partial<DaaStoreEquitySn
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const ts = toIsoString(snapshot.ts, new Date().toISOString());
-    const totalEquity = Math.max(0, toFinite(snapshot.totalEquity));
-    const holdingsValue = Math.max(0, toFinite(snapshot.holdingsValue));
-    const cash = Math.max(0, toFinite(snapshot.cash));
+    const totalEquity = Math.max(0, toFiniteNumber(snapshot.totalEquity));
+    const holdingsValue = Math.max(0, toFiniteNumber(snapshot.holdingsValue));
+    const cash = Math.max(0, toFiniteNumber(snapshot.cash));
     const source = normalizeText(snapshot.source, "manual");
 
     await query(
@@ -2347,7 +2697,7 @@ function mapHumanIngestStateRow(row: Record<string, unknown>): DaaStoreHumanInge
   return {
     id: "default",
     lastIngestAt: row.last_ingest_at == null ? null : toIsoString(row.last_ingest_at, new Date().toISOString()),
-    ingestCount: Math.max(0, Math.trunc(toFinite(row.ingest_count, 0))),
+    ingestCount: Math.max(0, Math.trunc(toFiniteNumber(row.ingest_count, 0))),
     latestBatch: parseJsonb<Record<string, unknown> | null>(row.latest_batch_json, null),
     latestActors: parseJsonb<Array<Record<string, unknown>>>(row.latest_actors_json, []),
     latestHoldings: parseJsonb<Array<Record<string, unknown>>>(row.latest_holdings_json, []),
@@ -2376,7 +2726,7 @@ export async function saveDaaHumanIngestState(input: {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const lastIngestAt = input.lastIngestAt ? toIsoString(input.lastIngestAt, new Date().toISOString()) : null;
-    const ingestCount = Math.max(0, Math.trunc(toFinite(input.ingestCount, 0)));
+    const ingestCount = Math.max(0, Math.trunc(toFiniteNumber(input.ingestCount, 0)));
     const latestBatch = input.latestBatch && typeof input.latestBatch === "object" ? input.latestBatch : null;
     const latestActors = Array.isArray(input.latestActors) ? input.latestActors : [];
     const latestHoldings = Array.isArray(input.latestHoldings) ? input.latestHoldings : [];
@@ -2400,7 +2750,7 @@ function mapCandidateAssetRow(row: Record<string, unknown>): DaaStoreCandidateAs
     market: normalizeText(row.market, "US").toUpperCase(),
     currency: normalizeText(row.currency, "USD").toUpperCase(),
     enabled: Boolean(row.enabled),
-    targetWeightHint: Math.max(0, toFinite(row.target_weight_hint)),
+    targetWeightHint: Math.max(0, toFiniteNumber(row.target_weight_hint)),
     tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
     createdAt: toIsoString(row.created_at),
@@ -2449,7 +2799,7 @@ export async function replaceDaaCandidateAssets(
         const currency = normalizeText(raw.currency, "USD").toUpperCase();
         const assetKey = buildPositionKey(symbol, market);
         const enabled = raw.enabled !== false;
-        const targetWeightHint = Math.max(0, toFinite(raw.targetWeightHint));
+        const targetWeightHint = Math.max(0, toFiniteNumber(raw.targetWeightHint));
         const tags = Array.isArray(raw.tags) ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
         const notes = normalizeText(raw.notes || "");
 
@@ -2545,9 +2895,9 @@ function normalizePositionSnapshotRow(row: Partial<DaaPositionSnapshotRow>): Daa
     symbol,
     market,
     currency: normalizeCcyCode(row.currency, "USD"),
-    qty: Math.max(0, toFinite(row.qty, 0)),
-    price: Math.max(0, toFinite(row.price, 0)),
-    costBasis: row.costBasis == null ? null : Math.max(0, toFinite(row.costBasis, 0)),
+    qty: Math.max(0, toFiniteNumber(row.qty, 0)),
+    price: Math.max(0, toFiniteNumber(row.price, 0)),
+    costBasis: row.costBasis == null ? null : Math.max(0, toFiniteNumber(row.costBasis, 0)),
     tags: Array.isArray(row.tags) ? row.tags.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean) : [],
     updatedAt: toIsoString(row.updatedAt, new Date().toISOString()),
   };
@@ -2641,7 +2991,7 @@ function buildFxLookupMap(rows: Array<Record<string, unknown>>): DaaFxLookupMap 
   for (const row of rows) {
     const base = normalizeCcyCode(row.base_ccy, "USD");
     const quote = normalizeCcyCode(row.quote_ccy, "USD");
-    const rate = Math.max(0, toFinite(row.rate, 0));
+    const rate = Math.max(0, toFiniteNumber(row.rate, 0));
     if (!base || !quote || rate <= 0) continue;
     out.set(normalizeFxPair(base, quote), rate);
   }
@@ -2687,9 +3037,9 @@ async function buildPortfolioSnapshotFromAssetUniverseInTx(
       symbol: normalizeText(row.symbol).toUpperCase(),
       market: normalizeText(row.market, "US").toUpperCase(),
       currency: normalizeCcyCode(row.currency, input.baseCurrency),
-      qty: Math.max(0, toFinite(row.holding_qty, 0)),
-      holdingPrice: Math.max(0, toFinite(row.holding_price, 0)),
-      lastPrice: Math.max(0, toFinite(row.last_price, 0)),
+      qty: Math.max(0, toFiniteNumber(row.holding_qty, 0)),
+      holdingPrice: Math.max(0, toFiniteNumber(row.holding_price, 0)),
+      lastPrice: Math.max(0, toFiniteNumber(row.last_price, 0)),
     })),
     baseCurrency: input.baseCurrency,
     cash: input.cash,
@@ -2712,10 +3062,20 @@ function normalizeTradeTicketSource(value: unknown): DaaStoreTradeTicketSource {
 
 function normalizeTradeTicketStatus(value: unknown): DaaStoreTradeTicketStatus {
   const text = normalizeText(value, "ready").toLowerCase();
+  if (text === "submitted") return "submitted";
+  if (text === "partially_filled") return "partially_filled";
   if (text === "executed") return "executed";
   if (text === "canceled") return "canceled";
   if (text === "rejected") return "rejected";
   return "ready";
+}
+
+function normalizeBrokerKind(value: unknown): DaaStoreBrokerKind | null {
+  const text = normalizeText(value).toLowerCase();
+  if (!text) return null;
+  if (text === "sim") return "sim";
+  if (text === "crypto" || text === "crypto_paper") return "crypto_paper";
+  return "sim";
 }
 
 function normalizeTradeBasketStatus(value: unknown): DaaStoreTradeBasketStatus {
@@ -2742,6 +3102,7 @@ function deriveDecisionStatusFromTradeTickets(
   if (statuses.every((status) => status === "ready")) return "pending";
   if (statuses.every((status) => status === "executed")) return "executed";
   if (statuses.every((status) => status === "canceled" || status === "rejected")) return "canceled";
+  if (statuses.every((status) => status === "submitted" || status === "partially_filled")) return "partial";
   return "partial";
 }
 
@@ -2750,7 +3111,12 @@ function deriveBasketStatusFromTickets(statuses: DaaStoreTradeTicketStatus[]): D
   if (statuses.every((status) => status === "ready")) return "draft";
   if (statuses.every((status) => status === "executed")) return "executed";
   if (statuses.every((status) => status === "canceled" || status === "rejected")) return "canceled";
+  if (statuses.every((status) => status === "ready" || status === "submitted" || status === "partially_filled")) return "executing";
   return "partial";
+}
+
+function isTradeTicketOpenStatus(status: DaaStoreTradeTicketStatus): boolean {
+  return status === "ready" || status === "submitted" || status === "partially_filled";
 }
 
 function normalizeTradeTicketSide(value: unknown): DaaStoreTradeTicketSide {
@@ -2762,6 +3128,51 @@ function normalizeTradePricingMode(value: unknown): "manual" | "market" {
   const mode = normalizeText(value, "manual").toLowerCase();
   return mode === "market" ? "market" : "manual";
 }
+
+const TRADE_TICKET_SELECT_COLUMNS_ = [
+  "ticket_id",
+  "basket_id",
+  "asset_key",
+  "cycle_id",
+  "source",
+  "status",
+  "symbol",
+  "market",
+  "instrument_currency",
+  "base_currency",
+  "side",
+  "qty",
+  "price",
+  "fee",
+  "gross_notional",
+  "fx_rate_to_base",
+  "notional_in_base",
+  "decision_ref_id",
+  "reason_tags",
+  "reason_text",
+  "snapshot_before_json",
+  "snapshot_after_json",
+  "reject_code",
+  "reject_message",
+  "pricing_mode",
+  "price_source",
+  "price_snapshot_at",
+  "broker_kind",
+  "broker_account_id",
+  "broker_order_id",
+  "broker_status",
+  "filled_qty",
+  "avg_fill_price",
+  "last_broker_sync_at",
+  "last_applied_fill_qty",
+  "broker_reject_reason",
+  "broker_raw_json",
+  "created_by",
+  "created_at",
+  "executed_at",
+  "canceled_at",
+  "updated_at",
+].join(", ");
 
 function isPgUniqueViolation(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && (error as { code?: unknown }).code === "23505");
@@ -2796,12 +3207,12 @@ function mapTradeTicketRow(row: Record<string, unknown>): DaaStoreTradeTicket {
     instrumentCurrency: normalizeCcyCode(row.instrument_currency, "USD"),
     baseCurrency: normalizeCcyCode(row.base_currency, "USD"),
     side: normalizeTradeTicketSide(row.side),
-    qty: Math.max(0, toFinite(row.qty)),
-    price: Math.max(0, toFinite(row.price)),
-    fee: Math.max(0, toFinite(row.fee)),
-    grossNotional: Math.max(0, toFinite(row.gross_notional)),
-    fxRateToBase: row.fx_rate_to_base == null ? null : Math.max(0, toFinite(row.fx_rate_to_base)),
-    notionalInBase: Math.max(0, toFinite(row.notional_in_base)),
+    qty: Math.max(0, toFiniteNumber(row.qty)),
+    price: Math.max(0, toFiniteNumber(row.price)),
+    fee: Math.max(0, toFiniteNumber(row.fee)),
+    grossNotional: Math.max(0, toFiniteNumber(row.gross_notional)),
+    fxRateToBase: row.fx_rate_to_base == null ? null : Math.max(0, toFiniteNumber(row.fx_rate_to_base)),
+    notionalInBase: Math.max(0, toFiniteNumber(row.notional_in_base)),
     decisionRefId: row.decision_ref_id == null ? null : normalizeText(row.decision_ref_id) || null,
     reasonTags: Array.isArray(row.reason_tags) ? row.reason_tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     reasonText: row.reason_text == null ? null : normalizeText(row.reason_text) || null,
@@ -2812,12 +3223,270 @@ function mapTradeTicketRow(row: Record<string, unknown>): DaaStoreTradeTicket {
     pricingMode: normalizeTradePricingMode(row.pricing_mode),
     priceSource: row.price_source == null ? null : normalizeText(row.price_source) || null,
     priceSnapshotAt: row.price_snapshot_at == null ? null : toIsoString(row.price_snapshot_at),
+    brokerKind: normalizeBrokerKind(row.broker_kind),
+    brokerAccountId: row.broker_account_id == null ? null : normalizeText(row.broker_account_id) || null,
+    brokerOrderId: row.broker_order_id == null ? null : normalizeText(row.broker_order_id) || null,
+    brokerStatus: row.broker_status == null ? null : normalizeText(row.broker_status) || null,
+    filledQty: row.filled_qty == null ? null : Math.max(0, toFiniteNumber(row.filled_qty)),
+    avgFillPrice: row.avg_fill_price == null ? null : Math.max(0, toFiniteNumber(row.avg_fill_price)),
+    lastBrokerSyncAt: row.last_broker_sync_at == null ? null : toIsoString(row.last_broker_sync_at),
+    lastAppliedFillQty: Math.max(0, toFiniteNumber(row.last_applied_fill_qty, 0)),
+    brokerRejectReason: row.broker_reject_reason == null ? null : normalizeText(row.broker_reject_reason) || null,
+    brokerRaw: row.broker_raw_json == null ? null : parseJsonb<Record<string, unknown>>(row.broker_raw_json, {}),
     createdBy: normalizeText(row.created_by, "admin"),
     createdAt: toIsoString(row.created_at),
     executedAt: row.executed_at == null ? null : toIsoString(row.executed_at),
     canceledAt: row.canceled_at == null ? null : toIsoString(row.canceled_at),
     updatedAt: toIsoString(row.updated_at),
   };
+}
+
+function mapBrokerOrderSnapshotRow(row: Record<string, unknown>): DaaStoreBrokerOrderSnapshot {
+  return {
+    ticketId: normalizeText(row.ticket_id),
+    brokerKind: normalizeBrokerKind(row.broker_kind) || "sim",
+    brokerAccountId: row.broker_account_id == null ? null : normalizeText(row.broker_account_id) || null,
+    brokerOrderId: normalizeText(row.broker_order_id),
+    status: normalizeText(row.status),
+    filledQty: row.filled_qty == null ? null : Math.max(0, toFiniteNumber(row.filled_qty)),
+    avgFillPrice: row.avg_fill_price == null ? null : Math.max(0, toFiniteNumber(row.avg_fill_price)),
+    raw: row.raw_json == null ? null : parseJsonb<Record<string, unknown>>(row.raw_json, {}),
+    syncedAt: toIsoString(row.synced_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+async function upsertBrokerOrderSnapshotInTx(
+  query: DaaTxQueryFn,
+  input: {
+    ticketId: string;
+    brokerKind: DaaStoreBrokerKind;
+    brokerAccountId?: string | null;
+    brokerOrderId: string;
+    status: string;
+    filledQty?: number | null;
+    avgFillPrice?: number | null;
+    raw?: Record<string, unknown> | null;
+    syncedAt?: string | null;
+  },
+): Promise<DaaStoreBrokerOrderSnapshot> {
+  const syncedAt = input.syncedAt ? toIsoString(input.syncedAt, new Date().toISOString()) : new Date().toISOString();
+  const result = await query(
+    `INSERT INTO daa_broker_order_snapshots (
+       ticket_id, broker_kind, broker_account_id, broker_order_id, status, filled_qty, avg_fill_price, raw_json, synced_at, updated_at
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,NOW()
+     )
+     ON CONFLICT (ticket_id) DO UPDATE
+     SET
+       broker_kind = EXCLUDED.broker_kind,
+       broker_account_id = EXCLUDED.broker_account_id,
+       broker_order_id = EXCLUDED.broker_order_id,
+       status = EXCLUDED.status,
+       filled_qty = EXCLUDED.filled_qty,
+       avg_fill_price = EXCLUDED.avg_fill_price,
+       raw_json = EXCLUDED.raw_json,
+       synced_at = EXCLUDED.synced_at,
+       updated_at = NOW()
+     RETURNING ticket_id, broker_kind, broker_account_id, broker_order_id, status, filled_qty, avg_fill_price, raw_json, synced_at, updated_at`,
+    [
+      normalizeText(input.ticketId),
+      input.brokerKind,
+      input.brokerAccountId ?? null,
+      normalizeText(input.brokerOrderId),
+      normalizeText(input.status) || "unknown",
+      input.filledQty == null ? null : Math.max(0, toFiniteNumber(input.filledQty)),
+      input.avgFillPrice == null ? null : Math.max(0, toFiniteNumber(input.avgFillPrice)),
+      JSON.stringify(input.raw ?? null),
+      syncedAt,
+    ],
+  );
+  return mapBrokerOrderSnapshotRow(result.rows[0] as Record<string, unknown>);
+}
+
+async function selectTradeTicketsByIdsInTx(
+  query: DaaTxQueryFn,
+  ticketIds: string[],
+  opts: {
+    forUpdate?: boolean;
+    orderByCreatedDesc?: boolean;
+  } = {},
+): Promise<DaaStoreTradeTicket[]> {
+  const ids = [...new Set(ticketIds.map((item) => normalizeText(item)).filter(Boolean))];
+  if (!ids.length) return [];
+  const placeholders = ids.map((_, idx) => `$${idx + 1}`).join(", ");
+  const result = await query(
+    `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+     FROM daa_trade_tickets
+     WHERE ticket_id IN (${placeholders})
+     ${opts.forUpdate ? "FOR UPDATE" : ""}
+     ${opts.orderByCreatedDesc ? "ORDER BY created_at DESC" : ""}`,
+    ids,
+  );
+  return result.rows.map((row) => mapTradeTicketRow(row as Record<string, unknown>));
+}
+
+async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: string[]): Promise<void> {
+  const touchedTickets = await selectTradeTicketsByIdsInTx(query, ticketIds);
+  const touchedDecisionIds = [...new Set(
+    touchedTickets
+      .map((ticket) => ticket.decisionRefId)
+      .filter((decisionId): decisionId is string => Boolean(decisionId)),
+  )];
+  if (touchedDecisionIds.length > 0) {
+    const decisionPlaceholders = touchedDecisionIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const decisionTicketRows = await query(
+      `SELECT decision_ref_id, status FROM daa_trade_tickets WHERE decision_ref_id IN (${decisionPlaceholders})`,
+      touchedDecisionIds,
+    );
+    const statusByDecision = new Map<string, DaaStoreTradeTicketStatus[]>();
+    for (const row of decisionTicketRows.rows as Array<Record<string, unknown>>) {
+      const decisionRefId = normalizeText(row.decision_ref_id);
+      if (!decisionRefId) continue;
+      const status = normalizeTradeTicketStatus(row.status);
+      if (!statusByDecision.has(decisionRefId)) statusByDecision.set(decisionRefId, []);
+      statusByDecision.get(decisionRefId)!.push(status);
+    }
+    for (const decisionId of touchedDecisionIds) {
+      const statuses = statusByDecision.get(decisionId) ?? [];
+      const nextStatus = deriveDecisionStatusFromTradeTickets(statuses);
+      await query(
+        "UPDATE daa_rebalance_decisions SET status = $1 WHERE id = $2",
+        [nextStatus, decisionId],
+      );
+    }
+  }
+
+  const touchedBasketIds = [...new Set(
+    touchedTickets
+      .map((ticket) => ticket.basketId)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  if (touchedBasketIds.length > 0) {
+    const basketPlaceholders = touchedBasketIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const basketTicketRows = await query(
+      `SELECT basket_id, status FROM daa_trade_tickets WHERE basket_id IN (${basketPlaceholders})`,
+      touchedBasketIds,
+    );
+    const statusByBasket = new Map<string, DaaStoreTradeTicketStatus[]>();
+    for (const row of basketTicketRows.rows as Array<Record<string, unknown>>) {
+      const id = normalizeText(row.basket_id);
+      if (!id) continue;
+      const status = normalizeTradeTicketStatus(row.status);
+      if (!statusByBasket.has(id)) statusByBasket.set(id, []);
+      statusByBasket.get(id)!.push(status);
+    }
+    for (const id of touchedBasketIds) {
+      const statuses = statusByBasket.get(id) ?? [];
+      const nextStatus = deriveBasketStatusFromTickets(statuses);
+      await query(
+        "UPDATE daa_trade_baskets SET status = $1, updated_at = NOW(), executed_at = CASE WHEN $1 IN ('executed','partial','canceled') THEN COALESCE(executed_at, NOW()) ELSE executed_at END WHERE basket_id = $2",
+        [nextStatus, id],
+      );
+    }
+  }
+
+  const touchedCycleIds = [...new Set(
+    touchedTickets
+      .map((ticket) => ticket.cycleId)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  if (touchedCycleIds.length > 0) {
+    const cyclePlaceholders = touchedCycleIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const cycleTicketRows = await query(
+      `SELECT cycle_id, ticket_id, status, qty, price
+       FROM daa_trade_tickets
+       WHERE cycle_id IN (${cyclePlaceholders})`,
+      touchedCycleIds,
+    );
+    const cycleStateRows = await query(
+      `SELECT cycle_id, executed_at, execution_summary_json
+       FROM daa_rebalance_cycles
+       WHERE cycle_id IN (${cyclePlaceholders})
+       FOR UPDATE`,
+      touchedCycleIds,
+    );
+
+    const currentCycleStateById = new Map<string, {
+      executedAt: string | null;
+      executionSummary: Record<string, unknown> | null;
+    }>();
+    for (const row of cycleStateRows.rows as Array<Record<string, unknown>>) {
+      currentCycleStateById.set(normalizeText(row.cycle_id), {
+        executedAt: row.executed_at == null ? null : toIsoString(row.executed_at),
+        executionSummary: row.execution_summary_json == null ? null : parseJsonb<Record<string, unknown>>(row.execution_summary_json, {}),
+      });
+    }
+
+    const cycleTicketStateById = new Map<string, {
+      ticketIds: string[];
+      statuses: DaaStoreTradeTicketStatus[];
+      totalNotional: number;
+    }>();
+    for (const row of cycleTicketRows.rows as Array<Record<string, unknown>>) {
+      const cycleId = normalizeText(row.cycle_id);
+      if (!cycleId) continue;
+      if (!cycleTicketStateById.has(cycleId)) {
+        cycleTicketStateById.set(cycleId, {
+          ticketIds: [],
+          statuses: [],
+          totalNotional: 0,
+        });
+      }
+      const current = cycleTicketStateById.get(cycleId)!;
+      current.ticketIds.push(normalizeText(row.ticket_id));
+      current.statuses.push(normalizeTradeTicketStatus(row.status));
+      current.totalNotional += Math.max(0, toFiniteNumber(row.qty, 0)) * Math.max(0, toFiniteNumber(row.price, 0));
+    }
+
+    for (const cycleId of touchedCycleIds) {
+      const current = currentCycleStateById.get(cycleId) || {
+        executedAt: null,
+        executionSummary: null,
+      };
+      const cycleState = cycleTicketStateById.get(cycleId) || {
+        ticketIds: [],
+        statuses: [],
+        totalNotional: 0,
+      };
+      const ordersExecuted = cycleState.statuses.filter((status) => status === "executed").length;
+      const ordersSubmitted = cycleState.statuses.filter((status) => status === "submitted" || status === "partially_filled").length;
+      const ordersFailed = cycleState.statuses.filter((status) => status === "rejected" || status === "canceled").length;
+      const hasOpenOrders = cycleState.statuses.some((status) => isTradeTicketOpenStatus(status));
+      const currentSummary = current.executionSummary || {};
+      const totalNotional = cycleState.totalNotional > 0
+        ? cycleState.totalNotional
+        : Math.max(0, toFiniteNumber(currentSummary.totalNotional, 0));
+      const newMaxDriftPct = Math.max(0, toFiniteNumber(currentSummary.newMaxDriftPct, 0));
+      const nextStatus: DaaStoreRebalanceCycleStatus = hasOpenOrders ? "executing" : "completed";
+      const nextExecutedAt = hasOpenOrders
+        ? current.executedAt
+        : (current.executedAt || new Date().toISOString());
+
+      await query(
+        `UPDATE daa_rebalance_cycles
+         SET
+           status = $2,
+           executed_at = $3,
+           executed_orders_json = $4::jsonb,
+           execution_summary_json = $5::jsonb
+         WHERE cycle_id = $1`,
+        [
+          cycleId,
+          nextStatus,
+          nextExecutedAt,
+          JSON.stringify(cycleState.ticketIds.filter(Boolean)),
+          JSON.stringify({
+            ordersExecuted,
+            ordersSubmitted,
+            ordersFailed,
+            totalNotional,
+            newMaxDriftPct,
+          }),
+        ],
+      );
+    }
+  }
 }
 
 function normalizeRebalanceCycleStatus(value: unknown): DaaStoreRebalanceCycleStatus {
@@ -2887,13 +3556,13 @@ function normalizeProposalDecisionContext(value: unknown): ProposalDecisionConte
     signalAction: value.signalAction === "open_or_add" || value.signalAction === "watch" || value.signalAction === "reduce_or_avoid"
       ? value.signalAction
       : null,
-    signalScore: value.signalScore == null ? null : clampNumber(toFinite(value.signalScore, 0), 0, 100),
-    signalConfidence: value.signalConfidence == null ? null : clampNumber(toFinite(value.signalConfidence, 0), 0, 100),
+    signalScore: value.signalScore == null ? null : clampNumber(toFiniteNumber(value.signalScore, 0), 0, 100),
+    signalConfidence: value.signalConfidence == null ? null : clampNumber(toFiniteNumber(value.signalConfidence, 0), 0, 100),
     signalConflict: toBoolean(value.signalConflict, false),
     llmAdjustment: value.llmAdjustment === "execute" || value.llmAdjustment === "reduce_size" || value.llmAdjustment === "skip" || value.llmAdjustment === "increase_priority"
       ? value.llmAdjustment
       : null,
-    llmConfidence: value.llmConfidence == null ? null : clampNumber(toFinite(value.llmConfidence, 0), 0, 100),
+    llmConfidence: value.llmConfidence == null ? null : clampNumber(toFiniteNumber(value.llmConfidence, 0), 0, 100),
     llmRationale: value.llmRationale == null ? null : normalizeText(value.llmRationale) || null,
     marketRegime: normalizeMarketRegimeStore(value.marketRegime || value.effectiveMarketRegime) === "neutral"
       ? null
@@ -2909,7 +3578,7 @@ function normalizeProposalDecisionContext(value: unknown): ProposalDecisionConte
       : (normalizeMarketRegimeStore(value.effectiveMarketRegime) as DaaMarketRegime),
     marketIndicatorFlags: normalizeStringArray(value.marketIndicatorFlags),
     conflictFlags: normalizeStringArray(value.conflictFlags),
-    finalQtyMultiplier: clampNumber(toFinite(value.finalQtyMultiplier, 1), 0, 1),
+    finalQtyMultiplier: clampNumber(toFiniteNumber(value.finalQtyMultiplier, 1), 0, 1),
   };
 }
 
@@ -2931,15 +3600,15 @@ function normalizeMarketIndicatorSnapshotJson(value: unknown): DaaMarketIndicato
     category: value.category === "relative_value" || value.category === "sentiment" ? value.category : "volatility",
     scope: normalizeMarketIndicatorScopeStore(value.scope),
     stance: normalizeMarketRegimeStore(value.stance),
-    riskOffScorePct: clampNumber(toFinite(value.riskOffScorePct, 50), 0, 100),
-    confidencePct: clampNumber(toFinite(value.confidencePct, 40), 0, 100),
-    rawValue: value.rawValue == null ? null : toFinite(value.rawValue, 0),
+    riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
+    rawValue: value.rawValue == null ? null : toFiniteNumber(value.rawValue, 0),
     unit: value.unit == null ? undefined : normalizeText(value.unit) || undefined,
-    percentile252: value.percentile252 == null ? null : toFinite(value.percentile252, 0),
-    zscore60: value.zscore60 == null ? null : toFinite(value.zscore60, 0),
-    trend1dPct: value.trend1dPct == null ? null : toFinite(value.trend1dPct, 0),
-    trend7dPct: value.trend7dPct == null ? null : toFinite(value.trend7dPct, 0),
-    trend30dPct: value.trend30dPct == null ? null : toFinite(value.trend30dPct, 0),
+    percentile252: value.percentile252 == null ? null : toFiniteNumber(value.percentile252, 0),
+    zscore60: value.zscore60 == null ? null : toFiniteNumber(value.zscore60, 0),
+    trend1dPct: value.trend1dPct == null ? null : toFiniteNumber(value.trend1dPct, 0),
+    trend7dPct: value.trend7dPct == null ? null : toFiniteNumber(value.trend7dPct, 0),
+    trend30dPct: value.trend30dPct == null ? null : toFiniteNumber(value.trend30dPct, 0),
     reason: normalizeText(value.reason, ""),
     source: normalizeText(value.source, "market_cache"),
     generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
@@ -2958,10 +3627,10 @@ function normalizeMarketScopeContextJson(value: unknown): DaaMarketContext["scop
     label: normalizeText(value.label, scope),
     generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
     regime: normalizeMarketRegimeStore(value.regime) === "neutral" ? "transitional" : (normalizeMarketRegimeStore(value.regime) as DaaMarketRegime),
-    riskOffScorePct: clampNumber(toFinite(value.riskOffScorePct, 50), 0, 100),
-    confidencePct: clampNumber(toFinite(value.confidencePct, 40), 0, 100),
-    buyScale: clampNumber(toFinite(value.buyScale, 1), 0, 1),
-    highRiskBuyScale: clampNumber(toFinite(value.highRiskBuyScale, 0.95), 0, 1),
+    riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
+    buyScale: clampNumber(toFiniteNumber(value.buyScale, 1), 0, 1),
+    highRiskBuyScale: clampNumber(toFiniteNumber(value.highRiskBuyScale, 0.95), 0, 1),
     reasons: normalizeStringArray(value.reasons),
     indicators,
   };
@@ -2987,10 +3656,10 @@ function normalizeMarketContextJson(value: unknown): DaaMarketContext | null {
   return {
     generatedAt: toIsoString(value.generatedAt, new Date().toISOString()),
     regime: normalizeMarketRegimeStore(value.regime) === "neutral" ? "transitional" : (normalizeMarketRegimeStore(value.regime) as DaaMarketRegime),
-    riskOffScorePct: clampNumber(toFinite(value.riskOffScorePct, 50), 0, 100),
-    confidencePct: clampNumber(toFinite(value.confidencePct, 40), 0, 100),
-    buyScale: clampNumber(toFinite(value.buyScale, 1), 0, 1),
-    highRiskBuyScale: clampNumber(toFinite(value.highRiskBuyScale, 0.95), 0, 1),
+    riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
+    confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
+    buyScale: clampNumber(toFiniteNumber(value.buyScale, 1), 0, 1),
+    highRiskBuyScale: clampNumber(toFiniteNumber(value.highRiskBuyScale, 0.95), 0, 1),
     reasons,
     indicators,
     scopes,
@@ -3006,8 +3675,8 @@ function normalizePreTradeRiskCheck(value: unknown): DaaStorePreTradeRiskCheck {
     items.push({
       rule: normalizeRiskRule(item.rule),
       status: normalizeRiskStatus(item.status),
-      current: toFinite(item.current, 0),
-      limit: toFinite(item.limit, 0),
+      current: toFiniteNumber(item.current, 0),
+      limit: toFiniteNumber(item.limit, 0),
       message: normalizeText(item.message, ""),
     });
   }
@@ -3029,9 +3698,9 @@ function normalizeDriftSnapshot(value: unknown): DaaStoreRebalanceCycle["driftSn
     out.push({
       assetKey,
       symbol,
-      actualPct: toFinite(row.actualPct, 0),
-      targetPct: toFinite(row.targetPct, 0),
-      driftPct: toFinite(row.driftPct, 0),
+      actualPct: toFiniteNumber(row.actualPct, 0),
+      targetPct: toFiniteNumber(row.targetPct, 0),
+      driftPct: toFiniteNumber(row.driftPct, 0),
     });
   }
   return out;
@@ -3050,11 +3719,11 @@ function normalizeCycleProposals(value: unknown): DaaStoreRebalanceCycle["propos
       assetKey,
       symbol,
       currency: normalizeCcyCode(row.currency, "USD"),
-      fxRateToBase: row.fxRateToBase == null ? null : Math.max(0, toFinite(row.fxRateToBase, 0)),
+      fxRateToBase: row.fxRateToBase == null ? null : Math.max(0, toFiniteNumber(row.fxRateToBase, 0)),
       side,
-      suggestedQty: Math.max(0, toFinite(row.suggestedQty, 0)),
-      suggestedNotional: Math.max(0, toFinite(row.suggestedNotional, 0)),
-      price: Math.max(0, toFinite(row.price, 0)),
+      suggestedQty: Math.max(0, toFiniteNumber(row.suggestedQty, 0)),
+      suggestedNotional: Math.max(0, toFiniteNumber(row.suggestedNotional, 0)),
+      price: Math.max(0, toFiniteNumber(row.price, 0)),
       reason: normalizeText(row.reason, ""),
       selected: toBoolean(row.selected, true),
       hfContribution: normalizeText(row.hfContribution, "") || null,
@@ -3068,10 +3737,11 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
   const executionSummaryRaw = row.execution_summary_json == null ? null : parseJsonb<Record<string, unknown>>(row.execution_summary_json, {});
   const executionSummary = executionSummaryRaw
     ? {
-      ordersExecuted: Math.max(0, toFinite(executionSummaryRaw.ordersExecuted, 0)),
-      ordersFailed: Math.max(0, toFinite(executionSummaryRaw.ordersFailed, 0)),
-      totalNotional: Math.max(0, toFinite(executionSummaryRaw.totalNotional, 0)),
-      newMaxDriftPct: Math.max(0, toFinite(executionSummaryRaw.newMaxDriftPct, 0)),
+      ordersExecuted: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersExecuted, 0)),
+      ordersSubmitted: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersSubmitted, 0)),
+      ordersFailed: Math.max(0, toFiniteNumber(executionSummaryRaw.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFiniteNumber(executionSummaryRaw.totalNotional, 0)),
+      newMaxDriftPct: Math.max(0, toFiniteNumber(executionSummaryRaw.newMaxDriftPct, 0)),
     }
     : null;
 
@@ -3086,7 +3756,7 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
     triggerSource: normalizeRebalanceTriggerSource(row.trigger_source),
     triggerReason: normalizeText(row.trigger_reason),
     snapshotAt: toIsoString(row.snapshot_at),
-    equitySnapshot: Math.max(0, toFinite(row.equity_snapshot, 0)),
+    equitySnapshot: Math.max(0, toFiniteNumber(row.equity_snapshot, 0)),
     driftSnapshot: normalizeDriftSnapshot(parseJsonb<unknown[]>(row.drift_snapshot_json, [])),
     proposals: normalizeCycleProposals(parseJsonb<unknown[]>(row.proposals_json, [])),
     riskCheck: normalizePreTradeRiskCheck(row.risk_check_json),
@@ -3120,7 +3790,7 @@ function mapCycleReportRow(row: Record<string, unknown>): DaaStoreCycleReport {
     const side = sideRaw === "BUY" || sideRaw === "SELL" ? sideRaw : "HOLD";
     return {
       symbol: normalizeText(item.symbol, "UNKNOWN").toUpperCase(),
-      pnl: toFinite(item.pnl, 0),
+      pnl: toFiniteNumber(item.pnl, 0),
       side: side as "BUY" | "SELL" | "HOLD",
     };
   });
@@ -3132,51 +3802,53 @@ function mapCycleReportRow(row: Record<string, unknown>): DaaStoreCycleReport {
     cycleCreatedAt: toIsoString(row.cycle_created_at),
     reportCreatedAt: toIsoString(row.created_at),
     executionSummary: {
-      ordersExecuted: Math.max(0, toFinite(executionStats.ordersExecuted, 0)),
-      ordersFailed: Math.max(0, toFinite(executionStats.ordersFailed, 0)),
-      totalNotional: Math.max(0, toFinite(executionStats.totalNotional, 0)),
-      newMaxDriftPct: Math.max(0, toFinite(executionStats.newMaxDriftPct, 0)),
+      ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
+      ordersSubmitted: Math.max(0, toFiniteNumber(executionStats.ordersSubmitted, 0)),
+      ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
+      newMaxDriftPct: Math.max(0, toFiniteNumber(executionStats.newMaxDriftPct, 0)),
     },
     beforeSnapshot: {
-      totalEquity: Math.max(0, toFinite(before.totalEquity, 0)),
-      holdingsValue: Math.max(0, toFinite(before.holdingsValue, 0)),
-      cash: Math.max(0, toFinite(before.cash, 0)),
-      hhiPct: Math.max(0, toFinite(before.hhiPct, 0)),
-      maxWeightPct: Math.max(0, toFinite(before.maxWeightPct, 0)),
-      maxDriftPct: Math.max(0, toFinite(before.maxDriftPct, 0)),
-      maxDrawdownPct: Math.max(0, toFinite(before.maxDrawdownPct, 0)),
+      totalEquity: Math.max(0, toFiniteNumber(before.totalEquity, 0)),
+      holdingsValue: Math.max(0, toFiniteNumber(before.holdingsValue, 0)),
+      cash: Math.max(0, toFiniteNumber(before.cash, 0)),
+      hhiPct: Math.max(0, toFiniteNumber(before.hhiPct, 0)),
+      maxWeightPct: Math.max(0, toFiniteNumber(before.maxWeightPct, 0)),
+      maxDriftPct: Math.max(0, toFiniteNumber(before.maxDriftPct, 0)),
+      maxDrawdownPct: Math.max(0, toFiniteNumber(before.maxDrawdownPct, 0)),
     },
     afterSnapshot: {
-      totalEquity: Math.max(0, toFinite(after.totalEquity, 0)),
-      holdingsValue: Math.max(0, toFinite(after.holdingsValue, 0)),
-      cash: Math.max(0, toFinite(after.cash, 0)),
-      hhiPct: Math.max(0, toFinite(after.hhiPct, 0)),
-      maxWeightPct: Math.max(0, toFinite(after.maxWeightPct, 0)),
-      maxDriftPct: Math.max(0, toFinite(after.maxDriftPct, 0)),
-      maxDrawdownPct: Math.max(0, toFinite(after.maxDrawdownPct, 0)),
+      totalEquity: Math.max(0, toFiniteNumber(after.totalEquity, 0)),
+      holdingsValue: Math.max(0, toFiniteNumber(after.holdingsValue, 0)),
+      cash: Math.max(0, toFiniteNumber(after.cash, 0)),
+      hhiPct: Math.max(0, toFiniteNumber(after.hhiPct, 0)),
+      maxWeightPct: Math.max(0, toFiniteNumber(after.maxWeightPct, 0)),
+      maxDriftPct: Math.max(0, toFiniteNumber(after.maxDriftPct, 0)),
+      maxDrawdownPct: Math.max(0, toFiniteNumber(after.maxDrawdownPct, 0)),
     },
     executionStats: {
-      ordersExecuted: Math.max(0, toFinite(executionStats.ordersExecuted, 0)),
-      ordersFailed: Math.max(0, toFinite(executionStats.ordersFailed, 0)),
-      totalNotional: Math.max(0, toFinite(executionStats.totalNotional, 0)),
-      feeTotal: Math.max(0, toFinite(executionStats.feeTotal, 0)),
+      ordersExecuted: Math.max(0, toFiniteNumber(executionStats.ordersExecuted, 0)),
+      ordersSubmitted: Math.max(0, toFiniteNumber(executionStats.ordersSubmitted, 0)),
+      ordersFailed: Math.max(0, toFiniteNumber(executionStats.ordersFailed, 0)),
+      totalNotional: Math.max(0, toFiniteNumber(executionStats.totalNotional, 0)),
+      feeTotal: Math.max(0, toFiniteNumber(executionStats.feeTotal, 0)),
     },
     pnlAttribution: {
-      realizedPnl: toFinite(pnl.realizedPnl, 0),
-      unrealizedPnl: toFinite(pnl.unrealizedPnl, 0),
-      feeTotal: Math.max(0, toFinite(pnl.feeTotal, 0)),
-      fxImpact: toFinite(pnl.fxImpact, 0),
+      realizedPnl: toFiniteNumber(pnl.realizedPnl, 0),
+      unrealizedPnl: toFiniteNumber(pnl.unrealizedPnl, 0),
+      feeTotal: Math.max(0, toFiniteNumber(pnl.feeTotal, 0)),
+      fxImpact: toFiniteNumber(pnl.fxImpact, 0),
       topContributors,
     },
     riskDelta: {
-      maxDrawdownBefore: Math.max(0, toFinite(riskDelta.maxDrawdownBefore, 0)),
-      maxDrawdownAfter: Math.max(0, toFinite(riskDelta.maxDrawdownAfter, 0)),
-      hhiBefore: Math.max(0, toFinite(riskDelta.hhiBefore, 0)),
-      hhiAfter: Math.max(0, toFinite(riskDelta.hhiAfter, 0)),
-      maxWeightBefore: Math.max(0, toFinite(riskDelta.maxWeightBefore, 0)),
-      maxWeightAfter: Math.max(0, toFinite(riskDelta.maxWeightAfter, 0)),
-      maxDriftBefore: Math.max(0, toFinite(riskDelta.maxDriftBefore, 0)),
-      maxDriftAfter: Math.max(0, toFinite(riskDelta.maxDriftAfter, 0)),
+      maxDrawdownBefore: Math.max(0, toFiniteNumber(riskDelta.maxDrawdownBefore, 0)),
+      maxDrawdownAfter: Math.max(0, toFiniteNumber(riskDelta.maxDrawdownAfter, 0)),
+      hhiBefore: Math.max(0, toFiniteNumber(riskDelta.hhiBefore, 0)),
+      hhiAfter: Math.max(0, toFiniteNumber(riskDelta.hhiAfter, 0)),
+      maxWeightBefore: Math.max(0, toFiniteNumber(riskDelta.maxWeightBefore, 0)),
+      maxWeightAfter: Math.max(0, toFiniteNumber(riskDelta.maxWeightAfter, 0)),
+      maxDriftBefore: Math.max(0, toFiniteNumber(riskDelta.maxDriftBefore, 0)),
+      maxDriftAfter: Math.max(0, toFiniteNumber(riskDelta.maxDriftAfter, 0)),
     },
   };
 }
@@ -3214,7 +3886,7 @@ function mapFxRateRow(row: Record<string, unknown>): DaaStoreFxRate {
     id: normalizeText(row.id),
     baseCcy: normalizeCcyCode(row.base_ccy),
     quoteCcy: normalizeCcyCode(row.quote_ccy),
-    rate: Math.max(0, toFinite(row.rate)),
+    rate: Math.max(0, toFiniteNumber(row.rate)),
     source: normalizeText(row.source, "manual"),
     asOfTs: toIsoString(row.as_of_ts),
     updatedAt: toIsoString(row.updated_at),
@@ -3241,7 +3913,7 @@ export async function replaceDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): P
       for (const raw of rows) {
         const baseCcy = normalizeCcyCode(raw.baseCcy, "USD");
         const quoteCcy = normalizeCcyCode(raw.quoteCcy, "USD");
-        const rate = Math.max(0, toFinite(raw.rate));
+        const rate = Math.max(0, toFiniteNumber(raw.rate));
         if (rate <= 0) continue;
         const pair = normalizeFxPair(baseCcy, quoteCcy);
         const id = normalizeText(raw.id, pair);
@@ -3280,7 +3952,7 @@ export async function upsertDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Pr
       for (const raw of rows) {
         const baseCcy = normalizeCcyCode(raw.baseCcy, "USD");
         const quoteCcy = normalizeCcyCode(raw.quoteCcy, "USD");
-        const rate = Math.max(0, toFinite(raw.rate));
+        const rate = Math.max(0, toFiniteNumber(raw.rate));
         if (rate <= 0) continue;
         const id = normalizeText(raw.id, normalizeFxPair(baseCcy, quoteCcy));
         const source = normalizeText(raw.source, "manual");
@@ -3322,12 +3994,12 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
     id: normalizeText(row.event_id),
     ts: toIsoString(row.ts),
     side,
-    amount: Math.max(0, toFinite(row.amount)),
+    amount: Math.max(0, toFiniteNumber(row.amount)),
     baseCurrency: normalizeCcyCode(row.base_currency, "USD"),
     entryKind,
     accountBaseCurrency: row.account_base_currency == null ? null : normalizeCcyCode(row.account_base_currency, "USD"),
-    amountInAccountBase: row.amount_in_account_base == null ? null : Math.max(0, toFinite(row.amount_in_account_base)),
-    fxRateToAccount: row.fx_rate_to_account == null ? null : Math.max(0, toFinite(row.fx_rate_to_account)),
+    amountInAccountBase: row.amount_in_account_base == null ? null : Math.max(0, toFiniteNumber(row.amount_in_account_base)),
+    fxRateToAccount: row.fx_rate_to_account == null ? null : Math.max(0, toFiniteNumber(row.fx_rate_to_account)),
     ticketId: row.ticket_id == null ? null : normalizeText(row.ticket_id) || null,
     cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
     settlementTs: row.settlement_ts == null ? null : toIsoString(row.settlement_ts),
@@ -3338,7 +4010,7 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
 
 export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCashLedgerEntry[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(1000, Math.trunc(toFinite(limit, 100))));
+  const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
@@ -3408,14 +4080,14 @@ export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
       ledgerStartTs,
       openingBalance: Math.max(
         0,
-        toFinite(
+        toFiniteNumber(
           openingRow?.amount_in_account_base ?? openingRow?.amount,
           0,
         ),
       ),
-      archivedCycleCount: Math.max(0, Math.trunc(toFinite(cycleRes.rows[0]?.count, 0))),
-      archivedTradeCount: Math.max(0, Math.trunc(toFinite(tradeRes.rows[0]?.count, 0))),
-      archivedReportCount: Math.max(0, Math.trunc(toFinite(reportRes.rows[0]?.count, 0))),
+      archivedCycleCount: Math.max(0, Math.trunc(toFiniteNumber(cycleRes.rows[0]?.count, 0))),
+      archivedTradeCount: Math.max(0, Math.trunc(toFiniteNumber(tradeRes.rows[0]?.count, 0))),
+      archivedReportCount: Math.max(0, Math.trunc(toFiniteNumber(reportRes.rows[0]?.count, 0))),
     };
   });
 }
@@ -3435,7 +4107,7 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
   return withDaaPgClient(async ({ query }) => {
     const sideRaw = normalizeText(input.side, "deposit").toLowerCase();
     const side: DaaStoreCashLedgerSide = sideRaw === "withdraw" ? "withdraw" : "deposit";
-    const amount = Math.max(0, toFinite(input.amount));
+    const amount = Math.max(0, toFiniteNumber(input.amount));
     if (amount <= 0) throw new Error("cash ledger amount must be greater than 0");
 
     const rawEntryKind = normalizeText(input.entryKind, "manual").toLowerCase();
@@ -3447,13 +4119,13 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
     await query("BEGIN");
     try {
       const accountState = await getAccountStateForUpdateInTx(query as any);
-      const currentCash = Math.max(0, toFinite(accountState.cash, 0));
+      const currentCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
       const accountBaseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
       const entryCurrency = normalizeCcyCode(input.baseCurrency, accountBaseCurrency);
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
 
-      let fxRateToAccount = input.fxRateToAccount != null ? Math.max(0, toFinite(input.fxRateToAccount, 0)) : 0;
+      let fxRateToAccount = input.fxRateToAccount != null ? Math.max(0, toFiniteNumber(input.fxRateToAccount, 0)) : 0;
       if (!(fxRateToAccount > 0)) {
         fxRateToAccount = resolveFxRateToBase(accountBaseCurrency, entryCurrency, fxMap) ?? 0;
       }
@@ -3464,8 +4136,8 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
         throw new Error(`missing fx rate for cash-ledger: ${entryCurrency}/${accountBaseCurrency}`);
       }
 
-      const amountInAccountBase = input.amountInAccountBase != null && toFinite(input.amountInAccountBase, 0) > 0
-        ? Math.max(0, toFinite(input.amountInAccountBase, 0))
+      const amountInAccountBase = input.amountInAccountBase != null && toFiniteNumber(input.amountInAccountBase, 0) > 0
+        ? Math.max(0, toFiniteNumber(input.amountInAccountBase, 0))
         : amount * fxRateToAccount;
       const nextCash = side === "deposit" ? currentCash + amountInAccountBase : currentCash - amountInAccountBase;
       if (nextCash < -1e-9) {
@@ -3628,7 +4300,7 @@ export async function listDaaTradeBaskets(opts: {
 } = {}): Promise<DaaStoreTradeBasket[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(200, Math.trunc(toFinite(opts.limit, 100))));
+    const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(opts.limit, 100))));
     const params: unknown[] = [];
     const where: string[] = [];
     if (opts.status) {
@@ -3655,7 +4327,7 @@ export async function listDaaTradeTickets(opts: {
 } = {}): Promise<DaaStoreTradeTicket[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(opts.limit, 100))));
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(opts.limit, 100))));
     const where: string[] = [];
     const params: unknown[] = [];
 
@@ -3678,7 +4350,7 @@ export async function listDaaTradeTickets(opts: {
 
     params.push(limit);
     const sql = [
-      "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at",
+      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}`,
       "FROM daa_trade_tickets",
       where.length ? `WHERE ${where.join(" AND ")}` : "",
       `ORDER BY created_at DESC LIMIT $${params.length}`,
@@ -3686,6 +4358,58 @@ export async function listDaaTradeTickets(opts: {
     const rows = await query(sql, params);
     return rows.rows.map((row) => mapTradeTicketRow(row as Record<string, unknown>));
   });
+}
+
+export async function getDaaTradeTicket(ticketIdRaw: string): Promise<DaaStoreTradeTicket | null> {
+  await ensureDaaStoreSchemaPg();
+  const ticketId = normalizeText(ticketIdRaw);
+  if (!ticketId) return null;
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
+      [ticketId],
+    );
+    if (!result.rows.length) return null;
+    return mapTradeTicketRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function listDaaBrokerOpenTradeTickets(brokerKind?: DaaStoreBrokerKind | null): Promise<DaaStoreTradeTicket[]> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const params: unknown[] = [];
+    const where = [
+      "broker_order_id IS NOT NULL",
+      "status IN ('submitted', 'partially_filled')",
+    ];
+    if (brokerKind) {
+      params.push(brokerKind);
+      where.push(`broker_kind = $${params.length}`);
+    }
+    const result = await query(
+      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+       FROM daa_trade_tickets
+       WHERE ${where.join(" AND ")}
+       ORDER BY updated_at DESC`,
+      params,
+    );
+    return result.rows.map((row) => mapTradeTicketRow(row as Record<string, unknown>));
+  });
+}
+
+export async function upsertDaaBrokerOrderSnapshot(input: {
+  ticketId: string;
+  brokerKind: DaaStoreBrokerKind;
+  brokerAccountId?: string | null;
+  brokerOrderId: string;
+  status: string;
+  filledQty?: number | null;
+  avgFillPrice?: number | null;
+  raw?: Record<string, unknown> | null;
+  syncedAt?: string | null;
+}): Promise<DaaStoreBrokerOrderSnapshot> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => upsertBrokerOrderSnapshotInTx(query as DaaTxQueryFn, input));
 }
 
 const REBALANCE_CYCLE_SELECT_COLUMNS_ = [
@@ -3711,7 +4435,7 @@ const REBALANCE_CYCLE_SELECT_COLUMNS_ = [
 export async function listDaaRebalanceCycles(limit = 100): Promise<DaaStoreRebalanceCycle[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const n = Math.max(1, Math.min(500, Math.trunc(toFinite(limit, 100))));
+    const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 100))));
     const result = await query(
       `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles ORDER BY created_at DESC LIMIT $1`,
       [n],
@@ -3742,7 +4466,7 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
     const triggerSource = normalizeRebalanceTriggerSource(input.triggerSource);
     const triggerReason = normalizeText(input.triggerReason, "");
     const snapshotAt = toIsoString(input.snapshotAt, new Date().toISOString());
-    const equitySnapshot = Math.max(0, toFinite(input.equitySnapshot, 0));
+    const equitySnapshot = Math.max(0, toFiniteNumber(input.equitySnapshot, 0));
     const driftSnapshot = normalizeDriftSnapshot(input.driftSnapshot);
     const proposals = normalizeCycleProposals(input.proposals);
     const riskCheck = normalizePreTradeRiskCheck(input.riskCheck);
@@ -3822,10 +4546,11 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
         ? current.executionSummary
         : (input.executionSummary
           ? {
-            ordersExecuted: Math.max(0, toFinite(input.executionSummary.ordersExecuted, 0)),
-            ordersFailed: Math.max(0, toFinite(input.executionSummary.ordersFailed, 0)),
-            totalNotional: Math.max(0, toFinite(input.executionSummary.totalNotional, 0)),
-            newMaxDriftPct: Math.max(0, toFinite(input.executionSummary.newMaxDriftPct, 0)),
+            ordersExecuted: Math.max(0, toFiniteNumber(input.executionSummary.ordersExecuted, 0)),
+            ordersSubmitted: Math.max(0, toFiniteNumber(input.executionSummary.ordersSubmitted, 0)),
+            ordersFailed: Math.max(0, toFiniteNumber(input.executionSummary.ordersFailed, 0)),
+            totalNotional: Math.max(0, toFiniteNumber(input.executionSummary.totalNotional, 0)),
+            newMaxDriftPct: Math.max(0, toFiniteNumber(input.executionSummary.newMaxDriftPct, 0)),
           }
           : null);
       const nextCancelledAt = input.cancelledAt === undefined
@@ -3971,7 +4696,7 @@ export async function getDaaCycleReport(cycleIdRaw: string): Promise<DaaStoreCyc
 export async function listDaaCycleReports(limit = 50): Promise<DaaStoreCycleReport[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const n = Math.max(1, Math.min(200, Math.trunc(toFinite(limit, 50))));
+    const n = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(limit, 50))));
     const result = await query(
       `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
        FROM daa_cycle_reports r
@@ -4058,7 +4783,7 @@ export async function listDaaLlmFeedback(input: {
 } = {}): Promise<DaaStoreLlmFeedback[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(input.limit, 100))));
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
     const params: unknown[] = [];
     const where: string[] = [];
     if (input.type) {
@@ -4091,6 +4816,206 @@ export async function getDaaTradeBasket(basketId: string): Promise<DaaStoreTrade
   });
 }
 
+export async function applyDaaBrokerOrderSync(input: {
+  ticketId?: string | null;
+  order: {
+    broker: DaaStoreBrokerKind;
+    accountId: string;
+    orderId: string;
+    status: string;
+    filledQty: number | null;
+    avgFillPrice: number | null;
+    updatedAt?: string | null;
+    raw?: Record<string, unknown> | null;
+  };
+}): Promise<DaaStoreTradeTicket | null> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const ticketId = normalizeText(input.ticketId);
+    const orderId = normalizeText(input.order.orderId);
+    if (!ticketId && !orderId) return null;
+
+    await query("BEGIN");
+    try {
+      const whereSql = ticketId ? "ticket_id = $1" : "broker_order_id = $1";
+      const currentRes = await query(
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
+         FROM daa_trade_tickets
+         WHERE ${whereSql}
+         LIMIT 1
+         FOR UPDATE`,
+        [ticketId || orderId],
+      );
+      if (!currentRes.rows.length) {
+        await query("ROLLBACK");
+        return null;
+      }
+
+      const current = mapTradeTicketRow(currentRes.rows[0] as Record<string, unknown>);
+      const nowIso = input.order.updatedAt ? toIsoString(input.order.updatedAt, new Date().toISOString()) : new Date().toISOString();
+      const nextStatus = normalizeTradeTicketStatus(mapBrokerOrderStatusToTradeTicketStatus(input.order.status));
+      const filledQty = input.order.filledQty == null ? (current.filledQty ?? 0) : Math.max(0, toFiniteNumber(input.order.filledQty));
+      const avgFillPrice = input.order.avgFillPrice == null
+        ? (current.avgFillPrice ?? null)
+        : Math.max(0, toFiniteNumber(input.order.avgFillPrice));
+      const lastAppliedFillQty = Math.max(0, current.lastAppliedFillQty);
+      const nextAppliedFillQty = Math.max(lastAppliedFillQty, Math.min(current.qty, filledQty));
+      const deltaFilledQty = Math.max(0, nextAppliedFillQty - lastAppliedFillQty);
+      const brokerRejectReason = nextStatus === "rejected"
+        ? normalizeText(
+          (input.order.raw as Record<string, unknown> | null)?.message
+          || (input.order.raw as Record<string, unknown> | null)?.text
+          || current.brokerRejectReason
+          || current.rejectMessage,
+        ) || null
+        : null;
+
+      if (deltaFilledQty > 0) {
+        const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
+        const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
+        const fxRateToBase = current.fxRateToBase && current.fxRateToBase > 0
+          ? current.fxRateToBase
+          : resolveFxRateToBase(current.baseCurrency, current.instrumentCurrency, fxMap);
+        const effectivePrice = avgFillPrice && avgFillPrice > 0 ? avgFillPrice : current.price;
+        const grossNotionalDelta = deltaFilledQty * effectivePrice;
+        const notionalInBaseDelta = fxRateToBase && fxRateToBase > 0
+          ? grossNotionalDelta * fxRateToBase
+          : grossNotionalDelta;
+        const ledgerSide: DaaStoreCashLedgerSide = current.side === "BUY" ? "withdraw" : "deposit";
+        const ledgerAmount = current.side === "BUY"
+          ? notionalInBaseDelta
+          : Math.max(0, notionalInBaseDelta);
+
+        await query(
+          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, notes, execution_order_id, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())",
+          [
+            randomUUID(),
+            current.symbol,
+            current.side,
+            deltaFilledQty,
+            effectivePrice,
+            grossNotionalDelta,
+            0,
+            nowIso,
+            current.source,
+            `broker_sync ${orderId} ${nextAppliedFillQty.toFixed(6)}`,
+            `${orderId}:${nextAppliedFillQty.toFixed(6)}`,
+          ],
+        );
+        try {
+          await query(
+            `INSERT INTO daa_portfolio_ledger_events (
+               event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+               amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
+             ) VALUES (
+               $1,$2,'trade_execution',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,NOW()
+             )`,
+            [
+              randomUUID(),
+              nowIso,
+              ledgerSide,
+              ledgerAmount,
+              current.baseCurrency,
+              current.baseCurrency,
+              ledgerAmount,
+              1,
+              current.ticketId,
+              current.cycleId,
+              nowIso,
+              `${current.side} ${current.symbol} 增量成交 ${deltaFilledQty.toFixed(6)} @ ${effectivePrice.toFixed(4)}`,
+              JSON.stringify({
+                entryKind: "trade_execution",
+                side: current.side,
+                brokerKind: input.order.broker,
+                brokerOrderId: orderId,
+                deltaFilledQty,
+              }),
+            ],
+          );
+        } catch (error) {
+          if (!isPgUniqueViolation(error)) throw error;
+        }
+      }
+
+      await query(
+        `UPDATE daa_trade_tickets
+         SET
+           status = $2,
+           broker_kind = $3,
+           broker_account_id = $4,
+           broker_order_id = $5,
+           broker_status = $6,
+           filled_qty = $7,
+           avg_fill_price = $8,
+           last_broker_sync_at = $9,
+           last_applied_fill_qty = $10,
+           broker_reject_reason = $11,
+           broker_raw_json = $12::jsonb,
+           reject_code = CASE WHEN $2 = 'rejected' THEN 'BROKER_REJECTED' ELSE NULL END,
+           reject_message = CASE WHEN $2 = 'rejected' THEN $11 ELSE NULL END,
+           gross_notional = CASE
+             WHEN COALESCE(CAST($7 AS DOUBLE PRECISION), 0) > 0
+               THEN COALESCE(CAST($7 AS DOUBLE PRECISION), 0)
+                 * CASE WHEN COALESCE(CAST($8 AS DOUBLE PRECISION), 0) > 0 THEN CAST($8 AS DOUBLE PRECISION) ELSE price END
+             ELSE gross_notional
+           END,
+           notional_in_base = CASE
+             WHEN COALESCE(CAST($7 AS DOUBLE PRECISION), 0) > 0
+               THEN (
+                 COALESCE(CAST($7 AS DOUBLE PRECISION), 0)
+                 * CASE WHEN COALESCE(CAST($8 AS DOUBLE PRECISION), 0) > 0 THEN CAST($8 AS DOUBLE PRECISION) ELSE price END
+               ) * CASE WHEN COALESCE(fx_rate_to_base, 0) > 0 THEN fx_rate_to_base ELSE 1 END
+             ELSE notional_in_base
+           END,
+           executed_at = CASE WHEN $2 = 'executed' THEN COALESCE(executed_at, $9) ELSE executed_at END,
+           canceled_at = CASE WHEN $2 = 'canceled' THEN COALESCE(canceled_at, $9) ELSE canceled_at END,
+           updated_at = NOW()
+         WHERE ticket_id = $1`,
+        [
+          current.ticketId,
+          nextStatus,
+          input.order.broker,
+          normalizeText(input.order.accountId) || current.brokerAccountId,
+          orderId || current.brokerOrderId,
+          normalizeText(input.order.status) || current.brokerStatus,
+          filledQty > 0 ? filledQty : null,
+          avgFillPrice && avgFillPrice > 0 ? avgFillPrice : null,
+          nowIso,
+          nextAppliedFillQty,
+          brokerRejectReason,
+          JSON.stringify(input.order.raw ?? null),
+        ],
+      );
+
+      if (orderId || current.brokerOrderId) {
+        await upsertBrokerOrderSnapshotInTx(query as DaaTxQueryFn, {
+          ticketId: current.ticketId,
+          brokerKind: input.order.broker,
+          brokerAccountId: normalizeText(input.order.accountId) || current.brokerAccountId,
+          brokerOrderId: orderId || current.brokerOrderId || current.ticketId,
+          status: normalizeText(input.order.status) || "unknown",
+          filledQty: filledQty > 0 ? filledQty : null,
+          avgFillPrice: avgFillPrice && avgFillPrice > 0 ? avgFillPrice : null,
+          raw: input.order.raw ?? null,
+          syncedAt: nowIso,
+        });
+      }
+
+      await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, [current.ticketId]);
+      const latestRows = await selectTradeTicketsByIdsInTx(query as DaaTxQueryFn, [current.ticketId], { orderByCreatedDesc: true });
+      await query("COMMIT");
+      return latestRows[0] ?? null;
+    } catch (error) {
+      try {
+        await query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw error;
+    }
+  });
+}
+
 export async function updateDaaTradeTicket(input: {
   ticketId: string;
   qty?: number;
@@ -4106,16 +5031,16 @@ export async function updateDaaTradeTicket(input: {
     await query("BEGIN");
     try {
       const existingRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE`,
         [ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
       const current = mapTradeTicketRow(existingRes.rows[0] as Record<string, unknown>);
       if (current.status !== "ready") throw new Error(`ticket status not editable: ${current.status}`);
 
-      const qty = input.qty == null ? current.qty : Math.max(0, toFinite(input.qty, 0));
-      const price = input.price == null ? current.price : Math.max(0, toFinite(input.price, 0));
-      const fee = input.fee == null ? current.fee : Math.max(0, toFinite(input.fee, 0));
+      const qty = input.qty == null ? current.qty : Math.max(0, toFiniteNumber(input.qty, 0));
+      const price = input.price == null ? current.price : Math.max(0, toFiniteNumber(input.price, 0));
+      const fee = input.fee == null ? current.fee : Math.max(0, toFiniteNumber(input.fee, 0));
       if (qty <= 0) throw new Error("qty must be greater than 0");
       if (price <= 0) throw new Error("price must be greater than 0");
 
@@ -4134,7 +5059,7 @@ export async function updateDaaTradeTicket(input: {
       await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
 
       const updatedRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
         [ticketId],
       );
       await query("COMMIT");
@@ -4158,7 +5083,7 @@ export async function cancelDaaTradeTicket(ticketIdRaw: string): Promise<DaaStor
     await query("BEGIN");
     try {
       const existingRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE`,
         [ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
@@ -4170,7 +5095,7 @@ export async function cancelDaaTradeTicket(ticketIdRaw: string): Promise<DaaStor
       );
       await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
       const updatedRes = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
         [ticketId],
       );
       await query("COMMIT");
@@ -4202,9 +5127,9 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
     const side = normalizeTradeTicketSide(input.side);
     const source = normalizeTradeTicketSource(input.source);
     const sourceForBasket = source === "decision" ? "decision" : "manual";
-    const qty = Math.max(0, toFinite(input.qty, 0));
-    const price = Math.max(0, toFinite(input.price, 0));
-    const fee = Math.max(0, toFinite(input.fee, 0));
+    const qty = Math.max(0, toFiniteNumber(input.qty, 0));
+    const price = Math.max(0, toFiniteNumber(input.price, 0));
+    const fee = Math.max(0, toFiniteNumber(input.fee, 0));
     const basketIdInput = normalizeText(input.basketId);
     const cycleId = normalizeText(input.cycleId, "") || null;
     const decisionRefId = normalizeText(input.decisionRefId, "") || null;
@@ -4215,6 +5140,17 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
     const pricingMode = normalizeTradePricingMode(input.pricingMode);
     const priceSource = normalizeText(input.priceSource, "") || null;
     const priceSnapshotAt = input.priceSnapshotAt ? toIsoString(input.priceSnapshotAt, new Date().toISOString()) : null;
+    const status = normalizeTradeTicketStatus(input.status);
+    const brokerKind = input.brokerKind ?? null;
+    const brokerAccountId = normalizeText(input.brokerAccountId, "") || null;
+    const brokerOrderId = normalizeText(input.brokerOrderId, "") || null;
+    const brokerStatus = normalizeText(input.brokerStatus, "") || null;
+    const filledQty = input.filledQty == null ? null : Math.max(0, toFiniteNumber(input.filledQty));
+    const avgFillPrice = input.avgFillPrice == null ? null : Math.max(0, toFiniteNumber(input.avgFillPrice));
+    const lastBrokerSyncAt = input.lastBrokerSyncAt ? toIsoString(input.lastBrokerSyncAt, new Date().toISOString()) : null;
+    const lastAppliedFillQty = input.lastAppliedFillQty == null ? 0 : Math.max(0, toFiniteNumber(input.lastAppliedFillQty));
+    const brokerRejectReason = normalizeText(input.brokerRejectReason, "") || null;
+    const brokerRaw = input.brokerRaw ?? null;
     const createdBy = normalizeText(input.createdBy, "admin");
 
     if (!symbol) throw new Error("symbol is required");
@@ -4235,7 +5171,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
     try {
       const accountState = await ensureAccountStateRowInTx(query as any);
       const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
-      const cash = Math.max(0, toFinite(accountState.cash, 0));
+      const cash = Math.max(0, toFiniteNumber(accountState.cash, 0));
 
       let basketId = basketIdInput;
       if (!basketId) {
@@ -4270,7 +5206,7 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
         "SELECT qty FROM daa_positions_v2 WHERE asset_key = $1 LIMIT 1 FOR UPDATE",
         [assetKey],
       );
-      const positionQty = Math.max(0, toFinite((posRes.rows[0] as Record<string, unknown> | undefined)?.qty, 0));
+      const positionQty = Math.max(0, toFiniteNumber((posRes.rows[0] as Record<string, unknown> | undefined)?.qty, 0));
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
       const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
@@ -4296,13 +5232,26 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
       }
 
       await query(
-        "INSERT INTO daa_trade_tickets (ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, pricing_mode, price_source, price_snapshot_at, created_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,'ready',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,NOW(),NOW())",
+        `INSERT INTO daa_trade_tickets (
+           ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency,
+           side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text,
+           snapshot_before_json, pricing_mode, price_source, price_snapshot_at, broker_kind, broker_account_id, broker_order_id,
+           broker_status, filled_qty, avg_fill_price, last_broker_sync_at, last_applied_fill_qty, broker_reject_reason, broker_raw_json,
+           created_by, created_at, updated_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+           $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+           $21::jsonb,$22,$23,$24,$25,$26,$27,
+           $28,$29,$30,$31,$32,$33,$34::jsonb,
+           $35,NOW(),NOW()
+         )`,
         [
           ticketId,
           basketId,
           assetKey,
           cycleId,
           source,
+          status,
           symbol,
           market,
           instrumentCurrency,
@@ -4321,6 +5270,16 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
           pricingMode,
           priceSource,
           priceSnapshotAt,
+          brokerKind,
+          brokerAccountId,
+          brokerOrderId,
+          brokerStatus,
+          filledQty,
+          avgFillPrice,
+          lastBrokerSyncAt,
+          lastAppliedFillQty,
+          brokerRejectReason,
+          JSON.stringify(brokerRaw),
           createdBy,
         ],
       );
@@ -4328,9 +5287,12 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
         "UPDATE daa_trade_baskets SET updated_at = NOW(), source = CASE WHEN source <> $1 THEN 'mixed' ELSE source END WHERE basket_id = $2",
         [sourceForBasket, basketId],
       );
+      if (status !== "ready") {
+        await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, [ticketId]);
+      }
 
       const inserted = await query(
-        "SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1",
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
         [ticketId],
       );
       await query("COMMIT");
@@ -4365,7 +5327,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
     try {
       const placeholders = ticketIds.map((_, idx) => `$${idx + 1}`).join(", ");
       const ticketRows = await query(
-        `SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) FOR UPDATE`,
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) FOR UPDATE`,
         ticketIds,
       );
       const ticketMap = new Map<string, DaaStoreTradeTicket>();
@@ -4383,7 +5345,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
 
       const accountState = await getAccountStateForUpdateInTx(query as any);
       const baseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
-      let accountCash = Math.max(0, toFinite(accountState.cash, 0));
+      let accountCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
       let accountInvestableCash = resolveInvestableCash(accountState.cash, accountState.frozenCash, accountState.investableCash);
 
       const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
@@ -4472,7 +5434,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           const prevQty = Math.max(0, existingPosition.qty);
           const nextQty = prevQty + ticket.qty;
           const prevCostBasis = prevQty > 0
-            ? Math.max(0, toFinite(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)))
+            ? Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)))
             : 0;
           const nextCostBasis = prevCostBasis + grossNotional;
           positionsMap.set(positionKey, {
@@ -4505,7 +5467,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           if (nextQty <= 0) {
             positionsMap.delete(positionKey);
           } else {
-            const prevCostBasis = Math.max(0, toFinite(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)));
+            const prevCostBasis = Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)));
             const costPerUnit = prevQty > 0 ? prevCostBasis / prevQty : 0;
             positionsMap.set(positionKey, {
               ...existingPosition,
@@ -4675,66 +5637,10 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ],
       );
 
-      const touchedDecisionIds = [...new Set(
-        ticketIds
-          .map((ticketId) => ticketMap.get(ticketId)?.decisionRefId ?? null)
-          .filter((decisionId): decisionId is string => Boolean(decisionId)),
-      )];
-      if (touchedDecisionIds.length > 0) {
-        const decisionPlaceholders = touchedDecisionIds.map((_, idx) => `$${idx + 1}`).join(", ");
-        const decisionTicketRows = await query(
-          `SELECT decision_ref_id, status FROM daa_trade_tickets WHERE decision_ref_id IN (${decisionPlaceholders})`,
-          touchedDecisionIds,
-        );
-        const statusByDecision = new Map<string, DaaStoreTradeTicketStatus[]>();
-        for (const row of decisionTicketRows.rows as Array<Record<string, unknown>>) {
-          const decisionRefId = normalizeText(row.decision_ref_id);
-          if (!decisionRefId) continue;
-          const status = normalizeTradeTicketStatus(row.status);
-          if (!statusByDecision.has(decisionRefId)) statusByDecision.set(decisionRefId, []);
-          statusByDecision.get(decisionRefId)!.push(status);
-        }
-        for (const decisionId of touchedDecisionIds) {
-          const statuses = statusByDecision.get(decisionId) ?? [];
-          const nextStatus = deriveDecisionStatusFromTradeTickets(statuses);
-          await query(
-            "UPDATE daa_rebalance_decisions SET status = $1 WHERE id = $2",
-            [nextStatus, decisionId],
-          );
-        }
-      }
-
-      const touchedBasketIds = [...new Set(
-        ticketIds
-          .map((ticketId) => ticketMap.get(ticketId)?.basketId ?? null)
-          .filter((id): id is string => Boolean(id)),
-      )];
-      if (touchedBasketIds.length > 0) {
-        const basketPlaceholders = touchedBasketIds.map((_, idx) => `$${idx + 1}`).join(", ");
-        const basketTicketRows = await query(
-          `SELECT basket_id, status FROM daa_trade_tickets WHERE basket_id IN (${basketPlaceholders})`,
-          touchedBasketIds,
-        );
-        const statusByBasket = new Map<string, DaaStoreTradeTicketStatus[]>();
-        for (const row of basketTicketRows.rows as Array<Record<string, unknown>>) {
-          const id = normalizeText(row.basket_id);
-          if (!id) continue;
-          const status = normalizeTradeTicketStatus(row.status);
-          if (!statusByBasket.has(id)) statusByBasket.set(id, []);
-          statusByBasket.get(id)!.push(status);
-        }
-        for (const id of touchedBasketIds) {
-          const statuses = statusByBasket.get(id) ?? [];
-          const nextStatus = deriveBasketStatusFromTickets(statuses);
-          await query(
-            "UPDATE daa_trade_baskets SET status = $1, updated_at = NOW(), executed_at = CASE WHEN $1 IN ('executed','partial','canceled') THEN COALESCE(executed_at, NOW()) ELSE executed_at END WHERE basket_id = $2",
-            [nextStatus, id],
-          );
-        }
-      }
+      await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, ticketIds);
 
       const latestTicketRows = await query(
-        `SELECT ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency, side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text, snapshot_before_json, snapshot_after_json, reject_code, reject_message, pricing_mode, price_source, price_snapshot_at, created_by, created_at, executed_at, canceled_at, updated_at FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
         ticketIds,
       );
       const latestPositionsRows = await query(
@@ -4756,9 +5662,9 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             symbol,
             market,
             currency: normalizeText(item.currency, "USD").toUpperCase(),
-            qty: Math.max(0, toFinite(item.qty)),
-            price: Math.max(0, toFinite(item.price)),
-            costBasis: item.cost_basis == null ? null : Math.max(0, toFinite(item.cost_basis)),
+            qty: Math.max(0, toFiniteNumber(item.qty)),
+            price: Math.max(0, toFiniteNumber(item.price)),
+            costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
             tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
             updatedAt: toIsoString(item.updated_at),
           } satisfies DaaStorePosition;
@@ -4781,51 +5687,6 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
       throw error;
     }
   });
-}
-
-export async function getDaaNotificationConfig(): Promise<DaaStoreNotificationConfig> {
-  const system = await getDaaSystemConfig();
-  const telegram = system.config.notification.telegram;
-  const feishu = system.config.notification.feishu;
-  return {
-    id: "default",
-    enabled: Boolean(telegram.enabled || feishu.enabled),
-    notifyOnDrift: Boolean(telegram.onDriftTrigger || feishu.onDriftTrigger),
-    notifyOnRebalance: Boolean(telegram.onSuggestionGenerated || feishu.onSuggestionGenerated || telegram.onTradeExecuted || feishu.onTradeExecuted),
-    notifyOnPriceAlert: false,
-    updatedAt: system.updatedAt,
-  };
-}
-
-export async function saveDaaNotificationConfig(input: Partial<DaaStoreNotificationConfig>): Promise<DaaStoreNotificationConfig> {
-  const current = await getDaaSystemConfig();
-  const currentTelegram = current.config.notification.telegram;
-  const currentFeishu = current.config.notification.feishu;
-  const next = normalizeSystemConfig({
-    ...current.config,
-    notification: {
-      telegram: {
-        ...currentTelegram,
-        enabled: input.enabled ?? currentTelegram.enabled,
-        onDriftTrigger: input.notifyOnDrift ?? currentTelegram.onDriftTrigger,
-        onTradeExecuted: input.notifyOnRebalance ?? currentTelegram.onTradeExecuted,
-      },
-      feishu: {
-        ...currentFeishu,
-      },
-    },
-  });
-  const saved = await saveDaaSystemConfig({ config: next, baseVersion: current.version });
-  const telegram = saved.config.notification.telegram;
-  const feishu = saved.config.notification.feishu;
-  return {
-    id: "default",
-    enabled: Boolean(telegram.enabled || feishu.enabled),
-    notifyOnDrift: Boolean(telegram.onDriftTrigger || feishu.onDriftTrigger),
-    notifyOnRebalance: Boolean(telegram.onSuggestionGenerated || feishu.onSuggestionGenerated || telegram.onTradeExecuted || feishu.onTradeExecuted),
-    notifyOnPriceAlert: false,
-    updatedAt: saved.updatedAt,
-  };
 }
 
 function mapRunHistoryRow(row: Record<string, unknown>): DaaStoreRunHistoryEntry {
@@ -4882,7 +5743,7 @@ export async function appendDaaRunHistory(input: {
 
 export async function listDaaRunHistory(limit = 50): Promise<DaaStoreRunHistoryEntry[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(500, Math.trunc(toFinite(limit, 50))));
+  const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 50))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       "SELECT id, ts, trigger_source, request_json, response_json, summary_json FROM daa_run_history ORDER BY ts DESC LIMIT $1",
@@ -4920,7 +5781,7 @@ export async function appendDaaOpLog(input: {
 
 export async function listDaaOpLog(limit = 100): Promise<DaaStoreOpLogEntry[]> {
   await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(500, Math.trunc(toFinite(limit, 100))));
+  const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 100))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       "SELECT id, ts, level, message, context_json FROM daa_op_log ORDER BY ts DESC LIMIT $1",
@@ -4943,7 +5804,7 @@ export async function appendAssetPriceHistoryRows(rows: Array<{ assetKey: string
           throw new Error(`price history assetKey invalid: ${normalizeText(row.assetKey) || "unknown"}`);
         }
         const assetKey = buildDaaAssetKey(parsedAssetKey.symbol, parsedAssetKey.market);
-        const price = Math.max(0, toFinite(row.price));
+        const price = Math.max(0, toFiniteNumber(row.price));
         if (!assetKey || price <= 0) continue;
         const ts = toIsoString(row.ts, new Date().toISOString());
         const source = normalizeText(row.source, "yfinance");
@@ -5049,7 +5910,7 @@ export async function listDaaRebalanceDecisions(opts?: {
   status?: DaaStoreRebalanceDecision["status"];
 }): Promise<Array<DaaStoreRebalanceDecision & { orders: DaaStoreExecutionOrder[] }>> {
   await ensureDaaStoreSchemaPg();
-  const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(opts?.limit, 50))));
+  const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(opts?.limit, 50))));
   const status = normalizeText(opts?.status);
 
   return withDaaPgClient(async ({ query }) => {
@@ -5138,33 +5999,6 @@ const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_ = [
   "created_at",
 ].join(", ");
 
-const HF_HOLDING_SNAPSHOT_SELECT_COLUMNS_ = [
-  "provider",
-  "fund_code",
-  "report_date",
-  "symbol",
-  "market",
-  "weight_pct",
-  "prev_weight_pct",
-  "disclosed_at",
-  "confidence_pct",
-  "source_ref",
-  "fetched_at",
-  "raw_ref_id",
-].join(", ");
-
-const HF_SIGNAL_SNAPSHOT_SELECT_COLUMNS_ = [
-  "provider",
-  "symbol",
-  "aggregated_score_pct",
-  "conviction_pct",
-  "thesis_drift_pct",
-  "fund_count",
-  "funds_json",
-  "generated_at",
-  "updated_at",
-].join(", ");
-
 const RAW_PAYLOAD_SELECT_COLUMNS_ = [
   "id",
   "provider",
@@ -5242,7 +6076,7 @@ function hashToken(value: string): string {
 }
 
 function mapMarketPriceSnapshotRow(row: Record<string, unknown>): DaaStoreMarketPriceSnapshot {
-  const price = Math.max(0, toFinite(row.price, 0));
+  const price = Math.max(0, toFiniteNumber(row.price, 0));
   const status = normalizeMarketPriceStatus(row.status, "missing");
   const semanticUpdatedAt = row.as_of_ts == null ? null : toIsoString(row.as_of_ts, new Date().toISOString());
   const persistedFetchedAt = row.fetched_at == null ? null : toIsoString(row.fetched_at, new Date().toISOString());
@@ -5272,7 +6106,7 @@ function mapMarketPriceHistoryRow(row: Record<string, unknown>): DaaStoreMarketP
     market: normalizeUpper(row.market, "US"),
     symbol: normalizeUpper(row.symbol),
     ts: toIsoString(row.as_of_ts, new Date().toISOString()),
-    price: Math.max(0, toFinite(row.price, 0)),
+    price: Math.max(0, toFiniteNumber(row.price, 0)),
     currency: normalizeUpper(row.currency, "USD"),
     source: normalizeText(row.source, "market_cache"),
     rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
@@ -5288,9 +6122,9 @@ function mapNewsItemSnapshotRow(row: Record<string, unknown>): DaaStoreNewsItemS
     link: row.link == null ? null : normalizeText(row.link) || null,
     publishedAt: row.published_at == null ? null : toIsoString(row.published_at, new Date().toISOString()),
     fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
-    sentimentScore: toFinite(row.sentiment_score, 0),
-    sourceCredibility: clampNumber(toFinite(row.source_credibility, 0), 0, 1),
-    freshness: clampNumber(toFinite(row.freshness, 0), 0, 1),
+    sentimentScore: toFiniteNumber(row.sentiment_score, 0),
+    sourceCredibility: clampNumber(toFiniteNumber(row.source_credibility, 0), 0, 1),
+    freshness: clampNumber(toFiniteNumber(row.freshness, 0), 0, 1),
     rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
   };
 }
@@ -5299,9 +6133,9 @@ function mapNewsSignalSnapshotRow(row: Record<string, unknown>): DaaStoreNewsSig
   return {
     provider: normalizeText(row.provider, "yahoo_rss"),
     symbol: normalizeUpper(row.symbol),
-    scorePct: clampNumber(toFinite(row.score_pct, 50), 0, 100),
-    confidencePct: clampNumber(toFinite(row.confidence_pct, 0), 0, 100),
-    evidenceCount: Math.max(0, Math.trunc(toFinite(row.evidence_count, 0))),
+    scorePct: clampNumber(toFiniteNumber(row.score_pct, 50), 0, 100),
+    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 0), 0, 100),
+    evidenceCount: Math.max(0, Math.trunc(toFiniteNumber(row.evidence_count, 0))),
     reasonsJson: parseJsonb<string[]>(row.reasons_json, []).map((item) => String(item || "").trim()).filter(Boolean),
     generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
     updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
@@ -5315,53 +6149,21 @@ function mapMarketIndicatorSnapshotRow(row: Record<string, unknown>): DaaStoreMa
     scope: normalizeText(row.scope, "us_equity"),
     subjectKey: normalizeText(row.subject_key, "GLOBAL"),
     stance: normalizeMarketRegimeStore(row.stance),
-    riskOffScorePct: clampNumber(toFinite(row.risk_off_score_pct, 50), 0, 100),
-    confidencePct: clampNumber(toFinite(row.confidence_pct, 40), 0, 100),
-    rawValue: row.raw_value == null ? null : toFinite(row.raw_value, 0),
+    riskOffScorePct: clampNumber(toFiniteNumber(row.risk_off_score_pct, 50), 0, 100),
+    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 40), 0, 100),
+    rawValue: row.raw_value == null ? null : toFiniteNumber(row.raw_value, 0),
     unit: row.unit == null ? null : normalizeText(row.unit) || null,
-    percentile252: row.percentile_252 == null ? null : toFinite(row.percentile_252, 0),
-    zscore60: row.zscore_60 == null ? null : toFinite(row.zscore_60, 0),
-    trend1dPct: row.trend_1d_pct == null ? null : toFinite(row.trend_1d_pct, 0),
-    trend7dPct: row.trend_7d_pct == null ? null : toFinite(row.trend_7d_pct, 0),
-    trend30dPct: row.trend_30d_pct == null ? null : toFinite(row.trend_30d_pct, 0),
+    percentile252: row.percentile_252 == null ? null : toFiniteNumber(row.percentile_252, 0),
+    zscore60: row.zscore_60 == null ? null : toFiniteNumber(row.zscore_60, 0),
+    trend1dPct: row.trend_1d_pct == null ? null : toFiniteNumber(row.trend_1d_pct, 0),
+    trend7dPct: row.trend_7d_pct == null ? null : toFiniteNumber(row.trend_7d_pct, 0),
+    trend30dPct: row.trend_30d_pct == null ? null : toFiniteNumber(row.trend_30d_pct, 0),
     source: normalizeText(row.source, "market_cache"),
     reasonsJson: normalizeStringArray(parseJsonb<unknown[]>(row.reasons_json, [])),
     componentsJson: parseJsonb<Record<string, unknown>>(row.components_json, {}),
     generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
     expireAt: row.expire_at == null ? null : toIsoString(row.expire_at, new Date().toISOString()),
     createdAt: toIsoString(row.created_at, new Date().toISOString()),
-  };
-}
-
-function mapHfHoldingSnapshotRow(row: Record<string, unknown>): DaaStoreHfHoldingSnapshot {
-  const reportDate = String(row.report_date || "").trim();
-  return {
-    provider: normalizeText(row.provider, "danjuan"),
-    fundCode: normalizeText(row.fund_code),
-    reportDate: /^\d{4}-\d{2}-\d{2}$/.test(reportDate) ? reportDate : toIsoString(row.report_date, new Date().toISOString()).slice(0, 10),
-    symbol: normalizeUpper(row.symbol),
-    market: normalizeUpper(row.market, "UNKNOWN"),
-    weightPct: Math.max(0, toFinite(row.weight_pct, 0)),
-    prevWeightPct: Math.max(0, toFinite(row.prev_weight_pct, 0)),
-    disclosedAt: row.disclosed_at == null ? null : toIsoString(row.disclosed_at, new Date().toISOString()),
-    confidencePct: clampNumber(toFinite(row.confidence_pct, 0), 0, 100),
-    sourceRef: row.source_ref == null ? null : normalizeText(row.source_ref) || null,
-    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
-    rawRefId: row.raw_ref_id == null ? null : normalizeText(row.raw_ref_id) || null,
-  };
-}
-
-function mapHfSignalSnapshotRow(row: Record<string, unknown>): DaaStoreHfSignalSnapshot {
-  return {
-    provider: normalizeText(row.provider, "human_signal"),
-    symbol: normalizeUpper(row.symbol),
-    aggregatedScorePct: clampNumber(toFinite(row.aggregated_score_pct, 0), 0, 100),
-    convictionPct: clampNumber(toFinite(row.conviction_pct, 0), 0, 100),
-    thesisDriftPct: clampNumber(toFinite(row.thesis_drift_pct, 0), 0, 100),
-    fundCount: Math.max(0, Math.trunc(toFinite(row.fund_count, 0))),
-    fundsJson: parseJsonb<Array<Record<string, unknown>>>(row.funds_json, []),
-    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
-    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
   };
 }
 
@@ -5373,7 +6175,7 @@ function mapExternalPayloadRawRow(row: Record<string, unknown>): DaaStoreExterna
     subjectKey: normalizeText(row.subject_key),
     requestUrl: normalizeText(row.request_url),
     requestJson: parseJsonb<Record<string, unknown>>(row.request_json, {}),
-    responseStatus: Math.max(0, Math.trunc(toFinite(row.response_status, 0))),
+    responseStatus: Math.max(0, Math.trunc(toFiniteNumber(row.response_status, 0))),
     responseHeadersJson: parseJsonb<Record<string, unknown>>(row.response_headers_json, {}),
     payloadJson: row.payload_json == null ? null : parseJsonb<Record<string, unknown>>(row.payload_json, {}),
     payloadText: row.payload_text == null ? null : String(row.payload_text),
@@ -5391,9 +6193,9 @@ function mapIngestJobLogRow(row: Record<string, unknown>): DaaStoreIngestJobLog 
     status: normalizeIngestJobStatus(row.status, "ok"),
     startedAt: toIsoString(row.started_at, new Date().toISOString()),
     finishedAt: toIsoString(row.finished_at, new Date().toISOString()),
-    totalCount: Math.max(0, Math.trunc(toFinite(row.total_count, 0))),
-    successCount: Math.max(0, Math.trunc(toFinite(row.success_count, 0))),
-    failureCount: Math.max(0, Math.trunc(toFinite(row.failure_count, 0))),
+    totalCount: Math.max(0, Math.trunc(toFiniteNumber(row.total_count, 0))),
+    successCount: Math.max(0, Math.trunc(toFiniteNumber(row.success_count, 0))),
+    failureCount: Math.max(0, Math.trunc(toFiniteNumber(row.failure_count, 0))),
     diagnosticsJson: parseJsonb<Record<string, unknown>>(row.diagnostics_json, {}),
   };
 }
@@ -5634,7 +6436,7 @@ export async function appendDaaExternalPayloadRaw(input: {
     const subjectKey = normalizeText(input.subjectKey, "");
     const requestUrl = normalizeText(input.requestUrl, "");
     const requestJson = input.requestJson && typeof input.requestJson === "object" ? input.requestJson : {};
-    const responseStatus = Math.max(0, Math.trunc(toFinite(input.responseStatus, 0)));
+    const responseStatus = Math.max(0, Math.trunc(toFiniteNumber(input.responseStatus, 0)));
     const responseHeadersJson = input.responseHeadersJson && typeof input.responseHeadersJson === "object" ? input.responseHeadersJson : {};
     const payloadJson = input.payloadJson && typeof input.payloadJson === "object" ? input.payloadJson : null;
     const payloadText = input.payloadText == null ? null : String(input.payloadText);
@@ -5662,7 +6464,7 @@ export async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toI
       "DELETE FROM daa_external_payload_raw_v1 WHERE expire_at <= $1",
       [toIsoString(nowIso, new Date().toISOString())],
     );
-    return Math.max(0, Math.trunc(toFinite(result.rowCount, 0)));
+    return Math.max(0, Math.trunc(toFiniteNumber(result.rowCount, 0)));
   });
 }
 
@@ -5679,7 +6481,7 @@ export async function upsertDaaMarketPriceSnapshots(rows: Array<Partial<DaaStore
         if (!symbol) continue;
         const normalizedSymbol = normalizeUpper(row.normalizedSymbol, symbol);
         const currency = normalizeUpper(row.currency, "USD");
-        const price = Math.max(0, toFinite(row.price, 0));
+        const price = Math.max(0, toFiniteNumber(row.price, 0));
         const status = normalizeMarketPriceStatus(row.status, price > 0 ? "fresh" : "missing");
         const priceUpdatedAt = row.priceUpdatedAt ? toIsoString(row.priceUpdatedAt, new Date().toISOString()) : (price > 0 ? new Date().toISOString() : null);
         const persistedFetchedAt = priceUpdatedAt || new Date().toISOString();
@@ -5768,7 +6570,7 @@ export async function listDaaMarketPriceSnapshots(input: {
       params.push(symbols);
       where.push(`symbol = ANY($${params.length})`);
     }
-    const limit = Math.max(1, Math.min(5000, Math.trunc(toFinite(input.limit, 2000))));
+    const limit = Math.max(1, Math.min(5000, Math.trunc(toFiniteNumber(input.limit, 2000))));
     params.push(limit);
     const result = await query(
       `SELECT ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_}
@@ -5810,7 +6612,7 @@ export async function listLatestDaaMarketPriceHistoryRows(input: {
       params.push(symbols);
       where.push(`symbol = ANY($${params.length})`);
     }
-    const limit = Math.max(1, Math.min(5000, Math.trunc(toFinite(input.limit, 2000))));
+    const limit = Math.max(1, Math.min(5000, Math.trunc(toFiniteNumber(input.limit, 2000))));
     params.push(limit);
     const result = await query(
       `SELECT provider, market, symbol, as_of_ts, price, currency, source, raw_ref_id
@@ -5839,7 +6641,7 @@ export async function appendDaaMarketPriceHistoryRows(rows: Array<Partial<DaaSto
         const provider = normalizeText(row.provider, "yfinance");
         const market = normalizeUpper(row.market, "US");
         const symbol = normalizeUpper(row.symbol);
-        const price = Math.max(0, toFinite(row.price, 0));
+        const price = Math.max(0, toFiniteNumber(row.price, 0));
         if (!symbol || !(price > 0)) continue;
         const ts = toIsoString(row.ts, new Date().toISOString());
         const currency = normalizeUpper(row.currency, "USD");
@@ -5876,7 +6678,7 @@ export async function appendDaaFxRateHistoryRows(rows: Array<Partial<DaaStoreFxR
         const baseCcy = normalizeUpper(row.baseCcy, "USD");
         const quoteCcy = normalizeUpper(row.quoteCcy, "USD");
         const status = normalizeFxHistoryStatus(row.status, "fresh");
-        const rate = Math.max(0, toFinite(row.rate, 0));
+        const rate = Math.max(0, toFiniteNumber(row.rate, 0));
         if (!baseCcy || !quoteCcy) continue;
         if (!(rate > 0) && status !== "error" && status !== "missing") continue;
         const asOfTs = toIsoString(row.asOfTs, new Date().toISOString());
@@ -5921,9 +6723,9 @@ export async function upsertDaaNewsItemSnapshots(rows: Array<Partial<DaaStoreNew
         const publishedAt = row.publishedAt ? toIsoString(row.publishedAt, new Date().toISOString()) : null;
         const itemHash = normalizeText(row.itemHash) || hashToken(`${symbol}::${title}::${link || ""}::${publishedAt || ""}`);
         const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
-        const sentimentScore = toFinite(row.sentimentScore, 0);
-        const sourceCredibility = clampNumber(toFinite(row.sourceCredibility, 0), 0, 1);
-        const freshness = clampNumber(toFinite(row.freshness, 0), 0, 1);
+        const sentimentScore = toFiniteNumber(row.sentimentScore, 0);
+        const sourceCredibility = clampNumber(toFiniteNumber(row.sourceCredibility, 0), 0, 1);
+        const freshness = clampNumber(toFiniteNumber(row.freshness, 0), 0, 1);
         const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
         await query(
           `INSERT INTO daa_news_item_snapshot_v1
@@ -5958,7 +6760,7 @@ export async function listDaaNewsItemsBySymbol(input: {
     const provider = normalizeText(input.provider, "yahoo_rss");
     const symbol = normalizeUpper(input.symbol);
     if (!symbol) return [];
-    const limit = Math.max(1, Math.min(200, Math.trunc(toFinite(input.limit, 20))));
+    const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(input.limit, 20))));
     const result = await query(
       `SELECT ${NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_}
        FROM daa_news_item_snapshot_v1
@@ -5981,9 +6783,9 @@ export async function upsertDaaNewsSignalSnapshots(rows: Array<Partial<DaaStoreN
         const provider = normalizeText(row.provider, "yahoo_rss");
         const symbol = normalizeUpper(row.symbol);
         if (!symbol) continue;
-        const scorePct = clampNumber(toFinite(row.scorePct, 50), 0, 100);
-        const confidencePct = clampNumber(toFinite(row.confidencePct, 0), 0, 100);
-        const evidenceCount = Math.max(0, Math.trunc(toFinite(row.evidenceCount, 0)));
+        const scorePct = clampNumber(toFiniteNumber(row.scorePct, 50), 0, 100);
+        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 0), 0, 100);
+        const evidenceCount = Math.max(0, Math.trunc(toFiniteNumber(row.evidenceCount, 0)));
         const reasonsJson = Array.isArray(row.reasonsJson) ? row.reasonsJson.map((item) => String(item || "").trim()).filter(Boolean) : [];
         const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
         const result = await query(
@@ -6043,15 +6845,15 @@ export async function upsertDaaMarketIndicatorSnapshots(rows: Array<Partial<DaaS
         const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
         const id = normalizeText(row.id, "") || hashToken(`${indicatorKey}::${scope}::${subjectKey}::${generatedAt}`);
         const stance = normalizeMarketRegimeStore(row.stance);
-        const riskOffScorePct = clampNumber(toFinite(row.riskOffScorePct, 50), 0, 100);
-        const confidencePct = clampNumber(toFinite(row.confidencePct, 40), 0, 100);
-        const rawValue = row.rawValue == null ? null : toFinite(row.rawValue, 0);
+        const riskOffScorePct = clampNumber(toFiniteNumber(row.riskOffScorePct, 50), 0, 100);
+        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 40), 0, 100);
+        const rawValue = row.rawValue == null ? null : toFiniteNumber(row.rawValue, 0);
         const unit = row.unit == null ? null : normalizeText(row.unit) || null;
-        const percentile252 = row.percentile252 == null ? null : toFinite(row.percentile252, 0);
-        const zscore60 = row.zscore60 == null ? null : toFinite(row.zscore60, 0);
-        const trend1dPct = row.trend1dPct == null ? null : toFinite(row.trend1dPct, 0);
-        const trend7dPct = row.trend7dPct == null ? null : toFinite(row.trend7dPct, 0);
-        const trend30dPct = row.trend30dPct == null ? null : toFinite(row.trend30dPct, 0);
+        const percentile252 = row.percentile252 == null ? null : toFiniteNumber(row.percentile252, 0);
+        const zscore60 = row.zscore60 == null ? null : toFiniteNumber(row.zscore60, 0);
+        const trend1dPct = row.trend1dPct == null ? null : toFiniteNumber(row.trend1dPct, 0);
+        const trend7dPct = row.trend7dPct == null ? null : toFiniteNumber(row.trend7dPct, 0);
+        const trend30dPct = row.trend30dPct == null ? null : toFiniteNumber(row.trend30dPct, 0);
         const source = normalizeText(row.source, "market_cache");
         const reasonsJson = normalizeStringArray(Array.isArray(row.reasonsJson) ? row.reasonsJson : []);
         const componentsJson = row.componentsJson && typeof row.componentsJson === "object" ? row.componentsJson as Record<string, unknown> : {};
@@ -6131,7 +6933,7 @@ export async function listDaaMarketIndicatorHistory(input: {
   return withDaaPgClient(async ({ query }) => {
     const keys = [...new Set((input.keys || []).map((item) => normalizeMarketIndicatorKey(item)).filter(Boolean))] as DaaMarketIndicatorKey[];
     if (!keys.length) return [];
-    const days = Math.max(1, Math.min(365, Math.trunc(toFinite(input.days, 90))));
+    const days = Math.max(1, Math.min(365, Math.trunc(toFiniteNumber(input.days, 90))));
     const since = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
     const scope = normalizeText(input.scope, "");
     const result = scope
@@ -6170,10 +6972,10 @@ export async function replaceDaaHfHoldingSnapshots(rows: Array<Partial<DaaStoreH
         const reportDate = normalizeText(row.reportDate);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) continue;
         const market = normalizeUpper(row.market, "UNKNOWN");
-        const weightPct = Math.max(0, toFinite(row.weightPct, 0));
-        const prevWeightPct = Math.max(0, toFinite(row.prevWeightPct, 0));
+        const weightPct = Math.max(0, toFiniteNumber(row.weightPct, 0));
+        const prevWeightPct = Math.max(0, toFiniteNumber(row.prevWeightPct, 0));
         const disclosedAt = row.disclosedAt ? toIsoString(row.disclosedAt, new Date().toISOString()) : null;
-        const confidencePct = clampNumber(toFinite(row.confidencePct, 0), 0, 100);
+        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 0), 0, 100);
         const sourceRef = row.sourceRef == null ? null : normalizeText(row.sourceRef) || null;
         const fetchedAt = toIsoString(row.fetchedAt, new Date().toISOString());
         const rawRefId = row.rawRefId == null ? null : normalizeText(row.rawRefId) || null;
@@ -6210,10 +7012,10 @@ export async function upsertDaaHfSignalSnapshots(rows: Array<Partial<DaaStoreHfS
         const provider = normalizeText(row.provider, "human_signal");
         const symbol = normalizeUpper(row.symbol);
         if (!symbol) continue;
-        const aggregatedScorePct = clampNumber(toFinite(row.aggregatedScorePct, 0), 0, 100);
-        const convictionPct = clampNumber(toFinite(row.convictionPct, 0), 0, 100);
-        const thesisDriftPct = clampNumber(toFinite(row.thesisDriftPct, 0), 0, 100);
-        const fundCount = Math.max(0, Math.trunc(toFinite(row.fundCount, 0)));
+        const aggregatedScorePct = clampNumber(toFiniteNumber(row.aggregatedScorePct, 0), 0, 100);
+        const convictionPct = clampNumber(toFiniteNumber(row.convictionPct, 0), 0, 100);
+        const thesisDriftPct = clampNumber(toFiniteNumber(row.thesisDriftPct, 0), 0, 100);
+        const fundCount = Math.max(0, Math.trunc(toFiniteNumber(row.fundCount, 0)));
         const fundsJson = Array.isArray(row.fundsJson) ? row.fundsJson : [];
         const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
         await query(
@@ -6257,9 +7059,9 @@ export async function appendDaaIngestJobLog(input: {
     const status = normalizeIngestJobStatus(input.status, "ok");
     const startedAt = toIsoString(input.startedAt, new Date().toISOString());
     const finishedAt = toIsoString(input.finishedAt, new Date().toISOString());
-    const totalCount = Math.max(0, Math.trunc(toFinite(input.totalCount, 0)));
-    const successCount = Math.max(0, Math.trunc(toFinite(input.successCount, 0)));
-    const failureCount = Math.max(0, Math.trunc(toFinite(input.failureCount, 0)));
+    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(input.totalCount, 0)));
+    const successCount = Math.max(0, Math.trunc(toFiniteNumber(input.successCount, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(input.failureCount, 0)));
     const diagnosticsJson = input.diagnosticsJson && typeof input.diagnosticsJson === "object" ? input.diagnosticsJson : {};
     await query(
       `INSERT INTO daa_ingest_job_log_v1
@@ -6284,7 +7086,7 @@ export async function listDaaIngestJobLogs(input: {
 } = {}): Promise<DaaStoreIngestJobLog[]> {
   await ensureDaaMarketCacheSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFinite(input.limit, 100))));
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
     if (input.jobType) {
       const result = await query(
         `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
@@ -6346,21 +7148,21 @@ export async function getDaaMarketCacheHealthStats(provider = "yfinance"): Promi
       [],
     );
     const jobs = jobsRes.rows[0] as Record<string, unknown> | undefined;
-    const successCount = Math.max(0, Math.trunc(toFinite(jobs?.success_count, 0)));
-    const failureCount = Math.max(0, Math.trunc(toFinite(jobs?.failure_count, 0)));
-    const totalCount = Math.max(0, Math.trunc(toFinite(jobs?.total_count, successCount + failureCount)));
+    const successCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.success_count, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.failure_count, 0)));
+    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.total_count, successCount + failureCount)));
     const safeDenominator = totalCount > 0 ? totalCount : Math.max(1, successCount + failureCount);
     const successRate = safeDenominator > 0 ? (successCount / safeDenominator) * 100 : 100;
     const failureRate = safeDenominator > 0 ? (failureCount / safeDenominator) * 100 : 0;
 
     return {
       provider: providerNormalized,
-      totalSnapshots: Math.max(0, Math.trunc(toFinite(summary?.total_count, 0))),
-      freshCount: Math.max(0, Math.trunc(toFinite(summary?.fresh_count, 0))),
-      staleCount: Math.max(0, Math.trunc(toFinite(summary?.stale_count, 0))),
-      missingCount: Math.max(0, Math.trunc(toFinite(summary?.missing_count, 0))),
-      errorCount: Math.max(0, Math.trunc(toFinite(summary?.error_count, 0))),
-      unsupportedCount: Math.max(0, Math.trunc(toFinite(summary?.unsupported_count, 0))),
+      totalSnapshots: Math.max(0, Math.trunc(toFiniteNumber(summary?.total_count, 0))),
+      freshCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.fresh_count, 0))),
+      staleCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.stale_count, 0))),
+      missingCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.missing_count, 0))),
+      errorCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.error_count, 0))),
+      unsupportedCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.unsupported_count, 0))),
       recentJobSuccessRatePct: Number(successRate.toFixed(2)),
       recentJobFailureRatePct: Number(failureRate.toFixed(2)),
     };

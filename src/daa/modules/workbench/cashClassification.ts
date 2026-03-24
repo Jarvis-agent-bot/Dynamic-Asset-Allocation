@@ -56,7 +56,7 @@ export type CashClassification = {
   totalEquity: number;
 };
 
-export type CashClassificationConfig = {
+type CashClassificationConfig = {
   /**
    * 运营储备占总权益的比例（0-1），用户在系统配置中设定。
    * 默认 0（不强制保留储备）。
@@ -74,7 +74,7 @@ export type CashClassificationConfig = {
   idleCooldownDays: number;
 };
 
-export type CashClassificationInput = {
+type CashClassificationInput = {
   /** 账户总现金余额（基准货币）*/
   totalCash: number;
   /** 冻结现金（挂单中等）*/

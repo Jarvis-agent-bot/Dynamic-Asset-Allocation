@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildAssetUniverseRow,
+  buildAssetUniverseView,
+  buildMarketPriceResolved,
+  buildSystemConfigRow,
+  buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture,
+} from "@/src/daa/__tests__/testDataFactories";
+import type { DaaLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
+import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import type { DaaOpportunityPanel } from "@/src/daa/signals/opportunityService";
+import type { DaaNewsSignal } from "@/src/daa/signals/newsSignal";
+import type { DaaTechnicalSignal } from "@/src/daa/signals/technicalSignal";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -43,277 +55,210 @@ import { buildOpportunityPanel } from "@/src/daa/signals/opportunityService";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getDaaSystemConfig, patchDaaAssetUniverseRow, updateDaaAssetUniverseLastPrice, upsertDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
 
-const MOCK_ASSET_ROW = {
+const MOCK_ASSET_ROW = buildAssetUniverseView({
   assetKey: "US::AAPL",
   symbol: "AAPL",
   market: "US",
   currency: "USD",
-  assetClass: "EQUITY",
-  region: "US",
-  exchange: "NASDAQ",
-  instrumentType: "STOCK",
-  marketGroup: "US_EQUITY",
-  holdingQty: 0,
-  holdingPrice: 0,
-  costBasis: null,
-  holdingTags: [],
-  watchEnabled: true,
-  targetWeightHint: 0,
-  watchTags: [],
-  notes: null,
   lastPrice: 188.2,
   priceUpdatedAt: "2026-03-01T00:00:00.000Z",
-  yfinanceSymbol: "AAPL",
-  priceStatus: "fresh" as const,
+  priceStatus: "fresh",
   priceSource: "yfinance:AAPL",
   priceAgeSec: 60,
   valuationBase: null,
-  fxRateToBase: 1,
-  fxMissing: false,
-  actualWeightPct: 0,
-  targetWeightPct: 0,
-  gapPct: null,
-  hfSignal: null,
-};
+});
+
+function buildMarketContextFixture(): DaaMarketContext {
+  const generatedAt = "2026-03-01T00:00:00.000Z";
+  const indicators = [
+    {
+      key: "vix" as const,
+      label: "VIX",
+      category: "volatility" as const,
+      scope: "us_equity" as const,
+      stance: "risk_off" as const,
+      riskOffScorePct: 78,
+      confidencePct: 90,
+      rawValue: 24.3,
+      unit: "%",
+      percentile252: 78,
+      zscore60: 1.2,
+      trend1dPct: 4.1,
+      trend7dPct: 9.3,
+      trend30dPct: 18.2,
+      reason: "VIX 处于高分位",
+      source: "test",
+      generatedAt,
+    },
+    {
+      key: "qqq_spy_ratio" as const,
+      label: "QQQ/SPY",
+      category: "relative_value" as const,
+      scope: "us_equity" as const,
+      stance: "risk_off" as const,
+      riskOffScorePct: 66,
+      confidencePct: 82,
+      rawValue: 1.08,
+      unit: "x",
+      percentile252: 66,
+      zscore60: 0.6,
+      trend1dPct: -0.8,
+      trend7dPct: -2.1,
+      trend30dPct: -4.5,
+      reason: "成长风格走弱",
+      source: "test",
+      generatedAt,
+    },
+  ];
+
+  return {
+    generatedAt,
+    regime: "risk_off",
+    riskOffScorePct: 72,
+    confidencePct: 86,
+    buyScale: 0.7,
+    highRiskBuyScale: 0.55,
+    reasons: ["美股：VIX 处于高分位", "美股：成长风格走弱"],
+    indicators,
+    scopes: [{
+      scope: "us_equity",
+      label: "美股",
+      generatedAt,
+      regime: "risk_off",
+      riskOffScorePct: 72,
+      confidencePct: 86,
+      buyScale: 0.7,
+      highRiskBuyScale: 0.55,
+      reasons: ["VIX 处于高分位", "成长风格走弱"],
+      indicators,
+    }],
+  };
+}
+
+function buildOpportunityPanelFixture(): DaaOpportunityPanel {
+  const technicalSignals: DaaTechnicalSignal[] = [{
+    symbol: "AAPL",
+    scorePct: 68,
+    confidencePct: 60,
+    momentumRegime: "neutral",
+    metrics: {
+      close: 188.2,
+      sma20: 180,
+      sma60: 170,
+      ema12: 182,
+      ema26: 176,
+      macd: 1.2,
+      macdSignal: 1,
+      macdHist: 0.2,
+      rsi14: 55,
+      bollingerUpper: 190,
+      bollingerMid: 180,
+      bollingerLower: 170,
+      return20Pct: 5,
+      return60Pct: 12,
+      drawdown30Pct: -3,
+      annualizedVolPct: 36.5,
+      goldenCross: false,
+      deathCross: false,
+      macdBullishCross: true,
+      macdBearishCross: false,
+    },
+    specific: [],
+    reasons: ["波动上行"],
+  }];
+  const newsSignals: DaaNewsSignal[] = [{
+    symbol: "AAPL",
+    scorePct: 60,
+    confidencePct: 58,
+    evidenceCount: 1,
+    reasons: ["中性新闻"],
+    items: [{
+      symbol: "AAPL",
+      title: "mock news",
+      link: "https://example.com/news",
+      ts: "2026-03-01T00:00:00.000Z",
+      sentimentScore: 0.2,
+      sourceCredibility: 0.7,
+      freshness: 0.8,
+    }],
+  }];
+  return {
+    generatedAt: "2026-03-01T00:00:00.000Z",
+    symbols: ["AAPL"],
+    opportunities: [{
+      symbol: "AAPL",
+      finalScorePct: 66,
+      confidencePct: 62,
+      riskScorePct: 78,
+      action: "watch",
+      scores: { human: 66, news: 64, technical: 68, valuation: 0, penalty: 0 },
+      weights: { human: 0.45, news: 0.25, technical: 0.3, valuation: 0 },
+      reasons: ["风险偏高，建议观察"],
+      sourceRefs: ["mock://source"],
+      human: null,
+      news: null,
+      technical: null,
+      valuation: null,
+    }],
+    diagnostics: {
+      humanSignalCount: 0,
+      humanSourceStatus: "fallback_seed",
+      humanDiagnostics: [],
+      newsSignalCount: 1,
+      technicalSignalCount: 1,
+      valuationSignalCount: 0,
+      valuationEnabled: false,
+      weights: { human: 0.45, news: 0.25, technical: 0.3, valuation: 0 },
+      newsProvider: "mock",
+      newsQuery: "",
+    },
+    raw: {
+      valuationSignals: [],
+      technicalSignals,
+      newsSignals,
+    },
+  };
+}
+
+function buildLlmAnalysisFixture(): DaaLlmAnalysis {
+  return {
+    status: "ok",
+    provider: "mock",
+    model: "mock-model",
+    generatedAt: "2026-03-01T00:00:00.000Z",
+    summary: "mock summary",
+    opportunityNotes: ["opportunity-1"],
+    riskNotes: ["risk-1"],
+    latencyMs: 12,
+  };
+}
 
 describe("workbench-asset-routes-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        dataSources: {
-          priceFeed: {
-            marketCache: {
-              freshMinutes: 15,
-              serveStaleHours: 48,
-              rawRetentionDays: 90,
-            },
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      dataSources: {
+        priceFeed: {
+          marketCache: {
+            freshMinutes: 15,
+            serveStaleHours: 48,
+            rawRetentionDays: 90,
           },
         },
       },
-    } as any);
+    }));
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({});
-    vi.mocked(updateDaaAssetUniverseLastPrice).mockResolvedValue({
-      assetKey: "US::AAPL",
-    } as any);
-
-    vi.mocked(upsertDaaAssetUniverseRow).mockResolvedValue({
-      assetKey: "US::AAPL",
-    } as any);
-
-    vi.mocked(patchDaaAssetUniverseRow).mockResolvedValue({
-      assetKey: "US::AAPL",
-    } as any);
-
-    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue({
-      baseCurrency: "USD",
+    vi.mocked(updateDaaAssetUniverseLastPrice).mockResolvedValue(buildAssetUniverseRow({ assetKey: "US::AAPL" }));
+    vi.mocked(upsertDaaAssetUniverseRow).mockResolvedValue(buildAssetUniverseRow({ assetKey: "US::AAPL" }));
+    vi.mocked(patchDaaAssetUniverseRow).mockResolvedValue(buildAssetUniverseRow({ assetKey: "US::AAPL" }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildWorkbenchBootstrapFixture({
       account: { cash: 1000, investableCash: 1000, frozenCash: 0, totalEquity: 1000 },
       assetUniverse: [MOCK_ASSET_ROW],
-      execution: {
-        logs: [],
-      },
-      rebalance: {
-        mode: "manual",
-        autoAnalysisEnabled: false,
-        analysisTimeUtc: "00:20",
-        timezone: "Asia/Shanghai",
-        analysisFocus: "mock",
-      },
-      marketContext: {
-        generatedAt: "2026-03-01T00:00:00.000Z",
-        regime: "risk_off",
-        riskOffScorePct: 72,
-        confidencePct: 86,
-        buyScale: 0.7,
-        highRiskBuyScale: 0.55,
-        reasons: ["美股：VIX 处于高分位", "美股：成长风格走弱"],
-        indicators: [
-          {
-            key: "vix",
-            label: "VIX",
-            category: "volatility",
-            scope: "us_equity",
-            stance: "risk_off",
-            riskOffScorePct: 78,
-            confidencePct: 90,
-            rawValue: 24.3,
-            unit: "%",
-            percentile252: 78,
-            zscore60: 1.2,
-            trend1dPct: 4.1,
-            trend7dPct: 9.3,
-            trend30dPct: 18.2,
-            reason: "VIX 处于高分位",
-            source: "test",
-            generatedAt: "2026-03-01T00:00:00.000Z",
-          },
-          {
-            key: "qqq_spy_ratio",
-            label: "QQQ/SPY",
-            category: "relative_value",
-            scope: "us_equity",
-            stance: "risk_off",
-            riskOffScorePct: 66,
-            confidencePct: 82,
-            rawValue: 1.08,
-            unit: "x",
-            percentile252: 66,
-            zscore60: 0.6,
-            trend1dPct: -0.8,
-            trend7dPct: -2.1,
-            trend30dPct: -4.5,
-            reason: "成长风格走弱",
-            source: "test",
-            generatedAt: "2026-03-01T00:00:00.000Z",
-          },
-        ],
-        scopes: [{
-          scope: "us_equity",
-          label: "美股",
-          generatedAt: "2026-03-01T00:00:00.000Z",
-          regime: "risk_off",
-          riskOffScorePct: 72,
-          confidencePct: 86,
-          buyScale: 0.7,
-          highRiskBuyScale: 0.55,
-          reasons: ["VIX 处于高分位", "成长风格走弱"],
-          indicators: [
-            {
-              key: "vix",
-              label: "VIX",
-              category: "volatility",
-              scope: "us_equity",
-              stance: "risk_off",
-              riskOffScorePct: 78,
-              confidencePct: 90,
-              rawValue: 24.3,
-              unit: "%",
-              percentile252: 78,
-              zscore60: 1.2,
-              trend1dPct: 4.1,
-              trend7dPct: 9.3,
-              trend30dPct: 18.2,
-              reason: "VIX 处于高分位",
-              source: "test",
-              generatedAt: "2026-03-01T00:00:00.000Z",
-            },
-            {
-              key: "qqq_spy_ratio",
-              label: "QQQ/SPY",
-              category: "relative_value",
-              scope: "us_equity",
-              stance: "risk_off",
-              riskOffScorePct: 66,
-              confidencePct: 82,
-              rawValue: 1.08,
-              unit: "x",
-              percentile252: 66,
-              zscore60: 0.6,
-              trend1dPct: -0.8,
-              trend7dPct: -2.1,
-              trend30dPct: -4.5,
-              reason: "成长风格走弱",
-              source: "test",
-              generatedAt: "2026-03-01T00:00:00.000Z",
-            },
-          ],
-        }],
-      },
-      warnings: [],
-    } as any);
-
-    vi.mocked(buildOpportunityPanel).mockResolvedValue({
-      generatedAt: "2026-03-01T00:00:00.000Z",
-      symbols: ["AAPL"],
-      opportunities: [{
-        symbol: "AAPL",
-        finalScorePct: 66,
-        confidencePct: 62,
-        riskScorePct: 78,
-        action: "watch",
-        scores: { human: 66, news: 64, technical: 68, valuation: 0, penalty: 0 },
-        weights: { human: 0.45, news: 0.25, technical: 0.3, valuation: 0 },
-        reasons: ["风险偏高，建议观察"],
-        sourceRefs: ["mock://source"],
-        human: null,
-        news: null,
-        technical: null,
-        valuation: null,
-      }],
-      diagnostics: {
-        humanSignalCount: 0,
-        humanSourceStatus: "fallback_seed",
-        humanDiagnostics: [],
-        newsSignalCount: 1,
-        technicalSignalCount: 1,
-        valuationSignalCount: 0,
-        valuationEnabled: false,
-        weights: { human: 0.45, news: 0.25, technical: 0.3, valuation: 0 },
-        newsProvider: "mock",
-        newsQuery: "",
-      },
-      raw: {
-        valuationSignals: [],
-        technicalSignals: [{
-          symbol: "AAPL",
-          scorePct: 68,
-          confidencePct: 60,
-          momentumRegime: "neutral",
-          metrics: {
-            close: 188.2,
-            sma20: 180,
-            sma60: 170,
-            ema12: 182,
-            ema26: 176,
-            macd: 1.2,
-            macdSignal: 1.0,
-            macdHist: 0.2,
-            rsi14: 55,
-            bollingerUpper: 190,
-            bollingerMid: 180,
-            bollingerLower: 170,
-            return20Pct: 5,
-            return60Pct: 12,
-            drawdown30Pct: -3,
-            annualizedVolPct: 36.5,
-            goldenCross: false,
-            deathCross: false,
-            macdBullishCross: true,
-            macdBearishCross: false,
-          },
-          specific: [],
-          reasons: ["波动上行"],
-        }],
-        newsSignals: [{
-          symbol: "AAPL",
-          scorePct: 60,
-          confidencePct: 58,
-          evidenceCount: 1,
-          reasons: ["中性新闻"],
-          items: [{
-            symbol: "AAPL",
-            title: "mock news",
-            link: "https://example.com/news",
-            ts: "2026-03-01T00:00:00.000Z",
-            sentimentScore: 0.2,
-            sourceCredibility: 0.7,
-            freshness: 0.8,
-          }],
-        }],
-      },
-    });
-
-    vi.mocked(runLlmAnalysis).mockResolvedValue({
-      status: "ok",
-      provider: "mock",
-      model: "mock-model",
-      generatedAt: "2026-03-01T00:00:00.000Z",
-      summary: "mock summary",
-      opportunityNotes: ["opportunity-1"],
-      riskNotes: ["risk-1"],
-      latencyMs: 12,
-    });
+      marketContext: buildMarketContextFixture(),
+    }));
+    vi.mocked(buildOpportunityPanel).mockResolvedValue(buildOpportunityPanelFixture());
+    vi.mocked(runLlmAnalysis).mockResolvedValue(buildLlmAnalysisFixture());
   });
 
   it("assets/upsert 返回标准 row", async () => {
@@ -367,17 +312,16 @@ describe("workbench-asset-routes-v1", () => {
   it("assets/{assetKey} PATCH 优先返回第三方价格", async () => {
     const updatedAt = new Date().toISOString();
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({
-      "US::AAPL": {
-        provider: "yfinance",
+      "US::AAPL": buildMarketPriceResolved({
         symbol: "AAPL",
         market: "US",
         currency: "USD",
         price: 199.8,
-        priceStatus: "fresh" as const,
+        priceStatus: "fresh",
         priceUpdatedAt: updatedAt,
         priceAgeSec: 4,
         priceSource: "asset_patch:yfinance:AAPL",
-      },
+      }),
     });
 
     const response = await patchAsset(
@@ -414,17 +358,16 @@ describe("workbench-asset-routes-v1", () => {
   it("assets/{assetKey}/insights 返回 technical/news/llm/risk", async () => {
     const updatedAt = new Date().toISOString();
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({
-      "US::AAPL": {
-        provider: "yfinance",
+      "US::AAPL": buildMarketPriceResolved({
         symbol: "AAPL",
         market: "US",
         currency: "USD",
         price: 191.2,
-        priceStatus: "fresh" as const,
+        priceStatus: "fresh",
         priceUpdatedAt: updatedAt,
         priceAgeSec: 8,
         priceSource: "asset_insights:yfinance:AAPL",
-      },
+      }),
     });
 
     const response = await getAssetInsights(

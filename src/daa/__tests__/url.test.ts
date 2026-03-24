@@ -32,7 +32,7 @@ describe("daa/url", () => {
       expect(normalizeDaaReturnTo("/daa/market/funds")).toBe("/daa/dashboard");
     });
 
-    it("canonicalizes /daa/dashboard and strips legacy tab", () => {
+    it("canonicalizes /daa/dashboard and strips unsupported tab", () => {
       expect(normalizeDaaReturnTo("/daa")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnTo("/daa/dashboard/")).toBe("/daa/dashboard");
       expect(normalizeDaaReturnTo("/daa/dashboard?tab=unknown#x")).toBe("/daa/dashboard#x");
@@ -41,7 +41,6 @@ describe("daa/url", () => {
 
     it("preserves dashboard deep links", () => {
       expect(normalizeDaaReturnTo("/daa/dashboard/workbench")).toBe("/daa/dashboard/workbench");
-      expect(normalizeDaaReturnTo("/daa/dashboard/strategy-lab?from=login#run")).toBe("/daa/dashboard/strategy-lab?from=login#run");
       expect(normalizeDaaReturnTo("/daa/dashboard/settings?section=risk")).toBe("/daa/dashboard/settings?section=risk");
     });
   });

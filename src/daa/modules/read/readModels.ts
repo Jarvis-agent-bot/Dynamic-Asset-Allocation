@@ -5,7 +5,6 @@ import type {
   DaaStoreEquitySnapshot,
 } from "@/src/daa/store/daaStorePg";
 import type {
-  AssetUniverseView,
   RebalanceCycle,
   WorkbenchBootstrap,
   WorkbenchRebalanceCycleReport,
@@ -29,30 +28,6 @@ export type TradesReadModel = {
   records: WorkbenchTradeRecords;
   reports: WorkbenchRebalanceCycleReport[];
   ledgerMeta: DaaCurrentLedgerMeta;
-  loadedAt: string;
-};
-
-export type StrategyLabSeedReadModel = {
-  bootstrap: WorkbenchBootstrap;
-  baseCurrency: string;
-  initialEquity: number;
-  constraints: {
-    maxPositionPct: number;
-    minNotional: number;
-    maxOrderPctOfNav: number;
-  };
-  policy: {
-    thresholdPct: number;
-    minTradeNotional: number;
-    cooldownSeconds: number;
-  };
-  execution: {
-    feeRateBps: number;
-    slippageBps: number;
-    maxOrderPctOfNav: number;
-  };
-  availableAssets: AssetUniverseView[];
-  selectedAssetKeys: string[];
   loadedAt: string;
 };
 

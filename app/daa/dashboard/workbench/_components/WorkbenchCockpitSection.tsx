@@ -7,12 +7,13 @@ import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContaine
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
-  DeepLedgerActionButton,
-  DeepLedgerMiniStat,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfaceMiniStat,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
+import { WorkbenchAssistantPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchAssistantPanel";
 
 const PIE_COLORS = ["#38BDF8", "#818CF8", "#34D399", "#F6AD55", "#F87171", "#A78BFA"];
 
@@ -55,16 +56,18 @@ export function WorkbenchCockpitSection(props: {
 
   return (
     <div className="space-y-4">
+      <WorkbenchAssistantPanel assistant={model.assistant} />
+
       <div className="grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
-        <DeepLedgerPanel
+        <DaaSurfacePanel
           accent="amber"
           title="统一信号"
-          subtitle="把告警、市场健康、运行状态与总览提示收束成一条可操作的列表。"
+          subtitle="把告警、市场健康和运行状态收束成一条可操作的列表。"
           action={(
-            <DeepLedgerActionButton tone="slate" onClick={() => void model.loadBootstrap(true)} disabled={model.refreshing}>
+            <DaaSurfaceActionButton tone="slate" onClick={() => void model.loadBootstrap(true)} disabled={model.refreshing}>
               <RefreshCcw className={`h-4 w-4 ${model.refreshing ? "animate-spin" : ""}`} />
               刷新工作台
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           )}
         >
           {topSignals.length > 0 ? (
@@ -72,9 +75,9 @@ export function WorkbenchCockpitSection(props: {
               {topSignals.map((signal) => (
                 <div key={signal.id} className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.6)] p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <DeepLedgerStatusPill tone={signalTone(signal.level)}>
+                    <DaaSurfaceStatusPill tone={signalTone(signal.level)}>
                       {signal.level === "warn" ? "需处理" : signal.level === "success" ? "已就绪" : "观察中"}
-                    </DeepLedgerStatusPill>
+                    </DaaSurfaceStatusPill>
                     <span className="text-xs text-[var(--faint)]">{signal.source}</span>
                   </div>
                   <div className="mt-2 text-sm text-[var(--text)]">{signal.text}</div>
@@ -94,27 +97,27 @@ export function WorkbenchCockpitSection(props: {
           ) : (
             <DashboardEmptyState title="当前没有需要强调的信号" description="重构后工作台会优先展示真正需要处理的事项，而不是重复说明文案。" className="border-0 bg-transparent px-0 py-8" />
           )}
-        </DeepLedgerPanel>
+        </DaaSurfacePanel>
 
-        <DeepLedgerPanel
+        <DaaSurfacePanel
           accent="indigo"
           title="运行摘要"
-          subtitle="把权益变化、资产分布与最近一轮市场状态放在同一视图内，减少在总览和工作台之间来回切换。"
+          subtitle="把权益变化、资产分布与最近一轮市场状态放在同一视图内，避免在多个区域之间来回切换。"
         >
           <div className="grid gap-3 md:grid-cols-3">
-            <DeepLedgerMiniStat
+            <DaaSurfaceMiniStat
               label="最近周期"
               value={model.bootstrap?.latestCycle ? model.bootstrap.latestCycle.cycleId.slice(0, 8) : "-"}
               hint={model.bootstrap?.latestCycle ? `${model.bootstrap.latestCycle.triggerSource} · ${model.bootstrap.latestCycle.status}` : "当前没有新周期"}
               tone="indigo"
             />
-            <DeepLedgerMiniStat
+            <DaaSurfaceMiniStat
               label="行情健康"
               value={model.bootstrap?.marketDataHealth?.status || "ok"}
               hint={`新鲜 ${model.bootstrap?.marketDataHealth?.freshCount || 0} · 过期 ${model.bootstrap?.marketDataHealth?.staleCount || 0}`}
               tone={model.bootstrap?.marketDataHealth?.status === "down" ? "red" : model.bootstrap?.marketDataHealth?.status === "degraded" ? "amber" : "green"}
             />
-            <DeepLedgerMiniStat
+            <DaaSurfaceMiniStat
               label="市场依据"
               value={String(marketContext?.reasons.length || 0)}
               hint={marketContext?.scopes?.[0]?.label || "市场状态层"}
@@ -183,7 +186,7 @@ export function WorkbenchCockpitSection(props: {
               </div>
             </div>
           </div>
-        </DeepLedgerPanel>
+        </DaaSurfacePanel>
       </div>
     </div>
   );

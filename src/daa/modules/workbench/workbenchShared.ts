@@ -1,22 +1,28 @@
-import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
-import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
-import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
-import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
-import { runLlmDecision } from "@/src/daa/llm/llmDecision";
-import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
-import { hydrateUnifiedRequestWithSignals } from "@/src/daa/modules/decision/hydrateUnifiedRequest";
-import type { UnifiedDecisionResult } from "@/src/daa/modules/decision/decisionResultTypes";
-import { buildMarketContextAttribution, getCurrentMarketContext, marketRegimeLabelZh, } from "@/src/daa/modules/marketContext/marketIndicatorService";
-import { classifyCash } from "./cashClassification";
-import { fuseDecision } from "./decisionFusion";
-import { appendDaaTriggerEvent, appendDaaRunHistory, appendAssetPriceHistoryRows, createDaaRebalanceCycle, createDaaRebalanceDecision, createDaaTradeTicket, executeDaaTradeTickets, getDaaCycleReport, getDaaHumanIngestState, getDaaRebalanceCycle, getDaaSystemConfig, getDaaMarketCacheHealthStats, listDaaAssetUniverse, listDaaCycleReports, listDaaEquitySnapshots, listDaaFxRates, listDaaRebalanceCycles, listDaaTradeTickets, patchDaaRebalanceCycle, upsertDaaCycleReport, updateDaaAssetUniverseLastPrice, type DaaStoreRebalanceCycle, } from "@/src/daa/store/daaStorePg";
-import { buildDaaUnifiedPlan, type DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
-import { buildFxLookupToBase, summarizeMarkToMarketPortfolio, } from "@/src/daa/modules/portfolio/portfolioValuation";
-import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
-import { buildAssetUniverseViewRows } from "./assetUniverseService";
+import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import {
+  appendDaaTriggerEvent,
+  getDaaCycleReport,
+  getDaaHumanIngestState,
+  getDaaSystemConfig,
+  getDaaMarketCacheHealthStats,
+  type DaaStoreRebalanceCycle,
+} from "@/src/daa/store/daaStorePg";
+import { buildFxLookupToBase, summarizeMarkToMarketPortfolio } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { computeCorrelationMatrix } from "./correlationService";
-import type { ExecuteRebalanceSummary, ExecuteRebalanceCycleResult, GenerateRebalanceCycleInput, GenerateRebalanceCycleResult, HfSignalSummary, PortfolioHealthyInsight, PreTradeRiskRule, PreTradeRiskCheckItem, PreTradeRiskCheck, RebalanceCycle, RebalanceProposal, RebalanceTriggerSource, UpdateRebalanceCycleInput, WorkbenchBootstrap, WorkbenchRebalanceCycleReport, WorkbenchRecommendation, WorkbenchRecommendationsResult, WorkbenchTradeRecords, } from "./workbenchTypes";
+import type {
+  HfSignalSummary,
+  PreTradeRiskRule,
+  PreTradeRiskCheckItem,
+  PreTradeRiskCheck,
+  RebalanceCycle,
+  RebalanceProposal,
+  RebalanceTriggerSource,
+  WorkbenchBootstrap,
+  WorkbenchRebalanceCycleReport,
+} from "./workbenchTypes";
 import { WorkbenchDomainError, type WorkbenchDomainErrorCode } from "./workbenchErrors";
 
 function pickArray(value: unknown): string[] {
@@ -267,7 +273,7 @@ function isCycleTerminal(status: RebalanceCycle["status"] | DaaStoreRebalanceCyc
   return status === "completed" || status === "cancelled";
 }
 
-export function isCycleExecutable(status: RebalanceCycle["status"] | DaaStoreRebalanceCycle["status"]): boolean {
+function isCycleExecutable(status: RebalanceCycle["status"] | DaaStoreRebalanceCycle["status"]): boolean {
     return status === "generated" || status === "reviewing";
 }
 
@@ -323,32 +329,63 @@ function buildPreTradeRiskCheck(input: {
     const maxOrderPctOfNav = Math.max(0, input.constraints.maxOrderPctOfNav) * 100;
     const maxConcentrationPct = Math.max(0, input.risk.maxConcentrationPct) * 100;
     const stopLossPct = Math.max(0, input.risk.perAssetStopLossPct) * 100;
-    const targetWeights = input.assetUniverse
-        .filter((row) => row.watchEnabled && row.targetWeightPct > 0)
-        .map((row) => ({ symbol: row.symbol, targetWeightPct: row.targetWeightPct }));
-    const maxTarget = targetWeights.reduce((max, row) => Math.max(max, row.targetWeightPct), 0);
-    const maxTargetRow = targetWeights.find((row) => row.targetWeightPct === maxTarget);
+    const currentValueByAssetKey = new Map<string, number>();
+    const symbolByAssetKey = new Map<string, string>();
+    for (const row of input.assetUniverse) {
+        currentValueByAssetKey.set(row.assetKey, Math.max(0, toFinite(row.valuationBase, 0)));
+        symbolByAssetKey.set(row.assetKey, row.symbol);
+    }
+    for (const proposal of input.proposals) {
+        const currentValue = currentValueByAssetKey.get(proposal.assetKey) || 0;
+        const proposalNotional = Math.max(0, toFinite(proposal.suggestedNotional, 0));
+        const delta = proposal.side === "BUY" ? proposalNotional : -proposalNotional;
+        currentValueByAssetKey.set(proposal.assetKey, Math.max(0, currentValue + delta));
+        if (!symbolByAssetKey.has(proposal.assetKey)) {
+            symbolByAssetKey.set(proposal.assetKey, proposal.symbol);
+        }
+    }
+    const projectedAssetRows = Array.from(currentValueByAssetKey.entries())
+        .map(([assetKey, nextValue]) => ({
+        assetKey,
+        symbol: symbolByAssetKey.get(assetKey) || assetKey,
+        nextValue: Math.max(0, nextValue),
+    }))
+        .filter((row) => row.nextValue > 0);
+    const totalProjectedAssetValue = projectedAssetRows.reduce((sum, row) => sum + row.nextValue, 0);
+    const totalNotional = input.proposals.reduce((sum, row) => sum + Math.max(0, toFinite(row.suggestedNotional, 0)), 0);
+    const riskNavBase = input.totalEquity > 0
+        ? input.totalEquity
+        : Math.max(totalProjectedAssetValue, totalNotional, 1e-9);
+    const projectedWeights = projectedAssetRows.map((row) => ({
+        ...row,
+        weightPct: riskNavBase > 0 ? (row.nextValue / riskNavBase) * 100 : 0,
+    }));
+    const maxProjected = projectedWeights.reduce((max, row) => row.weightPct > max.weightPct ? row : max, {
+        assetKey: "",
+        symbol: "组合",
+        nextValue: 0,
+        weightPct: 0,
+    });
     items.push({
         rule: "max_position",
-        status: maxTarget > maxPositionLimitPct ? "block" : "pass",
-        current: maxTarget,
+        status: maxProjected.weightPct > maxPositionLimitPct ? "block" : "pass",
+        current: maxProjected.weightPct,
         limit: maxPositionLimitPct,
-        message: maxTarget > maxPositionLimitPct
-            ? `${maxTargetRow?.symbol || "标的"} 目标权重 ${maxTarget.toFixed(2)}% 超过上限 ${maxPositionLimitPct.toFixed(2)}%`
-            : `单一持仓目标权重不超过 ${maxPositionLimitPct.toFixed(2)}%`,
+        message: maxProjected.weightPct > maxPositionLimitPct
+            ? `${maxProjected.symbol || "标的"} 交易后仓位 ${maxProjected.weightPct.toFixed(2)}% 超过上限 ${maxPositionLimitPct.toFixed(2)}%`
+            : `最大单一持仓交易后仓位 ${maxProjected.weightPct.toFixed(2)}%`,
     });
-    const totalWeightPct = targetWeights.reduce((sum, row) => sum + row.targetWeightPct, 0);
+    const totalWeightPct = projectedWeights.reduce((sum, row) => sum + row.weightPct, 0);
     items.push({
         rule: "total_weight",
         status: totalWeightPct > 100.0001 ? "block" : "pass",
         current: totalWeightPct,
         limit: 100,
         message: totalWeightPct > 100.0001
-            ? `目标权重总和 ${totalWeightPct.toFixed(2)}% 超过 100%`
-            : `目标权重总和 ${totalWeightPct.toFixed(2)}%`,
+            ? `交易后已投资仓位 ${totalWeightPct.toFixed(2)}% 超过 100%`
+            : `交易后已投资仓位 ${totalWeightPct.toFixed(2)}%`,
     });
-    const totalNotional = input.proposals.reduce((sum, row) => sum + Math.max(0, row.suggestedNotional), 0);
-    const orderPctOfNav = input.totalEquity > 0 ? (totalNotional / input.totalEquity) * 100 : 0;
+    const orderPctOfNav = riskNavBase > 0 ? (totalNotional / riskNavBase) * 100 : 0;
     items.push({
         rule: "max_order_pct",
         status: orderPctOfNav > maxOrderPctOfNav ? "warn" : "pass",
@@ -358,15 +395,15 @@ function buildPreTradeRiskCheck(input: {
             ? `单日交易占比 ${orderPctOfNav.toFixed(2)}% 超过阈值 ${maxOrderPctOfNav.toFixed(2)}%`
             : `单日交易占比 ${orderPctOfNav.toFixed(2)}%`,
     });
-    const hhi = computeHhiPct(targetWeights.map((row) => row.targetWeightPct));
+    const hhi = computeHhiPct(projectedWeights.map((row) => row.weightPct));
     items.push({
         rule: "concentration",
         status: hhi > maxConcentrationPct ? "warn" : "pass",
         current: hhi,
         limit: maxConcentrationPct,
         message: hhi > maxConcentrationPct
-            ? `组合集中度(HHI) ${hhi.toFixed(2)} 超过警戒 ${maxConcentrationPct.toFixed(2)}`
-            : `组合集中度(HHI) ${hhi.toFixed(2)}`,
+            ? `交易后组合集中度(HHI) ${hhi.toFixed(2)} 超过警戒 ${maxConcentrationPct.toFixed(2)}`
+            : `交易后组合集中度(HHI) ${hhi.toFixed(2)}`,
     });
     const worstDrawdown = input.assetUniverse.reduce((worst, row) => {
         const costPerUnit = calcHoldingCostPerUnit(row);
@@ -584,19 +621,6 @@ function buildMarketFacts(marketContext: DaaMarketContext | null | undefined): s
     });
 }
 
-function pickCycleMarketRegimes(cycle: RebalanceCycle | null, fallback: DaaMarketContext | null): {
-    ruleBasedMarketRegime: DaaMarketRegime | null;
-    llmMarketRegime: DaaMarketRegime | null;
-    effectiveMarketRegime: DaaMarketRegime | null;
-} {
-    const firstDecision = cycle?.proposals.find((item) => item.decisionContext)?.decisionContext || null;
-    return {
-        ruleBasedMarketRegime: firstDecision?.ruleBasedMarketRegime || cycle?.marketContext?.regime || fallback?.regime || null,
-        llmMarketRegime: firstDecision?.llmMarketRegime || null,
-        effectiveMarketRegime: firstDecision?.effectiveMarketRegime || firstDecision?.marketRegime || cycle?.marketContext?.regime || fallback?.regime || null,
-    };
-}
-
 function mapStoreCycleReportToView(report: Awaited<ReturnType<typeof getDaaCycleReport>>): WorkbenchRebalanceCycleReport | null {
     if (!report)
         return null;
@@ -706,68 +730,6 @@ function priceAgeSec(ts: string | null): number | null {
     if (!Number.isFinite(ms))
         return null;
     return Math.max(0, Math.floor((Date.now() - ms) / 1000));
-}
-
-function buildRecommendationRows(input: {
-    result: UnifiedDecisionResult;
-    decisionId: string | null;
-    assetRows: Awaited<ReturnType<typeof listDaaAssetUniverse>>;
-}): WorkbenchRecommendation[] {
-    const priceByAssetKey = new Map<string, number>();
-    for (const row of input.assetRows) {
-        const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-        if (price > 0)
-            priceByAssetKey.set(row.assetKey, price);
-    }
-    const opportunityByAssetKey = new Map<string, UnifiedDecisionResult["opportunityPanel"]["opportunities"][number]>();
-    for (const opp of input.result.opportunityPanel.opportunities) {
-        const symbol = normalizeDaaSymbol(opp.symbol);
-        if (!symbol)
-            continue;
-        const matched = input.assetRows.find((row) => normalizeDaaSymbol(row.symbol) === symbol);
-        if (matched) {
-            opportunityByAssetKey.set(matched.assetKey, opp);
-        }
-    }
-    return input.result.plan.executableOrders.map((order, index) => {
-        const parsed = parseDaaAssetKey(order.assetKey || order.symbol);
-        const symbol = normalizeDaaSymbol(parsed?.symbol || order.symbol);
-        const market = normalizeText(parsed?.market || order.market || "US").toUpperCase() || "US";
-        const assetKey = parsed ? `${parsed.market}::${parsed.symbol}` : `${market}::${symbol}`;
-        const currency = normalizeDaaCurrencyCode(order.instrumentCurrency, "USD");
-        const suggestedNotional = toPositive(order.notional, 0);
-        const price = toPositive(order.price, 0) || priceByAssetKey.get(assetKey) || 0;
-        const suggestedQty = toPositive(order.qty, 0) || (price > 0 ? suggestedNotional / price : 0);
-        const opp = opportunityByAssetKey.get(assetKey);
-        return {
-            id: `${assetKey}-${order.side}-${index + 1}`,
-            assetKey,
-            symbol,
-            market,
-            currency,
-            side: order.side,
-            suggestedNotional,
-            suggestedQty,
-            price,
-            reasons: Array.isArray(order.cappedBy) ? order.cappedBy.slice(0, 4) : [],
-            decisionRefId: input.decisionId,
-            action: opp?.action || "watch",
-            actionLabelZh: actionLabelZh(opp?.action || "watch"),
-            reasonZh: reasonZh(opp?.reasons || []),
-            riskZh: riskZh(toPositive(opp?.riskScorePct, 50), opp?.reasons || []),
-        } satisfies WorkbenchRecommendation;
-    });
-}
-
-function buildBlockedReasons(result: UnifiedDecisionResult): string[] {
-    const byReason = new Map<string, number>();
-    for (const row of result.plan.blockedOrders || []) {
-        const reason = normalizeText(row.blockedBy);
-        if (!reason)
-            continue;
-        byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
-    }
-    return [...byReason.entries()].map(([reason, count]) => `${reason} (${count})`);
 }
 
 function buildWorkbenchMarketDataHealth(input: {
@@ -1067,26 +1029,6 @@ function toCycleReportSnapshot(bootstrap: WorkbenchBootstrap) {
     };
 }
 
-export function normalizeExecutionLogFilters(input: {
-    status?: unknown;
-    source?: unknown;
-    limit?: unknown;
-}): {
-    status?: "ready" | "executed" | "canceled" | "rejected";
-    source?: "manual" | "decision";
-    limit: number;
-} {
-    const statusText = normalizeText(input.status).toLowerCase();
-    const status = statusText === "ready" || statusText === "executed" || statusText === "canceled" || statusText === "rejected"
-        ? statusText
-        : undefined;
-    const sourceText = normalizeText(input.source).toLowerCase();
-    const source = sourceText === "manual" || sourceText === "decision" ? sourceText : undefined;
-    const limitRaw = Math.trunc(toFinite(input.limit, 200));
-    const limit = Math.max(1, Math.min(500, limitRaw || 200));
-    return { status, source, limit };
-}
-
 export function normalizeTradeSide(value: unknown): "BUY" | "SELL" | null {
     const side = normalizeText(value).toUpperCase();
     if (side === "BUY" || side === "SELL")
@@ -1191,44 +1133,28 @@ export {
   toFinite,
   toPositive,
   normalizeText,
-  pickArray,
-  actionLabelZh,
-  reasonZh,
-  riskZh,
-  toPct,
   toIsoByMs,
   normalizeTimeZoneOrUtc,
-  toUtcMinuteOfDay,
   isPastUtcTime,
   getZonedYmd,
   isCalendarMonthDue,
   buildCalendarPeriodKey,
   nextCalendarDueDate,
-  buildHfSignalSummary,
   buildHfSignalMap,
-  computeHhiPct,
   buildPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
   buildManualPreTradeRiskCheck,
   mapStoreCycleToView,
   buildMarketFacts,
-  pickCycleMarketRegimes,
   mapStoreCycleReportToView,
   buildTargetWeightsFromConfig,
   computeTotalEquity,
   priceAgeSec,
-  buildRecommendationRows,
-  buildBlockedReasons,
   buildWorkbenchMarketDataHealth,
   buildCycleDraftFromBootstrap,
-  buildTriggerEventIdempotencyKey,
   appendTriggerEventSafe,
   calcHoldingCostPerUnit,
   buildRiskCycleDraft,
-  calcPortfolioHhiPct,
-  calcMaxWeightPct,
-  calcMaxDriftPct,
-  calcMaxDrawdownPct,
   toCycleReportSnapshot,
 };

@@ -31,11 +31,11 @@ export type ProposalDecisionContext = {
   finalQtyMultiplier: number;
 };
 
-export type FusedProposal = RebalanceProposal & {
+type FusedProposal = RebalanceProposal & {
   decisionContext: ProposalDecisionContext;
 };
 
-export type DecisionFusionInput = {
+type DecisionFusionInput = {
   draftProposals: RebalanceProposal[];
   fusedOpportunities: DaaFusedOpportunity[];
   llmDecision: LlmDecisionOutput;
@@ -53,7 +53,7 @@ export type DecisionFusionInput = {
   }>;
 };
 
-export type DecisionFusionResult = {
+type DecisionFusionResult = {
   proposals: FusedProposal[];
   marketRegime: DaaMarketRegime | null;
   overallConfidence: number;

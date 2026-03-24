@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { getTradesReadModel } from "@/src/daa/modules/read/readApi";
 import type { TradesReadModel } from "@/src/daa/modules/read/readModels";
-
-const DAA_DASHBOARD_REFRESH_EVENT_ = "daa:dashboard:refresh";
+import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 
 export type TradeTab = "cycles" | "orders" | "reports";
 
@@ -44,17 +43,7 @@ export function useTradesModel(input: {
     }
   }, [reportLimit, tradeLimit]);
 
-  useEffect(() => {
-    void load(false);
-  }, [load]);
-
-  useEffect(() => {
-    function onRefresh() {
-      void load(true);
-    }
-    window.addEventListener(DAA_DASHBOARD_REFRESH_EVENT_, onRefresh);
-    return () => window.removeEventListener(DAA_DASHBOARD_REFRESH_EVENT_, onRefresh);
-  }, [load]);
+  useDashboardAutoRefresh(load);
 
   const cycles = useMemo(
     () => [...(data?.records.cycles || [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),

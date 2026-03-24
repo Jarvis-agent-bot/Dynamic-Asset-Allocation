@@ -1,13 +1,13 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
 
-export type CorrelationPair = {
+type CorrelationPair = {
   symbolA: string;
   symbolB: string;
   correlation: number;
   dataPoints: number;
 };
 
-export type CorrelationMatrixResult = {
+type CorrelationMatrixResult = {
   pairs: CorrelationPair[];
   maxCorrelation: number;
   maxCorrelationPair: { symbolA: string; symbolB: string } | null;

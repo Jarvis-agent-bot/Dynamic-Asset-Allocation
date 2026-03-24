@@ -1,4 +1,4 @@
-import type { DeepLedgerTone } from "@/app/daa/dashboard/_components/DeepLedgerUI";
+import type { DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export function cycleStatusLabel(status: RebalanceCycle["status"]): string {
@@ -25,7 +25,7 @@ export function marketRegimeLabel(regime: string | null | undefined): string {
   return "待计算";
 }
 
-export function marketRegimeTone(regime: string | null | undefined): DeepLedgerTone {
+export function marketRegimeTone(regime: string | null | undefined): DaaSurfaceTone {
   if (regime === "risk_off") return "amber";
   if (regime === "risk_on") return "green";
   if (regime === "transitional") return "indigo";
@@ -38,13 +38,13 @@ export function riskStatusLabel(status: PreTradeRiskCheck["overallStatus"]) {
   return "通过";
 }
 
-export function riskOverallTone(status: PreTradeRiskCheck["overallStatus"]): DeepLedgerTone {
+export function riskOverallTone(status: PreTradeRiskCheck["overallStatus"]): DaaSurfaceTone {
   if (status === "block") return "red";
   if (status === "warn") return "amber";
   return "green";
 }
 
-export function cycleStatusTone(status: RebalanceCycle["status"]): DeepLedgerTone {
+export function cycleStatusTone(status: RebalanceCycle["status"]): DaaSurfaceTone {
   if (status === "completed") return "green";
   if (status === "executing") return "indigo";
   if (status === "cancelled") return "slate";
@@ -67,7 +67,7 @@ export function riskItemStatusLabel(status: "pass" | "warn" | "block"): string {
   return "通过";
 }
 
-export function riskItemTone(status: "pass" | "warn" | "block"): DeepLedgerTone {
+export function riskItemTone(status: "pass" | "warn" | "block"): DaaSurfaceTone {
   if (status === "block") return "red";
   if (status === "warn") return "amber";
   return "green";

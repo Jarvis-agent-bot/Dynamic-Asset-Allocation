@@ -60,7 +60,6 @@ export async function requestApi<T>(
   opts: RequestApiOptions = {},
 ): Promise<{ response: Response; payload: ApiResponse<T> }> {
   const fallbackCode = opts.fallbackErrorCode ?? "UNKNOWN";
-  const fallbackMessage = opts.fallbackErrorMessage ?? "request_failed";
 
   let response: Response;
   try {

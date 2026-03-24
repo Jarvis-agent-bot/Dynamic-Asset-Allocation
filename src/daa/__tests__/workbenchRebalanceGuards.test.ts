@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
+import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -17,17 +18,6 @@ import {
   saveDaaSystemConfig,
   upsertDaaAssetUniverseRow,
 } from "@/src/daa/store/daaStorePg";
-
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMemRuntime() {
-  process.env.DAA_PG_MEM = "1";
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-  delete (globalThis as any)[PG_GLOBAL_KEY];
-  delete (globalThis as any)[STORE_GLOBAL_KEY];
-}
 
 async function createCycle(status: "generated" | "completed") {
   return createDaaRebalanceCycle({
@@ -249,4 +239,3 @@ describe("workbench-rebalance-guards-v1", () => {
     expect(generated.cycle?.triggerSource).toBe("drift");
   }, 20000);
 });
-

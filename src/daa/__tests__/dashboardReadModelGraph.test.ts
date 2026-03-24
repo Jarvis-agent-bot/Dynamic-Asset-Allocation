@@ -17,7 +17,7 @@ describe("dashboard-read-model-graph-v1", () => {
 
     const offenders = files
       .map((file) => ({ file, content: read(file) }))
-      .filter(({ content }) => /getWorkbenchBootstrap|listWorkbenchTradeRecords|listWorkbenchRebalanceReports|listWorkbenchRebalanceCycles/.test(content))
+      .filter(({ content }) => /listWorkbenchTradeRecords|listWorkbenchRebalanceReports|listWorkbenchRebalanceCycles/.test(content))
       .map(({ file }) => path.relative(root, file).replace(/\\/g, "/"));
 
     expect(offenders).toEqual([]);

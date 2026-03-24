@@ -48,14 +48,14 @@ function normalizeAssetClassFilter(value: unknown): FeaturedAssetClassFilter {
   const text = normalizeText(value).toUpperCase();
   if (text === "ALL") return "ALL";
   const normalized = normalizeAssetClass(text, "EQUITY");
-  if (normalized === "EQUITY" || normalized === "ETF" || normalized === "BOND" || normalized === "COMMODITY" || normalized === "CRYPTO") {
+  if (normalized === "EQUITY" || normalized === "ETF" || normalized === "BOND" || normalized === "COMMODITY" || normalized === "CRYPTO" || normalized === "CURRENCY") {
     return normalized;
   }
   return "EQUITY";
 }
 
 function quoteType(assetClass: WorkbenchFeaturedAssetClass): string {
-  if (assetClass === "ETF" || assetClass === "COMMODITY") return "ETF";
+  if (assetClass === "ETF" || assetClass === "COMMODITY" || assetClass === "CURRENCY") return "ETF";
   if (assetClass === "BOND") return "BOND";
   if (assetClass === "CRYPTO") return "CRYPTOCURRENCY";
   return "EQUITY";
@@ -66,6 +66,7 @@ function typeDisp(assetClass: WorkbenchFeaturedAssetClass): string {
   if (assetClass === "BOND") return "债券";
   if (assetClass === "COMMODITY") return "商品";
   if (assetClass === "CRYPTO") return "加密资产";
+  if (assetClass === "CURRENCY") return "货币";
   return "股票";
 }
 

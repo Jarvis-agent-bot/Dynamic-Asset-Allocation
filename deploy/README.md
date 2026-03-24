@@ -12,7 +12,7 @@ chmod +x deploy/start.sh
 ./deploy/start.sh
 ```
 
-脚本拉取最新 `main`、重建镜像并重启服务。
+脚本会优先把 `.env.local` 作为 `docker compose --env-file` 的输入，再拉取最新 `main`、重建镜像并重启服务。
 
 ## 端口与反向代理
 
@@ -33,3 +33,38 @@ Cron 端点（价格刷新 / 漂移检查）建议通过 Vercel Cron 或外部�
 
 - `GET /api/daa/cron/price-refresh`
 - `GET /api/daa/cron/drift-check`
+
+## Telegram 对话助手
+
+如果要启用 Telegram 入站对话，而不只是出站通知，还需要补齐：
+
+```bash
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=7567255792
+TELEGRAM_WEBHOOK_SECRET=replace-with-random-secret
+TELEGRAM_ALLOWLIST=7567255792,7567255792:123456789
+```
+
+说明：
+
+- `TELEGRAM_CHAT_ID` 继续作为默认通知接收人。
+- `TELEGRAM_WEBHOOK_SECRET` 用于校验 Telegram 发来的 webhook 请求头。
+- `TELEGRAM_ALLOWLIST` 用于限制哪些 chat / user 可以和助手对话；支持 `chatId`、`userId`、`chatId:userId` 三种写法。
+- 当前执行类命令采用“先待确认，再执行”的模式；用户发出“买入 / 卖出 / 执行调仓”后，必须再回复一次“确认”。
+
+Webhook 配置示例：
+
+```bash
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  -H "content-type: application/json" \
+  -d '{
+    "url": "https://your-domain.example.com/api/daa/chat/telegram/webhook",
+    "secret_token": "'"${TELEGRAM_WEBHOOK_SECRET}"'"
+  }'
+```
+
+建议再检查一次：
+
+- 反向代理已放行 `POST /api/daa/chat/telegram/webhook`
+- 线上 `telegram_bot_token`、`telegram_chat_id`、`telegram_webhook_secret`、`telegram_allowlist` 均已配置
+- Bot 已通过 `setWebhook` 指向正确域名

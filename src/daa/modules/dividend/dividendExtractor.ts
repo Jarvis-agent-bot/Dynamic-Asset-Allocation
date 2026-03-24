@@ -28,9 +28,6 @@ export async function extractDividendsFromRawPayloads(input: {
   if (tableCheck.length === 0) return { extracted: 0, symbols: [] };
 
   // Build subject_key filter from symbols (e.g. ["SPY","QQQ"] → subject_key IN ('US::SPY','US::QQQ',...))
-  const symbolFilter = input.symbols && input.symbols.length > 0
-    ? `AND subject_key = ANY($2)`
-    : "";
   const params: unknown[] = [cutoff];
   if (input.symbols && input.symbols.length > 0) {
     // subject_key format is "MARKET::SYMBOL" — we don't know the market, so match by suffix

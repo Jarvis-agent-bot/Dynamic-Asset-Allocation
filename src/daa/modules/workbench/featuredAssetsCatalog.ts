@@ -1,7 +1,7 @@
 export type WorkbenchFeaturedMarket = "US" | "HK" | "CN" | "CRYPTO";
-export type WorkbenchFeaturedAssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CRYPTO";
+export type WorkbenchFeaturedAssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CRYPTO" | "CURRENCY";
 
-export type WorkbenchFeaturedCatalogItem = {
+type WorkbenchFeaturedCatalogItem = {
   symbol: string;
   market: WorkbenchFeaturedMarket;
   assetClass: WorkbenchFeaturedAssetClass;
@@ -75,4 +75,13 @@ export const WORKBENCH_FEATURED_ASSETS_CATALOG_: WorkbenchFeaturedCatalogItem[] 
   { symbol: "BTC-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Bitcoin", currency: "USD", exchange: "CRYPTO", thesisTagZh: "加密市场锚资产" },
   { symbol: "ETH-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Ethereum", currency: "USD", exchange: "CRYPTO", thesisTagZh: "智能合约核心" },
   { symbol: "SOL-USD", market: "CRYPTO", assetClass: "CRYPTO", name: "Solana", currency: "USD", exchange: "CRYPTO", thesisTagZh: "高性能公链" },
+
+  { symbol: "UUP", market: "US", assetClass: "CURRENCY", name: "Invesco DB US Dollar Index Bullish Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "美元指数多头" },
+  { symbol: "UDN", market: "US", assetClass: "CURRENCY", name: "Invesco DB US Dollar Index Bearish Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "美元指数空头" },
+  { symbol: "FXE", market: "US", assetClass: "CURRENCY", name: "Invesco CurrencyShares Euro Trust", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "欧元敞口" },
+  { symbol: "FXY", market: "US", assetClass: "CURRENCY", name: "Invesco CurrencyShares Japanese Yen Trust", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "日元避险敞口" },
+  { symbol: "FXB", market: "US", assetClass: "CURRENCY", name: "Invesco CurrencyShares British Pound Trust", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "英镑敞口" },
+  { symbol: "FXA", market: "US", assetClass: "CURRENCY", name: "Invesco CurrencyShares Australian Dollar Trust", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "澳元商品货币" },
+  { symbol: "CYB", market: "US", assetClass: "CURRENCY", name: "WisdomTree Chinese Yuan Strategy Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "人民币汇率敞口" },
+  { symbol: "CEW", market: "US", assetClass: "CURRENCY", name: "WisdomTree Emerging Currency Strategy Fund", currency: "USD", exchange: "NYSE ARCA", thesisTagZh: "新兴市场货币篮子" },
 ];

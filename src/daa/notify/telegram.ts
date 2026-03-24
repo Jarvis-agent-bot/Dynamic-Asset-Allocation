@@ -19,11 +19,13 @@ export async function sendTelegramMessage(opts: {
   botToken: string;
   chatId: string;
   text: string;
-  parseMode?: "HTML" | "Markdown";
+  parseMode?: "HTML" | "Markdown" | null;
+  replyToMessageId?: string | number | null;
 }): Promise<TelegramSendResult> {
   const botToken = String(opts.botToken || "").trim();
   const chatId = String(opts.chatId || "").trim();
   const text = String(opts.text || "").trim();
+  const replyToMessageId = opts.replyToMessageId == null ? null : String(opts.replyToMessageId).trim();
   if (!botToken || !chatId || !text) {
     return {
       ok: false,
@@ -44,7 +46,8 @@ export async function sendTelegramMessage(opts: {
       body: JSON.stringify({
         chat_id: chatId,
         text,
-        parse_mode: opts.parseMode || "Markdown",
+        ...(opts.parseMode === null ? {} : { parse_mode: opts.parseMode || "Markdown" }),
+        ...(replyToMessageId ? { reply_to_message_id: Number(replyToMessageId) } : {}),
         disable_web_page_preview: true,
       }),
       cache: "no-store",

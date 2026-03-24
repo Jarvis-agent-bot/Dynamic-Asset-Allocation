@@ -1,18 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { getDaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
-
-const PG_GLOBAL_KEY = "__daa_pg_state_v0__";
-const STORE_GLOBAL_KEY = "__daa_store_pg_state_v0__";
-
-function resetPgMemRuntime() {
-  process.env.DAA_PG_MEM = "1";
-  delete process.env.DAA_DB_URL;
-  delete process.env.DATABASE_URL;
-  delete (globalThis as Record<string, unknown>)[PG_GLOBAL_KEY];
-  delete (globalThis as Record<string, unknown>)[STORE_GLOBAL_KEY];
-}
 
 describe("ledger-meta-v1", () => {
   beforeEach(() => {

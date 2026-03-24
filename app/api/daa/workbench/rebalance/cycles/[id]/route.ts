@@ -1,6 +1,5 @@
-import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
+import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { getDaaRebalanceCycle } from "@/src/daa/store/daaStorePg";
 import { WorkbenchDomainError } from "@/src/daa/modules/workbench/workbenchErrors";
 import { updateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
@@ -24,19 +23,6 @@ function readCancelReason(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   const record = value as Record<string, unknown>;
   return String(record.reason || "").trim();
-}
-
-export async function GET(req: Request, { params }: Params) {
-  return withApiHandler(async () => {
-    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
-    if (denied) return denied;
-
-    const cycle = await getDaaRebalanceCycle(params.id);
-    if (!cycle) {
-      return fail("NOT_FOUND", "cycle not found", { status: 404 });
-    }
-    return ok(cycle);
-  });
 }
 
 export async function PATCH(req: Request, { params }: Params) {

@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   }
 
   const email = typeof body?.email === "string" ? body.email.trim() : "";
-  // Support legacy "username" field for backward compatibility
+  // 兼容旧请求里仍然传来的 username 字段
   const emailOrUsername = email || (typeof body?.username === "string" ? body.username.trim() : "");
   const password = typeof body?.password === "string" ? body.password : "";
   const returnTo = normalizeDaaReturnTo(body?.returnTo);
