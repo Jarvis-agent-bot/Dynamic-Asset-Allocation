@@ -34,6 +34,7 @@ const ASSET_CLASS_OPTIONS_ = [
   { value: "COMMODITY", label: "商品" },
   { value: "BOND", label: "债券" },
   { value: "CRYPTO", label: "加密" },
+  { value: "CURRENCY", label: "货币" },
 ] as const;
 
 const MARKET_OPTIONS_ = [
@@ -51,6 +52,7 @@ function assetClassLabelZh(value: string): string {
   if (key === "BOND") return "债券";
   if (key === "COMMODITY") return "商品";
   if (key === "CRYPTO") return "加密资产";
+  if (key === "CURRENCY") return "货币";
   if (key === "FUND") return "基金";
   if (key === "INDEX") return "指数";
   return key || "其他";
