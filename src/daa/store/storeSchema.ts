@@ -185,10 +185,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
       await query("BEGIN");
       try {
         const archivedLedgerV1 = ([
-          await archiveTableAsV1Snapshot(query as any, "daa_account_state"),
-          await archiveTableAsV1Snapshot(query as any, "daa_cash_ledger"),
-          await archiveTableAsV1Snapshot(query as any, "daa_equity_snapshots"),
-          await archiveTableAsV1Snapshot(query as any, "daa_positions"),
+          await archiveTableToLegacy(query as any, "daa_account_state"),
+          await archiveTableToLegacy(query as any, "daa_cash_ledger"),
+          await archiveTableToLegacy(query as any, "daa_equity_snapshots"),
+          await archiveTableToLegacy(query as any, "daa_positions"),
         ]).some(Boolean);
 
         await query(`

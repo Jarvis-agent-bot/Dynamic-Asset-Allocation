@@ -9,8 +9,10 @@ import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { buildDaaAssetKey, parseDaaAssetKey } from "@/src/daa/assetKey";
 import { resolveInvestableCash as resolveRuntimeInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import {
-  withDaaPgClient, parseJsonb, toIsoString, isPgUniqueViolation, isRecord, type DaaTxQueryFn,
+  withDaaPgClient, parseJsonb, toIsoString, isPgUniqueViolation, isRecord, toBoolean, clampNumber, type DaaTxQueryFn,
 } from "./storeShared";
+import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type { ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
 import type {
   DaaStoreTradeBasket, DaaStoreTradeBasketSource, DaaStoreTradeBasketStatus,
   DaaStoreTradeTicket, DaaStoreTradeTicketSource, DaaStoreTradeTicketStatus,
@@ -18,9 +20,20 @@ import type {
   DaaStoreExecuteTradeTicketsInput, DaaStoreExecuteTradeTicketsResult,
   DaaStorePosition, DaaStoreEquitySnapshot, DaaStoreCashLedgerSide,
   DaaStoreRebalanceDecision, DaaStoreBrokerKind, DaaStoreBrokerOrderSnapshot,
+  DaaStoreFxRate, DaaStoreCashLedgerEntry, DaaStoreCashLedgerEntryKind,
+  DaaStoreCashLedgerApplyInput, DaaCurrentLedgerMeta,
+  DaaStoreRebalanceCycle, DaaStoreCreateRebalanceCycleInput,
+  DaaStorePatchRebalanceCycleInput, DaaStoreCycleReport,
+  DaaStoreTriggerEvent, DaaStoreLlmFeedback,
+  DaaStoreRebalanceTriggerSource,
+  DaaStorePreTradeRiskCheck, DaaStorePreTradeRiskCheckItem,
 } from "./storeTypes";
+import type { DaaMarketContext, DaaMarketRegime, DaaMarketIndicatorSnapshot, DaaMarketIndicatorScope } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type { DaaStoreMarketIndicatorSnapshot, DaaStoreRebalanceCycleStatus, DaaStoreRiskRule } from "@/src/daa/store/storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
-import { buildFxLookupMap, resolveFxRateToBase, normalizeCcyCode } from "./fxStore";
+import { buildFxLookupMap, resolveFxRateToBase, normalizeCcyCode, normalizeFxPair } from "./fxStore";
+import { getCurrentLedgerStartTsInTx } from "./cashLedgerStore";
+import { mapBrokerOrderStatusToTradeTicketStatus } from "@/src/daa/broker/brokerOrderStatus";
 import { buildPortfolioSnapshotFromAssetUniverseInTx } from "./portfolioStore";
 import {
   syncStrategyAccountCashInTx, ensureAccountStateRowInTx, getAccountStateForUpdateInTx,
@@ -45,7 +58,7 @@ function normalizeTradeTicketStatus(value: unknown): DaaStoreTradeTicketStatus {
   return "ready";
 }
 
-function normalizeBrokerKind(value: unknown): DaaStoreBrokerKind | null {
+export function normalizeBrokerKind(value: unknown): DaaStoreBrokerKind | null {
   const text = normalizeText(value).toLowerCase();
   if (!text) return null;
   if (text === "sim") return "sim";
@@ -148,10 +161,6 @@ const TRADE_TICKET_SELECT_COLUMNS_ = [
   "canceled_at",
   "updated_at",
 ].join(", ");
-
-function isPgUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && (error as { code?: unknown }).code === "23505");
-}
 
 function mapTradeBasketRow(row: Record<string, unknown>): DaaStoreTradeBasket {
   return {
@@ -557,7 +566,7 @@ function normalizeProposalDecisionContext(value: unknown): ProposalDecisionConte
   };
 }
 
-function normalizeMarketIndicatorScopeStore(value: unknown): DaaMarketIndicatorSnapshot["scope"] {
+function normalizeMarketIndicatorScopeStore(value: unknown): DaaMarketIndicatorScope {
   const text = normalizeText(value, "us_equity").toLowerCase();
   if (text === "hk_cn_equity") return "hk_cn_equity";
   if (text === "crypto") return "crypto";
@@ -578,7 +587,7 @@ function normalizeMarketIndicatorSnapshotJson(value: unknown): DaaMarketIndicato
     riskOffScorePct: clampNumber(toFiniteNumber(value.riskOffScorePct, 50), 0, 100),
     confidencePct: clampNumber(toFiniteNumber(value.confidencePct, 40), 0, 100),
     rawValue: value.rawValue == null ? null : toFiniteNumber(value.rawValue, 0),
-    unit: value.unit == null ? undefined : normalizeText(value.unit) || undefined,
+    unit: value.unit == null ? undefined : (normalizeText(value.unit) || undefined),
     percentile252: value.percentile252 == null ? null : toFiniteNumber(value.percentile252, 0),
     zscore60: value.zscore60 == null ? null : toFiniteNumber(value.zscore60, 0),
     trend1dPct: value.trend1dPct == null ? null : toFiniteNumber(value.trend1dPct, 0),
@@ -868,7 +877,7 @@ function mapFxRateRow(row: Record<string, unknown>): DaaStoreFxRate {
   };
 }
 
-export async function listDaaFxRates(): Promise<DaaStoreFxRate[]> {
+async function listDaaFxRates(): Promise<DaaStoreFxRate[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
@@ -878,7 +887,7 @@ export async function listDaaFxRates(): Promise<DaaStoreFxRate[]> {
   });
 }
 
-export async function replaceDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Promise<DaaStoreFxRate[]> {
+async function replaceDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Promise<DaaStoreFxRate[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     await query("BEGIN");
@@ -919,7 +928,7 @@ export async function replaceDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): P
   });
 }
 
-export async function upsertDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Promise<DaaStoreFxRate[]> {
+async function upsertDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Promise<DaaStoreFxRate[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     await query("BEGIN");
@@ -983,7 +992,7 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
   };
 }
 
-export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCashLedgerEntry[]> {
+async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCashLedgerEntry[]> {
   await ensureDaaStoreSchemaPg();
   const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
   return withDaaPgClient(async ({ query }) => {
@@ -1000,12 +1009,12 @@ export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCas
   });
 }
 
-export async function getDaaLedgerStartTs(): Promise<string | null> {
+async function getDaaLedgerStartTs(): Promise<string | null> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => getCurrentLedgerStartTsInTx(query as DaaTxQueryFn));
 }
 
-export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
+async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const ledgerStartTs = await getCurrentLedgerStartTsInTx(query as DaaTxQueryFn);
@@ -1067,7 +1076,7 @@ export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
   });
 }
 
-export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInput): Promise<{
+async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInput): Promise<{
   entry: DaaStoreCashLedgerEntry;
   account: {
     baseCurrency: string;

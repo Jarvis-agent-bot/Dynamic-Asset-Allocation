@@ -29,6 +29,14 @@ import type {
 } from "./storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
 
+function normalizeBrokerKind(value: unknown): DaaStoreBrokerKind | null {
+  const text = normalizeText(value).toLowerCase();
+  if (!text) return null;
+  if (text === "sim") return "sim";
+  if (text === "crypto" || text === "crypto_paper") return "crypto_paper";
+  return "sim";
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

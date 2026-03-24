@@ -45,7 +45,7 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
   };
 }
 
-async function getCurrentLedgerStartTsInTx(query: DaaTxQueryFn): Promise<string | null> {
+export async function getCurrentLedgerStartTsInTx(query: DaaTxQueryFn): Promise<string | null> {
   const result = await query(
     `SELECT ts
      FROM daa_portfolio_ledger_events

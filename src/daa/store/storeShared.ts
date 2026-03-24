@@ -97,7 +97,7 @@ export async function hasTableColumn(query: SchemaQueryFn, tableName: string, co
 import { normalizeText } from "@/src/daa/utils/normalize";
 
 function buildLegacyTableName(tableName: string): string {
-  return `${normalizeText(tableName).toLowerCase()}_legacy_v1`;
+  return `${normalizeText(tableName).toLowerCase()}_archived_v1`;
 }
 
 export async function archiveTableToLegacy(query: SchemaQueryFn, tableName: string): Promise<boolean> {

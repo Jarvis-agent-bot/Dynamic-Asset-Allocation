@@ -473,6 +473,11 @@ export type DaaStoreExecuteTradeTicketsResult = {
 
 export type DaaStoreRiskRule =
   | "max_position"
+  | "max_order_pct"
+  | "concentration"
+  | "correlation"
+  | "stop_loss_breach"
+  | "total_weight"
 
 export type DaaStorePreTradeRiskCheckItem = {
   rule: DaaStoreRiskRule;

@@ -1,5 +1,6 @@
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 "use client";
+
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 // Best-effort clipboard helper for user-initiated actions.
 // Falls back to `execCommand('copy')` for environments where Clipboard API is unavailable.

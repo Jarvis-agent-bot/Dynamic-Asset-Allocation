@@ -2,7 +2,7 @@
  * Market-cache store functions.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { DaaMarketIndicatorKey, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
@@ -15,9 +15,27 @@ import type {
   DaaStoreNewsItemSnapshot, DaaStoreNewsSignalSnapshot,
   DaaStoreMarketIndicatorSnapshot, DaaStoreHfHoldingSnapshot, DaaStoreHfSignalSnapshot,
   DaaStoreIngestJobStatus,
+  DaaStoreExternalPayloadRaw,
+  DaaStoreIngestJobLog,
 } from "./storeTypes";
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
 import { normalizeMarketIndicatorKey, normalizeMarketRegimeStore } from "./rebalanceCycleStore";
+
+const RAW_PAYLOAD_SELECT_COLUMNS_ = [
+  "id",
+  "provider",
+  "resource",
+  "subject_key",
+  "request_url",
+  "request_json",
+  "response_status",
+  "response_headers_json",
+  "payload_json",
+  "payload_text",
+  "fetched_at",
+  "expire_at",
+  "created_at",
+].join(", ");
 
 const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_ = [
   "id",
@@ -233,222 +251,7 @@ function mapIngestJobLogRow(row: Record<string, unknown>): DaaStoreIngestJobLog 
   };
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  if (value <= min) return min;
-  if (value >= max) return max;
-  return value;
-}
-
-export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
-  const st = getStoreState();
-  if (st.marketCacheSchemaInit) {
-    await st.marketCacheSchemaInit;
-    return;
-  }
-  st.marketCacheSchemaInit = withDaaPgClient(async ({ query }) => {
-    await query("BEGIN");
-    try {
-      await query(`
-        CREATE TABLE IF NOT EXISTS daa_market_price_snapshot (
-          provider TEXT NOT NULL,
-          market TEXT NOT NULL,
-          symbol TEXT NOT NULL,
-          normalized_symbol TEXT NOT NULL,
-          currency TEXT NOT NULL DEFAULT 'USD',
-          price NUMERIC NOT NULL DEFAULT 0,
-          status TEXT NOT NULL CHECK (status IN ('fresh','stale','missing','error','unsupported')),
-          as_of_ts TIMESTAMPTZ,
-          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          source TEXT NOT NULL DEFAULT 'market_cache',
-          error_code TEXT,
-          error_message TEXT,
-          raw_ref_id TEXT,
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (provider, market, symbol)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_daa_market_price_snapshot_status_fetched_desc
-          ON daa_market_price_snapshot(status, fetched_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_daa_market_price_snapshot_market_symbol
-          ON daa_market_price_snapshot(market, symbol);
-
-        CREATE TABLE IF NOT EXISTS daa_market_price_history_v1 (
-          provider TEXT NOT NULL,
-          market TEXT NOT NULL,
-          symbol TEXT NOT NULL,
-          as_of_ts TIMESTAMPTZ NOT NULL,
-          price NUMERIC NOT NULL,
-          currency TEXT NOT NULL DEFAULT 'USD',
-          source TEXT NOT NULL DEFAULT 'market_cache',
-          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          raw_ref_id TEXT,
-          PRIMARY KEY (provider, market, symbol, as_of_ts)
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_market_price_history_v1_symbol_asof_desc
-          ON daa_market_price_history_v1(symbol, as_of_ts DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_fx_rate_history_v1 (
-          provider TEXT NOT NULL,
-          base_ccy TEXT NOT NULL,
-          quote_ccy TEXT NOT NULL,
-          as_of_ts TIMESTAMPTZ NOT NULL,
-          rate NUMERIC NOT NULL,
-          status TEXT NOT NULL CHECK (status IN ('fresh','stale','missing','error')),
-          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          error_code TEXT,
-          error_message TEXT,
-          raw_ref_id TEXT,
-          PRIMARY KEY (provider, base_ccy, quote_ccy, as_of_ts)
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_fx_rate_history_v1_pair_asof_desc
-          ON daa_fx_rate_history_v1(base_ccy, quote_ccy, as_of_ts DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_news_item_snapshot_v1 (
-          provider TEXT NOT NULL,
-          symbol TEXT NOT NULL,
-          item_hash TEXT NOT NULL,
-          title TEXT NOT NULL,
-          link TEXT,
-          published_at TIMESTAMPTZ,
-          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          sentiment_score NUMERIC NOT NULL DEFAULT 0,
-          source_credibility NUMERIC NOT NULL DEFAULT 0,
-          freshness NUMERIC NOT NULL DEFAULT 0,
-          raw_ref_id TEXT,
-          PRIMARY KEY (provider, symbol, item_hash)
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_news_item_snapshot_v1_symbol_published_desc
-          ON daa_news_item_snapshot_v1(symbol, published_at DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_news_signal_snapshot_v1 (
-          provider TEXT NOT NULL,
-          symbol TEXT NOT NULL,
-          score_pct NUMERIC NOT NULL DEFAULT 50,
-          confidence_pct NUMERIC NOT NULL DEFAULT 0,
-          evidence_count INTEGER NOT NULL DEFAULT 0,
-          reasons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (provider, symbol)
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_news_signal_snapshot_v1_generated_desc
-          ON daa_news_signal_snapshot_v1(generated_at DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_market_indicator_snapshot_v1 (
-          id TEXT PRIMARY KEY,
-          indicator_key TEXT NOT NULL,
-          scope TEXT NOT NULL DEFAULT 'portfolio',
-          subject_key TEXT NOT NULL DEFAULT 'GLOBAL',
-          stance TEXT NOT NULL DEFAULT 'neutral',
-          risk_off_score_pct NUMERIC NOT NULL DEFAULT 50,
-          confidence_pct NUMERIC NOT NULL DEFAULT 40,
-          raw_value NUMERIC,
-          unit TEXT,
-          percentile_252 NUMERIC,
-          zscore_60 NUMERIC,
-          trend_1d_pct NUMERIC,
-          trend_7d_pct NUMERIC,
-          trend_30d_pct NUMERIC,
-          source TEXT NOT NULL,
-          reasons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-          components_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-          generated_at TIMESTAMPTZ NOT NULL,
-          expire_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_market_indicator_snapshot_v1_key_generated_desc
-          ON daa_market_indicator_snapshot_v1(indicator_key, generated_at DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_hf_holding_snapshot_v1 (
-          provider TEXT NOT NULL,
-          fund_code TEXT NOT NULL,
-          report_date DATE NOT NULL,
-          symbol TEXT NOT NULL,
-          market TEXT NOT NULL,
-          weight_pct NUMERIC NOT NULL DEFAULT 0,
-          prev_weight_pct NUMERIC NOT NULL DEFAULT 0,
-          disclosed_at TIMESTAMPTZ,
-          confidence_pct NUMERIC NOT NULL DEFAULT 0,
-          source_ref TEXT,
-          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          raw_ref_id TEXT,
-          PRIMARY KEY (provider, fund_code, report_date, symbol)
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_hf_holding_snapshot_v1_symbol_report_desc
-          ON daa_hf_holding_snapshot_v1(symbol, report_date DESC);
-        CREATE INDEX IF NOT EXISTS idx_daa_hf_holding_snapshot_v1_fund_report_desc
-          ON daa_hf_holding_snapshot_v1(fund_code, report_date DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_hf_signal_snapshot_v1 (
-          provider TEXT NOT NULL,
-          symbol TEXT NOT NULL,
-          aggregated_score_pct NUMERIC NOT NULL DEFAULT 0,
-          conviction_pct NUMERIC NOT NULL DEFAULT 0,
-          thesis_drift_pct NUMERIC NOT NULL DEFAULT 0,
-          fund_count INTEGER NOT NULL DEFAULT 0,
-          funds_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-          generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (provider, symbol)
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_hf_signal_snapshot_v1_generated_desc
-          ON daa_hf_signal_snapshot_v1(generated_at DESC);
-
-        CREATE TABLE IF NOT EXISTS daa_external_payload_raw_v1 (
-          id TEXT PRIMARY KEY,
-          provider TEXT NOT NULL,
-          resource TEXT NOT NULL,
-          subject_key TEXT NOT NULL DEFAULT '',
-          request_url TEXT NOT NULL DEFAULT '',
-          request_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-          response_status INTEGER NOT NULL DEFAULT 0,
-          response_headers_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-          payload_json JSONB,
-          payload_text TEXT,
-          fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          expire_at TIMESTAMPTZ NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_external_payload_raw_v1_provider_resource_subject_fetched
-          ON daa_external_payload_raw_v1(provider, resource, subject_key, fetched_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_daa_external_payload_raw_v1_expire_at
-          ON daa_external_payload_raw_v1(expire_at);
-
-        CREATE TABLE IF NOT EXISTS daa_ingest_job_log_v1 (
-          job_id TEXT PRIMARY KEY,
-          job_type TEXT NOT NULL,
-          trigger_source TEXT NOT NULL DEFAULT 'manual',
-          status TEXT NOT NULL CHECK (status IN ('ok','partial','failed')),
-          started_at TIMESTAMPTZ NOT NULL,
-          finished_at TIMESTAMPTZ NOT NULL,
-          total_count INTEGER NOT NULL DEFAULT 0,
-          success_count INTEGER NOT NULL DEFAULT 0,
-          failure_count INTEGER NOT NULL DEFAULT 0,
-          diagnostics_json JSONB NOT NULL DEFAULT '{}'::jsonb
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_ingest_job_log_v1_job_type_started_desc
-          ON daa_ingest_job_log_v1(job_type, started_at DESC);
-      `);
-      await query("COMMIT");
-    } catch (error) {
-      try {
-        await query("ROLLBACK");
-      } catch (err) {
-        logSwallowed("marketCacheStore.rollback", err);
-      }
-      throw error;
-    }
-  });
-  try {
-    await st.marketCacheSchemaInit;
-  } catch (error) {
-    st.marketCacheSchemaInit = null;
-    throw error;
-  }
-}
-
-export async function appendDaaExternalPayloadRaw(input: {
+async function appendDaaExternalPayloadRaw(input: {
   provider: string;
   resource: string;
   subjectKey?: string;
@@ -490,7 +293,7 @@ export async function appendDaaExternalPayloadRaw(input: {
   });
 }
 
-export async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toISOString()): Promise<number> {
+async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toISOString()): Promise<number> {
   await ensureDaaMarketCacheSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(

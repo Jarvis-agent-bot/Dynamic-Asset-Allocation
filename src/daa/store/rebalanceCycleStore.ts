@@ -112,11 +112,6 @@ export function normalizeMarketRegimeStore(value: unknown): DaaMarketRegime | "n
   return "neutral";
 }
 
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => normalizeText(item)).filter(Boolean);
-}
-
 function normalizeProposalDecisionContext(value: unknown): ProposalDecisionContext | null {
   if (!isRecord(value)) return null;
   return {
