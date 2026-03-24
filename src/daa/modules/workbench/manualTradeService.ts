@@ -1,4 +1,5 @@
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionResult } from "@/src/daa/broker";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
@@ -580,8 +581,8 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       limit: 50,
     });
     syncedTicket = synced.tickets[0] || syncedTicket;
-  } catch {
-    // broker 已受理时，不因为首次同步失败阻断响应
+  } catch (err) {
+    logSwallowed("manualTradeService.syncBrokerOrders", err);
   }
 
   const logs = await listDaaTradeTickets({ limit: 200 });

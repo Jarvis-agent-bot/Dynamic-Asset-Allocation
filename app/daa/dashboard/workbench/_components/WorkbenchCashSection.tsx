@@ -21,6 +21,7 @@ import {
 } from "@/src/daa/modules/store/storeApi";
 import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
 import type { WorkbenchAccountBreakdownItem } from "@/src/daa/modules/workbench/workbenchTypes";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 const CASH_CURRENCY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "USD", label: "美元 (USD)" },
@@ -80,8 +81,8 @@ export function WorkbenchCashSection(props: {
     try {
       const entries = await listCashLedger(100);
       setCashLedger(entries);
-    } catch {
-      // silent — the table will just be empty
+    } catch (err) {
+  logSwallowed("WorkbenchCashSection.loadData", err);
     } finally {
       setLoading(false);
     }

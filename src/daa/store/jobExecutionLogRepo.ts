@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
 import { normalizeText } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaJobExecutionLog = {
   jobId: string;
@@ -41,7 +42,8 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch {
+    } catch (err) {
+      logSwallowed("jobExecutionLogRepo.parseJsonb", err);
       return null;
     }
   }

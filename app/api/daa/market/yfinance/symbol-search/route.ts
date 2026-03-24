@@ -1,5 +1,6 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -190,8 +191,8 @@ async function fetchSnapshotsBySymbols(symbols: string[]): Promise<Map<string, Q
       try {
         const snapshot = await fetchChartSnapshot(symbol);
         if (snapshot) out.set(symbol, snapshot);
-      } catch {
-        // ignore per-symbol failures
+      } catch (err) {
+  logSwallowed("symbolSearchRoute.perSymbol", err);
       }
     }),
   );

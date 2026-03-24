@@ -8,6 +8,7 @@ import { buildDailyReportText } from "@/src/daa/notify/dailyReportBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -206,8 +207,8 @@ export async function POST(req: Request) {
             }
             try {
               await Promise.allSettled(sends);
-            } catch {
-              // 通知失败不阻塞主流程
+            } catch (err) {
+  logSwallowed("dailyAnalysisRoute.notify", err);
             }
           }
 
@@ -281,8 +282,8 @@ export async function POST(req: Request) {
             }
             await Promise.allSettled(sends);
             dailyReport.sent = dailyReport.telegram || dailyReport.feishu;
-          } catch {
-            // daily report 失败不阻塞
+          } catch (err) {
+  logSwallowed("dailyAnalysisRoute.dailyReport", err);
           }
         }
 

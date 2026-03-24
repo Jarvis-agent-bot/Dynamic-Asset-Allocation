@@ -1,0 +1,261 @@
+/**
+ * Job and external-payload store functions.
+ */
+
+import { randomUUID } from "node:crypto";
+import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { withDaaPgClient, parseJsonb, toIsoString } from "./storeShared";
+import type { DaaStoreExternalPayloadRaw, DaaStoreIngestJobLog, DaaStoreIngestJobStatus } from "./storeTypes";
+import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
+
+const RAW_PAYLOAD_SELECT_COLUMNS_ = [
+  "id",
+  "provider",
+  "resource",
+  "subject_key",
+  "request_url",
+  "request_json",
+  "response_status",
+  "response_headers_json",
+  "payload_json",
+  "payload_text",
+  "fetched_at",
+  "expire_at",
+  "created_at",
+].join(", ");
+
+const INGEST_JOB_LOG_SELECT_COLUMNS_ = [
+  "job_id",
+  "job_type",
+  "trigger_source",
+  "status",
+  "started_at",
+  "finished_at",
+  "total_count",
+  "success_count",
+  "failure_count",
+  "diagnostics_json",
+].join(", ");
+
+function normalizeIngestJobStatus(value: unknown, fallback: DaaStoreIngestJobStatus = "ok"): DaaStoreIngestJobStatus {
+  const status = normalizeText(value, fallback).toLowerCase();
+  if (status === "ok" || status === "partial" || status === "failed") return status;
+  return fallback;
+}
+
+function mapExternalPayloadRawRow(row: Record<string, unknown>): DaaStoreExternalPayloadRaw {
+  return {
+    id: normalizeText(row.id),
+    provider: normalizeText(row.provider),
+    resource: normalizeText(row.resource),
+    subjectKey: normalizeText(row.subject_key),
+    requestUrl: normalizeText(row.request_url),
+    requestJson: parseJsonb<Record<string, unknown>>(row.request_json, {}),
+    responseStatus: Math.max(0, Math.trunc(toFiniteNumber(row.response_status, 0))),
+    responseHeadersJson: parseJsonb<Record<string, unknown>>(row.response_headers_json, {}),
+    payloadJson: row.payload_json == null ? null : parseJsonb<Record<string, unknown>>(row.payload_json, {}),
+    payloadText: row.payload_text == null ? null : String(row.payload_text),
+    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
+    expireAt: toIsoString(row.expire_at, new Date().toISOString()),
+    createdAt: toIsoString(row.created_at, new Date().toISOString()),
+  };
+}
+
+function mapIngestJobLogRow(row: Record<string, unknown>): DaaStoreIngestJobLog {
+  return {
+    jobId: normalizeText(row.job_id),
+    jobType: normalizeText(row.job_type),
+    triggerSource: normalizeText(row.trigger_source, "manual"),
+    status: normalizeIngestJobStatus(row.status, "ok"),
+    startedAt: toIsoString(row.started_at, new Date().toISOString()),
+    finishedAt: toIsoString(row.finished_at, new Date().toISOString()),
+    totalCount: Math.max(0, Math.trunc(toFiniteNumber(row.total_count, 0))),
+    successCount: Math.max(0, Math.trunc(toFiniteNumber(row.success_count, 0))),
+    failureCount: Math.max(0, Math.trunc(toFiniteNumber(row.failure_count, 0))),
+    diagnosticsJson: parseJsonb<Record<string, unknown>>(row.diagnostics_json, {}),
+  };
+}
+
+export async function appendDaaExternalPayloadRaw(input: {
+  provider: string;
+  resource: string;
+  subjectKey?: string;
+  requestUrl?: string;
+  requestJson?: Record<string, unknown>;
+  responseStatus?: number;
+  responseHeadersJson?: Record<string, unknown>;
+  payloadJson?: Record<string, unknown> | null;
+  payloadText?: string | null;
+  fetchedAt?: string;
+  expireAt?: string;
+}): Promise<DaaStoreExternalPayloadRaw> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const id = randomUUID();
+    const provider = normalizeText(input.provider, "unknown");
+    const resource = normalizeText(input.resource, "unknown");
+    const subjectKey = normalizeText(input.subjectKey, "");
+    const requestUrl = normalizeText(input.requestUrl, "");
+    const requestJson = input.requestJson && typeof input.requestJson === "object" ? input.requestJson : {};
+    const responseStatus = Math.max(0, Math.trunc(toFiniteNumber(input.responseStatus, 0)));
+    const responseHeadersJson = input.responseHeadersJson && typeof input.responseHeadersJson === "object" ? input.responseHeadersJson : {};
+    const payloadJson = input.payloadJson && typeof input.payloadJson === "object" ? input.payloadJson : null;
+    const payloadText = input.payloadText == null ? null : String(input.payloadText);
+    const fetchedAt = toIsoString(input.fetchedAt, new Date().toISOString());
+    const expireAt = toIsoString(input.expireAt, new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString());
+
+    await query(
+      `INSERT INTO daa_external_payload_raw_v1
+        (id, provider, resource, subject_key, request_url, request_json, response_status, response_headers_json, payload_json, payload_text, fetched_at, expire_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9::jsonb,$10,$11,$12,NOW())`,
+      [id, provider, resource, subjectKey, requestUrl, JSON.stringify(requestJson), responseStatus, JSON.stringify(responseHeadersJson), payloadJson == null ? null : JSON.stringify(payloadJson), payloadText, fetchedAt, expireAt],
+    );
+    const res = await query(
+      `SELECT ${RAW_PAYLOAD_SELECT_COLUMNS_} FROM daa_external_payload_raw_v1 WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    return mapExternalPayloadRawRow(res.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toISOString()): Promise<number> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      "DELETE FROM daa_external_payload_raw_v1 WHERE expire_at <= $1",
+      [toIsoString(nowIso, new Date().toISOString())],
+    );
+    return Math.max(0, Math.trunc(toFiniteNumber(result.rowCount, 0)));
+  });
+}
+
+export async function appendDaaIngestJobLog(input: {
+  jobType: string;
+  triggerSource?: string;
+  status?: DaaStoreIngestJobStatus;
+  startedAt?: string;
+  finishedAt?: string;
+  totalCount?: number;
+  successCount?: number;
+  failureCount?: number;
+  diagnosticsJson?: Record<string, unknown>;
+}): Promise<DaaStoreIngestJobLog> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const jobId = randomUUID();
+    const jobType = normalizeText(input.jobType, "unknown");
+    const triggerSource = normalizeText(input.triggerSource, "manual");
+    const status = normalizeIngestJobStatus(input.status, "ok");
+    const startedAt = toIsoString(input.startedAt, new Date().toISOString());
+    const finishedAt = toIsoString(input.finishedAt, new Date().toISOString());
+    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(input.totalCount, 0)));
+    const successCount = Math.max(0, Math.trunc(toFiniteNumber(input.successCount, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(input.failureCount, 0)));
+    const diagnosticsJson = input.diagnosticsJson && typeof input.diagnosticsJson === "object" ? input.diagnosticsJson : {};
+    await query(
+      `INSERT INTO daa_ingest_job_log_v1
+        (job_id, job_type, trigger_source, status, started_at, finished_at, total_count, success_count, failure_count, diagnostics_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)`,
+      [jobId, jobType, triggerSource, status, startedAt, finishedAt, totalCount, successCount, failureCount, JSON.stringify(diagnosticsJson)],
+    );
+    const result = await query(
+      `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
+       FROM daa_ingest_job_log_v1
+       WHERE job_id = $1
+       LIMIT 1`,
+      [jobId],
+    );
+    return mapIngestJobLogRow(result.rows[0] as Record<string, unknown>);
+  });
+}
+
+export async function listDaaIngestJobLogs(input: {
+  jobType?: string;
+  limit?: number;
+} = {}): Promise<DaaStoreIngestJobLog[]> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
+    if (input.jobType) {
+      const result = await query(
+        `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
+         FROM daa_ingest_job_log_v1
+         WHERE job_type = $1
+         ORDER BY started_at DESC
+         LIMIT $2`,
+        [normalizeText(input.jobType), limit],
+      );
+      return result.rows.map((row) => mapIngestJobLogRow(row as Record<string, unknown>));
+    }
+    const result = await query(
+      `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
+       FROM daa_ingest_job_log_v1
+       ORDER BY started_at DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return result.rows.map((row) => mapIngestJobLogRow(row as Record<string, unknown>));
+  });
+}
+
+export async function getDaaMarketCacheHealthStats(provider = "yfinance"): Promise<{
+  provider: string;
+  totalSnapshots: number;
+  freshCount: number;
+  staleCount: number;
+  missingCount: number;
+  errorCount: number;
+  unsupportedCount: number;
+  recentJobSuccessRatePct: number;
+  recentJobFailureRatePct: number;
+}> {
+  await ensureDaaMarketCacheSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const providerNormalized = normalizeText(provider, "yfinance");
+    const summaryRes = await query(
+      `SELECT
+         COUNT(*)::INT AS total_count,
+         SUM(CASE WHEN status='fresh' THEN 1 ELSE 0 END)::INT AS fresh_count,
+         SUM(CASE WHEN status='stale' THEN 1 ELSE 0 END)::INT AS stale_count,
+         SUM(CASE WHEN status='missing' THEN 1 ELSE 0 END)::INT AS missing_count,
+         SUM(CASE WHEN status='error' THEN 1 ELSE 0 END)::INT AS error_count,
+         SUM(CASE WHEN status='unsupported' THEN 1 ELSE 0 END)::INT AS unsupported_count
+       FROM daa_market_price_snapshot
+       WHERE provider = $1`,
+      [providerNormalized],
+    );
+    const summary = summaryRes.rows[0] as Record<string, unknown> | undefined;
+
+    const jobsRes = await query(
+      `SELECT
+         SUM(total_count)::INT AS total_count,
+         SUM(success_count)::INT AS success_count,
+         SUM(failure_count)::INT AS failure_count
+       FROM daa_ingest_job_log_v1
+       WHERE job_type IN ('market_cache_refresh', 'cron_price_refresh')
+         AND started_at >= NOW() - INTERVAL '24 hours'`,
+      [],
+    );
+    const jobs = jobsRes.rows[0] as Record<string, unknown> | undefined;
+    const successCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.success_count, 0)));
+    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.failure_count, 0)));
+    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(jobs?.total_count, successCount + failureCount)));
+    const safeDenominator = totalCount > 0 ? totalCount : Math.max(1, successCount + failureCount);
+    const successRate = safeDenominator > 0 ? (successCount / safeDenominator) * 100 : 100;
+    const failureRate = safeDenominator > 0 ? (failureCount / safeDenominator) * 100 : 0;
+
+    return {
+      provider: providerNormalized,
+      totalSnapshots: Math.max(0, Math.trunc(toFiniteNumber(summary?.total_count, 0))),
+      freshCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.fresh_count, 0))),
+      staleCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.stale_count, 0))),
+      missingCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.missing_count, 0))),
+      errorCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.error_count, 0))),
+      unsupportedCount: Math.max(0, Math.trunc(toFiniteNumber(summary?.unsupported_count, 0))),
+      recentJobSuccessRatePct: Number(successRate.toFixed(2)),
+      recentJobFailureRatePct: Number(failureRate.toFixed(2)),
+    };
+  });
+}
+

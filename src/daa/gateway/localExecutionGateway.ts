@@ -1,4 +1,5 @@
 import type { DaaBrokerBackedExecutionResult, DaaBrokerKind } from "@/src/daa/broker";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { buildTradeExecutionNotifyText } from "@/src/daa/notify/tradeExecutionBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
@@ -96,8 +97,8 @@ async function fanoutTradeExecutionNotification(execution: DaaBrokerBackedExecut
       notification.telegram.enabled && notification.telegram.onTradeExecuted ? sendTelegramByEnv(message, meta) : Promise.resolve(false),
       notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
     ]);
-  } catch {
-    // 通知扇出失败不阻塞执行返回
+  } catch (err) {
+    logSwallowed("localExecutionGateway.notify", err);
   }
 }
 
@@ -143,8 +144,8 @@ async function fanoutRebalanceExecutionNotification(
       notification.telegram.enabled && notification.telegram.onTradeExecuted ? sendTelegramByEnv(message, meta) : Promise.resolve(false),
       notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
     ]);
-  } catch {
-    // 通知扇出失败不阻塞执行返回
+  } catch (err) {
+    logSwallowed("localExecutionGateway.notify", err);
   }
 }
 

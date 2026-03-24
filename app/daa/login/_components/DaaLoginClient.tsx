@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
 import { fetchDaaAuthSession, type DaaAuthMePayload } from "@/app/daa/_components/daaAuthSessionClient";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type Props = {
   returnTo: string;
@@ -109,7 +110,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       });
       const text = await res.text().catch(() => "");
       let json: any = null;
-      try { json = JSON.parse(text); } catch { json = null; }
+      try { json = JSON.parse(text); } catch (err) { logSwallowed("DaaLoginClient.parseJson", err); json = null; }
       if (!res.ok || !json?.ok) { setAuthError(mapLoginError(parseApiError(json, `HTTP ${res.status}`))); return; }
       const redirectTo = normalizeDaaReturnTo(typeof json?.data?.redirectTo === "string" ? json.data.redirectTo : appendNoticeParam(safeReturnTo, "signed_in"));
       window.location.href = redirectTo;
@@ -125,7 +126,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       const res = await fetch("/api/daa/auth/logout", { method: "POST", headers: { accept: "application/json" } });
       const text = await res.text();
       let json: any = null;
-      try { json = JSON.parse(text); } catch { json = null; }
+      try { json = JSON.parse(text); } catch (err) { logSwallowed("DaaLoginClient.parseJson", err); json = null; }
       if (!res.ok || !json?.ok) throw new Error(parseApiError(json, `HTTP ${res.status}`));
       window.location.href = appendNoticeParam("/daa/login", "signed_out");
     } catch (e) {

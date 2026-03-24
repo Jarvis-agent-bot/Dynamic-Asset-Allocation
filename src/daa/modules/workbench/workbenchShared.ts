@@ -1,4 +1,5 @@
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
@@ -74,7 +75,8 @@ function normalizeTimeZoneOrUtc(value: unknown): string {
         new Intl.DateTimeFormat("en-US", { timeZone: text }).format(new Date());
         return text;
     }
-    catch {
+    catch (err) {
+        logSwallowed("workbenchShared.resolveTimezone", err);
         return "UTC";
     }
 }
@@ -114,8 +116,8 @@ function getZonedYmd(date: Date, timeZone: string): {
             return { year, month, day };
         }
     }
-    catch {
-        // ignored
+    catch (err) {
+        logSwallowed("workbenchShared.parseConfig", err);
     }
     return {
         year: date.getUTCFullYear(),
@@ -879,8 +881,8 @@ async function appendTriggerEventSafe(input: {
             detailsJson: input.detailsJson || {},
         });
     }
-    catch {
-        // 触发日志失败不阻塞主流程
+    catch (err) {
+        logSwallowed("workbenchShared.appendTriggerEvent", err);
     }
 }
 
@@ -1111,8 +1113,8 @@ async function enrichRiskCheckWithCorrelation(
             overallStatus: hasBlock ? "block" : (hasWarn ? "warn" : "pass"),
             items,
         };
-    } catch {
-        // Correlation check failure should not block trading
+    } catch (err) {
+        logSwallowed("workbenchShared.correlationCheck", err);
         return {
             ...riskCheck,
             items: [

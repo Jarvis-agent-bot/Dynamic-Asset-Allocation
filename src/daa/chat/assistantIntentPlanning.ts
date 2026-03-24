@@ -1,4 +1,5 @@
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 import { parseAssistantIntent } from "./assistantIntentRules";
 import type { AssistantPlanningInput, AssistantPlanningResult, DaaAssistantIntent } from "./assistantIntentTypes";
@@ -97,7 +98,8 @@ function parsePlannedIntent(rawUserText: string, rawPlannerText: string): DaaAss
     const value = JSON.parse(jsonText);
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     parsed = value as Record<string, unknown>;
-  } catch {
+  } catch (err) {
+    logSwallowed("assistantIntentPlanning.parseJson", err);
     return null;
   }
 
@@ -169,7 +171,8 @@ export async function planAssistantIntent(input: AssistantPlanningInput): Promis
       return { intent: fallback, source: "fallback", plannerRawText: response.text || null };
     }
     return { intent: planned, source: "llm", plannerRawText: response.text || null };
-  } catch {
+  } catch (err) {
+    logSwallowed("assistantIntentPlanning.planIntent", err);
     return { intent: fallback, source: "fallback", plannerRawText: null };
   }
 }

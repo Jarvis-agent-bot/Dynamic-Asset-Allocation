@@ -34,6 +34,7 @@ import type {
   RebalanceTriggerSource,
   UpdateRebalanceCycleInput,
 } from "./workbenchTypes";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 import { buildUnifiedRequestFromStore, buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
@@ -297,8 +298,8 @@ export async function generateWorkbenchRebalanceCycle(
         cashIdlePct: cashClassification.investableIdlePct,
         generatedAt: new Date().toISOString(),
       };
-    } catch {
-      // 洞察加载失败不影响主流程
+    } catch (err) {
+      logSwallowed("workbenchRebalanceCycleService.loadInsight", err);
     }
 
     void appendTriggerEventSafe({
@@ -329,8 +330,8 @@ export async function generateWorkbenchRebalanceCycle(
     const { request: unifiedRequest } = await buildUnifiedRequestFromStore();
     const hydrated = await hydrateUnifiedRequestWithSignals(unifiedRequest);
     fusedOpportunities = hydrated.opportunityPanel.opportunities;
-  } catch {
-    // 信号加载失败不阻断再平衡，降级为纯 drift 模式
+  } catch (err) {
+    logSwallowed("workbenchRebalanceCycleService.hydrateSignals", err);
     bootstrap.warnings.push("信号加载失败，当前再平衡建议仅基于漂移计算，未融合多路信号。");
   }
 
@@ -403,8 +404,8 @@ export async function generateWorkbenchRebalanceCycle(
         );
       }
     }
-  } catch {
-    // TLH scan failure does not block rebalance
+  } catch (err) {
+    logSwallowed("workbenchRebalanceCycleService.tlhScan", err);
   }
 
   // Merge TLH proposals with fusion proposals
@@ -667,8 +668,8 @@ async function executeWorkbenchProposalByRoute(input: {
         ticketId: localTicket.ticketId,
         limit: 50,
       });
-    } catch {
-      // broker 已受理时，不因为首次同步失败阻断整轮执行
+    } catch (err) {
+      logSwallowed("workbenchRebalanceCycleService.syncBrokerOrders", err);
     }
 
     return localTicket.ticketId;
@@ -931,7 +932,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
     void patchDaaRebalanceCycle({
       cycleId: input.cycleId,
       notes: `${cycle.notes || ""}\n[复盘报告] 生成失败: ${reportError instanceof Error ? reportError.message : String(reportError)}`.trim(),
-    }).catch(() => {});
+    }).catch((err) => { logSwallowed("workbenchRebalanceCycleService.patchNotes", err); });
   }
 
   return {

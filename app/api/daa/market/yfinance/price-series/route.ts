@@ -3,6 +3,7 @@ import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/route
 
 import { assertIsoDateString } from "@/src/core/isoDate";
 import { addDaysIsoUtc, normalizeYfinanceHistoricalQuotes, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -82,7 +83,8 @@ export async function GET(req: Request) {
     let payload: any;
     try {
       payload = JSON.parse(text);
-    } catch {
+    } catch (err) {
+  logSwallowed("priceSeriesRoute.parsePayload", err);
       payload = { raw: text };
     }
 

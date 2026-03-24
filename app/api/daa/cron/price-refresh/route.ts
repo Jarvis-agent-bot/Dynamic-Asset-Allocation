@@ -11,6 +11,7 @@ import {
   listDaaAssetUniverse,
   updateDaaAssetUniverseLastPrice,
 } from "@/src/daa/store/daaStorePg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -153,8 +154,8 @@ export async function POST(req: Request) {
         try {
           const divResult = await extractDividendsFromRawPayloads({ sinceDays: 1 });
           dividendExtracted = divResult.extracted;
-        } catch {
-          // Dividend extraction failure should not block price refresh
+        } catch (err) {
+  logSwallowed("priceRefreshRoute.dividendExtraction", err);
         }
 
         return {

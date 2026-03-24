@@ -1,4 +1,5 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { WorkbenchBootstrap, RebalanceProposal } from "./workbenchTypes";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -79,7 +80,8 @@ async function getWashSaleBlockedSymbols(input: {
       result.set(String(row.symbol).toUpperCase(), blockedUntil);
     }
     return result;
-  } catch {
+  } catch (err) {
+    logSwallowed("taxLossHarvestingService.loadCostBasis", err);
     return new Map();
   }
 }

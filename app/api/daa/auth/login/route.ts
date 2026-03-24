@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/src/daa/supabase/server";
 import { fail, ok } from "@/src/daa/api/routeHelpers";
 import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,8 @@ export async function POST(req: Request) {
   let body: any = null;
   try {
     body = await req.json();
-  } catch {
+  } catch (err) {
+  logSwallowed("loginRoute.parseBody", err);
     body = null;
   }
 

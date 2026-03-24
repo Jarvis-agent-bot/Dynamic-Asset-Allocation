@@ -1,4 +1,5 @@
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 import { buildContextDigest, buildRecentConversation, describePendingAction, normalizeText } from "./agentContext";
 import type { DaaAgentToolContext, DaaAgentToolExecutor, DaaAgentToolResult } from "./agentToolTypes";
@@ -53,7 +54,8 @@ async function answerWithAssistantLlm(input: {
     const response = await callLlm(config, prompt);
     const text = normalizeText(response.text);
     return text || null;
-  } catch {
+  } catch (err) {
+    logSwallowed("agentToolReasoningHandlers.runLlmReasoning", err);
     return null;
   }
 }

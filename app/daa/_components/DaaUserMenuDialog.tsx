@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { copyTextToClipboard } from "../copyToClipboard";
 import { fetchDaaAuthSession, invalidateDaaAuthSessionCache, type DaaAuthMePayload } from "./daaAuthSessionClient";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type Model =
   | { kind: "loading" }
@@ -51,7 +52,8 @@ export default function DaaUserMenuDialog() {
     // Only used for a nicer sign-in redirect. Fall back to /daa/dashboard.
     try {
       setReturnTo(`${window.location.pathname}${window.location.search}`);
-    } catch {
+    } catch (err) {
+  logSwallowed("DaaUserMenuDialog.resolveReturnTo", err);
       setReturnTo("/daa/dashboard");
     }
 

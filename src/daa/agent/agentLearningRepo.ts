@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { daaPgPool } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaAgentLearningEvent = {
   eventId: string;
@@ -40,7 +41,8 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-    } catch {
+    } catch (err) {
+      logSwallowed("agentLearningRepo.parseJsonb", err);
       return {};
     }
   }

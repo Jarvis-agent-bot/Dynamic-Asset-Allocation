@@ -11,10 +11,6 @@ import type {
 import type { ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
-/* ------------------------------------------------------------------ */
-/*  Position                                                          */
-/* ------------------------------------------------------------------ */
-
 export type DaaStorePosition = {
   id: string;
   assetKey: string;
@@ -28,19 +24,11 @@ export type DaaStorePosition = {
   updatedAt: string;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Strategy Config                                                   */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreStrategyConfig = {
   id: "default";
   configJson: Record<string, unknown>;
   updatedAt: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  Equity Snapshot                                                    */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreEquitySnapshot = {
   ts: string;
@@ -49,23 +37,6 @@ export type DaaStoreEquitySnapshot = {
   cash: number;
   source: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  Notification                                                      */
-/* ------------------------------------------------------------------ */
-
-export type DaaStoreNotificationConfig = {
-  id: "default";
-  enabled: boolean;
-  notifyOnDrift: boolean;
-  notifyOnRebalance: boolean;
-  notifyOnPriceAlert: boolean;
-  updatedAt: string;
-};
-
-/* ------------------------------------------------------------------ */
-/*  Rebalance Decision                                                */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreRebalanceDecision = {
   id: string;
@@ -76,10 +47,6 @@ export type DaaStoreRebalanceDecision = {
   responseJson: Record<string, unknown>;
   createdAt: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  Execution Order                                                   */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreExecutionOrder = {
   orderId: string;
@@ -99,10 +66,6 @@ export type DaaStoreExecutionOrder = {
   bookedAt?: string | null;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Run History / Op Log                                              */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreRunHistoryEntry = {
   id: string;
   ts: string;
@@ -120,10 +83,6 @@ export type DaaStoreOpLogEntry = {
   contextJson: Record<string, unknown>;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Candidate Asset                                                   */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreCandidateAsset = {
   id: string;
   symbol: string;
@@ -136,10 +95,6 @@ export type DaaStoreCandidateAsset = {
   createdAt: string;
   updatedAt: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  Asset Universe                                                    */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreAssetUniverseRow = {
   assetKey: string;
@@ -165,10 +120,6 @@ export type DaaStoreAssetUniverseRow = {
   updatedAt: string;
 };
 
-/* ------------------------------------------------------------------ */
-/*  FX Rates                                                          */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreFxRate = {
   id: string;
   baseCcy: string;
@@ -179,17 +130,11 @@ export type DaaStoreFxRate = {
   updatedAt: string;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Market Cache Status Types                                         */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreMarketPriceStatus = "fresh" | "stale" | "missing" | "error" | "unsupported";
-export type DaaStoreFxRateHistoryStatus = "fresh" | "stale" | "missing" | "error";
-export type DaaStoreIngestJobStatus = "ok" | "partial" | "failed";
 
-/* ------------------------------------------------------------------ */
-/*  Market Price Snapshot / History                                    */
-/* ------------------------------------------------------------------ */
+export type DaaStoreFxRateHistoryStatus = "fresh" | "stale" | "missing" | "error";
+
+export type DaaStoreIngestJobStatus = "ok" | "partial" | "failed";
 
 export type DaaStoreMarketPriceSnapshot = {
   provider: string;
@@ -218,10 +163,6 @@ export type DaaStoreMarketPriceHistory = {
   rawRefId: string | null;
 };
 
-/* ------------------------------------------------------------------ */
-/*  FX Rate History                                                   */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreFxRateHistory = {
   provider: string;
   baseCcy: string;
@@ -234,10 +175,6 @@ export type DaaStoreFxRateHistory = {
   errorMessage: string | null;
   rawRefId: string | null;
 };
-
-/* ------------------------------------------------------------------ */
-/*  News                                                              */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreNewsItemSnapshot = {
   provider: string;
@@ -264,10 +201,6 @@ export type DaaStoreNewsSignalSnapshot = {
   updatedAt: string;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Market Indicator                                                  */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreMarketIndicatorSnapshot = {
   id: string;
   key: DaaMarketIndicatorKey;
@@ -290,10 +223,6 @@ export type DaaStoreMarketIndicatorSnapshot = {
   expireAt: string | null;
   createdAt: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  HF (Human-Fund) Holdings / Signals                                */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreHfHoldingSnapshot = {
   provider: string;
@@ -322,10 +251,6 @@ export type DaaStoreHfSignalSnapshot = {
   updatedAt: string;
 };
 
-/* ------------------------------------------------------------------ */
-/*  External Payload Raw                                              */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreExternalPayloadRaw = {
   id: string;
   provider: string;
@@ -342,10 +267,6 @@ export type DaaStoreExternalPayloadRaw = {
   createdAt: string;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Ingest Job Log                                                    */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreIngestJobLog = {
   jobId: string;
   jobType: string;
@@ -359,11 +280,8 @@ export type DaaStoreIngestJobLog = {
   diagnosticsJson: Record<string, unknown>;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Cash Ledger                                                       */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreCashLedgerSide = "deposit" | "withdraw";
+
 export type DaaStoreCashLedgerEntryKind = "manual" | "trade_execution" | "dividend" | "opening_balance";
 
 export type DaaStoreCashLedgerEntry = {
@@ -405,15 +323,41 @@ export type DaaStoreCashLedgerApplyInput = {
   settlementTs?: string | null;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Trade Ticket / Basket                                             */
-/* ------------------------------------------------------------------ */
+export type DaaStoreBrokerKind = "sim" | "crypto_paper";
 
 export type DaaStoreTradeTicketSource = "manual" | "decision";
-export type DaaStoreTradeTicketStatus = "ready" | "executed" | "canceled" | "rejected";
+
+export type DaaStoreTradeTicketStatus = "ready" | "submitted" | "partially_filled" | "executed" | "canceled" | "rejected";
+
 export type DaaStoreTradeTicketSide = "BUY" | "SELL";
+
 export type DaaStoreTradeBasketStatus = "draft" | "executing" | "executed" | "partial" | "canceled";
+
 export type DaaStoreTradeBasketSource = "manual" | "decision" | "mixed" | "migration";
+
+export type DaaStoreBrokerAccountState = {
+  brokerKind: DaaStoreBrokerKind;
+  accountId: string | null;
+  baseCurrency: string;
+  cash: number;
+  investableCash: number;
+  frozenCash: number;
+  totalEquity: number | null;
+  updatedAt: string;
+};
+
+export type DaaStoreBrokerOrderSnapshot = {
+  ticketId: string;
+  brokerKind: DaaStoreBrokerKind;
+  brokerAccountId: string | null;
+  brokerOrderId: string;
+  status: string;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+  raw: Record<string, unknown> | null;
+  syncedAt: string;
+  updatedAt: string;
+};
 
 export type DaaStoreTradeBasket = {
   basketId: string;
@@ -454,6 +398,16 @@ export type DaaStoreTradeTicket = {
   pricingMode: "manual" | "market";
   priceSource: string | null;
   priceSnapshotAt: string | null;
+  brokerKind: DaaStoreBrokerKind | null;
+  brokerAccountId: string | null;
+  brokerOrderId: string | null;
+  brokerStatus: string | null;
+  filledQty: number | null;
+  avgFillPrice: number | null;
+  lastBrokerSyncAt: string | null;
+  lastAppliedFillQty: number;
+  brokerRejectReason: string | null;
+  brokerRaw: Record<string, unknown> | null;
   createdBy: string;
   createdAt: string;
   executedAt: string | null;
@@ -479,6 +433,17 @@ export type DaaStoreCreateTradeTicketInput = {
   pricingMode?: "manual" | "market";
   priceSource?: string;
   priceSnapshotAt?: string;
+  status?: DaaStoreTradeTicketStatus;
+  brokerKind?: DaaStoreBrokerKind | null;
+  brokerAccountId?: string | null;
+  brokerOrderId?: string | null;
+  brokerStatus?: string | null;
+  filledQty?: number | null;
+  avgFillPrice?: number | null;
+  lastBrokerSyncAt?: string | null;
+  lastAppliedFillQty?: number | null;
+  brokerRejectReason?: string | null;
+  brokerRaw?: Record<string, unknown> | null;
   createdBy?: string;
 };
 
@@ -506,17 +471,8 @@ export type DaaStoreExecuteTradeTicketsResult = {
   equitySnapshot: DaaStoreEquitySnapshot;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Risk                                                              */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreRiskRule =
   | "max_position"
-  | "max_order_pct"
-  | "concentration"
-  | "correlation"
-  | "stop_loss_breach"
-  | "total_weight";
 
 export type DaaStorePreTradeRiskCheckItem = {
   rule: DaaStoreRiskRule;
@@ -531,11 +487,8 @@ export type DaaStorePreTradeRiskCheck = {
   items: DaaStorePreTradeRiskCheckItem[];
 };
 
-/* ------------------------------------------------------------------ */
-/*  Rebalance Cycle                                                   */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreRebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
+
 export type DaaStoreRebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle";
 
 export type DaaStoreRebalanceCycle = {
@@ -571,6 +524,7 @@ export type DaaStoreRebalanceCycle = {
   executedOrders: string[];
   executionSummary: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     newMaxDriftPct: number;
@@ -582,10 +536,6 @@ export type DaaStoreRebalanceCycle = {
   llmDecisionSnapshot?: Record<string, unknown> | null;
   createdAt: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  Cycle Report                                                      */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreCycleReport = {
   cycleId: string;
@@ -614,6 +564,7 @@ export type DaaStoreCycleReport = {
   };
   executionStats: {
     ordersExecuted: number;
+    ordersSubmitted?: number;
     ordersFailed: number;
     totalNotional: number;
     feeTotal: number;
@@ -641,10 +592,6 @@ export type DaaStoreCycleReport = {
   };
 };
 
-/* ------------------------------------------------------------------ */
-/*  Trigger Event                                                     */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreTriggerEvent = {
   eventId: string;
   idempotencyKey: string;
@@ -656,10 +603,6 @@ export type DaaStoreTriggerEvent = {
   createdAt: string;
 };
 
-/* ------------------------------------------------------------------ */
-/*  LLM Feedback                                                      */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreLlmFeedback = {
   id: string;
   contextId: string;
@@ -668,10 +611,6 @@ export type DaaStoreLlmFeedback = {
   comment: string | null;
   createdAt: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  Rebalance Cycle Input types                                       */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreCreateRebalanceCycleInput = {
   cycleId?: string;
@@ -703,10 +642,6 @@ export type DaaStorePatchRebalanceCycleInput = {
   marketContext?: DaaMarketContext | null;
 };
 
-/* ------------------------------------------------------------------ */
-/*  Human Ingest State                                                */
-/* ------------------------------------------------------------------ */
-
 export type DaaStoreHumanIngestState = {
   id: "default";
   lastIngestAt: string | null;
@@ -716,10 +651,6 @@ export type DaaStoreHumanIngestState = {
   latestHoldings: Array<Record<string, unknown>>;
   updatedAt: string;
 };
-
-/* ------------------------------------------------------------------ */
-/*  System Config / Account State                                     */
-/* ------------------------------------------------------------------ */
 
 export type DaaStoreSystemConfigRow = {
   id: "default";

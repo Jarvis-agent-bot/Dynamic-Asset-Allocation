@@ -1,4 +1,5 @@
 import { isApiResponse, type ApiErrorCode, type ApiResponse } from "@/src/daa/api/contracts";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type RequestApiOptions = {
   fallbackErrorCode?: ApiErrorCode;
@@ -37,7 +38,8 @@ function toErrorResponse(
 function safeParseJson(text: string): unknown {
   try {
     return JSON.parse(text);
-  } catch {
+  } catch (err) {
+    logSwallowed("client.safeParseJson", err);
     return null;
   }
 }

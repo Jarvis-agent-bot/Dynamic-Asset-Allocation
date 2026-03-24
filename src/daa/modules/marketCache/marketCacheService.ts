@@ -1,3 +1,4 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   appendDaaExternalPayloadRaw,
   appendDaaIngestJobLog,
@@ -196,7 +197,8 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
     let payloadJson: Record<string, unknown> | null = null;
     try {
       payloadJson = JSON.parse(payloadText) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+      logSwallowed("marketCacheService.parsePayload", err);
       payloadJson = null;
     }
 
@@ -442,7 +444,8 @@ export async function getMarketPricesWithCache(input: {
               expireAt: new Date(Date.now() + rawRetentionDays * 24 * 3600 * 1000).toISOString(),
             });
             rawRefId = raw.id;
-          } catch {
+          } catch (err) {
+            logSwallowed("marketCacheService.appendRawRef", err);
             rawRefId = null;
           }
         }

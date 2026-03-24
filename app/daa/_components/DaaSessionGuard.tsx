@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import { fetchDaaAuthSession } from "./daaAuthSessionClient";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 const SESSION_EXPIRED_NOTICE_AT_KEY = "daa_notice_session_expired_at_v0";
 const SESSION_EXPIRED_REDIRECT_DELAY_MS = 650;
@@ -48,8 +49,8 @@ export default function DaaSessionGuard() {
           let returnTo = pathname;
           try {
             returnTo = `${window.location.pathname}${window.location.search}`;
-          } catch {
-            // Ignore access errors (should not happen in normal browsers).
+          } catch (err) {
+  logSwallowed("DaaSessionGuard.cookieAccess", err);
           }
 
           // Show a toast *before* navigating away, so the user understands why they were bounced.
@@ -58,8 +59,8 @@ export default function DaaSessionGuard() {
             toastShownRef.current = true;
             try {
               sessionStorage.setItem(SESSION_EXPIRED_NOTICE_AT_KEY, String(Date.now()));
-            } catch {
-              // Ignore storage errors (private mode / quota).
+            } catch (err) {
+  logSwallowed("DaaSessionGuard.storage", err);
             }
             toast.error("会话已过期，请重新登录。");
           }
@@ -69,8 +70,8 @@ export default function DaaSessionGuard() {
             window.location.href = href;
           }, SESSION_EXPIRED_REDIRECT_DELAY_MS);
         }
-      } catch {
-        // Best-effort: network/edge errors should not cause redirect loops.
+      } catch (err) {
+  logSwallowed("DaaSessionGuard.fetchSession", err);
       }
     }
 

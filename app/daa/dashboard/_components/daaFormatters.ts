@@ -1,3 +1,5 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+
 const CURRENCY_SYMBOLS_: Record<string, string> = {
   USD: "$",
   EUR: "€",
@@ -79,7 +81,8 @@ export function formatCurrency(v: number, currency = "USD"): string {
       minimumFractionDigits: hasCents ? 2 : 0,
       maximumFractionDigits: hasCents ? 2 : 0,
     });
-  } catch {
+  } catch (err) {
+    logSwallowed("daaFormatters.formatCurrency", err);
     return `${displayCurrency} ${roundedToCent.toLocaleString("en-US", {
       minimumFractionDigits: hasCents ? 2 : 0,
       maximumFractionDigits: hasCents ? 2 : 0,

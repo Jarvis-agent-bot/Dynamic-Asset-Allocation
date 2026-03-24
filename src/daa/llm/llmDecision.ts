@@ -15,6 +15,7 @@
  */
 
 import { callLlm, normalizeText, resolveLlmConfig, toFinite } from "@/src/daa/llm/llmClient";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { CashClassification } from "@/src/daa/modules/workbench/cashClassification";
 import type { DaaFusedOpportunity } from "@/src/daa/signals/fusion";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
@@ -264,7 +265,8 @@ function parseLlmJsonOutput(jsonText: string): Omit<LlmDecisionOutput, "status" 
     const parsed = JSON.parse(jsonText);
     if (!parsed || typeof parsed !== "object") return null;
     obj = parsed as Record<string, unknown>;
-  } catch {
+  } catch (err) {
+    logSwallowed("llmDecision.parseLlmJsonOutput", err);
     return null;
   }
 

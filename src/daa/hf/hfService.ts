@@ -1047,8 +1047,8 @@ export async function runHumanIngest(opts: {
             expireAt: new Date(Date.now() + HF_RAW_RETENTION_DAYS_ * 24 * 3600 * 1000).toISOString(),
           });
           rawRefByFundReport.set(`${payload.fundCode}::${payload.reportDate}`, raw.id);
-        } catch {
-          // ignore raw persist errors
+        } catch (err) {
+          logSwallowed("hfService.persistRaw", err);
         }
       }
     }

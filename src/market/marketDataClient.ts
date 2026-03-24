@@ -1,6 +1,7 @@
 import { isApiResponse } from "@/src/daa/api/contracts";
 
 import type { PriceBar } from "../core/domain";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -54,7 +55,8 @@ async function readJsonBestEffort(text: string): Promise<unknown> {
   if (!trimmed) return null;
   try {
     return JSON.parse(trimmed) as unknown;
-  } catch {
+  } catch (err) {
+  logSwallowed("marketDataClient.parseJson", err);
     return { _raw: trimmed };
   }
 }

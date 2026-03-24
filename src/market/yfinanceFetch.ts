@@ -1,4 +1,5 @@
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 function epochSecondsUtcStart(iso: string): number {
   const ms = Date.parse(`${iso}T00:00:00.000Z`);
@@ -51,7 +52,8 @@ export async function fetchYfinanceLatestClose(symbolRaw: string): Promise<{ sym
     }
 
     return null;
-  } catch {
+  } catch (err) {
+  logSwallowed("yfinanceFetch.parseResponse", err);
     return null;
   }
 }

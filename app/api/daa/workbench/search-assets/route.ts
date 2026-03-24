@@ -13,6 +13,7 @@ import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, toPositive } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type LookupMarket = "US" | "HK" | "CN" | "CRYPTO" | "OTHER";
 
@@ -289,7 +290,8 @@ export async function GET(req: Request) {
         serveStaleSec: Math.max(3600, cacheConfig.serveStaleHours * 3600),
         rawRetentionDays: cacheConfig.rawRetentionDays,
       });
-    } catch {
+    } catch (err) {
+  logSwallowed("searchAssetsRoute.enrichItems", err);
       items = out;
     }
 

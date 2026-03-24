@@ -28,6 +28,7 @@ import {
   type DaaStoreMarketIndicatorSnapshot,
 } from "@/src/daa/store/daaStorePg";
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type RefreshMarketIndicatorsResult = {
   marketContext: DaaMarketContext | null;
@@ -169,7 +170,8 @@ async function fetchDailyCloseBars(symbolRaw: string, days: number): Promise<Dai
       });
     }
     return out.slice(-safeDays);
-  } catch {
+  } catch (err) {
+    logSwallowed("marketIndicatorService.fetchDailyCloses", err);
     return [];
   }
 }
@@ -531,8 +533,8 @@ export async function getCurrentMarketContext(input: {
   if (input.forceRefresh) {
     try {
       return (await refreshMarketIndicators()).marketContext;
-    } catch {
-      // fallback to stored snapshots below
+    } catch (err) {
+      logSwallowed("marketIndicatorService.forceRefresh", err);
     }
   }
 
@@ -543,7 +545,8 @@ export async function getCurrentMarketContext(input: {
 
   try {
     return (await refreshMarketIndicators()).marketContext;
-  } catch {
+  } catch (err) {
+    logSwallowed("marketIndicatorService.refreshFallback", err);
     if (!latestSnapshots.length || input.allowStale !== true) return null;
     return buildContextFromStoredSnapshots({ snapshots: latestSnapshots, config });
   }

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { fail, ok } from "@/src/daa/api/routeHelpers";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,8 @@ export async function POST(req: Request) {
   let body: any = null;
   try {
     body = await req.json();
-  } catch {
+  } catch (err) {
+  logSwallowed("bootstrapRoute.parseBody", err);
     body = null;
   }
 

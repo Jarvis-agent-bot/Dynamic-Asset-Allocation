@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import { toFinite } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type QueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
 
@@ -16,7 +17,8 @@ function parseConfigJson(value: unknown): Record<string, any> {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, any> : {};
-    } catch {
+    } catch (err) {
+      logSwallowed("runtimeMigrations.parseConfigJson", err);
       return {};
     }
   }

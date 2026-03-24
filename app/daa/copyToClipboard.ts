@@ -1,3 +1,4 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 "use client";
 
 // Best-effort clipboard helper for user-initiated actions.
@@ -7,8 +8,8 @@ export async function copyTextToClipboard(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       return;
-    } catch {
-      // fall through to execCommand fallback
+    } catch (err) {
+  logSwallowed("copyToClipboard.clipboardApi", err);
     }
   }
 

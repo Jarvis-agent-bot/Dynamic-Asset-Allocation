@@ -7,6 +7,7 @@ import {
   listDaaAssetUniverse,
 } from "@/src/daa/store/daaStorePg";
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -120,8 +121,8 @@ export async function POST(req: Request) {
             error: describeError(error),
           },
         });
-      } catch {
-        // ignore job log failure
+      } catch (err) {
+  logSwallowed("newsRefreshRoute.jobLog", err);
       }
       throw error;
     }

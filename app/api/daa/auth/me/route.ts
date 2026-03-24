@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/src/daa/supabase/server";
 import { fail, ok } from "@/src/daa/api/routeHelpers";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,8 @@ function isSilentMode(req: Request): boolean {
     if (!value) return false;
     const normalized = value.trim().toLowerCase();
     return normalized === "1" || normalized === "true" || normalized === "yes";
-  } catch {
+  } catch (err) {
+  logSwallowed("meRoute.resolveSupabaseSession", err);
     return false;
   }
 }

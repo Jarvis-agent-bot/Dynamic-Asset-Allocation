@@ -2,13 +2,15 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 
 import { fetchTextWithTimeout, getProviderErrorStatus, mustGetEnv, parseXueqiuCookie } from "../../_lib/providerAdapters";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
 function parseJsonBestEffort(text: string): unknown {
   try {
     return JSON.parse(text);
-  } catch {
+  } catch (err) {
+  logSwallowed("xueqiuRoute.parseJson", err);
     return { raw: text };
   }
 }

@@ -1,4 +1,5 @@
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { getCurrentMarketContext } from "@/src/daa/modules/marketContext/marketIndicatorService";
@@ -210,8 +211,8 @@ async function syncWorkbenchPrices(opts: {
   if (historyRows.length > 0) {
     try {
       await appendAssetPriceHistoryRows(historyRows);
-    } catch {
-      // 行情历史附加失败不影响主流程
+    } catch (err) {
+      logSwallowed("workbenchReadService.attachPriceHistory", err);
     }
   }
 
@@ -340,8 +341,8 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
         forceRefreshAll: opts.forceRefreshAllPrices === true,
         maxTargets: opts.maxSyncTargets,
       });
-    } catch {
-      // 行情同步失败不阻塞工作台加载
+    } catch (err) {
+      logSwallowed("workbenchReadService.syncMarketData", err);
     }
   }
 
@@ -380,7 +381,8 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
       rawRetentionDays: marketCache.rawRetentionDays,
       source: "workbench_bootstrap_context",
     });
-  } catch {
+  } catch (err) {
+    logSwallowed("workbenchReadService.readMarketCache", err);
     marketCacheReadFailed = true;
     priceContextByKey = {};
   }
@@ -466,7 +468,8 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
   let marketContext: DaaMarketContext | null = null;
   try {
     marketContext = await getCurrentMarketContext({ allowStale: true });
-  } catch {
+  } catch (err) {
+    logSwallowed("workbenchReadService.getMarketContext", err);
     marketContext = null;
   }
 
@@ -550,8 +553,8 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
             },
           });
           rebalanceCycles = [createdRiskCycle, ...rebalanceCycles.filter((row) => row.cycleId !== createdRiskCycle.cycleId)];
-        } catch {
-          // 风险触发写入失败不阻塞工作台加载
+        } catch (err) {
+          logSwallowed("workbenchReadService.riskTriggerWrite", err);
         }
       } else {
         await appendTriggerEventSafe({

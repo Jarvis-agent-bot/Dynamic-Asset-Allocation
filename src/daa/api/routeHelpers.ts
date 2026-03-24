@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { ApiErrorCode } from "@/src/daa/api/contracts";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 function statusFromCode(code: ApiErrorCode): number {
   if (code === "UNAUTHORIZED" || code === "CRON_AUTH_FAILED") return 401;
@@ -85,7 +86,8 @@ export async function withApiHandler(handler: () => Promise<Response>): Promise<
 export async function readJsonBody<T = unknown>(req: Request): Promise<T | null> {
   try {
     return (await req.json()) as T;
-  } catch {
+  } catch (err) {
+    logSwallowed("routeHelpers.readJsonBody", err);
     return null;
   }
 }

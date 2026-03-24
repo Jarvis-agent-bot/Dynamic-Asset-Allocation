@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import type { CalibrationDraft, OrderDraft } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
@@ -63,8 +64,8 @@ export function useWorkbenchAssetActions(input: {
         includeLlm: false,
       }).then((data) => {
         setInsightDataByAssetKey((prev) => ({ ...prev, [row.assetKey]: data }));
-      }).catch(() => {
-        // 忽略预取失败
+      }).catch((err) => {
+        logSwallowed("useWorkbenchAssetActions.prefetchInsight", err);
       }).finally(() => {
         setInsightLoadingByAssetKey((prev) => ({ ...prev, [row.assetKey]: false }));
       });
