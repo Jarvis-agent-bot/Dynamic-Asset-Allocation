@@ -11,7 +11,6 @@ import type {
   RebalanceCycle,
   UpdateRebalanceCycleInput,
   WorkbenchAssetInsightResponse,
-  WorkbenchRebalanceCycleReport,
   WorkbenchExecutionExecuteInput,
   WorkbenchFeaturedAssetsResult,
   WorkbenchLlmFeedbackRow,
@@ -19,19 +18,8 @@ import type {
   WorkbenchLlmFeedbackType,
   WorkbenchExecutionExecuteResult,
   WorkbenchMarketOrderPreviewResult,
-  WorkbenchRebalanceConfig,
-  WorkbenchRecommendationsResult,
   WorkbenchSearchAssetResult,
-  WorkbenchTradeRecords,
 } from "./workbenchTypes";
-
-export async function getWorkbenchRecommendations(input: { analysisFocus: string }): Promise<WorkbenchRecommendationsResult> {
-  return requestData<WorkbenchRecommendationsResult>("/api/daa/workbench/recommendations", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-}
 
 export async function previewWorkbenchExecution(input: {
   assetKey: string;
@@ -157,14 +145,6 @@ export async function getWorkbenchAssetInsights(assetKey: string, opts: {
   });
 }
 
-export async function patchWorkbenchRebalanceConfig(input: Partial<WorkbenchRebalanceConfig>): Promise<WorkbenchRebalanceConfig> {
-  return requestData<WorkbenchRebalanceConfig>("/api/daa/workbench/rebalance-config", {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-}
-
 export async function generateWorkbenchRebalanceCycle(
   input: GenerateRebalanceCycleInput = {},
 ): Promise<GenerateRebalanceCycleResult> {
@@ -172,13 +152,6 @@ export async function generateWorkbenchRebalanceCycle(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
-  });
-}
-
-export async function getWorkbenchRebalanceCycle(cycleId: string): Promise<RebalanceCycle> {
-  return requestData<RebalanceCycle>(`/api/daa/workbench/rebalance/cycles/${encodeURIComponent(cycleId)}`, {
-    method: "GET",
-    cache: "no-store",
   });
 }
 
@@ -213,17 +186,6 @@ export async function summarizeWorkbenchRebalanceExecution(
   });
 }
 
-export async function getWorkbenchRebalanceCycleReport(cycleId: string): Promise<WorkbenchRebalanceCycleReport | null> {
-  const payload = await requestData<{ report: WorkbenchRebalanceCycleReport | null }>(
-    `/api/daa/workbench/rebalance/cycles/${encodeURIComponent(cycleId)}/report`,
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
-  return payload.report || null;
-}
-
 export async function submitWorkbenchLlmFeedback(input: {
   contextId: string;
   type: WorkbenchLlmFeedbackType;
@@ -248,4 +210,3 @@ export async function runWorkbenchRiskCheck(input: {
     body: JSON.stringify(input),
   });
 }
-

@@ -29,7 +29,7 @@ export type TlhScanResult = {
   scannedAt: string;
 };
 
-export type TlhConfig = {
+type TlhConfig = {
   enabled: boolean;
   minLossPct: number;          // minimum unrealized loss % to consider (default 5%)
   minLossAbsBase: number;      // minimum absolute loss in base currency (default 100)
@@ -195,32 +195,5 @@ export async function scanTaxLossHarvestingCandidates(input: {
     totalBlockedBase: blocked.reduce((sum, c) => sum + c.lossInBase, 0),
     proposals,
     scannedAt: new Date().toISOString(),
-  };
-}
-
-/**
- * After a TLH sell is executed, record it so future buys of the same symbol
- * within 30 days will be flagged as wash sales.
- * This is already handled by the trade ticket system (BUY records),
- * so this function just checks if a re-purchase would trigger a wash sale.
- */
-export function checkWashSaleRisk(input: {
-  symbol: string;
-  tlhSellDate: Date;
-  proposedBuyDate: Date;
-  washSaleDays?: number;
-}): { isWashSale: boolean; safeAfter: string } {
-  const days = input.washSaleDays ?? 30;
-  const sellMs = input.tlhSellDate.getTime();
-  const buyMs = input.proposedBuyDate.getTime();
-  const windowMs = days * 24 * 60 * 60 * 1000;
-
-  // Wash sale applies 30 days before AND after the sale
-  const windowStart = sellMs - windowMs;
-  const windowEnd = sellMs + windowMs;
-
-  return {
-    isWashSale: buyMs >= windowStart && buyMs <= windowEnd,
-    safeAfter: new Date(sellMs + windowMs).toISOString().slice(0, 10),
   };
 }

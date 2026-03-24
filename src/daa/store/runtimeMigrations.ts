@@ -384,6 +384,77 @@ const MIGRATIONS_: Migration[] = [
       }
     },
   },
+  {
+    id: "20260319_broker_connector_foundation",
+    async apply(query) {
+      await query("ALTER TABLE daa_trade_tickets DROP CONSTRAINT IF EXISTS daa_trade_tickets_status_check");
+      await query(
+        "ALTER TABLE daa_trade_tickets ADD CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))",
+      ).catch(() => undefined);
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_kind TEXT");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_account_id TEXT");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_order_id TEXT");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_status TEXT");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS filled_qty NUMERIC");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS avg_fill_price NUMERIC");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS last_broker_sync_at TIMESTAMPTZ");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS last_applied_fill_qty NUMERIC NOT NULL DEFAULT 0");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_reject_reason TEXT");
+      await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_raw_json JSONB");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_broker_order_id ON daa_trade_tickets(broker_order_id)");
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
+          ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
+          broker_kind TEXT NOT NULL,
+          broker_account_id TEXT,
+          broker_order_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          filled_qty NUMERIC,
+          avg_fill_price NUMERIC,
+          raw_json JSONB,
+          synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique ON daa_broker_order_snapshots(broker_kind, broker_order_id)");
+    },
+  },
+  {
+    id: "20260320_broker_portfolio_snapshots",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_broker_account_state (
+          broker_kind TEXT PRIMARY KEY,
+          account_id TEXT,
+          base_currency TEXT NOT NULL DEFAULT 'USD',
+          cash NUMERIC NOT NULL DEFAULT 0,
+          investable_cash NUMERIC NOT NULL DEFAULT 0,
+          frozen_cash NUMERIC NOT NULL DEFAULT 0,
+          total_equity NUMERIC,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_broker_positions (
+          broker_kind TEXT NOT NULL,
+          account_id TEXT,
+          asset_key TEXT NOT NULL,
+          symbol TEXT NOT NULL,
+          market TEXT NOT NULL DEFAULT 'US',
+          currency TEXT NOT NULL DEFAULT 'USD',
+          qty NUMERIC NOT NULL DEFAULT 0,
+          price NUMERIC NOT NULL DEFAULT 0,
+          cost_basis NUMERIC,
+          tags TEXT[] NOT NULL DEFAULT '{}',
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (broker_kind, asset_key)
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc ON daa_broker_positions(broker_kind, updated_at DESC)");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

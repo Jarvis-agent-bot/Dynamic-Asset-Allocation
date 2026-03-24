@@ -15,7 +15,6 @@
  */
 
 import { callLlm, normalizeText, resolveLlmConfig, toFinite } from "@/src/daa/llm/llmClient";
-import type { LlmRuntimeConfig } from "@/src/daa/llm/llmClient";
 import type { CashClassification } from "@/src/daa/modules/workbench/cashClassification";
 import type { DaaFusedOpportunity } from "@/src/daa/signals/fusion";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
@@ -94,6 +93,7 @@ export type LlmDecisionInput = {
   warnings: string[];
   analysisFocus: string;
   marketContext?: DaaMarketContext | null;
+  recentLearningsText?: string | null;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,6 +153,7 @@ function buildDecisionPrompt(input: LlmDecisionInput): string {
 
   const warningText = input.warnings.slice(0, 5).join("; ") || "无";
   const marketContextText = formatMarketContextForPrompt(input.marketContext);
+  const learningsText = normalizeText(input.recentLearningsText, "暂无可复用的历史复盘经验。");
 
   return `你是 DAA 量化投资决策助手，负责在再平衡流程中提供结构化决策参考。
 请严格基于以下数据输出 JSON 格式的调整建议。不要给下单指令，只给调整系数和简短原因。
@@ -164,6 +165,9 @@ function buildDecisionPrompt(input: LlmDecisionInput): string {
 
 ## 当前市场环境
 ${marketContextText}
+
+## 最近复盘经验
+${learningsText}
 
 ## 纯数学漂移建议（等待你的信号修正）
 ${proposalLines}

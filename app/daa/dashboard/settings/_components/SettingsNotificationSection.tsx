@@ -5,7 +5,8 @@ import { RefreshCcw, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
-import { DeepLedgerStatusPill } from "@/app/daa/dashboard/_components/DeepLedgerUI";
+import { DAA_DASHBOARD_DATA_UPDATED_EVENT } from "@/app/daa/dashboard/dashboardEvents";
+import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import {
   listNotificationDeliveries,
@@ -100,6 +101,24 @@ function channelPillText(input: {
   return "已启用";
 }
 
+function telegramAssistantPillTone(input: {
+  ready: boolean;
+  lastSessionAt: string | null;
+}): "slate" | "amber" | "green" {
+  if (input.ready) return "green";
+  if (input.lastSessionAt) return "amber";
+  return "slate";
+}
+
+function telegramAssistantPillText(input: {
+  ready: boolean;
+  lastSessionAt: string | null;
+}): string {
+  if (input.ready) return "已就绪";
+  if (input.lastSessionAt) return "曾有会话";
+  return "未就绪";
+}
+
 function formatSummaryTime(value: string | null | undefined): string {
   return value ? formatDateTime(value) : "暂无";
 }
@@ -135,9 +154,9 @@ function formatDerivedDailySchedule(analysisTimeUtc: string): {
 
 function RunningStatusTile(props: {
   title: string;
-  subtitle: string;
   value: string;
-  hint: string;
+  detail: string;
+  meta?: string;
   pill?: React.ReactNode;
 }) {
   return (
@@ -147,8 +166,10 @@ function RunningStatusTile(props: {
         {props.pill}
       </div>
       <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{props.value}</div>
-      <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted)" }}>{props.subtitle}</div>
-      <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>{props.hint}</div>
+      <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.6, color: "var(--muted)" }}>{props.detail}</div>
+      {props.meta ? (
+        <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>{props.meta}</div>
+      ) : null}
     </div>
   );
 }
@@ -167,16 +188,17 @@ function ChannelConfigCard(props: {
   tradeEnabled: boolean;
   dailyReportEnabled: boolean;
   summary: StoreNotificationStatusSummary["channels"]["telegram"] | StoreNotificationStatusSummary["channels"]["feishu"] | null;
+  telegramAssistant?: StoreNotificationStatusSummary["telegramAssistant"] | null;
   statusLoading: boolean;
   onSendTest: () => void;
   testing: boolean;
   testDisabledReason?: string | null;
 }) {
   const eventsText = props.statusLoading
-    ? "已保存触发：正在读取"
+    ? "已生效触发：读取中"
     : props.summary?.deliveryEvents?.length
-      ? `已保存触发：${props.summary.deliveryEvents.join(" / ")}`
-      : "已保存触发：当前未开启任何事件";
+      ? `已生效触发：${props.summary.deliveryEvents.join(" / ")}`
+      : "已生效触发：当前未开启";
   const effectiveDisabledReason = props.statusLoading
     ? "正在读取已保存状态，请稍后再试。"
     : props.testDisabledReason || null;
@@ -188,9 +210,9 @@ function ChannelConfigCard(props: {
       description={props.description}
     >
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <DeepLedgerStatusPill tone={props.summary ? channelPillTone(props.summary) : "slate"}>
+        <DaaSurfaceStatusPill tone={props.summary ? channelPillTone(props.summary) : "slate"}>
           {props.statusLoading ? "加载中" : props.summary ? channelPillText(props.summary) : "状态未知"}
-        </DeepLedgerStatusPill>
+        </DaaSurfaceStatusPill>
         <div style={{ fontSize: 11, color: "var(--faint)" }}>{eventsText}</div>
       </div>
 
@@ -215,10 +237,34 @@ function ChannelConfigCard(props: {
             {props.statusLoading ? "正在读取最近一次投递结果" : props.summary?.lastErrorMessage || "这里会显示最近一次失败原因或最近成功时间。"}
           </div>
         </div>
+        {props.telegramAssistant ? (
+          <div style={statusTileStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+              <div style={{ fontSize: 11, color: "var(--faint)" }}>对话助手</div>
+              <DaaSurfaceStatusPill tone={telegramAssistantPillTone(props.telegramAssistant)}>
+                {telegramAssistantPillText(props.telegramAssistant)}
+              </DaaSurfaceStatusPill>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)" }}>
+              {props.statusLoading
+                ? "加载中"
+                : props.telegramAssistant.ready
+                  ? "Web 与 Telegram 共用上下文"
+                  : "还不能稳定接收入站消息"}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 11, color: "var(--muted)" }}>
+              {props.statusLoading
+                ? "正在读取对话助手状态"
+                : props.telegramAssistant.ready
+                  ? `最近会话：${formatSummaryTime(props.telegramAssistant.lastSessionAt)}`
+                  : props.telegramAssistant.secretStates.map((item) => `${item.key} ${item.configured ? "已配置" : "缺失"}`).join(" · ")}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>待保存触发配置</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>触发事件</div>
         <button
           type="button"
           onClick={props.onSendTest}
@@ -293,8 +339,8 @@ export function SettingsNotificationSection(props: {
     function onSaved() {
       void loadStatus(true);
     }
-    window.addEventListener("daa:dashboard:data-updated", onSaved);
-    return () => window.removeEventListener("daa:dashboard:data-updated", onSaved);
+    window.addEventListener(DAA_DASHBOARD_DATA_UPDATED_EVENT, onSaved);
+    return () => window.removeEventListener(DAA_DASHBOARD_DATA_UPDATED_EVENT, onSaved);
   }, [loadStatus]);
 
   const handleSendTest = useCallback(async (channel: "telegram" | "feishu") => {
@@ -315,6 +361,7 @@ export function SettingsNotificationSection(props: {
   const latestJob = summary?.recentJobs?.[0] || null;
   const dailySchedule = formatDerivedDailySchedule(config.rebalanceStrategy.analysisTimeUtc);
   const telegramSummary = summary?.channels.telegram || null;
+  const telegramAssistant = summary?.telegramAssistant || null;
   const feishuSummary = summary?.channels.feishu || null;
   const statusLoading = loading && !summary && !statusError;
 
@@ -322,14 +369,14 @@ export function SettingsNotificationSection(props: {
     <section id="settings-notification" className="scroll-mt-28">
       <SectionCard
         title="通知"
-        description="上半区展示已保存配置对应的真实运行状态，下半区编辑待保存的触发开关，避免把表单和实际系统状态混在一起。"
+        description="先看真实运行态，再改待保存开关，避免把“当前生效”和“草稿修改”混在一起。"
       >
         <div style={{ display: "grid", gap: 16 }}>
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12 }}>
             <div style={{ maxWidth: 720 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>已保存运行态</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>真实运行态</div>
               <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7, color: "var(--muted)" }}>
-                这里基于数据库中已保存的系统配置、凭证状态、最近 job 和最近投递结果；你在本页勾选的改动，只有点击页面底部“保存全部设置”后才会影响这一块。
+                这里只看已经生效的配置、凭证和最近投递结果；你在本页勾选的改动，保存前不会影响这里。
               </div>
             </div>
             <button
@@ -346,24 +393,37 @@ export function SettingsNotificationSection(props: {
           <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
             <RunningStatusTile
               title="Cron"
-              subtitle={statusLoading ? "正在读取已保存的定时任务状态" : summary?.cronConfigured ? "定时任务鉴权已配置" : "定时任务鉴权缺失"}
               value={statusLoading ? "加载中" : summary?.cronConfigured ? "已就绪" : "待配置"}
-              hint={statusLoading ? "这里只展示已经生效的运行状态，不会把“还没加载出来”误写成“未配置”。" : latestJob ? `最近任务：${latestJob.jobType} · ${latestJob.status} · ${formatSummaryTime(latestJob.startedAt)}` : "当前还没有任何 job 执行记录。"}
-              pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : summary?.cronConfigured ? "green" : "amber"}>{statusLoading ? "加载中" : summary?.cronConfigured ? "已配置" : "未配置"}</DeepLedgerStatusPill>}
+              detail={statusLoading ? "正在读取定时任务状态" : summary?.cronConfigured ? "定时任务鉴权已配置" : "定时任务鉴权缺失"}
+              meta={statusLoading ? "这里只展示已生效的运行状态。" : latestJob ? `最近任务：${latestJob.jobType} · ${latestJob.status} · ${formatSummaryTime(latestJob.startedAt)}` : "当前还没有 job 执行记录。"}
+              pill={<DaaSurfaceStatusPill tone={statusLoading ? "slate" : summary?.cronConfigured ? "green" : "amber"}>{statusLoading ? "加载中" : summary?.cronConfigured ? "已配置" : "未配置"}</DaaSurfaceStatusPill>}
             />
             <RunningStatusTile
-              title="Telegram"
-              subtitle={statusLoading ? "正在读取已保存的 Telegram 状态" : telegramSummary?.enabled ? "运行中" : "当前关闭"}
+              title="Telegram 通知"
               value={statusLoading ? "加载中" : telegramSummary?.configured ? "凭证完整" : "凭证不完整"}
-              hint={statusLoading ? "会在读取完成后显示真实凭证状态和最近一次投递结果。" : telegramSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(telegramSummary?.lastAttemptAt)}`}
-              pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : telegramSummary ? channelPillTone(telegramSummary) : "slate"}>{statusLoading ? "加载中" : telegramSummary ? channelPillText(telegramSummary) : "未知"}</DeepLedgerStatusPill>}
+              detail={statusLoading ? "正在读取 Telegram 状态" : telegramSummary?.enabled ? "运行中" : "当前关闭"}
+              meta={statusLoading ? "会在读取完成后显示最近一次投递结果。" : telegramSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(telegramSummary?.lastAttemptAt)}`}
+              pill={<DaaSurfaceStatusPill tone={statusLoading ? "slate" : telegramSummary ? channelPillTone(telegramSummary) : "slate"}>{statusLoading ? "加载中" : telegramSummary ? channelPillText(telegramSummary) : "未知"}</DaaSurfaceStatusPill>}
             />
             <RunningStatusTile
-              title="飞书"
-              subtitle={statusLoading ? "正在读取已保存的飞书状态" : feishuSummary?.enabled ? "运行中" : "当前关闭"}
+              title="Telegram 对话"
+              value={statusLoading ? "加载中" : telegramAssistant?.ready ? "已就绪" : "待补配置"}
+              detail={statusLoading ? "正在读取 Telegram 对话状态" : telegramAssistant?.ready ? "入站消息、上下文和待确认执行已经接通" : "当前还不能稳定接收入站消息"}
+              meta={statusLoading
+                ? "会在读取完成后显示最近一次对话。"
+                : telegramAssistant?.lastSessionAt
+                  ? `最近会话：${formatSummaryTime(telegramAssistant.lastSessionAt)} · ${telegramAssistant.participantId || telegramAssistant.title || "Telegram"}`
+                  : telegramAssistant?.secretStates?.length
+                    ? telegramAssistant.secretStates.map((item) => `${item.key} ${item.configured ? "已配置" : "缺失"}`).join(" · ")
+                    : "当前还没有 Telegram 对话记录。"}
+              pill={<DaaSurfaceStatusPill tone={statusLoading || !telegramAssistant ? "slate" : telegramAssistantPillTone(telegramAssistant)}>{statusLoading || !telegramAssistant ? "加载中" : telegramAssistantPillText(telegramAssistant)}</DaaSurfaceStatusPill>}
+            />
+            <RunningStatusTile
+              title="飞书通知"
               value={statusLoading ? "加载中" : feishuSummary?.configured ? "凭证完整" : "凭证不完整"}
-              hint={statusLoading ? "会在读取完成后显示真实凭证状态和最近一次投递结果。" : feishuSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(feishuSummary?.lastAttemptAt)}`}
-              pill={<DeepLedgerStatusPill tone={statusLoading ? "slate" : feishuSummary ? channelPillTone(feishuSummary) : "slate"}>{statusLoading ? "加载中" : feishuSummary ? channelPillText(feishuSummary) : "未知"}</DeepLedgerStatusPill>}
+              detail={statusLoading ? "正在读取飞书状态" : feishuSummary?.enabled ? "运行中（仅出站 webhook）" : "当前关闭"}
+              meta={statusLoading ? "会在读取完成后显示最近一次投递结果。" : feishuSummary?.lastErrorMessage || `最近投递：${formatSummaryTime(feishuSummary?.lastAttemptAt)} · 当前未接飞书入站对话`}
+              pill={<DaaSurfaceStatusPill tone={statusLoading ? "slate" : feishuSummary ? channelPillTone(feishuSummary) : "slate"}>{statusLoading ? "加载中" : feishuSummary ? channelPillText(feishuSummary) : "未知"}</DaaSurfaceStatusPill>}
             />
           </div>
 
@@ -374,7 +434,7 @@ export function SettingsNotificationSection(props: {
           ) : null}
 
           <div style={{ marginTop: 4 }}>
-            <FieldLabel>每日分析 &amp; 报告发送时间</FieldLabel>
+            <FieldLabel>当前自动分析时间</FieldLabel>
             <div style={{ ...statusTileStyle, maxWidth: 520 }}>
               <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
                 {dailySchedule.title}
@@ -384,14 +444,14 @@ export function SettingsNotificationSection(props: {
               </div>
             </div>
             <div style={{ marginTop: 5, fontSize: 11, color: "var(--faint)" }}>
-              如需调整，请在上方“再平衡策略”里修改自动分析时间；保存配置后下一次 cron 窗口生效。
+              如需调整，请回到“再平衡策略”修改自动分析时间；保存后会在下一次 cron 窗口生效。
             </div>
           </div>
 
           <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
             <ChannelConfigCard
               title="Telegram"
-              description="适合即时消息提醒。这里既能编辑触发开关，也能查看真实凭证状态和最近一次投递。"
+              description="这里负责出站通知；下方额外显示入站对话助手是否真正可用。"
               enabled={config.notification.telegram.enabled}
               onEnabledChange={(value) =>
                 setConfig((prev) =>
@@ -478,6 +538,7 @@ export function SettingsNotificationSection(props: {
               tradeEnabled={config.notification.telegram.onTradeExecuted}
               dailyReportEnabled={config.notification.telegram.dailyReport}
               summary={telegramSummary}
+              telegramAssistant={telegramAssistant}
               statusLoading={statusLoading}
               onSendTest={() => void handleSendTest("telegram")}
               testing={testingChannel === "telegram"}
@@ -486,7 +547,7 @@ export function SettingsNotificationSection(props: {
 
             <ChannelConfigCard
               title="飞书"
-              description="适合团队群聊广播。优先用这张卡片确认 webhook 是否真正可投递，再决定是否开启对应事件。"
+              description="当前只支持出站 webhook 广播；若要做飞书对话，需要补 App Bot 的入站事件、鉴权和回消息链路。"
               enabled={config.notification.feishu.enabled}
               onEnabledChange={(value) =>
                 setConfig((prev) =>
@@ -582,7 +643,7 @@ export function SettingsNotificationSection(props: {
 
           <SubsectionCard
             title="最近通知投递"
-            description="这里记录真实发出去的消息结果，而不是只看是否勾选了开关。若无记录，多半说明凭证、cron 或事件入口仍未真正生效。"
+            description="这里只看真实发出去的结果，不看表单勾选。"
           >
             {loading ? (
               <div style={{ padding: "12px 0", fontSize: 12, color: "var(--muted)" }}>加载通知投递记录…</div>
@@ -616,7 +677,7 @@ export function SettingsNotificationSection(props: {
                         <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>{entry.channel === "telegram" ? "Telegram" : "飞书"}</td>
                         <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>{deliveryEventLabel(entry.eventType)}</td>
                         <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)" }}>
-                          <DeepLedgerStatusPill tone={entry.success ? "green" : "amber"}>{entry.success ? "成功" : "失败"}</DeepLedgerStatusPill>
+                          <DaaSurfaceStatusPill tone={entry.success ? "green" : "amber"}>{entry.success ? "成功" : "失败"}</DaaSurfaceStatusPill>
                         </td>
                         <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)" }}>{triggerSourceLabel(entry.triggerSource)}</td>
                         <td style={{ padding: "12px 8px", borderBottom: "1px solid var(--border)", color: "var(--muted)", lineHeight: 1.6 }}>
@@ -629,13 +690,7 @@ export function SettingsNotificationSection(props: {
               </div>
             ) : (
               <div style={{ padding: "12px 0", fontSize: 12, lineHeight: 1.8, color: "var(--muted)" }}>
-                当前还没有任何通知投递记录。若你已经启用了开关但这里仍为空，优先检查：
-                <br />
-                1. 对应凭证是否已在“凭证”区保存。
-                <br />
-                2. 本页配置是否已经点击底部保存。
-                <br />
-                3. `cron_token` 是否存在，否则定时任务不会触发。
+                当前还没有通知投递记录。若你已经启用了开关但这里仍为空，优先检查凭证是否已保存、页面配置是否已保存，以及 `cron_token` 是否存在。
               </div>
             )}
           </SubsectionCard>

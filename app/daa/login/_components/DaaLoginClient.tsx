@@ -23,8 +23,8 @@ type SessionModel =
 function parseApiError(json: any, fallback: string): string {
   const message = typeof json?.error?.message === "string" ? json.error.message.trim() : "";
   if (message) return message;
-  const legacy = typeof json?.error === "string" ? json.error.trim() : "";
-  if (legacy) return legacy;
+  const fallbackError = typeof json?.error === "string" ? json.error.trim() : "";
+  if (fallbackError) return fallbackError;
   const detail = typeof json?.error?.details?.message === "string" ? json.error.details.message.trim() : "";
   if (detail) return detail;
   return fallback;
@@ -32,9 +32,9 @@ function parseApiError(json: any, fallback: string): string {
 
 function mapLoginError(message: string): string {
   const code = String(message || "").trim();
-  if (code === "invalid_credentials") return "邮箱或密码错误。";
+  if (code === "invalid_credentials") return "用户名/邮箱或密码错误。";
   if (code === "auth_backend_unavailable") return "认证服务不可用，请稍后重试。";
-  if (code === "Invalid login credentials") return "邮箱或密码错误。";
+  if (code === "Invalid login credentials") return "用户名/邮箱或密码错误。";
   return code || "登录失败，请重试。";
 }
 
@@ -94,7 +94,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (busy || session.kind === "checking") return;
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password.trim()) {
-      setAuthError("请填写有效的邮箱和密码。");
+      setAuthError("请填写有效的用户名/邮箱和密码。");
       if (!trimmedEmail) emailRef.current?.focus();
       else passRef.current?.focus();
       return;
@@ -343,17 +343,17 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 className="block text-[11px] font-semibold uppercase tracking-widest"
                 style={{ color: "var(--faint)" }}
               >
-                邮箱
+                用户名或邮箱
               </label>
               <input
                 id="daa-login-email"
                 ref={emailRef}
-                type="email"
+                type="text"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                autoComplete="email"
-                placeholder="you@example.com"
+                autoComplete="username"
+                placeholder="admin 或 you@example.com"
                 value={email}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
@@ -441,7 +441,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               认证说明
             </div>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              使用 Supabase Auth 邮箱密码登录。首次使用请在 Supabase 控制台创建账号。
+              使用 DAA 本地认证登录。测试环境支持用户名或邮箱；账号需要先在当前数据环境中存在，系统不会自动补默认账号。
             </p>
           </div>
 

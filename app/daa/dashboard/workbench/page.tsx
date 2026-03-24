@@ -1,4 +1,4 @@
-import { DeepLedgerPageHeader, DeepLedgerStatusPill } from "../_components/DeepLedgerUI";
+import { DaaSurfacePageHeader } from "../_components/DaaSurfaceUI";
 
 import WorkbenchPageClient from "./_components/WorkbenchPageClient";
 
@@ -12,14 +12,9 @@ type Props = {
 export default function WorkbenchPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
-      <DeepLedgerPageHeader
+      <DaaSurfacePageHeader
         title="工作台"
-        description="总览、组合、调仓和现金管理都放在这里处理。"
-        actions={(
-          <div className="flex flex-wrap items-center gap-2">
-            <DeepLedgerStatusPill tone="slate">不会自动下单</DeepLedgerStatusPill>
-          </div>
-        )}
+        description="账户概览、风险信号、组合操作、调仓执行和现金流水都收在这里。"
       />
       <WorkbenchPageClient initialTab={searchParams?.tab} initialSection={searchParams?.section} />
     </div>

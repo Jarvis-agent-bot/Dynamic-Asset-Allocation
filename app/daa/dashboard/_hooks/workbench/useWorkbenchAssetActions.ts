@@ -118,8 +118,14 @@ export function useWorkbenchAssetActions(input: {
         priceSnapshotAt: preview.priceSnapshotAt ?? undefined,
         reasonText: "来自工作台市价预览",
       });
-      if (result.result.status === "executed") toast.success(`${preview.symbol} 执行成功`);
-      else toast.error(result.result.rejectMessage || `${preview.symbol} 执行失败`);
+      if (result.result.status === "executed" || result.result.status === "submitted" || result.result.status === "partially_filled") {
+        const successText = result.result.status === "executed"
+          ? `${preview.symbol} 执行成功`
+          : `${preview.symbol} 订单已提交`;
+        toast.success(successText);
+      } else {
+        toast.error(result.result.rejectMessage || `${preview.symbol} 执行失败`);
+      }
       await input.loadBootstrap(true);
       setOrderDraft(null);
     } catch (err) {

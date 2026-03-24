@@ -68,11 +68,11 @@ function toErrorMessage(payload: any, status: number): string {
     : "";
   if (apiDetailMessage) return apiDetailMessage;
 
-  const legacyError = typeof payload?.error === "string" ? payload.error.trim() : "";
-  if (legacyError) return legacyError;
+  const fallbackError = typeof payload?.error === "string" ? payload.error.trim() : "";
+  if (fallbackError) return fallbackError;
 
-  const legacyMessage = typeof payload?.message === "string" ? payload.message.trim() : "";
-  if (legacyMessage) return legacyMessage;
+  const fallbackMessage = typeof payload?.message === "string" ? payload.message.trim() : "";
+  if (fallbackMessage) return fallbackMessage;
 
   const raw = typeof payload?._raw === "string" ? payload._raw.trim() : "";
   return raw || `http ${status}`;

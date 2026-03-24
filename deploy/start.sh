@@ -9,14 +9,19 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
+COMPOSE_ENV_ARGS=()
+if [[ -f ".env.local" ]]; then
+  COMPOSE_ENV_ARGS+=(--env-file .env.local)
+fi
+
 echo "[deploy] pulling latest main..."
 git fetch origin
 git checkout main
 git pull --ff-only
 
 echo "[deploy] building + starting via docker compose..."
-docker compose build --no-cache
-docker compose up -d
+docker compose "${COMPOSE_ENV_ARGS[@]}" build --no-cache
+docker compose "${COMPOSE_ENV_ARGS[@]}" up -d
 
 echo "[deploy] status:"
-docker compose ps
+docker compose "${COMPOSE_ENV_ARGS[@]}" ps

@@ -3,9 +3,9 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import {
-  DeepLedgerStatusPill,
-  deepLedgerSubtlePanelClassName,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceStatusPill,
+  daaSurfaceSubtlePanelClassName,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
 import type { DaaMarketContext, DaaMarketScopeContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 
@@ -35,9 +35,9 @@ export function RebalanceMarketSnapshot(props: {
       >
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-[var(--text)]">市场快照</span>
-          <DeepLedgerStatusPill tone={marketRegimeTone(props.primaryDecisionContext?.effectiveMarketRegime || props.activeMarketContext.regime)}>
+          <DaaSurfaceStatusPill tone={marketRegimeTone(props.primaryDecisionContext?.effectiveMarketRegime || props.activeMarketContext.regime)}>
             {marketRegimeLabel(props.primaryDecisionContext?.effectiveMarketRegime || props.activeMarketContext.regime)}
-          </DeepLedgerStatusPill>
+          </DaaSurfaceStatusPill>
           <span className="text-xs text-[var(--muted)]">
             买入系数 {Math.round((props.decisionMarketContext?.buyScale ?? props.activeMarketContext.buyScale) * 100)}% · 高波动 {Math.round((props.decisionMarketContext?.highRiskBuyScale ?? props.activeMarketContext.highRiskBuyScale) * 100)}%
           </span>
@@ -53,29 +53,29 @@ export function RebalanceMarketSnapshot(props: {
               { label: "AI 市场环境", regime: props.primaryDecisionContext?.llmMarketRegime },
               { label: "最终生效", regime: props.primaryDecisionContext?.effectiveMarketRegime || props.decisionMarketContext?.regime || props.activeMarketContext.regime },
             ].map((item) => (
-              <div key={item.label} className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3.5")}>
+              <div key={item.label} className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{item.label}</div>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-[var(--text)]">{marketRegimeLabel(item.regime)}</div>
-                  <DeepLedgerStatusPill tone={marketRegimeTone(item.regime)}>{marketRegimeLabel(item.regime)}</DeepLedgerStatusPill>
+                  <DaaSurfaceStatusPill tone={marketRegimeTone(item.regime)}>{marketRegimeLabel(item.regime)}</DaaSurfaceStatusPill>
                 </div>
               </div>
             ))}
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3.5")}>
+            <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{props.decisionMarketLabel} · 买入系数</div>
               <div className="mt-2 font-[var(--font-mono)] text-[18px] text-[var(--text)]">{props.decisionMarketContext ? Math.round(props.decisionMarketContext.buyScale * 100) : 0}%</div>
               <div className="mt-1 text-xs text-[var(--muted)]">风险分 {props.decisionMarketContext?.riskOffScorePct.toFixed(1) || "0.0"} · 置信度 {props.decisionMarketContext?.confidencePct.toFixed(1) || "0.0"}%</div>
             </div>
-            <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3.5")}>
+            <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">高波动执行系数</div>
               <div className="mt-2 font-[var(--font-mono)] text-[18px] text-[var(--text)]">{props.decisionMarketContext ? Math.round(props.decisionMarketContext.highRiskBuyScale * 100) : 0}%</div>
               <div className="mt-1 text-xs text-[var(--muted)]">适用于成长、加密与高波动资产</div>
             </div>
           </div>
           {props.currentDecisionFacts.length > 0 ? (
-            <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3.5")}>
+            <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">关键市场指标</div>
               <div className="mt-3 space-y-2 text-sm text-[var(--text)]">
                 {props.currentDecisionFacts.map((fact) => (

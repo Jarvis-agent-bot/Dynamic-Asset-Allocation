@@ -2,17 +2,20 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture } from "@/src/daa/__tests__/testDataFactories";
+import type { NotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
+import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { WorkbenchActiveTabPanel } from "../WorkbenchActiveTabPanel";
 
 afterEach(() => {
   cleanup();
 });
 
-vi.mock("../../../portfolio/_components/workbench/AssetUniverseTable", () => ({
+vi.mock("../AssetUniverseTable", () => ({
   default: ({ view }: { view: string }) => <div data-testid={`asset-table-${view}`}>{view}</div>,
 }));
 
-vi.mock("../../../portfolio/_components/workbench/WatchlistBuilderPanel", () => ({
+vi.mock("../WatchlistBuilderPanel", () => ({
   default: () => <div data-testid="watchlist-builder">watchlist-builder</div>,
 }));
 
@@ -28,48 +31,240 @@ vi.mock("../WorkbenchRebalanceSection", () => ({
   ),
 }));
 
-function createModel(overrides: Record<string, unknown> = {}) {
+function createNotificationSummaryFixture(): NotificationStatusSummary {
   return {
-    activeTab: "watchlist",
-    setActiveTab: vi.fn(),
-    summary: {
-      holdingAssets: 2,
-      watchlistAssets: 5,
+    cronConfigured: true,
+    recentJobs: [],
+    channels: {
+      telegram: {
+        channel: "telegram",
+        enabled: false,
+        configured: false,
+        secretStates: [],
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastFailureAt: null,
+        lastErrorMessage: null,
+        deliveryEvents: [],
+      },
+      feishu: {
+        channel: "feishu",
+        enabled: false,
+        configured: false,
+        secretStates: [],
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastFailureAt: null,
+        lastErrorMessage: null,
+        deliveryEvents: [],
+      },
     },
-    tableProps: {
-      rows: [],
-      baseCurrency: "USD",
-      counts: { all: 0, holdings: 2, watchlist: 5, basket: 1 },
-      onAddToExecution: vi.fn(),
-      onUpdateTargetWeight: vi.fn(),
-      onNormalizeTargetWeights: vi.fn(),
-      onToggleBasket: vi.fn(),
-      onRemoveFromWatchlist: vi.fn(),
-      onOpenCalibration: vi.fn(),
-      expandedInsightKeys: {},
-      insightLoadingByAssetKey: {},
-      insightErrorByAssetKey: {},
-      insightDataByAssetKey: {},
-      onToggleInlineInsights: vi.fn(),
-      onSubmitLlmFeedback: vi.fn(),
-      llmFeedbackSubmittingByContext: {},
-      llmFeedbackScoreByContext: {},
+    telegramAssistant: {
+      ready: false,
+      secretStates: [],
+      lastSessionAt: null,
+      lastUserText: null,
+      lastAssistantText: null,
+      lastIntentKind: null,
+      participantId: null,
+      title: null,
     },
-    watchlistBuilderProps: {
-      joinedAssetKeys: {},
-      onListFeaturedAssets: vi.fn(),
-      onSearch: vi.fn(),
-      onAddAsset: vi.fn(),
+  };
+}
+
+function createOrderPreviewFixture() {
+  return {
+    assetKey: "US::AAPL",
+    symbol: "AAPL",
+    market: "US",
+    currency: "USD",
+    side: "BUY" as const,
+    qty: 1,
+    price: 100,
+    grossNotional: 100,
+    feeRateBps: 0,
+    fee: 0,
+    feeInBase: 0,
+    fxRateToBase: 1,
+    notionalInBase: 100,
+    baseCurrency: "USD",
+    accountCash: 1000,
+    holdingQty: 0,
+    canSubmit: true,
+    riskCheck: {
+      overallStatus: "pass" as const,
+      items: [],
     },
-    rebalanceSectionProps: {
-      onNavigateTab: vi.fn(),
+    priceSource: "test",
+    priceSnapshotAt: "2026-03-01T00:00:00.000Z",
+    warnings: [],
+  };
+}
+
+type WorkbenchPageModelOverrides =
+  Partial<Omit<WorkbenchPageModel, "tableProps" | "watchlistBuilderProps" | "rebalanceSectionProps" | "dialogProps">> & {
+    tableProps?: Partial<WorkbenchPageModel["tableProps"]>;
+    watchlistBuilderProps?: Partial<WorkbenchPageModel["watchlistBuilderProps"]>;
+    rebalanceSectionProps?: Partial<NonNullable<WorkbenchPageModel["rebalanceSectionProps"]>> | null;
+    dialogProps?: Partial<WorkbenchPageModel["dialogProps"]>;
+  };
+
+function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPageModel {
+  const {
+    tableProps: tablePropsOverride,
+    watchlistBuilderProps: watchlistBuilderPropsOverride,
+    rebalanceSectionProps: rebalanceSectionPropsOverride,
+    dialogProps: dialogPropsOverride,
+    ...topLevelOverrides
+  } = overrides;
+  const summary = overrides.summary ?? {
+    holdingAssets: 2,
+    watchlistAssets: 5,
+  };
+  const baseBootstrap = buildWorkbenchBootstrapFixture();
+  const tableProps: WorkbenchPageModel["tableProps"] = {
+    rows: [],
+    baseCurrency: "USD",
+    counts: { all: 0, holdings: 2, watchlist: 5, basket: 1 },
+    onAddToExecution: vi.fn(async () => undefined),
+    onUpdateTargetWeight: vi.fn(async () => undefined),
+    onNormalizeTargetWeights: vi.fn(async () => undefined),
+    onToggleBasket: vi.fn(async () => undefined),
+    onRemoveFromWatchlist: vi.fn(async () => undefined),
+    onOpenCalibration: vi.fn(),
+    expandedInsightKeys: {},
+    insightLoadingByAssetKey: {},
+    insightErrorByAssetKey: {},
+    insightDataByAssetKey: {},
+    onToggleInlineInsights: vi.fn(async () => undefined),
+    onSubmitLlmFeedback: vi.fn(async () => undefined),
+    llmFeedbackSubmittingByContext: {},
+    llmFeedbackScoreByContext: {},
+    actioningAssetKey: null,
+    disabled: false,
+    updatingTarget: false,
+    ...tablePropsOverride,
+  };
+  const watchlistBuilderProps: WorkbenchPageModel["watchlistBuilderProps"] = {
+    loading: false,
+    joinedAssetKeys: {},
+    onListFeaturedAssets: vi.fn(async () => ({ groups: [], generatedAt: "2026-03-01T00:00:00.000Z" })),
+    onSearch: vi.fn(async () => []),
+    onAddAsset: vi.fn(async () => undefined),
+    ...watchlistBuilderPropsOverride,
+  };
+  const rebalanceSectionProps = rebalanceSectionPropsOverride === null
+    ? null
+    : {
+        bootstrap: baseBootstrap,
+        cycles: [],
+        currentCycle: null,
+        currentRiskCheck: null,
+        summary,
+        busy: false,
+        marketContextExpanded: false,
+        setMarketContextExpanded: vi.fn(),
+        expandedProposalDecisionKeys: {},
+        setExpandedProposalDecisionKeys: vi.fn(),
+        llmFeedbackSubmittingByContext: {},
+        llmFeedbackScoreByContext: {},
+        activeMarketContext: null,
+        primaryDecisionContext: null,
+        decisionMarketContext: null,
+        decisionMarketLabel: "",
+        currentDecisionFacts: [],
+        canEditCurrentCycle: false,
+        canExecuteAll: false,
+        canExecuteSelected: false,
+        isCurrentCycleTerminal: false,
+        cycleProgressText: "",
+        selectedProposalCount: 0,
+        selectedProposalNotional: 0,
+        buyProposalCount: 0,
+        sellProposalCount: 0,
+        rebalanceChecklist: [],
+        rebalanceChecklistAllPassed: false,
+        firstUnmetChecklist: undefined,
+        onNavigateTab: vi.fn(),
+        onGenerateCycle: vi.fn(async () => undefined),
+        onOpenExecuteDialog: vi.fn(),
+        onCancelCycle: vi.fn(async () => undefined),
+        onSelectAllProposals: vi.fn(async () => undefined),
+        onToggleProposal: vi.fn(async () => undefined),
+        onSubmitLlmFeedback: vi.fn(async () => undefined),
+        onSelectCycle: vi.fn(),
+        ...rebalanceSectionPropsOverride,
+      };
+  const dialogProps: WorkbenchPageModel["dialogProps"] = {
+    orderDraft: null,
+    setOrderDraft: vi.fn(),
+    orderSubmitting: false,
+    onPreview: vi.fn(async () => createOrderPreviewFixture()),
+    onSubmitOrder: vi.fn(async () => undefined),
+    calibrationDraft: null,
+    setCalibrationDraft: vi.fn(),
+    calibrating: false,
+    busy: false,
+    onSubmitCalibration: vi.fn(async () => undefined),
+    pendingExecuteMode: null,
+    setPendingExecuteMode: vi.fn(),
+    executeSummary: null,
+    executeSummaryLoading: false,
+    executeSummaryError: "",
+    currentCycle: null,
+    baseCurrency: "USD",
+    onConfirmExecute: vi.fn(async () => undefined),
+    ...dialogPropsOverride,
+  };
+
+  return {
+    assistant: topLevelOverrides.assistant ?? {
+      conversation: null,
+      session: null,
+      messages: [],
+      sessions: [],
+      threads: [],
+      selectedSessionId: null,
+      loading: false,
+      sending: false,
+      error: "",
+      refresh: vi.fn(async () => undefined),
+      send: vi.fn(async () => undefined),
+      selectThread: vi.fn(async () => undefined),
     },
-    bootstrap: {
-      baseCurrency: "USD",
+    activeTab: topLevelOverrides.activeTab ?? "watchlist",
+    setActiveTab: topLevelOverrides.setActiveTab ?? vi.fn(),
+    bootstrap: topLevelOverrides.bootstrap ?? buildWorkbenchBootstrapFixture(),
+    snapshots: topLevelOverrides.snapshots ?? [],
+    cashLedger: topLevelOverrides.cashLedger ?? [],
+    signals: topLevelOverrides.signals ?? [],
+    allocationSummary: topLevelOverrides.allocationSummary ?? null,
+    ledgerMeta: topLevelOverrides.ledgerMeta ?? {
+      ledgerStartTs: null,
+      openingBalance: 0,
+      archivedCycleCount: 0,
+      archivedTradeCount: 0,
+      archivedReportCount: 0,
     },
-    loadBootstrap: vi.fn(),
-    ...overrides,
-  } as any;
+    notificationStatus: topLevelOverrides.notificationStatus ?? createNotificationSummaryFixture(),
+    loading: topLevelOverrides.loading ?? false,
+    refreshing: topLevelOverrides.refreshing ?? false,
+    error: topLevelOverrides.error ?? "",
+    authRequired: topLevelOverrides.authRequired ?? false,
+    loadBootstrap: topLevelOverrides.loadBootstrap ?? vi.fn(async () => undefined),
+    summary,
+    totalEquity: topLevelOverrides.totalEquity ?? 1000,
+    holdingsValue: topLevelOverrides.holdingsValue ?? 0,
+    cashValue: topLevelOverrides.cashValue ?? 1000,
+    availableCashValue: topLevelOverrides.availableCashValue ?? 1000,
+    frozenCashValue: topLevelOverrides.frozenCashValue ?? 0,
+    executionReceipt: topLevelOverrides.executionReceipt ?? null,
+    clearExecutionReceipt: topLevelOverrides.clearExecutionReceipt ?? vi.fn(),
+    tableProps,
+    watchlistBuilderProps,
+    rebalanceSectionProps,
+    dialogProps,
+  };
 }
 
 describe("WorkbenchActiveTabPanel", () => {

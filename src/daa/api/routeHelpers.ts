@@ -6,6 +6,7 @@ function statusFromCode(code: ApiErrorCode): number {
   if (code === "UNAUTHORIZED" || code === "CRON_AUTH_FAILED") return 401;
   if (code === "VALIDATION_FAILED") return 400;
   if (code === "NOT_FOUND") return 404;
+  if (code === "BROKER_SESSION_NOT_READY") return 409;
   if (code === "DB_ERROR") return 503;
   return 500;
 }
@@ -56,6 +57,14 @@ function isDbErrorMessage(message: string): boolean {
 export function errorToResponse(error: unknown): Response {
   console.error("[DAA API]", error);
   const message = error instanceof Error ? error.message : String(error);
+  const status = Number((error as { status?: unknown } | null)?.status);
+  const details = (error as { details?: unknown } | null)?.details;
+  if (Number.isFinite(status) && status >= 400 && status < 500) {
+    return fail(status === 409 ? "BROKER_SESSION_NOT_READY" : "UNKNOWN", message, {
+      status,
+      details,
+    });
+  }
   if (/not found/i.test(message)) {
     return fail("NOT_FOUND", message, { status: 404 });
   }

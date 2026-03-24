@@ -4,10 +4,9 @@ import { useState } from "react";
 import { Bot, ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Banknote } from "lucide-react";
 
 import {
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-  deepLedgerSubtlePanelClassName,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceStatusPill,
+  daaSurfaceSubtlePanelClassName,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
@@ -60,12 +59,12 @@ export function RebalanceAiInsight(props: {
         <div className="flex flex-wrap items-center gap-2">
           <Bot className="h-4 w-4 shrink-0 text-[var(--primary)]" />
           <span className="text-sm font-semibold text-[var(--text)]">AI 分析摘要</span>
-          <DeepLedgerStatusPill tone={marketRegimeTone(snap.marketRegime)}>
+          <DaaSurfaceStatusPill tone={marketRegimeTone(snap.marketRegime)}>
             {marketRegimeLabel(snap.marketRegime)}
-          </DeepLedgerStatusPill>
-          <DeepLedgerStatusPill tone={confidenceTone(snap.overallConfidence)}>
+          </DaaSurfaceStatusPill>
+          <DaaSurfaceStatusPill tone={confidenceTone(snap.overallConfidence)}>
             置信度 {snap.overallConfidence}%
-          </DeepLedgerStatusPill>
+          </DaaSurfaceStatusPill>
         </div>
         <span className="shrink-0 text-[10px] text-[var(--faint)]">
           {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -82,7 +81,7 @@ export function RebalanceAiInsight(props: {
           {/* Risks & Opportunities */}
           <div className="grid gap-3 md:grid-cols-2">
             {snap.keyRisks.length > 0 ? (
-              <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3.5")}>
+              <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
                 <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-400/80">
                   <AlertTriangle className="h-3 w-3" />
                   关键风险
@@ -96,7 +95,7 @@ export function RebalanceAiInsight(props: {
             ) : null}
 
             {snap.keyOpportunities.length > 0 ? (
-              <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3.5")}>
+              <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
                 <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-400/80">
                   <TrendingUp className="h-3 w-3" />
                   关键机会
@@ -112,13 +111,13 @@ export function RebalanceAiInsight(props: {
 
           {/* Cash Advice */}
           {snap.cashAdvice ? (
-            <div className={cn(deepLedgerSubtlePanelClassName, "px-4 py-3.5")}>
+            <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
               <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">
                 <Banknote className="h-3 w-3" />
                 现金建议
               </div>
               <div className="flex items-center gap-2">
-                <DeepLedgerStatusPill tone="cyan">{cashAdviceLabel[snap.cashAdvice] || snap.cashAdvice}</DeepLedgerStatusPill>
+                <DaaSurfaceStatusPill tone="cyan">{cashAdviceLabel[snap.cashAdvice] || snap.cashAdvice}</DaaSurfaceStatusPill>
                 {snap.cashRationale ? <span className="text-sm text-[var(--muted)]">{snap.cashRationale}</span> : null}
               </div>
             </div>

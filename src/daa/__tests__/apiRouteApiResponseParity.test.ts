@@ -25,7 +25,7 @@ function listRouteFiles(rootRel: string): string[] {
 }
 
 describe("api-route-api-response-parity-v1", () => {
-  it("/api/daa 路由不再直接输出 legacy NextResponse JSON 或原始 denied 响应", () => {
+  it("/api/daa 路由不再直接输出旧式 NextResponse JSON 或原始 denied 响应", () => {
     const routes = listRouteFiles("app/api/daa");
     const offenders: string[] = [];
 

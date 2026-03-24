@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useWorkbenchAssetActions } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchAssetActions";
 import { useWorkbenchExecutionFlow } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchExecutionFlow";
 import { useWorkbenchRebalanceFlow } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchRebalanceFlow";
+import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useWorkbenchModel } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -16,6 +17,7 @@ export function useWorkbenchPageModel(input: {
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
 } = {}) {
+  const assistant = useAssistantChat();
   const {
     activeTab,
     setActiveTab,
@@ -155,6 +157,7 @@ export function useWorkbenchPageModel(input: {
   };
 
   return {
+    assistant,
     activeTab,
     setActiveTab,
     bootstrap,

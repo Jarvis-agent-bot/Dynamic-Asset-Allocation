@@ -1,4 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildAssetUniverseRow,
+  buildAssetUniverseView,
+  buildMarketPriceResolved,
+  buildSystemConfigRow,
+  buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture,
+} from "@/src/daa/__tests__/testDataFactories";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 
 vi.mock("@/src/daa/adminAuth", () => ({
@@ -31,35 +38,79 @@ import { POST } from "@/app/api/daa/workbench/execution/preview/route";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getDaaSystemConfig, listDaaAssetUniverse, listDaaFxRates, updateDaaAssetUniverseLastPrice } from "@/src/daa/store/daaStorePg";
 
+const MARKET_CACHE_CONFIG = {
+  freshMinutes: 15,
+  serveStaleHours: 48,
+  rawRetentionDays: 90,
+} as const;
+
+function buildPreviewConfig(input?: {
+  priceFeedEnabled?: boolean;
+}) {
+  return buildSystemConfigRow({
+    strategy: {
+      constraints: {
+        tradeFeeRateBps: 5,
+      },
+    },
+    dataSources: {
+      priceFeed: {
+        enabled: input?.priceFeedEnabled ?? true,
+        marketCache: MARKET_CACHE_CONFIG,
+      },
+    },
+  });
+}
+
+function buildPreviewBootstrap(input?: {
+  cash?: number;
+  totalEquity?: number | null;
+  assets?: Array<ReturnType<typeof buildAssetUniverseView>>;
+}) {
+  const cash = input?.cash ?? 10000;
+  return buildWorkbenchBootstrapFixture({
+    account: {
+      cash,
+      investableCash: cash,
+      frozenCash: 0,
+      totalEquity: input?.totalEquity ?? cash,
+    },
+    assetUniverse: input?.assets ?? [],
+  });
+}
+
 describe("workbench-market-preview-route-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        strategy: {
-          constraints: {
-            tradeFeeRateBps: 5,
-          },
-        },
-        dataSources: {
-          priceFeed: {
-            marketCache: {
-              freshMinutes: 15,
-              serveStaleHours: 48,
-              rawRetentionDays: 90,
-            },
-          },
-        },
-      },
-    } as any);
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildPreviewConfig());
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({});
   });
 
   it("高波动与价格过旧保留为提示，但现金不足会禁止提交", async () => {
-    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue({
-      baseCurrency: "USD",
-      account: { cash: 50, investableCash: 50, frozenCash: 0, totalEquity: 50 },
-      assetUniverse: [{
+    const stalePriceUpdatedAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildPreviewBootstrap({
+      cash: 50,
+      totalEquity: 50,
+      assets: [
+        buildAssetUniverseView({
+          assetKey: "CRYPTO::BTC-USD",
+          symbol: "BTC-USD",
+          market: "CRYPTO",
+          currency: "USD",
+          assetClass: "CRYPTO",
+          region: "GLOBAL",
+          exchange: "COINBASE",
+          instrumentType: "CRYPTO",
+          marketGroup: "CRYPTO",
+          yfinanceSymbol: "BTC-USD",
+          lastPrice: 100,
+          priceUpdatedAt: stalePriceUpdatedAt,
+        }),
+      ],
+    }));
+
+    vi.mocked(listDaaAssetUniverse).mockResolvedValue([
+      buildAssetUniverseRow({
         assetKey: "CRYPTO::BTC-USD",
         symbol: "BTC-USD",
         market: "CRYPTO",
@@ -69,59 +120,10 @@ describe("workbench-market-preview-route-v1", () => {
         exchange: "COINBASE",
         instrumentType: "CRYPTO",
         marketGroup: "CRYPTO",
-        holdingQty: 0,
-        holdingPrice: 0,
-        costBasis: null,
-        holdingTags: [],
-        watchEnabled: true,
-        targetWeightHint: 0,
-        watchTags: [],
-        notes: null,
         lastPrice: 100,
-        priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-        valuationBase: 0,
-        fxRateToBase: 1,
-        fxMissing: false,
-        actualWeightPct: 0,
-        targetWeightPct: 0,
-        gapPct: null,
-      }],
-      execution: {
-        logs: [],
-      },
-      rebalance: {
-        mode: "manual",
-        autoAnalysisEnabled: false,
-        analysisTimeUtc: "00:20",
-        timezone: "Asia/Shanghai",
-        analysisFocus: "mock",
-      },
-      warnings: [],
-    } as any);
-
-    vi.mocked(listDaaAssetUniverse).mockResolvedValue([{
-      assetKey: "CRYPTO::BTC-USD",
-      symbol: "BTC-USD",
-      market: "CRYPTO",
-      currency: "USD",
-      assetClass: "CRYPTO",
-      region: "GLOBAL",
-      exchange: "COINBASE",
-      instrumentType: "CRYPTO",
-      marketGroup: "CRYPTO",
-      holdingQty: 0,
-      holdingPrice: 0,
-      costBasis: null,
-      holdingTags: [],
-      watchEnabled: true,
-      targetWeightHint: 0,
-      watchTags: [],
-      notes: null,
-      lastPrice: 100,
-      priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-      createdAt: "2026-03-01T00:00:00.000Z",
-      updatedAt: "2026-03-01T00:00:00.000Z",
-    }]);
+        priceUpdatedAt: stalePriceUpdatedAt,
+      }),
+    ]);
     vi.mocked(listDaaFxRates).mockResolvedValue([]);
 
     const response = await POST(new Request("http://localhost/api/daa/workbench/execution/preview", {
@@ -145,90 +147,30 @@ describe("workbench-market-preview-route-v1", () => {
   });
 
   it("行情源关闭时不再发起实时刷新，并沿用本地价格预览", async () => {
-    vi.mocked(getDaaSystemConfig).mockResolvedValue({
-      config: {
-        strategy: {
-          constraints: {
-            tradeFeeRateBps: 5,
-          },
-        },
-        dataSources: {
-          priceFeed: {
-            enabled: false,
-            marketCache: {
-              freshMinutes: 15,
-              serveStaleHours: 48,
-              rawRetentionDays: 90,
-            },
-          },
-        },
-      },
-    } as any);
-    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue({
-      baseCurrency: "USD",
-      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
-      assetUniverse: [{
+    const stalePriceUpdatedAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildPreviewConfig({ priceFeedEnabled: false }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildPreviewBootstrap({
+      assets: [
+        buildAssetUniverseView({
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          market: "US",
+          currency: "USD",
+          lastPrice: 100,
+          priceUpdatedAt: stalePriceUpdatedAt,
+        }),
+      ],
+    }));
+    vi.mocked(listDaaAssetUniverse).mockResolvedValue([
+      buildAssetUniverseRow({
         assetKey: "US::AAPL",
         symbol: "AAPL",
         market: "US",
         currency: "USD",
-        assetClass: "EQUITY",
-        region: "US",
-        exchange: "NASDAQ",
-        instrumentType: "STOCK",
-        marketGroup: "US_EQUITY",
-        holdingQty: 0,
-        holdingPrice: 0,
-        costBasis: null,
-        holdingTags: [],
-        watchEnabled: true,
-        targetWeightHint: 0,
-        watchTags: [],
-        notes: null,
         lastPrice: 100,
-        priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-        valuationBase: 0,
-        fxRateToBase: 1,
-        fxMissing: false,
-        actualWeightPct: 0,
-        targetWeightPct: 0,
-        gapPct: null,
-      }],
-      execution: {
-        logs: [],
-      },
-      rebalance: {
-        mode: "manual",
-        autoAnalysisEnabled: false,
-        analysisTimeUtc: "00:20",
-        timezone: "Asia/Shanghai",
-        analysisFocus: "mock",
-      },
-      warnings: [],
-    } as any);
-    vi.mocked(listDaaAssetUniverse).mockResolvedValue([{
-      assetKey: "US::AAPL",
-      symbol: "AAPL",
-      market: "US",
-      currency: "USD",
-      assetClass: "EQUITY",
-      region: "US",
-      exchange: "NASDAQ",
-      instrumentType: "STOCK",
-      marketGroup: "US_EQUITY",
-      holdingQty: 0,
-      holdingPrice: 0,
-      costBasis: null,
-      holdingTags: [],
-      watchEnabled: true,
-      targetWeightHint: 0,
-      watchTags: [],
-      notes: null,
-      lastPrice: 100,
-      priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-      createdAt: "2026-03-01T00:00:00.000Z",
-      updatedAt: "2026-03-01T00:00:00.000Z",
-    }]);
+        priceUpdatedAt: stalePriceUpdatedAt,
+      }),
+    ]);
     vi.mocked(listDaaFxRates).mockResolvedValue([]);
 
     const response = await POST(new Request("http://localhost/api/daa/workbench/execution/preview", {
@@ -250,76 +192,33 @@ describe("workbench-market-preview-route-v1", () => {
   });
 
   it("会优先使用第三方行情，失败后才回退本地缓存价", async () => {
-    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue({
-      baseCurrency: "USD",
-      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
-      assetUniverse: [{
+    const stalePriceUpdatedAt = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildPreviewBootstrap({
+      assets: [
+        buildAssetUniverseView({
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          market: "US",
+          currency: "USD",
+          lastPrice: 100,
+          priceUpdatedAt: stalePriceUpdatedAt,
+        }),
+      ],
+    }));
+    vi.mocked(listDaaAssetUniverse).mockResolvedValue([
+      buildAssetUniverseRow({
         assetKey: "US::AAPL",
         symbol: "AAPL",
         market: "US",
         currency: "USD",
-        assetClass: "EQUITY",
-        region: "US",
-        exchange: "NASDAQ",
-        instrumentType: "STOCK",
-        marketGroup: "US_EQUITY",
-        holdingQty: 0,
-        holdingPrice: 0,
-        costBasis: null,
-        holdingTags: [],
-        watchEnabled: true,
-        targetWeightHint: 0,
-        watchTags: [],
-        notes: null,
         lastPrice: 100,
-        priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-        valuationBase: 0,
-        fxRateToBase: 1,
-        fxMissing: false,
-        actualWeightPct: 0,
-        targetWeightPct: 0,
-        gapPct: null,
-      }],
-      execution: {
-        logs: [],
-      },
-      rebalance: {
-        mode: "manual",
-        autoAnalysisEnabled: false,
-        analysisTimeUtc: "00:20",
-        timezone: "Asia/Shanghai",
-        analysisFocus: "mock",
-      },
-      warnings: [],
-    } as any);
-    vi.mocked(listDaaAssetUniverse).mockResolvedValue([{
-      assetKey: "US::AAPL",
-      symbol: "AAPL",
-      market: "US",
-      currency: "USD",
-      assetClass: "EQUITY",
-      region: "US",
-      exchange: "NASDAQ",
-      instrumentType: "STOCK",
-      marketGroup: "US_EQUITY",
-      holdingQty: 0,
-      holdingPrice: 0,
-      costBasis: null,
-      holdingTags: [],
-      watchEnabled: true,
-      targetWeightHint: 0,
-      watchTags: [],
-      notes: null,
-      lastPrice: 100,
-      priceUpdatedAt: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-      createdAt: "2026-03-01T00:00:00.000Z",
-      updatedAt: "2026-03-01T00:00:00.000Z",
-    }]);
+        priceUpdatedAt: stalePriceUpdatedAt,
+      }),
+    ]);
     vi.mocked(listDaaFxRates).mockResolvedValue([]);
     const updatedAt = new Date().toISOString();
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({
-      "US::AAPL": {
-        provider: "yfinance",
+      "US::AAPL": buildMarketPriceResolved({
         symbol: "AAPL",
         market: "US",
         currency: "USD",
@@ -328,7 +227,7 @@ describe("workbench-market-preview-route-v1", () => {
         priceUpdatedAt: updatedAt,
         priceAgeSec: 5,
         priceSource: "execution_preview:yfinance:AAPL",
-      },
+      }),
     });
 
     const response = await POST(new Request("http://localhost/api/daa/workbench/execution/preview", {
@@ -358,75 +257,31 @@ describe("workbench-market-preview-route-v1", () => {
   });
 
   it("缺少行情时间时不再伪造 priceSnapshotAt", async () => {
-    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue({
-      baseCurrency: "USD",
-      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
-      assetUniverse: [{
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildPreviewBootstrap({
+      assets: [
+        buildAssetUniverseView({
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          market: "US",
+          currency: "USD",
+          lastPrice: 100,
+          priceUpdatedAt: null,
+        }),
+      ],
+    }));
+    vi.mocked(listDaaAssetUniverse).mockResolvedValue([
+      buildAssetUniverseRow({
         assetKey: "US::AAPL",
         symbol: "AAPL",
         market: "US",
         currency: "USD",
-        assetClass: "EQUITY",
-        region: "US",
-        exchange: "NASDAQ",
-        instrumentType: "STOCK",
-        marketGroup: "US_EQUITY",
-        holdingQty: 0,
-        holdingPrice: 0,
-        costBasis: null,
-        holdingTags: [],
-        watchEnabled: true,
-        targetWeightHint: 0,
-        watchTags: [],
-        notes: null,
         lastPrice: 100,
         priceUpdatedAt: null,
-        valuationBase: 0,
-        fxRateToBase: 1,
-        fxMissing: false,
-        actualWeightPct: 0,
-        targetWeightPct: 0,
-        gapPct: null,
-      }],
-      execution: {
-        logs: [],
-      },
-      rebalance: {
-        mode: "manual",
-        autoAnalysisEnabled: false,
-        analysisTimeUtc: "00:20",
-        timezone: "Asia/Shanghai",
-        analysisFocus: "mock",
-      },
-      warnings: [],
-    } as any);
-    vi.mocked(listDaaAssetUniverse).mockResolvedValue([{
-      assetKey: "US::AAPL",
-      symbol: "AAPL",
-      market: "US",
-      currency: "USD",
-      assetClass: "EQUITY",
-      region: "US",
-      exchange: "NASDAQ",
-      instrumentType: "STOCK",
-      marketGroup: "US_EQUITY",
-      holdingQty: 0,
-      holdingPrice: 0,
-      costBasis: null,
-      holdingTags: [],
-      watchEnabled: true,
-      targetWeightHint: 0,
-      watchTags: [],
-      notes: null,
-      lastPrice: 100,
-      priceUpdatedAt: null,
-      createdAt: "2026-03-01T00:00:00.000Z",
-      updatedAt: "2026-03-01T00:00:00.000Z",
-    }]);
+      }),
+    ]);
     vi.mocked(listDaaFxRates).mockResolvedValue([]);
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({
-      "US::AAPL": {
-        provider: "yfinance",
+      "US::AAPL": buildMarketPriceResolved({
         symbol: "AAPL",
         market: "US",
         currency: "USD",
@@ -435,7 +290,7 @@ describe("workbench-market-preview-route-v1", () => {
         priceUpdatedAt: null,
         priceAgeSec: null,
         priceSource: "execution_preview:yfinance:AAPL",
-      },
+      }),
     });
 
     const response = await POST(new Request("http://localhost/api/daa/workbench/execution/preview", {
@@ -457,45 +312,20 @@ describe("workbench-market-preview-route-v1", () => {
   });
 
   it("缺少 FX 时返回提示但不阻断预览", async () => {
-    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue({
-      baseCurrency: "USD",
-      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
-      assetUniverse: [],
-      execution: {
-        logs: [],
-      },
-      rebalance: {
-        mode: "manual",
-        autoAnalysisEnabled: false,
-        analysisTimeUtc: "00:20",
-        timezone: "Asia/Shanghai",
-        analysisFocus: "mock",
-      },
-      warnings: [],
-    } as any);
-    vi.mocked(listDaaAssetUniverse).mockResolvedValue([{
-      assetKey: "HK::700",
-      symbol: "700",
-      market: "HK",
-      currency: "HKD",
-      assetClass: "EQUITY",
-      region: "HK",
-      exchange: "HKEX",
-      instrumentType: "STOCK",
-      marketGroup: "HK_EQUITY",
-      holdingQty: 0,
-      holdingPrice: 0,
-      costBasis: null,
-      holdingTags: [],
-      watchEnabled: true,
-      targetWeightHint: 0,
-      watchTags: [],
-      notes: null,
-      lastPrice: 100,
-      priceUpdatedAt: "2026-03-01T00:00:00.000Z",
-      createdAt: "2026-03-01T00:00:00.000Z",
-      updatedAt: "2026-03-01T00:00:00.000Z",
-    }]);
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildPreviewBootstrap());
+    vi.mocked(listDaaAssetUniverse).mockResolvedValue([
+      buildAssetUniverseRow({
+        assetKey: "HK::700",
+        symbol: "700",
+        market: "HK",
+        currency: "HKD",
+        assetClass: "EQUITY",
+        region: "HK",
+        exchange: "HKEX",
+        instrumentType: "STOCK",
+        marketGroup: "HK_EQUITY",
+      }),
+    ]);
     vi.mocked(listDaaFxRates).mockResolvedValue([]);
 
     const response = await POST(new Request("http://localhost/api/daa/workbench/execution/preview", {
@@ -516,49 +346,20 @@ describe("workbench-market-preview-route-v1", () => {
   });
 
   it("价格缺失且第三方与缓存都不可用时阻断提交", async () => {
-    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue({
-      baseCurrency: "USD",
-      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
-      assetUniverse: [],
-      execution: {
-        logs: [],
-      },
-      rebalance: {
-        mode: "manual",
-        autoAnalysisEnabled: false,
-        analysisTimeUtc: "00:20",
-        timezone: "Asia/Shanghai",
-        analysisFocus: "mock",
-      },
-      warnings: [],
-    } as any);
-    vi.mocked(listDaaAssetUniverse).mockResolvedValue([{
-      assetKey: "US::AAPL",
-      symbol: "AAPL",
-      market: "US",
-      currency: "USD",
-      assetClass: "EQUITY",
-      region: "US",
-      exchange: "NASDAQ",
-      instrumentType: "STOCK",
-      marketGroup: "US_EQUITY",
-      holdingQty: 0,
-      holdingPrice: 0,
-      costBasis: null,
-      holdingTags: [],
-      watchEnabled: true,
-      targetWeightHint: 0,
-      watchTags: [],
-      notes: null,
-      lastPrice: 0,
-      priceUpdatedAt: null,
-      createdAt: "2026-03-01T00:00:00.000Z",
-      updatedAt: "2026-03-01T00:00:00.000Z",
-    }]);
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildPreviewBootstrap());
+    vi.mocked(listDaaAssetUniverse).mockResolvedValue([
+      buildAssetUniverseRow({
+        assetKey: "US::AAPL",
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        lastPrice: 0,
+        priceUpdatedAt: null,
+      }),
+    ]);
     vi.mocked(listDaaFxRates).mockResolvedValue([]);
     vi.mocked(getMarketPricesWithCache).mockResolvedValue({
-      "US::AAPL": {
-        provider: "yfinance",
+      "US::AAPL": buildMarketPriceResolved({
         symbol: "AAPL",
         market: "US",
         currency: "USD",
@@ -567,7 +368,7 @@ describe("workbench-market-preview-route-v1", () => {
         priceUpdatedAt: null,
         priceAgeSec: null,
         priceSource: "execution_preview:yfinance:AAPL",
-      },
+      }),
     });
 
     const response = await POST(new Request("http://localhost/api/daa/workbench/execution/preview", {

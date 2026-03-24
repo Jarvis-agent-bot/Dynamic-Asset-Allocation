@@ -10,16 +10,17 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
-  DeepLedgerActionButton,
-  DeepLedgerPanel,
-  DeepLedgerStatusPill,
-} from "@/app/daa/dashboard/_components/DeepLedgerUI";
+  DaaSurfaceActionButton,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import {
   appendCashLedgerEntry,
   listCashLedger,
   type StoreCashLedgerEntry,
 } from "@/src/daa/modules/store/storeApi";
 import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
+import type { WorkbenchAccountBreakdownItem } from "@/src/daa/modules/workbench/workbenchTypes";
 
 const CASH_CURRENCY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "USD", label: "美元 (USD)" },
@@ -52,9 +53,20 @@ export function WorkbenchCashSection(props: {
   baseCurrency: string;
   entries?: StoreCashLedgerEntry[];
   ledgerMeta?: DaaCurrentLedgerMeta | null;
+  cashMutationsAllowed?: boolean;
+  readOnlyReason?: string | null;
+  accountBreakdown?: WorkbenchAccountBreakdownItem[];
   onCashChanged?: () => void;
 }) {
-  const { baseCurrency, entries, ledgerMeta, onCashChanged } = props;
+  const {
+    baseCurrency,
+    entries,
+    ledgerMeta,
+    cashMutationsAllowed = true,
+    readOnlyReason,
+    accountBreakdown = [],
+    onCashChanged,
+  } = props;
 
   const [cashLedger, setCashLedger] = useState<StoreCashLedgerEntry[]>(entries || []);
   const [loading, setLoading] = useState(!entries);
@@ -102,6 +114,10 @@ export function WorkbenchCashSection(props: {
 
   const handleSubmit = useCallback(async () => {
     if (!dialogSide || submitting) return;
+    if (!cashMutationsAllowed) {
+      toast.error(readOnlyReason || "当前现金余额为只读状态。");
+      return;
+    }
     const amount = Number(cashAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("请输入大于 0 的金额");
@@ -124,26 +140,30 @@ export function WorkbenchCashSection(props: {
     } finally {
       setSubmitting(false);
     }
-  }, [cashAmount, cashCurrency, cashNote, closeDialog, dialogSide, loadLedger, onCashChanged, submitting]);
+  }, [cashAmount, cashCurrency, cashMutationsAllowed, cashNote, closeDialog, dialogSide, loadLedger, onCashChanged, readOnlyReason, submitting]);
 
   return (
     <>
-      <DeepLedgerPanel
+      <DaaSurfacePanel
         accent="indigo"
-        title="现金流水"
-        subtitle="记录入金出金并查看最近资金进出，确认账户现金变化是否符合预期。"
-        action={(
+        title={cashMutationsAllowed ? "现金流水" : "现金流水（只读）"}
+        subtitle={accountBreakdown.length > 1
+          ? "这里保留当前账本现金流水，并拆开显示各本地执行通道的资金分布，方便核对现金去向。"
+          : cashMutationsAllowed
+            ? "记录入金出金并查看最近资金进出，确认账户现金变化是否符合预期。"
+            : "当前余额为只读状态，这里只保留本地资金流水作为审计记录。"}
+        action={cashMutationsAllowed ? (
           <div className="flex flex-wrap gap-2">
-            <DeepLedgerActionButton tone="success" onClick={() => setDialogSide("deposit")}>
+            <DaaSurfaceActionButton tone="success" onClick={() => setDialogSide("deposit")}>
               <Plus className="h-4 w-4" />
               入金
-            </DeepLedgerActionButton>
-            <DeepLedgerActionButton tone="warning" onClick={() => setDialogSide("withdraw")}>
+            </DaaSurfaceActionButton>
+            <DaaSurfaceActionButton tone="warning" onClick={() => setDialogSide("withdraw")}>
               <Minus className="h-4 w-4" />
               出金
-            </DeepLedgerActionButton>
+            </DaaSurfaceActionButton>
           </div>
-        )}
+        ) : undefined}
         bodyClassName="pt-0"
       >
         <div className="grid gap-3 border-b border-[var(--border)] pb-4 md:grid-cols-3">
@@ -158,11 +178,49 @@ export function WorkbenchCashSection(props: {
             <div className="mt-1 text-xs text-[var(--muted)]">如果你之前做过历史入金，这里会显示账本重置后保留下来的起点现金。</div>
           </div>
           <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">当前流水说明</div>
-            <div className="mt-2 text-sm text-[var(--text)]">{cashLedger.length} 条记录</div>
-            <div className="mt-1 text-xs text-[var(--muted)]">入金、出金、成交扣款和期初余额都会统一落在这里，避免再分散到多个页面解释。</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">数据来源</div>
+            <div className="mt-2 flex items-center gap-2 text-sm text-[var(--text)]">
+              <span>本地模拟账本</span>
+              <DaaSurfaceStatusPill tone={accountBreakdown.length > 1 ? "cyan" : cashMutationsAllowed ? "slate" : "amber"}>
+                {accountBreakdown.length > 1 ? "分账户展示" : cashMutationsAllowed ? "可编辑" : "只读"}
+              </DaaSurfaceStatusPill>
+            </div>
+            <div className="mt-1 text-xs text-[var(--muted)]">
+              {accountBreakdown.length > 1
+                ? `当前展示 ${cashLedger.length} 条本地流水；下方拆分仅用于解释不同执行通道的现金分布。`
+                : `当前展示 ${cashLedger.length} 条本地流水，入金、出金和成交现金变化都会统一记录在这里。`}
+            </div>
+            {!cashMutationsAllowed && readOnlyReason ? (
+              <div className="mt-2 text-xs leading-5 text-[var(--faint)]">{readOnlyReason}</div>
+            ) : null}
           </div>
         </div>
+
+        {accountBreakdown.length > 0 ? (
+          <div className="mt-4 grid gap-3 border-b border-[var(--border)] pb-4 md:grid-cols-2 xl:grid-cols-3">
+            {accountBreakdown.map((item) => (
+              <div key={`${item.venueKind}:${item.accountId || "default"}`} className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">{item.label}</div>
+                  <DaaSurfaceStatusPill tone={item.cashMutationsAllowed ? "cyan" : "amber"}>
+                    {item.cashMutationsAllowed ? "可编辑" : "只读"}
+                  </DaaSurfaceStatusPill>
+                </div>
+                <div className="mt-3 text-sm text-[var(--text)]">
+                  {item.accountId ? `账户 ${item.accountId}` : "默认账户"}
+                </div>
+                <div className="mt-2 grid gap-1 text-xs text-[var(--muted)]">
+                  <div>现金 {formatCurrency(item.cash, item.baseCurrency)}</div>
+                  <div>可投资 {formatCurrency(item.investableCash, item.baseCurrency)}</div>
+                  <div>冻结 {formatCurrency(item.frozenCash, item.baseCurrency)}</div>
+                </div>
+                {item.readOnlyReason ? (
+                  <div className="mt-2 text-xs leading-5 text-[var(--faint)]">{item.readOnlyReason}</div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="overflow-x-auto">
           <Table>
@@ -186,7 +244,7 @@ export function WorkbenchCashSection(props: {
                   <TableRow key={row.id} className="border-[var(--border)]">
                     <TableCell className="text-sm text-[var(--text)]">{(row.ts || row.createdAt || "").slice(0, 16).replace("T", " ")}</TableCell>
                     <TableCell>
-                      <DeepLedgerStatusPill tone={row.side === "withdraw" ? "amber" : "green"}>{side}</DeepLedgerStatusPill>
+                      <DaaSurfaceStatusPill tone={row.side === "withdraw" ? "amber" : "green"}>{side}</DaaSurfaceStatusPill>
                     </TableCell>
                     <TableCell className="text-sm text-[var(--text)]">
                       <div>{formatCurrency(amount, displayCurrency)}</div>
@@ -203,7 +261,11 @@ export function WorkbenchCashSection(props: {
               })}
               {!loading && cashLedger.length === 0 ? (
                 <TableRow className="border-[var(--border)]">
-                  <TableCell colSpan={4} className="py-12 text-center text-sm text-[var(--faint)]">当前还没有入金或出金记录，先记录一笔资金变动后这里才会出现流水。</TableCell>
+                  <TableCell colSpan={4} className="py-12 text-center text-sm text-[var(--faint)]">
+                    {cashMutationsAllowed
+                      ? "当前还没有入金或出金记录，先记录一笔资金变动后这里才会出现流水。"
+                      : "当前没有可展示的本地现金流水；只读模式下余额不会由这里的流水直接驱动。"}
+                  </TableCell>
                 </TableRow>
               ) : null}
               {loading ? (
@@ -214,7 +276,7 @@ export function WorkbenchCashSection(props: {
             </TableBody>
           </Table>
         </div>
-      </DeepLedgerPanel>
+      </DaaSurfacePanel>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
         <DialogContent className="max-w-md border-[var(--border)] bg-[var(--surface)] text-[var(--text)]">

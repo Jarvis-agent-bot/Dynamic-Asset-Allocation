@@ -419,12 +419,12 @@ function normalizeFusionWeights(input: unknown): DaaSystemConfig["dataSources"][
     };
   }
 
-  const legacySum = human + news + technical;
-  if (!(legacySum > 0)) return defaultWeights;
+  const baseSignalSum = human + news + technical;
+  if (!(baseSignalSum > 0)) return defaultWeights;
   return {
-    human: (human / legacySum) * 0.85,
-    news: (news / legacySum) * 0.85,
-    technical: (technical / legacySum) * 0.85,
+    human: (human / baseSignalSum) * 0.85,
+    news: (news / baseSignalSum) * 0.85,
+    technical: (technical / baseSignalSum) * 0.85,
     valuation: 0.15,
   };
 }
@@ -575,12 +575,14 @@ export function getStrategyExecutionConfig(config: Pick<DaaSystemConfig, "strate
   const execution = config.strategy.execution || fallback.execution;
   const constraints = config.strategy.constraints || fallback.constraints;
   const feeRateBpsRaw = Number(execution.feeRateBps);
-  const legacyFeeRateBpsRaw = Number(constraints.tradeFeeRateBps);
+  const fallbackConstraintFeeRateBps = Number(constraints.tradeFeeRateBps);
 
   return {
     maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav), 0.01, 1),
     feeRateBps: clamp(
-      Number.isFinite(feeRateBpsRaw) ? feeRateBpsRaw : (Number.isFinite(legacyFeeRateBpsRaw) ? legacyFeeRateBpsRaw : fallback.execution.feeRateBps),
+      Number.isFinite(feeRateBpsRaw)
+        ? feeRateBpsRaw
+        : (Number.isFinite(fallbackConstraintFeeRateBps) ? fallbackConstraintFeeRateBps : fallback.execution.feeRateBps),
       0,
       500,
     ),
@@ -617,11 +619,8 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const notificationTelegram = isRecord(notification.telegram) ? notification.telegram : {};
   const notificationFeishu = isRecord(notification.feishu) ? notification.feishu : {};
 
-  const legacyAutomation = isRecord(source.automation) ? source.automation : {};
-  const legacyDailyAnalysis = isRecord(legacyAutomation.dailyAnalysis) ? legacyAutomation.dailyAnalysis : {};
-  const legacyNotification = isRecord(source.notification) ? source.notification : {};
   const normalizedAnalysisTimeUtc = normalizeAnalysisTimeUtc(
-    rebalanceStrategy.analysisTimeUtc ?? legacyDailyAnalysis.analysisTimeUtc,
+    rebalanceStrategy.analysisTimeUtc,
     fallback.rebalanceStrategy.analysisTimeUtc,
   );
 
@@ -697,12 +696,9 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       },
       cooldownHours: Math.max(1, Math.trunc(Number(rebalanceStrategy.cooldownHours) || fallback.rebalanceStrategy.cooldownHours)),
       analysisTimeUtc: normalizedAnalysisTimeUtc,
-      timezone: String(rebalanceStrategy.timezone || legacyDailyAnalysis.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
-      analysisFocus: String(rebalanceStrategy.analysisFocus || legacyDailyAnalysis.analysisFocus || fallback.rebalanceStrategy.analysisFocus).trim() || fallback.rebalanceStrategy.analysisFocus,
-      autoGenerateEnabled: toBool(
-        rebalanceStrategy.autoGenerateEnabled,
-        toBool(legacyDailyAnalysis.enabled, fallback.rebalanceStrategy.autoGenerateEnabled),
-      ),
+      timezone: String(rebalanceStrategy.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
+      analysisFocus: String(rebalanceStrategy.analysisFocus || fallback.rebalanceStrategy.analysisFocus).trim() || fallback.rebalanceStrategy.analysisFocus,
+      autoGenerateEnabled: toBool(rebalanceStrategy.autoGenerateEnabled, fallback.rebalanceStrategy.autoGenerateEnabled),
     },
     dataSources: {
       hfFund: {
@@ -765,15 +761,9 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       ),
       telegram: {
         enabled: toBool(notificationTelegram.enabled, fallback.notification.telegram.enabled),
-        onDriftTrigger: toBool(
-          notificationTelegram.onDriftTrigger,
-          toBool((legacyNotification as Record<string, unknown>).notifyOnDrift, fallback.notification.telegram.onDriftTrigger),
-        ),
+        onDriftTrigger: toBool(notificationTelegram.onDriftTrigger, fallback.notification.telegram.onDriftTrigger),
         onSuggestionGenerated: toBool(notificationTelegram.onSuggestionGenerated, fallback.notification.telegram.onSuggestionGenerated),
-        onTradeExecuted: toBool(
-          notificationTelegram.onTradeExecuted,
-          toBool((legacyNotification as Record<string, unknown>).notifyOnRebalance, fallback.notification.telegram.onTradeExecuted),
-        ),
+        onTradeExecuted: toBool(notificationTelegram.onTradeExecuted, fallback.notification.telegram.onTradeExecuted),
         dailyReport: toBool(notificationTelegram.dailyReport, fallback.notification.telegram.dailyReport),
       },
       feishu: {

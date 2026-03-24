@@ -1,65 +1,38 @@
-import { normalizeDaaCurrencyCode, normalizeDaaSymbol, parseDaaAssetKey } from "@/src/daa/assetKey";
-import type { DaaMarketContext, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { normalizeDaaCurrencyCode, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
-import { runLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
 import { runLlmDecision } from "@/src/daa/llm/llmDecision";
 import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
 import { hydrateUnifiedRequestWithSignals } from "@/src/daa/modules/decision/hydrateUnifiedRequest";
-import type { UnifiedDecisionResult } from "@/src/daa/modules/decision/decisionResultTypes";
-import {
-  buildMarketContextAttribution,
-  getCurrentMarketContext,
-  marketRegimeLabelZh,
-} from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { classifyCash } from "./cashClassification";
 import { fuseDecision } from "./decisionFusion";
 import {
-  appendDaaTriggerEvent,
-  appendDaaRunHistory,
-  appendAssetPriceHistoryRows,
+  applyDaaBrokerOrderSync,
   createDaaRebalanceCycle,
-  createDaaRebalanceDecision,
   createDaaTradeTicket,
   executeDaaTradeTickets,
-  getDaaHumanIngestState,
   getDaaRebalanceCycle,
   getDaaSystemConfig,
-  getDaaMarketCacheHealthStats,
-  listDaaAssetUniverse,
-  listDaaEquitySnapshots,
-  listDaaFxRates,
   listDaaRebalanceCycles,
   listDaaTradeTickets,
   patchDaaRebalanceCycle,
   upsertDaaCycleReport,
-  updateDaaAssetUniverseLastPrice,
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
-import { buildDaaUnifiedPlan, type DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
-import {
-  buildFxLookupToBase,
-  summarizeMarkToMarketPortfolio,
-} from "@/src/daa/modules/portfolio/portfolioValuation";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
+import { resolveExecutionRoute, syncBrokerOrders } from "@/src/daa/broker";
 
 import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
-import { buildAssetUniverseViewRows } from "./assetUniverseService";
 import type {
-  ExecuteRebalanceSummary,
   ExecuteRebalanceCycleResult,
   GenerateRebalanceCycleInput,
   GenerateRebalanceCycleResult,
-  HfSignalSummary,
   PortfolioHealthyInsight,
-  PreTradeRiskCheckItem,
-  PreTradeRiskCheck,
   RebalanceCycle,
   RebalanceProposal,
   RebalanceTriggerSource,
   UpdateRebalanceCycleInput,
-  WorkbenchBootstrap,
-  WorkbenchRecommendation,
-  WorkbenchRecommendationsResult,
 } from "./workbenchTypes";
 
 import { buildUnifiedRequestFromStore, buildWorkbenchBootstrap } from "./workbenchReadService";
@@ -71,10 +44,8 @@ import {
   buildCalendarPeriodKey,
   buildMarketFacts,
   buildCycleDraftFromBootstrap,
-  buildPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
-  buildRiskCycleDraft,
   calcHoldingCostPerUnit,
   getZonedYmd,
   isCalendarMonthDue,
@@ -82,7 +53,6 @@ import {
   mapStoreCycleToView,
   normalizeText,
   normalizeTimeZoneOrUtc,
-  pickCycleMarketRegimes,
   toCycleReportSnapshot,
   toFinite,
   toIsoByMs,
@@ -99,6 +69,7 @@ export async function generateWorkbenchRebalanceCycle(
     getDaaSystemConfig(),
     listDaaRebalanceCycles(120),
   ]);
+  const recentLearningsText = await buildAgentLearningDigest(6);
 
   const latestCycle = recentCycles[0] || null;
   const strategy = systemRow.config.rebalanceStrategy;
@@ -310,6 +281,7 @@ export async function generateWorkbenchRebalanceCycle(
         warnings: bootstrap.warnings,
         analysisFocus,
         marketContext,
+        recentLearningsText,
       });
 
       healthyInsight = {
@@ -383,6 +355,7 @@ export async function generateWorkbenchRebalanceCycle(
     warnings: bootstrap.warnings,
     analysisFocus,
     marketContext,
+    recentLearningsText,
   });
 
   // ── Step E: 三层决策融合（drift × signal × LLM）──────────────────
@@ -591,6 +564,133 @@ export async function updateWorkbenchRebalanceCycle(
   return mapped;
 }
 
+function normalizeExecutionErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error || "broker_order_failed");
+}
+
+async function executeWorkbenchProposalByRoute(input: {
+  cycleId: string;
+  row: {
+    assetKey: string;
+    symbol: string;
+    currency: string;
+    side: "BUY" | "SELL";
+    suggestedQty: number;
+    price: number;
+    reason: string;
+  };
+  feeRate: number;
+  assetMeta?: {
+    market: string;
+    assetClass: string;
+    instrumentType: string;
+    marketGroup: string;
+  } | null;
+}): Promise<string | null> {
+  if (!(input.row.price > 0) || !(input.row.suggestedQty > 0)) return null;
+
+  const parsed = parseDaaAssetKey(input.row.assetKey);
+  const market = parsed?.market || "US";
+  const fee = Math.max(0, input.row.suggestedQty * input.row.price * input.feeRate);
+  const route = await resolveExecutionRoute({
+    assetKey: input.row.assetKey,
+    symbol: input.row.symbol,
+    market,
+    currency: input.row.currency,
+    assetClass: input.assetMeta?.assetClass || null,
+    instrumentType: input.assetMeta?.instrumentType || null,
+    marketGroup: input.assetMeta?.marketGroup || null,
+  });
+
+  const localTicket = await createDaaTradeTicket({
+    source: "decision",
+    cycleId: input.cycleId,
+    assetKey: input.row.assetKey,
+    symbol: input.row.symbol,
+    market,
+    instrumentCurrency: normalizeDaaCurrencyCode(input.row.currency, "USD"),
+    side: input.row.side,
+    qty: input.row.suggestedQty,
+    price: input.row.price,
+    fee,
+    pricingMode: "market",
+    priceSource: "rebalance_cycle",
+    decisionRefId: input.cycleId,
+    reasonText: input.row.reason,
+    reasonTags: ["rebalance_cycle"],
+    brokerKind: route.kind,
+    brokerAccountId: route.remote ? null : route.kind,
+    brokerOrderId: null,
+    brokerStatus: route.remote ? null : "ready",
+    createdBy: "workbench.rebalance",
+  });
+
+  if (!route.remote) {
+    await executeDaaTradeTickets({ ticketIds: [localTicket.ticketId] });
+    return localTicket.ticketId;
+  }
+
+  try {
+    const placed = await route.adapter.placeOrder({
+      assetKey: input.row.assetKey,
+      symbol: input.row.symbol,
+      market,
+      currency: normalizeDaaCurrencyCode(input.row.currency, "USD"),
+      side: input.row.side,
+      qty: input.row.suggestedQty,
+      orderType: "MKT",
+      referencePrice: input.row.price,
+      limitPrice: null,
+      reasonText: input.row.reason,
+      tags: ["rebalance_cycle"],
+      createdBy: "workbench.rebalance",
+    });
+
+    await applyDaaBrokerOrderSync({
+      ticketId: localTicket.ticketId,
+      order: {
+        broker: route.kind,
+        accountId: placed.order.accountId,
+        orderId: placed.order.orderId,
+        status: placed.order.status,
+        filledQty: placed.order.filledQty,
+        avgFillPrice: placed.order.avgFillPrice,
+        updatedAt: placed.order.updatedAt,
+        raw: placed.order.raw,
+      },
+    });
+
+    try {
+      await syncBrokerOrders({
+        scope: "ticket",
+        ticketId: localTicket.ticketId,
+        limit: 50,
+      });
+    } catch {
+      // broker 已受理时，不因为首次同步失败阻断整轮执行
+    }
+
+    return localTicket.ticketId;
+  } catch (error) {
+    const message = normalizeExecutionErrorMessage(error);
+    await applyDaaBrokerOrderSync({
+      ticketId: localTicket.ticketId,
+      order: {
+        broker: route.kind,
+        accountId: "",
+        orderId: "",
+        status: "Rejected",
+        filledQty: null,
+        avgFillPrice: null,
+        updatedAt: new Date().toISOString(),
+        raw: { text: message, message },
+      },
+    });
+    return localTicket.ticketId;
+  }
+}
+
 export async function executeWorkbenchRebalanceCycle(input: {
   cycleId: string;
   executeMode: "selected" | "all";
@@ -701,42 +801,32 @@ export async function executeWorkbenchRebalanceCycle(input: {
     };
   });
 
+  const assetMetaByKey = new Map(
+    beforeBootstrap.assetUniverse.map((row) => [row.assetKey, row]),
+  );
   const createdTicketIds: string[] = [];
   for (const row of executionRows) {
-    if (!(row.price > 0) || !(row.suggestedQty > 0)) continue;
-    const parsed = parseDaaAssetKey(row.assetKey);
-    const fee = Math.max(0, row.suggestedQty * row.price * feeRate);
-    const created = await createDaaTradeTicket({
-      source: "decision",
+    const ticketId = await executeWorkbenchProposalByRoute({
       cycleId: input.cycleId,
-      assetKey: row.assetKey,
-      symbol: row.symbol,
-      market: parsed?.market || "US",
-      instrumentCurrency: normalizeDaaCurrencyCode(row.currency, "USD"),
-      side: row.side,
-      qty: row.suggestedQty,
-      price: row.price,
-      fee,
-      pricingMode: "market",
-      priceSource: "rebalance_cycle",
-      decisionRefId: input.cycleId,
-      reasonText: row.reason,
-      reasonTags: ["rebalance_cycle"],
-      createdBy: "workbench.rebalance",
+      row,
+      feeRate,
+      assetMeta: assetMetaByKey.get(row.assetKey)
+        ? {
+          market: assetMetaByKey.get(row.assetKey)!.market,
+          assetClass: assetMetaByKey.get(row.assetKey)!.assetClass,
+          instrumentType: assetMetaByKey.get(row.assetKey)!.instrumentType,
+          marketGroup: assetMetaByKey.get(row.assetKey)!.marketGroup,
+        }
+        : null,
     });
-    createdTicketIds.push(created.ticketId);
+    if (ticketId) createdTicketIds.push(ticketId);
   }
 
-  const execution = createdTicketIds.length
-    ? await executeDaaTradeTickets({ ticketIds: createdTicketIds })
-    : null;
-
-  const executedCount = execution
-    ? execution.results.filter((item) => item.status === "executed").length
-    : 0;
-  const failedCount = execution
-    ? execution.results.filter((item) => item.status !== "executed").length
-    : 0;
+  const logs = await listDaaTradeTickets({ limit: 300 });
+  const cycleLogs = logs.filter((row) => createdTicketIds.includes(row.ticketId));
+  const executedCount = cycleLogs.filter((row) => row.status === "executed").length;
+  const submittedCount = cycleLogs.filter((row) => row.status === "submitted" || row.status === "partially_filled").length;
+  const failedCount = cycleLogs.filter((row) => row.status === "rejected" || row.status === "canceled").length;
   const totalNotional = toExecute.reduce((sum, row) => sum + row.suggestedNotional, 0);
   const newMaxDriftPct = cycle.driftSnapshot.reduce((max, row) => Math.max(max, Math.abs(row.driftPct * 100)), 0);
 
@@ -747,14 +837,16 @@ export async function executeWorkbenchRebalanceCycle(input: {
   const executionNotes = priceAdjustmentNotes.length > 0
     ? `\n[执行价格] ${priceAdjustmentNotes.join(" | ")}`
     : "";
+  const hasOpenOrders = submittedCount > 0;
 
   const completed = await patchDaaRebalanceCycle({
     cycleId: input.cycleId,
-    status: "completed",
-    executedAt: new Date().toISOString(),
+    status: hasOpenOrders ? "executing" : "completed",
+    executedAt: hasOpenOrders ? null : new Date().toISOString(),
     executedOrders: createdTicketIds,
     executionSummary: {
       ordersExecuted: executedCount,
+      ordersSubmitted: submittedCount,
       ordersFailed: failedCount,
       totalNotional,
       newMaxDriftPct,
@@ -762,15 +854,18 @@ export async function executeWorkbenchRebalanceCycle(input: {
     notes: (cycle.notes || "") + executionNotes || null,
   });
 
-  const [logs, afterBootstrap] = await Promise.all([
-    listDaaTradeTickets({ limit: 300 }),
-    buildWorkbenchBootstrap({ syncPrices: false }),
-  ]);
+  if (hasOpenOrders) {
+    return {
+      cycle: mapStoreCycleToView(completed)!,
+      logs: cycleLogs.filter((row) => row.status !== "ready").slice(0, 200),
+    };
+  }
+
+  const afterBootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
 
   try {
     const beforeSnapshot = toCycleReportSnapshot(beforeBootstrap);
     const afterSnapshot = toCycleReportSnapshot(afterBootstrap);
-    const cycleLogs = logs.filter((row) => createdTicketIds.includes(row.ticketId));
     const feeTotal = cycleLogs
       .filter((row) => row.status === "executed")
       .reduce((sum, row) => sum + Math.max(0, row.fee), 0);
@@ -806,6 +901,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
       afterSnapshot,
       executionStats: {
         ordersExecuted: executedCount,
+        ordersSubmitted: submittedCount,
         ordersFailed: failedCount,
         totalNotional,
         newMaxDriftPct,
@@ -840,8 +936,6 @@ export async function executeWorkbenchRebalanceCycle(input: {
 
   return {
     cycle: mapStoreCycleToView(completed)!,
-    logs: logs.filter((row) => row.status !== "ready").slice(0, 200),
+    logs: cycleLogs.filter((row) => row.status !== "ready").slice(0, 200),
   };
 }
-
-
