@@ -13,7 +13,7 @@
   --card:    #131C2E;
   --elevated:#182236;
   --hover:   #1D2B42;
-  --panel:   rgba(24,34,54,0.92);
+
   --text:    #EDF2F7;
   --muted:   #94A3B8;
   --faint:   #566477;
@@ -24,9 +24,7 @@
   --indigo:  #818CF8;
   --border:  rgba(255,255,255,0.07);
   --border-strong: rgba(255,255,255,0.13);
-  --grid-dot: rgba(56,189,248,0.08);
-  --shell-shadow: 0 24px 70px rgba(0,0,0,0.34);
-  --radius-panel: 20px;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;

@@ -7,7 +7,6 @@ import { useWorkbenchExecutionFlow } from "@/app/daa/dashboard/_hooks/workbench/
 import { useWorkbenchRebalanceFlow } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchRebalanceFlow";
 import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useWorkbenchModel } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
-import type { PriceUpdate } from "@/app/daa/dashboard/_hooks/usePriceStream";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
@@ -212,7 +211,6 @@ export function useWorkbenchPageModel(input: {
     summary: rebalanceFlow.summary,
     totalEquity,
     holdingsValue,
-    cashValue: totalCashValue,
     availableCashValue,
     frozenCashValue,
     executionReceipt: executionFlow.executionReceipt as ExecutionReceipt | null,
@@ -223,7 +221,6 @@ export function useWorkbenchPageModel(input: {
     dialogProps,
     // SSE 实时价格流状态
     priceStreamConnected,
-    livePrices,
   };
 }
 

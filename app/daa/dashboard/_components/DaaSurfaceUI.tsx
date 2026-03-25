@@ -72,10 +72,10 @@ export const daaSurfaceTableHeadClassName =
 export const daaSurfaceTableCellClassName =
   "border-b border-[var(--border)]/70 px-4 py-3 align-top text-sm";
 
-export const daaSurfaceDialogContentClassName =
+const daaSurfaceDialogContentClassName =
   "flex max-h-[min(90dvh,860px)] w-[calc(100vw-1rem)] max-w-[720px] flex-col overflow-hidden border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,24,39,0.98),rgba(8,12,20,1))] p-0 text-[var(--text)] shadow-[0_28px_72px_rgba(0,0,0,0.48)] sm:w-[calc(100vw-2rem)]";
 
-export function toneColor(tone: DaaSurfaceTone = "cyan") {
+function toneColor(tone: DaaSurfaceTone = "cyan") {
   return ACCENT_CLASS[tone];
 }
 

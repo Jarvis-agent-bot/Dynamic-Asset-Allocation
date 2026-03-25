@@ -259,7 +259,6 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     summary,
     totalEquity: topLevelOverrides.totalEquity ?? 1000,
     holdingsValue: topLevelOverrides.holdingsValue ?? 0,
-    cashValue: topLevelOverrides.cashValue ?? 1000,
     availableCashValue: topLevelOverrides.availableCashValue ?? 1000,
     frozenCashValue: topLevelOverrides.frozenCashValue ?? 0,
     executionReceipt: topLevelOverrides.executionReceipt ?? null,
@@ -269,7 +268,6 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     rebalanceSectionProps,
     dialogProps,
     priceStreamConnected: topLevelOverrides.priceStreamConnected ?? false,
-    livePrices: topLevelOverrides.livePrices ?? new Map(),
   };
 }
 
