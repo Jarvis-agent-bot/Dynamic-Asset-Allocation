@@ -92,7 +92,7 @@ export function RebalanceProposalList(props: {
                     <div
                       key={proposalKey}
                       className={cn(
-                        "rounded-[18px] border p-4 transition-all",
+                        "rounded-[18px] border p-4 transition-colors",
                         row.selected
                           ? "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.08)]"
                           : "border-[var(--border)] bg-[rgba(8,12,20,0.48)]",

@@ -59,6 +59,23 @@ export default function SettingsPage() {
     return JSON.stringify(config) !== baselineConfigText;
   }, [baselineConfigText, config]);
 
+  /** Per-section dirty detection for nav indicator dots */
+  const sectionDirtyMap = useMemo<Record<SettingsNavItemId, boolean>>(() => {
+    if (!config || !baselineConfigText) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
+    let baseline: DaaSystemConfig | null = null;
+    try { baseline = JSON.parse(baselineConfigText) as DaaSystemConfig; } catch { /* noop */ }
+    if (!baseline) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
+    const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+    return {
+      strategy: changed(config.rebalanceStrategy, baseline.rebalanceStrategy),
+      risk: changed(config.strategy?.risk, baseline.strategy?.risk) || changed(config.strategy?.constraints, baseline.strategy?.constraints),
+      data: changed(config.dataSources, baseline.dataSources),
+      "human-factor": changed(config.strategy?.targetWeights, baseline.strategy?.targetWeights) || changed(config.dataSources?.newsFeed?.fusionWeights, baseline.dataSources?.newsFeed?.fusionWeights),
+      notification: changed(config.notification, baseline.notification),
+      secrets: false, // secrets managed separately
+    };
+  }, [baselineConfigText, config]);
+
   const saveConfig = useCallback(async (): Promise<boolean> => {
     if (!config || version == null) return false;
     setSaving(true);
@@ -179,7 +196,14 @@ export default function SettingsPage() {
                   <DaaSurfaceSectionAnchor
                     href={`#settings-${item.id}`}
                     active={activeSection === item.id}
-                    label={item.label}
+                    label={
+                      <>
+                        {item.label}
+                        {sectionDirtyMap[item.id] ? (
+                          <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--amber)]" title="存在未保存修改" />
+                        ) : null}
+                      </>
+                    }
                     onClick={() => setActiveSection(item.id)}
                   />
                   <div className="px-3 pb-2 pt-1 text-xs leading-5 text-[var(--faint)]">{item.desc}</div>
@@ -231,7 +255,7 @@ export default function SettingsPage() {
           <div>
             <div className="text-sm font-semibold text-[var(--text)]">配置保存条</div>
             <div className="mt-1 text-sm text-[var(--muted)]">
-              {isDirty ? "你有未保存的修改，建议在离开页面前统一保存。" : "当前页面没有待保存的修改。"}
+              {isDirty ? "存在未保存的修改，建议在离开页面前统一保存。" : "当前页面没有待保存的修改。"}
             </div>
           </div>
           <button

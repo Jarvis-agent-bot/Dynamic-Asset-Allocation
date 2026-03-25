@@ -214,6 +214,10 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     currentCycle: null,
     baseCurrency: "USD",
     onConfirmExecute: vi.fn(async () => undefined),
+    pendingConfirm: null,
+    setPendingConfirm: vi.fn(),
+    onConfirmCancelCycle: vi.fn(async () => undefined),
+    onConfirmRemoveFromWatchlist: vi.fn(async () => undefined),
     ...dialogPropsOverride,
   };
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, RefreshCcw } from "lucide-react";
 
@@ -22,7 +23,7 @@ const STATUS_TONE: Record<string, "cyan" | "amber" | "green" | "indigo" | "slate
   cancelled: "slate",
 };
 
-const emptyActionLinkClassName = "inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/30 hover:text-[var(--text)]";
+const emptyActionLinkClassName = "inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]";
 
 function cycleStatusLabel(status: string): string {
   if (status === "generated") return "已生成";
@@ -196,7 +197,7 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
               type="button"
               onClick={() => model.setActiveTab(tab)}
               className={[
-                "rounded-[16px] border px-4 py-3 text-left transition-all",
+                "rounded-[16px] border px-4 py-3 text-left transition-colors",
                 active
                   ? "border-[var(--primary)]/35 bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
                   : "border-transparent bg-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[var(--hover)] hover:text-[var(--text)]",
@@ -276,7 +277,10 @@ function TradesCyclesPanel({ model }: { model: TradesModel }) {
   );
 }
 
+const ORDERS_PAGE_SIZE_ = 50;
+
 function TradesOrdersPanel({ model }: { model: TradesModel }) {
+  const [visibleCount, setVisibleCount] = useState(ORDERS_PAGE_SIZE_);
   if (model.orders.length <= 0) {
     return (
       <DashboardEmptyState
@@ -307,7 +311,7 @@ function TradesOrdersPanel({ model }: { model: TradesModel }) {
           </tr>
         </thead>
         <tbody>
-          {model.orders.map((order) => (
+          {model.orders.slice(0, visibleCount).map((order) => (
             <tr key={order.ticketId}>
               <TableCellMono>{order.symbol}</TableCellMono>
               <TableCellText>{orderSideLabel(order.side)}</TableCellText>
@@ -319,6 +323,17 @@ function TradesOrdersPanel({ model }: { model: TradesModel }) {
           ))}
         </tbody>
       </table>
+      {model.orders.length > visibleCount ? (
+        <div className="border-t border-[var(--border)] px-4 py-3 text-center">
+          <button
+            type="button"
+            className="text-xs font-medium text-[var(--primary)] transition-colors hover:text-[var(--text)]"
+            onClick={() => setVisibleCount((prev) => prev + ORDERS_PAGE_SIZE_)}
+          >
+            加载更多（还有 {model.orders.length - visibleCount} 条）
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

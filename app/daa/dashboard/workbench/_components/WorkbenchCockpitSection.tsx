@@ -85,7 +85,7 @@ export function WorkbenchCockpitSection(props: {
                     <div className="mt-3">
                       <Link
                         href={signal.actionHref}
-                        className="inline-flex items-center gap-2 rounded-full border border-[var(--primary)]/28 bg-[rgba(56,189,248,0.08)] px-3 py-1.5 text-xs font-medium text-[var(--primary)] transition-all hover:border-[var(--primary)]/42 hover:bg-[rgba(56,189,248,0.12)]"
+                        className="inline-flex items-center gap-2 rounded-full border border-[var(--primary)]/28 bg-[rgba(56,189,248,0.08)] px-3 py-1.5 text-xs font-medium text-[var(--primary)] transition-colors hover:border-[var(--primary)]/42 hover:bg-[rgba(56,189,248,0.12)]"
                       >
                         前往处理
                       </Link>

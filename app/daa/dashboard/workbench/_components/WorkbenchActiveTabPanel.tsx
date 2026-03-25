@@ -38,7 +38,7 @@ export function WorkbenchActiveTabPanel(props: {
               type="button"
               onClick={() => (props.onNavigateTab ? props.onNavigateTab(item.key) : model.setActiveTab(item.key))}
               className={cn(
-                "rounded-[12px] px-3 py-2 text-sm transition-all",
+                "rounded-[12px] px-3 py-2 text-sm transition-colors",
                 model.activeTab === item.key
                   ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
                   : "text-[var(--muted)] hover:text-[var(--text)]",
@@ -68,7 +68,7 @@ export function WorkbenchActiveTabPanel(props: {
                   setWatchlistBuilderTouched(true);
                   setWatchlistBuilderOpen((prev) => !prev);
                 }}
-                className="inline-flex items-center justify-center rounded-full border border-[var(--border-strong)] px-3.5 py-2 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]"
+                className="inline-flex items-center justify-center rounded-full border border-[var(--border-strong)] px-3.5 py-2 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/32 hover:text-[var(--text)]"
               >
                 {watchlistBuilderOpen ? "收起观察池工具" : "展开观察池工具"}
               </button>

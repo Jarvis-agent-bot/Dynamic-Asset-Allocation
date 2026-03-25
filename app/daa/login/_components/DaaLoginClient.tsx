@@ -358,7 +358,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 value={email}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
-                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-all disabled:opacity-50"
+                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
                 style={{
                   background: "var(--elevated)",
                   borderColor: "var(--border-strong)",
@@ -386,7 +386,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 value={password}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setPassword(e.target.value); setAuthError(null); }}
-                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-all disabled:opacity-50"
+                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
                 style={{
                   background: "var(--elevated)",
                   borderColor: "var(--border-strong)",
@@ -416,7 +416,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             <button
               type="submit"
               disabled={busy || session.kind === "checking"}
-              className="w-full rounded-md py-2.5 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+              className="w-full rounded-md py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ background: "var(--primary)", color: "var(--bg)" }}
             >
               {busy ? (

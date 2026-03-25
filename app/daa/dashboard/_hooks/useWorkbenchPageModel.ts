@@ -8,7 +8,12 @@ import { useWorkbenchRebalanceFlow } from "@/app/daa/dashboard/_hooks/workbench/
 import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useWorkbenchModel } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
-import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+
+export type PendingConfirm =
+  | { type: "cancelCycle" }
+  | { type: "removeWatchlist"; row: AssetUniverseView }
+  | null;
 
 export type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
 
@@ -42,6 +47,7 @@ export function useWorkbenchPageModel(input: {
   } = useWorkbenchModel(input);
 
   const [busy, setBusy] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
   const assetRows = useMemo(() => bootstrap?.assetUniverse ?? [], [bootstrap?.assetUniverse]);
 
   const syncCycleState = useCallback((nextCycle: RebalanceCycle | null) => {
@@ -128,7 +134,7 @@ export function useWorkbenchPageModel(input: {
     onNavigateTab: setActiveTab,
     onGenerateCycle: rebalanceFlow.handleGenerateCycle,
     onOpenExecuteDialog: executionFlow.handleOpenExecuteDialog,
-    onCancelCycle: rebalanceFlow.handleCancelCycle,
+    onCancelCycle: () => setPendingConfirm({ type: "cancelCycle" }),
     onSelectAllProposals: rebalanceFlow.handleSelectAllProposals,
     onToggleProposal: rebalanceFlow.handleToggleProposal,
     onSubmitLlmFeedback: assetActions.handleSubmitLlmFeedback,
@@ -154,6 +160,18 @@ export function useWorkbenchPageModel(input: {
     currentCycle,
     baseCurrency: bootstrap?.baseCurrency || "USD",
     onConfirmExecute: executionFlow.handleConfirmExecuteCycle,
+    pendingConfirm,
+    setPendingConfirm,
+    onConfirmCancelCycle: rebalanceFlow.handleCancelCycle,
+    onConfirmRemoveFromWatchlist: assetActions.tableProps.onRemoveFromWatchlist,
+  };
+
+  const overriddenTableProps = {
+    ...assetActions.tableProps,
+    onRemoveFromWatchlist: (row: AssetUniverseView) => {
+      setPendingConfirm({ type: "removeWatchlist", row });
+      return Promise.resolve();
+    },
   };
 
   return {
@@ -180,7 +198,7 @@ export function useWorkbenchPageModel(input: {
     frozenCashValue,
     executionReceipt: executionFlow.executionReceipt as ExecutionReceipt | null,
     clearExecutionReceipt: executionFlow.clearExecutionReceipt,
-    tableProps: assetActions.tableProps,
+    tableProps: overriddenTableProps,
     watchlistBuilderProps: assetActions.watchlistBuilderProps,
     rebalanceSectionProps,
     dialogProps,

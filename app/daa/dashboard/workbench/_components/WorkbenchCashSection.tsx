@@ -291,7 +291,7 @@ export function WorkbenchCashSection(props: {
               <select
                 value={cashCurrency}
                 onChange={(e) => setCashCurrency(e.target.value)}
-                className="h-10 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--elevated)] px-3 text-sm text-[var(--text)] outline-none transition-all focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.16)]"
+                className="h-10 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--elevated)] px-3 text-sm text-[var(--text)] outline-none transition-[border-color,box-shadow] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.16)]"
               >
                 {CASH_CURRENCY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
@@ -307,7 +307,7 @@ export function WorkbenchCashSection(props: {
             </div>
           </div>
           <DialogFooter>
-            <button type="button" onClick={closeDialog} className="rounded-xl border border-[var(--border-strong)] px-4 py-2 text-sm text-[var(--muted)] transition-all hover:border-[var(--primary)]/30 hover:text-[var(--text)]">取消</button>
+            <button type="button" onClick={closeDialog} className="rounded-xl border border-[var(--border-strong)] px-4 py-2 text-sm text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]">取消</button>
             <button type="button" onClick={() => void handleSubmit()} disabled={submitting} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--bg)] transition-opacity hover:opacity-90 disabled:opacity-50">{submitting ? "提交中..." : "确认提交"}</button>
           </DialogFooter>
         </DialogContent>

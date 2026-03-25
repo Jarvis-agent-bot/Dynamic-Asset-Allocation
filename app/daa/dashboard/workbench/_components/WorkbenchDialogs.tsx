@@ -123,6 +123,73 @@ export function WorkbenchDialogs(props: WorkbenchPageModel["dialogProps"]) {
           </div>
         </DaaSurfaceDialogShell>
       </Dialog>
+
+      {/* 确认取消周期 */}
+      <Dialog open={props.pendingConfirm?.type === "cancelCycle"} onOpenChange={(open) => {
+        if (!open) props.setPendingConfirm(null);
+      }}>
+        <DaaSurfaceDialogShell
+          accent="red"
+          className="max-w-md"
+          title="确认取消周期"
+          description="取消后已生成的调仓建议将被清除，此操作不可撤销。"
+          badges={<DaaSurfaceStatusPill tone="red">取消周期</DaaSurfaceStatusPill>}
+          footer={(
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <DaaSurfaceActionButton tone="slate" className="justify-center" onClick={() => props.setPendingConfirm(null)}>取消</DaaSurfaceActionButton>
+              <DaaSurfaceActionButton
+                tone="danger"
+                className="justify-center"
+                onClick={() => {
+                  props.setPendingConfirm(null);
+                  void props.onConfirmCancelCycle();
+                }}
+              >
+                确认取消
+              </DaaSurfaceActionButton>
+            </div>
+          )}
+        >
+          <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3 text-sm text-[var(--muted)]")}>
+            本操作将取消当前再平衡周期，已生成的建议不会被执行。如需继续调仓，请重新生成周期。
+          </div>
+        </DaaSurfaceDialogShell>
+      </Dialog>
+
+      {/* 确认移出观察列表 */}
+      <Dialog open={props.pendingConfirm?.type === "removeWatchlist"} onOpenChange={(open) => {
+        if (!open) props.setPendingConfirm(null);
+      }}>
+        <DaaSurfaceDialogShell
+          accent="red"
+          className="max-w-md"
+          title="确认移出观察列表"
+          description={`确定要将 ${props.pendingConfirm?.type === "removeWatchlist" ? props.pendingConfirm.row.symbol : ""} 移出观察列表吗？`}
+          badges={<DaaSurfaceStatusPill tone="red">移出观察</DaaSurfaceStatusPill>}
+          footer={(
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <DaaSurfaceActionButton tone="slate" className="justify-center" onClick={() => props.setPendingConfirm(null)}>保留</DaaSurfaceActionButton>
+              <DaaSurfaceActionButton
+                tone="danger"
+                className="justify-center"
+                onClick={() => {
+                  if (props.pendingConfirm?.type === "removeWatchlist") {
+                    const { row } = props.pendingConfirm;
+                    props.setPendingConfirm(null);
+                    void props.onConfirmRemoveFromWatchlist(row);
+                  }
+                }}
+              >
+                移出
+              </DaaSurfaceActionButton>
+            </div>
+          )}
+        >
+          <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3 text-sm text-[var(--muted)]")}>
+            移出后该资产将不再参与再平衡计算，目标权重将被清零。
+          </div>
+        </DaaSurfaceDialogShell>
+      </Dialog>
     </>
   );
 }

@@ -102,7 +102,7 @@ export function WorkbenchAssistantPanel(props: {
                   key={prompt}
                   type="button"
                   onClick={() => submit(prompt)}
-                  className="inline-flex h-8 items-center rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
+                  className="inline-flex h-8 items-center rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
                 >
                   {prompt}
                 </button>
@@ -226,7 +226,7 @@ export function WorkbenchAssistantPanel(props: {
                   type="button"
                   onClick={() => void props.assistant.selectThread(thread.sessionId)}
                   className={cn(
-                    "w-full rounded-[14px] border bg-[rgba(8,12,20,0.58)] p-3 text-left transition-all",
+                    "w-full rounded-[14px] border bg-[rgba(8,12,20,0.58)] p-3 text-left transition-colors",
                     props.assistant.selectedSessionId === thread.sessionId
                       ? "border-[var(--primary)]/40 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
                       : "border-[var(--border)] hover:border-[var(--primary)]/20",

@@ -30,7 +30,7 @@ export function WorkbenchBannerStack(props: {
   executionReceipt: ExecutionReceipt | null;
   onClearExecutionReceipt: () => void;
 }) {
-  const actionLinkClassName = "inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/30 hover:text-[var(--text)]";
+  const actionLinkClassName = "inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]";
 
   return (
     <>

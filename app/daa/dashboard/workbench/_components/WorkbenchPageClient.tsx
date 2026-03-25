@@ -35,11 +35,11 @@ class WorkbenchErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
-          <h3 className="text-lg font-semibold text-red-800">工作台加载异常</h3>
-          <p className="mt-2 text-sm text-red-600">{this.state.error?.message || "未知错误"}</p>
+        <div className="rounded-[16px] border border-[rgba(248,113,113,0.24)] bg-[rgba(248,113,113,0.08)] p-6 text-center">
+          <h3 className="text-lg font-semibold text-[var(--danger)]">工作台加载异常</h3>
+          <p className="mt-2 text-sm text-[var(--muted)]">{this.state.error?.message || "未知错误"}</p>
           <button
-            className="mt-4 rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
+            className="mt-4 rounded-[12px] bg-[var(--danger)] px-4 py-2 text-sm text-white transition-colors hover:brightness-110"
             onClick={() => this.setState({ hasError: false, error: null })}
           >
             重试

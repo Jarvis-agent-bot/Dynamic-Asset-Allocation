@@ -212,7 +212,20 @@ export function useWorkbenchAssetActions(input: {
     try {
       await patchWorkbenchAsset(row.assetKey, { watchEnabled: false, targetWeightHint: 0 });
       setExpandedInsightKeys((prev) => ({ ...prev, [row.assetKey]: false }));
-      toast.success(`${row.symbol} 已移出观察列表`);
+      toast.success(`${row.symbol} 已移出观察列表`, {
+        action: {
+          label: "撤销",
+          onClick: async () => {
+            try {
+              await patchWorkbenchAsset(row.assetKey, { watchEnabled: true });
+              toast.success(`${row.symbol} 已恢复到观察列表`);
+              await input.loadBootstrap(true);
+            } catch {
+              toast.error("撤销失败，请手动重新添加");
+            }
+          },
+        },
+      });
       await input.loadBootstrap(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "移除观察失败");
