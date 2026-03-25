@@ -122,6 +122,48 @@ export async function updateDaaAssetUniverseLastPrice(input: {
   });
 }
 
+/**
+ * 批量更新资产最新价格 — 单次事务替代 N 次独立连接。
+ * 性能优化：将 N+1 查询模式改为单次批量 UPDATE。
+ */
+export async function batchUpdateDaaAssetUniverseLastPrices(
+  items: Array<{ assetKey: string; lastPrice: number; priceUpdatedAt: string }>,
+): Promise<string[]> {
+  if (items.length === 0) return [];
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const validItems = items
+      .map((item) => ({
+        assetKey: normalizeText(item.assetKey).toUpperCase(),
+        lastPrice: Math.max(0, toFiniteNumber(item.lastPrice)),
+        priceUpdatedAt: toIsoString(item.priceUpdatedAt, new Date().toISOString()),
+      }))
+      .filter((item) => item.assetKey && item.lastPrice > 0);
+
+    if (validItems.length === 0) return [];
+
+    // 构建 VALUES 列表用于批量 UPDATE
+    const params: (string | number)[] = [];
+    const valuesClauses: string[] = [];
+    for (let i = 0; i < validItems.length; i++) {
+      const offset = i * 3;
+      params.push(validItems[i].assetKey, validItems[i].lastPrice, validItems[i].priceUpdatedAt);
+      valuesClauses.push(`($${offset + 1}, $${offset + 2}::numeric, $${offset + 3}::timestamptz)`);
+    }
+
+    const result = await query(
+      `UPDATE daa_asset_universe AS u
+       SET last_price = v.price, price_updated_at = v.updated_at, updated_at = NOW()
+       FROM (VALUES ${valuesClauses.join(", ")}) AS v(asset_key, price, updated_at)
+       WHERE u.asset_key = v.asset_key
+       RETURNING u.asset_key`,
+      params,
+    );
+
+    return result.rows.map((row: Record<string, unknown>) => String(row.asset_key || ""));
+  });
+}
+
 export async function upsertDaaAssetUniverseRow(input: {
   symbol: string;
   market?: string;

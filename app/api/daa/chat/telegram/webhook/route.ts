@@ -1,3 +1,5 @@
+import { timingSafeEqual, createHash } from "node:crypto";
+
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { parseTelegramInboundUpdate } from "@/src/daa/chat/channelAdapters";
 import { runAssistantTurn, isTelegramSenderAllowed } from "@/src/daa/chat/chatOrchestrator";
@@ -12,11 +14,18 @@ function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** 使用 SHA-256 哈希进行时序安全比较，避免侧信道攻击 */
+function timingSafeCompare(a: string, b: string): boolean {
+  const hashA = createHash("sha256").update(a).digest();
+  const hashB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(hashA, hashB);
+}
+
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const webhookSecret = await resolveSecret("telegram_webhook_secret");
     const providedSecret = normalizeText(req.headers.get("x-telegram-bot-api-secret-token"));
-    if (webhookSecret && webhookSecret !== providedSecret) {
+    if (webhookSecret && !timingSafeCompare(webhookSecret, providedSecret)) {
       return fail("UNAUTHORIZED", "telegram webhook secret mismatch", { status: 401 });
     }
 

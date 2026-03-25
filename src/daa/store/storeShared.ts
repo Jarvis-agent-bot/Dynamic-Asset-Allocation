@@ -96,6 +96,15 @@ export async function hasTableColumn(query: SchemaQueryFn, tableName: string, co
 
 import { normalizeText } from "@/src/daa/utils/normalize";
 
+/**
+ * 对 SQL 标识符进行转义（表名、列名），防止 SQL 注入。
+ * 使用 PostgreSQL 双引号规则：内部双引号替换为两个双引号。
+ */
+function quoteIdent(name: string): string {
+  const sanitized = name.replace(/"/g, '""');
+  return `"${sanitized}"`;
+}
+
 function buildLegacyTableName(tableName: string): string {
   return `${normalizeText(tableName).toLowerCase()}_archived_v1`;
 }
@@ -108,7 +117,7 @@ export async function archiveTableToLegacy(query: SchemaQueryFn, tableName: stri
   if (await hasTable(query, legacyTableName)) {
     throw new Error(`legacy table already exists: ${legacyTableName}`);
   }
-  await query(`ALTER TABLE ${normalized} RENAME TO ${legacyTableName}`);
+  await query(`ALTER TABLE ${quoteIdent(normalized)} RENAME TO ${quoteIdent(legacyTableName)}`);
   return true;
 }
 
@@ -119,7 +128,8 @@ export async function ensureTableColumn(
   definitionSql: string,
 ): Promise<void> {
   if (await hasTableColumn(query, tableName, columnName)) return;
-  await query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definitionSql}`);
+  // definitionSql 是开发者硬编码的类型定义（如 "TEXT DEFAULT ''"），无需转义
+  await query(`ALTER TABLE ${quoteIdent(tableName)} ADD COLUMN ${quoteIdent(columnName)} ${definitionSql}`);
 }
 
 /* ------------------------------------------------------------------ */

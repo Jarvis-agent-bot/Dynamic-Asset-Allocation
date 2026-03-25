@@ -9,7 +9,7 @@ import {
   type RebalanceTriggerDecision,
 } from "./rebalanceCore";
 import { assertValidSeriesDates } from "./seriesContracts";
-import { toFinite } from "@/src/daa/utils/normalize";
+import { toFinite } from "@/src/core/utils/number";
 
 export type DriftRebalanceBacktestRequest = {
   /** Historical close series per symbol. All series must share the same dates. */

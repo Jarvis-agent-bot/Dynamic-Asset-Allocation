@@ -66,9 +66,14 @@ function deriveEncryptionKey(): Buffer {
 
   const dbUrl = (process.env.DAA_DB_URL || "").trim();
   if (!dbUrl) {
-    console.warn("[secretsManager] DAA_SECRETS_ENCRYPTION_KEY 和 DAA_DB_URL 均未设置，使用固定密钥加密。建议在生产环境中配置 DAA_SECRETS_ENCRYPTION_KEY。");
+    // 生产环境：无密钥且无 DB URL 时，拒绝加密/解密操作
+    if ((process.env.NODE_ENV || "").toLowerCase() === "production") {
+      throw new Error("[secretsManager] 生产环境必须配置 DAA_SECRETS_ENCRYPTION_KEY 或 DAA_DB_URL，拒绝使用默认密钥。");
+    }
+    console.warn("[secretsManager] DAA_SECRETS_ENCRYPTION_KEY 和 DAA_DB_URL 均未设置，仅开发环境允许使用派生密钥。");
   }
-  cachedKey = createHash("sha256").update(`daa-secrets:${dbUrl || "daa-secrets-default-key"}`).digest();
+  // 非生产环境回退：从 DB URL 派生（或开发默认值）
+  cachedKey = createHash("sha256").update(`daa-secrets:${dbUrl || "daa-dev-only-key-" + process.pid}`).digest();
   return cachedKey;
 }
 

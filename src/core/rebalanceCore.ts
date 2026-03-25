@@ -114,7 +114,7 @@ export type RebalanceCoreResponse = {
   trigger: RebalanceTriggerDecision;
 };
 
-import { toFinite } from "@/src/daa/utils/normalize";
+import { toFinite } from "@/src/core/utils/number";
 
 function clamp01(x: number) {
   if (!Number.isFinite(x)) return 0;

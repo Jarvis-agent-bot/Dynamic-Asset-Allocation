@@ -51,11 +51,8 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    return fail("INTERNAL_ERROR", "auth_backend_unavailable", {
-      status: 503,
-      details: {
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
+    // P1 安全修复：不向客户端泄露内部错误详情
+    console.error("[login] auth backend error:", error instanceof Error ? error.message : String(error));
+    return fail("INTERNAL_ERROR", "auth_backend_unavailable", { status: 503 });
   }
 }

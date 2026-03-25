@@ -99,7 +99,13 @@ export function daaPgPool(): Pool {
 
   const url = getDaaPgUrl();
   if (url) {
-    const pool = new Pool({ connectionString: url });
+    const pool = new Pool({
+      connectionString: url,
+      max: 5,                       // 最大连接数（serverless 环境避免耗尽数据库连接）
+      idleTimeoutMillis: 30_000,    // 空闲连接 30s 后释放
+      connectionTimeoutMillis: 5_000, // 获取连接超时 5s
+      statement_timeout: 30_000,    // 单条 SQL 超时 30s
+    });
     st.pool = pool;
     return pool;
   }
