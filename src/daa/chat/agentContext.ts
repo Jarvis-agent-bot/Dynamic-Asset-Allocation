@@ -1,5 +1,6 @@
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 import { getChatSessionMemory, listChatMessages, saveChatSessionMemory } from "./chatRepo";
 import type { DaaChatIntentKind, DaaChatPendingAction, DaaChatSessionMemory } from "./chatTypes";
@@ -16,10 +17,6 @@ export type DaaAssistantRuntimeContext = {
   learningDigest: string;
   storedPendingAction: DaaChatPendingAction | null;
 };
-
-export function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 export function formatMoney(value: number | null | undefined, currency: string): string {
   const amount = Number(value || 0);

@@ -1,3 +1,5 @@
+import { normalizeCollapse } from "@/src/daa/utils/normalize";
+
 import type { DaaChatIntentKind } from "./chatTypes";
 import type { DaaAssistantIntent } from "./assistantIntentTypes";
 
@@ -5,10 +7,6 @@ const BUY_WORDS = /(^|[\s，,。.!?？；;])(买入|买|buy)\s+/i;
 const SELL_WORDS = /(^|[\s，,。.!?？；;])(卖出|卖|sell)\s+/i;
 const TRADE_PATTERN = /(买入|买|buy|卖出|卖|sell)\s+([A-Za-z][A-Za-z0-9.\-]{0,20})(?:\s+([\d.]+)\s*(股|份|usd|usdt|美元|刀|元)?)?/i;
 const ANALYSIS_WORDS = /(建议|分析|解释|怎么看|为什么|如何看|判断|复盘|总结|优化|合理吗|应该|帮我想|给我方案)/i;
-
-function normalizeText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
 
 function parseTrade(text: string): DaaAssistantIntent | null {
   const match = text.match(TRADE_PATTERN);
@@ -45,7 +43,7 @@ function downgradeExecutionIntent(intent: DaaAssistantIntent, allowExecution: bo
 export function parseAssistantIntent(raw: string, options?: {
   allowExecution?: boolean;
 }): DaaAssistantIntent {
-  const text = normalizeText(raw);
+  const text = normalizeCollapse(raw);
   const allowExecution = options?.allowExecution !== false;
   if (!text) return { kind: "help", rawText: raw };
 

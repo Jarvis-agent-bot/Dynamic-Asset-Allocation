@@ -1,7 +1,9 @@
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-import { buildContextDigest, buildRecentConversation, describePendingAction, normalizeText } from "./agentContext";
+import { normalizeText } from "@/src/daa/utils/normalize";
+
+import { buildContextDigest, buildRecentConversation, describePendingAction } from "./agentContext";
 import type { DaaAgentToolContext, DaaAgentToolExecutor, DaaAgentToolResult } from "./agentToolTypes";
 import { buildAssistantHelpText } from "./agentToolViewHandlers";
 import type { DaaChatPendingAction } from "./chatTypes";

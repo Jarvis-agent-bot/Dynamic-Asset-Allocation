@@ -1,4 +1,5 @@
 import { getDaaTradeTicket, listDaaBrokerOpenTradeTickets, type DaaStoreTradeTicket } from "@/src/daa/store/daaStorePg";
+import { normalizeUpper } from "@/src/daa/utils/normalize";
 
 import { CryptoPaperBroker } from "./cryptoPaperBroker";
 import { SimBroker } from "./simBroker";
@@ -20,14 +21,6 @@ export type ExecutionRouteDecision = {
   routeReason: string;
   remote: boolean;
 };
-
-function normalizeText(value: unknown): string {
-  return String(value || "").trim();
-}
-
-function normalizeUpper(value: unknown): string {
-  return normalizeText(value).toUpperCase();
-}
 
 export function isCryptoAsset(input: ExecutionRouteInput): boolean {
   const market = normalizeUpper(input.market);

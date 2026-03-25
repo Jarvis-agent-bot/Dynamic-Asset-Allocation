@@ -5,7 +5,7 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export { withDaaPgClient } from "@/src/daa/pg/daaPg";
-export { normalizeText, toFinite } from "@/src/daa/utils/normalize";
+export { normalizeText, toFinite, normalizeUpper } from "@/src/daa/utils/normalize";
 export { toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 
 /* ------------------------------------------------------------------ */
@@ -183,10 +183,6 @@ export function clampNumber(value: number, min: number, max: number): number {
   if (value <= min) return min;
   if (value >= max) return max;
   return value;
-}
-
-export function normalizeUpper(value: unknown, fallback = ""): string {
-  return normalizeText(value, fallback).toUpperCase();
 }
 
 export function normalizeStringArray(value: unknown): string[] {

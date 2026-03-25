@@ -1,4 +1,5 @@
 import { listDaaTradeTickets, type DaaStoreTradeTicket } from "@/src/daa/store/daaStorePg";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 import type {
   BrokerAdapter,
@@ -10,10 +11,6 @@ import type {
   DaaBrokerPreviewOrderInput,
   DaaBrokerPreviewOrderResult,
 } from "./brokerTypes";
-
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 function mapTicketToOrder(ticket: DaaStoreTradeTicket): DaaBrokerOrder {
   return {

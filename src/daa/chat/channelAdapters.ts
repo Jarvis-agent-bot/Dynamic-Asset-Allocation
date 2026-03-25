@@ -1,3 +1,5 @@
+import { normalizeText } from "@/src/daa/utils/normalize";
+
 import type { DaaChatChannel } from "./chatTypes";
 
 export type DaaAssistantSessionDescriptor = {
@@ -33,10 +35,6 @@ export type TelegramInboundMessage = {
   participantId: string;
 };
 
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 export function buildWebAssistantSessionDescriptor(input: {
   accountId: string;
   username: string;
@@ -61,7 +59,7 @@ export function parseTelegramInboundUpdate(update: TelegramUpdate): TelegramInbo
   if (!text || !chatId || !userId) return null;
 
   const participantId = normalizeText(message?.from?.username)
-    || [message?.from?.first_name, message?.from?.last_name].map(normalizeText).filter(Boolean).join(" ")
+    || [message?.from?.first_name, message?.from?.last_name].map((v) => normalizeText(v)).filter(Boolean).join(" ")
     || userId;
 
   return {

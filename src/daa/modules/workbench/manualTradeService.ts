@@ -15,6 +15,7 @@ import {
   listDaaTradeTickets,
   updateDaaAssetUniverseLastPrice,
 } from "@/src/daa/store/daaStorePg";
+import { toPositive } from "@/src/daa/utils/normalize";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
@@ -94,12 +95,6 @@ export type ExecuteManualTradeInput = {
 };
 
 export type ExecuteManualTradeResult = DaaBrokerBackedExecutionResult;
-
-function toPositive(v: unknown): number {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return n;
-}
 
 function toNonNegative(v: unknown): number | null {
   if (v == null || String(v).trim() === "") return null;

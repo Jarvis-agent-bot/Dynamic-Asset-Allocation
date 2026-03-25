@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from
 
 import { ensureDaaAuthSchemaPg, isDaaPgEnabled, isDaaPgMemRuntime, withDaaPgClient } from "../pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { isPgUniqueViolation } from "@/src/daa/store/storeShared";
 
 export type DaaAuthRole = "viewer" | "editor";
 export type DaaAuthAccountStatus = "active" | "inactive";
@@ -168,11 +169,6 @@ function addDaysIso(iso: string, days: number): string {
   const d = new Date(Number.isFinite(ms) ? ms : Date.now());
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString();
-}
-
-function isPgUniqueViolation(e: any): boolean {
-  // pg error code 23505 = unique_violation.
-  return Boolean(e && typeof e === "object" && (e as any).code === "23505");
 }
 
 async function ensureAuthSchemaIfPg(): Promise<void> {

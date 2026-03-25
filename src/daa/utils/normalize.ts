@@ -21,3 +21,13 @@ export function toPositive(value: unknown, fallback = 0): number {
   const n = toFinite(value, NaN);
   return n > 0 ? n : fallback;
 }
+
+/** normalizeText + toUpperCase. */
+export function normalizeUpper(value: unknown, fallback = ""): string {
+  return normalizeText(value, fallback).toUpperCase();
+}
+
+/** Collapse consecutive whitespace to single space, then trim. */
+export function normalizeCollapse(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
