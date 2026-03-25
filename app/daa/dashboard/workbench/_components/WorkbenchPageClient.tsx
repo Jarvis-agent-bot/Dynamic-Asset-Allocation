@@ -135,6 +135,7 @@ export default function WorkbenchPageClient(props: {
           notificationStatus={model.notificationStatus}
           loading={model.loading && !model.bootstrap}
           refreshing={model.refreshing}
+          priceStreamConnected={model.priceStreamConnected}
           onRefresh={() => void model.loadBootstrap(true)}
         />
 

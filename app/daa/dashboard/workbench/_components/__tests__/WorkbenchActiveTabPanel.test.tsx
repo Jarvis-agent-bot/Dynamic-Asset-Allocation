@@ -268,6 +268,8 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     watchlistBuilderProps,
     rebalanceSectionProps,
     dialogProps,
+    priceStreamConnected: topLevelOverrides.priceStreamConnected ?? false,
+    livePrices: topLevelOverrides.livePrices ?? new Map(),
   };
 }
 

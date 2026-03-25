@@ -94,6 +94,7 @@ export function WorkbenchSummaryHeader(props: {
   notificationStatus: StoreNotificationStatusSummary | null;
   loading: boolean;
   refreshing: boolean;
+  priceStreamConnected?: boolean;
   onRefresh: () => void;
 }) {
   const summaryItems = [
@@ -147,6 +148,11 @@ export function WorkbenchSummaryHeader(props: {
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <DaaSurfaceStatusPill tone={accountModeTone}>{accountModeLabel}</DaaSurfaceStatusPill>
             <DaaSurfaceStatusPill tone={syncTone}>{syncLabel}</DaaSurfaceStatusPill>
+            {props.priceStreamConnected != null && (
+              <DaaSurfaceStatusPill tone={props.priceStreamConnected ? "green" : "slate"}>
+                {props.priceStreamConnected ? "实时" : "离线"}
+              </DaaSurfaceStatusPill>
+            )}
             <DaaSurfaceActionButton onClick={props.onRefresh} disabled={props.loading || props.refreshing}>
               <RefreshCcw className={cn("h-3.5 w-3.5", props.refreshing ? "animate-spin" : "")} />
               {props.loading ? "准备中…" : props.refreshing ? "刷新中…" : "刷新"}

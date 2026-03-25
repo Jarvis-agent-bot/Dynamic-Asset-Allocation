@@ -7,6 +7,7 @@ import { useWorkbenchExecutionFlow } from "@/app/daa/dashboard/_hooks/workbench/
 import { useWorkbenchRebalanceFlow } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchRebalanceFlow";
 import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useWorkbenchModel } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
+import type { PriceUpdate } from "@/app/daa/dashboard/_hooks/usePriceStream";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
@@ -44,11 +45,29 @@ export function useWorkbenchPageModel(input: {
     error,
     authRequired,
     loadBootstrap,
+    livePrices,
+    priceStreamConnected,
   } = useWorkbenchModel(input);
 
   const [busy, setBusy] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
-  const assetRows = useMemo(() => bootstrap?.assetUniverse ?? [], [bootstrap?.assetUniverse]);
+  const rawAssetRows = useMemo(() => bootstrap?.assetUniverse ?? [], [bootstrap?.assetUniverse]);
+
+  // 将 SSE 实时价格合并到 assetRows（覆盖 lastPrice + 添加 priceDelta/priceDirection）
+  const assetRows = useMemo(() => {
+    if (livePrices.size === 0) return rawAssetRows;
+    return rawAssetRows.map((row) => {
+      const live = livePrices.get(row.assetKey);
+      if (!live) return row;
+      return {
+        ...row,
+        lastPrice: live.price,
+        priceUpdatedAt: live.ts,
+        priceDelta: live.delta,
+        priceDirection: live.direction,
+      };
+    });
+  }, [rawAssetRows, livePrices]);
 
   const syncCycleState = useCallback((nextCycle: RebalanceCycle | null) => {
     setCurrentCycle(nextCycle);
@@ -202,6 +221,9 @@ export function useWorkbenchPageModel(input: {
     watchlistBuilderProps: assetActions.watchlistBuilderProps,
     rebalanceSectionProps,
     dialogProps,
+    // SSE 实时价格流状态
+    priceStreamConnected,
+    livePrices,
   };
 }
 
