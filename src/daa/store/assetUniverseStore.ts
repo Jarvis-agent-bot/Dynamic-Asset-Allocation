@@ -164,6 +164,41 @@ export async function batchUpdateDaaAssetUniverseLastPrices(
   });
 }
 
+/** SSE 用：批量读取资产价格快照（单次查询，高频安全） */
+export type AssetPriceSnapshot = {
+  assetKey: string;
+  symbol: string;
+  lastPrice: number;
+  priceUpdatedAt: string;
+  currency: string;
+};
+
+export async function batchReadAssetPriceSnapshots(
+  assetKeys: string[],
+): Promise<AssetPriceSnapshot[]> {
+  if (assetKeys.length === 0) return [];
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const params = assetKeys.map((k) => normalizeText(k).toUpperCase()).filter(Boolean);
+    if (params.length === 0) return [];
+    const placeholders = params.map((_, i) => `$${i + 1}`).join(", ");
+    const result = await query(
+      `SELECT asset_key, symbol, last_price, price_updated_at, currency
+       FROM daa_asset_universe
+       WHERE asset_key IN (${placeholders})
+         AND last_price IS NOT NULL AND last_price > 0`,
+      params,
+    );
+    return result.rows.map((row: Record<string, unknown>) => ({
+      assetKey: String(row.asset_key || ""),
+      symbol: String(row.symbol || ""),
+      lastPrice: toFiniteNumber(row.last_price),
+      priceUpdatedAt: String(row.price_updated_at || ""),
+      currency: String(row.currency || "USD"),
+    }));
+  });
+}
+
 export async function upsertDaaAssetUniverseRow(input: {
   symbol: string;
   market?: string;
