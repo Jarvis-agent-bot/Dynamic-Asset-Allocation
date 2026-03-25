@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import { getDaaAuthContextFromRequest } from "./auth/daaAuthRequest";
@@ -8,6 +10,14 @@ export type DaaAdminTokenKind = "viewer" | "editor" | "unknown" | "none";
 
 function normalizeToken(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
+
+}
+
+/** SHA-256 时序安全比较 — 固定 32 字节，无长度泄露 */
+function timingSafeCompare(a: string, b: string): boolean {
+  const hashA = createHash("sha256").update(a).digest();
+  const hashB = createHash("sha256").update(b).digest();
+  return timingSafeEqual(hashA, hashB);
 }
 
 function getAdminTokens() {
@@ -26,8 +36,8 @@ export function inferDaaAdminTokenKind(providedToken: string | null | undefined)
   if (!t) return "none";
 
   const { viewer, editor } = getAdminTokens();
-  if (editor && t === editor) return "editor";
-  if (viewer && t === viewer) return "viewer";
+  if (editor && timingSafeCompare(t, editor)) return "editor";
+  if (viewer && timingSafeCompare(t, viewer)) return "viewer";
   return "unknown";
 }
 

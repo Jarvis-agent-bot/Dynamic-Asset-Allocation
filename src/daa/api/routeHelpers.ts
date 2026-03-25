@@ -61,13 +61,14 @@ export function errorToResponse(error: unknown): Response {
   const status = Number((error as { status?: unknown } | null)?.status);
   const details = (error as { details?: unknown } | null)?.details;
   if (Number.isFinite(status) && status >= 400 && status < 500) {
-    return fail(status === 409 ? "BROKER_SESSION_NOT_READY" : "UNKNOWN", message, {
+    // 不泄露内部错误详情 — 仅返回安全的错误码
+    const safeMessage = status === 404 ? "not_found" : status === 409 ? "conflict" : "request_error";
+    return fail(status === 409 ? "BROKER_SESSION_NOT_READY" : status === 404 ? "NOT_FOUND" : "UNKNOWN", safeMessage, {
       status,
-      details,
     });
   }
   if (/not found/i.test(message)) {
-    return fail("NOT_FOUND", message, { status: 404 });
+    return fail("NOT_FOUND", "not_found", { status: 404 });
   }
   if (isDbErrorMessage(message)) {
     return fail("DB_ERROR", "service temporarily unavailable", { status: 503 });

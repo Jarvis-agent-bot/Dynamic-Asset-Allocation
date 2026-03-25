@@ -49,11 +49,7 @@ export async function GET(req: Request) {
     if (isSilentMode(req)) {
       return fail("UNAUTHORIZED", "not_authenticated", { status: 200 });
     }
-    return fail("INTERNAL_ERROR", "auth_backend_unavailable", {
-      status: 503,
-      details: {
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
+    logSwallowed("auth.me", error);
+    return fail("INTERNAL_ERROR", "auth_backend_unavailable", { status: 503 });
   }
 }

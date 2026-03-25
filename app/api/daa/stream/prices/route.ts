@@ -40,7 +40,11 @@ export async function GET(req: Request) {
   }
 
   try {
-    const stream = createPriceStream(assetKeys, 1000, 5 * 60 * 1000);
+    const stream = createPriceStream(assetKeys, 3000, 5 * 60 * 1000);
+
+    if (!stream) {
+      return fail("VALIDATION_FAILED", "并发连接数已达上限，请稍后重试", { status: 429 });
+    }
 
     return new Response(stream, {
       headers: {

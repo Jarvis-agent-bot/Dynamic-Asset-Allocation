@@ -27,14 +27,11 @@ export async function requireCronAuth(req: Request): Promise<NextResponse | null
 
   const provided = normalizeToken(req.headers.get("x-daa-cron-token")) || parseBearer(req);
   if (provided) {
-    const a = Buffer.from(provided);
-    const b = Buffer.from(expected);
-    const maxLen = Math.max(a.length, b.length);
-    const paddedA = Buffer.alloc(maxLen);
-    const paddedB = Buffer.alloc(maxLen);
-    a.copy(paddedA);
-    b.copy(paddedB);
-    if (a.length === b.length && timingSafeEqual(paddedA, paddedB)) return null;
+    // SHA-256 比较：固定 32 字节长度，完全消除 length 泄露
+    const { createHash } = await import("node:crypto");
+    const hashA = createHash("sha256").update(provided).digest();
+    const hashB = createHash("sha256").update(expected).digest();
+    if (timingSafeEqual(hashA, hashB)) return null;
   }
 
   return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
