@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import { fetchYahooRssFeedBySymbol, parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import {
   appendDaaExternalPayloadRaw,
@@ -30,12 +31,6 @@ export type DaaNewsSignal = {
 const NEWS_SIGNAL_CACHE_MAX_AGE_MS_ = 30 * 60 * 1000;
 const NEWS_RAW_RETENTION_DAYS_ = 90;
 
-function clamp(v: number, lo: number, hi: number): number {
-  if (!Number.isFinite(v)) return lo;
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
 
 function domainFromLink(link: string | null | undefined): string {
   const text = String(link || "").trim();

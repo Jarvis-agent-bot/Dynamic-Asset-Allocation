@@ -765,7 +765,7 @@ function shouldUseCache(maxAgeMs = 6 * 60 * 60 * 1000): boolean {
   return Date.now() - ts < maxAgeMs;
 }
 
-export type DaaFundManagerOperation = {
+type DaaFundManagerOperation = {
   symbol: string;
   actorId: string;
   fundCode: string;
@@ -779,7 +779,7 @@ export type DaaFundManagerOperation = {
   confidencePct: number;
 };
 
-export type DaaFundManagerOpsBySymbol = {
+type DaaFundManagerOpsBySymbol = {
   symbol: string;
   generatedAt: string;
   sourceStatus: "live" | "fallback_seed" | "unknown";
@@ -867,13 +867,13 @@ async function buildDanjuanSignalBatch(opts: {
   };
 }
 
-export function listHumanActors(opts: { marketScope?: string[] } = {}): DaaHumanActor[] {
+function listHumanActors(opts: { marketScope?: string[] } = {}): DaaHumanActor[] {
   const scope = new Set(normalizeMarketScope(opts.marketScope));
   const source = runtimeState.latestActors.length > 0 ? runtimeState.latestActors : HF_SEED_ACTORS_;
   return source.filter((actor) => actor.markets.some((m) => matchesScope(m, scope))).map((actor) => ({ ...actor }));
 }
 
-export function listActorHoldings(actorId: string, opts: { marketScope?: string[] } = {}): DaaActorHoldingSnapshot[] {
+function listActorHoldings(actorId: string, opts: { marketScope?: string[] } = {}): DaaActorHoldingSnapshot[] {
   const normalizedActorId = String(actorId || "").trim();
   if (!normalizedActorId) return [];
 
@@ -885,7 +885,7 @@ export function listActorHoldings(actorId: string, opts: { marketScope?: string[
     .map((row) => ({ ...row }));
 }
 
-export async function listFundManagerOperationsBySymbols(opts: {
+async function listFundManagerOperationsBySymbols(opts: {
   symbols: string[];
   marketScope?: string[];
   topN?: number;
@@ -966,7 +966,7 @@ export async function listFundManagerOperationsBySymbols(opts: {
   return out;
 }
 
-export function computeHumanSignalBatch(opts: { marketScope?: string[]; symbols?: string[] } = {}): DaaHumanSignalBatch {
+function computeHumanSignalBatch(opts: { marketScope?: string[]; symbols?: string[] } = {}): DaaHumanSignalBatch {
   return buildSeedSignalBatch(opts);
 }
 
@@ -1146,7 +1146,7 @@ export async function getLatestHumanSignalBatch(opts: {
   return ingest.batch;
 }
 
-export function getHumanIngestRuntimeState(): RuntimeHumanFactorState {
+function getHumanIngestRuntimeState(): RuntimeHumanFactorState {
   return {
     lastIngestAt: runtimeState.lastIngestAt,
     ingestCount: runtimeState.ingestCount,

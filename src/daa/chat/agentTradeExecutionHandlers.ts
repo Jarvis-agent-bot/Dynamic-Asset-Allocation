@@ -1,5 +1,5 @@
 import { appendAgentLearningEvent } from "@/src/daa/agent/agentLearningRepo";
-import { executeTradeViaGateway, previewTradeViaGateway } from "@/src/daa/gateway";
+import { executeTradeViaGateway, previewTradeViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { ExecuteManualTradeResult, PreviewManualTradeResult } from "@/src/daa/modules/workbench/manualTradeService";
 
 import { appendChatToolCall } from "./chatRepo";

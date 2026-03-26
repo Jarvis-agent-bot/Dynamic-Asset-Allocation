@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
 import {
   getMarketIndicatorRefreshSymbols,
@@ -50,10 +51,6 @@ type ComputedIndicatorRow = {
   subjectKey: string;
 };
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, value));
-}
 
 function round(value: number, digits = 2): number {
   if (!Number.isFinite(value)) return 0;

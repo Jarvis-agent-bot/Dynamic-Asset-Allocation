@@ -1,7 +1,7 @@
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
-import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionResult } from "@/src/daa/broker";
+import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionResult } from "./executionVenue";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";

@@ -1,6 +1,7 @@
 import { buildOpportunityPanel, type DaaOpportunityPanel } from "@/src/daa/signals/opportunityService";
 import type { DaaTechnicalSignal } from "@/src/daa/signals/technicalSignal";
 import { buildDaaAssetKey, normalizeDaaMarket, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { clamp } from "@/src/core/math";
 import { listDaaCandidateAssets, listDaaFxRates } from "@/src/daa/store/daaStorePg";
 import type {
   DaaUnifiedCandidateAsset,
@@ -35,12 +36,6 @@ function normalizeMarket(value: unknown, fallback = "US"): string {
   return normalizeDaaMarket(value, fallback);
 }
 
-function clamp(v: number, lo: number, hi: number): number {
-  if (!Number.isFinite(v)) return lo;
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
 
 function sumWeights(weights: Record<string, number>): number {
   return Object.values(weights).reduce((acc, value) => acc + (Number(value) || 0), 0);

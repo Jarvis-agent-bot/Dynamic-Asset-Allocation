@@ -1,4 +1,10 @@
-import type { DaaBrokerBackedExecutionResult, DaaBrokerKind } from "@/src/daa/broker";
+/**
+ * 本地执行网关: trade / rebalance 执行 + 通知扇出.
+ *
+ * 合并自原 src/daa/gateway/localExecutionGateway.ts。
+ */
+
+import type { DaaBrokerBackedExecutionResult, DaaBrokerKind } from "./executionVenue";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { buildTradeExecutionNotifyText } from "@/src/daa/notify/tradeExecutionBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
@@ -9,9 +15,9 @@ import {
   previewManualTrade,
   type ExecuteManualTradeInput,
   type PreviewManualTradeInput,
-} from "@/src/daa/modules/workbench/manualTradeService";
-import { executeWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
-import type { ExecuteRebalanceCycleResult } from "@/src/daa/modules/workbench/workbenchTypes";
+} from "./manualTradeService";
+import { executeWorkbenchRebalanceCycle } from "./workbenchRebalanceCycleService";
+import type { ExecuteRebalanceCycleResult } from "./workbenchTypes";
 
 export type LocalExecutionGatewayNotifyMode = "fanout" | "silent";
 
@@ -98,7 +104,7 @@ async function fanoutTradeExecutionNotification(execution: DaaBrokerBackedExecut
       notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
     ]);
   } catch (err) {
-    logSwallowed("localExecutionGateway.notify", err);
+    logSwallowed("executionGateway.notify", err);
   }
 }
 
@@ -145,7 +151,7 @@ async function fanoutRebalanceExecutionNotification(
       notification.feishu.enabled && notification.feishu.onTradeExecuted ? sendFeishuByEnv(message, meta) : Promise.resolve(false),
     ]);
   } catch (err) {
-    logSwallowed("localExecutionGateway.notify", err);
+    logSwallowed("executionGateway.notify", err);
   }
 }
 

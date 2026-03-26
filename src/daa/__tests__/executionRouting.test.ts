@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resolveExecutionRoute } from "@/src/daa/broker/executionRouting";
+import { resolveExecutionRoute } from "@/src/daa/modules/workbench/executionVenue";
 
 describe("execution-routing", () => {
   beforeEach(() => {

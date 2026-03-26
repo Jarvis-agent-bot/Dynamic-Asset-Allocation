@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import type { DaaHumanSignal } from "@/src/daa/hf/humanSignals";
 import type { MacroCyclePhase } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaNewsSignal } from "@/src/daa/signals/newsSignal";
@@ -46,12 +47,6 @@ export type BuildFusedOpportunitiesInput = {
   assetClasses?: Record<string, string>;
 };
 
-function clamp(v: number, lo: number, hi: number): number {
-  if (!Number.isFinite(v)) return lo;
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
 
 function normalizeSymbol(value: unknown): string {
   return String(value || "").trim().toUpperCase();

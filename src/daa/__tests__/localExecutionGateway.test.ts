@@ -42,7 +42,7 @@ import {
   executeTradeViaGateway,
   getLocalExecutionGatewayStatus,
   previewTradeViaGateway,
-} from "@/src/daa/gateway";
+} from "@/src/daa/modules/workbench/executionGateway";
 
 describe("local-execution-gateway", () => {
   beforeEach(() => {

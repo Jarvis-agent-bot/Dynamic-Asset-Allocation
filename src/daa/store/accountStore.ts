@@ -18,28 +18,14 @@ import {
   withDaaPgClient,
   parseJsonb,
   toIsoString,
+  isRecord,
   type DaaTxQueryFn,
 } from "./storeShared";
 import type {
   DaaStoreSystemConfigRow,
   DaaStoreAccountState,
-  DaaStoreStrategyConfig,
-  DaaStoreBrokerKind,
-  DaaStoreBrokerAccountState,
 } from "./storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
-
-function normalizeBrokerKind(value: unknown): DaaStoreBrokerKind | null {
-  const text = normalizeText(value).toLowerCase();
-  if (!text) return null;
-  if (text === "sim") return "sim";
-  if (text === "crypto" || text === "crypto_paper") return "crypto_paper";
-  return "sim";
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 export function resolveInvestableCash(cash: number, frozenCash: number, investableCashRaw: unknown): number {
   return resolveRuntimeInvestableCash({
@@ -49,24 +35,10 @@ export function resolveInvestableCash(cash: number, frozenCash: number, investab
   });
 }
 
-export function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState {
+function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState {
   const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
   return {
     id: "default",
-    baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
-    cash: Math.max(0, toFiniteNumber(row.cash, 0)),
-    investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
-    frozenCash: Math.max(0, toFiniteNumber(row.frozen_cash, 0)),
-    totalEquity: Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null,
-    updatedAt: toIsoString(row.updated_at),
-  };
-}
-
-export function mapBrokerAccountStateRow(row: Record<string, unknown>): DaaStoreBrokerAccountState {
-  const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
-  return {
-    brokerKind: normalizeBrokerKind(row.broker_kind) || "sim",
-    accountId: row.account_id == null ? null : normalizeText(row.account_id) || null,
     baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
     cash: Math.max(0, toFiniteNumber(row.cash, 0)),
     investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
@@ -416,71 +388,6 @@ export async function replaceDaaAccountState(input: {
   });
 }
 
-export async function getDaaBrokerAccountState(
-  brokerKind: DaaStoreBrokerKind = "sim",
-): Promise<DaaStoreBrokerAccountState | null> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const result = await query(
-      `SELECT broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
-       FROM daa_broker_account_state
-       WHERE broker_kind = $1
-       LIMIT 1`,
-      [brokerKind],
-    );
-    if (!result.rows.length) return null;
-    return mapBrokerAccountStateRow(result.rows[0] as Record<string, unknown>);
-  });
-}
-
-export async function replaceDaaBrokerAccountState(input: {
-  brokerKind: DaaStoreBrokerKind;
-  accountId?: string | null;
-  baseCurrency?: string;
-  cash?: number;
-  investableCash?: number;
-  frozenCash?: number;
-  totalEquity?: number | null;
-}): Promise<DaaStoreBrokerAccountState> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const baseCurrency = normalizeCurrencyAlias(normalizeText(input.baseCurrency, "USD"), "USD");
-    const cash = Math.max(0, toFiniteNumber(input.cash, 0));
-    const frozenCash = Math.max(0, toFiniteNumber(input.frozenCash, 0));
-    const investableCash = resolveInvestableCash(cash, frozenCash, input.investableCash);
-    const totalEquityRaw = input.totalEquity == null ? Number.NaN : toFiniteNumber(input.totalEquity, Number.NaN);
-    const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
-
-    const result = await query(
-      `INSERT INTO daa_broker_account_state (
-         broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
-       ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,NOW()
-       )
-       ON CONFLICT (broker_kind) DO UPDATE
-       SET
-         account_id = EXCLUDED.account_id,
-         base_currency = EXCLUDED.base_currency,
-         cash = EXCLUDED.cash,
-         investable_cash = EXCLUDED.investable_cash,
-         frozen_cash = EXCLUDED.frozen_cash,
-         total_equity = EXCLUDED.total_equity,
-         updated_at = NOW()
-       RETURNING broker_kind, account_id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
-      [
-        input.brokerKind,
-        input.accountId ?? null,
-        baseCurrency,
-        cash,
-        investableCash,
-        frozenCash,
-        totalEquity,
-      ],
-    );
-    return mapBrokerAccountStateRow(result.rows[0] as Record<string, unknown>);
-  });
-}
-
 export async function saveDaaSystemConfig(input: {
   config: unknown;
   baseVersion?: number;
@@ -533,26 +440,5 @@ export async function patchDaaSystemConfig(input: {
   });
 }
 
-export async function getDaaStrategyConfig(): Promise<DaaStoreStrategyConfig> {
-  const row = await getDaaSystemConfig();
-  return {
-    id: "default",
-    configJson: row.config.strategy as unknown as Record<string, unknown>,
-    updatedAt: row.updatedAt,
-  };
-}
 
-export async function saveDaaStrategyConfig(configJson: Record<string, unknown>): Promise<DaaStoreStrategyConfig> {
-  const current = await getDaaSystemConfig();
-  const merged = {
-    ...current.config,
-    strategy: configJson || {},
-  };
-  const saved = await saveDaaSystemConfig({ config: merged, baseVersion: current.version });
-  return {
-    id: "default",
-    configJson: saved.config.strategy as unknown as Record<string, unknown>,
-    updatedAt: saved.updatedAt,
-  };
-}
 

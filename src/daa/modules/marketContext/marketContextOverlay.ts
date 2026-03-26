@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
 import { classifyMacroCycle } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
@@ -18,10 +19,6 @@ import type {
 
 const ACTIONABLE_SCOPES: DaaMarketIndicatorScope[] = ["us_equity", "hk_cn_equity", "crypto"];
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, value));
-}
 
 function round(value: number, digits = 2): number {
   if (!Number.isFinite(value)) return 0;

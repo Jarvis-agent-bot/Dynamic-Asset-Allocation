@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import {
   normalizeBaseCurrencyCode,
   normalizeCurrencyPairToken,
@@ -345,12 +346,6 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  if (value <= min) return min;
-  if (value >= max) return max;
-  return value;
-}
 
 function toPositiveNumber(value: unknown, fallback: number): number {
   const num = Number(value);

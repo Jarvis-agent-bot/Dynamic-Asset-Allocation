@@ -21,7 +21,7 @@ import {
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
-import { resolveExecutionRoute, syncBrokerOrders } from "@/src/daa/broker";
+import { resolveExecutionRoute, syncBrokerOrders } from "./executionVenue";
 
 import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
 import type {

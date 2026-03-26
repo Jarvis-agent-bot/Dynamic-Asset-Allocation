@@ -1,4 +1,4 @@
-import type { DaaBrokerKind } from "@/src/daa/broker";
+import type { DaaBrokerKind } from "./executionVenue";
 import type { TradeTicketSide, TradeTicketSource, TradeTicketStatus, TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
 import type {

@@ -33,7 +33,7 @@ import type { DaaStoreMarketIndicatorSnapshot, DaaStoreRebalanceCycleStatus, Daa
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
 import { buildFxLookupMap, resolveFxRateToBase, normalizeCcyCode, normalizeFxPair } from "./fxStore";
 import { getCurrentLedgerStartTsInTx } from "./cashLedgerStore";
-import { mapBrokerOrderStatusToTradeTicketStatus } from "@/src/daa/broker/brokerOrderStatus";
+import { mapBrokerOrderStatusToTradeTicketStatus } from "@/src/daa/modules/workbench/executionVenue";
 import { buildPortfolioSnapshotFromAssetUniverseInTx } from "./portfolioStore";
 import {
   syncStrategyAccountCashInTx, ensureAccountStateRowInTx, getAccountStateForUpdateInTx,

@@ -1,6 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { executeTradeViaGateway } from "@/src/daa/gateway";
+import { executeTradeViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { ManualTradeServiceError } from "@/src/daa/modules/workbench/manualTradeService";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
