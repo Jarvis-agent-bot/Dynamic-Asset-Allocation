@@ -395,7 +395,7 @@ describe("workbench-asset-routes-v1", () => {
     expect(json.data.opportunity.actionLabelZh).toBeTruthy();
     expect(json.data.llmAnalysis.summary).toBe("mock summary");
     expect(json.data.marketContext.regime).toBe("risk_off");
-    expect(json.data.marketAttribution.relevantKeys).toEqual(["vix", "qqq_spy_ratio"]);
+    expect(json.data.marketAttribution.relevantKeys).toEqual(["vix", "qqq_spy_ratio", "market_breadth"]);
     expect(json.data.marketAttribution.explanation[0]).toContain("美股当前处于 偏防守");
     expect(vi.mocked(runLlmAnalysis).mock.calls[0]?.[0]?.marketContext).toMatchObject({ regime: "risk_off" });
     expect(Array.isArray(json.data.riskHints)).toBe(true);

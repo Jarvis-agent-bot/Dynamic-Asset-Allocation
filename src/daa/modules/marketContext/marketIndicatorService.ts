@@ -299,7 +299,7 @@ async function computeVixIndicator(getBars: (symbol: string, days: number) => Pr
 }
 
 async function computeRatioIndicator(input: {
-  key: "qqq_spy_ratio" | "kweb_fxi_ratio" | "gold_silver_ratio" | "btc_eth_ratio";
+  key: DaaMarketIndicatorKey;
   leftSymbol: string;
   rightSymbol: string;
   riskDirection: "high_is_risk_off" | "low_is_risk_off";
@@ -347,7 +347,7 @@ async function computeRatioIndicator(input: {
 }
 
 async function computeRealizedVolIndicator(input: {
-  key: "fxi_volatility" | "btc_volatility";
+  key: DaaMarketIndicatorKey;
   symbol: string;
   highReason: string;
   lowReason: string;
@@ -455,6 +455,69 @@ async function computeEnabledIndicators(config: DaaMarketIndicatorsConfig): Prom
       riskDirection: "high_is_risk_off",
       highReason: "金银比高位，宏观资金偏向防御资产",
       lowReason: "金银比低位，宏观防御需求有所缓和",
+      getBars,
+    }));
+  }
+
+  // 收益率曲线斜率 (IEF/SHY)
+  if (config.indicators.yieldCurveSpread?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "yield_curve_spread",
+      leftSymbol: "IEF",
+      rightSymbol: "SHY",
+      riskDirection: "low_is_risk_off",
+      highReason: "收益率曲线陡峭，经济扩张信号",
+      lowReason: "收益率曲线平坦/倒挂，衰退风险上升",
+      getBars,
+    }));
+  }
+
+  // 美元强弱 (UUP)
+  if (config.indicators.usdStrength?.enabled) {
+    rows.push(computeRealizedVolIndicator({
+      key: "usd_strength",
+      symbol: "UUP",
+      highReason: "美元走强波动加剧，新兴市场承压",
+      lowReason: "美元走弱波动平稳，全球风险偏好回暖",
+      getBars,
+    }));
+  }
+
+  // 信用利差 (HYG/LQD)
+  if (config.indicators.creditSpread?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "credit_spread",
+      leftSymbol: "HYG",
+      rightSymbol: "LQD",
+      riskDirection: "low_is_risk_off",
+      highReason: "高收益债表现强势，信用环境宽松",
+      lowReason: "信用利差扩大，信用风险上升",
+      getBars,
+    }));
+  }
+
+  // 通胀预期 (TIP/IEF)
+  if (config.indicators.inflationExpectation?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "inflation_expectation",
+      leftSymbol: "TIP",
+      rightSymbol: "IEF",
+      riskDirection: "high_is_risk_off",
+      highReason: "通胀预期升温，实物资产受益",
+      lowReason: "通胀预期回落，名义债券相对占优",
+      getBars,
+    }));
+  }
+
+  // 市场广度 (RSP/SPY)
+  if (config.indicators.marketBreadth?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "market_breadth",
+      leftSymbol: "RSP",
+      rightSymbol: "SPY",
+      riskDirection: "low_is_risk_off",
+      highReason: "市场广度良好，涨幅分散健康",
+      lowReason: "市场窄幅上涨，风险集中于头部",
       getBars,
     }));
   }

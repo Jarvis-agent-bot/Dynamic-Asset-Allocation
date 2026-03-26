@@ -14,6 +14,7 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { WorkbenchAssistantPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchAssistantPanel";
+import { MarketIndicatorDashboard } from "@/app/daa/dashboard/workbench/_components/MarketIndicatorDashboard";
 
 const PIE_COLORS = ["#38BDF8", "#818CF8", "#34D399", "#F6AD55", "#F87171", "#A78BFA"];
 
@@ -188,6 +189,10 @@ export function WorkbenchCockpitSection(props: {
           </div>
         </DaaSurfacePanel>
       </div>
+
+      <DaaSurfacePanel accent="cyan" title="市场指标面板" subtitle="美林投资时钟、全维度指标与 Scope 分析">
+        <MarketIndicatorDashboard marketContext={marketContext ?? null} />
+      </DaaSurfacePanel>
     </div>
   );
 }

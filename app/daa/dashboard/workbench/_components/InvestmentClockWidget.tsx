@@ -1,0 +1,126 @@
+"use client";
+
+import { cn } from "@/lib/utils";
+
+type InvestmentClockPhase = "recovery" | "overheating" | "stagflation" | "deflation";
+
+type InvestmentClockWidgetProps = {
+  phase: InvestmentClockPhase | null;
+  growthProxy?: number;
+  inflationProxy?: number;
+  confidence?: number;
+};
+
+const QUADRANTS: Array<{
+  phase: InvestmentClockPhase;
+  label: string;
+  assets: string;
+  growthDir: string;
+  inflationDir: string;
+  activeBg: string;
+  activeText: string;
+  position: string;
+}> = [
+  {
+    phase: "recovery",
+    label: "复苏",
+    assets: "股票, 周期品",
+    growthDir: "高增长",
+    inflationDir: "低通胀",
+    activeBg: "bg-emerald-600",
+    activeText: "text-white",
+    position: "rounded-tl-[var(--radius-lg)]",
+  },
+  {
+    phase: "overheating",
+    label: "过热",
+    assets: "大宗商品, TIPS",
+    growthDir: "高增长",
+    inflationDir: "高通胀",
+    activeBg: "bg-amber-600",
+    activeText: "text-white",
+    position: "rounded-tr-[var(--radius-lg)]",
+  },
+  {
+    phase: "deflation",
+    label: "衰退",
+    assets: "债券, 防御股",
+    growthDir: "低增长",
+    inflationDir: "低通胀",
+    activeBg: "bg-indigo-600",
+    activeText: "text-white",
+    position: "rounded-bl-[var(--radius-lg)]",
+  },
+  {
+    phase: "stagflation",
+    label: "滞胀",
+    assets: "现金, 黄金",
+    growthDir: "低增长",
+    inflationDir: "高通胀",
+    activeBg: "bg-red-600",
+    activeText: "text-white",
+    position: "rounded-br-[var(--radius-lg)]",
+  },
+];
+
+export function InvestmentClockWidget({ phase, confidence }: InvestmentClockWidgetProps) {
+  const noData = phase === null;
+
+  return (
+    <div className="space-y-2">
+      {/* 轴标签 + 网格 */}
+      <div className="flex items-stretch gap-2">
+        {/* 左侧纵轴标签 */}
+        <div className="flex w-5 shrink-0 flex-col items-center justify-center">
+          <span className="whitespace-nowrap text-[10px] font-semibold tracking-wide text-[var(--muted)] [writing-mode:vertical-lr] [text-orientation:mixed] rotate-180">
+            增长 ↑
+          </span>
+        </div>
+
+        {/* 2x2 网格 */}
+        <div className="grid flex-1 grid-cols-2 gap-0.5">
+          {QUADRANTS.map((q) => {
+            const isActive = !noData && phase === q.phase;
+            return (
+              <div
+                key={q.phase}
+                className={cn(
+                  "flex flex-col items-center justify-center px-3 py-4 text-center transition-colors",
+                  q.position,
+                  isActive
+                    ? cn(q.activeBg, q.activeText, "shadow-lg")
+                    : "bg-[rgba(8,12,20,0.72)] text-[var(--muted)]",
+                )}
+              >
+                <div className={cn("text-sm font-bold", isActive ? q.activeText : "text-[var(--text)]")}>
+                  {q.label}
+                </div>
+                <div className={cn("mt-1 text-[11px]", isActive ? "opacity-90" : "text-[var(--faint)]")}>
+                  {q.assets}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 底部横轴标签 */}
+      <div className="flex items-center pl-7">
+        <div className="flex flex-1 items-center justify-between text-[10px] font-semibold text-[var(--muted)]">
+          <span>低通胀</span>
+          <span>通胀 →</span>
+          <span>高通胀</span>
+        </div>
+      </div>
+
+      {/* 无数据提示 */}
+      {noData ? (
+        <div className="pt-1 text-center text-xs text-[var(--faint)]">数据不足</div>
+      ) : confidence !== undefined ? (
+        <div className="pt-1 text-center text-xs text-[var(--faint)]">
+          置信度 {confidence.toFixed(0)}%
+        </div>
+      ) : null}
+    </div>
+  );
+}

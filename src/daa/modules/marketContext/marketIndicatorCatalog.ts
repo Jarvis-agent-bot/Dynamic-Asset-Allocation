@@ -10,6 +10,7 @@ export const MARKET_SCOPE_LABEL_ZH_: Record<DaaMarketIndicatorScope, string> = {
   hk_cn_equity: "港股 / 中概",
   crypto: "加密市场",
   macro_defensive: "宏观防御",
+  macro_global: "宏观全局",
 };
 
 export const MARKET_INDICATOR_KEYS_: DaaMarketIndicatorKey[] = [
@@ -20,6 +21,11 @@ export const MARKET_INDICATOR_KEYS_: DaaMarketIndicatorKey[] = [
   "btc_eth_ratio",
   "btc_volatility",
   "gold_silver_ratio",
+  "yield_curve_spread",
+  "usd_strength",
+  "credit_spread",
+  "inflation_expectation",
+  "market_breadth",
 ];
 
 export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY_: Record<DaaMarketIndicatorConfigKey, DaaMarketIndicatorKey> = {
@@ -30,6 +36,11 @@ export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY_: Record<DaaMarketIndicatorConfi
   btcEthRatio: "btc_eth_ratio",
   btcVolatility: "btc_volatility",
   goldSilverRatio: "gold_silver_ratio",
+  yieldCurveSpread: "yield_curve_spread",
+  usdStrength: "usd_strength",
+  creditSpread: "credit_spread",
+  inflationExpectation: "inflation_expectation",
+  marketBreadth: "market_breadth",
 };
 
 export const MARKET_INDICATOR_CONFIG_KEY_BY_KEY_: Record<DaaMarketIndicatorKey, DaaMarketIndicatorConfigKey> = {
@@ -40,6 +51,11 @@ export const MARKET_INDICATOR_CONFIG_KEY_BY_KEY_: Record<DaaMarketIndicatorKey, 
   btc_eth_ratio: "btcEthRatio",
   btc_volatility: "btcVolatility",
   gold_silver_ratio: "goldSilverRatio",
+  yield_curve_spread: "yieldCurveSpread",
+  usd_strength: "usdStrength",
+  credit_spread: "creditSpread",
+  inflation_expectation: "inflationExpectation",
+  market_breadth: "marketBreadth",
 };
 
 export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
@@ -105,6 +121,46 @@ export const MARKET_INDICATOR_META_CATALOG_: Record<DaaMarketIndicatorKey, {
     source: "yfinance:GC=F/SI=F",
     fixedSymbols: ["GC=F", "SI=F"],
   },
+  yield_curve_spread: {
+    label: "收益率曲线斜率 (IEF/SHY)",
+    category: "macro",
+    scope: "macro_defensive",
+    unit: "x",
+    source: "yfinance:IEF/SHY",
+    fixedSymbols: ["IEF", "SHY"],
+  },
+  usd_strength: {
+    label: "美元强弱波动 (UUP)",
+    category: "macro",
+    scope: "macro_global",
+    unit: "%",
+    source: "yfinance:UUP",
+    fixedSymbols: ["UUP"],
+  },
+  credit_spread: {
+    label: "信用利差 (HYG/LQD)",
+    category: "macro",
+    scope: "macro_defensive",
+    unit: "x",
+    source: "yfinance:HYG/LQD",
+    fixedSymbols: ["HYG", "LQD"],
+  },
+  inflation_expectation: {
+    label: "通胀预期 (TIP/IEF)",
+    category: "macro",
+    scope: "macro_global",
+    unit: "x",
+    source: "yfinance:TIP/IEF",
+    fixedSymbols: ["TIP", "IEF"],
+  },
+  market_breadth: {
+    label: "市场广度 (RSP/SPY)",
+    category: "macro",
+    scope: "us_equity",
+    unit: "x",
+    source: "yfinance:RSP/SPY",
+    fixedSymbols: ["RSP", "SPY"],
+  },
 };
 
 export const MARKET_SCOPE_KEY_ORDER_: DaaMarketIndicatorScope[] = [
@@ -112,13 +168,15 @@ export const MARKET_SCOPE_KEY_ORDER_: DaaMarketIndicatorScope[] = [
   "hk_cn_equity",
   "crypto",
   "macro_defensive",
+  "macro_global",
 ];
 
 export const MARKET_INDICATOR_KEYS_BY_SCOPE_: Record<DaaMarketIndicatorScope, DaaMarketIndicatorKey[]> = {
-  us_equity: ["vix", "qqq_spy_ratio"],
+  us_equity: ["vix", "qqq_spy_ratio", "market_breadth"],
   hk_cn_equity: ["fxi_volatility", "kweb_fxi_ratio"],
   crypto: ["btc_eth_ratio", "btc_volatility"],
-  macro_defensive: ["gold_silver_ratio"],
+  macro_defensive: ["gold_silver_ratio", "yield_curve_spread", "credit_spread"],
+  macro_global: ["usd_strength", "inflation_expectation"],
 };
 
 export function getMarketIndicatorRefreshSymbols(config: DaaMarketIndicatorsConfig): string[] {

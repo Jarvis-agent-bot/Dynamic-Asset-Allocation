@@ -72,3 +72,11 @@ export function riskItemTone(status: "pass" | "warn" | "block"): DaaSurfaceTone 
   if (status === "warn") return "amber";
   return "green";
 }
+
+export function macroCyclePhaseLabel(phase: string | null | undefined): string {
+  if (phase === "recovery") return "复苏";
+  if (phase === "overheating") return "过热";
+  if (phase === "stagflation") return "滞胀";
+  if (phase === "deflation") return "衰退";
+  return "待定";
+}

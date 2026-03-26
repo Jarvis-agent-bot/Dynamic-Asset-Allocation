@@ -22,7 +22,7 @@ export type DaaHfFundTrack = {
   enabled: boolean;
 };
 
-export type DaaMarketIndicatorConfigKey = "vix" | "qqqSpyRatio" | "fxiVolatility" | "kwebFxiRatio" | "btcEthRatio" | "btcVolatility" | "goldSilverRatio";
+export type DaaMarketIndicatorConfigKey = "vix" | "qqqSpyRatio" | "fxiVolatility" | "kwebFxiRatio" | "btcEthRatio" | "btcVolatility" | "goldSilverRatio" | "yieldCurveSpread" | "usdStrength" | "creditSpread" | "inflationExpectation" | "marketBreadth";
 
 export type DaaMarketIndicatorConfigItem = {
   enabled: boolean;
@@ -309,6 +309,11 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
         btcEthRatio: { enabled: true, weight: 0.5 },
         btcVolatility: { enabled: true, weight: 0.5 },
         goldSilverRatio: { enabled: true, weight: 1 },
+        yieldCurveSpread: { enabled: true, weight: 0.5 },
+        usdStrength: { enabled: true, weight: 0.4 },
+        creditSpread: { enabled: true, weight: 0.6 },
+        inflationExpectation: { enabled: true, weight: 0.5 },
+        marketBreadth: { enabled: true, weight: 0.45 },
       },
       overlays: {
         transitionalBuyScale: 0.85,
