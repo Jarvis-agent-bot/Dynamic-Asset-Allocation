@@ -187,8 +187,8 @@ export function SettingsDataInitSection() {
               {/* 进度条 */}
               <div className="h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
                 <div
-                  className="h-full rounded-full bg-[var(--primary)] transition-all duration-300"
-                  style={{ width: `${running ? Math.max(progressPct, 5) : (result ? 100 : 0)}%` }}
+                  className={`h-full rounded-full bg-[var(--primary)] transition-all duration-300${running ? " animate-pulse" : ""}`}
+                  style={{ width: `${running ? "100" : (result ? 100 : 0)}%`, opacity: running ? 0.6 : 1 }}
                 />
               </div>
 

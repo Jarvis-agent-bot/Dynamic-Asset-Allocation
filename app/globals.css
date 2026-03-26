@@ -44,6 +44,10 @@
   --muted-border: rgba(148,163,184,0.18);
   --muted-bg: rgba(148,163,184,0.08);
 
+  /* ── 装饰/布局 ── */
+  --grid-dot: rgba(56,189,248,0.06);
+  --shell-shadow: 0 22px 48px rgba(0,0,0,0.24);
+
   /* ── shadcn/ui HSL tokens (deep navy dark palette) ── */
   --shadcn-background: 222 47% 5%;
   --shadcn-foreground: 210 40% 95%;

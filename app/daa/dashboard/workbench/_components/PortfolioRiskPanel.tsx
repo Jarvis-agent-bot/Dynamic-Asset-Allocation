@@ -149,8 +149,8 @@ function WeightBar({
       </div>
       <div className="relative flex-1 h-3 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-[var(--primary)]/40"
-          style={{ width: `${targetWidth}%` }}
+          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${targetWidth}%`, background: "rgba(56,189,248,0.35)" }}
         />
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-[var(--primary)]"
@@ -194,7 +194,7 @@ export function PortfolioRiskPanel({
   const holdingsWithTarget = useMemo(
     () =>
       holdings
-        .filter((h) => h.holdingQty > 0 && h.targetWeightPct > 0)
+        .filter((h) => h.holdingQty > 0 || h.targetWeightPct > 0)
         .sort((a, b) => b.targetWeightPct - a.targetWeightPct),
     [holdings],
   );

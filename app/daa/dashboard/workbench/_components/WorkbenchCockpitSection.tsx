@@ -121,14 +121,17 @@ export function WorkbenchCockpitSection(props: {
           </div>
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
-              {!model.snapshots || model.snapshots.length === 0 ? (
-                <SkeletonChart />
-              ) : (
-                <PerformanceChart snapshots={model.snapshots} />
-              )}
-            </div>
+            <SectionErrorBoundary sectionName="Performance chart">
+              <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
+                {!model.snapshots || model.snapshots.length === 0 ? (
+                  <SkeletonChart />
+                ) : (
+                  <PerformanceChart snapshots={model.snapshots} />
+                )}
+              </div>
+            </SectionErrorBoundary>
 
+            <SectionErrorBoundary sectionName="Allocation chart">
             <div className="grid gap-3">
               <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
                 {allocationData.length > 0 && totalEquity > 0 ? (
@@ -164,6 +167,7 @@ export function WorkbenchCockpitSection(props: {
                 </div>
               </div>
             </div>
+            </SectionErrorBoundary>
           </div>
         </DaaSurfacePanel>
       </div>

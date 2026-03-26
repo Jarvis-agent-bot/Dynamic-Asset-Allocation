@@ -52,7 +52,7 @@ function normalizeSnapshots(
   const filtered = cutoff ? sorted.filter((s) => s.ts >= cutoff) : sorted;
   if (filtered.length === 0) return [];
 
-  const base = filtered[0].totalEquity || 1;
+  const base = filtered[0].totalEquity > 0 ? filtered[0].totalEquity : 1;
   return filtered.map((snap) => ({
     label: snap.ts.slice(5, 10),
     date: snap.ts.slice(0, 10),
