@@ -49,6 +49,7 @@ export function useWorkbenchModel(input: {
   const cashLedger = data?.cashLedger ?? [];
   const signals = data?.signals ?? [];
   const allocationSummary = data?.allocationSummary ?? null;
+  const equityDelta = data?.equityDelta ?? null;
   const ledgerMeta = data?.ledgerMeta ?? null;
   const notificationStatus = data?.notificationStatus ?? null;
 
@@ -135,6 +136,7 @@ export function useWorkbenchModel(input: {
     cashLedger,
     signals,
     allocationSummary,
+    equityDelta,
     ledgerMeta,
     notificationStatus,
     setCycles,

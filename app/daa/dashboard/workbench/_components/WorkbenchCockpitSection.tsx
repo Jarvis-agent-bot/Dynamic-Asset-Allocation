@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { RefreshCcw } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import { SkeletonChart } from "@/app/daa/dashboard/_components/SkeletonPatterns";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
   DaaSurfaceActionButton,
@@ -16,6 +17,8 @@ import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbench
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { WorkbenchAssistantPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchAssistantPanel";
 import { MarketIndicatorDashboard } from "@/app/daa/dashboard/workbench/_components/MarketIndicatorDashboard";
+import { PerformanceChart } from "@/app/daa/dashboard/workbench/_components/PerformanceChart";
+import { PortfolioRiskPanel } from "@/app/daa/dashboard/workbench/_components/PortfolioRiskPanel";
 
 const PIE_COLORS = ["#38BDF8", "#818CF8", "#34D399", "#F6AD55", "#F87171", "#A78BFA"];
 
@@ -25,17 +28,6 @@ function signalTone(level: "info" | "warn" | "success") {
   return "cyan" as const;
 }
 
-function trendRows(model: WorkbenchPageModel) {
-  return [...(model.snapshots || [])]
-    .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts))
-    .slice(-60)
-    .map((row) => ({
-      label: row.ts.slice(5, 10),
-      totalEquity: row.totalEquity,
-      holdings: row.holdingsValue,
-      cash: row.cash,
-    }));
-}
 
 function allocationRows(model: WorkbenchPageModel) {
   const rows = model.allocationSummary?.topHoldings || [];
@@ -51,7 +43,6 @@ export function WorkbenchCockpitSection(props: {
   const { model } = props;
   const baseCurrency = model.bootstrap?.baseCurrency || "USD";
   const topSignals = (model.signals || []).slice(0, 6);
-  const trendData = trendRows(model);
   const allocationData = allocationRows(model);
   const totalEquity = model.totalEquity || 0;
   const marketContext = model.bootstrap?.marketContext;
@@ -131,26 +122,10 @@ export function WorkbenchCockpitSection(props: {
 
           <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
-              {trendData.length > 1 ? (
-                <div className="h-[260px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="workbenchEquityFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#38BDF8" stopOpacity={0.34} />
-                          <stop offset="100%" stopColor="#38BDF8" stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fill: "#94A3B8", fontSize: 11 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: "#94A3B8", fontSize: 11 }} tickLine={false} axisLine={false} width={42} />
-                      <Tooltip contentStyle={{ background: "#0F172A", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 14 }} />
-                      <Area type="monotone" dataKey="totalEquity" stroke="#38BDF8" fill="url(#workbenchEquityFill)" strokeWidth={2.2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+              {!model.snapshots || model.snapshots.length === 0 ? (
+                <SkeletonChart />
               ) : (
-                <DashboardEmptyState title="暂无权益曲线" description="V2 账本启用后，新的权益快照会在入金、交易和后续运行中逐步积累。" className="border-0 bg-transparent px-0 py-10" />
+                <PerformanceChart snapshots={model.snapshots} />
               )}
             </div>
 
@@ -192,6 +167,16 @@ export function WorkbenchCockpitSection(props: {
           </div>
         </DaaSurfacePanel>
       </div>
+
+      {model.bootstrap ? (
+        <SectionErrorBoundary sectionName="组合风险">
+          <PortfolioRiskPanel
+            bootstrap={model.bootstrap}
+            snapshots={model.snapshots ?? []}
+            latestCycle={model.bootstrap.latestCycle}
+          />
+        </SectionErrorBoundary>
+      ) : null}
 
       <DaaSurfacePanel accent="cyan" title="市场指标面板" subtitle="美林投资时钟、全维度指标与 Scope 分析">
         <MarketIndicatorDashboard marketContext={marketContext ?? null} />

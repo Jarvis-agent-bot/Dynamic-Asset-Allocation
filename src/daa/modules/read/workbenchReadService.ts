@@ -2,6 +2,7 @@ import {
   getDaaCurrentLedgerMeta,
   listDaaCashLedgerEntries,
   listDaaEquitySnapshots,
+  type DaaStoreEquitySnapshot,
 } from "@/src/daa/store/daaStorePg";
 import {
   buildWorkbenchBootstrapBundle,
@@ -10,6 +11,7 @@ import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationSta
 import { nextCalendarDueDate } from "@/src/daa/modules/workbench/workbenchShared";
 
 import type {
+  EquityDelta,
   WorkbenchAllocationSummary,
   WorkbenchReadModel,
   WorkbenchSignal,
@@ -236,6 +238,48 @@ function buildAllocationSummary(input: {
   };
 }
 
+function getWeekStart(now: Date): Date {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = d.getDay(); // 0=Sunday
+  const diff = day === 0 ? 6 : day - 1; // Monday as week start
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+function buildEquityDelta(input: {
+  currentEquity: number;
+  snapshots: DaaStoreEquitySnapshot[];
+}): EquityDelta {
+  const { currentEquity, snapshots } = input;
+  const nil: EquityDelta = { dayChange: null, dayChangePct: null, weekChange: null, weekChangePct: null };
+  if (snapshots.length === 0 || !(currentEquity > 0)) return nil;
+
+  const now = new Date();
+  const todayStartIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const weekStartIso = getWeekStart(now).toISOString();
+
+  // snapshots 按时间降序（最新在前），找最近一条早于今日的快照作为日初基准
+  const sorted = [...snapshots].sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts));
+  const dayBaseSnap = sorted.find((s) => s.ts < todayStartIso);
+  const weekBaseSnap = sorted.find((s) => s.ts < weekStartIso);
+
+  let dayChange: number | null = null;
+  let dayChangePct: number | null = null;
+  if (dayBaseSnap && dayBaseSnap.totalEquity > 0) {
+    dayChange = currentEquity - dayBaseSnap.totalEquity;
+    dayChangePct = (dayChange / dayBaseSnap.totalEquity) * 100;
+  }
+
+  let weekChange: number | null = null;
+  let weekChangePct: number | null = null;
+  if (weekBaseSnap && weekBaseSnap.totalEquity > 0) {
+    weekChange = currentEquity - weekBaseSnap.totalEquity;
+    weekChangePct = (weekChange / weekBaseSnap.totalEquity) * 100;
+  }
+
+  return { dayChange, dayChangePct, weekChange, weekChangePct };
+}
+
 export async function buildWorkbenchReadModel(input: {
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
@@ -275,6 +319,10 @@ export async function buildWorkbenchReadModel(input: {
     cashLedger: filteredCashLedger,
     signals: buildSignals({ bootstrap: nextBootstrap, ledgerStartTs, notificationStatus }),
     allocationSummary: buildAllocationSummary({ bootstrap: nextBootstrap }),
+    equityDelta: buildEquityDelta({
+      currentEquity: nextBootstrap.account.totalEquity ?? 0,
+      snapshots: filteredSnapshots,
+    }),
     ledgerMeta,
     notificationStatus,
     loadedAt: new Date().toISOString(),

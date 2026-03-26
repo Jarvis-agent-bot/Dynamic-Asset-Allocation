@@ -133,6 +133,7 @@ export default function WorkbenchPageClient(props: {
           accountBreakdown={model.bootstrap?.account.accountBreakdown || []}
           ledgerMeta={model.ledgerMeta}
           marketDataHealth={model.bootstrap?.marketDataHealth || null}
+          equityDelta={model.equityDelta}
           notificationStatus={model.notificationStatus}
           loading={model.loading && !model.bootstrap}
           refreshing={model.refreshing}

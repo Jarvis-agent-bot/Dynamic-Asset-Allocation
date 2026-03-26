@@ -267,6 +267,7 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     watchlistBuilderProps,
     rebalanceSectionProps,
     dialogProps,
+    equityDelta: topLevelOverrides.equityDelta ?? null,
     priceStreamConnected: topLevelOverrides.priceStreamConnected ?? false,
   };
 }

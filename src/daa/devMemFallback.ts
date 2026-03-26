@@ -158,6 +158,7 @@ export function buildDevMemWorkbenchReadModel(): WorkbenchReadModel {
       totalEquity: 0,
       topHoldings: [],
     },
+    equityDelta: { dayChange: null, dayChangePct: null, weekChange: null, weekChangePct: null },
     ledgerMeta: buildDevMemLedgerMeta(),
     notificationStatus: buildDevMemNotificationStatusSummary(),
     loadedAt: new Date().toISOString(),

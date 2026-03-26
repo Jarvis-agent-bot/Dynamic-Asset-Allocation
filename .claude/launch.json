@@ -3,12 +3,14 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:mem"],
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:mem"],
       "port": 3000,
       "autoPort": true,
       "env": {
-        "DAA_PG_MEM": "1"
+        "DAA_PG_MEM": "1",
+        "NEXT_PUBLIC_SUPABASE_URL": "http://localhost:54321",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
       }
     }
   ]

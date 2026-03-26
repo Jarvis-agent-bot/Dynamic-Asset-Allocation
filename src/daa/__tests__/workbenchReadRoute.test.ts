@@ -125,6 +125,7 @@ function buildWorkbenchReadModelFixture(
       totalEquity: 5200,
       topHoldings: [],
     },
+    equityDelta: { dayChange: null, dayChangePct: null, weekChange: null, weekChangePct: null },
     ledgerMeta: buildLedgerMetaFixture(),
     notificationStatus: buildNotificationSummaryFixture(),
     loadedAt: "2026-03-01T00:00:00.000Z",

@@ -4,6 +4,7 @@ import {
   DaaSurfaceStatusPill,
   daaSurfaceSubtlePanelClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { SkeletonIndicatorGrid } from "@/app/daa/dashboard/_components/SkeletonPatterns";
 import { cn } from "@/lib/utils";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 
@@ -65,11 +66,7 @@ function normalizePhase(phase: string | undefined | null): "recovery" | "overhea
 
 export function MarketIndicatorDashboard({ marketContext }: MarketIndicatorDashboardProps) {
   if (!marketContext) {
-    return (
-      <div className="flex items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--border-strong)] bg-[rgba(13,19,32,0.7)] px-5 py-10 text-center">
-        <span className="text-sm text-[var(--muted)]">市场指标数据加载中...</span>
-      </div>
-    );
+    return <SkeletonIndicatorGrid count={12} />;
   }
 
   const macro = marketContext.macroCycle ?? null;

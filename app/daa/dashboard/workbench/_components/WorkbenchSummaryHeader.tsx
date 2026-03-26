@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { RefreshCcw } from "lucide-react";
 
-import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatCurrency, formatDateTime, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
   DaaSurfaceActionButton,
   DaaSurfaceEmptyState,
@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { StoreNotificationStatusSummary } from "@/src/daa/modules/store/storeApi";
 import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
+import type { EquityDelta } from "@/src/daa/modules/read/readModels";
 import type { WorkbenchAccountBreakdownItem, WorkbenchMarketDataHealth } from "@/src/daa/modules/workbench/workbenchTypes";
 
 function notificationTone(input: {
@@ -89,6 +90,7 @@ export function WorkbenchSummaryHeader(props: {
   cashMutationsAllowed?: boolean;
   readOnlyReason?: string | null;
   accountBreakdown?: WorkbenchAccountBreakdownItem[];
+  equityDelta?: EquityDelta | null;
   ledgerMeta: DaaCurrentLedgerMeta | null;
   marketDataHealth?: WorkbenchMarketDataHealth | null;
   notificationStatus: StoreNotificationStatusSummary | null;
@@ -141,6 +143,18 @@ export function WorkbenchSummaryHeader(props: {
               <div key={item.label} className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{item.label}</div>
                 <div className="mt-2 font-[var(--font-mono)] text-lg tabular-nums text-[var(--text)]">{item.value}</div>
+                {item.label === "总权益" && props.equityDelta?.dayChange != null && (
+                  <div className={`mt-1 text-xs ${props.equityDelta.dayChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    今日 {props.equityDelta.dayChange >= 0 ? "+" : ""}{formatCurrency(props.equityDelta.dayChange, props.baseCurrency)}
+                    {" "}{props.equityDelta.dayChange >= 0 ? "\u25B2" : "\u25BC"} {formatPercent(props.equityDelta.dayChangePct ?? 0)}
+                  </div>
+                )}
+                {item.label === "总权益" && props.equityDelta?.weekChange != null && (
+                  <div className={`mt-0.5 text-xs ${props.equityDelta.weekChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    本周 {props.equityDelta.weekChange >= 0 ? "+" : ""}{formatCurrency(props.equityDelta.weekChange, props.baseCurrency)}
+                    {" "}{props.equityDelta.weekChange >= 0 ? "\u25B2" : "\u25BC"} {formatPercent(props.equityDelta.weekChangePct ?? 0)}
+                  </div>
+                )}
                 <div className="mt-2 text-xs text-[var(--muted)]">{item.hint}</div>
               </div>
             ))}
