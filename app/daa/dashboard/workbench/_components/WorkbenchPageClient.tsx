@@ -5,6 +5,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DaaSurfaceSectionAnchor } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { WorkbenchActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchActiveTabPanel";
@@ -139,7 +140,11 @@ export default function WorkbenchPageClient(props: {
           onRefresh={() => void model.loadBootstrap(true)}
         />
 
-        {model.bootstrap ? <WorkbenchCockpitSection model={model} /> : null}
+        {model.bootstrap ? (
+          <SectionErrorBoundary sectionName="驾驶舱">
+            <WorkbenchCockpitSection model={model} />
+          </SectionErrorBoundary>
+        ) : null}
 
         <div className="space-y-4">
           <div className="grid gap-2 rounded-[18px] border border-[var(--border)] bg-[rgba(13,19,32,0.8)] p-2 md:grid-cols-3">
@@ -154,7 +159,11 @@ export default function WorkbenchPageClient(props: {
             ))}
           </div>
 
-          {model.bootstrap ? <WorkbenchActiveTabPanel model={model} onNavigateTab={navigateToTab} /> : null}
+          {model.bootstrap ? (
+            <SectionErrorBoundary sectionName="标签面板">
+              <WorkbenchActiveTabPanel model={model} onNavigateTab={navigateToTab} />
+            </SectionErrorBoundary>
+          ) : null}
         </div>
 
         <WorkbenchDialogs {...model.dialogProps} />

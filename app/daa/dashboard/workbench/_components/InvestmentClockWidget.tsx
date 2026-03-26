@@ -63,7 +63,7 @@ const QUADRANTS: Array<{
   },
 ];
 
-export function InvestmentClockWidget({ phase, confidence }: InvestmentClockWidgetProps) {
+export function InvestmentClockWidget({ phase, growthProxy, inflationProxy, confidence }: InvestmentClockWidgetProps) {
   const noData = phase === null;
 
   return (
@@ -71,10 +71,15 @@ export function InvestmentClockWidget({ phase, confidence }: InvestmentClockWidg
       {/* 轴标签 + 网格 */}
       <div className="flex items-stretch gap-2">
         {/* 左侧纵轴标签 */}
-        <div className="flex w-5 shrink-0 flex-col items-center justify-center">
+        <div className="flex w-5 shrink-0 flex-col items-center justify-center gap-1">
           <span className="whitespace-nowrap text-[10px] font-semibold tracking-wide text-[var(--muted)] [writing-mode:vertical-lr] [text-orientation:mixed] rotate-180">
             增长 ↑
           </span>
+          {growthProxy != null ? (
+            <span className="mt-1 text-[9px] font-medium tabular-nums text-[var(--faint)]">
+              {growthProxy.toFixed(1)}
+            </span>
+          ) : null}
         </div>
 
         {/* 2x2 网格 */}
@@ -106,10 +111,17 @@ export function InvestmentClockWidget({ phase, confidence }: InvestmentClockWidg
 
       {/* 底部横轴标签 */}
       <div className="flex items-center pl-7">
-        <div className="flex flex-1 items-center justify-between text-[10px] font-semibold text-[var(--muted)]">
-          <span>低通胀</span>
-          <span>通胀 →</span>
-          <span>高通胀</span>
+        <div className="flex flex-1 flex-col gap-0.5">
+          <div className="flex items-center justify-between text-[10px] font-semibold text-[var(--muted)]">
+            <span>低通胀</span>
+            <span>通胀 →</span>
+            <span>高通胀</span>
+          </div>
+          {inflationProxy != null ? (
+            <div className="text-center text-[9px] font-medium tabular-nums text-[var(--faint)]">
+              通胀指数: {inflationProxy.toFixed(1)}
+            </div>
+          ) : null}
         </div>
       </div>
 

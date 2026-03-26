@@ -146,17 +146,38 @@ export function WorkbenchAssistantPanel(props: {
             ) : null}
             <div className="mt-3 space-y-3">
               {(props.assistant.messages || []).length > 0 ? (
-                props.assistant.messages.slice(-8).map((item) => (
-                  <div key={item.messageId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <DaaSurfaceStatusPill tone={messageTone(item.role)}>
-                        {item.role === "assistant" ? "助手" : item.role === "system" ? "系统" : "你"}
-                      </DaaSurfaceStatusPill>
-                      {item.intentKind ? <DaaSurfaceStatusPill tone="slate">{item.intentKind}</DaaSurfaceStatusPill> : null}
+                <>
+                  {props.assistant.messages.slice(-8).map((item) => (
+                    <div key={item.messageId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <DaaSurfaceStatusPill tone={messageTone(item.role)}>
+                          {item.role === "assistant" ? "助手" : item.role === "system" ? "系统" : "你"}
+                        </DaaSurfaceStatusPill>
+                        {item.intentKind ? <DaaSurfaceStatusPill tone="slate">{item.intentKind}</DaaSurfaceStatusPill> : null}
+                        {item.createdAt ? (
+                          <span className="ml-auto text-[10px] tabular-nums text-[var(--faint)]">
+                            {(() => {
+                              const d = new Date(item.createdAt);
+                              return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+                            })()}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--text)]">{item.body}</div>
                     </div>
-                    <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--text)]">{item.body}</div>
-                  </div>
-                ))
+                  ))}
+                  {props.assistant.sending ? (
+                    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
+                      <div className="flex items-center gap-2">
+                        <DaaSurfaceStatusPill tone="cyan">助手</DaaSurfaceStatusPill>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1 text-sm text-[var(--muted)]">
+                        <span className="inline-block animate-pulse">···</span>
+                        <span className="text-xs text-[var(--faint)]">正在思考</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <DaaSurfaceEmptyState
                   className="border-0 bg-transparent px-0 py-8"

@@ -13,6 +13,7 @@ import {
   DaaSurfaceStatusPill,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
+import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { WorkbenchAssistantPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchAssistantPanel";
 import { MarketIndicatorDashboard } from "@/app/daa/dashboard/workbench/_components/MarketIndicatorDashboard";
 
@@ -57,7 +58,9 @@ export function WorkbenchCockpitSection(props: {
 
   return (
     <div className="space-y-4">
-      <WorkbenchAssistantPanel assistant={model.assistant} />
+      <SectionErrorBoundary sectionName="交易助手">
+        <WorkbenchAssistantPanel assistant={model.assistant} />
+      </SectionErrorBoundary>
 
       <div className="grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
         <DaaSurfacePanel

@@ -194,6 +194,7 @@ export type RebalanceCycle = {
     model: string;
     latencyMs: number;
     generatedAt: string;
+    reasoning?: string;
   } | null;
   createdAt: string;
 };

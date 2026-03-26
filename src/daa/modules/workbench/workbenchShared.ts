@@ -607,6 +607,9 @@ function mapStoreCycleToView(cycle: DaaStoreRebalanceCycle | null): RebalanceCyc
             model: String((cycle.llmDecisionSnapshot as Record<string, unknown>).model ?? ""),
             latencyMs: Number((cycle.llmDecisionSnapshot as Record<string, unknown>).latencyMs) || 0,
             generatedAt: String((cycle.llmDecisionSnapshot as Record<string, unknown>).generatedAt ?? ""),
+            reasoning: (cycle.llmDecisionSnapshot as Record<string, unknown>).reasoning
+                ? String((cycle.llmDecisionSnapshot as Record<string, unknown>).reasoning)
+                : undefined,
         } : null,
         createdAt: cycle.createdAt,
     };

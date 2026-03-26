@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Banknote } from "lucide-react";
+import { Bot, BrainCircuit, ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Banknote } from "lucide-react";
 
 import {
   DaaSurfaceStatusPill,
@@ -78,6 +78,17 @@ export function RebalanceAiInsight(props: {
 
       {expanded ? (
         <div className="space-y-3 border-t border-[var(--border)] px-5 pb-5 pt-4">
+          {/* Reasoning */}
+          {snap.reasoning ? (
+            <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}>
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--primary)]/80">
+                <BrainCircuit className="h-3 w-3" />
+                决策推理
+              </div>
+              <p className="text-sm leading-6 text-[var(--text)]">{snap.reasoning}</p>
+            </div>
+          ) : null}
+
           {/* Risks & Opportunities */}
           <div className="grid gap-3 md:grid-cols-2">
             {snap.keyRisks.length > 0 ? (

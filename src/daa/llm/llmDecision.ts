@@ -43,7 +43,7 @@ export type LlmPerAssetAdjustment = {
   sizeMagnitude: number;
   /** LLM 对此调整的置信度（0-100）*/
   confidencePct: number;
-  /** 简短中文说明（60字以内，需引用具体数据）*/
+  /** 简短中文说明（120字以内，需引用具体数据）*/
   rationale: string;
 };
 
@@ -67,6 +67,8 @@ export type LlmDecisionOutput = {
   keyRisks: string[];
   /** 关键机会（2-3条）*/
   keyOpportunities: string[];
+  /** 整体推理说明（200字以内中文）*/
+  reasoning?: string;
   /** LLM 提供商 */
   provider: string;
   /** 模型名称 */
@@ -192,14 +194,15 @@ ${warningText}
       "adjustment": "execute 或 reduce_size 或 skip 或 increase_priority",
       "sizeMagnitude": 0到1（1.0=全量, 0.5=半仓, 0=等同skip）, 
       "confidencePct": 0到100,
-      "rationale": "中文说明，60字以内，需引用具体数据（如指标值、偏移百分比）"
+      "rationale": "中文说明，120字以内，需引用具体数据（如指标值、偏移百分比）"
     }
   ],
   "cashAdvice": "hold 或 deploy_to_underweight 或 await_signal",
   "cashRationale": "现金建议说明，20字以内",
   "summary": "一句话总体市场判断，50字以内",
   "keyRisks": ["风险点1", "风险点2"],
-  "keyOpportunities": ["机会1", "机会2"]
+  "keyOpportunities": ["机会1", "机会2"],
+  "reasoning": "整体推理说明，200字以内中文，简要阐述本次决策的核心逻辑和依据"
 }
 
 ## 决策规则（必须遵守）：
@@ -253,7 +256,7 @@ function parsePerAssetAdjustments(raw: unknown): LlmPerAssetAdjustment[] {
         adjustment,
         sizeMagnitude: Math.max(0, Math.min(1, toFinite(item.sizeMagnitude, 1.0))),
         confidencePct: Math.max(0, Math.min(100, toFinite(item.confidencePct, 50))),
-        rationale: normalizeText(item.rationale).slice(0, 60),
+        rationale: normalizeText(item.rationale).slice(0, 120),
       };
     })
     .filter((item): item is LlmPerAssetAdjustment => item !== null);
@@ -293,6 +296,7 @@ function parseLlmJsonOutput(jsonText: string): Omit<LlmDecisionOutput, "status" 
     keyOpportunities: Array.isArray(obj.keyOpportunities)
       ? obj.keyOpportunities.map((o) => normalizeText(o)).filter(Boolean).slice(0, 3)
       : [],
+    reasoning: normalizeText(obj.reasoning).slice(0, 200) || undefined,
   };
 }
 
