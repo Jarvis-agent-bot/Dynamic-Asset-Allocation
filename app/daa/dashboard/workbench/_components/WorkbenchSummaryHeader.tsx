@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { RefreshCcw } from "lucide-react";
+import { ChevronDown, RefreshCcw } from "lucide-react";
 
 import { formatCurrency, formatDateTime, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
@@ -133,6 +134,7 @@ export function WorkbenchSummaryHeader(props: {
   const accountBreakdown = props.accountBreakdown || [];
   const accountDetailTone = accountBreakdown.length > 1 ? "cyan" : props.cashMutationsAllowed === false ? "amber" : "slate";
   const accountDetailLabel = accountBreakdown.length > 1 ? "本地分账户" : props.cashMutationsAllowed === false ? "余额只读" : "本地可编辑";
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (
     <>
@@ -174,6 +176,14 @@ export function WorkbenchSummaryHeader(props: {
           </div>
         </div>
 
+        <div className="mt-3 flex justify-center">
+          <button onClick={() => setDetailsOpen(v => !v)} className="text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors flex items-center gap-1">
+            {detailsOpen ? "收起详情" : "展开详情"}
+            <ChevronDown className={`h-3 w-3 transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+
+        {detailsOpen && (
         <div className="mt-4 grid gap-3 xl:grid-cols-3">
           <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
@@ -271,6 +281,7 @@ export function WorkbenchSummaryHeader(props: {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {props.loading ? (
