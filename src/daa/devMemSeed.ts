@@ -83,15 +83,15 @@ export async function seedDevDataIfNeeded(): Promise<void> {
     // 2. 写入账户状态
     await replaceDaaAccountState({
       cash: 15000,
-      totalEquity: 100000,
+      totalEquity: 71100, // SPY 26000 + QQQ 13500 + AAPL 8400 + GLD 4600 + BND 3600 + cash 15000
     });
 
     // 3. 写入 5 个持仓（通过 replaceDaaPositions 同步 positions_v2 + asset_universe）
     await replaceDaaPositions(SEED_POSITIONS_);
 
-    // 4. 生成 30 天权益快照（$95k → $100k 缓慢上涨）
-    const baseEquity = 95000;
-    const endEquity = 100000;
+    // 4. 生成 30 天权益快照（$68k → $71.1k 缓慢上涨，与持仓+现金一致）
+    const baseEquity = 68000;
+    const endEquity = 71100;
     const days = 30;
     for (let i = 0; i < days; i++) {
       const date = new Date();

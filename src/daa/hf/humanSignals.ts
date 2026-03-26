@@ -1,4 +1,4 @@
-import type { DaaAnalystStance, DaaMomentumRegime } from "@/src/daa/unifiedRebalance";
+import type { DaaAnalystStance, DaaMomentumRegime } from "@/src/daa/unifiedRebalanceTypes";
 
 export type DaaHumanSourceChannel =
   | "official_regulatory"

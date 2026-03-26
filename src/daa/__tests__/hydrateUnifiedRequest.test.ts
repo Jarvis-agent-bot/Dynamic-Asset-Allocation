@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DaaOpportunityPanel } from "@/src/daa/signals/opportunityService";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
-import type { DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
+import type { DaaUnifiedRequest } from "@/src/daa/unifiedRebalanceTypes";
 
 vi.mock("@/src/daa/signals/opportunityService", () => ({
   buildOpportunityPanel: vi.fn(),

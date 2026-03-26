@@ -19,7 +19,7 @@ import {
   updateDaaAssetUniverseLastPrice,
   type DaaStoreAssetUniverseRow,
 } from "@/src/daa/store/daaStorePg";
-import type { DaaUnifiedRequest } from "@/src/daa/unifiedRebalance";
+import type { DaaUnifiedRequest } from "@/src/daa/unifiedRebalanceTypes";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 
 import { buildAssetUniverseViewRows } from "./assetUniverseService";

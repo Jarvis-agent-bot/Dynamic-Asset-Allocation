@@ -8,7 +8,7 @@ import type {
   DaaUnifiedFxRate,
   DaaUnifiedHumanSignal,
   DaaUnifiedRequest,
-} from "@/src/daa/unifiedRebalance";
+} from "@/src/daa/unifiedRebalanceTypes";
 
 export type HydrateUnifiedRequestResult = {
   request: DaaUnifiedRequest;

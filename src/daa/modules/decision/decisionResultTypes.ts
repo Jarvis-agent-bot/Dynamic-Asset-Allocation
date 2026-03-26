@@ -1,6 +1,6 @@
 import type { DaaLlmAnalysis } from "@/src/daa/llm/llmAnalysis";
 import type { DaaOpportunityPanel } from "@/src/daa/signals/opportunityService";
-import type { DaaUnifiedResponse } from "@/src/daa/unifiedRebalance";
+import type { DaaUnifiedResponse } from "@/src/daa/unifiedRebalanceTypes";
 
 export type DecisionHydrationDiagnostics = {
   addedTargets: string[];

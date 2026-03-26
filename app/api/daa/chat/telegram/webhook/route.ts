@@ -6,13 +6,10 @@ import { runAssistantTurn, isTelegramSenderAllowed } from "@/src/daa/chat/chatOr
 import { prepareTelegramAssistantSession } from "@/src/daa/chat/chatSessionService";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { sendTelegramMessage } from "@/src/daa/notify/telegram";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 /** 使用 SHA-256 哈希进行时序安全比较，避免侧信道攻击 */
 function timingSafeCompare(a: string, b: string): boolean {
