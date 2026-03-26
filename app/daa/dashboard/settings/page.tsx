@@ -25,6 +25,12 @@ import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/sr
 
 const SETTINGS_PAGE_DESCRIPTION_ = "按职责配置再平衡策略、风控参数、数据源、人因与通知，并通过固定保存条统一提交。";
 
+/** 按 key 排序后序列化，消除字段顺序差异导致的误判 */
+function stableStringify(obj: unknown): string {
+  if (obj === null || obj === undefined) return "";
+  return JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort());
+}
+
 export default function SettingsPage() {
   const [version, setVersion] = useState<number | null>(null);
   const [config, setConfig] = useState<DaaSystemConfig | null>(null);
@@ -32,7 +38,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
-  const [baselineConfigText, setBaselineConfigText] = useState("");
+  const [baselineConfig, setBaselineConfig] = useState<DaaSystemConfig | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsNavItemId>("strategy");
   const [marketRefreshing, setMarketRefreshing] = useState(false);
 
@@ -43,7 +49,7 @@ export default function SettingsPage() {
       const res = await getSystemConfig();
       setVersion(res.version);
       setConfig(res.config);
-      setBaselineConfigText(JSON.stringify(res.config));
+      setBaselineConfig(res.config);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载设置失败");
     } finally {
@@ -56,26 +62,23 @@ export default function SettingsPage() {
   }, [load]);
 
   const isDirty = useMemo(() => {
-    if (!config) return false;
-    return JSON.stringify(config) !== baselineConfigText;
-  }, [baselineConfigText, config]);
+    if (!config || !baselineConfig) return false;
+    return stableStringify(config) !== stableStringify(baselineConfig);
+  }, [baselineConfig, config]);
 
   /** Per-section dirty detection for nav indicator dots */
   const sectionDirtyMap = useMemo<Record<SettingsNavItemId, boolean>>(() => {
-    if (!config || !baselineConfigText) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
-    let baseline: DaaSystemConfig | null = null;
-    try { baseline = JSON.parse(baselineConfigText) as DaaSystemConfig; } catch { /* noop */ }
-    if (!baseline) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
+    if (!config || !baselineConfig) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     return {
-      strategy: changed(config.rebalanceStrategy, baseline.rebalanceStrategy),
-      risk: changed(config.strategy?.risk, baseline.strategy?.risk) || changed(config.strategy?.constraints, baseline.strategy?.constraints),
-      data: changed(config.dataSources, baseline.dataSources),
-      "human-factor": changed(config.strategy?.targetWeights, baseline.strategy?.targetWeights) || changed(config.dataSources?.newsFeed?.fusionWeights, baseline.dataSources?.newsFeed?.fusionWeights),
-      notification: changed(config.notification, baseline.notification),
+      strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy),
+      risk: changed(config.strategy?.risk, baselineConfig.strategy?.risk) || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints),
+      data: changed(config.dataSources, baselineConfig.dataSources),
+      "human-factor": changed(config.strategy?.targetWeights, baselineConfig.strategy?.targetWeights) || changed(config.dataSources?.newsFeed?.fusionWeights, baselineConfig.dataSources?.newsFeed?.fusionWeights),
+      notification: changed(config.notification, baselineConfig.notification),
       secrets: false, // secrets managed separately
     };
-  }, [baselineConfigText, config]);
+  }, [baselineConfig, config]);
 
   const saveConfig = useCallback(async (): Promise<boolean> => {
     if (!config || version == null) return false;
@@ -86,7 +89,7 @@ export default function SettingsPage() {
       const saved = await saveSystemConfig({ config, baseVersion: version });
       setVersion(saved.version);
       setConfig(saved.config);
-      setBaselineConfigText(JSON.stringify(saved.config));
+      setBaselineConfig(saved.config);
       setHint(`保存成功 ${formatDateTime(saved.updatedAt)}；已生成的再平衡周期需重新生成/刷新建议后才会应用新配置`);
       toast.message("设置已保存；请重新生成或刷新建议，使新配置应用到当前再平衡周期。");
       emitDashboardDataUpdated();
@@ -96,8 +99,12 @@ export default function SettingsPage() {
         const latestVersion = typeof e.details === "object" && e.details && "latestVersion" in (e.details as Record<string, unknown>)
           ? Number((e.details as Record<string, unknown>).latestVersion)
           : Number.NaN;
-        const suffix = Number.isFinite(latestVersion) && latestVersion > 0 ? `（最新版本 ${Math.trunc(latestVersion)}）` : "";
-        setError(`配置已被其他操作更新，请刷新后重试${suffix}`);
+        if (typeof latestVersion === "number" && latestVersion > 0) {
+          setError(`配置已被其他操作更新，请刷新后重试（最新版本 ${Math.trunc(latestVersion)}）`);
+        } else {
+          toast.error("配置版本冲突，请刷新页面重试。");
+          setError("配置已被其他操作更新，请刷新后重试");
+        }
         return false;
       }
       setError(e instanceof Error ? e.message : "保存失败");

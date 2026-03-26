@@ -5,6 +5,7 @@ import { Check, Eye, EyeOff, KeyRound, Lock, Pencil, PlugZap, Send, Trash2, X } 
 import { toast } from "sonner";
 
 import { SectionCard } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
+import { DaaSurfaceActionButton } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import {
   deleteSecretValue,
   listSecrets,
@@ -129,21 +130,21 @@ function SecretRow({
                 {showValue ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
               </button>
             </div>
-            <button
-              type="button"
+            <DaaSurfaceActionButton
+              tone="primary"
               onClick={() => void handleSave()}
               disabled={saving || !value.trim()}
-              className="rounded-md bg-emerald-600 p-1.5 text-white transition-opacity hover:opacity-80 disabled:opacity-40"
+              className="p-1.5"
             >
               <Check className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
+            </DaaSurfaceActionButton>
+            <DaaSurfaceActionButton
+              tone="slate"
               onClick={() => { setEditing(false); setValue(""); }}
-              className="rounded-md bg-zinc-600 p-1.5 text-white transition-opacity hover:opacity-80"
+              className="p-1.5"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </DaaSurfaceActionButton>
           </div>
         ) : (
           <div className="mt-1 flex items-center gap-2">

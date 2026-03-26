@@ -9,6 +9,7 @@ import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
 import { fetchDaaAuthSession, type DaaAuthMePayload } from "@/app/daa/_components/daaAuthSessionClient";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import packageJson from "@/package.json";
 
 type Props = {
   returnTo: string;
@@ -451,7 +452,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             className="flex items-center justify-between pt-2 text-[11px]"
             style={{ color: "var(--faint)", borderTop: "1px solid var(--border)" }}
           >
-            <span>DAA 控制台 v2.0</span>
+            <span>DAA 控制台 v{packageJson.version}</span>
             <Link href="/support" className="hover:underline">
               需要帮助？
             </Link>

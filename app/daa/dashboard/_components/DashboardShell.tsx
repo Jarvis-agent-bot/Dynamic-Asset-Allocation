@@ -15,7 +15,7 @@ type Props = {
   children: React.ReactNode;
 };
 
-const SECTION_META = {
+const SECTION_META: Record<string, { label: string; hint: string }> = {
   workbench: {
     label: "工作台",
     hint: "账户概览、风险信号、组合操作与执行都在这里处理",
@@ -28,13 +28,15 @@ const SECTION_META = {
     label: "设置",
     hint: "策略、风控、数据源与通知配置",
   },
-} as const;
+};
 
-function resolveSection(pathname: string) {
-  if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench" as const;
-  if (pathname.startsWith("/daa/dashboard/trades")) return "trades" as const;
-  if (pathname.startsWith("/daa/dashboard/settings")) return "settings" as const;
-  return "workbench" as const;
+const DEFAULT_SECTION_META = { label: "控制台", hint: "" };
+
+function resolveSection(pathname: string): string {
+  if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench";
+  if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
+  if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
+  return "workbench";
 }
 
 export default function DashboardShell({ children }: Props) {
@@ -46,7 +48,7 @@ export default function DashboardShell({ children }: Props) {
     if (saved === "0") setSidebarCollapsed(false);
   }, []);
 
-  const currentSection = useMemo(() => SECTION_META[resolveSection(pathname)], [pathname]);
+  const currentSection = useMemo(() => SECTION_META[resolveSection(pathname)] ?? DEFAULT_SECTION_META, [pathname]);
 
   function toggleSidebar() {
     setSidebarCollapsed((prev) => {

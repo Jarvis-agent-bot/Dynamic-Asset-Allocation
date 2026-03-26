@@ -212,9 +212,9 @@ export function SettingsDataInitSection() {
 
           {/* --- 成功状态 --- */}
           {result && !error && result.failedAssets.length === 0 ? (
-            <div className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-emerald-500/20 bg-emerald-500/8 px-4 py-3">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-              <div className="text-sm text-emerald-200">
+            <div className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-[var(--primary-border)] bg-[var(--primary-bg)] px-4 py-3">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
+              <div className="text-sm text-[var(--primary)]">
                 全部 {result.completedAssets} 个资产的历史数据已成功写入，共 {result.totalRows.toLocaleString()} 条记录。
               </div>
             </div>
@@ -222,10 +222,10 @@ export function SettingsDataInitSection() {
 
           {/* --- 部分失败 --- */}
           {result && !error && result.failedAssets.length > 0 ? (
-            <div className="space-y-2 rounded-[var(--radius-lg)] border border-amber-500/20 bg-amber-500/8 px-4 py-3">
+            <div className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--amber-border)] bg-[var(--amber-bg)] px-4 py-3">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                <div className="text-sm text-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <div className="text-sm text-amber-300">
                   {result.completedAssets}/{result.totalAssets} 资产成功，{result.failedAssets.length} 个资产失败:
                 </div>
               </div>
@@ -239,9 +239,9 @@ export function SettingsDataInitSection() {
 
           {/* --- 错误状态 --- */}
           {error ? (
-            <div className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-rose-500/20 bg-rose-500/8 px-4 py-3">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-              <div className="text-sm text-rose-200">{error}</div>
+            <div className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
+              <div className="text-sm text-red-300">{error}</div>
             </div>
           ) : null}
         </div>
