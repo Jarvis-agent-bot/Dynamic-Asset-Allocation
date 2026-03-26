@@ -24,12 +24,6 @@ export type DaaStorePosition = {
   updatedAt: string;
 };
 
-export type DaaStoreStrategyConfig = {
-  id: "default";
-  configJson: Record<string, unknown>;
-  updatedAt: string;
-};
-
 export type DaaStoreEquitySnapshot = {
   ts: string;
   totalEquity: number;
@@ -334,17 +328,6 @@ export type DaaStoreTradeTicketSide = "BUY" | "SELL";
 export type DaaStoreTradeBasketStatus = "draft" | "executing" | "executed" | "partial" | "canceled";
 
 export type DaaStoreTradeBasketSource = "manual" | "decision" | "mixed" | "migration";
-
-export type DaaStoreBrokerAccountState = {
-  brokerKind: DaaStoreBrokerKind;
-  accountId: string | null;
-  baseCurrency: string;
-  cash: number;
-  investableCash: number;
-  frozenCash: number;
-  totalEquity: number | null;
-  updatedAt: string;
-};
 
 export type DaaStoreBrokerOrderSnapshot = {
   ticketId: string;

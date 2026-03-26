@@ -179,11 +179,10 @@ export function WorkbenchSummaryHeader(props: {
         <div className="mt-3 flex justify-center">
           <button
             onClick={() => setDetailsOpen(v => !v)}
-            className="mx-auto flex items-center gap-1 rounded-full px-3 py-1 text-[10px] text-[var(--faint)] transition-colors hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)]"
-            title={detailsOpen ? "收起账户/市场/通知详情" : "展开账户/市场/通知详情"}
+            className="mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[var(--faint)] transition-colors hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)]"
+            title="展开账户/市场/通知详情"
           >
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
-            <span>{detailsOpen ? "收起" : "详情"}</span>
           </button>
         </div>
 

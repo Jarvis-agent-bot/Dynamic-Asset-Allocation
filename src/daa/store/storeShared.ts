@@ -5,7 +5,8 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export { withDaaPgClient } from "@/src/daa/pg/daaPg";
-export { normalizeText, toFinite, normalizeUpper } from "@/src/daa/utils/normalize";
+import { normalizeText, toFinite, normalizeUpper } from "@/src/daa/utils/normalize";
+export { normalizeText, toFinite, normalizeUpper };
 export { toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 
 /* ------------------------------------------------------------------ */
@@ -93,8 +94,6 @@ export async function hasTableColumn(query: SchemaQueryFn, tableName: string, co
   );
   return result.rows.length > 0;
 }
-
-import { normalizeText } from "@/src/daa/utils/normalize";
 
 /**
  * 对 SQL 标识符进行转义（表名、列名），防止 SQL 注入。

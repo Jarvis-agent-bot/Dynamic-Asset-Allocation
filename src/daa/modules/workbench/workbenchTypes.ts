@@ -466,7 +466,7 @@ export type WorkbenchExecutionExecuteInput = {
 // Runtime parser — validates unknown request body into typed input
 // ---------------------------------------------------------------------------
 
-export type ParsedExecuteTradeInput = {
+type ParsedExecuteTradeInput = {
   source: "manual" | "decision";
   side: TradeTicketSide;
   assetKey: string;
