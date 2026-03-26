@@ -1,38 +1,17 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { executeTradeViaGateway } from "@/src/daa/gateway";
+import { executeTradeViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { ManualTradeServiceError } from "@/src/daa/modules/workbench/manualTradeService";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
-
-type Body = {
-  source?: unknown;
-  origin?: unknown;
-  side?: unknown;
-  assetKey?: unknown;
-  cycleId?: unknown;
-  symbol?: unknown;
-  market?: unknown;
-  currency?: unknown;
-  qty?: unknown;
-  price?: unknown;
-  notionalInBase?: unknown;
-  fee?: unknown;
-  pricingMode?: unknown;
-  priceSource?: unknown;
-  priceSnapshotAt?: unknown;
-  decisionRefId?: unknown;
-  reasonTags?: unknown;
-  reasonText?: unknown;
-  createdBy?: unknown;
-};
 
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const denied = mapDeniedResponse(await requireDaaAdminEditorAuth(req));
     if (denied) return denied;
 
-    const body = await readJsonBody<Body>(req);
+    const body = await readJsonBody(req);
     let execution;
     try {
       execution = await executeTradeViaGateway({ request: body || {} });

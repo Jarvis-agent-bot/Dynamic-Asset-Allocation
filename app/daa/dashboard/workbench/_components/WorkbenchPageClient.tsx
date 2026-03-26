@@ -5,6 +5,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DaaSurfaceSectionAnchor } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { WorkbenchActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchActiveTabPanel";
@@ -35,11 +36,11 @@ class WorkbenchErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
-          <h3 className="text-lg font-semibold text-red-800">工作台加载异常</h3>
-          <p className="mt-2 text-sm text-red-600">{this.state.error?.message || "未知错误"}</p>
+        <div className="rounded-[16px] border border-[rgba(248,113,113,0.24)] bg-[rgba(248,113,113,0.08)] p-6 text-center">
+          <h3 className="text-lg font-semibold text-[var(--danger)]">工作台加载异常</h3>
+          <p className="mt-2 text-sm text-[var(--muted)]">{this.state.error?.message || "未知错误"}</p>
           <button
-            className="mt-4 rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
+            className="mt-4 rounded-[12px] bg-[var(--danger)] px-4 py-2 text-sm text-white transition-colors hover:brightness-110"
             onClick={() => this.setState({ hasError: false, error: null })}
           >
             重试
@@ -132,13 +133,19 @@ export default function WorkbenchPageClient(props: {
           accountBreakdown={model.bootstrap?.account.accountBreakdown || []}
           ledgerMeta={model.ledgerMeta}
           marketDataHealth={model.bootstrap?.marketDataHealth || null}
+          equityDelta={model.equityDelta}
           notificationStatus={model.notificationStatus}
           loading={model.loading && !model.bootstrap}
           refreshing={model.refreshing}
+          priceStreamConnected={model.priceStreamConnected}
           onRefresh={() => void model.loadBootstrap(true)}
         />
 
-        {model.bootstrap ? <WorkbenchCockpitSection model={model} /> : null}
+        {model.bootstrap ? (
+          <SectionErrorBoundary sectionName="驾驶舱">
+            <WorkbenchCockpitSection model={model} />
+          </SectionErrorBoundary>
+        ) : null}
 
         <div className="space-y-4">
           <div className="grid gap-2 rounded-[18px] border border-[var(--border)] bg-[rgba(13,19,32,0.8)] p-2 md:grid-cols-3">
@@ -153,7 +160,11 @@ export default function WorkbenchPageClient(props: {
             ))}
           </div>
 
-          {model.bootstrap ? <WorkbenchActiveTabPanel model={model} onNavigateTab={navigateToTab} /> : null}
+          {model.bootstrap ? (
+            <SectionErrorBoundary sectionName="标签面板">
+              <WorkbenchActiveTabPanel model={model} onNavigateTab={navigateToTab} />
+            </SectionErrorBoundary>
+          ) : null}
         </div>
 
         <WorkbenchDialogs {...model.dialogProps} />

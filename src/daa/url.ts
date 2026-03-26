@@ -1,3 +1,5 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+
 const DUMMY_ORIGIN_ = "https://daa.local";
 const DEFAULT_DASHBOARD_RETURN_TO_ = "/daa/dashboard";
 
@@ -40,8 +42,8 @@ export function normalizeDaaReturnTo(raw: unknown): string {
     if (u.pathname.startsWith("/daa/dashboard/")) {
       return `${u.pathname}${u.search}${u.hash}`;
     }
-  } catch {
-    // Ignore parse errors; fall back to dashboard.
+  } catch (err) {
+    logSwallowed("url.normalizeDaaReturnTo", err);
   }
 
   return DEFAULT_DASHBOARD_RETURN_TO_;

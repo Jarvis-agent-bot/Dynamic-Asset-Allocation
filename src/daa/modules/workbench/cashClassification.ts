@@ -97,6 +97,8 @@ type CashClassificationInput = {
   lastDepositAt: string | null;
 };
 
+import { toFinite } from "@/src/daa/utils/normalize";
+
 // 视为"策略性现金（货基/短债）"的持仓标签关键词
 const STRATEGIC_CASH_TAGS = [
   "money_market",
@@ -107,11 +109,6 @@ const STRATEGIC_CASH_TAGS = [
   "mma",
   "mmf",
 ];
-
-function toFinite(value: unknown, fallback = 0): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 function isStrategicCashAsset(tags: string[]): boolean {
   const normalized = tags.map((t) => String(t).toLowerCase().trim());

@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { RefreshCcw } from "lucide-react";
+import { ChevronDown, RefreshCcw } from "lucide-react";
 
-import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatCurrency, formatDateTime, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
   DaaSurfaceActionButton,
   DaaSurfaceEmptyState,
@@ -13,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { StoreNotificationStatusSummary } from "@/src/daa/modules/store/storeApi";
 import type { DaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
+import type { EquityDelta } from "@/src/daa/modules/read/readModels";
 import type { WorkbenchAccountBreakdownItem, WorkbenchMarketDataHealth } from "@/src/daa/modules/workbench/workbenchTypes";
 
 function notificationTone(input: {
@@ -62,9 +64,11 @@ function telegramAssistantText(input: {
   return "待配置";
 }
 
-function formatMetricValue(value: number, currency: string, loading: boolean): string {
-  if (loading) return "—";
-  return formatCurrency(value, currency);
+function MetricValue({ value, currency, loading }: { value: number; currency: string; loading: boolean }) {
+  if (loading) {
+    return <span className="inline-block h-5 w-24 animate-pulse rounded-[8px] bg-[var(--border)]" />;
+  }
+  return <>{formatCurrency(value, currency)}</>;
 }
 
 function buildMarketDataDetail(health: WorkbenchMarketDataHealth | null | undefined): string {
@@ -87,32 +91,34 @@ export function WorkbenchSummaryHeader(props: {
   cashMutationsAllowed?: boolean;
   readOnlyReason?: string | null;
   accountBreakdown?: WorkbenchAccountBreakdownItem[];
+  equityDelta?: EquityDelta | null;
   ledgerMeta: DaaCurrentLedgerMeta | null;
   marketDataHealth?: WorkbenchMarketDataHealth | null;
   notificationStatus: StoreNotificationStatusSummary | null;
   loading: boolean;
   refreshing: boolean;
+  priceStreamConnected?: boolean;
   onRefresh: () => void;
 }) {
   const summaryItems = [
     {
       label: "总权益",
-      value: formatMetricValue(props.totalEquity, props.baseCurrency, props.loading),
+      value: <MetricValue value={props.totalEquity} currency={props.baseCurrency} loading={props.loading} />,
       hint: "持仓市值 + 可用现金 + 冻结现金",
     },
     {
       label: "持仓市值",
-      value: formatMetricValue(props.holdingsValue, props.baseCurrency, props.loading),
+      value: <MetricValue value={props.holdingsValue} currency={props.baseCurrency} loading={props.loading} />,
       hint: "当前持仓按最新价格估算",
     },
     {
       label: "可用现金",
-      value: formatMetricValue(props.availableCashValue, props.baseCurrency, props.loading),
+      value: <MetricValue value={props.availableCashValue} currency={props.baseCurrency} loading={props.loading} />,
       hint: "未冻结，可继续操作",
     },
     {
       label: "冻结现金",
-      value: formatMetricValue(props.frozenCashValue, props.baseCurrency, props.loading),
+      value: <MetricValue value={props.frozenCashValue} currency={props.baseCurrency} loading={props.loading} />,
       hint: "待释放或执行中占用",
     },
   ];
@@ -128,6 +134,7 @@ export function WorkbenchSummaryHeader(props: {
   const accountBreakdown = props.accountBreakdown || [];
   const accountDetailTone = accountBreakdown.length > 1 ? "cyan" : props.cashMutationsAllowed === false ? "amber" : "slate";
   const accountDetailLabel = accountBreakdown.length > 1 ? "本地分账户" : props.cashMutationsAllowed === false ? "余额只读" : "本地可编辑";
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (
     <>
@@ -137,7 +144,19 @@ export function WorkbenchSummaryHeader(props: {
             {summaryItems.map((item) => (
               <div key={item.label} className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{item.label}</div>
-                <div className="mt-2 font-[var(--font-mono)] text-lg text-[var(--text)]">{item.value}</div>
+                <div className="mt-2 font-[var(--font-mono)] text-lg tabular-nums text-[var(--text)]">{item.value}</div>
+                {item.label === "总权益" && props.equityDelta?.dayChange != null && (
+                  <div className={`mt-1 text-xs ${props.equityDelta.dayChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    今日 {props.equityDelta.dayChange >= 0 ? "+" : "-"}{formatCurrency(Math.abs(props.equityDelta.dayChange), props.baseCurrency)}
+                    {" "}{props.equityDelta.dayChange >= 0 ? "\u25B2" : "\u25BC"} {formatPercent(Math.abs(props.equityDelta.dayChangePct ?? 0))}
+                  </div>
+                )}
+                {item.label === "总权益" && props.equityDelta?.weekChange != null && (
+                  <div className={`mt-0.5 text-xs ${props.equityDelta.weekChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    本周 {props.equityDelta.weekChange >= 0 ? "+" : "-"}{formatCurrency(Math.abs(props.equityDelta.weekChange), props.baseCurrency)}
+                    {" "}{props.equityDelta.weekChange >= 0 ? "\u25B2" : "\u25BC"} {formatPercent(Math.abs(props.equityDelta.weekChangePct ?? 0))}
+                  </div>
+                )}
                 <div className="mt-2 text-xs text-[var(--muted)]">{item.hint}</div>
               </div>
             ))}
@@ -145,6 +164,11 @@ export function WorkbenchSummaryHeader(props: {
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <DaaSurfaceStatusPill tone={accountModeTone}>{accountModeLabel}</DaaSurfaceStatusPill>
             <DaaSurfaceStatusPill tone={syncTone}>{syncLabel}</DaaSurfaceStatusPill>
+            {props.priceStreamConnected != null && (
+              <DaaSurfaceStatusPill tone={props.priceStreamConnected ? "green" : "slate"}>
+                {props.priceStreamConnected ? "实时" : "离线"}
+              </DaaSurfaceStatusPill>
+            )}
             <DaaSurfaceActionButton onClick={props.onRefresh} disabled={props.loading || props.refreshing}>
               <RefreshCcw className={cn("h-3.5 w-3.5", props.refreshing ? "animate-spin" : "")} />
               {props.loading ? "准备中…" : props.refreshing ? "刷新中…" : "刷新"}
@@ -152,6 +176,17 @@ export function WorkbenchSummaryHeader(props: {
           </div>
         </div>
 
+        <div className="mt-3 flex justify-center">
+          <button
+            onClick={() => setDetailsOpen(v => !v)}
+            className="mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[var(--faint)] transition-colors hover:text-[var(--text)] hover:bg-[rgba(255,255,255,0.04)]"
+            title="展开账户/市场/通知详情"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+
+        {detailsOpen && (
         <div className="mt-4 grid gap-3 xl:grid-cols-3">
           <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3")}>
             <div className="flex items-center justify-between gap-2">
@@ -181,7 +216,7 @@ export function WorkbenchSummaryHeader(props: {
               {props.readOnlyReason || "工作台与交易记录统一按当前账本窗口统计；不同执行通道的拆分只用于解释资金分布。"}
             </div>
             <div className="mt-3">
-              <Link href="/daa/dashboard/trades" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
+              <Link href="/daa/dashboard/trades" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
                 查看交易记录
               </Link>
             </div>
@@ -209,7 +244,7 @@ export function WorkbenchSummaryHeader(props: {
                 : buildMarketDataDetail(props.marketDataHealth)}
             </div>
             <div className="mt-3">
-              <Link href="/daa/dashboard/settings#settings-data" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
+              <Link href="/daa/dashboard/settings#settings-data" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
                 查看数据源设置
               </Link>
             </div>
@@ -243,12 +278,13 @@ export function WorkbenchSummaryHeader(props: {
                     : "Telegram 入站对话尚未就绪；飞书当前只接了出站通知 webhook，请到通知设置页补齐凭证。"}
             </div>
             <div className="mt-3">
-              <Link href="/daa/dashboard/settings#settings-notification" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
+              <Link href="/daa/dashboard/settings#settings-notification" className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/32 hover:text-[var(--text)]">
                 前往通知设置
               </Link>
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {props.loading ? (

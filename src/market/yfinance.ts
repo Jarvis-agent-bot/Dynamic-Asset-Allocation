@@ -42,6 +42,10 @@ export type YahooFinanceHistoricalQuoteLike = {
   date?: unknown;
   close?: unknown;
   adjClose?: unknown;
+  open?: unknown;
+  high?: unknown;
+  low?: unknown;
+  volume?: unknown;
 };
 
 /**
@@ -86,7 +90,16 @@ export function normalizeYfinanceHistoricalQuotes(
     }
 
     if (!byDate.has(date)) {
-      byDate.set(date, { date, close });
+      const bar: PriceBar = { date, close };
+      const openVal = Number(row.open);
+      if (Number.isFinite(openVal) && openVal > 0) bar.open = openVal;
+      const highVal = Number(row.high);
+      if (Number.isFinite(highVal) && highVal > 0) bar.high = highVal;
+      const lowVal = Number(row.low);
+      if (Number.isFinite(lowVal) && lowVal > 0) bar.low = lowVal;
+      const volVal = Number(row.volume);
+      if (Number.isFinite(volVal) && volVal >= 0) bar.volume = volVal;
+      byDate.set(date, bar);
     }
   }
 

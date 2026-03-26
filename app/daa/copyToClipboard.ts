@@ -1,5 +1,7 @@
 "use client";
 
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+
 // Best-effort clipboard helper for user-initiated actions.
 // Falls back to `execCommand('copy')` for environments where Clipboard API is unavailable.
 export async function copyTextToClipboard(text: string): Promise<void> {
@@ -7,8 +9,8 @@ export async function copyTextToClipboard(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       return;
-    } catch {
-      // fall through to execCommand fallback
+    } catch (err) {
+  logSwallowed("copyToClipboard.clipboardApi", err);
     }
   }
 

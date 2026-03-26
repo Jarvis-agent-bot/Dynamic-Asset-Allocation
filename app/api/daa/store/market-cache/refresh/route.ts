@@ -3,6 +3,7 @@ import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src
 import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
 import { WORKBENCH_FEATURED_ASSETS_CATALOG_ } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 export const runtime = "nodejs";
 
@@ -12,11 +13,6 @@ type RefreshBody = {
   concurrency?: unknown;
   includeFeatured?: unknown;
 };
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
 
 function normalizeUpper(value: unknown, fallback = ""): string {
   return normalizeText(value, fallback).toUpperCase();

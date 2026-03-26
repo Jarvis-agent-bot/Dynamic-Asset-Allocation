@@ -2,6 +2,7 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 
 import { fetchTextWithTimeout, getProviderErrorStatus } from "../../../_lib/providerAdapters";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,8 @@ function normalizeReportDate(raw: string | null): string | null {
 function parseJsonBestEffort(text: string): unknown {
   try {
     return JSON.parse(text);
-  } catch {
+  } catch (err) {
+  logSwallowed("danjuanRoute.parseJson", err);
     return { raw: text };
   }
 }

@@ -12,6 +12,8 @@ import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCa
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { normalizeText, toPositive } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type LookupMarket = "US" | "HK" | "CN" | "CRYPTO" | "OTHER";
 
@@ -40,23 +42,12 @@ type SearchAssetItem = {
 
 const SEARCH_LIMIT_MAX = 35;
 
-function normalizeText(v: unknown): string {
-  return String(v || "").trim();
-}
-
 function clampLimit(v: unknown): number {
   const n = Number(v);
   if (!Number.isFinite(n)) return 15;
   return Math.max(1, Math.min(SEARCH_LIMIT_MAX, Math.trunc(n)));
 }
 
-function toPositive(...values: unknown[]): number {
-  for (const raw of values) {
-    const n = Number(raw);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return 0;
-}
 
 type YahooQuoteRaw = {
   symbol?: unknown;
@@ -263,7 +254,7 @@ export async function GET(req: Request) {
         symbol,
         market,
         currency: normalizeDaaCurrencyCode(row.currency, market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD"),
-        price: toPositive(row.regularMarketPrice, row.postMarketPrice, row.bid, row.ask),
+        price: toPositive(row.regularMarketPrice) || toPositive(row.postMarketPrice) || toPositive(row.bid) || toPositive(row.ask),
         name,
         shortName,
         longName,
@@ -299,7 +290,8 @@ export async function GET(req: Request) {
         serveStaleSec: Math.max(3600, cacheConfig.serveStaleHours * 3600),
         rawRetentionDays: cacheConfig.rawRetentionDays,
       });
-    } catch {
+    } catch (err) {
+  logSwallowed("searchAssetsRoute.enrichItems", err);
       items = out;
     }
 

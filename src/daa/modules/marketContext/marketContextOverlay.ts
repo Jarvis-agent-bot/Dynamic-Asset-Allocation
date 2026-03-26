@@ -1,4 +1,6 @@
+import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
+import { classifyMacroCycle } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
   MARKET_INDICATOR_CONFIG_KEY_BY_KEY_,
   MARKET_INDICATOR_KEYS_,
@@ -17,10 +19,6 @@ import type {
 
 const ACTIONABLE_SCOPES: DaaMarketIndicatorScope[] = ["us_equity", "hk_cn_equity", "crypto"];
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, value));
-}
 
 function round(value: number, digits = 2): number {
   if (!Number.isFinite(value)) return 0;
@@ -160,7 +158,7 @@ export function buildMarketContextFromIndicators(input: {
     .map((key) => input.indicators.find((item) => item.key === key) || null)
     .filter(Boolean) as DaaMarketIndicatorSnapshot[];
 
-  return {
+  const result: DaaMarketContext = {
     generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : new Date().toISOString(),
     regime: topScope.regime,
     riskOffScorePct: topScope.riskOffScorePct,
@@ -170,7 +168,10 @@ export function buildMarketContextFromIndicators(input: {
     reasons,
     indicators: enabledIndicators,
     scopes,
+    macroCycle: classifyMacroCycle(enabledIndicators) ?? null,
   };
+
+  return result;
 }
 
 export function compareMarketRegimePriority(regime: DaaMarketRegime | null | undefined): number {

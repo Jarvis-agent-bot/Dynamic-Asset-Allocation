@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import { fetchYahooRssFeedBySymbol, parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import {
   appendDaaExternalPayloadRaw,
@@ -6,6 +7,7 @@ import {
   upsertDaaNewsItemSnapshots,
   upsertDaaNewsSignalSnapshots,
 } from "@/src/daa/store/daaStorePg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaNewsSignalItem = {
   symbol: string;
@@ -29,19 +31,14 @@ export type DaaNewsSignal = {
 const NEWS_SIGNAL_CACHE_MAX_AGE_MS_ = 30 * 60 * 1000;
 const NEWS_RAW_RETENTION_DAYS_ = 90;
 
-function clamp(v: number, lo: number, hi: number): number {
-  if (!Number.isFinite(v)) return lo;
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
 
 function domainFromLink(link: string | null | undefined): string {
   const text = String(link || "").trim();
   if (!text) return "";
   try {
     return new URL(text).hostname.toLowerCase();
-  } catch {
+  } catch (err) {
+    logSwallowed("newsSignal.domainFromLink", err);
     return "";
   }
 }
@@ -160,8 +157,8 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
         };
       }
     }
-  } catch {
-    // ignore cache errors and continue to fetch upstream
+  } catch (err) {
+    logSwallowed("newsSignal.fetchNewsSignal.cache", err);
   }
 
   const feedResult = await fetchYahooRssFeedBySymbol(normalized, 25);
@@ -187,7 +184,8 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
         expireAt: new Date(Date.now() + NEWS_RAW_RETENTION_DAYS_ * 24 * 3600 * 1000).toISOString(),
       });
       rawRefId = raw.id;
-    } catch {
+    } catch (err) {
+      logSwallowed("newsSignal.appendRawPayload", err);
       rawRefId = null;
     }
   }
@@ -274,8 +272,8 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
       freshness: item.freshness,
       rawRefId,
     })));
-  } catch {
-    // ignore persist errors to keep signal path robust
+  } catch (err) {
+    logSwallowed("newsSignal.persistSignal", err);
   }
 
   return signal;

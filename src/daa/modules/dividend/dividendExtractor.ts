@@ -1,4 +1,5 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { upsertDividendRecords } from "./dividendService";
 
 type YahooChartDividend = {
@@ -95,8 +96,8 @@ export async function extractDividendsFromRawPayloads(input: {
         });
         symbolsFound.add(symbol);
       }
-    } catch {
-      // Skip unparseable payloads
+    } catch (err) {
+      logSwallowed("dividendExtractor.parsePayload", err);
     }
   }
 

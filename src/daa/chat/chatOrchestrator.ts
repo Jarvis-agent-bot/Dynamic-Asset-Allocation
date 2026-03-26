@@ -1,10 +1,10 @@
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { ManualTradeServiceError } from "@/src/daa/modules/workbench/manualTradeService";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 import { appendChatMessage, appendChatToolCall, getChatSessionMemory, getOrCreateChatSession } from "./chatRepo";
 import {
   loadAssistantRuntimeContext,
-  normalizeText,
   parsePendingAction,
   resolveCurrentPendingAction,
   saveAssistantSessionSnapshot,

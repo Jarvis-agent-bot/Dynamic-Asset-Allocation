@@ -1,4 +1,7 @@
+import { clamp } from "@/src/core/math";
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { toFinite } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaValuationMetricStatus = "bullish" | "bearish" | "neutral" | "unavailable";
 
@@ -46,17 +49,6 @@ type FundamentalStats = {
   dividendYieldPct: number | null;
 };
 
-function toFinite(v: unknown, fallback = Number.NaN): number {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  if (!Number.isFinite(v)) return lo;
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
 
 function mean(values: number[]): number {
   if (values.length <= 0) return Number.NaN;
@@ -116,8 +108,9 @@ async function fetchDailyCloses(symbolRaw: string, days = 320): Promise<number[]
     const closesRaw = Array.isArray(payload?.chart?.result?.[0]?.indicators?.quote?.[0]?.close)
       ? payload.chart.result[0].indicators.quote[0].close
       : [];
-    return closesRaw.map((item: unknown) => toFinite(item)).filter((item: number) => Number.isFinite(item) && item > 0);
-  } catch {
+    return closesRaw.map((item: unknown) => toFinite(item, NaN)).filter((item: number) => Number.isFinite(item) && item > 0);
+  } catch (err) {
+    logSwallowed("valuationSignal.fetchDailyCloses", err);
     return [];
   }
 }
@@ -159,7 +152,8 @@ async function fetchFundamentals(symbolRaw: string): Promise<FundamentalStats> {
       pb: Number.isFinite(pb) && pb > 0 ? pb : null,
       dividendYieldPct: Number.isFinite(dividendYieldRaw) && dividendYieldRaw >= 0 ? dividendYieldRaw * 100 : null,
     };
-  } catch {
+  } catch (err) {
+    logSwallowed("valuationSignal.fetchFundamentals", err);
     return { pe: null, pb: null, dividendYieldPct: null };
   }
 }

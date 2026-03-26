@@ -1,3 +1,4 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type {
   DaaChatIntentKind,
   DaaChatMessage,
@@ -32,7 +33,8 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-    } catch {
+    } catch (err) {
+      logSwallowed("chatRepoMappers.parseJsonb", err);
       return {};
     }
   }

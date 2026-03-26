@@ -19,6 +19,7 @@ import {
 } from "@/src/daa/modules/workbench/featuredAssetsCatalog";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 type FeaturedMarketFilter = WorkbenchFeaturedMarket | "ALL";
 type FeaturedAssetClassFilter = WorkbenchFeaturedAssetClass | "ALL";
@@ -30,10 +31,6 @@ const MARKET_LABEL_ZH_: Record<WorkbenchFeaturedMarket, string> = {
   CN: "A股",
   CRYPTO: "加密",
 };
-
-function normalizeText(value: unknown): string {
-  return String(value || "").trim();
-}
 
 function clampLimitPerMarket(value: unknown): number {
   const n = Number(value);

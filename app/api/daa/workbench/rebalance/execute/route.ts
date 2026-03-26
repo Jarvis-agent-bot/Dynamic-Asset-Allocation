@@ -1,7 +1,8 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
-import { executeRebalanceViaGateway } from "@/src/daa/gateway";
+import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { WorkbenchDomainError } from "@/src/daa/modules/workbench/workbenchErrors";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -54,7 +55,8 @@ export async function POST(req: Request) {
             current: parsed.current ?? null,
             limit: parsed.limit ?? null,
           };
-        } catch {
+        } catch (err) {
+  logSwallowed("rebalanceExecuteRoute.parseReason", err);
           reason = raw || reason;
         }
         return fail("VALIDATION_FAILED", reason, { status: 409, details });

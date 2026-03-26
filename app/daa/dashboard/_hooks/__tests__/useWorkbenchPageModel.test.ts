@@ -163,6 +163,8 @@ describe("useWorkbenchPageModel", () => {
       error: "",
       authRequired: false,
       loadBootstrap: vi.fn(),
+      livePrices: new Map(),
+      priceStreamConnected: false,
     });
 
     const { result } = renderHook(() => useWorkbenchPageModel());
@@ -208,6 +210,8 @@ describe("useWorkbenchPageModel", () => {
       error: "",
       authRequired: false,
       loadBootstrap: vi.fn(),
+      livePrices: new Map(),
+      priceStreamConnected: false,
     });
 
     const { result } = renderHook(() => useWorkbenchPageModel());

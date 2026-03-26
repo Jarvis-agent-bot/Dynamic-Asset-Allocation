@@ -1,6 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { listDaaFxRates, upsertDaaFxRates } from "@/src/daa/store/daaStorePg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -116,7 +117,8 @@ async function fetchFxRateFromYfinance(baseCcy: string, quoteCcy: string): Promi
   let payload: any = null;
   try {
     payload = JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    logSwallowed("fxSnapshotRoute.parsePayload", err);
     throw new Error(`FX upstream payload invalid for ${baseCcy}/${quoteCcy}`);
   }
 

@@ -1,3 +1,4 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   appendDaaExternalPayloadRaw,
   appendDaaIngestJobLog,
@@ -10,6 +11,7 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { addDaysIsoUtc } from "@/src/market/yfinance";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
+import { normalizeText, normalizeUpper, toFinite } from "@/src/daa/utils/normalize";
 
 export type MarketCachePriceStatus = "fresh" | "stale" | "missing";
 
@@ -65,20 +67,6 @@ type YfinanceChartPayload = {
     error?: { code?: string; description?: string } | null;
   };
 };
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
-
-function normalizeUpper(value: unknown, fallback = ""): string {
-  return normalizeText(value, fallback).toUpperCase();
-}
-
-function toFinite(value: unknown, fallback = 0): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -205,7 +193,8 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
     let payloadJson: Record<string, unknown> | null = null;
     try {
       payloadJson = JSON.parse(payloadText) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+      logSwallowed("marketCacheService.parsePayload", err);
       payloadJson = null;
     }
 
@@ -451,7 +440,8 @@ export async function getMarketPricesWithCache(input: {
               expireAt: new Date(Date.now() + rawRetentionDays * 24 * 3600 * 1000).toISOString(),
             });
             rawRefId = raw.id;
-          } catch {
+          } catch (err) {
+            logSwallowed("marketCacheService.appendRawRef", err);
             rawRefId = null;
           }
         }

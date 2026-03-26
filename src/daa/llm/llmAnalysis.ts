@@ -52,7 +52,11 @@ function formatMarketContextForPrompt(marketContext: DaaMarketContext | null | u
   const indicators = marketContext.indicators.slice(0, 4).map((item) => (
     `${item.label}:值=${item.rawValue == null ? "N/A" : item.rawValue}${item.unit || ""},分位=${item.percentile252 == null ? "N/A" : item.percentile252.toFixed(1)}%,说明=${item.reason}`
   )).join(" | ");
-  return `regime=${marketContext.regime}, riskOffScore=${marketContext.riskOffScorePct.toFixed(1)}, buyScale=${marketContext.buyScale.toFixed(2)}, highRiskBuyScale=${marketContext.highRiskBuyScale.toFixed(2)}, reasons=${reasons}, indicators=${indicators}`;
+  const lines = [`regime=${marketContext.regime}, riskOffScore=${marketContext.riskOffScorePct.toFixed(1)}, buyScale=${marketContext.buyScale.toFixed(2)}, highRiskBuyScale=${marketContext.highRiskBuyScale.toFixed(2)}, reasons=${reasons}, indicators=${indicators}`];
+  if (marketContext.macroCycle) {
+    lines.push(`macroCycle=${marketContext.macroCycle.phase}(${marketContext.macroCycle.label}), growth=${marketContext.macroCycle.growthProxy}, inflation=${marketContext.macroCycle.inflationProxy}, favored=${marketContext.macroCycle.favoredAssets.join(",")}`);
+  }
+  return lines.join("; ");
 }
 
 function buildMarketFactsFromContext(marketContext: DaaMarketContext | null | undefined): string[] {

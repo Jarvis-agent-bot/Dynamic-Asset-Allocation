@@ -18,6 +18,7 @@ export type WorkbenchReadModel = {
   cashLedger: DaaStoreCashLedgerEntry[];
   signals: WorkbenchSignal[];
   allocationSummary: WorkbenchAllocationSummary;
+  equityDelta: EquityDelta;
   ledgerMeta: DaaCurrentLedgerMeta;
   notificationStatus: NotificationStatusSummary;
   loadedAt: string;
@@ -38,6 +39,13 @@ export type WorkbenchSignal = {
   text: string;
   actionHref: string | null;
   createdAt: string;
+};
+
+export type EquityDelta = {
+  dayChange: number | null;
+  dayChangePct: number | null;
+  weekChange: number | null;
+  weekChangePct: number | null;
 };
 
 export type WorkbenchAllocationSummary = {

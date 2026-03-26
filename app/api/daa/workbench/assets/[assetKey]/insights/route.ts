@@ -11,6 +11,7 @@ import {
   summarizeOpportunityReasonZh,
   summarizeOpportunityRiskZh,
 } from "@/src/daa/modules/workbench/workbenchShared";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -131,7 +132,8 @@ export async function GET(req: Request, ctx: Ctx) {
     if (bootstrapRow) {
       try {
         resolvedAssetRow = await preferAssetRowPrice(bootstrapRow, "asset_insights");
-      } catch {
+      } catch (err) {
+  logSwallowed("insightsRoute.resolveAsset", err);
         resolvedAssetRow = bootstrapRow;
       }
     }

@@ -8,7 +8,12 @@ import { useWorkbenchRebalanceFlow } from "@/app/daa/dashboard/_hooks/workbench/
 import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useWorkbenchModel } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
-import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+
+export type PendingConfirm =
+  | { type: "cancelCycle" }
+  | { type: "removeWatchlist"; row: AssetUniverseView }
+  | null;
 
 export type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
 
@@ -27,6 +32,7 @@ export function useWorkbenchPageModel(input: {
     cashLedger,
     signals,
     allocationSummary,
+    equityDelta,
     ledgerMeta,
     notificationStatus,
     setCycles,
@@ -39,10 +45,29 @@ export function useWorkbenchPageModel(input: {
     error,
     authRequired,
     loadBootstrap,
+    livePrices,
+    priceStreamConnected,
   } = useWorkbenchModel(input);
 
   const [busy, setBusy] = useState(false);
-  const assetRows = useMemo(() => bootstrap?.assetUniverse ?? [], [bootstrap?.assetUniverse]);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+  const rawAssetRows = useMemo(() => bootstrap?.assetUniverse ?? [], [bootstrap?.assetUniverse]);
+
+  // 将 SSE 实时价格合并到 assetRows（覆盖 lastPrice + 添加 priceDelta/priceDirection）
+  const assetRows = useMemo(() => {
+    if (livePrices.size === 0) return rawAssetRows;
+    return rawAssetRows.map((row) => {
+      const live = livePrices.get(row.assetKey);
+      if (!live) return row;
+      return {
+        ...row,
+        lastPrice: live.price,
+        priceUpdatedAt: live.ts,
+        priceDelta: live.delta,
+        priceDirection: live.direction,
+      };
+    });
+  }, [rawAssetRows, livePrices]);
 
   const syncCycleState = useCallback((nextCycle: RebalanceCycle | null) => {
     setCurrentCycle(nextCycle);
@@ -128,7 +153,7 @@ export function useWorkbenchPageModel(input: {
     onNavigateTab: setActiveTab,
     onGenerateCycle: rebalanceFlow.handleGenerateCycle,
     onOpenExecuteDialog: executionFlow.handleOpenExecuteDialog,
-    onCancelCycle: rebalanceFlow.handleCancelCycle,
+    onCancelCycle: () => setPendingConfirm({ type: "cancelCycle" }),
     onSelectAllProposals: rebalanceFlow.handleSelectAllProposals,
     onToggleProposal: rebalanceFlow.handleToggleProposal,
     onSubmitLlmFeedback: assetActions.handleSubmitLlmFeedback,
@@ -154,6 +179,18 @@ export function useWorkbenchPageModel(input: {
     currentCycle,
     baseCurrency: bootstrap?.baseCurrency || "USD",
     onConfirmExecute: executionFlow.handleConfirmExecuteCycle,
+    pendingConfirm,
+    setPendingConfirm,
+    onConfirmCancelCycle: rebalanceFlow.handleCancelCycle,
+    onConfirmRemoveFromWatchlist: assetActions.tableProps.onRemoveFromWatchlist,
+  };
+
+  const overriddenTableProps = {
+    ...assetActions.tableProps,
+    onRemoveFromWatchlist: (row: AssetUniverseView) => {
+      setPendingConfirm({ type: "removeWatchlist", row });
+      return Promise.resolve();
+    },
   };
 
   return {
@@ -165,6 +202,7 @@ export function useWorkbenchPageModel(input: {
     cashLedger,
     signals,
     allocationSummary,
+    equityDelta,
     ledgerMeta,
     notificationStatus,
     loading,
@@ -175,15 +213,16 @@ export function useWorkbenchPageModel(input: {
     summary: rebalanceFlow.summary,
     totalEquity,
     holdingsValue,
-    cashValue: totalCashValue,
     availableCashValue,
     frozenCashValue,
     executionReceipt: executionFlow.executionReceipt as ExecutionReceipt | null,
     clearExecutionReceipt: executionFlow.clearExecutionReceipt,
-    tableProps: assetActions.tableProps,
+    tableProps: overriddenTableProps,
     watchlistBuilderProps: assetActions.watchlistBuilderProps,
     rebalanceSectionProps,
     dialogProps,
+    // SSE 实时价格流状态
+    priceStreamConnected,
   };
 }
 

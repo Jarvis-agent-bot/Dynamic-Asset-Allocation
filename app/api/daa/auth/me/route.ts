@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/src/daa/supabase/server";
 import { fail, ok } from "@/src/daa/api/routeHelpers";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -9,12 +10,32 @@ function isSilentMode(req: Request): boolean {
     if (!value) return false;
     const normalized = value.trim().toLowerCase();
     return normalized === "1" || normalized === "true" || normalized === "yes";
-  } catch {
+  } catch (err) {
+  logSwallowed("meRoute.resolveSupabaseSession", err);
     return false;
   }
 }
 
 export async function GET(req: Request) {
+  // Dev bypass: DAA_PG_MEM=1 时返回虚拟 dev 用户
+  if (process.env.DAA_PG_MEM === "1") {
+    return ok({
+      account: {
+        accountId: "dev-user",
+        username: "dev@localhost",
+        roles: ["editor"],
+        status: "active",
+      },
+      session: {
+        sessionId: "dev-session",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        revokedAt: null,
+        lastSeenAt: new Date().toISOString(),
+      },
+    });
+  }
+
   try {
     const silent = isSilentMode(req);
     const supabase = createSupabaseServerClient();
@@ -47,11 +68,7 @@ export async function GET(req: Request) {
     if (isSilentMode(req)) {
       return fail("UNAUTHORIZED", "not_authenticated", { status: 200 });
     }
-    return fail("INTERNAL_ERROR", "auth_backend_unavailable", {
-      status: 503,
-      details: {
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
+    logSwallowed("auth.me", error);
+    return fail("INTERNAL_ERROR", "auth_backend_unavailable", { status: 503 });
   }
 }

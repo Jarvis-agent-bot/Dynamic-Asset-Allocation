@@ -92,7 +92,7 @@ export function RebalanceProposalList(props: {
                     <div
                       key={proposalKey}
                       className={cn(
-                        "rounded-[18px] border p-4 transition-all",
+                        "rounded-[18px] border p-4 transition-colors",
                         row.selected
                           ? "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.08)]"
                           : "border-[var(--border)] bg-[rgba(8,12,20,0.48)]",
@@ -110,9 +110,22 @@ export function RebalanceProposalList(props: {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-[var(--font-mono)] text-[15px] font-semibold text-[var(--text)]">{row.symbol}</span>
                             <DaaSurfaceStatusPill tone={row.side === "BUY" ? "green" : "amber"}>{row.side === "BUY" ? "买入" : "卖出"}</DaaSurfaceStatusPill>
+                            {(() => {
+                              const drift = props.currentCycle?.driftSnapshot?.find((d) => d.assetKey === row.assetKey);
+                              return drift ? (
+                                <DaaSurfaceStatusPill tone={Math.abs(drift.driftPct) >= 0.05 ? "amber" : "slate"}>
+                                  漂移 {(drift.driftPct * 100).toFixed(1)}%
+                                </DaaSurfaceStatusPill>
+                              ) : null;
+                            })()}
                             {row.currency !== props.bootstrap.baseCurrency ? <DaaSurfaceStatusPill tone="slate">{row.currency}</DaaSurfaceStatusPill> : null}
                             <DaaSurfaceStatusPill tone={row.selected ? "cyan" : "slate"}>{row.selected ? "已纳入执行" : "未勾选"}</DaaSurfaceStatusPill>
                           </div>
+                          {row.reason ? (
+                            <div className="text-xs leading-5 text-[var(--muted)] line-clamp-1">
+                              {row.reason.slice(0, 50)}{row.reason.length > 50 ? "…" : ""}
+                            </div>
+                          ) : null}
 
                           <div className="grid gap-2 sm:grid-cols-3">
                             <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>

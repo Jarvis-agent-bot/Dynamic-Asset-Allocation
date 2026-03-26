@@ -1,4 +1,5 @@
 import { daaPgPool, withDaaPgClient } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { randomUUID } from "node:crypto";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -263,8 +264,8 @@ export async function creditPendingDividends(input: {
 
       credited++;
       totalAmountBase += amountInBase;
-    } catch {
-      // Skip failed entries, will retry next run
+    } catch (err) {
+      logSwallowed("dividendService.processEntry", err);
     }
   }
 

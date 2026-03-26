@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
 import { fetchDaaAuthSession, type DaaAuthMePayload } from "@/app/daa/_components/daaAuthSessionClient";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import packageJson from "@/package.json";
 
 type Props = {
   returnTo: string;
@@ -109,7 +111,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       });
       const text = await res.text().catch(() => "");
       let json: any = null;
-      try { json = JSON.parse(text); } catch { json = null; }
+      try { json = JSON.parse(text); } catch (err) { logSwallowed("DaaLoginClient.parseJson", err); json = null; }
       if (!res.ok || !json?.ok) { setAuthError(mapLoginError(parseApiError(json, `HTTP ${res.status}`))); return; }
       const redirectTo = normalizeDaaReturnTo(typeof json?.data?.redirectTo === "string" ? json.data.redirectTo : appendNoticeParam(safeReturnTo, "signed_in"));
       window.location.href = redirectTo;
@@ -125,7 +127,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
       const res = await fetch("/api/daa/auth/logout", { method: "POST", headers: { accept: "application/json" } });
       const text = await res.text();
       let json: any = null;
-      try { json = JSON.parse(text); } catch { json = null; }
+      try { json = JSON.parse(text); } catch (err) { logSwallowed("DaaLoginClient.parseJson", err); json = null; }
       if (!res.ok || !json?.ok) throw new Error(parseApiError(json, `HTTP ${res.status}`));
       window.location.href = appendNoticeParam("/daa/login", "signed_out");
     } catch (e) {
@@ -357,7 +359,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 value={email}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
-                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-all disabled:opacity-50"
+                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
                 style={{
                   background: "var(--elevated)",
                   borderColor: "var(--border-strong)",
@@ -385,7 +387,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 value={password}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setPassword(e.target.value); setAuthError(null); }}
-                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-all disabled:opacity-50"
+                className="w-full rounded-md border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] disabled:opacity-50"
                 style={{
                   background: "var(--elevated)",
                   borderColor: "var(--border-strong)",
@@ -415,7 +417,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             <button
               type="submit"
               disabled={busy || session.kind === "checking"}
-              className="w-full rounded-md py-2.5 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50"
+              className="w-full rounded-md py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ background: "var(--primary)", color: "var(--bg)" }}
             >
               {busy ? (
@@ -450,7 +452,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             className="flex items-center justify-between pt-2 text-[11px]"
             style={{ color: "var(--faint)", borderTop: "1px solid var(--border)" }}
           >
-            <span>DAA 控制台 v2.0</span>
+            <span>DAA 控制台 v{packageJson.version}</span>
             <Link href="/support" className="hover:underline">
               需要帮助？
             </Link>

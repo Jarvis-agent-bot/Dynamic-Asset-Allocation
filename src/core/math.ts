@@ -1,6 +1,7 @@
 /** math helpers */
 
 export function clamp(x: number, min: number, max: number): number {
+  if (!Number.isFinite(x)) return min;
   return Math.max(min, Math.min(max, x));
 }
 

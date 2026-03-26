@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bot, SendHorizonal, Sparkles } from "lucide-react";
 
 import {
@@ -50,6 +50,15 @@ export function WorkbenchAssistantPanel(props: {
   assistant: AssistantChatModel;
 }) {
   const [draft, setDraft] = useState("");
+  const [expanded, setExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem("daa:assistant:expanded") === "true"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("daa:assistant:expanded", String(expanded)); } catch {}
+  }, [expanded]);
+
   const conversation = props.assistant.conversation;
   const recentThreads = props.assistant.threads.slice(0, 5);
   const selectedThread = conversation?.selectedThread || props.assistant.threads[0] || null;
@@ -73,6 +82,9 @@ export function WorkbenchAssistantPanel(props: {
           <DaaSurfaceStatusPill tone={props.assistant.loading ? "slate" : props.assistant.error ? "amber" : "green"}>
             {props.assistant.loading ? "同步中" : props.assistant.error ? "待排查" : "已就绪"}
           </DaaSurfaceStatusPill>
+          <DaaSurfaceActionButton tone="slate" onClick={() => setExpanded(v => !v)}>
+            {expanded ? "收起" : "展开"}
+          </DaaSurfaceActionButton>
           <DaaSurfaceActionButton tone="slate" onClick={() => void props.assistant.refresh()} disabled={props.assistant.loading || props.assistant.sending}>
             <Sparkles className="h-3.5 w-3.5" />
             刷新会话
@@ -80,56 +92,61 @@ export function WorkbenchAssistantPanel(props: {
         </div>
       )}
     >
-      <div className="grid gap-4 xl:grid-cols-[1.18fr_0.82fr]">
-        <div className="space-y-3">
-          <div className={cn(daaSurfaceSubtlePanelClassName, "p-4")}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
-                  <Bot className="h-3.5 w-3.5" />
-                  助手输入
-                </div>
-                <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                  直接输入自然语言即可。当前以查询、生成调仓和待确认执行为主，不再要求记住一长串固定命令。
-                </div>
+      {/* -- Collapsed: quick prompts + input bar only -- */}
+      <div className={cn(daaSurfaceSubtlePanelClassName, "p-4")}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
+              <Bot className="h-3.5 w-3.5" />
+              助手输入
+            </div>
+            {expanded && (
+              <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                直接输入自然语言即可。当前以查询、生成调仓和待确认执行为主，不再要求记住一长串固定命令。
               </div>
-              <DaaSurfaceStatusPill tone="indigo">Web + Telegram 共用会话</DaaSurfaceStatusPill>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {QUICK_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => submit(prompt)}
-                  className="inline-flex h-8 items-center rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 text-xs font-medium text-[var(--muted)] transition-all hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
-            <form
-              className="mt-4 flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submit(draft);
-              }}
-            >
-              <input
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="例如：生成调仓建议 / 当前风险状态 / 买入 QQQ 10股"
-                className={cn(daaSurfaceDenseFieldClassName, "h-10 flex-1 rounded-[14px] text-sm")}
-              />
-              <DaaSurfaceActionButton type="submit" disabled={props.assistant.sending || !draft.trim()}>
-                <SendHorizonal className="h-3.5 w-3.5" />
-                {props.assistant.sending ? "处理中…" : "发送"}
-              </DaaSurfaceActionButton>
-            </form>
-            {props.assistant.error ? <div className="mt-3 text-xs text-amber-300">{props.assistant.error}</div> : null}
+            )}
           </div>
+          <DaaSurfaceStatusPill tone="indigo">Web + Telegram 共用会话</DaaSurfaceStatusPill>
+        </div>
 
+        <div className="mt-4 flex flex-wrap gap-2">
+          {QUICK_PROMPTS.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              onClick={() => submit(prompt)}
+              className="inline-flex h-8 items-center rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 text-xs font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+
+        <form
+          className="mt-4 flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit(draft);
+          }}
+        >
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="例如：生成调仓建议 / 当前风险状态 / 买入 QQQ 10股"
+            className={cn(daaSurfaceDenseFieldClassName, "h-10 flex-1 rounded-[14px] text-sm")}
+          />
+          <DaaSurfaceActionButton type="submit" disabled={props.assistant.sending || !draft.trim()}>
+            <SendHorizonal className="h-3.5 w-3.5" />
+            {props.assistant.sending ? "处理中…" : "发送"}
+          </DaaSurfaceActionButton>
+        </form>
+        {props.assistant.error ? <div className="mt-3 text-xs text-amber-300">{props.assistant.error}</div> : null}
+      </div>
+
+      {/* -- Expanded: messages, context, threads, hints -- */}
+      {expanded && (
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1.18fr_0.82fr]">
+        <div className="space-y-3">
           <div className={cn(daaSurfaceSubtlePanelClassName, "p-4")}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">
@@ -146,17 +163,38 @@ export function WorkbenchAssistantPanel(props: {
             ) : null}
             <div className="mt-3 space-y-3">
               {(props.assistant.messages || []).length > 0 ? (
-                props.assistant.messages.slice(-8).map((item) => (
-                  <div key={item.messageId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <DaaSurfaceStatusPill tone={messageTone(item.role)}>
-                        {item.role === "assistant" ? "助手" : item.role === "system" ? "系统" : "你"}
-                      </DaaSurfaceStatusPill>
-                      {item.intentKind ? <DaaSurfaceStatusPill tone="slate">{item.intentKind}</DaaSurfaceStatusPill> : null}
+                <>
+                  {props.assistant.messages.slice(-8).map((item) => (
+                    <div key={item.messageId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <DaaSurfaceStatusPill tone={messageTone(item.role)}>
+                          {item.role === "assistant" ? "助手" : item.role === "system" ? "系统" : "你"}
+                        </DaaSurfaceStatusPill>
+                        {item.intentKind ? <DaaSurfaceStatusPill tone="slate">{item.intentKind}</DaaSurfaceStatusPill> : null}
+                        {item.createdAt ? (
+                          <span className="ml-auto text-[10px] tabular-nums text-[var(--faint)]">
+                            {(() => {
+                              const d = new Date(item.createdAt);
+                              return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+                            })()}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--text)]">{item.body}</div>
                     </div>
-                    <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--text)]">{item.body}</div>
-                  </div>
-                ))
+                  ))}
+                  {props.assistant.sending ? (
+                    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] p-3">
+                      <div className="flex items-center gap-2">
+                        <DaaSurfaceStatusPill tone="cyan">助手</DaaSurfaceStatusPill>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1 text-sm text-[var(--muted)]">
+                        <span className="inline-block animate-pulse">···</span>
+                        <span className="text-xs text-[var(--faint)]">正在思考</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <DaaSurfaceEmptyState
                   className="border-0 bg-transparent px-0 py-8"
@@ -226,7 +264,7 @@ export function WorkbenchAssistantPanel(props: {
                   type="button"
                   onClick={() => void props.assistant.selectThread(thread.sessionId)}
                   className={cn(
-                    "w-full rounded-[14px] border bg-[rgba(8,12,20,0.58)] p-3 text-left transition-all",
+                    "w-full rounded-[14px] border bg-[rgba(8,12,20,0.58)] p-3 text-left transition-colors",
                     props.assistant.selectedSessionId === thread.sessionId
                       ? "border-[var(--primary)]/40 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
                       : "border-[var(--border)] hover:border-[var(--primary)]/20",
@@ -264,6 +302,7 @@ export function WorkbenchAssistantPanel(props: {
           </div>
         </div>
       </div>
+      )}
     </DaaSurfacePanel>
   );
 }

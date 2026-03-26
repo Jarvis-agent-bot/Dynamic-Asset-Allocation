@@ -15,33 +15,33 @@ const ACCENT_CLASS: Record<DaaSurfaceTone, string> = {
 
 const TONE_STYLE: Record<DaaSurfaceTone, { border: string; bg: string; text: string }> = {
   cyan: {
-    border: "rgba(56,189,248,0.28)",
-    bg: "rgba(56,189,248,0.12)",
+    border: "var(--primary-border)",
+    bg: "var(--primary-bg)",
     text: "var(--primary)",
   },
   amber: {
-    border: "rgba(246,173,85,0.28)",
-    bg: "rgba(246,173,85,0.12)",
+    border: "var(--amber-border)",
+    bg: "var(--amber-bg)",
     text: "var(--amber)",
   },
   green: {
-    border: "rgba(52,211,153,0.24)",
-    bg: "rgba(52,211,153,0.10)",
+    border: "var(--success-border)",
+    bg: "var(--success-bg)",
     text: "var(--success)",
   },
   red: {
-    border: "rgba(248,113,113,0.24)",
-    bg: "rgba(248,113,113,0.10)",
+    border: "var(--danger-border)",
+    bg: "var(--danger-bg)",
     text: "var(--danger)",
   },
   indigo: {
-    border: "rgba(129,140,248,0.24)",
-    bg: "rgba(129,140,248,0.12)",
+    border: "var(--indigo-border)",
+    bg: "var(--indigo-bg)",
     text: "var(--indigo)",
   },
   slate: {
-    border: "rgba(148,163,184,0.18)",
-    bg: "rgba(148,163,184,0.08)",
+    border: "var(--muted-border)",
+    bg: "var(--muted-bg)",
     text: "var(--muted)",
   },
 };
@@ -49,22 +49,22 @@ const TONE_STYLE: Record<DaaSurfaceTone, { border: string; bg: string; text: str
 export type DaaSurfaceTone = "cyan" | "amber" | "green" | "red" | "indigo" | "slate";
 
 export const daaSurfaceFieldClassName =
-  "w-full rounded-[14px] border border-[var(--border-strong)] bg-[rgba(8,12,20,0.78)] px-3.5 py-2.5 text-sm text-[var(--text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] outline-none transition-all placeholder:text-[var(--faint)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.16)]";
+  "w-full rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[rgba(8,12,20,0.78)] px-3.5 py-2.5 text-sm text-[var(--text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--faint)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.16)]";
 
 export const daaSurfaceDenseFieldClassName =
-  "h-9 rounded-[12px] border border-[var(--border-strong)] bg-[rgba(8,12,20,0.82)] px-3 text-xs text-[var(--text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] outline-none transition-all placeholder:text-[var(--faint)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.14)]";
+  "h-9 rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[rgba(8,12,20,0.82)] px-3 text-xs text-[var(--text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--faint)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.14)]";
 
 export const daaSurfaceTableShellClassName =
-  "overflow-hidden rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(10,15,25,0.96),rgba(6,10,18,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+  "overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(10,15,25,0.96),rgba(6,10,18,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
 
 export const daaSurfaceSubtlePanelClassName =
-  "rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.72)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+  "rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(8,12,20,0.72)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
 
 export const daaSurfaceMonoPanelClassName =
-  "rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 font-[var(--font-mono)] text-xs leading-6 text-[var(--muted)]";
+  "rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 font-[var(--font-mono)] text-xs leading-6 text-[var(--muted)]";
 
 export const daaSurfaceSearchShellClassName =
-  "flex items-center gap-2 rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
+  "flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
 
 export const daaSurfaceTableHeadClassName =
   "border-b border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]";
@@ -72,10 +72,10 @@ export const daaSurfaceTableHeadClassName =
 export const daaSurfaceTableCellClassName =
   "border-b border-[var(--border)]/70 px-4 py-3 align-top text-sm";
 
-export const daaSurfaceDialogContentClassName =
+const daaSurfaceDialogContentClassName =
   "flex max-h-[min(90dvh,860px)] w-[calc(100vw-1rem)] max-w-[720px] flex-col overflow-hidden border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,24,39,0.98),rgba(8,12,20,1))] p-0 text-[var(--text)] shadow-[0_28px_72px_rgba(0,0,0,0.48)] sm:w-[calc(100vw-2rem)]";
 
-export function toneColor(tone: DaaSurfaceTone = "cyan") {
+function toneColor(tone: DaaSurfaceTone = "cyan") {
   return ACCENT_CLASS[tone];
 }
 
@@ -135,7 +135,7 @@ export function DaaSurfaceMetricCard({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.98),rgba(13,19,32,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition-transform duration-200 hover:-translate-y-0.5",
+        "group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.98),rgba(13,19,32,0.96))] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.28)] transition-transform duration-200 hover:-translate-y-0.5",
         className,
       )}
     >
@@ -173,7 +173,7 @@ export function DaaSurfacePanel({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.96),rgba(13,19,32,0.98))] shadow-[0_24px_50px_rgba(0,0,0,0.3)]",
+        "relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.96),rgba(13,19,32,0.98))] shadow-[0_24px_50px_rgba(0,0,0,0.3)]",
         className,
       )}
     >
@@ -210,7 +210,7 @@ export function DaaSurfaceMiniStat({
   return (
     <div
       className={cn(
-        "rounded-[16px] border bg-[rgba(8,12,20,0.74)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
+        "rounded-[var(--radius-lg)] border bg-[rgba(8,12,20,0.74)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
         className,
       )}
       style={{ borderColor: toneStyle.border }}
@@ -235,7 +235,7 @@ export function DaaSurfaceFilterChip({
     <button
       type="button"
       className={cn(
-        "inline-flex h-8 shrink-0 items-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] transition-all",
+        "inline-flex h-8 shrink-0 items-center rounded-full border px-3 text-xs font-semibold uppercase tracking-[0.08em] transition-colors",
         active
           ? "border-[var(--primary)]/38 bg-[rgba(56,189,248,0.12)] text-[var(--primary)]"
           : "border-[var(--border)] bg-[rgba(255,255,255,0.02)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]",
@@ -297,7 +297,7 @@ export function DaaSurfaceNoticeBox({
   return (
     <div
       className={cn(
-        "rounded-[16px] border px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
+        "rounded-[var(--radius-lg)] border px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
         className,
       )}
       style={{
@@ -336,7 +336,7 @@ export function DaaSurfaceEmptyState({
   return (
     <div
       className={cn(
-        "rounded-[18px] border border-dashed border-[var(--border-strong)] bg-[rgba(13,19,32,0.7)] px-5 py-10 text-center",
+        "rounded-[var(--radius-xl)] border border-dashed border-[var(--border-strong)] bg-[rgba(13,19,32,0.7)] px-5 py-10 text-center",
         className,
       )}
     >
@@ -373,7 +373,7 @@ export const DaaSurfaceActionButton = forwardRef<HTMLButtonElement, ButtonHTMLAt
       ref={ref}
       type="button"
       className={cn(
-        "inline-flex items-center gap-2 rounded-[10px] border px-3.5 py-2 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center gap-2 rounded-[var(--radius-sm)] border px-3.5 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
         toneClasses,
         className,
       )}
@@ -444,7 +444,7 @@ export function DaaSurfaceSectionAnchor({
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-all",
+        "group flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-colors",
         active
           ? "border-[var(--primary)]/40 bg-[rgba(56,189,248,0.1)] text-[var(--primary)]"
           : "border-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[var(--hover)] hover:text-[var(--text)]",

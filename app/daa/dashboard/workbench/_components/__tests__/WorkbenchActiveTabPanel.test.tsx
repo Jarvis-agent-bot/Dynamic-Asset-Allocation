@@ -214,6 +214,10 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     currentCycle: null,
     baseCurrency: "USD",
     onConfirmExecute: vi.fn(async () => undefined),
+    pendingConfirm: null,
+    setPendingConfirm: vi.fn(),
+    onConfirmCancelCycle: vi.fn(async () => undefined),
+    onConfirmRemoveFromWatchlist: vi.fn(async () => undefined),
     ...dialogPropsOverride,
   };
 
@@ -255,7 +259,6 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     summary,
     totalEquity: topLevelOverrides.totalEquity ?? 1000,
     holdingsValue: topLevelOverrides.holdingsValue ?? 0,
-    cashValue: topLevelOverrides.cashValue ?? 1000,
     availableCashValue: topLevelOverrides.availableCashValue ?? 1000,
     frozenCashValue: topLevelOverrides.frozenCashValue ?? 0,
     executionReceipt: topLevelOverrides.executionReceipt ?? null,
@@ -264,6 +267,8 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     watchlistBuilderProps,
     rebalanceSectionProps,
     dialogProps,
+    equityDelta: topLevelOverrides.equityDelta ?? null,
+    priceStreamConnected: topLevelOverrides.priceStreamConnected ?? false,
   };
 }
 

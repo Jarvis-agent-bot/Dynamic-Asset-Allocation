@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { appendJobExecutionLog } from "@/src/daa/store/jobExecutionLogRepo";
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
+import { normalizeText } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 function buildRequestId(req?: Request): string {
   if (!req) return randomUUID();
@@ -53,8 +50,8 @@ export async function runLoggedJob<T>(input: {
         durationMs,
         resultJson: input.summarize ? (input.summarize(result) || {}) : {},
       });
-    } catch {
-      // ignore job log failures
+    } catch (err) {
+      logSwallowed("jobService.logSuccess", err);
     }
     return { jobId, requestId, startedAt, finishedAt, durationMs, result };
   } catch (error) {
@@ -73,8 +70,8 @@ export async function runLoggedJob<T>(input: {
         durationMs,
         errorText: describeError(error),
       });
-    } catch {
-      // ignore job log failures
+    } catch (err) {
+      logSwallowed("jobService.logFailure", err);
     }
     throw error;
   }

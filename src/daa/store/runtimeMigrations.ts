@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
+import { toFinite } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type QueryFn = (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>;
 
@@ -15,7 +17,8 @@ function parseConfigJson(value: unknown): Record<string, any> {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, any> : {};
-    } catch {
+    } catch (err) {
+      logSwallowed("runtimeMigrations.parseConfigJson", err);
       return {};
     }
   }
@@ -27,11 +30,6 @@ function normalizeBaseCurrency(value: unknown, fallback = "USD"): string {
   if (!text) return fallback;
   if (text === "RMB" || text === "CNH") return "CNY";
   return text;
-}
-
-function toFiniteNumber(value: unknown, fallback = 0): number {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 function toIsoTimestamp(value: unknown): string {
@@ -79,14 +77,14 @@ async function ensureAccountStateSeed(query: QueryFn): Promise<void> {
   const account = strategy?.account && typeof strategy.account === "object" ? strategy.account : {};
 
   const baseCurrency = normalizeBaseCurrency(account.baseCurrency, "USD");
-  const cash = Math.max(0, toFiniteNumber(account.cash, 0));
-  const frozenCash = Math.max(0, toFiniteNumber(account.frozenCash, 0));
+  const cash = Math.max(0, toFinite(account.cash, 0));
+  const frozenCash = Math.max(0, toFinite(account.frozenCash, 0));
   const investableCash = resolveInvestableCash({
     cash,
     frozenCash,
     investableCash: account.investableCash,
   });
-  const totalEquityRaw = account.totalEquity == null ? Number.NaN : toFiniteNumber(account.totalEquity, Number.NaN);
+  const totalEquityRaw = account.totalEquity == null ? Number.NaN : toFinite(account.totalEquity, Number.NaN);
   const totalEquity = Number.isFinite(totalEquityRaw) ? Math.max(0, totalEquityRaw) : null;
 
   await query(
@@ -338,9 +336,9 @@ const MIGRATIONS_: Migration[] = [
 
       const accountRow = accountRes.rows[0] || {};
       const baseCurrency = normalizeBaseCurrency(accountRow.base_currency, "USD");
-      const snapshotCash = Math.max(0, toFiniteNumber(snapshotRes.rows[0]?.cash, Number.NaN));
-      const currentCash = Math.max(0, toFiniteNumber(accountRow.cash, 0));
-      const frozenCash = Math.max(0, toFiniteNumber(accountRow.frozen_cash, 0));
+      const snapshotCash = Math.max(0, toFinite(snapshotRes.rows[0]?.cash, Number.NaN));
+      const currentCash = Math.max(0, toFinite(accountRow.cash, 0));
+      const frozenCash = Math.max(0, toFinite(accountRow.frozen_cash, 0));
       const investableCash = resolveInvestableCash({
         cash: currentCash,
         frozenCash,
@@ -348,8 +346,8 @@ const MIGRATIONS_: Migration[] = [
       });
       const openingCash = Number.isFinite(snapshotCash) ? snapshotCash : currentCash;
       const hasOpeningBalance = openingExistsRes.rows.length > 0;
-      const activityCount = Math.max(0, toFiniteNumber(activityRes.rows[0]?.count, 0));
-      const holdingCount = Math.max(0, toFiniteNumber(holdingRes.rows[0]?.count, 0));
+      const activityCount = Math.max(0, toFinite(activityRes.rows[0]?.count, 0));
+      const holdingCount = Math.max(0, toFinite(holdingRes.rows[0]?.count, 0));
 
       if (!hasOpeningBalance && openingCash > 0) {
         await query(
@@ -418,6 +416,17 @@ const MIGRATIONS_: Migration[] = [
         )
       `);
       await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique ON daa_broker_order_snapshots(broker_kind, broker_order_id)");
+    },
+  },
+  {
+    id: "20260326_price_history_ohlcv",
+    async apply(query) {
+      const hasPriceHistory = await tableExists(query, "daa_price_history");
+      if (!hasPriceHistory) return;
+      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS open_price NUMERIC");
+      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS high_price NUMERIC");
+      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS low_price NUMERIC");
+      await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS volume BIGINT");
     },
   },
   {

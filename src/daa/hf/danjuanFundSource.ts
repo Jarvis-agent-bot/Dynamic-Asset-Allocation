@@ -1,3 +1,5 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+
 export type DanjuanFundRegistryItem = {
   fundCode: string;
   label: string;
@@ -182,7 +184,8 @@ export async function fetchDanjuanFundAssetPercentWithRaw(params: {
     let payload: any = null;
     try {
       payload = JSON.parse(text);
-    } catch {
+    } catch (err) {
+      logSwallowed("danjuanFundSource.parsePayload", err);
       payload = null;
     }
 
@@ -239,7 +242,8 @@ export async function fetchDanjuanFundAssetPercentWithRaw(params: {
         })),
       raw,
     };
-  } catch {
+  } catch (err) {
+    logSwallowed("danjuanFundSource.fetchAssetPercent", err);
     return {
       rows: [],
       raw: {

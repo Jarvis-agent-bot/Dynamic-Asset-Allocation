@@ -9,6 +9,7 @@ import {
   listDaaFxRates,
   upsertDaaFxRates,
 } from "@/src/daa/store/daaStorePg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -172,7 +173,8 @@ async function fetchYfinanceFxRate(baseCcy: string, quoteCcy: string): Promise<F
   let payloadJson: Record<string, unknown> | null = null;
   try {
     payloadJson = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
+  } catch (err) {
+  logSwallowed("fxRefreshRoute.parsePayload", err);
     payloadJson = null;
   }
 
@@ -332,7 +334,8 @@ export async function POST(req: Request) {
           expireAt: new Date(Date.now() + rawRetentionDays * 24 * 3600 * 1000).toISOString(),
         });
         rawRefId = raw.id;
-      } catch {
+      } catch (err) {
+        logSwallowed("fxRefreshRoute.appendRaw", err);
         rawRefId = null;
       }
 

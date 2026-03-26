@@ -1,5 +1,6 @@
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { appendNotificationDeliveryLog } from "@/src/daa/store/notificationDeliveryLogRepo";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type TelegramSendResult = {
   ok: boolean;
@@ -133,8 +134,8 @@ export async function sendTelegramByEnv(message: string, meta?: {
         },
         responseJson: result.responseJson,
       });
-    } catch {
-      // 通知日志失败不阻塞主链路
+    } catch (err) {
+      logSwallowed("telegram.sendTelegramByEnv", err);
     }
   }
 

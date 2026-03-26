@@ -7,10 +7,17 @@ export type DaaMarketIndicatorKey =
   | "kweb_fxi_ratio"
   | "btc_eth_ratio"
   | "btc_volatility"
-  | "gold_silver_ratio";
+  | "gold_silver_ratio"
+  | "yield_curve_spread"
+  | "usd_strength"
+  | "credit_spread"
+  | "inflation_expectation"
+  | "market_breadth";
 
-export type DaaMarketIndicatorCategory = "volatility" | "relative_value" | "sentiment";
-export type DaaMarketIndicatorScope = "us_equity" | "hk_cn_equity" | "crypto" | "macro_defensive";
+export type DaaMarketIndicatorCategory = "volatility" | "relative_value" | "sentiment" | "macro";
+export type DaaMarketIndicatorScope = "us_equity" | "hk_cn_equity" | "crypto" | "macro_defensive" | "macro_global";
+
+export type MacroCyclePhase = "recovery" | "overheating" | "stagflation" | "deflation";
 
 export type DaaMarketIndicatorSnapshot = {
   key: DaaMarketIndicatorKey;
@@ -55,6 +62,14 @@ export type DaaMarketContext = {
   reasons: string[];
   indicators: DaaMarketIndicatorSnapshot[];
   scopes: DaaMarketScopeContext[];
+  macroCycle?: {
+    phase: MacroCyclePhase;
+    growthProxy: number;
+    inflationProxy: number;
+    confidence: number;
+    label: string;
+    favoredAssets: string[];
+  } | null;
 };
 
 export type DaaMarketContextAttribution = {

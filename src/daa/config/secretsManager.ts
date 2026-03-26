@@ -11,6 +11,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import { daaPgPool } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Secret key definitions
@@ -65,9 +66,14 @@ function deriveEncryptionKey(): Buffer {
 
   const dbUrl = (process.env.DAA_DB_URL || "").trim();
   if (!dbUrl) {
-    console.warn("[secretsManager] DAA_SECRETS_ENCRYPTION_KEY 和 DAA_DB_URL 均未设置，使用固定密钥加密。建议在生产环境中配置 DAA_SECRETS_ENCRYPTION_KEY。");
+    // 生产环境：无密钥且无 DB URL 时，拒绝加密/解密操作
+    if ((process.env.NODE_ENV || "").toLowerCase() === "production") {
+      throw new Error("[secretsManager] 生产环境必须配置 DAA_SECRETS_ENCRYPTION_KEY 或 DAA_DB_URL，拒绝使用默认密钥。");
+    }
+    console.warn("[secretsManager] DAA_SECRETS_ENCRYPTION_KEY 和 DAA_DB_URL 均未设置，仅开发环境允许使用派生密钥。");
   }
-  cachedKey = createHash("sha256").update(`daa-secrets:${dbUrl || "daa-secrets-default-key"}`).digest();
+  // 非生产环境回退：从 DB URL 派生（或开发默认值）
+  cachedKey = createHash("sha256").update(`daa-secrets:${dbUrl || "daa-dev-only-key-" + process.pid}`).digest();
   return cachedKey;
 }
 
@@ -172,8 +178,8 @@ export async function resolveSecret(key: DaaSecretKey): Promise<string> {
       const row = result.rows[0] as { value: string; iv: string };
       return decrypt(row.value, row.iv);
     }
-  } catch {
-    // DB not available — fall through
+  } catch (err) {
+    logSwallowed("secretsManager.resolveSecret", err);
   }
 
   return "";
@@ -191,8 +197,8 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
       const r = row as { key: string; value: string; iv: string; updated_at: string };
       dbRows.set(r.key, r);
     }
-  } catch {
-    // DB not available
+  } catch (err) {
+    logSwallowed("secretsManager.listSecretStatuses", err);
   }
 
   return SECRET_KEY_DEFS_.map((def) => {
@@ -217,8 +223,8 @@ export async function listSecretStatuses(): Promise<DaaSecretStatus[]> {
       let plaintext = "";
       try {
         plaintext = decrypt(dbRow.value, dbRow.iv);
-      } catch {
-        // decryption failed — treat as empty
+      } catch (err) {
+        logSwallowed("secretsManager.decrypt", err);
       }
       if (plaintext) {
         return {

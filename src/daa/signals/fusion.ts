@@ -1,4 +1,6 @@
+import { clamp } from "@/src/core/math";
 import type { DaaHumanSignal } from "@/src/daa/hf/humanSignals";
+import type { MacroCyclePhase } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaNewsSignal } from "@/src/daa/signals/newsSignal";
 import type { DaaTechnicalSignal } from "@/src/daa/signals/technicalSignal";
 import type { DaaValuationSignal } from "@/src/daa/signals/valuationSignal";
@@ -41,14 +43,10 @@ export type BuildFusedOpportunitiesInput = {
   technicalSignals: DaaTechnicalSignal[];
   valuationSignals: DaaValuationSignal[];
   weights?: Partial<DaaFusionWeights>;
+  macroCyclePhase?: MacroCyclePhase | null;
+  assetClasses?: Record<string, string>;
 };
 
-function clamp(v: number, lo: number, hi: number): number {
-  if (!Number.isFinite(v)) return lo;
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
 
 function normalizeSymbol(value: unknown): string {
   return String(value || "").trim().toUpperCase();
@@ -130,6 +128,33 @@ function conflictPenalty(input: {
   };
 }
 
+const MACRO_PHASE_LABEL_: Record<MacroCyclePhase, string> = {
+  recovery: "复苏",
+  overheating: "过热",
+  stagflation: "滞胀",
+  deflation: "衰退",
+};
+
+function macroCycleAdjustment(phase: MacroCyclePhase | null | undefined, assetClass: string | null | undefined): number {
+  if (!phase || !assetClass) return 0;
+  const cls = assetClass.toUpperCase();
+  if (phase === "stagflation") {
+    if (cls === "EQUITY" || cls === "ETF") return -5;
+    if (cls === "COMMODITY") return 5;
+  }
+  if (phase === "deflation") {
+    if (cls === "BOND") return 5;
+    if (cls === "COMMODITY") return -3;
+  }
+  if (phase === "overheating") {
+    if (cls === "COMMODITY") return 3;
+  }
+  if (phase === "recovery") {
+    if (cls === "EQUITY" || cls === "ETF") return 3;
+  }
+  return 0;
+}
+
 function inferAction(score: number, confidence: number, riskTags: string[]): DaaOpportunityAction {
   if (riskTags.includes("thesis_drift") || riskTags.includes("weak_actor_quality")) {
     return "reduce_or_avoid";
@@ -186,7 +211,9 @@ export function buildFusedOpportunities(input: BuildFusedOpportunitiesInput): Da
       valuationConfidence,
     });
 
-    const finalScore = clamp(weighted - conflict.penalty, 0, 100);
+    const assetClass = input.assetClasses?.[symbol] ?? null;
+    const macroAdj = macroCycleAdjustment(input.macroCyclePhase, assetClass);
+    const finalScore = clamp(weighted + macroAdj - conflict.penalty, 0, 100);
     const confidence = clamp(
       humanConfidence * 0.42
       + newsConfidence * 0.2
@@ -206,6 +233,11 @@ export function buildFusedOpportunities(input: BuildFusedOpportunitiesInput): Da
     if (technical) reasons.push(`技术评分 ${technicalScore.toFixed(1)}%`);
     if (valuation) reasons.push(`估值评分 ${valuationScore.toFixed(1)}%`);
     reasons.push(...conflict.reasons);
+    if (macroAdj !== 0 && input.macroCyclePhase) {
+      const phaseLabel = MACRO_PHASE_LABEL_[input.macroCyclePhase];
+      const sign = macroAdj > 0 ? "+" : "";
+      reasons.push(`宏观周期（${phaseLabel}）：${assetClass ?? "?"} ${sign}${macroAdj}`);
+    }
     if (!human && !news && !technical && !valuation) reasons.push("缺少可用信号，按中性处理");
 
     const sourceRefs = [

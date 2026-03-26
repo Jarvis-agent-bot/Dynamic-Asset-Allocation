@@ -2,13 +2,9 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 export const runtime = "nodejs";
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
 
 type LlmHealthProbe = {
   reachable: boolean;

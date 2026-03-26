@@ -1,4 +1,6 @@
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import {
@@ -23,19 +25,6 @@ import type {
   WorkbenchRebalanceCycleReport,
 } from "./workbenchTypes";
 import { WorkbenchDomainError, type WorkbenchDomainErrorCode } from "./workbenchErrors";
-
-function toFinite(value: unknown, fallback = 0): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
-function toPositive(value: unknown, fallback = 0): number {
-    return Math.max(0, toFinite(value, fallback));
-}
-
-function normalizeText(value: unknown): string {
-    return String(value ?? "").trim();
-}
 
 function pickArray(value: unknown): string[] {
     if (!Array.isArray(value))
@@ -86,7 +75,8 @@ function normalizeTimeZoneOrUtc(value: unknown): string {
         new Intl.DateTimeFormat("en-US", { timeZone: text }).format(new Date());
         return text;
     }
-    catch {
+    catch (err) {
+        logSwallowed("workbenchShared.resolveTimezone", err);
         return "UTC";
     }
 }
@@ -126,8 +116,8 @@ function getZonedYmd(date: Date, timeZone: string): {
             return { year, month, day };
         }
     }
-    catch {
-        // ignored
+    catch (err) {
+        logSwallowed("workbenchShared.parseConfig", err);
     }
     return {
         year: date.getUTCFullYear(),
@@ -617,6 +607,9 @@ function mapStoreCycleToView(cycle: DaaStoreRebalanceCycle | null): RebalanceCyc
             model: String((cycle.llmDecisionSnapshot as Record<string, unknown>).model ?? ""),
             latencyMs: Number((cycle.llmDecisionSnapshot as Record<string, unknown>).latencyMs) || 0,
             generatedAt: String((cycle.llmDecisionSnapshot as Record<string, unknown>).generatedAt ?? ""),
+            reasoning: (cycle.llmDecisionSnapshot as Record<string, unknown>).reasoning
+                ? String((cycle.llmDecisionSnapshot as Record<string, unknown>).reasoning)
+                : undefined,
         } : null,
         createdAt: cycle.createdAt,
     };
@@ -891,8 +884,8 @@ async function appendTriggerEventSafe(input: {
             detailsJson: input.detailsJson || {},
         });
     }
-    catch {
-        // 触发日志失败不阻塞主流程
+    catch (err) {
+        logSwallowed("workbenchShared.appendTriggerEvent", err);
     }
 }
 
@@ -1123,8 +1116,8 @@ async function enrichRiskCheckWithCorrelation(
             overallStatus: hasBlock ? "block" : (hasWarn ? "warn" : "pass"),
             items,
         };
-    } catch {
-        // Correlation check failure should not block trading
+    } catch (err) {
+        logSwallowed("workbenchShared.correlationCheck", err);
         return {
             ...riskCheck,
             items: [

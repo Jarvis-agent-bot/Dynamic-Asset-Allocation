@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
 import type { LlmDecisionOutput, LlmPerAssetAdjustment } from "@/src/daa/llm/llmDecision";
 import { MARKET_SCOPE_LABEL_ZH_, resolveMarketScopeForAsset } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
@@ -64,10 +65,6 @@ type DecisionFusionResult = {
 
 const DESELECT_THRESHOLD = 0.15;
 
-function clamp(v: number, lo: number, hi: number): number {
-  if (!Number.isFinite(v)) return lo;
-  return Math.max(lo, Math.min(hi, v));
-}
 
 function buildMarketIndicatorFlags(marketContext: DaaMarketContext | null | undefined, scopeKeys: string[]): string[] {
   if (!marketContext) return [];

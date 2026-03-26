@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
+import { normalizeText } from "@/src/daa/utils/normalize";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaNotificationChannel = "telegram" | "feishu";
 
@@ -22,11 +24,6 @@ export type DaaNotificationDeliveryLog = {
   responseJson: Record<string, unknown> | null;
   createdAt: string;
 };
-
-function normalizeText(value: unknown, fallback = ""): string {
-  const text = String(value || "").trim();
-  return text || fallback;
-}
 
 function toIsoString(value: unknown, fallback = new Date().toISOString()): string {
   if (value instanceof Date) {
@@ -50,7 +47,8 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch {
+    } catch (err) {
+      logSwallowed("notificationDeliveryLogRepo.parseJsonb", err);
       return null;
     }
   }

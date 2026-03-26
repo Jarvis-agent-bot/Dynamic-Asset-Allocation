@@ -16,6 +16,7 @@ import {
   upsertDaaHfSignalSnapshots,
 } from "@/src/daa/store/daaStorePg";
 import { HF_DEFAULT_MARKET_SCOPE_, HF_SEED_ACTORS_, HF_SEED_HOLDINGS_ } from "@/src/daa/hf/hfSeedData";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type {
   DaaActorHoldingSnapshot,
   DaaHumanActor,
@@ -542,8 +543,8 @@ async function fetchDanjuanRows(opts: {
         };
       })
       .filter((item) => item.fundCode.length > 0 && item.enabled);
-  } catch {
-    // 数据源读取失败时回退到本地默认配置，避免采集中断。
+  } catch (err) {
+    logSwallowed("hfService.resolveRegistry", err);
   }
 
   const requestedCodes = normalizeFundCodes(opts.fundCodes);
@@ -746,8 +747,8 @@ async function ensureRuntimeHydratedFromStore(): Promise<void> {
         runtimeState.latestActors = sanitizeActorsFromStore(persisted.latestActors);
         runtimeState.latestHoldings = sanitizeHoldingsFromStore(persisted.latestHoldings);
       }
-    } catch {
-      // ignore store hydration failures and fall back to in-memory/seed.
+    } catch (err) {
+      logSwallowed("hfService.hydrateFromStore", err);
     } finally {
       runtimeState.hydratedFromStore = true;
       runtimeHydrationPromise = null;
@@ -764,7 +765,7 @@ function shouldUseCache(maxAgeMs = 6 * 60 * 60 * 1000): boolean {
   return Date.now() - ts < maxAgeMs;
 }
 
-export type DaaFundManagerOperation = {
+type DaaFundManagerOperation = {
   symbol: string;
   actorId: string;
   fundCode: string;
@@ -778,7 +779,7 @@ export type DaaFundManagerOperation = {
   confidencePct: number;
 };
 
-export type DaaFundManagerOpsBySymbol = {
+type DaaFundManagerOpsBySymbol = {
   symbol: string;
   generatedAt: string;
   sourceStatus: "live" | "fallback_seed" | "unknown";
@@ -866,13 +867,13 @@ async function buildDanjuanSignalBatch(opts: {
   };
 }
 
-export function listHumanActors(opts: { marketScope?: string[] } = {}): DaaHumanActor[] {
+function listHumanActors(opts: { marketScope?: string[] } = {}): DaaHumanActor[] {
   const scope = new Set(normalizeMarketScope(opts.marketScope));
   const source = runtimeState.latestActors.length > 0 ? runtimeState.latestActors : HF_SEED_ACTORS_;
   return source.filter((actor) => actor.markets.some((m) => matchesScope(m, scope))).map((actor) => ({ ...actor }));
 }
 
-export function listActorHoldings(actorId: string, opts: { marketScope?: string[] } = {}): DaaActorHoldingSnapshot[] {
+function listActorHoldings(actorId: string, opts: { marketScope?: string[] } = {}): DaaActorHoldingSnapshot[] {
   const normalizedActorId = String(actorId || "").trim();
   if (!normalizedActorId) return [];
 
@@ -884,7 +885,7 @@ export function listActorHoldings(actorId: string, opts: { marketScope?: string[
     .map((row) => ({ ...row }));
 }
 
-export async function listFundManagerOperationsBySymbols(opts: {
+async function listFundManagerOperationsBySymbols(opts: {
   symbols: string[];
   marketScope?: string[];
   topN?: number;
@@ -965,7 +966,7 @@ export async function listFundManagerOperationsBySymbols(opts: {
   return out;
 }
 
-export function computeHumanSignalBatch(opts: { marketScope?: string[]; symbols?: string[] } = {}): DaaHumanSignalBatch {
+function computeHumanSignalBatch(opts: { marketScope?: string[]; symbols?: string[] } = {}): DaaHumanSignalBatch {
   return buildSeedSignalBatch(opts);
 }
 
@@ -1046,8 +1047,8 @@ export async function runHumanIngest(opts: {
             expireAt: new Date(Date.now() + HF_RAW_RETENTION_DAYS_ * 24 * 3600 * 1000).toISOString(),
           });
           rawRefByFundReport.set(`${payload.fundCode}::${payload.reportDate}`, raw.id);
-        } catch {
-          // ignore raw persist errors
+        } catch (err) {
+          logSwallowed("hfService.persistRaw", err);
         }
       }
     }
@@ -1145,7 +1146,7 @@ export async function getLatestHumanSignalBatch(opts: {
   return ingest.batch;
 }
 
-export function getHumanIngestRuntimeState(): RuntimeHumanFactorState {
+function getHumanIngestRuntimeState(): RuntimeHumanFactorState {
   return {
     lastIngestAt: runtimeState.lastIngestAt,
     ingestCount: runtimeState.ingestCount,

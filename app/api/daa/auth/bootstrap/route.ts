@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { fail, ok } from "@/src/daa/api/routeHelpers";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -9,13 +10,37 @@ export const runtime = "nodejs";
  * Bootstrap endpoint: create the first admin account via Supabase Admin API.
  *
  * Requires SUPABASE_SERVICE_ROLE_KEY (server-side only, never exposed to client).
- * This is a one-time setup endpoint.
+ * This is a one-time setup endpoint — only allowed when no accounts exist yet.
  */
 export async function POST(req: Request) {
+  // --- P0 安全守卫：仅在无账号时允许 bootstrap ---
+  const supabaseUrlPre = await resolveSecret("supabase_url");
+  const serviceRoleKeyPre = await resolveSecret("supabase_service_role_key");
+  if (supabaseUrlPre && serviceRoleKeyPre) {
+    try {
+      const adminCheck = createClient(supabaseUrlPre, serviceRoleKeyPre, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { data: existingUsers } = await adminCheck.auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (existingUsers && existingUsers.users && existingUsers.users.length > 0) {
+        return fail("UNAUTHORIZED", "bootstrap 已完成，系统已存在账号，禁止再次调用此端点", { status: 403 });
+      }
+    } catch (err) {
+      logSwallowed("bootstrapRoute.guardCheck", err);
+      // 如果检查失败但在生产环境，拒绝请求
+      if ((process.env.NODE_ENV || "").toLowerCase() === "production") {
+        return fail("INTERNAL_ERROR", "无法验证系统状态，生产环境已拒绝 bootstrap", { status: 500 });
+      }
+    }
+  } else if (process.env.DAA_PG_MEM !== "1") {
+    // 密钥未配置且非内存模式 → 拒绝 bootstrap（防止无守卫穿透）
+    return fail("INTERNAL_ERROR", "supabase 密钥未配置，无法执行 bootstrap", { status: 500 });
+  }
   let body: any = null;
   try {
     body = await req.json();
-  } catch {
+  } catch (err) {
+  logSwallowed("bootstrapRoute.parseBody", err);
     body = null;
   }
 
@@ -60,6 +85,7 @@ export async function POST(req: Request) {
       bootstrapped: true,
     });
   } catch (error: any) {
-    return fail("INTERNAL_ERROR", error?.message || String(error), { status: 500 });
+    console.error("[bootstrap] error:", error?.message || String(error));
+    return fail("INTERNAL_ERROR", "bootstrap_failed", { status: 500 });
   }
 }

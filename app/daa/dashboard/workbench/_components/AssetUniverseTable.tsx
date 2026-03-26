@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { Loader2, MoreHorizontal, Search } from "lucide-react";
+import { Fragment, useMemo, useState, useCallback } from "react";
+import { Info, Loader2, MoreHorizontal, Search } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -34,6 +34,7 @@ import {
   daaSurfaceTableHeadClassName,
   daaSurfaceTableShellClassName,
 } from "../../_components/DaaSurfaceUI";
+import { FusionScoreBreakdown } from "./FusionScoreBreakdown";
 
 type AssetUniverseViewFilter = "all" | "holdings" | "watchlist" | "basket";
 type HoldingGroupKey = "stock" | "etf" | "bond" | "crypto";
@@ -475,6 +476,7 @@ function InlineInsights(props: {
     type: "insight";
     score: WorkbenchLlmFeedbackScore;
   }) => void;
+  onOpenFusionBreakdown?: () => void;
 }) {
   if (props.loading) {
     return (
@@ -586,6 +588,17 @@ function InlineInsights(props: {
                   <DaaSurfaceStatusPill tone="cyan">{opportunity.actionLabelZh}</DaaSurfaceStatusPill>
                   <DaaSurfaceStatusPill tone="indigo">强度 {opportunity.finalScorePct.toFixed(1)}%</DaaSurfaceStatusPill>
                   <DaaSurfaceStatusPill tone="slate">一致性 {opportunity.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
+                  {props.onOpenFusionBreakdown && opportunity.scores ? (
+                    <button
+                      type="button"
+                      onClick={props.onOpenFusionBreakdown}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--primary)]"
+                      title="查看融合分解"
+                    >
+                      <Info className="h-3 w-3" />
+                      分解
+                    </button>
+                  ) : null}
                 </div>
                 {opportunity.scores ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -941,7 +954,29 @@ export default function AssetUniverseTable(props: {
 }) {
   const [keyword, setKeyword] = useState("");
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
+  const [fusionBreakdownKey, setFusionBreakdownKey] = useState<string | null>(null);
   const hasKeyword = keyword.trim().length > 0;
+
+  const fusionBreakdownData = useMemo(() => {
+    if (!fusionBreakdownKey) return null;
+    const insight = props.insightDataByAssetKey[fusionBreakdownKey];
+    if (!insight?.opportunity) return null;
+    return {
+      symbol: insight.symbol,
+      scores: insight.opportunity.scores ?? null,
+      finalScore: insight.opportunity.finalScorePct,
+      confidence: insight.opportunity.confidencePct,
+      action: insight.opportunity.action,
+    };
+  }, [fusionBreakdownKey, props.insightDataByAssetKey]);
+
+  const handleOpenFusionBreakdown = useCallback((assetKey: string) => {
+    setFusionBreakdownKey(assetKey);
+  }, []);
+
+  const handleCloseFusionBreakdown = useCallback((open: boolean) => {
+    if (!open) setFusionBreakdownKey(null);
+  }, []);
 
   const filteredRows = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -1398,6 +1433,7 @@ export default function AssetUniverseTable(props: {
                             feedbackSubmitting={Boolean(props.llmFeedbackSubmittingByContext[feedbackContextId || ""])}
                             feedbackScore={feedbackContextId ? props.llmFeedbackScoreByContext[feedbackContextId] || null : null}
                             onSubmitFeedback={props.onSubmitLlmFeedback}
+                            onOpenFusionBreakdown={() => handleOpenFusionBreakdown(row.assetKey)}
                           />
                         </td>
                       </tr>
@@ -1432,6 +1468,17 @@ export default function AssetUniverseTable(props: {
           </table>
         </TooltipProvider>
       </div>
+
+      {/* Fusion score breakdown dialog */}
+      <FusionScoreBreakdown
+        symbol={fusionBreakdownData?.symbol ?? ""}
+        scores={fusionBreakdownData?.scores ?? null}
+        finalScore={fusionBreakdownData?.finalScore ?? 0}
+        confidence={fusionBreakdownData?.confidence ?? 0}
+        action={fusionBreakdownData?.action ?? ""}
+        open={fusionBreakdownKey !== null && fusionBreakdownData !== null}
+        onOpenChange={handleCloseFusionBreakdown}
+      />
     </DaaSurfacePanel>
   );
 }

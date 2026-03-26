@@ -5,6 +5,7 @@ import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -103,8 +104,8 @@ export async function POST(req: Request) {
         }
         await Promise.allSettled(sends);
       }
-    } catch {
-      // 通知失败不阻塞主流程
+    } catch (err) {
+  logSwallowed("driftCheckRoute.notify", err);
     }
 
     return ok({

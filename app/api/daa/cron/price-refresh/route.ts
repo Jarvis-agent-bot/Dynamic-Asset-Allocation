@@ -11,6 +11,8 @@ import {
   listDaaAssetUniverse,
   updateDaaAssetUniverseLastPrice,
 } from "@/src/daa/store/daaStorePg";
+import { batchUpdateDaaAssetUniverseLastPrices } from "@/src/daa/store/assetUniverseStore";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -121,28 +123,31 @@ export async function POST(req: Request) {
           rawRetentionDays: marketCache.rawRetentionDays,
         });
 
-        const refreshedAssetKeys: string[] = [];
+        // P1-3 性能优化：收集待更新项，然后批量 UPDATE（替代 N+1 查询）
+        const batchItems: Array<{ assetKey: string; lastPrice: number; priceUpdatedAt: string }> = [];
         const historyRows: Array<{ assetKey: string; ts?: string; price: number; source?: string }> = [];
         for (const row of assetRows) {
           const key = `${normalizeUpper(row.market, "US")}::${normalizeUpper(row.symbol)}`;
           const priced = result.results[key];
           if (!priced || !(priced.price > 0)) continue;
           if (!priced.priceUpdatedAt) continue;
-          const updatedAt = priced.priceUpdatedAt;
-          const updated = await updateDaaAssetUniverseLastPrice({
+          batchItems.push({
             assetKey: row.assetKey,
             lastPrice: priced.price,
-            priceUpdatedAt: updatedAt,
+            priceUpdatedAt: priced.priceUpdatedAt,
           });
-          if (!updated) continue;
-          refreshedAssetKeys.push(updated.assetKey);
           historyRows.push({
-            assetKey: updated.assetKey,
+            assetKey: row.assetKey,
             price: priced.price,
-            ts: updatedAt,
+            ts: priced.priceUpdatedAt,
             source: "cron_price_refresh",
           });
         }
+
+        // 单次事务批量更新所有价格
+        const refreshedAssetKeys = batchItems.length > 0
+          ? await batchUpdateDaaAssetUniverseLastPrices(batchItems)
+          : [];
 
         if (historyRows.length > 0) {
           await appendAssetPriceHistoryRows(historyRows);
@@ -153,8 +158,8 @@ export async function POST(req: Request) {
         try {
           const divResult = await extractDividendsFromRawPayloads({ sinceDays: 1 });
           dividendExtracted = divResult.extracted;
-        } catch {
-          // Dividend extraction failure should not block price refresh
+        } catch (err) {
+  logSwallowed("priceRefreshRoute.dividendExtraction", err);
         }
 
         return {

@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { ApiClientError, getApiErrorMessage } from "@/src/daa/api/client";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import type { WorkbenchReadModel } from "@/src/daa/modules/read/readModels";
 import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
+import { usePriceStream, type PriceUpdate } from "./usePriceStream";
 
 export type WorkbenchTab = "positions" | "watchlist" | "rebalance" | "cash";
 
@@ -48,6 +49,7 @@ export function useWorkbenchModel(input: {
   const cashLedger = data?.cashLedger ?? [];
   const signals = data?.signals ?? [];
   const allocationSummary = data?.allocationSummary ?? null;
+  const equityDelta = data?.equityDelta ?? null;
   const ledgerMeta = data?.ledgerMeta ?? null;
   const notificationStatus = data?.notificationStatus ?? null;
 
@@ -111,6 +113,19 @@ export function useWorkbenchModel(input: {
 
   useDashboardAutoRefresh(loadBootstrap);
 
+  // --- SSE 实时价格流 ---
+  const assetKeys = useMemo(() => {
+    const rows = bootstrap?.assetUniverse || [];
+    return rows.map((r: { assetKey?: string }) => r.assetKey || "").filter(Boolean);
+  }, [bootstrap?.assetUniverse]);
+
+  const priceStream = usePriceStream(assetKeys);
+
+  // 将流式价格合并到 bootstrap（不修改原始 data，仅在渲染层覆盖）
+  const livePrices: Map<string, PriceUpdate> = priceStream.prices;
+  const priceStreamConnected = priceStream.connected;
+  const priceStreamLastUpdate = priceStream.lastUpdate;
+
   return {
     activeTab,
     setActiveTab,
@@ -121,6 +136,7 @@ export function useWorkbenchModel(input: {
     cashLedger,
     signals,
     allocationSummary,
+    equityDelta,
     ledgerMeta,
     notificationStatus,
     setCycles,
@@ -133,5 +149,9 @@ export function useWorkbenchModel(input: {
     error,
     authRequired,
     loadBootstrap,
+    // 实时价格流
+    livePrices,
+    priceStreamConnected,
+    priceStreamLastUpdate,
   };
 }

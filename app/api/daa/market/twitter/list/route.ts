@@ -2,13 +2,15 @@ import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 
 import { clampLimit, fetchTextWithTimeout, getProviderErrorStatus, mustGetEnv } from "../../_lib/providerAdapters";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
 function parseJsonBestEffort(text: string): unknown {
   try {
     return JSON.parse(text);
-  } catch {
+  } catch (err) {
+  logSwallowed("twitterListRoute.parseJson", err);
     return { raw: text };
   }
 }

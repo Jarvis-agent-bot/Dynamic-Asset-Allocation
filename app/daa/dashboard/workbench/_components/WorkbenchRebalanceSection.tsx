@@ -76,7 +76,7 @@ export function WorkbenchRebalanceSection(props: {
   onNavigateTab: (tab: WorkbenchTab) => void;
   onGenerateCycle: () => Promise<void>;
   onOpenExecuteDialog: (mode: "selected" | "all") => void;
-  onCancelCycle: () => Promise<void>;
+  onCancelCycle: () => void;
   onSelectAllProposals: (selected: boolean) => Promise<void>;
   onToggleProposal: (assetKey: string, side: "BUY" | "SELL", selected: boolean) => Promise<void>;
   onSubmitLlmFeedback: (input: { contextId: string; type: "decision"; score: WorkbenchLlmFeedbackScore; comment?: string }) => Promise<void>;
@@ -126,7 +126,7 @@ export function WorkbenchRebalanceSection(props: {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
               <DropdownMenuItem onClick={() => props.onOpenExecuteDialog("all")} disabled={!props.canExecuteAll}>执行全部（需确认）</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void props.onCancelCycle()} disabled={!props.currentCycle || props.isCurrentCycleTerminal || props.busy}>取消本次再平衡</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => props.onCancelCycle()} disabled={!props.currentCycle || props.isCurrentCycleTerminal || props.busy}>取消本次再平衡</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild><Link href="/daa/dashboard/trades">查看历史详情</Link></DropdownMenuItem>
             </DropdownMenuContent>

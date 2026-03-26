@@ -41,7 +41,8 @@
     "lib/**/*.tsx",
     "instrumentation.ts",
     "middleware.ts",
-    ".next-check/types/**/*.ts"
+    ".next-check/types/**/*.ts",
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

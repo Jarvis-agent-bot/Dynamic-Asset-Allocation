@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { daaPgPool } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { normalizeText } from "@/src/daa/utils/normalize";
 
 export type DaaAgentLearningEvent = {
   eventId: string;
@@ -13,10 +15,6 @@ export type DaaAgentLearningEvent = {
   createdAt: string;
   contextJson: Record<string, unknown>;
 };
-
-function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 function toIsoString(value: unknown): string {
   if (value instanceof Date) {
@@ -40,7 +38,8 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
     try {
       const parsed = JSON.parse(value);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-    } catch {
+    } catch (err) {
+      logSwallowed("agentLearningRepo.parseJsonb", err);
       return {};
     }
   }

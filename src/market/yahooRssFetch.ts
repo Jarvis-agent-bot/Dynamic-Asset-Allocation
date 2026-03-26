@@ -1,3 +1,4 @@
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 export type YahooRssItem = {
   title: string;
   link?: string;
@@ -102,7 +103,8 @@ export async function fetchYahooRssFeedBySymbol(symbolRaw: string, limit = 20): 
       payloadText: xml,
       items: parseYahooRssXml(xml, limit),
     };
-  } catch {
+  } catch (err) {
+  logSwallowed("yahooRssFetch.fetchFeed", err);
     return {
       symbol,
       requestUrl: rss.toString(),

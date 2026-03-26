@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { renderHook, act } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { renderHook, act, cleanup } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
 import { useWorkbenchExecutionFlow } from "../workbench/useWorkbenchExecutionFlow";
 import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -49,6 +49,10 @@ function makeInput(overrides?: Record<string, unknown>) {
 }
 
 describe("useWorkbenchExecutionFlow", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     const api = await import("@/src/daa/modules/workbench/workbenchApi");

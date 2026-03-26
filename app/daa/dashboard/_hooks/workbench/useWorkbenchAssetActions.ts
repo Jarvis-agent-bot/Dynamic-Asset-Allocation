@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import type { CalibrationDraft, OrderDraft } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
@@ -63,8 +64,8 @@ export function useWorkbenchAssetActions(input: {
         includeLlm: false,
       }).then((data) => {
         setInsightDataByAssetKey((prev) => ({ ...prev, [row.assetKey]: data }));
-      }).catch(() => {
-        // 忽略预取失败
+      }).catch((err) => {
+        logSwallowed("useWorkbenchAssetActions.prefetchInsight", err);
       }).finally(() => {
         setInsightLoadingByAssetKey((prev) => ({ ...prev, [row.assetKey]: false }));
       });
@@ -211,7 +212,20 @@ export function useWorkbenchAssetActions(input: {
     try {
       await patchWorkbenchAsset(row.assetKey, { watchEnabled: false, targetWeightHint: 0 });
       setExpandedInsightKeys((prev) => ({ ...prev, [row.assetKey]: false }));
-      toast.success(`${row.symbol} 已移出观察列表`);
+      toast.success(`${row.symbol} 已移出观察列表`, {
+        action: {
+          label: "撤销",
+          onClick: async () => {
+            try {
+              await patchWorkbenchAsset(row.assetKey, { watchEnabled: true });
+              toast.success(`${row.symbol} 已恢复到观察列表`);
+              await input.loadBootstrap(true);
+            } catch {
+              toast.error("撤销失败，请手动重新添加");
+            }
+          },
+        },
+      });
       await input.loadBootstrap(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "移除观察失败");

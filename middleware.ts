@@ -11,6 +11,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL(`${normalized}${search}`, req.url));
   }
 
+  // Dev bypass: DAA_PG_MEM=1 时跳过 Supabase 认证（仅开发/测试环境）
+  if (process.env.DAA_PG_MEM === "1") {
+    return NextResponse.next();
+  }
+
   // Login page is always accessible.
   if (pathname === "/daa/login" || pathname.startsWith("/daa/login/")) {
     // Still refresh session so auto-redirect works if already signed in.

@@ -1,5 +1,5 @@
 import { appendAgentLearningEvent } from "@/src/daa/agent/agentLearningRepo";
-import { executeRebalanceViaGateway } from "@/src/daa/gateway";
+import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 import { appendChatToolCall } from "./chatRepo";

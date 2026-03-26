@@ -28,7 +28,7 @@ export function RebalanceCycleHistory(props: {
               type="button"
               onClick={() => props.onSelectCycle(cycle)}
               className={cn(
-                "w-full rounded-[14px] border px-4 py-3 text-left transition-all",
+                "w-full rounded-[14px] border px-4 py-3 text-left transition-colors",
                 active
                   ? "border-[var(--primary)]/32 bg-[rgba(56,189,248,0.10)]"
                   : "border-[var(--border)] bg-[rgba(8,12,20,0.42)] hover:border-[var(--border-strong)] hover:bg-[var(--hover)]",

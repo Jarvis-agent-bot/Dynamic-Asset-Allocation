@@ -1,6 +1,7 @@
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
-import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionResult } from "@/src/daa/broker";
+import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionResult } from "./executionVenue";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildFxLookupToBase, resolveFxRateToBase } from "@/src/daa/modules/portfolio/portfolioValuation";
@@ -14,6 +15,7 @@ import {
   listDaaTradeTickets,
   updateDaaAssetUniverseLastPrice,
 } from "@/src/daa/store/daaStorePg";
+import { toPositive } from "@/src/daa/utils/normalize";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
@@ -93,12 +95,6 @@ export type ExecuteManualTradeInput = {
 };
 
 export type ExecuteManualTradeResult = DaaBrokerBackedExecutionResult;
-
-function toPositive(v: unknown): number {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return n;
-}
 
 function toNonNegative(v: unknown): number | null {
   if (v == null || String(v).trim() === "") return null;
@@ -580,8 +576,8 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       limit: 50,
     });
     syncedTicket = synced.tickets[0] || syncedTicket;
-  } catch {
-    // broker 已受理时，不因为首次同步失败阻断响应
+  } catch (err) {
+    logSwallowed("manualTradeService.syncBrokerOrders", err);
   }
 
   const logs = await listDaaTradeTickets({ limit: 200 });

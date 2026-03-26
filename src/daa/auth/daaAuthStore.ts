@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
 import { ensureDaaAuthSchemaPg, isDaaPgEnabled, isDaaPgMemRuntime, withDaaPgClient } from "../pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { isPgUniqueViolation } from "@/src/daa/store/storeShared";
 
 export type DaaAuthRole = "viewer" | "editor";
 export type DaaAuthAccountStatus = "active" | "inactive";
@@ -89,7 +91,8 @@ function parseJsonArrayOrEmpty(raw: unknown): any[] {
   try {
     const v = JSON.parse(raw);
     return Array.isArray(v) ? v : [];
-  } catch {
+  } catch (err) {
+    logSwallowed("daaAuthStore.parseJsonArrayOrEmpty", err);
     return [];
   }
 }
@@ -143,7 +146,8 @@ export function verifyPassword(passwordRaw: unknown, storedHashRaw: unknown): bo
   const actual = scryptSync(password, salt, expect.length, { N, r, p });
   try {
     return timingSafeEqual(actual, expect);
-  } catch {
+  } catch (err) {
+    logSwallowed("daaAuthStore.verifyPassword", err);
     return false;
   }
 }
@@ -167,11 +171,6 @@ function addDaysIso(iso: string, days: number): string {
   return d.toISOString();
 }
 
-function isPgUniqueViolation(e: any): boolean {
-  // pg error code 23505 = unique_violation.
-  return Boolean(e && typeof e === "object" && (e as any).code === "23505");
-}
-
 async function ensureAuthSchemaIfPg(): Promise<void> {
   if (!isDaaPgEnabled()) throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   await ensureDaaAuthSchemaPg();
@@ -182,7 +181,8 @@ function rowToAuthAuditEvent(row: any): DaaAuthAuditEventListRow {
   if (row?.payload_json && typeof row.payload_json === "string") {
     try {
       payload = JSON.parse(row.payload_json);
-    } catch {
+    } catch (err) {
+      logSwallowed("daaAuthStore.rowToAuthAuditEvent", err);
       payload = {};
     }
   }
@@ -439,8 +439,8 @@ export async function bootstrapCreateFirstDaaAuthAccount(args: {
         } catch (e) {
           try {
             await query("ROLLBACK");
-          } catch {
-            // ignore
+          } catch (err) {
+            logSwallowed("daaAuthStore.createAccount.rollback", err);
           }
           throw e;
         }

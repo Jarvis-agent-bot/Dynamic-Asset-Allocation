@@ -1,3 +1,4 @@
+import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
 import {
   getMarketIndicatorRefreshSymbols,
@@ -28,6 +29,7 @@ import {
   type DaaStoreMarketIndicatorSnapshot,
 } from "@/src/daa/store/daaStorePg";
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type RefreshMarketIndicatorsResult = {
   marketContext: DaaMarketContext | null;
@@ -49,10 +51,6 @@ type ComputedIndicatorRow = {
   subjectKey: string;
 };
 
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, value));
-}
 
 function round(value: number, digits = 2): number {
   if (!Number.isFinite(value)) return 0;
@@ -169,7 +167,8 @@ async function fetchDailyCloseBars(symbolRaw: string, days: number): Promise<Dai
       });
     }
     return out.slice(-safeDays);
-  } catch {
+  } catch (err) {
+    logSwallowed("marketIndicatorService.fetchDailyCloses", err);
     return [];
   }
 }
@@ -297,7 +296,7 @@ async function computeVixIndicator(getBars: (symbol: string, days: number) => Pr
 }
 
 async function computeRatioIndicator(input: {
-  key: "qqq_spy_ratio" | "kweb_fxi_ratio" | "gold_silver_ratio" | "btc_eth_ratio";
+  key: DaaMarketIndicatorKey;
   leftSymbol: string;
   rightSymbol: string;
   riskDirection: "high_is_risk_off" | "low_is_risk_off";
@@ -345,7 +344,7 @@ async function computeRatioIndicator(input: {
 }
 
 async function computeRealizedVolIndicator(input: {
-  key: "fxi_volatility" | "btc_volatility";
+  key: DaaMarketIndicatorKey;
   symbol: string;
   highReason: string;
   lowReason: string;
@@ -457,6 +456,69 @@ async function computeEnabledIndicators(config: DaaMarketIndicatorsConfig): Prom
     }));
   }
 
+  // 收益率曲线斜率 (IEF/SHY)
+  if (config.indicators.yieldCurveSpread?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "yield_curve_spread",
+      leftSymbol: "IEF",
+      rightSymbol: "SHY",
+      riskDirection: "low_is_risk_off",
+      highReason: "收益率曲线陡峭，经济扩张信号",
+      lowReason: "收益率曲线平坦/倒挂，衰退风险上升",
+      getBars,
+    }));
+  }
+
+  // 美元强弱 (UUP)
+  if (config.indicators.usdStrength?.enabled) {
+    rows.push(computeRealizedVolIndicator({
+      key: "usd_strength",
+      symbol: "UUP",
+      highReason: "美元走强波动加剧，新兴市场承压",
+      lowReason: "美元走弱波动平稳，全球风险偏好回暖",
+      getBars,
+    }));
+  }
+
+  // 信用利差 (HYG/LQD)
+  if (config.indicators.creditSpread?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "credit_spread",
+      leftSymbol: "HYG",
+      rightSymbol: "LQD",
+      riskDirection: "low_is_risk_off",
+      highReason: "高收益债表现强势，信用环境宽松",
+      lowReason: "信用利差扩大，信用风险上升",
+      getBars,
+    }));
+  }
+
+  // 通胀预期 (TIP/IEF)
+  if (config.indicators.inflationExpectation?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "inflation_expectation",
+      leftSymbol: "TIP",
+      rightSymbol: "IEF",
+      riskDirection: "high_is_risk_off",
+      highReason: "通胀预期升温，实物资产受益",
+      lowReason: "通胀预期回落，名义债券相对占优",
+      getBars,
+    }));
+  }
+
+  // 市场广度 (RSP/SPY)
+  if (config.indicators.marketBreadth?.enabled) {
+    rows.push(computeRatioIndicator({
+      key: "market_breadth",
+      leftSymbol: "RSP",
+      rightSymbol: "SPY",
+      riskDirection: "low_is_risk_off",
+      highReason: "市场广度良好，涨幅分散健康",
+      lowReason: "市场窄幅上涨，风险集中于头部",
+      getBars,
+    }));
+  }
+
   const resolved = await Promise.all(rows);
   const expireAt = buildExpireAt(config.refreshIntervalMinutes, new Date().toISOString());
   return resolved
@@ -531,8 +593,8 @@ export async function getCurrentMarketContext(input: {
   if (input.forceRefresh) {
     try {
       return (await refreshMarketIndicators()).marketContext;
-    } catch {
-      // fallback to stored snapshots below
+    } catch (err) {
+      logSwallowed("marketIndicatorService.forceRefresh", err);
     }
   }
 
@@ -543,7 +605,8 @@ export async function getCurrentMarketContext(input: {
 
   try {
     return (await refreshMarketIndicators()).marketContext;
-  } catch {
+  } catch (err) {
+    logSwallowed("marketIndicatorService.refreshFallback", err);
     if (!latestSnapshots.length || input.allowStale !== true) return null;
     return buildContextFromStoredSnapshots({ snapshots: latestSnapshots, config });
   }

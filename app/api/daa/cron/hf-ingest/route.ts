@@ -2,6 +2,7 @@ import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runHumanIngest } from "@/src/daa/hf/hfService";
 import { appendDaaIngestJobLog } from "@/src/daa/store/daaStorePg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -56,8 +57,8 @@ export async function POST(req: Request) {
             error: describeError(error),
           },
         });
-      } catch {
-        // ignore job log failure
+      } catch (err) {
+  logSwallowed("hfIngestRoute.jobLog", err);
       }
       throw error;
     }

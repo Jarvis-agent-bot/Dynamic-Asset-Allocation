@@ -4,6 +4,7 @@ import { preferAssetRowPrice } from "@/src/daa/modules/workbench/preferAssetRowP
 import { upsertDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -67,7 +68,8 @@ export async function POST(req: Request) {
     let resolvedRow = row;
     try {
       resolvedRow = await preferAssetRowPrice(row, "asset_upsert");
-    } catch {
+    } catch (err) {
+  logSwallowed("upsertRoute.resolveAsset", err);
       resolvedRow = row;
     }
     return ok({ row: resolvedRow });
