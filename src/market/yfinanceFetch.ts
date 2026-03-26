@@ -34,9 +34,8 @@ export async function fetchYfinanceLatestClose(symbolRaw: string): Promise<{ sym
 
     const payload = await response.json() as any;
     const timestamps = Array.isArray(payload?.chart?.result?.[0]?.timestamp) ? payload.chart.result[0].timestamp : [];
-    const closes = Array.isArray(payload?.chart?.result?.[0]?.indicators?.quote?.[0]?.close)
-      ? payload.chart.result[0].indicators.quote[0].close
-      : [];
+    const quote0 = payload?.chart?.result?.[0]?.indicators?.quote?.[0] ?? {};
+    const closes = Array.isArray(quote0?.close) ? quote0.close : [];
 
     if (!timestamps.length || !closes.length) return null;
 

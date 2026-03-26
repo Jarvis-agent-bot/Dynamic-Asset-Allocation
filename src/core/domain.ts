@@ -3,6 +3,10 @@ export type ISODate = string;
 export type PriceBar = {
   date: ISODate;
   close: number;
+  open?: number;
+  high?: number;
+  low?: number;
+  volume?: number;
 };
 
 /**

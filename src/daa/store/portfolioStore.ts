@@ -268,7 +268,7 @@ export async function buildPortfolioSnapshotFromAssetUniverseInTx(
   };
 }
 
-export async function appendAssetPriceHistoryRows(rows: Array<{ assetKey: string; ts?: string; price: number; source?: string }>): Promise<number> {
+export async function appendAssetPriceHistoryRows(rows: Array<{ assetKey: string; ts?: string; price: number; source?: string; open?: number; high?: number; low?: number; volume?: number }>): Promise<number> {
   if (!rows.length) return 0;
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
@@ -285,10 +285,20 @@ export async function appendAssetPriceHistoryRows(rows: Array<{ assetKey: string
         if (!assetKey || price <= 0) continue;
         const ts = toIsoString(row.ts, new Date().toISOString());
         const source = normalizeText(row.source, "yfinance");
+        const openPrice = row.open != null && Number.isFinite(row.open) && row.open > 0 ? row.open : null;
+        const highPrice = row.high != null && Number.isFinite(row.high) && row.high > 0 ? row.high : null;
+        const lowPrice = row.low != null && Number.isFinite(row.low) && row.low > 0 ? row.low : null;
+        const volume = row.volume != null && Number.isFinite(row.volume) && row.volume >= 0 ? row.volume : null;
 
         await query(
-          "INSERT INTO daa_price_history (symbol, ts, price, source) VALUES ($1,$2,$3,$4) ON CONFLICT (symbol, ts) DO UPDATE SET price = EXCLUDED.price, source = EXCLUDED.source",
-          [assetKey, ts, price, source],
+          `INSERT INTO daa_price_history (symbol, ts, price, source, open_price, high_price, low_price, volume)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+           ON CONFLICT (symbol, ts) DO UPDATE SET price = EXCLUDED.price, source = EXCLUDED.source,
+             open_price = COALESCE(EXCLUDED.open_price, daa_price_history.open_price),
+             high_price = COALESCE(EXCLUDED.high_price, daa_price_history.high_price),
+             low_price = COALESCE(EXCLUDED.low_price, daa_price_history.low_price),
+             volume = COALESCE(EXCLUDED.volume, daa_price_history.volume)`,
+          [assetKey, ts, price, source, openPrice, highPrice, lowPrice, volume],
         );
         inserted += 1;
       }

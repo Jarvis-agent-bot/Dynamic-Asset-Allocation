@@ -1,10 +1,11 @@
 /**
  * 基准对比服务 — 计算组合 vs SPY vs 60/40 的归一化收益曲线
  *
- * daa_price_history 表中 symbol 列存储的是 assetKey 格式（如 "US:SPY"），
+ * daa_price_history 表中 symbol 列存储的是 assetKey 格式（如 "US::SPY"），
  * 此服务查询 SPY 和 BND 的历史价格，与权益快照对齐后归一化为 100 基准。
  */
 
+import { buildDaaAssetKey } from "@/src/daa/assetKey";
 import { withDaaPgClient } from "@/src/daa/store/storeShared";
 
 export type BenchmarkDataPoint = {
@@ -20,8 +21,8 @@ export type BenchmarkSummary = {
   excessVsBalanced: number | null;
 };
 
-const SPY_KEY = "US:SPY";
-const BND_KEY = "US:BND";
+const SPY_KEY = buildDaaAssetKey("SPY", "US");
+const BND_KEY = buildDaaAssetKey("BND", "US");
 
 /**
  * 根据权益快照和市场价格历史，构建归一化的基准对比数据。

@@ -101,14 +101,30 @@ export async function GET(req: Request) {
 
     const result0 = payload?.chart?.result?.[0];
     const ts: unknown[] = Array.isArray(result0?.timestamp) ? result0.timestamp : [];
-    const closes: unknown[] = Array.isArray(result0?.indicators?.quote?.[0]?.close) ? result0.indicators.quote[0].close : [];
+    const quote0 = result0?.indicators?.quote?.[0] ?? {};
+    const closes: unknown[] = Array.isArray(quote0?.close) ? quote0.close : [];
+    const opens: unknown[] = Array.isArray(quote0?.open) ? quote0.open : [];
+    const highs: unknown[] = Array.isArray(quote0?.high) ? quote0.high : [];
+    const lows: unknown[] = Array.isArray(quote0?.low) ? quote0.low : [];
+    const volumes: unknown[] = Array.isArray(quote0?.volume) ? quote0.volume : [];
     const adjCloses: unknown[] = Array.isArray(result0?.indicators?.adjclose?.[0]?.adjclose) ? result0.indicators.adjclose[0].adjclose : [];
 
     const rows = ts.map((t, i) => {
       const d = new Date(Number(t) * 1000);
       const iso = Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : "";
       const selectedClose = useAdjustedClose ? (adjCloses[i] ?? closes[i]) : (closes[i] ?? adjCloses[i]);
-      return { date: iso, close: selectedClose };
+      const open = Number(opens[i]);
+      const high = Number(highs[i]);
+      const low = Number(lows[i]);
+      const vol = Number(volumes[i]);
+      return {
+        date: iso,
+        close: selectedClose,
+        open: Number.isFinite(open) && open > 0 ? open : undefined,
+        high: Number.isFinite(high) && high > 0 ? high : undefined,
+        low: Number.isFinite(low) && low > 0 ? low : undefined,
+        volume: Number.isFinite(vol) && vol >= 0 ? vol : undefined,
+      };
     });
 
     const normalized = normalizeYfinanceHistoricalQuotes(rows, { start, end });
