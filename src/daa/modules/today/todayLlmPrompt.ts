@@ -88,11 +88,19 @@ ${decisionsText}
 
 function parseLlmResponse(text: string): Omit<TodayLlmOutput, "status" | "generatedAt"> | null {
   try {
-    // 尝试提取 JSON（LLM 可能在 JSON 前后加了多余文字）
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    // 先尝试直接解析整段文本
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(text.trim()) as Record<string, unknown>;
+    } catch {
+      // LLM 可能在 JSON 前后加了多余文字
+      // 找到第一个 { 和最后一个 } 之间的内容尝试解析
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (firstBrace === -1 || lastBrace <= firstBrace) return null;
+      const candidate = text.slice(firstBrace, lastBrace + 1);
+      parsed = JSON.parse(candidate) as Record<string, unknown>;
+    }
 
     const conclusion = parsed.conclusion;
     if (conclusion !== "act" && conclusion !== "watch" && conclusion !== "hold") return null;

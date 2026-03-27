@@ -154,10 +154,12 @@ export default function TodayPageClient(props: {
   ], [portfolioTab, wbModel.activeTab, activeTopTab]);
 
   // ── 决策层 UI ──
-  const todaySection = today.model ? (
+  const todayModel = today.model;
+  const actionItems = todayModel?.llmOutput.actionItems ?? [];
+  const todaySection = todayModel ? (
     <>
       <div className="flex items-start justify-between gap-4">
-        <ConclusionCard llmOutput={today.model.llmOutput} isStale={today.model.isStale} />
+        <ConclusionCard llmOutput={todayModel.llmOutput} isStale={todayModel.isStale} />
         <button
           onClick={today.handleRefresh}
           disabled={today.refreshing}
@@ -170,19 +172,19 @@ export default function TodayPageClient(props: {
         </button>
       </div>
 
-      <SignalSeats seats={today.model.decisionContext.signalSeats} />
+      <SignalSeats seats={todayModel.decisionContext.signalSeats} />
 
-      {(today.model.llmOutput.actionItems ?? []).length > 0 && (
+      {actionItems.length > 0 && (
         <section>
           <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-            需要关注 ({today.model.llmOutput.actionItems!.length})
+            需要关注 ({actionItems.length})
           </h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {today.model.llmOutput.actionItems!.map((item) => (
+            {actionItems.map((item) => (
               <ActionCard
                 key={item.assetKey}
                 item={item}
-                overallConclusion={today.model!.llmOutput.conclusion}
+                overallConclusion={todayModel.llmOutput.conclusion}
                 onDecision={today.handleDecision}
               />
             ))}
@@ -190,7 +192,7 @@ export default function TodayPageClient(props: {
         </section>
       )}
 
-      <PortfolioHealthBar health={today.model.portfolioHealth} />
+      <PortfolioHealthBar health={todayModel.portfolioHealth} />
     </>
   ) : today.loading ? (
     <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -216,7 +218,7 @@ export default function TodayPageClient(props: {
       <div className="space-y-6">{todaySection}</div>
 
       {/* ═══ 分隔线 ═══ */}
-      {today.model && (
+      {todayModel && (
         <div className="flex items-center gap-3 py-2">
           <div className="h-px flex-1 bg-border" />
           <span className="text-xs text-muted-foreground">操作面板</span>
