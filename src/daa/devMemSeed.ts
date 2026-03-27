@@ -17,6 +17,7 @@ function findCatalogItem(symbol: string) {
 
 /** 12 个种子资产：symbol → { lastPrice, targetWeightHint（小数，如 0.15 = 15%）} */
 const SEED_ASSETS_: Record<string, { lastPrice: number; targetWeightHint: number }> = {
+  // targetWeightHint 使用小数形式（0.08 = 8%），assetUniverseService 会 ×100 转为百分比
   AAPL: { lastPrice: 210, targetWeightHint: 0.08 },
   MSFT: { lastPrice: 420, targetWeightHint: 0.08 },
   NVDA: { lastPrice: 880, targetWeightHint: 0.06 },
@@ -40,11 +41,12 @@ const SEED_POSITIONS_: Array<{
   price: number;
   costBasis: number;
 }> = [
-  { symbol: "SPY", market: "US", currency: "USD", qty: 50, price: 520, costBasis: 495 },
-  { symbol: "QQQ", market: "US", currency: "USD", qty: 30, price: 450, costBasis: 420 },
-  { symbol: "AAPL", market: "US", currency: "USD", qty: 40, price: 210, costBasis: 185 },
-  { symbol: "GLD", market: "US", currency: "USD", qty: 20, price: 230, costBasis: 210 },
-  { symbol: "BND", market: "US", currency: "USD", qty: 50, price: 72, costBasis: 74 },
+  // costBasis = 总成本（qty × 每股成本），显示时 ÷ qty 得到每股成本
+  { symbol: "SPY", market: "US", currency: "USD", qty: 50, price: 520, costBasis: 50 * 495 },
+  { symbol: "QQQ", market: "US", currency: "USD", qty: 30, price: 450, costBasis: 30 * 420 },
+  { symbol: "AAPL", market: "US", currency: "USD", qty: 40, price: 210, costBasis: 40 * 185 },
+  { symbol: "GLD", market: "US", currency: "USD", qty: 20, price: 230, costBasis: 20 * 210 },
+  { symbol: "BND", market: "US", currency: "USD", qty: 50, price: 72, costBasis: 50 * 74 },
 ];
 
 export async function seedDevDataIfNeeded(): Promise<void> {

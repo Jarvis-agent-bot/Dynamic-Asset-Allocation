@@ -560,7 +560,7 @@ function InlineInsights(props: {
       ) : null}
 
       <Tabs defaultValue="opportunity" className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-6 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.72)] p-1">
+        <TabsList className="flex h-auto w-full flex-wrap gap-1 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.72)] p-1">
           {[
             ["opportunity", "机会"],
             ["technical", "技术"],
@@ -572,7 +572,7 @@ function InlineInsights(props: {
             <TabsTrigger
               key={value}
               value={value}
-              className="rounded-[10px] px-2 py-2 text-xs text-[var(--muted)] data-[state=active]:bg-[rgba(56,189,248,0.12)] data-[state=active]:text-[var(--text)]"
+              className="flex-1 min-w-0 rounded-[10px] px-2 py-2 text-xs text-[var(--muted)] data-[state=active]:bg-[rgba(56,189,248,0.12)] data-[state=active]:text-[var(--text)]"
             >
               {label}
             </TabsTrigger>

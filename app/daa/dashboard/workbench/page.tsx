@@ -1,7 +1,9 @@
-import { DaaSurfacePageHeader } from "../_components/DaaSurfaceUI";
+import { redirect } from "next/navigation";
 
-import WorkbenchPageClient from "./_components/WorkbenchPageClient";
-
+/**
+ * /workbench → /today 重定向
+ * 工作台已融合进投委会页面，保留此路由避免旧链接 404。
+ */
 type Props = {
   searchParams?: {
     tab?: string;
@@ -10,13 +12,9 @@ type Props = {
 };
 
 export default function WorkbenchPage({ searchParams }: Props) {
-  return (
-    <div className="space-y-6">
-      <DaaSurfacePageHeader
-        title="工作台"
-        description="账户概览、风险信号、组合操作、调仓执行和现金流水都收在这里。"
-      />
-      <WorkbenchPageClient initialTab={searchParams?.tab} initialSection={searchParams?.section} />
-    </div>
-  );
+  const params = new URLSearchParams();
+  if (searchParams?.tab) params.set("tab", searchParams.tab);
+  if (searchParams?.section) params.set("section", searchParams.section);
+  const query = params.toString();
+  redirect(`/daa/dashboard/today${query ? `?${query}` : ""}`);
 }

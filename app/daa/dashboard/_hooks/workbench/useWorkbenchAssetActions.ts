@@ -195,7 +195,10 @@ export function useWorkbenchAssetActions(input: {
     const opened = Boolean(expandedInsightKeys[assetKey]);
     setExpandedInsightKeys((prev) => ({ ...prev, [assetKey]: !opened }));
     if (opened) return;
-    if (insightDataByAssetKey[assetKey] || insightLoadingByAssetKey[assetKey]) return;
+    // 如果已有 LLM 数据或正在加载则跳过；但如果只有非 LLM prefetch 数据则重新获取含 LLM 的完整数据
+    const existing = insightDataByAssetKey[assetKey];
+    if (insightLoadingByAssetKey[assetKey]) return;
+    if (existing?.llmAnalysis?.status === "ok") return;
 
     setInsightLoadingByAssetKey((prev) => ({ ...prev, [assetKey]: true }));
     setInsightErrorByAssetKey((prev) => ({ ...prev, [assetKey]: "" }));

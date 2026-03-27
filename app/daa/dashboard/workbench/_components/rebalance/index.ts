@@ -1,6 +1,5 @@
 export { RebalanceAiInsight } from "./RebalanceAiInsight";
 export { RebalanceProposalList } from "./RebalanceProposalList";
-export { RebalanceMarketSnapshot } from "./RebalanceMarketSnapshot";
 export { RebalanceRiskAlerts } from "./RebalanceRiskAlerts";
 export { RebalanceExecutionChecklist, type WorkbenchChecklistItem } from "./RebalanceExecutionChecklist";
 export { RebalanceCycleHistory } from "./RebalanceCycleHistory";

@@ -462,7 +462,8 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     warnings.push(`存在 ${staleCount} 个资产行情抓取时间超过 ${Math.floor(PRICE_STALE_SEC / 3600)} 小时。`);
   }
   if (missingCount > 0) {
-    warnings.push(`存在 ${missingCount} 个资产暂时无可用价格，相关标的暂不可执行市价单。`);
+    const missingSymbols = assetUniverse.filter((row) => row.priceStatus === "missing").map((row) => row.symbol).slice(0, 8);
+    warnings.push(`${missingCount} 个资产暂无价格（${missingSymbols.join("、")}），暂不可执行市价单。`);
   }
 
   let marketContext: DaaMarketContext | null = null;

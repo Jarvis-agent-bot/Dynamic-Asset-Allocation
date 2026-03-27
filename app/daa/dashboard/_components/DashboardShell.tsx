@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
@@ -16,9 +16,9 @@ type Props = {
 };
 
 const SECTION_META: Record<string, { label: string; hint: string }> = {
-  workbench: {
-    label: "工作台",
-    hint: "账户概览、风险信号、组合操作与执行都在这里处理",
+  today: {
+    label: "投委会",
+    hint: "今日决策摘要 — 今天要不要动作？",
   },
   trades: {
     label: "交易记录",
@@ -37,15 +37,16 @@ const SECTION_META: Record<string, { label: string; hint: string }> = {
 const DEFAULT_SECTION_META = { label: "控制台", hint: "" };
 
 function resolveSection(pathname: string): string {
-  if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench";
+  if (pathname.startsWith("/daa/dashboard/today")) return "today";
+  if (pathname.startsWith("/daa/dashboard/workbench")) return "today";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
-  return "workbench";
+  return "today";
 }
 
 export default function DashboardShell({ children }: Props) {
-  const pathname = usePathname() || "/daa/dashboard/workbench";
+  const pathname = usePathname() || "/daa/dashboard/today";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [hydrated, setHydrated] = useState(false);
 
@@ -84,7 +85,7 @@ export default function DashboardShell({ children }: Props) {
           <div className={cn("border-b border-[var(--border)]", sidebarCollapsed ? "px-2 py-3" : "px-3 py-3")}>
             <div className={cn("flex items-center", sidebarCollapsed ? "flex-col gap-2" : "gap-2.5")}>
               <Link
-                href="/daa/dashboard/workbench"
+                href="/daa/dashboard/today"
                 aria-label="DAA dashboard"
                 className="group relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ fontFamily: "var(--font-mono)" }}
@@ -106,7 +107,7 @@ export default function DashboardShell({ children }: Props) {
                 title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {sidebarCollapsed ? <ChevronsRight className="h-3.5 w-3.5" /> : <ChevronsLeft className="h-3.5 w-3.5" />}
+                {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
               </button>
             </div>
           </div>

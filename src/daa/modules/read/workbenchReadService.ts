@@ -49,7 +49,7 @@ function buildSignals(input: {
       level: "warn",
       source: "alert",
       text: `${maxDriftRow.symbol} 偏移 ${Number(maxDriftRow.gapPct || 0).toFixed(2)}%，超过阈值 ${driftThresholdPct.toFixed(2)}%`,
-      actionHref: "/daa/dashboard/workbench?tab=watchlist",
+      actionHref: "/daa/dashboard/today?tab=watchlist",
       createdAt,
     });
   }
@@ -61,7 +61,7 @@ function buildSignals(input: {
       level: highlightedHf.hfSignal.level === "bearish" ? "warn" : "info",
       source: "alert",
       text: `人因信号：${highlightedHf.symbol} ${highlightedHf.hfSignal.icon} ${highlightedHf.hfSignal.label}`,
-      actionHref: "/daa/dashboard/workbench?tab=watchlist",
+      actionHref: "/daa/dashboard/today?tab=watchlist",
       createdAt,
     });
   }
@@ -76,7 +76,7 @@ function buildSignals(input: {
       level: "success",
       source: "alert",
       text: `下次定期再平衡：${nextDueAt.slice(0, 10)}`,
-      actionHref: "/daa/dashboard/workbench?tab=rebalance",
+      actionHref: "/daa/dashboard/today?tab=rebalance",
       createdAt,
     });
   }
@@ -90,7 +90,7 @@ function buildSignals(input: {
       level: "warn",
       source: "alert",
       text: `${labels.join(" / ")}进入偏防守，普通买入执行 ${Math.round(strongestScope.buyScale * 100)}%，高波动资产买入执行 ${Math.round(strongestScope.highRiskBuyScale * 100)}%。`,
-      actionHref: "/daa/dashboard/workbench",
+      actionHref: "/daa/dashboard/today",
       createdAt: strongestScope.generatedAt || createdAt,
     });
   }
@@ -101,7 +101,7 @@ function buildSignals(input: {
       level: "warn",
       source: "warning",
       text: warning,
-      actionHref: "/daa/dashboard/workbench",
+      actionHref: "/daa/dashboard/today",
       createdAt,
     });
   }
@@ -112,7 +112,7 @@ function buildSignals(input: {
       level: "warn",
       source: "system",
       text: input.bootstrap.marketDataHealth.message,
-      actionHref: "/daa/dashboard/workbench",
+      actionHref: "/daa/dashboard/today",
       createdAt,
     });
   }
@@ -195,7 +195,7 @@ function buildSignals(input: {
       level: input.bootstrap.latestCycle.status === "completed" ? "success" : "info",
       source: "system",
       text: `最近周期 ${input.bootstrap.latestCycle.cycleId.slice(0, 8)} · ${input.bootstrap.latestCycle.triggerSource} · ${input.bootstrap.latestCycle.status}`,
-      actionHref: "/daa/dashboard/workbench?tab=rebalance",
+      actionHref: "/daa/dashboard/today?tab=rebalance",
       createdAt: input.bootstrap.latestCycle.createdAt,
     });
   }
