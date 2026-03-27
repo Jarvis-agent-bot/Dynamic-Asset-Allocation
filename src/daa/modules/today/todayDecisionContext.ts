@@ -8,6 +8,12 @@
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { DecisionLogEntry, SignalSeatResult, TodayDecisionContext } from "./todayTypes";
 
+/** 将数值限制在合理范围内 */
+function clampPct(v: number | null | undefined, min = -100, max = 100): number {
+  if (v == null || !Number.isFinite(v)) return 0;
+  return Math.max(min, Math.min(max, v));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Signal seat builders
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,7 +37,7 @@ function buildTechnicalSeat(universe: WorkbenchBootstrap["assetUniverse"]): Sign
 
   for (const h of holdings) {
     if (h.priceStatus === "fresh") freshCount++;
-    const drift = Math.abs(h.gapPct ?? 0);
+    const drift = Math.abs(clampPct(h.gapPct));
     totalDrift += drift;
     if (drift > maxDrift) {
       maxDrift = drift;
@@ -74,7 +80,7 @@ function buildValuationSeat(universe: WorkbenchBootstrap["assetUniverse"]): Sign
   let maxGapAbs = 0;
 
   for (const h of holdings) {
-    const gap = h.targetWeightPct - h.actualWeightPct;
+    const gap = clampPct(h.targetWeightPct - h.actualWeightPct);
     if (gap > 1) underweightCount++;
     if (gap < -1) overweightCount++;
     if (Math.abs(gap) > maxGapAbs) {
@@ -86,8 +92,9 @@ function buildValuationSeat(universe: WorkbenchBootstrap["assetUniverse"]): Sign
   const total = holdings.length;
   const stance = underweightCount > total * 0.5 ? "bullish" : overweightCount > total * 0.5 ? "bearish" : "neutral";
   const confidence = Math.round(Math.min(100, (Math.max(underweightCount, overweightCount) / total) * 80 + 20));
-  const gapDir = (maxGapAsset.targetWeightPct - maxGapAsset.actualWeightPct) > 0 ? "低配" : "超配";
-  const gapPct = Math.abs(maxGapAsset.targetWeightPct - maxGapAsset.actualWeightPct).toFixed(1);
+  const clampedGap = clampPct(maxGapAsset.targetWeightPct - maxGapAsset.actualWeightPct);
+  const gapDir = clampedGap > 0 ? "低配" : "超配";
+  const gapPct = Math.abs(clampedGap).toFixed(1);
 
   return {
     seat: "valuation",
@@ -135,7 +142,7 @@ function buildPortfolioBehaviorSeat(
   let maxDrift = 0;
   let maxDriftAsset = holdings[0];
   for (const h of holdings) {
-    const drift = Math.abs(h.gapPct ?? 0);
+    const drift = Math.abs(clampPct(h.gapPct));
     if (drift > maxDrift) {
       maxDrift = drift;
       maxDriftAsset = h;
@@ -192,7 +199,7 @@ export function buildTodayDecisionContext(
         assetKey: h.assetKey,
         symbol: h.symbol,
         weight: h.actualWeightPct,
-        drift: h.gapPct ?? 0,
+        drift: clampPct(h.gapPct),
         holdingQty: h.holdingQty,
       })),
       cashRatio,

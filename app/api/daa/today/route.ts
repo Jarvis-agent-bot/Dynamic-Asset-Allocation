@@ -16,6 +16,8 @@ import {
   insertDecisionLog,
   upsertTodayCache,
 } from "@/src/daa/store/todayStore";
+import { batchReadAssetPriceSnapshots } from "@/src/daa/store/assetUniverseStore";
+import { computeDecisionStats } from "@/src/daa/modules/today/decisionOutcomeService";
 import type { TodayReadModel } from "@/src/daa/modules/today/todayTypes";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,6 +48,7 @@ export async function GET() {
         : cache.llmOutput,
       portfolioHealth: extractPortfolioHealth(cache.decisionContext),
       recentDecisions: decisions,
+      decisionStats: computeDecisionStats(decisions),
       cachedAt: cache.cachedAt,
       isStale,
     };
@@ -80,11 +83,16 @@ export async function POST(req: Request) {
       return fail("VALIDATION_FAILED", `conclusion 须为: ${validConclusions.join(", ")}`);
     }
 
+    // 记录决策时的价格快照（供后验使用）
+    const priceSnaps = await batchReadAssetPriceSnapshots([body.assetKey]);
+    const priceAtDecision = priceSnaps[0]?.lastPrice ?? null;
+
     await insertDecisionLog({
       assetKey: body.assetKey,
       conclusion: body.conclusion as "act" | "watch" | "hold",
       userAction: body.userAction as "adopted" | "ignored" | "deferred",
       llmReason: body.llmReason,
+      signalSnapshot: { priceAtDecision, recordedAt: new Date().toISOString() },
     });
 
     return ok({ recorded: true });
@@ -125,6 +133,7 @@ async function buildFreshTodayModel(
     llmOutput,
     portfolioHealth: extractPortfolioHealth(decisionContext),
     recentDecisions: decisions,
+    decisionStats: computeDecisionStats(decisions),
     cachedAt: new Date().toISOString(),
     isStale: false,
   };

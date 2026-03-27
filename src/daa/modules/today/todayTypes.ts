@@ -111,6 +111,15 @@ export type DecisionLogEntry = {
 // Today Read Model (API response)
 // ─────────────────────────────────────────────────────────────────────────────
 
+export type TodayDecisionStats = {
+  totalDecisions: number;
+  adopted: number;
+  ignored: number;
+  deferred: number;
+  outcomeChecked: number;
+  verdictBreakdown: Record<string, number>;
+};
+
 export type TodayReadModel = {
   decisionContext: TodayDecisionContext;
   llmOutput: TodayLlmOutput;
@@ -123,6 +132,7 @@ export type TodayReadModel = {
     maxDrawdown: number | null;
   };
   recentDecisions: DecisionLogEntry[];
+  decisionStats: TodayDecisionStats;
   cachedAt: string | null;
   isStale: boolean;
 };
