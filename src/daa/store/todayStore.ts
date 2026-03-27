@@ -164,7 +164,7 @@ export async function cleanupStaleTodayCache(): Promise<number> {
     const result = await query(
       `DELETE FROM daa_today_cache WHERE cached_at < NOW() - INTERVAL '24 hours'`,
     );
-    return result.rows?.length ?? 0;
+    return Math.max(0, Math.trunc(toFinite((result as unknown as { rowCount?: number }).rowCount, 0)));
   });
 }
 

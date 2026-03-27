@@ -34,14 +34,20 @@ function useTodayDecision() {
   const [model, setModel] = useState<TodayReadModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch("/api/daa/today");
       const json = await res.json();
-      if (json.ok) setModel(json.data);
-    } catch {
-      // swallow — workbench data is the fallback
+      if (json.ok) {
+        setModel(json.data);
+        setError(null);
+      } else {
+        setError(json.error?.message ?? "决策数据加载失败");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "网络错误");
     } finally {
       setLoading(false);
     }
@@ -52,9 +58,12 @@ function useTodayDecision() {
     try {
       const res = await fetch("/api/daa/today", { method: "PUT" });
       const json = await res.json();
-      if (json.ok) setModel(json.data);
+      if (json.ok) {
+        setModel(json.data);
+        setError(null);
+      }
     } catch {
-      // swallow
+      // 刷新失败不覆盖已有数据
     } finally {
       setRefreshing(false);
     }
@@ -70,7 +79,7 @@ function useTodayDecision() {
         });
         await fetchData();
       } catch {
-        // swallow
+        // 决策记录失败不阻塞 UI
       }
     },
     [fetchData],
@@ -78,7 +87,7 @@ function useTodayDecision() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  return { model, loading, refreshing, handleRefresh, handleDecision };
+  return { model, loading, refreshing, error, handleRefresh, handleDecision };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,6 +196,16 @@ export default function TodayPageClient(props: {
     <div className="flex items-center justify-center py-8 text-muted-foreground">
       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
       正在加载决策摘要…
+    </div>
+  ) : today.error ? (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+      决策摘要加载失败: {today.error}
+      <button
+        onClick={() => { void today.handleRefresh(); }}
+        className="ml-3 underline hover:no-underline"
+      >
+        重试
+      </button>
     </div>
   ) : null;
 
