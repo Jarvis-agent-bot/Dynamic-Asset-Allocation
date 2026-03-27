@@ -17,14 +17,14 @@ function findCatalogItem(symbol: string) {
 
 /** 12 个种子资产：symbol → { lastPrice, targetWeightHint } */
 const SEED_ASSETS_: Record<string, { lastPrice: number; targetWeightHint: number }> = {
-  // targetWeightHint 应与实际持仓占比大致匹配，避免产生异常的漂移百分比
-  AAPL: { lastPrice: 210, targetWeightHint: 12 },
+  // targetWeightHint 使用小数形式（0.12 = 12%），assetUniverseService 会 ×100 转为百分比
+  AAPL: { lastPrice: 210, targetWeightHint: 0.12 },
   MSFT: { lastPrice: 420, targetWeightHint: 0 },
   NVDA: { lastPrice: 880, targetWeightHint: 0 },
-  SPY: { lastPrice: 520, targetWeightHint: 38 },
-  QQQ: { lastPrice: 450, targetWeightHint: 20 },
-  GLD: { lastPrice: 230, targetWeightHint: 10 },
-  BND: { lastPrice: 72, targetWeightHint: 5 },
+  SPY: { lastPrice: 520, targetWeightHint: 0.37 },
+  QQQ: { lastPrice: 450, targetWeightHint: 0.20 },
+  GLD: { lastPrice: 230, targetWeightHint: 0.10 },
+  BND: { lastPrice: 72, targetWeightHint: 0.05 },
   "0700.HK": { lastPrice: 380, targetWeightHint: 0 },
   "600519.SS": { lastPrice: 1680, targetWeightHint: 0 },
   "BTC-USD": { lastPrice: 68000, targetWeightHint: 0 },

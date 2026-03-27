@@ -105,9 +105,10 @@ export function WorkbenchCockpitSection(props: {
           </SectionErrorBoundary>
 
           <SectionErrorBoundary sectionName="Allocation chart">
-            <div className="grid gap-3">
-              <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
-                {allocationData.length > 0 && totalEquity > 0 ? (
+            <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
+              {allocationData.length > 0 && totalEquity > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-[1fr_1fr]">
+                  {/* 饼图 */}
                   <div className="h-[220px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -115,34 +116,33 @@ export function WorkbenchCockpitSection(props: {
                           {allocationData.map((item, index) => <Cell key={item.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
                         </Pie>
                         <Tooltip
-                          contentStyle={{ background: "#0F172A", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 14 }}
+                          contentStyle={{ background: "#0F172A", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 14, color: "#e2e8f0" }}
+                          itemStyle={{ color: "#e2e8f0" }}
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           formatter={((value: number) => `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`) as any}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                ) : (
-                  <DashboardEmptyState title="当前没有可分配资产" description="账本重置后，新的持仓会在工作台重新生成。" className="border-0 bg-transparent px-0 py-8" />
-                )}
-              </div>
-              <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
-                <div className="text-xs uppercase tracking-[0.16em] text-[var(--faint)]">Top Holdings</div>
-                <div className="mt-3 space-y-3">
-                  {(model.allocationSummary?.topHoldings || []).slice(0, 4).map((item) => (
-                    <div key={item.assetKey} className="flex items-center justify-between gap-3 text-sm">
-                      <div className="font-medium text-[var(--text)]">{item.symbol}</div>
-                      <div className="text-right">
-                        <div className="text-[var(--text)]">{formatCurrency(item.value, baseCurrency)}</div>
-                        <div className="text-xs text-[var(--muted)]">{item.weightPct.toFixed(2)}%</div>
-                      </div>
+                  {/* Top Holdings */}
+                  <div className="flex flex-col justify-center">
+                    <div className="text-xs uppercase tracking-[0.16em] text-[var(--faint)]">Top Holdings</div>
+                    <div className="mt-3 space-y-3">
+                      {(model.allocationSummary?.topHoldings || []).slice(0, 4).map((item) => (
+                        <div key={item.assetKey} className="flex items-center justify-between gap-3 text-sm">
+                          <div className="font-medium text-[var(--text)]">{item.symbol}</div>
+                          <div className="text-right">
+                            <div className="text-[var(--text)]">{formatCurrency(item.value, baseCurrency)}</div>
+                            <div className="text-xs text-[var(--muted)]">{item.weightPct.toFixed(2)}%</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  {(model.allocationSummary?.topHoldings || []).length === 0 ? (
-                    <div className="text-sm text-[var(--muted)]">当前还没有持仓暴露。</div>
-                  ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <DashboardEmptyState title="当前没有可分配资产" description="账本重置后，新的持仓会在工作台重新生成。" className="border-0 bg-transparent px-0 py-8" />
+              )}
             </div>
           </SectionErrorBoundary>
         </div>

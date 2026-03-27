@@ -192,7 +192,7 @@ export default function TodayPageClient(props: {
         </section>
       )}
 
-      <PortfolioHealthBar health={todayModel.portfolioHealth} />
+      {/* 组合健康已整合到下方操作面板的总权益区域 */}
     </>
   ) : today.loading ? (
     <div className="flex items-center justify-center py-8 text-muted-foreground">

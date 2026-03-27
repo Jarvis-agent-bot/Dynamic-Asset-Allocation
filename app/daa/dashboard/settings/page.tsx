@@ -259,8 +259,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="mt-6">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 rounded-[20px] border border-[var(--border)] bg-[rgba(8,12,20,0.9)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-[var(--border)] bg-[rgba(8,12,20,0.95)] px-4 py-3 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:-mx-7 lg:px-7">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-semibold text-[var(--text)]">配置保存条</div>
             <div className="mt-1 text-sm text-[var(--muted)]">
