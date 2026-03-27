@@ -58,6 +58,7 @@ export function riskRuleLabel(rule: string): string {
   if (rule === "concentration") return "组合集中度";
   if (rule === "stop_loss_breach") return "止损阈值";
   if (rule === "total_weight") return "目标权重合计";
+  if (rule === "cash_sufficiency") return "现金充足性";
   return rule;
 }
 

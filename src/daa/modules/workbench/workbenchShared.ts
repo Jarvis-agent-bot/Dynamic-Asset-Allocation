@@ -317,6 +317,7 @@ function buildPreTradeRiskCheck(input: {
     assetUniverse: WorkbenchBootstrap["assetUniverse"];
     proposals: RebalanceProposal[];
     totalEquity: number;
+    availableCash?: number;
     constraints: {
         maxPositionPct: number;
         maxOrderPctOfNav: number;
@@ -426,6 +427,22 @@ function buildPreTradeRiskCheck(input: {
             ? `存在持仓浮亏 ${worstDrawdown.toFixed(2)}%，超过止损线 ${stopLossPct.toFixed(2)}%`
             : `持仓止损检查通过（最大浮亏 ${worstDrawdown.toFixed(2)}%）`,
     });
+    // 现金充足性检查：BUY 提案总金额 vs 可用现金
+    const totalBuyNotional = input.proposals
+        .filter((p) => p.side === "BUY" && p.selected)
+        .reduce((sum, p) => sum + p.suggestedNotional, 0);
+    const availCash = Math.max(0, toFinite(input.availableCash, 0));
+    if (availCash > 0 || totalBuyNotional > 0) {
+        items.push({
+            rule: "cash_sufficiency",
+            status: totalBuyNotional > availCash ? "block" : "pass",
+            current: totalBuyNotional,
+            limit: availCash,
+            message: totalBuyNotional > availCash
+                ? `买入总额 $${totalBuyNotional.toLocaleString(undefined, { maximumFractionDigits: 0 })} 超过可用现金 $${availCash.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                : `买入总额在可用现金范围内`,
+        });
+    }
     const hasBlock = items.some((item) => item.status === "block");
     const hasWarn = items.some((item) => item.status === "warn");
     return {
@@ -443,6 +460,7 @@ function buildPreTradeRiskCheckFromBootstrap(input: {
         assetUniverse: input.bootstrap.assetUniverse,
         proposals: input.proposals,
         totalEquity: Math.max(0, toFinite(input.bootstrap.account.totalEquity, 0)),
+        availableCash: Math.max(0, toFinite(input.bootstrap.account.investableCash, 0)),
         constraints: {
             maxPositionPct: input.systemConfig.strategy.constraints.maxPositionPct,
             maxOrderPctOfNav: input.systemConfig.strategy.constraints.maxOrderPctOfNav,
@@ -788,10 +806,13 @@ function buildCycleDraftFromBootstrap(input: {
     maxAbsDriftRow: WorkbenchBootstrap["assetUniverse"][number] | null;
 } {
     const totalEquity = Math.max(0, toFinite(input.bootstrap.account.totalEquity, 0));
+    const availableCash = Math.max(0, toFinite(input.bootstrap.account.investableCash, 0));
     const driftSnapshot: RebalanceCycle["driftSnapshot"] = [];
     const proposals: RebalanceProposal[] = [];
     let maxAbsDrift = 0;
     let maxAbsDriftRow: WorkbenchBootstrap["assetUniverse"][number] | null = null;
+    // 跟踪 BUY 提案累计金额，不超过可用现金
+    let buyNotionalUsed = 0;
     for (const row of input.bootstrap.assetUniverse) {
         if (!(row.watchEnabled || row.holdingQty > 0))
             continue;
@@ -815,9 +836,21 @@ function buildCycleDraftFromBootstrap(input: {
         const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
         if (!(price > 0) || !(totalEquity > 0))
             continue;
-        const suggestedNotional = Math.abs(driftPct) * totalEquity;
+        let suggestedNotional = Math.abs(driftPct) * totalEquity;
         if (!(suggestedNotional > 0))
             continue;
+        const side: "BUY" | "SELL" = driftPct > 0 ? "SELL" : "BUY";
+
+        // BUY 提案现金上限防护：累计买入金额不超过可用现金
+        if (side === "BUY") {
+            const cashRemaining = Math.max(0, availableCash - buyNotionalUsed);
+            if (cashRemaining <= 0) continue; // 现金已耗尽，跳过后续 BUY 提案
+            if (suggestedNotional > cashRemaining) {
+                suggestedNotional = cashRemaining; // 截断至可用现金
+            }
+            buyNotionalUsed += suggestedNotional;
+        }
+
         const fxRateToBase = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : null;
         const localNotional = fxRateToBase ? (suggestedNotional / fxRateToBase) : suggestedNotional;
         const suggestedQty = localNotional / price;
@@ -826,7 +859,7 @@ function buildCycleDraftFromBootstrap(input: {
             symbol: row.symbol,
             currency: row.currency,
             fxRateToBase,
-            side: driftPct > 0 ? "SELL" : "BUY",
+            side,
             suggestedQty,
             suggestedNotional,
             price,

@@ -137,7 +137,8 @@ export type PreTradeRiskRule =
   | "concentration"
   | "correlation"
   | "stop_loss_breach"
-  | "total_weight";
+  | "total_weight"
+  | "cash_sufficiency";
 
 export type PreTradeRiskCheckItem = {
   rule: PreTradeRiskRule;

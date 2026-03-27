@@ -461,6 +461,7 @@ export type DaaStoreRiskRule =
   | "correlation"
   | "stop_loss_breach"
   | "total_weight"
+  | "cash_sufficiency"
 
 export type DaaStorePreTradeRiskCheckItem = {
   rule: DaaStoreRiskRule;
