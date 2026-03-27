@@ -29,13 +29,14 @@ import type {
 import {
   RebalanceAiInsight,
   RebalanceProposalList,
-  RebalanceMarketSnapshot,
   RebalanceRiskAlerts,
   RebalanceExecutionChecklist,
   RebalanceCycleHistory,
   cycleStatusLabel,
   cycleStatusTone,
   triggerSourceLabel,
+  marketRegimeLabel,
+  marketRegimeTone,
   type WorkbenchChecklistItem,
 } from "./rebalance";
 
@@ -157,16 +158,17 @@ export function WorkbenchRebalanceSection(props: {
 
           <RebalanceAiInsight currentCycle={props.currentCycle} />
 
+          {/* 市场环境精简展示（详细指标已在 cockpit 指标面板，不再重复） */}
           {props.activeMarketContext ? (
-            <RebalanceMarketSnapshot
-              activeMarketContext={props.activeMarketContext}
-              primaryDecisionContext={props.primaryDecisionContext}
-              decisionMarketContext={props.decisionMarketContext}
-              decisionMarketLabel={props.decisionMarketLabel}
-              currentDecisionFacts={props.currentDecisionFacts}
-              marketContextExpanded={props.marketContextExpanded}
-              setMarketContextExpanded={props.setMarketContextExpanded}
-            />
+            <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[rgba(13,19,32,0.92)] px-4 py-2.5 text-sm">
+              <span className="text-[var(--muted)]">市场环境</span>
+              <DaaSurfaceStatusPill tone={marketRegimeTone(props.activeMarketContext.regime)}>
+                {marketRegimeLabel(props.activeMarketContext.regime)}
+              </DaaSurfaceStatusPill>
+              <span className="text-xs text-[var(--faint)]">
+                买入力度 {props.activeMarketContext.buyScale}%
+              </span>
+            </div>
           ) : null}
 
           {props.currentRiskCheck ? (
