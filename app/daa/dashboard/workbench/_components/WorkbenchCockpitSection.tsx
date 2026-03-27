@@ -93,7 +93,7 @@ export function WorkbenchCockpitSection(props: {
           </DaaSurfaceActionButton>
         )}
       >
-        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid gap-4 xl:grid-cols-2">
           <SectionErrorBoundary sectionName="Performance chart">
             <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] p-4">
               {!model.snapshots || model.snapshots.length === 0 ? (
@@ -114,7 +114,11 @@ export function WorkbenchCockpitSection(props: {
                         <Pie data={allocationData} dataKey="value" nameKey="name" innerRadius={46} outerRadius={78} paddingAngle={3}>
                           {allocationData.map((item, index) => <Cell key={item.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
                         </Pie>
-                        <Tooltip contentStyle={{ background: "#0F172A", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 14 }} />
+                        <Tooltip
+                          contentStyle={{ background: "#0F172A", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 14 }}
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          formatter={((value: number) => `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`) as any}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
