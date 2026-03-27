@@ -20,10 +20,6 @@ const SECTION_META: Record<string, { label: string; hint: string }> = {
     label: "投委会",
     hint: "今日决策摘要 — 今天要不要动作？",
   },
-  workbench: {
-    label: "工作台",
-    hint: "账户概览、风险信号、组合操作与执行都在这里处理",
-  },
   trades: {
     label: "交易记录",
     hint: "周期、订单与复盘报告审计中心",
@@ -38,7 +34,7 @@ const DEFAULT_SECTION_META = { label: "控制台", hint: "" };
 
 function resolveSection(pathname: string): string {
   if (pathname.startsWith("/daa/dashboard/today")) return "today";
-  if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench";
+  if (pathname.startsWith("/daa/dashboard/workbench")) return "today";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
   return "today";
