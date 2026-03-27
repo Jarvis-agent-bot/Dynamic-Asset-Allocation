@@ -464,6 +464,43 @@ const MIGRATIONS_: Migration[] = [
       await query("CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc ON daa_broker_positions(broker_kind, updated_at DESC)");
     },
   },
+  {
+    id: "20260327_today_decision_log",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_decision_log (
+          id SERIAL PRIMARY KEY,
+          account_id TEXT NOT NULL DEFAULT 'default',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          asset_key TEXT NOT NULL,
+          conclusion TEXT NOT NULL,
+          user_action TEXT NOT NULL,
+          llm_reason TEXT,
+          signal_snapshot JSONB,
+          outcome_checked_at TIMESTAMPTZ,
+          outcome_result JSONB
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_decision_log_account_created_desc ON daa_decision_log(account_id, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_decision_log_asset_key ON daa_decision_log(asset_key)");
+    },
+  },
+  {
+    id: "20260327_today_cache",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_today_cache (
+          id SERIAL PRIMARY KEY,
+          account_id TEXT NOT NULL DEFAULT 'default',
+          cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          decision_context JSONB NOT NULL,
+          llm_output JSONB NOT NULL,
+          is_stale BOOLEAN NOT NULL DEFAULT false
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_today_cache_account_cached_desc ON daa_today_cache(account_id, cached_at DESC)");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {
