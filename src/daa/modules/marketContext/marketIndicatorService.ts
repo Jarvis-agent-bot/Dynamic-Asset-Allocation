@@ -1,5 +1,8 @@
 import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
+import { resolveSecret } from "@/src/daa/config/secretsManager";
+import { fetchFredMacroSnapshot } from "@/src/market/fredClient";
+import type { FredMacroInput } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
   getMarketIndicatorRefreshSymbols,
   getRelevantMarketIndicatorKeysForAsset,
@@ -28,6 +31,7 @@ import {
   upsertDaaMarketIndicatorSnapshots,
   type DaaStoreMarketIndicatorSnapshot,
 } from "@/src/daa/store/daaStorePg";
+import { upsertMacroCycleSnapshot } from "@/src/daa/store/marketCacheStore";
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -576,9 +580,43 @@ export async function refreshMarketIndicators(): Promise<RefreshMarketIndicators
     return { marketContext: null, indicators: [], refreshedCount: 0 };
   }
 
+  // 尝试获取 FRED 宏观数据
+  let fredMacro: FredMacroInput | null = null;
+  const fredApiKey = await resolveSecret("fred_api_key");
+  if (fredApiKey) {
+    try {
+      const snapshot = await fetchFredMacroSnapshot(fredApiKey);
+      fredMacro = {
+        gdpGrowthPct: snapshot.gdpGrowth,
+        cpiYoYPct: snapshot.cpiYoY,
+        unemploymentPct: snapshot.unemployment,
+      };
+    } catch (err) {
+      logSwallowed("refreshMarketIndicators.fred", err);
+    }
+  }
+
   const refreshedCount = await upsertDaaMarketIndicatorSnapshots(computed.map((item) => buildStoredRowPayload(item)));
   const indicators = computed.map((item) => item.snapshot);
-  const marketContext = buildMarketContextFromIndicators({ indicators, config });
+  const marketContext = buildMarketContextFromIndicators({ indicators, config, fredMacro });
+
+  // 持久化宏观周期快照（fire-and-forget，不阻塞刷新流程）
+  const macroCycle = marketContext?.macroCycle;
+  if (macroCycle) {
+    upsertMacroCycleSnapshot({
+      phase: macroCycle.phase,
+      growthProxy: macroCycle.growthProxy,
+      inflationProxy: macroCycle.inflationProxy,
+      confidence: macroCycle.confidence,
+      label: macroCycle.label,
+      favoredAssets: macroCycle.favoredAssets,
+      dataSource: fredMacro ? "fred" : "proxy",
+      fredGdpPct: fredMacro?.gdpGrowthPct,
+      fredCpiPct: fredMacro?.cpiYoYPct,
+      fredUnemploymentPct: fredMacro?.unemploymentPct,
+    }).catch((err) => logSwallowed("refreshMarketIndicators.persistMacroCycle", err));
+  }
+
   return { marketContext, indicators, refreshedCount };
 }
 

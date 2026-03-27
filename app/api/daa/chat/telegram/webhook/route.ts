@@ -21,9 +21,14 @@ function timingSafeCompare(a: string, b: string): boolean {
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const webhookSecret = await resolveSecret("telegram_webhook_secret");
-    const providedSecret = normalizeText(req.headers.get("x-telegram-bot-api-secret-token"));
-    if (webhookSecret && !timingSafeCompare(webhookSecret, providedSecret)) {
-      return fail("UNAUTHORIZED", "telegram webhook secret mismatch", { status: 401 });
+    if (!webhookSecret && process.env.DAA_PG_MEM !== "1") {
+      return fail("UNAUTHORIZED", "telegram webhook secret 未配置，拒绝未认证请求", { status: 401 });
+    }
+    if (webhookSecret) {
+      const providedSecret = normalizeText(req.headers.get("x-telegram-bot-api-secret-token"));
+      if (!timingSafeCompare(webhookSecret, providedSecret)) {
+        return fail("UNAUTHORIZED", "telegram webhook secret mismatch", { status: 401 });
+      }
     }
 
     const update = await req.json();

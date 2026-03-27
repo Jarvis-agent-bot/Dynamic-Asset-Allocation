@@ -28,7 +28,7 @@ export function WorkbenchActiveTabPanel(props: {
   return (
     <div className="space-y-4">
       {isPortfolioTab ? (
-        <div className="inline-flex rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-1.5">
+        <div className="inline-flex rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-1.5" role="tablist">
           {([
             { key: "positions", label: `持仓 ${model.summary.holdingAssets}` },
             { key: "watchlist", label: `观察列表 ${model.summary.watchlistAssets}` },
@@ -36,6 +36,9 @@ export function WorkbenchActiveTabPanel(props: {
             <button
               key={item.key}
               type="button"
+              role="tab"
+              aria-selected={model.activeTab === item.key}
+              aria-controls={`tabpanel-${item.key}`}
               onClick={() => (props.onNavigateTab ? props.onNavigateTab(item.key) : model.setActiveTab(item.key))}
               className={cn(
                 "rounded-[12px] px-3 py-2 text-sm transition-colors",

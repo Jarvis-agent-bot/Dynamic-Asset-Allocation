@@ -876,3 +876,85 @@ export async function upsertDaaHfSignalSnapshots(rows: Array<Partial<DaaStoreHfS
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Macro Cycle Snapshots
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type MacroCycleSnapshotRow = {
+  id: string;
+  phase: string;
+  growthProxy: number;
+  inflationProxy: number;
+  confidence: number;
+  label: string;
+  favoredAssets: string[];
+  dataSource: string;
+  fredGdpPct: number | null;
+  fredCpiPct: number | null;
+  fredUnemploymentPct: number | null;
+  createdAt: string;
+};
+
+export async function upsertMacroCycleSnapshot(input: {
+  phase: string;
+  growthProxy: number;
+  inflationProxy: number;
+  confidence: number;
+  label: string;
+  favoredAssets: string[];
+  dataSource: string;
+  fredGdpPct?: number | null;
+  fredCpiPct?: number | null;
+  fredUnemploymentPct?: number | null;
+}): Promise<void> {
+  return withDaaPgClient(async (client) => {
+    await client.query(
+      `INSERT INTO daa_macro_cycle_snapshots (
+         id, phase, growth_proxy, inflation_proxy, confidence, label,
+         favored_assets, data_source, fred_gdp_pct, fred_cpi_pct, fred_unemployment_pct,
+         created_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())`,
+      [
+        randomUUID(),
+        input.phase,
+        input.growthProxy,
+        input.inflationProxy,
+        input.confidence,
+        input.label,
+        input.favoredAssets,
+        input.dataSource,
+        input.fredGdpPct ?? null,
+        input.fredCpiPct ?? null,
+        input.fredUnemploymentPct ?? null,
+      ],
+    );
+  });
+}
+
+export async function listMacroCycleHistory(limit = 30): Promise<MacroCycleSnapshotRow[]> {
+  return withDaaPgClient(async (client) => {
+    const result = await client.query(
+      `SELECT id, phase, growth_proxy, inflation_proxy, confidence, label,
+              favored_assets, data_source, fred_gdp_pct, fred_cpi_pct, fred_unemployment_pct, created_at
+       FROM daa_macro_cycle_snapshots
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [Math.max(1, Math.min(200, Math.trunc(limit)))],
+    );
+    return result.rows.map((row: Record<string, unknown>) => ({
+      id: normalizeText(row.id),
+      phase: normalizeText(row.phase),
+      growthProxy: toFinite(row.growth_proxy, 0),
+      inflationProxy: toFinite(row.inflation_proxy, 0),
+      confidence: toFinite(row.confidence, 0),
+      label: normalizeText(row.label),
+      favoredAssets: normalizeStringArray(row.favored_assets),
+      dataSource: normalizeText(row.data_source, "proxy"),
+      fredGdpPct: row.fred_gdp_pct == null ? null : toFinite(row.fred_gdp_pct, 0),
+      fredCpiPct: row.fred_cpi_pct == null ? null : toFinite(row.fred_cpi_pct, 0),
+      fredUnemploymentPct: row.fred_unemployment_pct == null ? null : toFinite(row.fred_unemployment_pct, 0),
+      createdAt: toIsoString(row.created_at, new Date().toISOString()),
+    }));
+  });
+}
+

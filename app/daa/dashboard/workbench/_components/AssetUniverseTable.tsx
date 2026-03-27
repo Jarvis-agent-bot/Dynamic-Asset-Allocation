@@ -29,7 +29,6 @@ import {
   DaaSurfaceMiniStat,
   DaaSurfacePanel,
   DaaSurfaceStatusPill,
-  daaSurfaceDenseFieldClassName,
   daaSurfaceSearchShellClassName,
   daaSurfaceTableHeadClassName,
   daaSurfaceTableShellClassName,
@@ -205,7 +204,7 @@ function emptyStateMeta(input: {
   if (input.view === "holdings" && input.watchlistCount > 0) {
     return {
       title: "当前还没有正式持仓",
-      description: "已有观察标的，切到“观察列表”继续设置目标或发起首笔买入。",
+      description: "已有观察标的，切到「观察列表」继续设置目标或发起首笔买入。",
     };
   }
   if (input.view === "watchlist") {
@@ -920,6 +919,296 @@ function InlineInsights(props: {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+ * WeightGapCell — inline-edit target weight + gap bar (merged column 5)
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+function WeightGapCell(props: {
+  row: AssetUniverseView;
+  editing: boolean;
+  editingValue: string;
+  disabled?: boolean;
+  updatingTarget?: boolean;
+  onStartEdit: () => void;
+  onChangeEditValue: (value: string) => void;
+  onSave: () => void;
+}) {
+  const { row } = props;
+  const rowGapInfo = gapLabel(row.gapPct);
+  const gapBarWidth = row.gapPct == null ? 0 : Math.min(100, Math.max(8, Math.abs(row.gapPct) * 1000));
+
+  return (
+    <td className="px-3 py-3 text-right align-top">
+      <div className="text-xs text-[var(--muted)]">实际 {formatPercent(row.actualWeightPct)}</div>
+      <div
+        className="mt-0.5 group cursor-pointer"
+        onClick={() => { if (!props.editing) props.onStartEdit(); }}
+      >
+        {props.editing ? (
+          <input
+            autoFocus
+            type="number"
+            min="0"
+            step="0.01"
+            value={props.editingValue}
+            onChange={(e) => props.onChangeEditValue(e.target.value)}
+            onBlur={props.onSave}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); props.onSave(); }
+              if (e.key === "Escape") { e.preventDefault(); props.onSave(); }
+            }}
+            className="w-20 bg-transparent text-right text-xs outline-none border-b border-[var(--primary)] font-[var(--font-mono)] text-[var(--text)]"
+            disabled={props.disabled || props.updatingTarget}
+            data-testid={`workbench-target-${row.assetKey}`}
+          />
+        ) : (
+          <span className="text-xs text-[var(--text)] group-hover:text-[var(--primary)] transition-colors">
+            目标 {formatPercent(row.targetWeightPct)}
+          </span>
+        )}
+      </div>
+      {/* gap bar */}
+      <div className="mt-1.5">
+        <span className="h-1 w-16 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)] block">
+          <span className={cn("block h-full rounded-full", rowGapInfo.barClassName)} style={{ width: `${gapBarWidth}%` }} />
+        </span>
+        <span className={cn("text-[10px] mt-0.5 block", rowGapInfo.className)}>{rowGapInfo.text}</span>
+      </div>
+    </td>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Mobile card layout — renders below the md breakpoint
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+type MobileTableEntry =
+  | { type: "group"; key: HoldingGroupKey; label: string; totalValue: number; totalWeightPct: number; count: number }
+  | { type: "item"; row: AssetUniverseView };
+
+function MobileAssetCard(props: {
+  row: AssetUniverseView;
+  baseCurrency: string;
+  disabled?: boolean;
+  actioningAssetKey?: string | null;
+  insightData: WorkbenchAssetInsightResponse | null;
+  expanded: boolean;
+  insightLoading: boolean;
+  insightError: string;
+  llmFeedbackSubmittingByContext: Record<string, boolean>;
+  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
+  onAddToExecution: (row: AssetUniverseView, side: TradeTicketSide) => void;
+  onToggleBasket: (row: AssetUniverseView, nextInBasket: boolean) => Promise<void>;
+  onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
+  onOpenCalibration: (row: AssetUniverseView) => void;
+  onToggleInlineInsights: (row: AssetUniverseView) => void;
+  onSubmitLlmFeedback: (input: { contextId: string; type: "insight"; score: WorkbenchLlmFeedbackScore }) => void;
+  onOpenFusionBreakdown: (assetKey: string) => void;
+}) {
+  const { row } = props;
+  const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
+  const inBasket = isInBasket(row);
+  const buyDisabled = Boolean(props.disabled) || !(price > 0);
+  const sellDisabled = Boolean(props.disabled) || !(price > 0) || !(row.holdingQty > 0);
+  const actionBusy = props.actioningAssetKey === row.assetKey;
+  const rowValuation = localValuation(row);
+  const rowGapInfo = gapLabel(row.gapPct);
+  const rowPnlPct = unrealizedPnlPct(row);
+
+  const buyReason = disabledReason({ disabled: buyDisabled, disabledGlobal: Boolean(props.disabled), price, requireHolding: false, holdingQty: row.holdingQty });
+  const sellReason = disabledReason({ disabled: sellDisabled, disabledGlobal: Boolean(props.disabled), price, requireHolding: true, holdingQty: row.holdingQty });
+
+  const feedbackContextId = props.insightData?.llmAnalysis?.status === "ok"
+    ? `insight:${row.assetKey}:${props.insightData?.llmAnalysis?.generatedAt || props.insightData?.generatedAt || ""}`
+    : null;
+
+  return (
+    <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.82)]">
+      {/* ── Header: symbol + status ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold tracking-[-0.01em] text-[var(--text)]">{row.symbol}</span>
+          <DaaSurfaceStatusPill tone={rowStatusTone({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}>
+            {rowStatusLabel({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}
+          </DaaSurfaceStatusPill>
+        </div>
+        <DaaSurfaceStatusPill tone={priceStatusTone(row.priceStatus)}>
+          {priceStatusLabel(row)}
+        </DaaSurfaceStatusPill>
+      </div>
+      <div className="px-4 pb-3 text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+        {rowTypeSummary(row)} · {row.market} · {row.currency}
+      </div>
+
+      {/* ── Metrics grid ── */}
+      <div className="grid grid-cols-2 gap-px border-t border-[var(--border)] bg-[var(--border)]">
+        <MobileMetricCell label="持仓" value={row.holdingQty.toFixed(4)} />
+        <MobileMetricCell label="价格" value={priceLabel(row)} />
+        <MobileMetricCell label="成本" value={row.holdingQty > 0 ? `${currencySymbol(row.currency)} ${holdingCostPerUnit(row).toFixed(4)}` : "-"} />
+        <MobileMetricCell label="市值" value={rowValuation > 0 ? formatCurrency(rowValuation, row.currency) : "-"} />
+        <MobileMetricCell label="目标" value={row.targetWeightPct > 0 ? `${formatTargetWeightDraft(row.targetWeightPct)}%` : "-"} />
+        <MobileMetricCell label="偏离" value={rowGapInfo.text} valueClassName={rowGapInfo.className} />
+        <MobileMetricCell
+          label="浮盈亏"
+          value={rowPnlPct != null ? `${rowPnlPct >= 0 ? "+" : ""}${rowPnlPct.toFixed(1)}%` : "-"}
+          valueClassName={rowPnlPct != null ? (rowPnlPct >= 0 ? "text-emerald-300" : "text-rose-300") : undefined}
+        />
+        <MobileMetricCell label="汇率" value={fxLabel(row)} valueClassName={row.fxMissing ? "text-rose-200" : undefined} />
+      </div>
+
+      {/* ── Actions row ── */}
+      <div className="flex items-center gap-2 border-t border-[var(--border)] px-4 py-3">
+        <ActionButton label="买入" disabled={buyDisabled} reason={buyReason} tone="success" className="flex-1 justify-center" onClick={() => props.onAddToExecution(row, "BUY")} />
+        <ActionButton label="卖出" disabled={sellDisabled} reason={sellReason} tone="warning" className="flex-1 justify-center" onClick={() => props.onAddToExecution(row, "SELL")} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <DaaSurfaceActionButton tone="slate" className="h-8 rounded-full px-3 text-[11px]" disabled={Boolean(props.disabled)}>
+              <MoreHorizontal className="h-3.5 w-3.5" />
+              更多
+            </DaaSurfaceActionButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
+            <DropdownMenuLabel className="text-xs text-[var(--faint)]">低频操作</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => props.onToggleInlineInsights(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
+              {props.expanded ? "收起详情" : "展开详情"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => void props.onToggleBasket(row, !inBasket)}
+              disabled={actionBusy || !row.watchEnabled}
+              className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]"
+            >
+              {inBasket ? "移出再平衡列表" : "加入再平衡列表"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => props.onOpenCalibration(row)}
+              className="text-xs text-[var(--primary)] focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--primary)]"
+            >
+              手动校准持仓
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-[var(--border)]" />
+            <DropdownMenuItem
+              onClick={() => void props.onRemoveFromWatchlist(row)}
+              disabled={actionBusy || !row.watchEnabled}
+              className="text-xs text-rose-200 focus:bg-[rgba(248,113,113,0.1)] focus:text-rose-200"
+            >
+              移除观察
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* ── Inline insights (expanded) ── */}
+      {props.expanded ? (
+        <div className="border-t border-[var(--border)] px-4 py-4">
+          <InlineInsights
+            loading={props.insightLoading}
+            error={props.insightError}
+            data={props.insightData}
+            feedbackContextId={feedbackContextId}
+            feedbackSubmitting={Boolean(props.llmFeedbackSubmittingByContext[feedbackContextId || ""])}
+            feedbackScore={feedbackContextId ? props.llmFeedbackScoreByContext[feedbackContextId] || null : null}
+            onSubmitFeedback={props.onSubmitLlmFeedback}
+            onOpenFusionBreakdown={() => props.onOpenFusionBreakdown(row.assetKey)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MobileMetricCell(props: { label: string; value: string; valueClassName?: string }) {
+  return (
+    <div className="bg-[rgba(8,12,20,0.82)] px-4 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--faint)]">{props.label}</div>
+      <div className={cn("mt-1 font-[var(--font-mono)] text-xs text-[var(--text)]", props.valueClassName)}>{props.value}</div>
+    </div>
+  );
+}
+
+function MobileAssetCardList(props: {
+  tableEntries: MobileTableEntry[];
+  baseCurrency: string;
+  view: AssetUniverseViewFilter;
+  counts: { all: number; holdings: number; watchlist: number; basket: number };
+  disabled?: boolean;
+  updatingTarget?: boolean;
+  actioningAssetKey?: string | null;
+  insightDataByAssetKey: Record<string, WorkbenchAssetInsightResponse>;
+  expandedInsightKeys: Record<string, boolean>;
+  insightLoadingByAssetKey: Record<string, boolean>;
+  insightErrorByAssetKey: Record<string, string>;
+  llmFeedbackSubmittingByContext: Record<string, boolean>;
+  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
+  onAddToExecution: (row: AssetUniverseView, side: TradeTicketSide) => void;
+  onToggleBasket: (row: AssetUniverseView, nextInBasket: boolean) => Promise<void>;
+  onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
+  onOpenCalibration: (row: AssetUniverseView) => void;
+  onToggleInlineInsights: (row: AssetUniverseView) => void;
+  onSubmitLlmFeedback: (input: { contextId: string; type: "insight"; score: WorkbenchLlmFeedbackScore }) => void;
+  onOpenFusionBreakdown: (assetKey: string) => void;
+  hasKeyword: boolean;
+  onClearKeyword: () => void;
+}) {
+  if (props.tableEntries.length === 0) {
+    const emptyMeta = emptyStateMeta({
+      view: props.view,
+      hasKeyword: props.hasKeyword,
+      watchlistCount: props.counts.watchlist,
+      basketCount: props.counts.basket,
+    });
+    return (
+      <DaaSurfaceEmptyState
+        title={emptyMeta.title}
+        description={emptyMeta.description}
+        action={props.hasKeyword ? <DaaSurfaceActionButton tone="slate" onClick={props.onClearKeyword}>清空搜索</DaaSurfaceActionButton> : null}
+        className="border-0 bg-transparent px-0 py-6"
+      />
+    );
+  }
+
+  return (
+    <TooltipProvider delayDuration={120}>
+      <div className="space-y-3">
+        {props.tableEntries.map((entry) => {
+          if (entry.type === "group") {
+            return (
+              <div key={`mgroup-${entry.key}`} className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-4 py-3 text-xs">
+                <span className="font-semibold text-[var(--text)]">{entry.label}（{entry.count}）</span>
+                <span className="text-[var(--muted)]">
+                  市值 {formatCurrency(entry.totalValue, props.baseCurrency)} · 占总权益 {formatPercent(entry.totalWeightPct)}
+                </span>
+              </div>
+            );
+          }
+          const row = entry.row;
+          return (
+            <MobileAssetCard
+              key={`m-${row.assetKey}`}
+              row={row}
+              baseCurrency={props.baseCurrency}
+              disabled={props.disabled}
+              actioningAssetKey={props.actioningAssetKey}
+              insightData={props.insightDataByAssetKey[row.assetKey] || null}
+              expanded={Boolean(props.expandedInsightKeys[row.assetKey])}
+              insightLoading={Boolean(props.insightLoadingByAssetKey[row.assetKey])}
+              insightError={props.insightErrorByAssetKey[row.assetKey] || ""}
+              llmFeedbackSubmittingByContext={props.llmFeedbackSubmittingByContext}
+              llmFeedbackScoreByContext={props.llmFeedbackScoreByContext}
+              onAddToExecution={props.onAddToExecution}
+              onToggleBasket={props.onToggleBasket}
+              onRemoveFromWatchlist={props.onRemoveFromWatchlist}
+              onOpenCalibration={props.onOpenCalibration}
+              onToggleInlineInsights={props.onToggleInlineInsights}
+              onSubmitLlmFeedback={props.onSubmitLlmFeedback}
+              onOpenFusionBreakdown={props.onOpenFusionBreakdown}
+            />
+          );
+        })}
+      </div>
+    </TooltipProvider>
+  );
+}
+
 export default function AssetUniverseTable(props: {
   rows: AssetUniverseView[];
   baseCurrency: string;
@@ -954,6 +1243,7 @@ export default function AssetUniverseTable(props: {
 }) {
   const [keyword, setKeyword] = useState("");
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
+  const [editingTargetKey, setEditingTargetKey] = useState<string | null>(null);
   const [fusionBreakdownKey, setFusionBreakdownKey] = useState<string | null>(null);
   const hasKeyword = keyword.trim().length > 0;
 
@@ -1047,13 +1337,25 @@ export default function AssetUniverseTable(props: {
   async function handleSaveTarget(row: AssetUniverseView) {
     const raw = draftTargetValue(row);
     const next = Number(raw);
-    if (!Number.isFinite(next) || next < 0) return;
+    if (!Number.isFinite(next) || next < 0) {
+      setEditingTargetKey(null);
+      return;
+    }
     await props.onUpdateTargetWeight(row, normalizeTargetWeightPct(next));
     setTargetDrafts((prev) => {
       const nextState = { ...prev };
       delete nextState[row.assetKey];
       return nextState;
     });
+    setEditingTargetKey(null);
+  }
+
+  function handleStartEditTarget(row: AssetUniverseView) {
+    setEditingTargetKey(row.assetKey);
+    // 初始化 draft 为当前目标值
+    if (targetDrafts[row.assetKey] == null) {
+      setTargetDrafts((prev) => ({ ...prev, [row.assetKey]: formatTargetWeightDraft(row.targetWeightPct) }));
+    }
   }
 
   return (
@@ -1096,8 +1398,10 @@ export default function AssetUniverseTable(props: {
               {hasKeyword ? <DaaSurfaceStatusPill tone="indigo">筛选中</DaaSurfaceStatusPill> : null}
             </div>
             <div className={cn(daaSurfaceSearchShellClassName, "mt-2 h-9")}>
+              <label htmlFor="asset-search-keyword" className="sr-only">搜索标的</label>
               <Search className="h-3.5 w-3.5 text-[var(--faint)]" />
               <input
+                id="asset-search-keyword"
                 name="asset-search-keyword"
                 value={keyword}
                 onChange={(event) => setKeyword(event.target.value)}
@@ -1118,38 +1422,59 @@ export default function AssetUniverseTable(props: {
         </div>
       </div>
 
-      <div className={cn(daaSurfaceTableShellClassName, "overflow-x-auto")}>
+      {/* ───── Mobile card layout (< md) ───── */}
+      <div className="md:hidden">
+        <MobileAssetCardList
+          tableEntries={tableEntries}
+          baseCurrency={props.baseCurrency}
+          view={props.view}
+          counts={props.counts}
+          disabled={props.disabled}
+          updatingTarget={props.updatingTarget}
+          actioningAssetKey={props.actioningAssetKey}
+          insightDataByAssetKey={props.insightDataByAssetKey}
+          expandedInsightKeys={props.expandedInsightKeys}
+          insightLoadingByAssetKey={props.insightLoadingByAssetKey}
+          insightErrorByAssetKey={props.insightErrorByAssetKey}
+          llmFeedbackSubmittingByContext={props.llmFeedbackSubmittingByContext}
+          llmFeedbackScoreByContext={props.llmFeedbackScoreByContext}
+          onAddToExecution={props.onAddToExecution}
+          onToggleBasket={props.onToggleBasket}
+          onRemoveFromWatchlist={props.onRemoveFromWatchlist}
+          onOpenCalibration={props.onOpenCalibration}
+          onToggleInlineInsights={props.onToggleInlineInsights}
+          onSubmitLlmFeedback={props.onSubmitLlmFeedback}
+          onOpenFusionBreakdown={handleOpenFusionBreakdown}
+          hasKeyword={hasKeyword}
+          onClearKeyword={() => setKeyword("")}
+        />
+      </div>
+
+      {/* ───── Desktop table layout (>= md) ───── */}
+      <div className={cn(daaSurfaceTableShellClassName, "hidden overflow-x-auto md:block")}>
         <div className="border-b border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-2.5 text-[11px] text-[var(--faint)]">
-          表格较宽，右侧买卖区固定；建议先看偏离和汇率，再决定操作。
+          7 列精简视图，点击目标权重可直接编辑；详细类型、汇率等信息请展开详情查看。
         </div>
         <TooltipProvider delayDuration={120}>
-          <table className="min-w-[1320px] w-full border-collapse">
+          <table className="min-w-[980px] w-full border-collapse">
             <colgroup>
-              <col className="w-[280px]" />
-              <col className="w-[170px]" />
-              <col className="w-[140px]" />
-              <col className="w-[130px]" />
-              <col className="w-[160px]" />
-              <col className="w-[150px]" />
-              <col className="w-[170px]" />
-              <col className="w-[130px]" />
               <col className="w-[240px]" />
-              <col className="w-[90px]" />
-              <col className="w-[168px]" />
+              <col className="w-[120px]" />
+              <col className="w-[130px]" />
+              <col className="w-[130px]" />
+              <col className="w-[150px]" />
+              <col className="w-[120px]" />
+              <col className="w-[100px]" />
             </colgroup>
             <thead>
               <tr>
-                <th className={daaSurfaceTableHeadClassName}>标的 / 定位</th>
-                <th className={daaSurfaceTableHeadClassName}>类型 / 补充</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>持仓 / 成本</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>价格 / 刷新</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>本币估值</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>实际 / 浮盈亏</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>目标仓位</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>偏离</th>
-                <th className={daaSurfaceTableHeadClassName}>人因 / 观点</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>汇率</th>
-                <th className="sticky right-0 z-20 border-b border-[var(--border)] bg-[rgba(7,10,18,0.98)] px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">操作区</th>
+                <th className={daaSurfaceTableHeadClassName}>标的</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>持仓</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>现价</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>市值</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>权重 / 偏离</th>
+                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>盈亏</th>
+                <th className="sticky right-0 z-20 border-b border-[var(--border)] bg-[rgba(7,10,18,0.98)] px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -1157,7 +1482,7 @@ export default function AssetUniverseTable(props: {
                 if (entry.type === "group") {
                   return (
                     <tr key={`group-${entry.key}`} className="border-b border-[var(--border)]/70 bg-[rgba(255,255,255,0.03)]">
-                      <td colSpan={11} className="px-4 py-3">
+                      <td colSpan={7} className="px-4 py-3">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span className="font-semibold text-[var(--text)]">{entry.label}（{entry.count}）</span>
                           <span className="text-[var(--muted)]">
@@ -1171,18 +1496,12 @@ export default function AssetUniverseTable(props: {
 
                 const row = entry.row;
                 const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
-                const targetDraft = draftTargetValue(row);
-                const targetDraftNum = Number(targetDraft);
-                const targetChanged = Number.isFinite(targetDraftNum) && Math.abs(targetDraftNum - normalizeTargetWeightPct(row.targetWeightPct)) > 1e-6;
-                const targetInvalid = !Number.isFinite(targetDraftNum) || targetDraftNum < 0;
                 const buyDisabled = props.disabled || !(price > 0);
                 const sellDisabled = props.disabled || !(price > 0) || !(row.holdingQty > 0);
                 const actionBusy = props.actioningAssetKey === row.assetKey;
                 const inBasket = isInBasket(row);
                 const expanded = Boolean(props.expandedInsightKeys[row.assetKey]);
                 const rowValuation = localValuation(row);
-                const rowGapLabel = gapLabel(row.gapPct);
-                const gapBarWidth = row.gapPct == null ? 0 : Math.min(100, Math.max(8, Math.abs(row.gapPct) * 1000));
                 const rowPnlPct = unrealizedPnlPct(row);
                 const valuationScore = props.insightDataByAssetKey[row.assetKey]?.valuation?.scorePct ?? null;
                 const valuationTemp = valuationTemperatureMeta(valuationScore);
@@ -1207,29 +1526,41 @@ export default function AssetUniverseTable(props: {
                   ? `insight:${row.assetKey}:${props.insightDataByAssetKey[row.assetKey]?.llmAnalysis?.generatedAt || props.insightDataByAssetKey[row.assetKey]?.generatedAt || ""}`
                   : null;
 
+                const isEditingTarget = editingTargetKey === row.assetKey;
+
                 return (
                   <Fragment key={row.assetKey}>
                     <tr className="border-b border-[var(--border)]/70 text-[12px] transition-colors hover:bg-[rgba(56,189,248,0.04)]">
-                      <td className="px-4 py-3 align-top">
-                        <div className="max-w-[320px]">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="font-semibold tracking-[-0.01em] text-[var(--text)]">{row.symbol}</div>
-                            <DaaSurfaceStatusPill tone={rowStatusTone({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}>
-                              {rowStatusLabel({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}
-                            </DaaSurfaceStatusPill>
-                          </div>
-                          <div className="mt-1 truncate text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
-                            {rowMarketLine(row)}
-                          </div>
-                          {row.notes ? <div className="mt-2 truncate text-[11px] leading-5 text-[var(--muted)]">{row.notes}</div> : null}
-                        </div>
+                      {/* Column 1: 标的 — symbol + status pill + market line + type tooltip */}
+                      <td className="px-3 py-3 align-top">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="max-w-[230px] cursor-default">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="font-semibold tracking-[-0.01em] text-[var(--text)]">{row.symbol}</div>
+                                <DaaSurfaceStatusPill tone={rowStatusTone({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}>
+                                  {rowStatusLabel({ holdingQty: row.holdingQty, watchEnabled: row.watchEnabled, inBasket })}
+                                </DaaSurfaceStatusPill>
+                              </div>
+                              <div className="mt-1 truncate text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">
+                                {rowMarketLine(row)}
+                              </div>
+                              {row.notes ? <div className="mt-1.5 truncate text-[11px] leading-5 text-[var(--muted)]">{row.notes}</div> : null}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
+                            <div className="space-y-1 text-xs">
+                              <div className="font-medium">{rowTypeSummary(row)}</div>
+                              <div className="text-[var(--muted)]">{rowTypeDetail(row)}</div>
+                              <div className="text-[var(--muted)]">交易所: {exchangeLabel(row.exchange) || "-"}</div>
+                              <div className="text-[var(--muted)]">区域: {regionLabel(row.region || row.market)}</div>
+                              {tagSummary ? <div className="text-[var(--muted)]">标签: {tagSummary}</div> : null}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
                       </td>
-                      <td className="px-4 py-3 align-top text-[11px] text-[var(--muted)]">
-                        <div className="truncate">{rowTypeSummary(row)}</div>
-                        <div className="mt-1 text-[11px] text-[var(--faint)]">{rowTypeDetail(row)}</div>
-                        {tagSummary ? <div className="mt-2 text-[11px] text-[var(--faint)]">标签：{tagSummary}</div> : null}
-                      </td>
-                      <td className="px-4 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
+                      {/* Column 2: 持仓 — qty + cost per unit */}
+                      <td className="px-3 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
                         <div>{row.holdingQty.toFixed(4)}</div>
                         {row.holdingQty > 0 ? (
                           <div className="mt-1 text-[11px] text-[var(--muted)]">
@@ -1237,7 +1568,8 @@ export default function AssetUniverseTable(props: {
                           </div>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
+                      {/* Column 3: 现价 — price + status pill */}
+                      <td className="px-3 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div className="inline-flex cursor-default flex-col items-end">
@@ -1252,7 +1584,8 @@ export default function AssetUniverseTable(props: {
                           </TooltipContent>
                         </Tooltip>
                       </td>
-                      <td className="px-4 py-3 text-right align-top font-[var(--font-mono)] text-sm text-[var(--text)]">
+                      {/* Column 4: 市值 — local valuation + base currency tooltip */}
+                      <td className="px-3 py-3 text-right align-top font-[var(--font-mono)] text-sm text-[var(--text)]">
                         {rowValuation > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1268,127 +1601,67 @@ export default function AssetUniverseTable(props: {
                           </Tooltip>
                         ) : "-"}
                       </td>
-                      <td className="px-4 py-3 text-right align-top">
-                        <div className="font-[var(--font-mono)] text-sm text-[var(--text)]">{formatPercent(row.actualWeightPct)}</div>
+                      {/* Column 5: 权重/偏离 — merged actual + target (inline edit) + gap bar */}
+                      <WeightGapCell
+                        row={row}
+                        editing={isEditingTarget}
+                        editingValue={draftTargetValue(row)}
+                        disabled={props.disabled}
+                        updatingTarget={props.updatingTarget}
+                        onStartEdit={() => handleStartEditTarget(row)}
+                        onChangeEditValue={(value) => {
+                          setTargetDrafts((prev) => ({ ...prev, [row.assetKey]: value }));
+                        }}
+                        onSave={() => void handleSaveTarget(row)}
+                      />
+                      {/* Column 6: 盈亏 — unrealized PnL % + valuation temperature */}
+                      <td className="px-3 py-3 text-right align-top">
                         {rowPnlPct != null ? (
-                          <div className={cn("mt-1 text-[11px]", rowPnlPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
-                            浮盈亏 {rowPnlPct.toFixed(2)}%
+                          <div className={cn("font-[var(--font-mono)] text-xs font-semibold", rowPnlPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
+                            {rowPnlPct >= 0 ? "+" : ""}{rowPnlPct.toFixed(2)}%
                           </div>
-                        ) : null}
-                        <div className={cn("mt-1 text-[11px]", valuationTemp.className)}>估值温度 {valuationTemp.text}</div>
+                        ) : (
+                          <div className="text-xs text-[var(--faint)]">-</div>
+                        )}
+                        <div className={cn("mt-1 text-[10px]", valuationTemp.className)}>{valuationTemp.text}</div>
                       </td>
-                      <td className="px-4 py-3 text-right align-top">
-                        <div className="flex justify-end gap-2">
-                          <input
-                            name={`target-weight-${row.assetKey}`}
-                            value={targetDraft}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setTargetDrafts((prev) => ({ ...prev, [row.assetKey]: value }));
-                            }}
-                            className={cn(daaSurfaceDenseFieldClassName, "w-24 text-right font-[var(--font-mono)] text-[12px]")}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            disabled={props.disabled || props.updatingTarget}
-                            data-testid={`workbench-target-${row.assetKey}`}
-                          />
-                          <DaaSurfaceActionButton
-                            tone="slate"
-                            className="h-9 min-w-[64px] rounded-[12px] px-3 text-[11px]"
-                            onClick={() => void handleSaveTarget(row)}
-                            disabled={props.disabled || props.updatingTarget || !targetChanged || targetInvalid}
-                            data-testid={`workbench-target-save-${row.assetKey}`}
-                          >
-                            保存
-                          </DaaSurfaceActionButton>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right align-top">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="inline-flex cursor-default flex-col items-end gap-2">
-                              <span className={cn("text-xs font-semibold", rowGapLabel.className)}>{rowGapLabel.text}</span>
-                              <span className="h-1.5 w-20 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
-                                <span className={cn("block h-full rounded-full", rowGapLabel.barClassName)} style={{ width: `${gapBarWidth}%` }} />
-                              </span>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent className="border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
-                            <div className="text-xs">目标差值 = 目标权重 - 当前权重</div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-1.5 text-xs text-[var(--text)]"
-                            >
-                              <span className="text-base leading-none">{hfSignalIcon(row.hfSignal)}</span>
-                              <span>{hfSignalButtonLabel(row.hfSignal)}</span>
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
-                            {row.hfSignal ? (
-                              <div className="space-y-1.5">
-                                <div className="text-xs font-medium">{row.hfSignal.icon} {row.hfSignal.label}</div>
-                                <div className="text-xs text-[var(--muted)]">
-                                  信号强度 {row.hfSignal.aggregatedScorePct.toFixed(1)}% · 一致性 {row.hfSignal.convictionPct.toFixed(1)}%
-                                </div>
-                                <div className="text-xs text-[var(--muted)]">
-                                  观点偏离度 {row.hfSignal.thesisDriftPct.toFixed(1)}% · {hfTrendLabel(row.hfSignal.trend)}
-                                </div>
-                                {row.hfSignal.funds.length ? (
-                                  <div className="space-y-1">
-                                    {row.hfSignal.funds.slice(0, 3).map((fund) => (
-                                      <div key={`${fund.fundCode}-${fund.weightPct}`} className="text-xs text-[var(--muted)]">
-                                        {normalizeFundLabel(fund.fundName, fund.fundCode)} · 当前仓位 {fund.weightPct.toFixed(1)}% · 变动 {fund.changePct >= 0 ? "+" : ""}{fund.changePct.toFixed(1)}%
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ) : (
-                              <div className="text-xs text-[var(--muted)]">暂无人因信号</div>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </td>
-                      <td className={cn("px-4 py-3 text-right align-top font-[var(--font-mono)] text-xs", row.fxMissing ? "text-rose-200" : "text-[var(--muted)]")}>
-                        {fxLabel(row)}
-                      </td>
-                      <td className="sticky right-0 z-10 bg-[rgba(7,10,18,0.98)] px-4 py-3 text-right align-top">
-                        <div className="flex w-[136px] flex-col gap-2 ml-auto">
-                          <ActionButton
-                            label="买入"
-                            testId={`workbench-buy-${row.assetKey}`}
-                            disabled={buyDisabled}
-                            reason={buyReason}
-                            tone="success"
-                            className="w-full justify-center"
-                            onClick={() => props.onAddToExecution(row, "BUY")}
-                          />
-                          <ActionButton
-                            label="卖出"
-                            testId={`workbench-sell-${row.assetKey}`}
-                            disabled={sellDisabled}
-                            reason={sellReason}
-                            tone="warning"
-                            className="w-full justify-center"
-                            onClick={() => props.onAddToExecution(row, "SELL")}
-                          />
+                      {/* Column 7: 操作 (sticky) — trade dropdown + more menu */}
+                      <td className="sticky right-0 z-10 bg-[rgba(7,10,18,0.98)] px-3 py-3 text-right align-top">
+                        <div className="flex items-center justify-end gap-1.5">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <DaaSurfaceActionButton
-                                tone="slate"
-                                className="h-8 w-full justify-center rounded-full px-3 text-[11px]"
+                              <DaaSurfaceActionButton tone="primary" className="h-7 rounded-full px-3 text-[11px]">
+                                交易
+                              </DaaSurfaceActionButton>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-36 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
+                              <DropdownMenuItem
+                                onClick={() => props.onAddToExecution(row, "BUY")}
+                                disabled={buyDisabled}
+                                className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]"
+                              >
+                                买入
+                                {buyReason ? <span className="ml-auto text-[10px] text-[var(--faint)]">不可用</span> : null}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => props.onAddToExecution(row, "SELL")}
+                                disabled={sellDisabled}
+                                className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]"
+                              >
+                                卖出
+                                {sellReason ? <span className="ml-auto text-[10px] text-[var(--faint)]">不可用</span> : null}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--text)] transition-colors"
                                 disabled={Boolean(props.disabled)}
                               >
                                 <MoreHorizontal className="h-3.5 w-3.5" />
-                                更多
-                              </DaaSurfaceActionButton>
+                              </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
                               <DropdownMenuLabel className="text-xs text-[var(--faint)]">低频操作</DropdownMenuLabel>
@@ -1424,7 +1697,14 @@ export default function AssetUniverseTable(props: {
 
                     {expanded ? (
                       <tr className="border-b border-[var(--border)]/70 bg-[rgba(8,12,20,0.86)]">
-                        <td colSpan={11} className="px-4 py-4">
+                        <td colSpan={7} className="px-4 py-4">
+                          {/* 快速信息条 */}
+                          <div className="flex flex-wrap gap-4 border-b border-[var(--border)] px-4 py-2.5 text-xs mb-4 -mx-4 -mt-4 rounded-t-[4px]">
+                            <span className="text-[var(--faint)]">类型: {rowTypeSummary(row)} · {rowTypeDetail(row)}</span>
+                            <span className={cn("", row.fxMissing ? "text-rose-200" : "text-[var(--faint)]")}>汇率: {fxLabel(row)}</span>
+                            <span className={cn("", valuationTemp.className)}>估值温度: {valuationTemp.text}</span>
+                            <span className="text-[var(--faint)]">{hfSignalButtonLabel(row.hfSignal)}</span>
+                          </div>
                           <InlineInsights
                             loading={Boolean(props.insightLoadingByAssetKey[row.assetKey])}
                             error={props.insightErrorByAssetKey[row.assetKey] || ""}
@@ -1444,7 +1724,7 @@ export default function AssetUniverseTable(props: {
 
               {tableEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center">
+                  <td colSpan={7} className="px-4 py-10 text-center">
                     {(() => {
                       const emptyMeta = emptyStateMeta({
                         view: props.view,

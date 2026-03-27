@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * 单个资产的实时价格更新。
@@ -119,10 +119,14 @@ export function usePriceStream(assetKeys: string[]): StreamState {
     setState((prev) => ({ ...prev, connected: false }));
   }, []);
 
+  // assetKeys 稳定化（避免 join 作为 dep 的代码异味）
+  const assetKeysStable = useMemo(() => assetKeys.join(","), [assetKeys]);
+
   // 页面可见性管理
   useEffect(() => {
     function handleVisibility() {
       if (document.visibilityState === "visible") {
+        retryCountRef.current = 0; // 可见性恢复时重置退避
         connect();
       } else {
         disconnect();
@@ -131,7 +135,8 @@ export function usePriceStream(assetKeys: string[]): StreamState {
 
     document.addEventListener("visibilitychange", handleVisibility);
 
-    // 初始连接
+    // assetKeys 变化时重置退避并重连
+    retryCountRef.current = 0;
     if (assetKeys.length > 0 && document.visibilityState === "visible") {
       connect();
     }
@@ -140,7 +145,7 @@ export function usePriceStream(assetKeys: string[]): StreamState {
       document.removeEventListener("visibilitychange", handleVisibility);
       disconnect();
     };
-  }, [assetKeys.join(","), connect, disconnect]);
+  }, [assetKeysStable, connect, disconnect]);
 
   return state;
 }

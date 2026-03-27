@@ -24,6 +24,10 @@ const SECTION_META: Record<string, { label: string; hint: string }> = {
     label: "交易记录",
     hint: "周期、订单与复盘报告审计中心",
   },
+  "strategy-lab": {
+    label: "策略实验室",
+    hint: "回测资产配置策略，对比基准收益",
+  },
   settings: {
     label: "设置",
     hint: "策略、风控、数据源与通知配置",
@@ -35,6 +39,7 @@ const DEFAULT_SECTION_META = { label: "控制台", hint: "" };
 function resolveSection(pathname: string): string {
   if (pathname.startsWith("/daa/dashboard/workbench")) return "workbench";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
+  if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
   return "workbench";
 }
@@ -42,10 +47,12 @@ function resolveSection(pathname: string): string {
 export default function DashboardShell({ children }: Props) {
   const pathname = usePathname() || "/daa/dashboard/workbench";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("daa:sidebar:collapsed");
-    if (saved === "0") setSidebarCollapsed(false);
+    const stored = window.localStorage.getItem("daa:sidebar:collapsed");
+    if (stored === "0") setSidebarCollapsed(false);
+    setHydrated(true);
   }, []);
 
   const currentSection = useMemo(() => SECTION_META[resolveSection(pathname)] ?? DEFAULT_SECTION_META, [pathname]);

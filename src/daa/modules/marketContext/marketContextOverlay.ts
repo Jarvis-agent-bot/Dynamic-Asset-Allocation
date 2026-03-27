@@ -1,6 +1,6 @@
 import { clamp } from "@/src/core/math";
 import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
-import { classifyMacroCycle } from "@/src/daa/modules/marketContext/macroCycleClassifier";
+import { classifyMacroCycleWithFred, type FredMacroInput } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
   MARKET_INDICATOR_CONFIG_KEY_BY_KEY_,
   MARKET_INDICATOR_KEYS_,
@@ -130,6 +130,7 @@ function buildScopedContext(input: {
 export function buildMarketContextFromIndicators(input: {
   indicators: DaaMarketIndicatorSnapshot[];
   config: DaaMarketIndicatorsConfig;
+  fredMacro?: FredMacroInput | null;
 }): DaaMarketContext | null {
   const scopes = MARKET_SCOPE_KEY_ORDER_
     .map((scope) => buildScopedContext({ scope, indicators: input.indicators, config: input.config }))
@@ -168,7 +169,7 @@ export function buildMarketContextFromIndicators(input: {
     reasons,
     indicators: enabledIndicators,
     scopes,
-    macroCycle: classifyMacroCycle(enabledIndicators) ?? null,
+    macroCycle: classifyMacroCycleWithFred(input.fredMacro ?? null, enabledIndicators) ?? null,
   };
 
   return result;

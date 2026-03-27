@@ -122,6 +122,30 @@ async function testTelegram(mode: TestMode): Promise<TestResult> {
   }
 }
 
+async function testFred(): Promise<TestResult> {
+  const start = Date.now();
+  const apiKey = await resolveSecret("fred_api_key");
+  if (!apiKey) {
+    return { key: "fred_api_key", success: false, message: "FRED API Key 未配置", latencyMs: Date.now() - start };
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const url = `https://api.stlouisfed.org/fred/series?series_id=GDP&api_key=${apiKey}&file_type=json`;
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      const body = await response.text();
+      return { key: "fred_api_key", success: false, message: `FRED API 返回 ${response.status}: ${body.slice(0, 100)}`, latencyMs: Date.now() - start };
+    }
+    const data = await response.json();
+    const title = data?.seriess?.[0]?.title || "GDP";
+    return { key: "fred_api_key", success: true, message: `FRED 连通正常（${title}）`, latencyMs: Date.now() - start };
+  } catch (e) {
+    return { key: "fred_api_key", success: false, message: e instanceof Error ? e.message : String(e), latencyMs: Date.now() - start };
+  }
+}
+
 async function testFeishu(mode: TestMode): Promise<TestResult> {
   const start = Date.now();
   const webhookUrl = await resolveSecret("feishu_webhook_url");
@@ -187,6 +211,8 @@ export async function POST(req: Request) {
       result = await testTelegram(mode);
     } else if (body.key === "feishu_webhook_url") {
       result = await testFeishu(mode);
+    } else if (body.key === "fred_api_key") {
+      result = await testFred();
     }
 
     if (!result) {

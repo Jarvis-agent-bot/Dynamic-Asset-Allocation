@@ -26,9 +26,11 @@ const GROUP_META: Record<string, { label: string; order: number }> = {
   feishu: { label: "飞书", order: 2 },
   supabase: { label: "Supabase 认证", order: 3 },
   cron: { label: "定时任务", order: 4 },
+  fred: { label: "FRED 宏观数据", order: 5 },
+  twitter_data: { label: "Twitter 数据", order: 6 },
 };
 
-const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url"]);
+const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "fred_api_key"]);
 const DELIVERABLE_KEYS = new Set(["telegram_bot_token", "feishu_webhook_url"]);
 
 // ─────────────────────────────────────────────────────────────────────────────

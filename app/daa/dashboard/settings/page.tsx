@@ -25,10 +25,18 @@ import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/sr
 
 const SETTINGS_PAGE_DESCRIPTION_ = "按职责配置再平衡策略、风控参数、数据源、人因与通知，并通过固定保存条统一提交。";
 
-/** 按 key 排序后序列化，消除字段顺序差异导致的误判 */
+/** 深度排序后序列化，消除嵌套字段顺序差异导致的误判 */
 function stableStringify(obj: unknown): string {
   if (obj === null || obj === undefined) return "";
-  return JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort());
+  return JSON.stringify(obj, (_key, value) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return Object.keys(value).sort().reduce<Record<string, unknown>>((sorted, k) => {
+        sorted[k] = value[k];
+        return sorted;
+      }, {});
+    }
+    return value;
+  });
 }
 
 export default function SettingsPage() {
@@ -259,8 +267,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="sticky bottom-4 z-20">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 rounded-[20px] border border-[var(--border)] bg-[rgba(8,12,20,0.9)] px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.34)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-4">
+        <div className="flex flex-col gap-3 rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.52)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-semibold text-[var(--text)]">配置保存条</div>
             <div className="mt-1 text-sm text-[var(--muted)]">
