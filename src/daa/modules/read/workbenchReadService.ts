@@ -90,7 +90,7 @@ function buildSignals(input: {
       level: "warn",
       source: "alert",
       text: `${labels.join(" / ")}进入偏防守，普通买入执行 ${Math.round(strongestScope.buyScale * 100)}%，高波动资产买入执行 ${Math.round(strongestScope.highRiskBuyScale * 100)}%。`,
-      actionHref: "/daa/dashboard/workbench",
+      actionHref: "/daa/dashboard/today",
       createdAt: strongestScope.generatedAt || createdAt,
     });
   }
@@ -101,7 +101,7 @@ function buildSignals(input: {
       level: "warn",
       source: "warning",
       text: warning,
-      actionHref: "/daa/dashboard/workbench",
+      actionHref: "/daa/dashboard/today",
       createdAt,
     });
   }
@@ -112,7 +112,7 @@ function buildSignals(input: {
       level: "warn",
       source: "system",
       text: input.bootstrap.marketDataHealth.message,
-      actionHref: "/daa/dashboard/workbench",
+      actionHref: "/daa/dashboard/today",
       createdAt,
     });
   }
