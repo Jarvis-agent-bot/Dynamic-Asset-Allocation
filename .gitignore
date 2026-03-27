@@ -109,6 +109,11 @@ Thumbs.db
 # Factory
 .factory/specs/
 
+# Claude Code temp files (keep launch.json)
+.claude/plans/
+.claude/worktrees/
+.claude/settings.local.json
+
 # Build / temp artifacts
 output/
 .tmp/
