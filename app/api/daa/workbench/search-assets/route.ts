@@ -13,6 +13,7 @@ import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, toPositive } from "@/src/daa/utils/normalize";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type LookupMarket = "US" | "HK" | "CN" | "CRYPTO" | "OTHER";
@@ -201,14 +202,25 @@ export async function GET(req: Request) {
     upstream.searchParams.set("newsCount", "0");
     upstream.searchParams.set("enableFuzzyQuery", "true");
 
-    const response = await fetch(upstream, {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
-      },
-      cache: "no-store",
-    });
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 8_000);
+    let response: Response;
+    try {
+      response = await fetch(upstream, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          "user-agent": MARKET_DATA_USER_AGENT,
+        },
+        cache: "no-store",
+        signal: abortController.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const message = err instanceof Error && err.name === "AbortError" ? "yfinance search timeout (8s)" : "yfinance search network error";
+      return fail("ROUTE_DENIED", message, { status: 502 });
+    }
+    clearTimeout(timeoutId);
 
     const text = await response.text();
     if (!response.ok) {
@@ -218,7 +230,15 @@ export async function GET(req: Request) {
       });
     }
 
-    const payload: unknown = JSON.parse(text);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      return fail("ROUTE_DENIED", "yfinance search 返回非 JSON 响应", {
+        status: 502,
+        details: { body: text.slice(0, 500) },
+      });
+    }
     const quotes = safeQuotesArray(payload);
 
     const out: SearchAssetItem[] = [];

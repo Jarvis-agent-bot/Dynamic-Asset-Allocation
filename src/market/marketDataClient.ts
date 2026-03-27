@@ -92,30 +92,62 @@ export function createMarketDataClient(opts: { endpointBase?: string; fetch?: Fe
   const base = normalizeBase(opts.endpointBase ?? "");
   const fetchFn: FetchLike = opts.fetch ?? fetch;
 
+  const RETRY_DELAYS = [500, 1000];
+
+  function isRetryable(status: number): boolean {
+    return status >= 500 && status < 600;
+  }
+
   async function getJson<T>(path: string, qs?: URLSearchParams, init?: RequestInit): Promise<T> {
     const url = `${base}${path}${qs && qs.toString() ? `?${qs.toString()}` : ""}`;
-
-    const response = await fetchFn(url, {
+    const requestInit: RequestInit = {
       method: "GET",
       ...init,
       headers: mergeHeaders(opts.headers, init?.headers),
-    });
+    };
 
-    const text = await response.text();
-    const payload = await readJsonBestEffort(text);
+    let lastError: Error | null = null;
 
-    if (!response.ok) {
-      throw new Error(toErrorMessage(payload, response.status));
-    }
-
-    if (isApiResponse(payload)) {
-      if (!payload.ok) {
-        throw new Error(toErrorMessage(payload, response.status));
+    for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt - 1]));
       }
-      return payload.data as T;
+
+      let response: Response;
+      try {
+        response = await fetchFn(url, requestInit);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < RETRY_DELAYS.length) {
+          logSwallowed(`marketDataClient.getJson retry ${attempt + 1}/${RETRY_DELAYS.length} (network)`, err);
+          continue;
+        }
+        throw lastError;
+      }
+
+      const text = await response.text();
+      const payload = await readJsonBestEffort(text);
+
+      if (!response.ok) {
+        lastError = new Error(toErrorMessage(payload, response.status));
+        if (isRetryable(response.status) && attempt < RETRY_DELAYS.length) {
+          logSwallowed(`marketDataClient.getJson retry ${attempt + 1}/${RETRY_DELAYS.length} (${response.status})`, lastError);
+          continue;
+        }
+        throw lastError;
+      }
+
+      if (isApiResponse(payload)) {
+        if (!payload.ok) {
+          throw new Error(toErrorMessage(payload, response.status));
+        }
+        return payload.data as T;
+      }
+
+      return payload as T;
     }
 
-    return payload as T;
+    throw lastError ?? new Error("getJson: unexpected retry exhaustion");
   }
 
   const noStore: RequestInit = { cache: "no-store" };

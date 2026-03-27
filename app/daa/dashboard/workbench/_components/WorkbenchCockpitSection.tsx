@@ -15,7 +15,6 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { WorkbenchAssistantPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchAssistantPanel";
 import { MarketIndicatorDashboard } from "@/app/daa/dashboard/workbench/_components/MarketIndicatorDashboard";
 import { PerformanceChart } from "@/app/daa/dashboard/workbench/_components/PerformanceChart";
 import { PortfolioRiskPanel } from "@/app/daa/dashboard/workbench/_components/PortfolioRiskPanel";
@@ -77,10 +76,6 @@ export function WorkbenchCockpitSection(props: {
 
   return (
     <div className="space-y-4">
-      <SectionErrorBoundary sectionName="交易助手">
-        <WorkbenchAssistantPanel assistant={model.assistant} />
-      </SectionErrorBoundary>
-
       {/* ── Summary: Performance + Allocation (always visible) ── */}
       <DaaSurfacePanel
         accent="indigo"
@@ -181,7 +176,7 @@ export function WorkbenchCockpitSection(props: {
 
       {/* ── Collapsible: Market Indicators ── */}
       <CollapsibleDetail title="市场指标">
-        <MarketIndicatorDashboard marketContext={marketContext ?? null} />
+        <MarketIndicatorDashboard marketContext={marketContext ?? null} hideClock />
       </CollapsibleDetail>
 
       {/* ── Collapsible: Portfolio Risk ── */}

@@ -41,12 +41,10 @@ app/
 │   ├── read/                   # Read aggregates (workbench, trades)
 │   ├── cron/                   # Scheduled jobs (price, fx, news, drift, analysis)
 │   ├── hf/                     # Hedge fund manager holdings tracking
-│   ├── strategy-lab/           # Backtesting engine API
 │   └── auth/                   # Authentication
 ├── daa/dashboard/              # Frontend pages
 │   ├── workbench/              # Asset pool, insights, rebalancing UI
 │   ├── trades/                 # Trade records
-│   ├── strategy-lab/           # Backtest interface
 │   └── settings/               # Config, credentials, notifications
 
 src/
@@ -62,7 +60,6 @@ src/
 │   │   ├── portfolio/          # Position tracking
 │   │   ├── trade/              # Trade ticket lifecycle
 │   │   ├── marketContext/      # Market regime detection (risk_off/risk_on)
-│   │   ├── strategyLab/        # Backtest service
 │   │   ├── decision/           # Proposal decision context
 │   │   └── dividend/           # Dividend tracking
 │   ├── signals/                # Three-dimensional signal fusion
@@ -77,8 +74,8 @@ src/
 ├── market/                     # Market data clients
 │   ├── yfinance.ts             # Yahoo Finance adapter
 │   ├── yahooRssFetch.ts        # News RSS fetching
-│   └── marketDataClient.ts     # Unified market data API client
-└── components/                 # Shared UI components
+│   ├── marketDataClient.ts     # Unified market data API client
+│   └── constants.ts            # Shared constants (User-Agent etc.)
 ```
 
 ## Asset Classes & Coverage
@@ -89,7 +86,7 @@ src/
 ### Supported Regions (Region type)
 `US` | `HK` | `CN` | `EU` | `JP` | `GLOBAL` | `OTHER`
 
-### Featured Assets Catalog (78 items)
+### Featured Assets Catalog (87 items)
 
 | Category | Count | Examples |
 |----------|-------|---------|
@@ -154,6 +151,9 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Workbench types | `src/daa/modules/workbench/workbenchTypes.ts` |
 | Ensemble strategy | `src/core/ensemble/strategy.ts` |
 | Core domain types | `src/core/domain.ts` |
+| Asset key utilities | `src/daa/assetKey.ts` |
+| API rate limiting | `src/daa/api/rateLimit.ts` |
+| Market data constants | `src/market/constants.ts` |
 
 ## Development Conventions
 

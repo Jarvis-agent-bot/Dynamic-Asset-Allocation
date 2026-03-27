@@ -25,10 +25,18 @@ import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/sr
 
 const SETTINGS_PAGE_DESCRIPTION_ = "按职责配置再平衡策略、风控参数、数据源、人因与通知，并通过固定保存条统一提交。";
 
-/** 按 key 排序后序列化，消除字段顺序差异导致的误判 */
+/** 深度排序后序列化，消除嵌套字段顺序差异导致的误判 */
 function stableStringify(obj: unknown): string {
   if (obj === null || obj === undefined) return "";
-  return JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort());
+  return JSON.stringify(obj, (_key, value) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return Object.keys(value).sort().reduce<Record<string, unknown>>((sorted, k) => {
+        sorted[k] = value[k];
+        return sorted;
+      }, {});
+    }
+    return value;
+  });
 }
 
 export default function SettingsPage() {

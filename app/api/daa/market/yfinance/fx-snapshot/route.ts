@@ -1,6 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { listDaaFxRates, upsertDaaFxRates } from "@/src/daa/store/daaStorePg";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -104,7 +105,7 @@ async function fetchFxRateFromYfinance(baseCcy: string, quoteCcy: string): Promi
     method: "GET",
     headers: {
       accept: "application/json",
-      "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
+      "user-agent": MARKET_DATA_USER_AGENT,
     },
     cache: "no-store",
   });
@@ -182,17 +183,29 @@ export async function POST(req: Request) {
     const rowsToUpsert: Array<{ baseCcy: string; quoteCcy: string; rate: number; source: string; asOfTs: string }> = [];
     const updatedPairs: string[] = [];
 
-    for (const pair of pairs) {
-      if (alreadyPulledPairs.includes(pair.pair)) continue;
-      const rate = await fetchFxRateFromYfinance(pair.baseCcy, pair.quoteCcy);
-      rowsToUpsert.push({
-        baseCcy: pair.baseCcy,
-        quoteCcy: pair.quoteCcy,
-        rate,
-        source: "manual_daily_pull",
-        asOfTs: nowIso,
-      });
-      updatedPairs.push(pair.pair);
+    // 并行拉取汇率（批次大小 5，避免上游限流）
+    const pending = pairs.filter((p) => !alreadyPulledPairs.includes(p.pair));
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+      const batch = pending.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (pair) => {
+          const rate = await fetchFxRateFromYfinance(pair.baseCcy, pair.quoteCcy);
+          return { baseCcy: pair.baseCcy, quoteCcy: pair.quoteCcy, rate, pair: pair.pair };
+        }),
+      );
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          rowsToUpsert.push({
+            baseCcy: result.value.baseCcy,
+            quoteCcy: result.value.quoteCcy,
+            rate: result.value.rate,
+            source: "manual_daily_pull",
+            asOfTs: nowIso,
+          });
+          updatedPairs.push(result.value.pair);
+        }
+      }
     }
 
     const rates = rowsToUpsert.length ? await upsertDaaFxRates(rowsToUpsert) : existingRates;

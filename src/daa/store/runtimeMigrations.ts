@@ -388,7 +388,11 @@ const MIGRATIONS_: Migration[] = [
       await query("ALTER TABLE daa_trade_tickets DROP CONSTRAINT IF EXISTS daa_trade_tickets_status_check");
       await query(
         "ALTER TABLE daa_trade_tickets ADD CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))",
-      ).catch(() => undefined);
+      ).catch((err: unknown) => {
+        // 仅忽略约束已存在的错误（PG error code 42710）
+        const code = (err as Record<string, unknown>)?.code;
+        if (code !== "42710") throw err;
+      });
       await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_kind TEXT");
       await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_account_id TEXT");
       await query("ALTER TABLE daa_trade_tickets ADD COLUMN IF NOT EXISTS broker_order_id TEXT");
@@ -427,6 +431,28 @@ const MIGRATIONS_: Migration[] = [
       await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS high_price NUMERIC");
       await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS low_price NUMERIC");
       await query("ALTER TABLE daa_price_history ADD COLUMN IF NOT EXISTS volume BIGINT");
+    },
+  },
+  {
+    id: "20260327_macro_cycle_snapshots",
+    async apply(query) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_macro_cycle_snapshots (
+          id TEXT PRIMARY KEY,
+          phase TEXT NOT NULL,
+          growth_proxy NUMERIC NOT NULL,
+          inflation_proxy NUMERIC NOT NULL,
+          confidence NUMERIC NOT NULL,
+          label TEXT NOT NULL,
+          favored_assets TEXT[] NOT NULL DEFAULT '{}',
+          data_source TEXT NOT NULL DEFAULT 'proxy',
+          fred_gdp_pct NUMERIC,
+          fred_cpi_pct NUMERIC,
+          fred_unemployment_pct NUMERIC,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_macro_cycle_snapshots_created_desc ON daa_macro_cycle_snapshots(created_at DESC)");
     },
   },
   {

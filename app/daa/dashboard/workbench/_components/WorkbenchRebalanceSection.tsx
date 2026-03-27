@@ -82,6 +82,7 @@ export function WorkbenchRebalanceSection(props: {
   onToggleProposal: (assetKey: string, side: "BUY" | "SELL", selected: boolean) => Promise<void>;
   onSubmitLlmFeedback: (input: { contextId: string; type: "decision"; score: WorkbenchLlmFeedbackScore; comment?: string }) => Promise<void>;
   onSelectCycle: (cycle: RebalanceCycle) => void;
+  compact?: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -135,7 +136,7 @@ export function WorkbenchRebalanceSection(props: {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_296px] xl:items-start">
+      <div className={props.compact ? "flex flex-col gap-4" : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_296px] xl:items-start"}>
         <div className="flex min-w-0 flex-col gap-4">
           <RebalanceProposalList
             bootstrap={props.bootstrap}

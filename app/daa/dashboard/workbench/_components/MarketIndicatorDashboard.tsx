@@ -64,7 +64,7 @@ function normalizePhase(phase: string | undefined | null): "recovery" | "overhea
 
 /* ---------- component ---------- */
 
-export function MarketIndicatorDashboard({ marketContext }: MarketIndicatorDashboardProps) {
+export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketIndicatorDashboardProps & { hideClock?: boolean }) {
   if (!marketContext) {
     return <SkeletonIndicatorGrid count={12} />;
   }
@@ -76,36 +76,36 @@ export function MarketIndicatorDashboard({ marketContext }: MarketIndicatorDashb
 
   return (
     <div className="space-y-5">
-      {/* Section 1: 投资时钟 */}
-      <div>
-        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">投资时钟</div>
-        <div className="grid gap-4 md:grid-cols-[240px_1fr]">
-          <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-4")}>
-            <InvestmentClockWidget
-              phase={clockPhase}
-              growthProxy={macro?.growthProxy}
-              inflationProxy={macro?.inflationProxy}
-              confidence={macro?.confidence}
-            />
-          </div>
-          <div className={cn(daaSurfaceSubtlePanelClassName, "flex flex-col justify-center px-4 py-4")}>
-            <div className="text-sm font-semibold text-[var(--text)]">
-              当前阶段: {macroCyclePhaseLabel(clockPhase)} {macro?.label ? `— ${macro.label}` : ""}
+      {/* Section 1: 投资时钟（无宏观数据或 hideClock 时隐藏） */}
+      {!hideClock && clockPhase && (
+        <div>
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">投资时钟</div>
+          <div className="grid gap-4 md:grid-cols-[240px_1fr]">
+            <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-4")}>
+              <InvestmentClockWidget
+                phase={clockPhase}
+                growthProxy={macro?.growthProxy}
+                inflationProxy={macro?.inflationProxy}
+                confidence={macro?.confidence}
+              />
             </div>
-            {macro?.favoredAssets && macro.favoredAssets.length > 0 ? (
-              <div className="mt-2 text-sm text-[var(--muted)]">
-                推荐资产: {macro.favoredAssets.join(", ")}
+            <div className={cn(daaSurfaceSubtlePanelClassName, "flex flex-col justify-center px-4 py-4")}>
+              <div className="text-sm font-semibold text-[var(--text)]">
+                当前阶段: {macroCyclePhaseLabel(clockPhase)} {macro?.label ? `— ${macro.label}` : ""}
               </div>
-            ) : clockPhase ? (
-              <div className="mt-2 text-sm text-[var(--muted)]">
-                推荐: {clockPhase === "recovery" ? "股票, 周期品" : clockPhase === "overheating" ? "大宗商品, TIPS" : clockPhase === "stagflation" ? "现金, 黄金" : "债券, 防御股"}
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-[var(--faint)]">宏观周期数据暂未生成</div>
-            )}
+              {macro?.favoredAssets && macro.favoredAssets.length > 0 ? (
+                <div className="mt-2 text-sm text-[var(--muted)]">
+                  推荐资产: {macro.favoredAssets.join(", ")}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-[var(--muted)]">
+                  推荐: {clockPhase === "recovery" ? "股票, 周期品" : clockPhase === "overheating" ? "大宗商品, TIPS" : clockPhase === "stagflation" ? "现金, 黄金" : "债券, 防御股"}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Section 2: 指标概览 */}
       {indicators.length > 0 ? (

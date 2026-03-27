@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -25,6 +25,29 @@ type NormalizedPoint = {
   date: string; // YYYY-MM-DD
   portfolio: number; // 归一化 %（100 = 起始）
 };
+
+/**
+ * 图表配色常量 — 对应 CSS 变量的静态值。
+ * Recharts 部分 prop（tick.fill、contentStyle 等）不支持 CSS var()，
+ * 因此在此集中维护，与主题色保持同步。
+ */
+const CHART_COLORS = {
+  /** var(--muted) — 坐标轴刻度文字 */
+  muted: "hsl(215 16% 57%)",
+  /** var(--foreground) — 工具提示背景 */
+  tooltipBg: "hsl(222 47% 11%)",
+  /** var(--border) — 工具提示边框 */
+  tooltipBorder: "hsla(215,16%,57%,0.2)",
+  /** 网格线 */
+  grid: "hsla(215,16%,57%,0.12)",
+  /** var(--primary) / 主图线 */
+  primary: "hsl(199 89% 60%)",
+  /** var(--primary) 背景 */
+  primaryBgAlpha: "hsla(199,89%,60%,0.16)",
+  // 预留基准线：
+  // success: "hsl(160 60% 55%)",   // var(--success)
+  // warning: "hsl(43 96% 56%)",    // var(--warning)
+} as const;
 
 const TIME_RANGES = [
   { key: "1M", label: "1M", days: 30 },
@@ -64,7 +87,7 @@ function normalizeSnapshots(
 /*  组件                                                               */
 /* ------------------------------------------------------------------ */
 
-export function PerformanceChart(props: {
+export const PerformanceChart = React.memo(function PerformanceChart(props: {
   snapshots: Snapshot[];
   className?: string;
 }) {
@@ -110,7 +133,7 @@ export function PerformanceChart(props: {
               onClick={() => setRange(r.key)}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 range === r.key
-                  ? "bg-[rgba(56,189,248,0.16)] text-[#38BDF8]"
+                  ? "bg-[hsla(199,89%,60%,0.16)] text-[hsl(199,89%,60%)]"
                   : "text-[var(--muted)] hover:text-[var(--text)]"
               }`}
             >
@@ -138,17 +161,17 @@ export function PerformanceChart(props: {
             margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
           >
             <CartesianGrid
-              stroke="rgba(148,163,184,0.12)"
+              stroke={CHART_COLORS.grid}
               vertical={false}
             />
             <XAxis
               dataKey="label"
-              tick={{ fill: "#94A3B8", fontSize: 11 }}
+              tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
-              tick={{ fill: "#94A3B8", fontSize: 11 }}
+              tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
               tickLine={false}
               axisLine={false}
               width={42}
@@ -157,8 +180,8 @@ export function PerformanceChart(props: {
             />
             <Tooltip
               contentStyle={{
-                background: "#0F172A",
-                border: "1px solid rgba(148,163,184,0.2)",
+                background: CHART_COLORS.tooltipBg,
+                border: `1px solid ${CHART_COLORS.tooltipBorder}`,
                 borderRadius: 14,
               }}
               formatter={(value: number | undefined) => [
@@ -177,18 +200,18 @@ export function PerformanceChart(props: {
               type="monotone"
               dataKey="portfolio"
               name="我的组合"
-              stroke="#38BDF8"
+              stroke={CHART_COLORS.primary}
               strokeWidth={2.2}
               dot={false}
-              activeDot={{ r: 4, fill: "#38BDF8" }}
+              activeDot={{ r: 4, fill: CHART_COLORS.primary }}
             />
             {/* 未来添加基准线：
-            <Line type="monotone" dataKey="spy" name="SPY" stroke="#34D399" strokeWidth={1.6} dot={false} strokeDasharray="4 2" />
-            <Line type="monotone" dataKey="balanced" name="60/40" stroke="#FBBF24" strokeWidth={1.6} dot={false} strokeDasharray="4 2" />
+            <Line type="monotone" dataKey="spy" name="SPY" stroke={CHART_COLORS.success} strokeWidth={1.6} dot={false} strokeDasharray="4 2" />
+            <Line type="monotone" dataKey="balanced" name="60/40" stroke={CHART_COLORS.warning} strokeWidth={1.6} dot={false} strokeDasharray="4 2" />
             */}
           </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
   );
-}
+});

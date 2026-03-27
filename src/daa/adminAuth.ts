@@ -64,12 +64,9 @@ function unauthorized() {
 export type DaaAdminActorUserId = "viewer-token" | "editor-token" | "unknown-token";
 
 export function inferDaaAdminActorUserId(providedToken: string | null | undefined): DaaAdminActorUserId {
-  const t = normalizeToken(providedToken);
-  if (!t) return "unknown-token";
-
-  const { viewer, editor } = getAdminTokens();
-  if (viewer && t === viewer) return "viewer-token";
-  if (editor && t === editor) return "editor-token";
+  const kind = inferDaaAdminTokenKind(providedToken);
+  if (kind === "viewer") return "viewer-token";
+  if (kind === "editor") return "editor-token";
   return "unknown-token";
 }
 

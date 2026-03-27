@@ -24,27 +24,27 @@ export default function DaaDashboardError({
     <div className="space-y-4">
       <Card className="border-destructive/20">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Dashboard crashed</CardTitle>
+          <CardTitle className="text-base">仪表盘加载异常</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="text-sm text-muted-foreground">
-            Something went wrong while rendering <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code>. You can retry safely.
+            渲染 <code className="rounded bg-muted px-1 py-0.5">/daa/dashboard</code> 时发生错误，您可以安全地重试。
           </div>
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={reset}>
-              Retry
+              重试
             </Button>
             <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-              Reload page
+              刷新页面
             </Button>
             <Button asChild type="button" variant="ghost">
-              <Link href="/daa/dashboard">Back to dashboard</Link>
+              <Link href="/daa/dashboard">返回仪表盘</Link>
             </Button>
           </div>
 
           <Alert variant="destructive">
-            <AlertTitle>Details</AlertTitle>
+            <AlertTitle>错误详情</AlertTitle>
             <AlertDescription>
               <div className="break-words font-mono text-xs">{error.message || String(error)}</div>
               {error.digest ? <div className="mt-1 font-mono text-xs opacity-80">digest: {error.digest}</div> : null}

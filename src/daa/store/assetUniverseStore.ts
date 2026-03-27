@@ -305,84 +305,95 @@ export async function patchDaaAssetUniverseRow(input: {
     const parsed = parseDaaAssetKey(input.assetKey);
     if (!parsed) throw new Error("assetKey is required");
     const assetKey = buildPositionKey(parsed.symbol, parsed.market);
-    const currentRes = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE u.asset_key = $1 LIMIT 1`, [assetKey]);
-    if (!currentRes.rows.length) throw new Error(`asset not found: ${assetKey}`);
-    const current = mapAssetUniverseRow(currentRes.rows[0] as Record<string, unknown>);
 
-    const market = normalizeText(input.market, current.market).toUpperCase();
-    const assetClass = normalizeAssetClass(input.assetClass, current.assetClass as any);
-    const next = {
-      symbol: current.symbol,
-      market,
-      currency: normalizeCcyCode(input.currency, current.currency),
-      assetClass,
-      region: normalizeRegion(input.region, current.region as any),
-      exchange: normalizeText(input.exchange, current.exchange),
-      instrumentType: normalizeInstrumentType(input.instrumentType, current.instrumentType as any),
-      marketGroup: normalizeText(input.marketGroup, current.marketGroup || inferMarketGroup({ market, assetClass })),
-      watchEnabled: input.watchEnabled == null ? current.watchEnabled : Boolean(input.watchEnabled),
-      targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFiniteNumber(input.targetWeightHint)),
-      holdingQty: input.holdingQty == null ? current.holdingQty : Math.max(0, toFiniteNumber(input.holdingQty)),
-      holdingPrice: input.holdingPrice == null ? current.holdingPrice : Math.max(0, toFiniteNumber(input.holdingPrice)),
-      costBasis: input.costBasis === undefined ? current.costBasis : (input.costBasis == null ? null : Math.max(0, toFiniteNumber(input.costBasis))),
-      watchTags: input.watchTags == null ? current.watchTags : input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
-      notes: input.notes === undefined ? current.notes : (input.notes == null ? null : normalizeText(input.notes) || null),
-      lastPrice: input.lastPrice == null ? current.lastPrice : Math.max(0, toFiniteNumber(input.lastPrice)),
-      priceUpdatedAt: input.priceUpdatedAt === undefined ? current.priceUpdatedAt : (input.priceUpdatedAt ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null),
-    };
+    // 使用事务包裹 UPDATE + 持仓同步，保证一致性
+    await query("BEGIN");
+    try {
+      const currentRes = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE u.asset_key = $1 LIMIT 1`, [assetKey]);
+      if (!currentRes.rows.length) throw new Error(`asset not found: ${assetKey}`);
+      const current = mapAssetUniverseRow(currentRes.rows[0] as Record<string, unknown>);
 
-    const updatedRes = await query(
-      `UPDATE daa_asset_universe
-       SET
-         currency = $2,
-         asset_class = $3,
-         region = $4,
-         exchange = $5,
-         instrument_type = $6,
-         market_group = $7,
-         watch_enabled = $8,
-         target_weight_hint = $9,
-         holding_qty = $10,
-         holding_price = $11,
-         cost_basis = $12,
-         watch_tags = $13,
-         notes = $14,
-         last_price = $15,
-         price_updated_at = $16,
-         updated_at = NOW()
-       WHERE asset_key = $1
-       RETURNING asset_key`,
-      [
+      const market = normalizeText(input.market, current.market).toUpperCase();
+      const assetClass = normalizeAssetClass(input.assetClass, current.assetClass as any);
+      const next = {
+        symbol: current.symbol,
+        market,
+        currency: normalizeCcyCode(input.currency, current.currency),
+        assetClass,
+        region: normalizeRegion(input.region, current.region as any),
+        exchange: normalizeText(input.exchange, current.exchange),
+        instrumentType: normalizeInstrumentType(input.instrumentType, current.instrumentType as any),
+        marketGroup: normalizeText(input.marketGroup, current.marketGroup || inferMarketGroup({ market, assetClass })),
+        watchEnabled: input.watchEnabled == null ? current.watchEnabled : Boolean(input.watchEnabled),
+        targetWeightHint: input.targetWeightHint == null ? current.targetWeightHint : Math.max(0, toFiniteNumber(input.targetWeightHint)),
+        holdingQty: input.holdingQty == null ? current.holdingQty : Math.max(0, toFiniteNumber(input.holdingQty)),
+        holdingPrice: input.holdingPrice == null ? current.holdingPrice : Math.max(0, toFiniteNumber(input.holdingPrice)),
+        costBasis: input.costBasis === undefined ? current.costBasis : (input.costBasis == null ? null : Math.max(0, toFiniteNumber(input.costBasis))),
+        watchTags: input.watchTags == null ? current.watchTags : input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
+        notes: input.notes === undefined ? current.notes : (input.notes == null ? null : normalizeText(input.notes) || null),
+        lastPrice: input.lastPrice == null ? current.lastPrice : Math.max(0, toFiniteNumber(input.lastPrice)),
+        priceUpdatedAt: input.priceUpdatedAt === undefined ? current.priceUpdatedAt : (input.priceUpdatedAt ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null),
+      };
+
+      const updatedRes = await query(
+        `UPDATE daa_asset_universe
+         SET
+           currency = $2,
+           asset_class = $3,
+           region = $4,
+           exchange = $5,
+           instrument_type = $6,
+           market_group = $7,
+           watch_enabled = $8,
+           target_weight_hint = $9,
+           holding_qty = $10,
+           holding_price = $11,
+           cost_basis = $12,
+           watch_tags = $13,
+           notes = $14,
+           last_price = $15,
+           price_updated_at = $16,
+           updated_at = NOW()
+         WHERE asset_key = $1
+         RETURNING asset_key`,
+        [
+          assetKey,
+          next.currency,
+          next.assetClass,
+          next.region,
+          next.exchange,
+          next.instrumentType,
+          next.marketGroup,
+          next.watchEnabled,
+          next.targetWeightHint,
+          next.holdingQty,
+          next.holdingPrice,
+          next.costBasis,
+          next.watchTags,
+          next.notes,
+          next.lastPrice,
+          next.priceUpdatedAt,
+        ],
+      );
+      await syncSinglePositionV2InTx(query as DaaTxQueryFn, {
         assetKey,
-        next.currency,
-        next.assetClass,
-        next.region,
-        next.exchange,
-        next.instrumentType,
-        next.marketGroup,
-        next.watchEnabled,
-        next.targetWeightHint,
-        next.holdingQty,
-        next.holdingPrice,
-        next.costBasis,
-        next.watchTags,
-        next.notes,
-        next.lastPrice,
-        next.priceUpdatedAt,
-      ],
-    );
-    await syncSinglePositionV2InTx(query as DaaTxQueryFn, {
-      assetKey,
-      symbol: current.symbol,
-      market: current.market,
-      currency: next.currency,
-      qty: next.holdingQty,
-      price: next.holdingPrice,
-      costBasis: next.costBasis,
-      tags: current.holdingTags,
-      updatedAt: new Date().toISOString(),
-    });
-    return (await selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, normalizeText(updatedRes.rows[0]?.asset_key, assetKey)))!;
+        symbol: current.symbol,
+        market: current.market,
+        currency: next.currency,
+        qty: next.holdingQty,
+        price: next.holdingPrice,
+        costBasis: next.costBasis,
+        tags: current.holdingTags,
+        updatedAt: new Date().toISOString(),
+      });
+      const row = await selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, normalizeText(updatedRes.rows[0]?.asset_key, assetKey));
+      if (!row) throw new Error(`patch succeeded but row not found: ${assetKey}`);
+      await query("COMMIT");
+      return row;
+    } catch (err) {
+      await query("ROLLBACK").catch(() => {});
+      throw err;
+    }
   });
 }
 

@@ -1,4 +1,5 @@
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 function epochSecondsUtcStart(iso: string): number {
@@ -26,7 +27,7 @@ export async function fetchYfinanceLatestClose(symbolRaw: string): Promise<{ sym
       cache: "no-store",
       headers: {
         accept: "application/json",
-        "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
+        "user-agent": MARKET_DATA_USER_AGENT,
       },
     });
 
