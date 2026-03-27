@@ -3,6 +3,7 @@ import { fail, mapDeniedResponse, ok, withApiHandler } from "@/src/daa/api/route
 
 import { assertIsoDateString } from "@/src/core/isoDate";
 import { addDaysIsoUtc, normalizeYfinanceHistoricalQuotes, normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -64,7 +65,7 @@ export async function GET(req: Request) {
       method: "GET",
       headers: {
         accept: "application/json",
-        "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
+        "user-agent": MARKET_DATA_USER_AGENT,
       },
       cache: "no-store",
     });

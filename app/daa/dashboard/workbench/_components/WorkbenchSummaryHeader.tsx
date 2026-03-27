@@ -161,7 +161,7 @@ export function WorkbenchSummaryHeader(props: {
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
             <DaaSurfaceStatusPill tone={accountModeTone}>{accountModeLabel}</DaaSurfaceStatusPill>
             <DaaSurfaceStatusPill tone={syncTone}>{syncLabel}</DaaSurfaceStatusPill>
             {props.priceStreamConnected != null && (

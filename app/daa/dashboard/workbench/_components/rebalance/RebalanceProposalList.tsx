@@ -105,6 +105,7 @@ export function RebalanceProposalList(props: {
                           checked={row.selected}
                           onChange={(e) => void props.onToggleProposal(row.assetKey, row.side, e.target.checked)}
                           disabled={!props.canEditCurrentCycle}
+                          aria-label={`选中 ${row.symbol} 提案`}
                         />
                         <div className="min-w-0 flex-1 space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
@@ -146,6 +147,8 @@ export function RebalanceProposalList(props: {
                             type="button"
                             onClick={() => props.setExpandedProposalDecisionKeys((prev) => ({ ...prev, [proposalKey]: !prev[proposalKey] }))}
                             className="flex items-center gap-1.5 text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+                            aria-expanded={decisionExpanded}
+                            aria-label="展开/收起详情"
                           >
                             <span className="text-[9px]">{decisionExpanded ? "▼" : "▶"}</span>
                             执行说明与决策上下文

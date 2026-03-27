@@ -30,6 +30,8 @@ export type DaaNewsSignal = {
 
 const NEWS_SIGNAL_CACHE_MAX_AGE_MS_ = 30 * 60 * 1000;
 const NEWS_RAW_RETENTION_DAYS_ = 90;
+const TWITTER_SEARCH_TIMEOUT_MS_ = 10_000;
+const TWITTER_SOURCE_CREDIBILITY_ = 0.6;
 
 
 function domainFromLink(link: string | null | undefined): string {
@@ -127,6 +129,75 @@ function scoreFromNewsItem(item: DaaNewsSignalItem): number {
   return clamp(adjusted, 0, 100);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Twitter 数据源
+// ─────────────────────────────────────────────────────────────────────────────
+
+type TwitterTimelineEntry = {
+  content?: {
+    itemContent?: {
+      tweet_results?: {
+        result?: {
+          legacy?: {
+            full_text?: string;
+            created_at?: string;
+          };
+        };
+      };
+    };
+  };
+};
+
+function parseTweetEntries(payload: unknown): Array<{ text: string; createdAt: string }> {
+  if (!payload || typeof payload !== "object") return [];
+  const entries = (payload as Record<string, unknown>).entries;
+  if (!Array.isArray(entries)) return [];
+  const out: Array<{ text: string; createdAt: string }> = [];
+  for (const entry of entries as TwitterTimelineEntry[]) {
+    const legacy = entry?.content?.itemContent?.tweet_results?.result?.legacy;
+    const text = String(legacy?.full_text || "").trim();
+    if (!text) continue;
+    const createdAt = String(legacy?.created_at || "").trim();
+    out.push({ text, createdAt });
+  }
+  return out;
+}
+
+async function fetchTwitterNewsForSymbol(symbol: string, token: string): Promise<DaaNewsSignalItem[]> {
+  const upstream = new URL("https://pro.twitterdata.com/SearchTimeline");
+  upstream.searchParams.set("rawQuery", symbol);
+  upstream.searchParams.set("token", token);
+  upstream.searchParams.set("limit", "10");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TWITTER_SEARCH_TIMEOUT_MS_);
+  try {
+    const response = await fetch(upstream, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+    const payload = await response.json() as unknown;
+    const tweets = parseTweetEntries(payload);
+    return tweets.map((tweet) => {
+      const ts = parseTs(tweet.createdAt);
+      return {
+        symbol,
+        title: tweet.text.slice(0, 200),
+        link: null,
+        ts,
+        sentimentScore: sentimentFromText(tweet.text),
+        sourceCredibility: TWITTER_SOURCE_CREDIBILITY_,
+        freshness: freshnessDecayByTs(ts),
+      };
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsSignal | null> {
   const normalized = String(symbol || "").trim().toUpperCase();
   if (!normalized) return null;
@@ -190,17 +261,6 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
     }
   }
 
-  if (!rssItems.length) {
-    return {
-      symbol: normalized,
-      scorePct: 50,
-      confidencePct: 35,
-      evidenceCount: 0,
-      reasons: ["无近期新闻样本"],
-      items: [],
-    };
-  }
-
   const items: DaaNewsSignalItem[] = rssItems.map((item) => {
     const text = `${item.title} ${item.summary || ""}`.trim();
     const ts = parseTs(item.pubDate);
@@ -215,6 +275,28 @@ export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsS
       freshness: freshnessDecayByTs(ts),
     };
   });
+
+  // 合并 Twitter 数据（如果 token 可用）
+  const twitterToken = (process.env.TWITTERDATA_TOKEN || process.env.DAA_TWITTERDATA_TOKEN || "").trim();
+  if (twitterToken) {
+    try {
+      const tweets = await fetchTwitterNewsForSymbol(normalized, twitterToken);
+      items.push(...tweets);
+    } catch (err) {
+      logSwallowed("newsSignal.twitter", err);
+    }
+  }
+
+  if (!items.length) {
+    return {
+      symbol: normalized,
+      scorePct: 50,
+      confidencePct: 35,
+      evidenceCount: 0,
+      reasons: ["无近期新闻样本"],
+      items: [],
+    };
+  }
 
   const totalWeight = items.reduce((acc, item) => acc + item.sourceCredibility * item.freshness, 0);
   const scorePct = totalWeight > 0

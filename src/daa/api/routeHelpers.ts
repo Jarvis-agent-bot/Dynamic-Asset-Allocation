@@ -92,3 +92,15 @@ export async function readJsonBody<T = unknown>(req: Request): Promise<T | null>
     return null;
   }
 }
+
+/**
+ * 严格版 readJsonBody：解析失败时抛出错误（由 withApiHandler 捕获后返回 400）。
+ * 适用于要求请求体必须为有效 JSON 的路由。
+ */
+export async function readJsonBodyStrict<T = unknown>(req: Request): Promise<T> {
+  try {
+    return (await req.json()) as T;
+  } catch {
+    throw Object.assign(new Error("请求体不是有效的 JSON"), { status: 400 });
+  }
+}

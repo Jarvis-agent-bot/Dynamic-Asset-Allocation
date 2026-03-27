@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
+import { checkRateLimit } from "@/src/daa/api/rateLimit";
 import { fail, ok } from "@/src/daa/api/routeHelpers";
 import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -13,6 +14,9 @@ export const runtime = "nodejs";
  * This is a one-time setup endpoint — only allowed when no accounts exist yet.
  */
 export async function POST(req: Request) {
+  if (!checkRateLimit("bootstrap", req)) {
+    return fail("RATE_LIMITED", "请求过于频繁，请稍后重试", { status: 429 });
+  }
   // --- P0 安全守卫：仅在无账号时允许 bootstrap ---
   const supabaseUrlPre = await resolveSecret("supabase_url");
   const serviceRoleKeyPre = await resolveSecret("supabase_service_role_key");
@@ -27,10 +31,8 @@ export async function POST(req: Request) {
       }
     } catch (err) {
       logSwallowed("bootstrapRoute.guardCheck", err);
-      // 如果检查失败但在生产环境，拒绝请求
-      if ((process.env.NODE_ENV || "").toLowerCase() === "production") {
-        return fail("INTERNAL_ERROR", "无法验证系统状态，生产环境已拒绝 bootstrap", { status: 500 });
-      }
+      // 守卫检查失败 → 任何环境都拒绝 bootstrap（安全兜底）
+      return fail("INTERNAL_ERROR", "无法验证系统状态，已拒绝 bootstrap", { status: 500 });
     }
   } else if (process.env.DAA_PG_MEM !== "1") {
     // 密钥未配置且非内存模式 → 拒绝 bootstrap（防止无守卫穿透）

@@ -9,11 +9,13 @@ vi.mock("@supabase/supabase-js", () => ({
 }));
 
 import { POST as bootstrapPost } from "@/app/api/daa/auth/bootstrap/route";
+import { _resetRateLimit } from "@/src/daa/api/rateLimit";
 
-function mockAdminClient(createUserResult: any) {
+function mockAdminClient(createUserResult: any, listUsersResult?: any) {
   mocks.createClient.mockReturnValue({
     auth: {
       admin: {
+        listUsers: vi.fn(async () => listUsersResult ?? { data: { users: [] } }),
         createUser: vi.fn(async () => createUserResult),
       },
     },
@@ -23,11 +25,13 @@ function mockAdminClient(createUserResult: any) {
 describe("auth-bootstrap-route-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetRateLimit("bootstrap");
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
   });
 
   it("缺少 email 或 password 时返回 400", async () => {
+    mockAdminClient({ data: null, error: null });
     const response = await bootstrapPost(new Request("http://localhost/api/daa/auth/bootstrap", {
       method: "POST",
       headers: { "content-type": "application/json" },

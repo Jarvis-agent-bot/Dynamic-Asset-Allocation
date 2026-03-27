@@ -15,20 +15,20 @@ function findCatalogItem(symbol: string) {
   return WORKBENCH_FEATURED_ASSETS_CATALOG_.find((item) => item.symbol === symbol) ?? null;
 }
 
-/** 12 个种子资产：symbol → { lastPrice, targetWeightHint } */
+/** 12 个种子资产：symbol → { lastPrice, targetWeightHint（小数，如 0.15 = 15%）} */
 const SEED_ASSETS_: Record<string, { lastPrice: number; targetWeightHint: number }> = {
-  AAPL: { lastPrice: 210, targetWeightHint: 8 },
-  MSFT: { lastPrice: 420, targetWeightHint: 8 },
-  NVDA: { lastPrice: 880, targetWeightHint: 6 },
-  SPY: { lastPrice: 520, targetWeightHint: 15 },
-  QQQ: { lastPrice: 450, targetWeightHint: 12 },
-  GLD: { lastPrice: 230, targetWeightHint: 8 },
-  BND: { lastPrice: 72, targetWeightHint: 10 },
-  "0700.HK": { lastPrice: 380, targetWeightHint: 5 },
-  "600519.SS": { lastPrice: 1680, targetWeightHint: 5 },
-  "BTC-USD": { lastPrice: 68000, targetWeightHint: 5 },
-  EEM: { lastPrice: 43, targetWeightHint: 8 },
-  TLT: { lastPrice: 92, targetWeightHint: 10 },
+  AAPL: { lastPrice: 210, targetWeightHint: 0.08 },
+  MSFT: { lastPrice: 420, targetWeightHint: 0.08 },
+  NVDA: { lastPrice: 880, targetWeightHint: 0.06 },
+  SPY: { lastPrice: 520, targetWeightHint: 0.15 },
+  QQQ: { lastPrice: 450, targetWeightHint: 0.12 },
+  GLD: { lastPrice: 230, targetWeightHint: 0.08 },
+  BND: { lastPrice: 72, targetWeightHint: 0.10 },
+  "0700.HK": { lastPrice: 380, targetWeightHint: 0.05 },
+  "600519.SS": { lastPrice: 1680, targetWeightHint: 0.05 },
+  "BTC-USD": { lastPrice: 68000, targetWeightHint: 0.05 },
+  EEM: { lastPrice: 43, targetWeightHint: 0.08 },
+  TLT: { lastPrice: 92, targetWeightHint: 0.10 },
 };
 
 /** 5 个种子持仓 */

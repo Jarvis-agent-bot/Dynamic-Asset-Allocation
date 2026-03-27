@@ -104,9 +104,9 @@ vi.mock('@/src/daa/modules/marketContext/marketIndicatorService', () => ({
   })),
 }));
 
-import { GET as driftCheckGet, POST as driftCheckPost } from '@/app/api/daa/cron/drift-check/route';
+import { POST as driftCheckPost } from '@/app/api/daa/cron/drift-check/route';
 import { POST as hfIngestPost } from '@/app/api/daa/cron/hf-ingest/route';
-import { GET as marketIndicatorsRefreshGet } from '@/app/api/daa/cron/market-indicators-refresh/route';
+import { POST as marketIndicatorsRefreshPost } from '@/app/api/daa/cron/market-indicators-refresh/route';
 
 import { requireCronAuth } from '@/src/daa/cron/auth';
 import { sendTelegramByEnv } from '@/src/daa/notify/telegram';
@@ -218,7 +218,7 @@ describe('cron-remaining-routes-v1', () => {
       feishuEnabled: false,
     }));
 
-    const response = await driftCheckGet(new Request('http://localhost/api/daa/cron/drift-check', { method: 'GET' }));
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -308,7 +308,7 @@ describe('cron-remaining-routes-v1', () => {
   });
 
   it('market-indicators-refresh GET 返回刷新结果', async () => {
-    const response = await marketIndicatorsRefreshGet(new Request('http://localhost/api/daa/cron/market-indicators-refresh', { method: 'GET' }));
+    const response = await marketIndicatorsRefreshPost(new Request('http://localhost/api/daa/cron/market-indicators-refresh', { method: 'POST' }));
     const json = await response.json();
 
     expect(response.status).toBe(200);

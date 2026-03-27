@@ -26,6 +26,3 @@ export async function POST(req: Request) {
   return handle(req);
 }
 
-export async function GET(req: Request) {
-  return handle(req);
-}

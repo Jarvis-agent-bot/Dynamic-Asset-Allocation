@@ -279,7 +279,7 @@ describe("WorkbenchActiveTabPanel", () => {
 
     render(<WorkbenchActiveTabPanel model={model} onNavigateTab={onNavigateTab} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "持仓 2" }));
+    fireEvent.click(screen.getByRole("tab", { name: "持仓 2" }));
 
     expect(onNavigateTab).toHaveBeenCalledWith("positions");
     expect(model.setActiveTab).not.toHaveBeenCalled();

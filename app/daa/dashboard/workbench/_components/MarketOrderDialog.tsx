@@ -39,18 +39,8 @@ export default function MarketOrderDialog(props: {
   const [preview, setPreview] = useState<WorkbenchMarketOrderPreviewResult | null>(null);
   const [error, setError] = useState("");
 
+  // 对话框打开或切换资产/方向时重置表单状态
   useEffect(() => {
-    if (!props.open) {
-      setQty("");
-      setNotional("");
-      setPreview(null);
-      setError("");
-      setPreviewLoading(false);
-    }
-  }, [props.open]);
-
-  useEffect(() => {
-    if (!props.open) return;
     setQty("");
     setNotional("");
     setPreview(null);
