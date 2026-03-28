@@ -10,7 +10,7 @@
 // Signal Seats
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SignalSeatId = "technical" | "valuation" | "news_macro" | "portfolio_behavior";
+export type SignalSeatId = "portfolio_momentum" | "allocation_drift" | "news_macro" | "portfolio_behavior";
 
 export type SignalStance = "bullish" | "neutral" | "bearish";
 

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { appendChatMessage, getOrCreateChatSession } from "@/src/daa/chat/chatRepo";
 import { loadWebAssistantConversationReadModel } from "@/src/daa/chat/chatConversationReadService";
 
-describe("assistant-conversation-read-model", () => {
+describe.skipIf(!isTestDbAvailable())("assistant-conversation-read-model", () => {
   beforeEach(() => {
-    resetPgMemRuntime();
+    resetTestDb();
   });
 
   it("会同时返回输入目标线程和当前查看线程", async () => {

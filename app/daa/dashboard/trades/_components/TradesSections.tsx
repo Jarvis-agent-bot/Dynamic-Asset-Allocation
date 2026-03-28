@@ -108,9 +108,8 @@ function TableCellText({ children, align = "left", className = "" }: { children:
 export function TradesHeader({ model }: { model: TradesModel }) {
   return (
     <DaaSurfacePageHeader
-      eyebrow="交易审计"
       title="交易记录"
-      description="集中查看再平衡周期、订单与复盘结果，便于回顾执行质量和风险变化。"
+      description="查看调仓周期、订单明细和执行回顾。"
       actions={(
         <DaaSurfaceActionButton onClick={() => void model.load(true)} disabled={model.loading || model.refreshing}>
           <RefreshCcw className={`h-4 w-4 ${model.refreshing ? "animate-spin" : ""}`} />

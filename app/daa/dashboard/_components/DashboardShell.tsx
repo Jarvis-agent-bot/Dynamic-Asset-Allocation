@@ -20,6 +20,14 @@ const SECTION_META: Record<string, { label: string; hint: string }> = {
     label: "投委会",
     hint: "今日决策摘要 — 今天要不要动作？",
   },
+  portfolio: {
+    label: "持仓",
+    hint: "资产配置与观察列表管理",
+  },
+  rebalance: {
+    label: "调仓",
+    hint: "再平衡工作流 — 检测、生成、审阅、执行",
+  },
   trades: {
     label: "交易记录",
     hint: "周期、订单与复盘报告审计中心",
@@ -38,6 +46,8 @@ const DEFAULT_SECTION_META = { label: "控制台", hint: "" };
 
 function resolveSection(pathname: string): string {
   if (pathname.startsWith("/daa/dashboard/today")) return "today";
+  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
+  if (pathname.startsWith("/daa/dashboard/rebalance")) return "rebalance";
   if (pathname.startsWith("/daa/dashboard/workbench")) return "today";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 
 vi.mock("@/src/daa/modules/workbench/decisionFusion", async () => {
   const actual = await vi.importActual<typeof import("@/src/daa/modules/workbench/decisionFusion")>(
@@ -53,10 +53,10 @@ import {
   updateWorkbenchRebalanceCycle,
 } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
-describe("workbench-risk-consistency-v1", () => {
+describe.skipIf(!isTestDbAvailable())("workbench-risk-consistency-v1", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    resetPgMemRuntime();
+    resetTestDb();
 
     const current = await getDaaSystemConfig();
     await saveDaaSystemConfig({

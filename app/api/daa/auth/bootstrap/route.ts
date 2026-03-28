@@ -34,8 +34,8 @@ export async function POST(req: Request) {
       // 守卫检查失败 → 任何环境都拒绝 bootstrap（安全兜底）
       return fail("INTERNAL_ERROR", "无法验证系统状态，已拒绝 bootstrap", { status: 500 });
     }
-  } else if (process.env.DAA_PG_MEM !== "1") {
-    // 密钥未配置且非内存模式 → 拒绝 bootstrap（防止无守卫穿透）
+  } else {
+    // 密钥未配置 → 拒绝 bootstrap（防止无守卫穿透）
     return fail("INTERNAL_ERROR", "supabase 密钥未配置，无法执行 bootstrap", { status: 500 });
   }
   let body: any = null;

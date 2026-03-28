@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { buildWebAssistantSessionDescriptor } from "@/src/daa/chat/channelAdapters";
 import { appendChatMessage } from "@/src/daa/chat/chatRepo";
 import { loadWebAssistantConversationReadModel } from "@/src/daa/chat/chatConversationReadService";
 import { getLatestAssistantSessionByChannel, prepareTelegramAssistantSession } from "@/src/daa/chat/chatSessionService";
 
-describe("assistant-session-service", () => {
+describe.skipIf(!isTestDbAvailable())("assistant-session-service", () => {
   beforeEach(() => {
-    resetPgMemRuntime();
+    resetTestDb();
   });
 
   it("web descriptor 保持稳定", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import {
   authenticateDaaAuthAccount,
   createDaaAuthAccount,
@@ -10,9 +10,9 @@ import {
   updateDaaAuthAccount,
 } from "../daaAuthStore";
 
-describe("daa/auth admin accounts CRUD v0", () => {
+describe.skipIf(!isTestDbAvailable())("daa/auth admin accounts CRUD v0", () => {
   it("lists accounts + supports updating roles/status + deleting", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "a1@example.com", password: "pw-1", roles: ["editor"] });
     const a2 = await createDaaAuthAccount({ username: "a2@example.com", password: "pw-2", roles: ["viewer"] });

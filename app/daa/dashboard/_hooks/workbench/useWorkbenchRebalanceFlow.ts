@@ -15,11 +15,6 @@ function isTerminalCycleStatus(status: RebalanceCycle["status"]): boolean {
   return status === "completed" || status === "cancelled";
 }
 
-function marketPercentileText(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "近一年位置 N/A";
-  return `近一年位置 ${value.toFixed(1)}%`;
-}
-
 export function useWorkbenchRebalanceFlow(input: {
   bootstrap: WorkbenchBootstrap | null;
   assetRows: AssetUniverseView[];
@@ -31,7 +26,6 @@ export function useWorkbenchRebalanceFlow(input: {
   loadBootstrap: (silent?: boolean, preferredCycleId?: string | null) => Promise<void>;
   syncCycleState: (nextCycle: RebalanceCycle | null) => void;
 }) {
-  const [marketContextExpanded, setMarketContextExpanded] = useState(false);
   const [expandedProposalDecisionKeys, setExpandedProposalDecisionKeys] = useState<Record<string, boolean>>({});
 
   const derived = useMemo(() => {
@@ -52,16 +46,6 @@ export function useWorkbenchRebalanceFlow(input: {
       .reduce((sum, row) => sum + row.suggestedNotional, 0) ?? 0;
     const buyProposalCount = input.currentCycle?.proposals.filter((row) => row.side === "BUY").length ?? 0;
     const sellProposalCount = input.currentCycle?.proposals.filter((row) => row.side === "SELL").length ?? 0;
-    const activeMarketContext = input.currentCycle?.marketContext || input.bootstrap?.marketContext || null;
-    const primaryDecisionContext = input.currentCycle?.proposals.find((row) => row.decisionContext)?.decisionContext || null;
-    const scopedMarketContext = primaryDecisionContext?.marketScope
-      ? activeMarketContext?.scopes?.find((item) => item.scope === primaryDecisionContext.marketScope) || null
-      : null;
-    const decisionMarketContext = scopedMarketContext || activeMarketContext;
-    const decisionMarketLabel = primaryDecisionContext?.marketScopeLabel || scopedMarketContext?.label || "组合摘要";
-    const currentDecisionFacts = decisionMarketContext?.indicators.slice(0, 3).map((item) => (
-      `${item.label} ${item.rawValue == null ? "N/A" : `${item.rawValue}${item.unit || ""}`} / ${marketPercentileText(item.percentile252)}`
-    )) || [];
     const basketAssetCount = input.assetRows.filter((row) => row.watchEnabled && row.targetWeightHint > 0).length;
     const hasCycleProposal = Boolean(input.currentCycle && input.currentCycle.proposals.length > 0);
     const rebalanceChecklist = [
@@ -86,20 +70,16 @@ export function useWorkbenchRebalanceFlow(input: {
     return {
       summary, currentRiskCheck, selectedProposalCount, isCurrentCycleTerminal,
       riskReadyForExecution, canEditCurrentCycle, canExecuteAll, canExecuteSelected,
-      selectedProposalNotional, buyProposalCount, sellProposalCount,
-      activeMarketContext, primaryDecisionContext, decisionMarketContext,
-      decisionMarketLabel, currentDecisionFacts, basketAssetCount,
+      selectedProposalNotional, buyProposalCount, sellProposalCount, basketAssetCount,
       hasCycleProposal, rebalanceChecklist, rebalanceChecklistAllPassed,
       firstUnmetChecklist, cycleProgressText,
     };
-  }, [input.assetRows, input.currentCycle, input.riskCheck, input.bootstrap?.marketContext, input.busy]);
+  }, [input.assetRows, input.currentCycle, input.riskCheck, input.busy]);
 
   const {
     summary, currentRiskCheck, selectedProposalCount, isCurrentCycleTerminal,
     riskReadyForExecution, canEditCurrentCycle, canExecuteAll, canExecuteSelected,
-    selectedProposalNotional, buyProposalCount, sellProposalCount,
-    activeMarketContext, primaryDecisionContext, decisionMarketContext,
-    decisionMarketLabel, currentDecisionFacts, basketAssetCount,
+    selectedProposalNotional, buyProposalCount, sellProposalCount, basketAssetCount,
     hasCycleProposal, rebalanceChecklist, rebalanceChecklistAllPassed,
     firstUnmetChecklist, cycleProgressText,
   } = derived;
@@ -190,15 +170,8 @@ export function useWorkbenchRebalanceFlow(input: {
   return {
     summary,
     currentRiskCheck,
-    marketContextExpanded,
-    setMarketContextExpanded,
     expandedProposalDecisionKeys,
     setExpandedProposalDecisionKeys,
-    activeMarketContext,
-    primaryDecisionContext,
-    decisionMarketContext,
-    decisionMarketLabel,
-    currentDecisionFacts,
     canEditCurrentCycle,
     canExecuteAll,
     canExecuteSelected,

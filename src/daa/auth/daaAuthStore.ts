@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 
-import { ensureDaaAuthSchemaPg, isDaaPgEnabled, isDaaPgMemRuntime, withDaaPgClient } from "../pg/daaPg";
+import { ensureDaaAuthSchemaPg, isDaaPgEnabled, withDaaPgClient } from "../pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { isPgUniqueViolation } from "@/src/daa/store/storeShared";
 
@@ -422,9 +422,7 @@ export async function bootstrapCreateFirstDaaAuthAccount(args: {
         await query("BEGIN");
         try {
           // Prevent races when two bootstraps are attempted concurrently.
-          if (!isDaaPgMemRuntime()) {
-            await query("LOCK TABLE daa_auth_accounts IN EXCLUSIVE MODE");
-          }
+          await query("LOCK TABLE daa_auth_accounts IN EXCLUSIVE MODE");
 
           const r0 = await query("SELECT COUNT(1) AS n FROM daa_auth_accounts");
           const n = Number(r0.rows?.[0]?.n ?? 0) || 0;

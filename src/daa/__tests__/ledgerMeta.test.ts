@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { getDaaCurrentLedgerMeta } from "@/src/daa/store/daaStorePg";
 
-describe("ledger-meta-v1", () => {
+describe.skipIf(!isTestDbAvailable())("ledger-meta-v1", () => {
   beforeEach(() => {
-    resetPgMemRuntime();
+    resetTestDb();
   });
 
   it("按关联 cycle.created_at 统计已归档报告数量", async () => {

@@ -18,7 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { DaaMarketContext, DaaMarketScopeContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type {
   PreTradeRiskCheck,
   RebalanceCycle,
@@ -27,22 +26,16 @@ import type {
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
-  RebalanceAiInsight,
   RebalanceProposalList,
-  RebalanceRiskAlerts,
   RebalanceExecutionChecklist,
   RebalanceCycleHistory,
   cycleStatusLabel,
   cycleStatusTone,
   triggerSourceLabel,
-  marketRegimeLabel,
-  marketRegimeTone,
   type WorkbenchChecklistItem,
 } from "./rebalance";
 
 export type { WorkbenchChecklistItem };
-
-type ProposalDecisionContext = RebalanceCycle["proposals"][number]["decisionContext"];
 
 export function WorkbenchRebalanceSection(props: {
   bootstrap: WorkbenchBootstrap;
@@ -51,17 +44,10 @@ export function WorkbenchRebalanceSection(props: {
   currentRiskCheck: PreTradeRiskCheck | null;
   summary: { holdingAssets: number; watchlistAssets: number };
   busy: boolean;
-  marketContextExpanded: boolean;
-  setMarketContextExpanded: Dispatch<SetStateAction<boolean>>;
   expandedProposalDecisionKeys: Record<string, boolean>;
   setExpandedProposalDecisionKeys: Dispatch<SetStateAction<Record<string, boolean>>>;
   llmFeedbackSubmittingByContext: Record<string, boolean>;
   llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
-  activeMarketContext: DaaMarketContext | null;
-  primaryDecisionContext: ProposalDecisionContext | null;
-  decisionMarketContext: DaaMarketContext | DaaMarketScopeContext | null;
-  decisionMarketLabel: string;
-  currentDecisionFacts: string[];
   canEditCurrentCycle: boolean;
   canExecuteAll: boolean;
   canExecuteSelected: boolean;
@@ -157,24 +143,7 @@ export function WorkbenchRebalanceSection(props: {
             onSubmitLlmFeedback={props.onSubmitLlmFeedback}
           />
 
-          <RebalanceAiInsight currentCycle={props.currentCycle} />
-
-          {/* 市场环境精简展示（详细指标已在 cockpit 指标面板，不再重复） */}
-          {props.activeMarketContext ? (
-            <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[rgba(13,19,32,0.92)] px-4 py-2.5 text-sm">
-              <span className="text-[var(--muted)]">市场环境</span>
-              <DaaSurfaceStatusPill tone={marketRegimeTone(props.activeMarketContext.regime)}>
-                {marketRegimeLabel(props.activeMarketContext.regime)}
-              </DaaSurfaceStatusPill>
-              <span className="text-xs text-[var(--faint)]">
-                买入力度 {props.activeMarketContext.buyScale}%
-              </span>
-            </div>
-          ) : null}
-
-          {props.currentRiskCheck ? (
-            <RebalanceRiskAlerts currentRiskCheck={props.currentRiskCheck} />
-          ) : null}
+          {/* AI 洞察和风控告警已迁移至独立的市场情报区和风控区 */}
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">

@@ -57,8 +57,8 @@ describe("TradesPageClient", () => {
 
     render(<TradesPageClient />);
 
-    expect(screen.getByText("正在加载交易审计…")).toBeTruthy();
-    expect(screen.getByText(/加载完成前不会先显示默认 0 值/)).toBeTruthy();
+    expect(screen.getByText("正在加载交易记录…")).toBeTruthy();
+    expect(screen.getByText(/正在读取订单与调仓周期历史/)).toBeTruthy();
     expect(screen.queryByText("订单记录")).toBeNull();
   });
 });

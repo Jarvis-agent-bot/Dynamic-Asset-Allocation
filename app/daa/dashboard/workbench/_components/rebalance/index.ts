@@ -9,6 +9,7 @@ export {
   triggerSourceLabel,
   marketRegimeLabel,
   marketRegimeTone,
+  macroCyclePhaseLabel,
   riskStatusLabel,
   riskOverallTone,
   riskRuleLabel,

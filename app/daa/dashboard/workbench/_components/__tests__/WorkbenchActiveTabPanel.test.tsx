@@ -23,13 +23,7 @@ vi.mock("../WorkbenchCashSection", () => ({
   WorkbenchCashSection: () => <div data-testid="cash-section">cash</div>,
 }));
 
-vi.mock("../WorkbenchRebalanceSection", () => ({
-  WorkbenchRebalanceSection: ({ onNavigateTab }: { onNavigateTab: (tab: "positions" | "watchlist" | "rebalance" | "cash") => void }) => (
-    <button type="button" data-testid="rebalance-go-watchlist" onClick={() => onNavigateTab("watchlist")}>
-      go-watchlist
-    </button>
-  ),
-}));
+// WorkbenchRebalanceSection mock removed — rebalance tab moved to ActionWorkflow
 
 function createNotificationSummaryFixture(): NotificationStatusSummary {
   return {
@@ -162,17 +156,10 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
         currentRiskCheck: null,
         summary,
         busy: false,
-        marketContextExpanded: false,
-        setMarketContextExpanded: vi.fn(),
         expandedProposalDecisionKeys: {},
         setExpandedProposalDecisionKeys: vi.fn(),
         llmFeedbackSubmittingByContext: {},
         llmFeedbackScoreByContext: {},
-        activeMarketContext: null,
-        primaryDecisionContext: null,
-        decisionMarketContext: null,
-        decisionMarketLabel: "",
-        currentDecisionFacts: [],
         canEditCurrentCycle: false,
         canExecuteAll: false,
         canExecuteSelected: false,
@@ -285,56 +272,17 @@ describe("WorkbenchActiveTabPanel", () => {
     expect(model.setActiveTab).not.toHaveBeenCalled();
   });
 
-  it("观察列表先展示当前列表，再展示补充标的面板", () => {
+  it("观察列表直接展示补充标的面板（不折叠）", () => {
     const model = createModel();
 
     render(<WorkbenchActiveTabPanel model={model} />);
 
     const table = screen.getAllByTestId("asset-table-watchlist")[0];
-    fireEvent.click(screen.getByRole("button", { name: "展开观察池工具" }));
     const builder = screen.getByTestId("watchlist-builder");
 
+    // builder 始终显示在 table 之后
     expect(Boolean(table.compareDocumentPosition(builder) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it("观察列表异步加载后如果已有标的，会自动收起补充面板避免首屏过长", () => {
-    const initialModel = createModel({
-      summary: {
-        holdingAssets: 0,
-        watchlistAssets: 0,
-      },
-    });
-    const { rerender } = render(<WorkbenchActiveTabPanel model={initialModel} />);
-
-    expect(screen.getByTestId("watchlist-builder")).toBeTruthy();
-
-    const loadedModel = createModel({
-      summary: {
-        holdingAssets: 2,
-        watchlistAssets: 5,
-      },
-    });
-    rerender(<WorkbenchActiveTabPanel model={loadedModel} />);
-
-    expect(screen.queryByTestId("watchlist-builder")).toBeNull();
-    expect(screen.getByRole("button", { name: "展开观察池工具" })).toBeTruthy();
-  });
-
-  it("调仓页的引导动作会复用页面级导航回调，而不是局部 setState", () => {
-    const onNavigateTab = vi.fn();
-    const localNavigate = vi.fn();
-    const model = createModel({
-      activeTab: "rebalance",
-      rebalanceSectionProps: {
-        onNavigateTab: localNavigate,
-      },
-    });
-
-    render(<WorkbenchActiveTabPanel model={model} onNavigateTab={onNavigateTab} />);
-
-    fireEvent.click(screen.getByTestId("rebalance-go-watchlist"));
-
-    expect(onNavigateTab).toHaveBeenCalledWith("watchlist");
-    expect(localNavigate).not.toHaveBeenCalled();
-  });
+  // 调仓已从 Tab 移到独立的 ActionWorkflow 模块，调仓导航测试不再适用
 });

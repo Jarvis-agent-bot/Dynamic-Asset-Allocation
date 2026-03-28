@@ -22,8 +22,7 @@ DAA Console 是面向个人投资者的单组合动态资产配置工作台。
 
 ```bash
 pnpm install          # Install dependencies
-pnpm dev              # Start dev server (requires PostgreSQL)
-pnpm dev:mem          # Start dev server with in-memory DB
+pnpm dev              # Start dev server (requires PostgreSQL + .env.local)
 pnpm test             # Run unit tests (vitest)
 pnpm typecheck        # TypeScript type check
 pnpm gates            # Full gate: test + typecheck + build
@@ -162,7 +161,7 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 - **API routes**: Next.js App Router convention under `app/api/daa/`
 - **Testing**: Vitest for unit tests; test files colocated or in `__tests__/` directories
 - **Gate check**: Always run `pnpm gates` (test + typecheck + build) before considering a change complete
-- **DB dev mode**: Use `pnpm dev:mem` for in-memory PostgreSQL during local development
+- **Database**: Requires real PostgreSQL (DAA_DB_URL in .env.local). Integration tests (12 files) skip automatically when no DB is configured.
 
 ## Cron Jobs (Scheduled Tasks)
 

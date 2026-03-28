@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { resetPgMemRuntime, setPgMemStoreState } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { DEFAULT_SYSTEM_CONFIG_, normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import {
@@ -10,9 +10,9 @@ import {
   saveDaaSystemConfig,
 } from "@/src/daa/store/daaStorePg";
 
-describe("system-config-cas-v1", () => {
+describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
   beforeEach(() => {
-    resetPgMemRuntime();
+    resetTestDb();
   });
 
   it("旧 cash ledger 会归档为 archived_v1 并切换到 V2 账本", async () => {
@@ -87,11 +87,6 @@ describe("system-config-cas-v1", () => {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
-    });
-
-    setPgMemStoreState({
-      schemaInit: Promise.resolve(),
-      marketCacheSchemaInit: null,
     });
 
     await expect(listDaaCashLedgerEntries(10)).resolves.toEqual([]);

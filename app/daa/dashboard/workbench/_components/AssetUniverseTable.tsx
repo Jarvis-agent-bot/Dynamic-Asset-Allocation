@@ -34,6 +34,7 @@ import {
   daaSurfaceTableShellClassName,
 } from "../../_components/DaaSurfaceUI";
 import { FusionScoreBreakdown } from "./FusionScoreBreakdown";
+import { marketRegimeLabel, marketRegimeTone } from "./rebalance";
 
 type AssetUniverseViewFilter = "all" | "holdings" | "watchlist" | "basket";
 type HoldingGroupKey = "stock" | "etf" | "bond" | "crypto";
@@ -284,20 +285,6 @@ function priceStatusNote(status: string): string {
   if (status === "stale") return "当前展示的是较旧缓存，建议结合最新市场状态判断。";
   if (status === "unsupported") return "该标的不支持自动行情映射。";
   return "当前暂无可用行情。";
-}
-
-function marketRegimeTone(regime: string | null | undefined) {
-  if (regime === "risk_off") return "red" as const;
-  if (regime === "risk_on") return "green" as const;
-  if (regime === "transitional") return "amber" as const;
-  return "slate" as const;
-}
-
-function marketRegimeLabel(regime: string | null | undefined): string {
-  if (regime === "risk_off") return "偏防守";
-  if (regime === "risk_on") return "偏进攻";
-  if (regime === "transitional") return "过渡";
-  return "待计算";
 }
 
 function marketIndicatorKeyLabel(key: string): string {
@@ -711,9 +698,9 @@ function InlineInsights(props: {
                   <div className="mt-1 text-xs text-[var(--muted)]">置信度 {displayMarketContext.confidencePct.toFixed(1)}%</div>
                 </div>
                 <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">买入执行系数</div>
-                  <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">普通 {Math.round(displayMarketContext.buyScale * 100)}%</div>
-                  <div className="mt-1 text-xs text-[var(--muted)]">高波动资产 {Math.round(displayMarketContext.highRiskBuyScale * 100)}%</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">建议仓位比例</div>
+                  <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">常规标的 {Math.round(displayMarketContext.buyScale * 100)}%</div>
+                  <div className="mt-1 text-xs text-[var(--muted)]">高波动标的 {Math.round(displayMarketContext.highRiskBuyScale * 100)}%</div>
                 </div>
               </div>
 
@@ -1365,61 +1352,34 @@ export default function AssetUniverseTable(props: {
       bodyClassName="space-y-5"
       action={<DaaSurfaceStatusPill tone={props.view === "holdings" ? "cyan" : "amber"}>当前 {filteredRows.length} 个标的</DaaSurfaceStatusPill>}
     >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
-        <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,38,0.98),rgba(9,14,24,0.94))] p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="font-[var(--font-display)] text-[28px] leading-none tracking-[-0.03em] text-[var(--text)]">
-                {viewLabel(props.view)}
-              </div>
-              <div className="mt-3 max-w-2xl text-[13px] leading-6 text-[var(--muted)]">
-                {viewDescription(props.view)}
-              </div>
-            </div>
-            <DaaSurfaceActionButton
-              tone="slate"
-              className="h-9 rounded-full px-4 text-xs"
-              onClick={() => void props.onNormalizeTargetWeights()}
-              disabled={props.disabled || props.updatingTarget}
-            >
-              {props.updatingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-{props.updatingTarget ? "处理中..." : "目标仓位补齐到 100%"}
+      {/* ─── 紧凑工具栏（过滤 + 权重补齐）─── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className={cn(daaSurfaceSearchShellClassName, "h-9 flex-1 min-w-[200px]")}>
+          <label htmlFor="asset-search-keyword" className="sr-only">过滤列表</label>
+          <Search className="h-3.5 w-3.5 text-[var(--faint)]" />
+          <input
+            id="asset-search-keyword"
+            name="asset-search-keyword"
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            className="h-9 w-full bg-transparent text-xs text-[var(--text)] outline-none placeholder:text-[var(--faint)]"
+            placeholder="过滤已有标的（代码、市场）"
+          />
+          {hasKeyword ? (
+            <DaaSurfaceActionButton tone="slate" className="h-7 shrink-0 rounded-full px-2.5 text-[11px]" onClick={() => setKeyword("")}>
+              清空
             </DaaSurfaceActionButton>
-          </div>
+          ) : null}
         </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
-          <DaaSurfaceMiniStat label="持仓资产" value={props.counts.holdings} tone="cyan" />
-          <DaaSurfaceMiniStat label="观察资产" value={props.counts.watchlist} tone="amber" />
-          <DaaSurfaceMiniStat label="调仓范围" value={props.counts.basket} tone="indigo" />
-          <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.74)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">搜索标的</div>
-              {hasKeyword ? <DaaSurfaceStatusPill tone="indigo">筛选中</DaaSurfaceStatusPill> : null}
-            </div>
-            <div className={cn(daaSurfaceSearchShellClassName, "mt-2 h-9")}>
-              <label htmlFor="asset-search-keyword" className="sr-only">搜索标的</label>
-              <Search className="h-3.5 w-3.5 text-[var(--faint)]" />
-              <input
-                id="asset-search-keyword"
-                name="asset-search-keyword"
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                className="h-9 w-full bg-transparent text-xs text-[var(--text)] outline-none placeholder:text-[var(--faint)]"
-                placeholder="搜索代码、市场或行情映射"
-              />
-            </div>
-            <div className="mt-2 flex min-h-5 items-center justify-end text-[11px]">
-              {hasKeyword ? (
-                <DaaSurfaceActionButton tone="slate" className="h-7 rounded-full px-2.5 text-[11px]" onClick={() => setKeyword("")}>
-                  清空搜索
-                </DaaSurfaceActionButton>
-              ) : (
-                <span className="text-[11px] text-[var(--faint)]">支持代码、市场、行情映射模糊过滤</span>
-              )}
-            </div>
-          </div>
-        </div>
+        <DaaSurfaceActionButton
+          tone="slate"
+          className="h-9 shrink-0 rounded-full px-4 text-xs"
+          onClick={() => void props.onNormalizeTargetWeights()}
+          disabled={props.disabled || props.updatingTarget}
+        >
+          {props.updatingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          {props.updatingTarget ? "处理中..." : "权重补齐 100%"}
+        </DaaSurfaceActionButton>
       </div>
 
       {/* ───── Mobile card layout (< md) ───── */}

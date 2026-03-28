@@ -115,7 +115,7 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
     return (
       <DashboardEmptyState
         title="暂无权益曲线"
-        description="V2 账本启用后，新的权益快照会在入金、交易和后续运行中逐步积累。"
+        description="入金并完成首次交易后，权益走势图将自动生成。"
         className={`border-0 bg-transparent px-0 py-10 ${className ?? ""}`}
       />
     );

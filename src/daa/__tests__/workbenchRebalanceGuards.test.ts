@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 
 vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminViewerAuth: vi.fn(async () => null),
@@ -56,10 +56,10 @@ async function createCycle(status: "generated" | "completed") {
   });
 }
 
-describe("workbench-rebalance-guards-v1", () => {
+describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetPgMemRuntime();
+    resetTestDb();
   });
 
   it("completed 周期调用执行摘要返回 409 + CYCLE_NOT_EXECUTABLE", async () => {

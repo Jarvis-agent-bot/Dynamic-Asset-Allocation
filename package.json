@@ -5,7 +5,6 @@
   "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "next dev",
-    "dev:mem": "DAA_PG_MEM=1 next dev",
     "build": "next build",
     "build:check": "NEXT_DIST_DIR=.next-check next build",
     "start": "next start",
@@ -45,7 +44,6 @@
     "@types/react": "19.2.13",
     "autoprefixer": "^10.4.24",
     "jsdom": "^28.1.0",
-    "pg-mem": "^3.0.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "tailwindcss-animate": "^1.0.7",

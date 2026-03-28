@@ -18,8 +18,8 @@ export default function TradesPageClient() {
       <div className="space-y-6 lg:space-y-7">
         <TradesHeader model={model} />
         <DashboardEmptyState
-          title="正在加载交易审计…"
-          description="正在读取账本窗口、订单与周期历史，加载完成前不会先显示默认 0 值。"
+          title="正在加载交易记录…"
+          description="正在读取订单与调仓周期历史。"
           className="px-5 py-16"
         />
         <TradesErrorState error={model.error} />

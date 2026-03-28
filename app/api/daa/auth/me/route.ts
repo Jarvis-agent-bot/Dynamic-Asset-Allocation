@@ -17,25 +17,6 @@ function isSilentMode(req: Request): boolean {
 }
 
 export async function GET(req: Request) {
-  // Dev bypass: DAA_PG_MEM=1 时返回虚拟 dev 用户
-  if (process.env.DAA_PG_MEM === "1") {
-    return ok({
-      account: {
-        accountId: "dev-user",
-        username: "dev@localhost",
-        roles: ["editor"],
-        status: "active",
-      },
-      session: {
-        sessionId: "dev-session",
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        revokedAt: null,
-        lastSeenAt: new Date().toISOString(),
-      },
-    });
-  }
-
   try {
     const silent = isSilentMode(req);
     const supabase = createSupabaseServerClient();
