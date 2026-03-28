@@ -1,33 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import { RefreshCw } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowDown, ArrowUp, ArrowRight, Plus, Wallet, Target } from "lucide-react";
 
 import type { TodayReadModel } from "@/src/daa/modules/today/todayTypes";
-import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
-import { DaaSurfaceSectionAnchor } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
+import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 
-import { WorkbenchBannerStack } from "@/app/daa/dashboard/workbench/_components/WorkbenchBannerStack";
-import { WorkbenchSummaryHeader } from "@/app/daa/dashboard/workbench/_components/WorkbenchSummaryHeader";
-import { WorkbenchCockpitSection } from "@/app/daa/dashboard/workbench/_components/WorkbenchCockpitSection";
-import { WorkbenchActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchActiveTabPanel";
-import { WorkbenchDialogs } from "@/app/daa/dashboard/workbench/_components/WorkbenchDialogs";
-import {
-  getWorkbenchHref,
-  resolveWorkbenchTabFromLocation,
-  shouldHandleWorkbenchAnchorClick,
-} from "@/app/daa/dashboard/workbench/_components/workbenchNavigation";
+import { WorkbenchNotificationBar } from "@/app/daa/dashboard/workbench/_components/WorkbenchNotificationBar";
 
-import ConclusionCard from "./ConclusionCard";
-import SignalSeats from "./SignalSeats";
-import ActionCard from "./ActionCard";
-import PortfolioHealthBar from "./PortfolioHealthBar";
+import { TodayBrief } from "./TodayBrief";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Today decision data (独立于 workbench 的决策层数据)
+// Today decision data
 // ─────────────────────────────────────────────────────────────────────────────
 
 function useTodayDecision() {
@@ -91,196 +77,219 @@ function useTodayDecision() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Unified page: 决策层 + 操作层
+// 空组合引导流
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EmptyPortfolioGuide(props: { hasAssets: boolean; hasCash: boolean; hasTargets: boolean }) {
+  const steps = [
+    {
+      done: props.hasCash,
+      icon: Wallet,
+      title: "入金",
+      desc: "记录初始资金，作为组合起点",
+      href: "/daa/dashboard/portfolio",
+    },
+    {
+      done: props.hasAssets,
+      icon: Plus,
+      title: "添加标的",
+      desc: "将关注的股票、ETF、债券加入观察列表",
+      href: "/daa/dashboard/portfolio?tab=watchlist",
+    },
+    {
+      done: props.hasTargets,
+      icon: Target,
+      title: "设置目标权重",
+      desc: "为每个标的分配目标占比，系统自动检测偏移",
+      href: "/daa/dashboard/portfolio?tab=watchlist",
+    },
+  ];
+
+  return (
+    <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-6">
+      <div className="mb-4 text-center">
+        <div className="text-lg font-semibold text-[var(--text)]">开始构建你的组合</div>
+        <div className="mt-1 text-sm text-[var(--muted)]">完成以下步骤，即可使用调仓和分析功能</div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {steps.map((step, i) => {
+          const Icon = step.icon;
+          return (
+            <Link
+              key={i}
+              href={step.href}
+              className={`rounded-[14px] border px-4 py-4 transition-colors ${
+                step.done
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : "border-[var(--border)] hover:border-[var(--primary)]/30 hover:bg-[rgba(8,12,20,0.6)]"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                  step.done ? "bg-emerald-500/20 text-emerald-400" : "bg-[rgba(255,255,255,0.06)] text-[var(--muted)]"
+                }`}>
+                  {step.done ? (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <Icon className="h-4 w-4" />
+                  )}
+                </div>
+                <div>
+                  <div className={`text-sm font-medium ${step.done ? "text-emerald-400" : "text-[var(--text)]"}`}>
+                    {step.title}
+                  </div>
+                  <div className="mt-0.5 text-xs text-[var(--muted)]">{step.desc}</div>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 首页
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TodayPageClient(props: {
   initialTab?: string;
   initialSection?: string;
 }) {
-  // ── 决策层数据 ──
   const today = useTodayDecision();
-
-  // ── 操作层数据（原 workbench） ──
   const wbModel = useWorkbenchPageModel({ initialTab: props.initialTab });
-  const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const sectionParam = searchParams.get("section");
-  const tabParam = searchParams.get("tab");
 
-  useEffect(() => {
-    const nextTab = resolveWorkbenchTabFromLocation({
-      section: sectionParam || props.initialSection,
-      searchTab: tabParam || props.initialTab,
-      fallbackTab: wbModel.activeTab,
-    });
-    if (wbModel.activeTab !== nextTab) wbModel.setActiveTab(nextTab);
-  }, [wbModel.activeTab, wbModel.setActiveTab, props.initialSection, props.initialTab, sectionParam, tabParam]);
+  const baseCurrency = wbModel.bootstrap?.baseCurrency || "USD";
+  const topHoldings = useMemo(() => {
+    return (wbModel.allocationSummary?.topHoldings || []).slice(0, 5);
+  }, [wbModel.allocationSummary]);
 
-  useEffect(() => {
-    if (!sectionParam) return;
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("section");
-    const nextTab = resolveWorkbenchTabFromLocation({
-      section: sectionParam,
-      searchTab: tabParam || props.initialTab,
-      fallbackTab: wbModel.activeTab,
-    });
-    params.set("tab", nextTab);
-    router.replace(`${pathname}${params.toString() ? `?${params.toString()}` : ""}`, { scroll: false });
-  }, [wbModel.activeTab, pathname, props.initialTab, router, searchParams, sectionParam, tabParam]);
+  const isEmptyPortfolio = wbModel.totalEquity === 0 && topHoldings.length === 0;
+  const hasCash = wbModel.availableCashValue > 0;
+  const hasAssets = wbModel.summary.holdingAssets > 0 || wbModel.summary.watchlistAssets > 0;
+  const hasTargets = wbModel.tableProps.rows.some((r) => r.targetWeightHint > 0);
 
-  function navigateToTab(tab: WorkbenchTab) {
-    wbModel.setActiveTab(tab);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("section");
-    params.set("tab", tab);
-    router.replace(`${pathname}${params.toString() ? `?${params.toString()}` : ""}`, { scroll: false });
-  }
+  // 漂移数量（供入口卡片显示）
+  const driftCount = useMemo(() => {
+    const threshold = (wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100;
+    return wbModel.tableProps.rows.filter(
+      (r) => r.watchEnabled && r.targetWeightHint > 0 && r.gapPct != null && Math.abs(r.gapPct) > threshold,
+    ).length;
+  }, [wbModel.tableProps.rows, wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct]);
 
-  function handleSectionAnchor(event: MouseEvent<HTMLAnchorElement>, tab: WorkbenchTab) {
-    if (!shouldHandleWorkbenchAnchorClick(event)) return;
-    event.preventDefault();
-    navigateToTab(tab);
-  }
-
-  const activeTopTab = wbModel.activeTab === "watchlist" ? "watchlist" : wbModel.activeTab;
-  const portfolioTab = wbModel.activeTab === "watchlist" ? "watchlist" : "positions";
-  const navigationItems = useMemo<Array<{ key: WorkbenchTab; label: string; active: boolean }>>(() => [
-    { key: portfolioTab, label: "组合", active: wbModel.activeTab === "watchlist" || wbModel.activeTab === "positions" },
-    { key: "rebalance" as WorkbenchTab, label: "调仓", active: activeTopTab === "rebalance" },
-    { key: "cash" as WorkbenchTab, label: "现金", active: activeTopTab === "cash" },
-  ], [portfolioTab, wbModel.activeTab, activeTopTab]);
-
-  // ── 决策层 UI ──
-  const todayModel = today.model;
-  const actionItems = todayModel?.llmOutput.actionItems ?? [];
-  const todaySection = todayModel ? (
-    <>
-      <div className="flex items-start justify-between gap-4">
-        <ConclusionCard llmOutput={todayModel.llmOutput} isStale={todayModel.isStale} />
-        <button
-          onClick={today.handleRefresh}
-          disabled={today.refreshing}
-          className="mt-1 flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs
-                     text-muted-foreground transition hover:bg-muted disabled:opacity-50"
-          title="手动刷新 AI 分析"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${today.refreshing ? "animate-spin" : ""}`} />
-          刷新
-        </button>
-      </div>
-
-      <SignalSeats seats={todayModel.decisionContext.signalSeats} />
-
-      {actionItems.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-            需要关注 ({actionItems.length})
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {actionItems.map((item) => (
-              <ActionCard
-                key={item.assetKey}
-                item={item}
-                overallConclusion={todayModel.llmOutput.conclusion}
-                onDecision={today.handleDecision}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 组合健康已整合到下方操作面板的总权益区域 */}
-    </>
-  ) : today.loading ? (
-    <div className="flex items-center justify-center py-8 text-muted-foreground">
-      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-      正在加载决策摘要…
-    </div>
-  ) : today.error ? (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-      决策摘要加载失败: {today.error}
-      <button
-        onClick={() => { void today.handleRefresh(); }}
-        className="ml-3 underline hover:no-underline"
-      >
-        重试
-      </button>
-    </div>
-  ) : null;
-
-  // ── 完整页面 ──
   return (
     <div className="space-y-4">
-      {/* ═══ 决策层：回答"今天要不要动作" ═══ */}
-      <div className="space-y-6">{todaySection}</div>
-
-      {/* ═══ 分隔线 ═══ */}
-      {todayModel && (
-        <div className="flex items-center gap-3 py-2">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted-foreground">操作面板</span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-      )}
-
-      {/* ═══ 操作层：原 workbench 内容 ═══ */}
-      <WorkbenchBannerStack
+      {/* ═══ 通知区 ═══ */}
+      <WorkbenchNotificationBar
         error={wbModel.error}
         authRequired={wbModel.authRequired}
         bootstrap={wbModel.bootstrap}
         executionReceipt={wbModel.executionReceipt}
         onClearExecutionReceipt={wbModel.clearExecutionReceipt}
+        currentCycle={wbModel.rebalanceSectionProps?.currentCycle ?? null}
+        warnings={wbModel.bootstrap?.warnings || []}
       />
 
-      <WorkbenchSummaryHeader
-        baseCurrency={wbModel.bootstrap?.baseCurrency || "USD"}
-        totalEquity={wbModel.totalEquity}
-        holdingsValue={wbModel.holdingsValue}
-        availableCashValue={wbModel.availableCashValue}
-        frozenCashValue={wbModel.frozenCashValue}
-        cashMutationsAllowed={wbModel.bootstrap?.account.cashMutationsAllowed ?? true}
-        readOnlyReason={wbModel.bootstrap?.account.readOnlyReason || null}
-        accountBreakdown={wbModel.bootstrap?.account.accountBreakdown || []}
-        ledgerMeta={wbModel.ledgerMeta}
-        marketDataHealth={wbModel.bootstrap?.marketDataHealth || null}
-        equityDelta={wbModel.equityDelta}
-        notificationStatus={wbModel.notificationStatus}
-        loading={wbModel.loading && !wbModel.bootstrap}
-        refreshing={wbModel.refreshing}
-        priceStreamConnected={wbModel.priceStreamConnected}
-        onRefresh={() => void wbModel.loadBootstrap(true)}
-      />
-
+      {/* ═══ 空组合引导 or 组合卡片 ═══ */}
       {wbModel.bootstrap ? (
-        <SectionErrorBoundary sectionName="驾驶舱">
-          <WorkbenchCockpitSection model={wbModel} />
-        </SectionErrorBoundary>
+        isEmptyPortfolio ? (
+          <EmptyPortfolioGuide hasCash={hasCash} hasAssets={hasAssets} hasTargets={hasTargets} />
+        ) : (
+          <Link
+            href="/daa/dashboard/portfolio"
+            className="block rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-4 transition-colors hover:border-[var(--primary)]/20"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="font-[var(--font-mono)] text-2xl tabular-nums text-[var(--text)]">
+                  {formatCurrency(wbModel.totalEquity, baseCurrency)}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+                  {wbModel.equityDelta?.dayChangePct != null && (
+                    <span className={(wbModel.equityDelta.dayChange ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>
+                      {(wbModel.equityDelta.dayChange ?? 0) >= 0 ? <ArrowUp className="mr-0.5 inline h-3 w-3" /> : <ArrowDown className="mr-0.5 inline h-3 w-3" />}
+                      今日 {formatPercent(Math.abs(wbModel.equityDelta.dayChangePct))}
+                    </span>
+                  )}
+                  {wbModel.equityDelta?.weekChangePct != null && (
+                    <span className={(wbModel.equityDelta.weekChange ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}>
+                      {(wbModel.equityDelta.weekChange ?? 0) >= 0 ? <ArrowUp className="mr-0.5 inline h-3 w-3" /> : <ArrowDown className="mr-0.5 inline h-3 w-3" />}
+                      本周 {formatPercent(Math.abs(wbModel.equityDelta.weekChangePct))}
+                    </span>
+                  )}
+                  <span className="text-[var(--muted)]">
+                    持仓 {formatCurrency(wbModel.holdingsValue, baseCurrency)} · 现金 {formatCurrency(wbModel.availableCashValue, baseCurrency)}
+                  </span>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-[var(--muted)]" />
+            </div>
+
+            {/* mini 持仓列表 */}
+            {topHoldings.length > 0 && (
+              <div className="mt-3 grid grid-cols-5 gap-2">
+                {topHoldings.map((h) => (
+                  <div key={h.symbol} className="text-center">
+                    <div className="text-xs font-medium text-[var(--text)]">{h.symbol}</div>
+                    <div className="text-[10px] text-[var(--muted)]">{formatPercent(h.weightPct, 0)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Link>
+        )
       ) : null}
 
-      <div className="space-y-4">
-        <div className="grid gap-2 rounded-[18px] border border-[var(--border)] bg-[rgba(13,19,32,0.8)] p-2 md:grid-cols-3">
-          {navigationItems.map((item) => (
-            <DaaSurfaceSectionAnchor
-              key={item.key}
-              href={getWorkbenchHref(item.key)}
-              label={item.label}
-              active={item.active}
-              onClick={(event) => handleSectionAnchor(event, item.key)}
-            />
-          ))}
+      {/* ═══ AI 决策简报（仅有持仓时显示） ═══ */}
+      {!isEmptyPortfolio && (
+        <TodayBrief
+          model={today.model}
+          loading={today.loading}
+          refreshing={today.refreshing}
+          error={today.error}
+          onRefresh={today.handleRefresh}
+          onDecision={today.handleDecision}
+        />
+      )}
+
+      {/* ═══ 快捷入口 ═══ */}
+      {wbModel.bootstrap ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Link
+            href={isEmptyPortfolio ? "/daa/dashboard/portfolio" : "/daa/dashboard/rebalance"}
+            className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-4 transition-colors hover:border-[var(--primary)]/30 hover:bg-[rgba(8,12,20,0.6)]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-[var(--text)]">
+                {isEmptyPortfolio ? "管理持仓" : "调仓工作流"}
+              </div>
+              <ArrowRight className="h-3.5 w-3.5 text-[var(--muted)]" />
+            </div>
+            <div className="mt-1 text-xs text-[var(--muted)]">
+              {isEmptyPortfolio
+                ? "添加标的、设置权重、管理观察列表"
+                : wbModel.rebalanceSectionProps?.currentCycle
+                  ? `周期 ${wbModel.rebalanceSectionProps.currentCycle.cycleId.slice(0, 8)} 进行中`
+                  : driftCount > 0
+                    ? `${driftCount} 项偏移超阈值`
+                    : "配置均衡，暂无需调仓"}
+            </div>
+          </Link>
+          <Link
+            href="/daa/dashboard/trades"
+            className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-4 transition-colors hover:border-[var(--primary)]/30 hover:bg-[rgba(8,12,20,0.6)]"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-[var(--text)]">交易记录</div>
+              <ArrowRight className="h-3.5 w-3.5 text-[var(--muted)]" />
+            </div>
+            <div className="mt-1 text-xs text-[var(--muted)]">周期、订单与现金流水</div>
+          </Link>
         </div>
-
-        {wbModel.bootstrap ? (
-          <SectionErrorBoundary sectionName="标签面板">
-            <WorkbenchActiveTabPanel model={wbModel} onNavigateTab={navigateToTab} />
-          </SectionErrorBoundary>
-        ) : null}
-      </div>
-
-      <WorkbenchDialogs {...wbModel.dialogProps} />
+      ) : null}
     </div>
   );
 }

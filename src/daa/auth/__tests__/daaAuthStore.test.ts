@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import {
   appendDaaAuthAuditEvent,
   authenticateDaaAuthAccount,
@@ -18,7 +18,7 @@ import {
   verifyPassword,
 } from "../daaAuthStore";
 
-describe("daa/auth store v0", () => {
+describe.skipIf(!isTestDbAvailable())("daa/auth store v0", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -33,7 +33,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("creates + authenticates an account", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "Admin", password: "pw-1", roles: ["editor"] });
     expect(a1.username).toBe("admin");
@@ -52,7 +52,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("allows creating an account without providing a password", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "temp-user", roles: ["viewer"] });
     expect(a1.username).toBe("temp-user");
@@ -62,7 +62,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("bootstraps the first admin only when there are no accounts", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     expect(await hasAnyDaaAuthAccounts()).toBe(false);
 
@@ -83,7 +83,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("auto-bootstraps deterministic default admin in non-production", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     vi.stubEnv("NODE_ENV", "test");
     delete process.env.DAA_AUTH_DEV_DEFAULT_ACCOUNT;
@@ -99,7 +99,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("creates + verifies + revokes a session", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "user1@example.com", password: "pw-2", roles: ["viewer"] });
 
@@ -121,7 +121,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("rejects an expired session", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "user2@example.com", password: "pw-3", roles: ["viewer"] });
 
@@ -139,7 +139,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("refreshes session expiry and last seen via postgres", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "user3@example.com", password: "pw-5", roles: ["viewer"] });
 
@@ -164,7 +164,7 @@ describe("daa/auth store v0", () => {
   });
 
   it("appends and lists auth audit events", async () => {
-    resetPgMemRuntime();
+    resetTestDb();
 
     const a1 = await createDaaAuthAccount({ username: "audit@example.com", password: "pw-4", roles: ["editor"] });
     const { session } = await createDaaAuthSession({ accountId: a1.accountId, ttlDays: 7 });

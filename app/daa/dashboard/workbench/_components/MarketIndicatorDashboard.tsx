@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 import { InvestmentClockWidget } from "./InvestmentClockWidget";
-import { macroCyclePhaseLabel, marketRegimeLabel, marketRegimeTone } from "./rebalance/rebalanceLabels";
+import { macroCyclePhaseLabel, marketRegimeLabel, marketRegimeTone } from "./rebalance";
 
 /* ---------- types ---------- */
 
@@ -27,6 +27,18 @@ type MarketIndicatorDashboardProps = {
 };
 
 /* ---------- helpers ---------- */
+
+const SCOPE_LABEL_ZH: Record<string, string> = {
+  us_equity: "美股",
+  hk_cn_equity: "港股 / 中概",
+  crypto: "加密市场",
+  macro_defensive: "宏观防御",
+  macro_global: "宏观全局",
+};
+
+function scopeLabelZh(scope: string): string {
+  return SCOPE_LABEL_ZH[scope] || scope;
+}
 
 function stanceTone(stance: string) {
   if (stance === "risk_off") return "amber" as const;
@@ -121,7 +133,7 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-[var(--text)]">{ind.label}</span>
                   <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-[10px] text-[var(--faint)]">
-                    {ind.scope}
+                    {scopeLabelZh(ind.scope)}
                   </span>
                 </div>
 
@@ -164,7 +176,7 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
       {/* Section 3: Scope 分析 */}
       {scopes.length > 0 ? (
         <div>
-          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">Scope 分析</div>
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场区域</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {scopes.map((s) => (
               <div
@@ -178,7 +190,7 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                   </DaaSurfaceStatusPill>
                 </div>
                 <div className="mt-2 font-[var(--font-mono)] text-base text-[var(--text)]">
-                  买入系数 {Math.round(s.buyScale * 100)}%
+                  建议仓位 {Math.round(s.buyScale * 100)}%
                 </div>
                 {s.reasons.length > 0 ? (
                   <div className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted)]">

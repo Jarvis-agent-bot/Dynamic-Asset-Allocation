@@ -18,9 +18,6 @@ export async function requireCronAuth(req: Request): Promise<NextResponse | null
   const expected = await resolveSecret("cron_token");
 
   if (!expected) {
-    // 仅在内存数据库模式（开发/测试）下跳过认证
-    if (process.env.DAA_PG_MEM === "1") return null;
-    // 所有其他环境（包括 staging/preview）均要求 cron_token
     console.warn("[cronAuth] cron_token 未配置，拒绝未认证的 cron 请求。请设置 cron_token secret。");
     return NextResponse.json({ ok: false, error: "missing_cron_secret" }, { status: 500 });
   }

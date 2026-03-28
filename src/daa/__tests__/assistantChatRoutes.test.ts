@@ -54,7 +54,7 @@ import { GET as getWorkbenchReadModel } from "@/app/api/daa/read/workbench/route
 import { GET as getSessions } from "@/app/api/daa/chat/sessions/route";
 import { POST as postMessage } from "@/app/api/daa/chat/messages/route";
 import { POST as telegramWebhook } from "@/app/api/daa/chat/telegram/webhook/route";
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { getDaaSystemConfig, saveDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 function getTelegramReplyText(callIndex: number): string {
@@ -63,10 +63,10 @@ function getTelegramReplyText(callIndex: number): string {
   return typeof input?.text === "string" ? input.text : "";
 }
 
-describe("assistant-chat-routes", () => {
+describe.skipIf(!isTestDbAvailable())("assistant-chat-routes", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    resetPgMemRuntime();
+    resetTestDb();
     process.env.TELEGRAM_CHAT_ID = "777";
     process.env.TELEGRAM_BOT_TOKEN = "test-bot-token";
     delete process.env.TELEGRAM_WEBHOOK_SECRET;

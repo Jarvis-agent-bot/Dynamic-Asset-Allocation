@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { appendChatMessage, getOrCreateChatSession } from "@/src/daa/chat/chatRepo";
 import { buildNotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
 import { getDaaSystemConfig, saveDaaSystemConfig } from "@/src/daa/store/daaStorePg";
@@ -17,9 +17,9 @@ function clearTelegramEnv() {
   delete process.env.DAA_TELEGRAM_ALLOWLIST;
 }
 
-describe("notification-status", () => {
+describe.skipIf(!isTestDbAvailable())("notification-status", () => {
   beforeEach(async () => {
-    resetPgMemRuntime();
+    resetTestDb();
     clearTelegramEnv();
 
     const current = await getDaaSystemConfig();

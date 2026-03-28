@@ -1,5 +1,4 @@
 import { Pool } from "pg";
-import { createRequire } from "node:module";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 type PgState = {
@@ -8,10 +7,6 @@ type PgState = {
 };
 
 const GLOBAL_KEY = "__daa_pg_state_v0__";
-
-function isProductionRuntime(): boolean {
-  return (process.env.NODE_ENV || "").toLowerCase() === "production";
-}
 
 function getState(): PgState {
   const g: any = globalThis as any;
@@ -27,97 +22,38 @@ export function getDaaPgUrl(): string | null {
   const v = daaDbUrl || databaseUrl;
   if (!v) return null;
 
-  if (/^(sqlite:|file:)/i.test(v)) {
-    // 开发环境下允许使用 sqlite/file 占位并自动回退到 pg-mem，避免鉴权接口直接 500。
-    if (isProductionRuntime()) {
-      throw new Error("Postgres-only runtime: non-Postgres database configuration is not allowed");
-    }
-    return null;
-  }
-
-  const scheme = v.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase();
-  if (scheme && !/^(postgres|postgresql|postgresql\+psycopg)$/.test(scheme)) {
-    // 开发环境容错：错误 scheme 自动降级到 pg-mem，线上仍强制报错。
-    if (isProductionRuntime()) {
-      throw new Error("Postgres-only runtime: unsupported database URL scheme");
-    }
-    return null;
-  }
-
   // Allow sharing env with the Python service (sqlalchemy uses postgresql+psycopg://).
   return v.replace(/^postgresql\+psycopg:\/\//i, "postgresql://");
 }
 
-function isDaaPgMemEnabled(): boolean {
-  const explicit = typeof process.env.DAA_PG_MEM === "string" && process.env.DAA_PG_MEM.trim() === "1";
-  if (explicit) return true;
-
-  if (isProductionRuntime()) return false;
-
-  // 本地开发兜底：未配置 PG URL 时自动启用 pg-mem，避免登录/鉴权接口直接 500。
-  return !getDaaPgUrl();
-}
-
-export function isDaaPgMemRuntime(): boolean {
-  return isDaaPgMemEnabled();
-}
-
-function assertPgMemAllowed(): void {
-  if (!isDaaPgMemEnabled()) return;
-  if (isProductionRuntime()) {
-    throw new Error("DAA_PG_MEM must not be enabled in production");
-  }
-}
-
 export function isDaaPgEnabled(): boolean {
-  assertPgMemAllowed();
-  return Boolean(getDaaPgUrl() || isDaaPgMemEnabled());
+  return Boolean(getDaaPgUrl());
 }
 
 export function daaPgPool(): Pool {
   const st = getState();
   if (st.pool) return st.pool;
 
-  assertPgMemAllowed();
-
-  // DAA_PG_MEM=1 显式声明时优先使用 pg-mem，即使 DAA_DB_URL 也已配置（预览/测试场景）。
-  if (isDaaPgMemEnabled()) {
-    // Unit-test helper: create an in-memory Postgres-compatible pool via pg-mem.
-    // Use createRequire() so this works in ESM (vitest) and CJS (Next server).
-    const req = createRequire(import.meta.url);
-    const { newDb } = req("pg-mem");
-    const db = newDb({
-      autoCreateForeignKeyIndices: true,
-      // pg-mem 3.x 默认会对未完全实现的 AST 抛错；本地开发放宽以兼容 CREATE TABLE 约束声明。
-      noAstCoverageCheck: true,
-    });
-    const adapter = db.adapters.createPg();
-    const pool = new adapter.Pool();
-    st.pool = pool;
-    return pool;
-  }
-
   const url = getDaaPgUrl();
-  if (url) {
-    const pool = new Pool({
-      connectionString: url,
-      max: 5,                       // 最大连接数（serverless 环境避免耗尽数据库连接）
-      idleTimeoutMillis: 30_000,    // 空闲连接 30s 后释放
-      connectionTimeoutMillis: 5_000, // 获取连接超时 5s
-      statement_timeout: 30_000,    // 单条 SQL 超时 30s
-    });
-    st.pool = pool;
-    return pool;
+  if (!url) {
+    throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
   }
 
-  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+  const pool = new Pool({
+    connectionString: url,
+    max: 5,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+    statement_timeout: 30_000,
+  });
+  st.pool = pool;
+  return pool;
 }
 
 export async function withDaaPgClient<T>(fn: (client: { query: Pool["query"] }) => Promise<T>): Promise<T> {
   const pool = daaPgPool();
   const client = await pool.connect();
   try {
-    // Wrap only the `query` surface so callers don't depend on pg Client types.
     return await fn({ query: client.query.bind(client) });
   } finally {
     client.release();
@@ -195,7 +131,6 @@ export async function ensureDaaAuthSchemaPg(): Promise<void> {
         throw e;
       }
     }).catch((e) => {
-      // Allow future calls to retry after transient DB/network failures.
       st.schemaInit = null;
       throw e;
     });

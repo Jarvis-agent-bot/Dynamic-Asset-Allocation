@@ -5,17 +5,17 @@ vi.mock("@/src/daa/adminAuth", () => ({
   requireDaaAdminEditorAuth: vi.fn(async () => null),
 }));
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { GET as getWorkbenchReadModel } from "@/app/api/daa/read/workbench/route";
 import { POST as upsertAsset } from "@/app/api/daa/workbench/assets/upsert/route";
 import { POST as executeOrder } from "@/app/api/daa/workbench/execution/execute/route";
 import { POST as previewExecution } from "@/app/api/daa/workbench/execution/preview/route";
 import { getDaaSystemConfig, listDaaCashLedgerEntries, replaceDaaAccountState, saveDaaSystemConfig, upsertDaaFxRates } from "@/src/daa/store/daaStorePg";
 
-describe("workbench-trade-flow-route-v1", () => {
+describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    resetPgMemRuntime();
+    resetTestDb();
 
     const current = await getDaaSystemConfig();
     await saveDaaSystemConfig({

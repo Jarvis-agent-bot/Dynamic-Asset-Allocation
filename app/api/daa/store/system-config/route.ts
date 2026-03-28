@@ -2,7 +2,6 @@ import { requireDaaAdminEditorAuth, requireDaaAdminViewerAuth } from "@/src/daa/
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { patchDaaSystemConfig, saveDaaSystemConfig, getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import type { DaaSystemConfigPatch } from "@/src/daa/config/systemConfig";
-import { buildDevMemSystemConfigEnvelope, shouldUseDevMemFallback } from "@/src/daa/devMemFallback";
 
 export const runtime = "nodejs";
 
@@ -31,27 +30,15 @@ function isPatchList(value: unknown): value is DaaSystemConfigPatch[] {
 
 export async function GET(req: Request) {
   return withApiHandler(async () => {
-    const authResult = await requireDaaAdminViewerAuth(req).catch((error) => {
-      if (shouldUseDevMemFallback(error)) return null;
-      throw error;
-    });
-    const denied = mapDeniedResponse(authResult);
-    if (denied) {
-      if (shouldUseDevMemFallback()) return ok(buildDevMemSystemConfigEnvelope());
-      return denied;
-    }
+    const denied = mapDeniedResponse(await requireDaaAdminViewerAuth(req));
+    if (denied) return denied;
 
-    try {
-      const row = await getDaaSystemConfig();
-      return ok({
-        version: row.version,
-        updatedAt: row.updatedAt,
-        config: row.config,
-      });
-    } catch (error) {
-      if (shouldUseDevMemFallback(error)) return ok(buildDevMemSystemConfigEnvelope());
-      throw error;
-    }
+    const row = await getDaaSystemConfig();
+    return ok({
+      version: row.version,
+      updatedAt: row.updatedAt,
+      config: row.config,
+    });
   });
 }
 

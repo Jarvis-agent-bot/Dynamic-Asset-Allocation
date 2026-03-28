@@ -108,11 +108,22 @@ function computeMaxDrawdown(
 
 function driftViolations(
   cycle: RebalanceCycle | null,
+  holdings: Array<{ gapPct: number | null; watchEnabled: boolean; targetWeightPct: number }>,
   thresholdPct = 3,
 ): { count: number; status: string } {
-  if (!cycle?.driftSnapshot?.length) return { count: 0, status: "无周期" };
-  const violations = cycle.driftSnapshot.filter(
-    (d) => Math.abs(d.driftPct) > thresholdPct,
+  // 优先使用 cycle snapshot，fallback 到实时持仓数据
+  if (cycle?.driftSnapshot?.length) {
+    const violations = cycle.driftSnapshot.filter(
+      (d) => Math.abs(d.driftPct) > thresholdPct,
+    );
+    return {
+      count: violations.length,
+      status: violations.length > 0 ? `${violations.length} 项超限` : "正常",
+    };
+  }
+  // 无周期时用实时 assetRows 计算
+  const violations = holdings.filter(
+    (h) => h.watchEnabled && h.targetWeightPct > 0 && h.gapPct != null && Math.abs(h.gapPct) > thresholdPct,
   );
   return {
     count: violations.length,
@@ -189,7 +200,8 @@ export function PortfolioRiskPanel({
   const hhi = useMemo(() => computeHHI(holdings), [holdings]);
   const maxPos = useMemo(() => maxSinglePosition(holdings), [holdings]);
   const drawdown = useMemo(() => computeMaxDrawdown(snapshots), [snapshots]);
-  const drift = useMemo(() => driftViolations(latestCycle), [latestCycle]);
+  const driftThresholdPctPoints = (bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100;
+  const drift = useMemo(() => driftViolations(latestCycle, holdings, driftThresholdPctPoints), [latestCycle, holdings, driftThresholdPctPoints]);
 
   const holdingsWithTarget = useMemo(
     () =>

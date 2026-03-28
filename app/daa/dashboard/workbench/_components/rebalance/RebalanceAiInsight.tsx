@@ -41,7 +41,7 @@ export function RebalanceAiInsight(props: {
       <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(13,19,32,0.72)] px-5 py-3.5">
         <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
           <Bot className="h-4 w-4 shrink-0" />
-          <span>AI 分析未启用或本次未生成</span>
+          <span>调仓环境分析未启用或本次未生成</span>
         </div>
       </div>
     );
@@ -58,7 +58,7 @@ export function RebalanceAiInsight(props: {
       >
         <div className="flex flex-wrap items-center gap-2">
           <Bot className="h-4 w-4 shrink-0 text-[var(--primary)]" />
-          <span className="text-sm font-semibold text-[var(--text)]">AI 分析摘要</span>
+          <span className="text-sm font-semibold text-[var(--text)]">调仓环境分析</span>
           <DaaSurfaceStatusPill tone={marketRegimeTone(snap.marketRegime)}>
             {marketRegimeLabel(snap.marketRegime)}
           </DaaSurfaceStatusPill>

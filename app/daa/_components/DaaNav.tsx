@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { ClipboardList, FlaskConical, Gauge, Menu, Settings } from "lucide-react";
+import { Briefcase, ClipboardList, FlaskConical, Gauge, Menu, RefreshCw, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -13,14 +13,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
-type NavKey = "today" | "trades" | "strategy-lab" | "settings";
+type NavKey = "today" | "portfolio" | "rebalance" | "trades" | "strategy-lab" | "settings";
 type IconType = ComponentType<{ className?: string }>;
 type NavItem = { key: NavKey; href: string; label: string; shortLabel: string; Icon: IconType };
 
 function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
   if (pathname.startsWith("/daa/dashboard/today")) return "today";
-  if (pathname.startsWith("/daa/dashboard/workbench")) return "today"; // workbench → today
+  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
+  if (pathname.startsWith("/daa/dashboard/rebalance")) return "rebalance";
+  if (pathname.startsWith("/daa/dashboard/workbench")) return "today";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
@@ -31,6 +33,8 @@ function useNavItems(): NavItem[] {
   return useMemo(
     () => [
       { key: "today" as const, href: "/daa/dashboard/today", label: "投委会", shortLabel: "投委会", Icon: Gauge },
+      { key: "portfolio" as const, href: "/daa/dashboard/portfolio", label: "持仓", shortLabel: "持仓", Icon: Briefcase },
+      { key: "rebalance" as const, href: "/daa/dashboard/rebalance", label: "调仓", shortLabel: "调仓", Icon: RefreshCw },
       { key: "trades" as const, href: "/daa/dashboard/trades", label: "交易记录", shortLabel: "交易", Icon: ClipboardList },
       { key: "strategy-lab" as const, href: "/daa/dashboard/strategy-lab", label: "策略实验室", shortLabel: "回测", Icon: FlaskConical },
       { key: "settings" as const, href: "/daa/dashboard/settings", label: "设置", shortLabel: "设置", Icon: Settings },

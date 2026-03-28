@@ -1,17 +1,22 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle, Clock, Database } from "lucide-react";
 
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
   DaaSurfaceActionButton,
   DaaSurfaceNoticeBox,
+  DaaSurfaceStatusPill,
+  daaSurfaceSubtlePanelClassName,
   type DaaSurfaceTone,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { cn } from "@/lib/utils";
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
+// ─── Execution receipt meta ───
 function executionReceiptMeta(status: ExecutionReceipt["status"]): {
   title: string;
   tone: DaaSurfaceTone;
@@ -23,17 +28,62 @@ function executionReceiptMeta(status: ExecutionReceipt["status"]): {
   return { title: "执行失败", tone: "red" };
 }
 
-export function WorkbenchBannerStack(props: {
+// ─── Types ───
+export function WorkbenchNotificationBar(props: {
+  // 原 BannerStack props
   error: string;
   authRequired: boolean;
   bootstrap: WorkbenchBootstrap | null;
   executionReceipt: ExecutionReceipt | null;
   onClearExecutionReceipt: () => void;
+  // 业务告警 props（漂移已在 Stepper 展示）
+  currentCycle: { status: string; cycleId: string } | null;
+  warnings: string[];
 }) {
   const actionLinkClassName = "inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]";
 
+  // ─── 业务级告警 pills（漂移已在 Stepper 展示，这里不再重复）───
+  const alerts = useMemo(() => {
+    const result: Array<{ key: string; tone: "amber" | "cyan"; icon: React.ReactNode; label: string }> = [];
+
+    // 待审阅周期
+    const cycleStatus = props.currentCycle?.status;
+    if (cycleStatus === "generated" || cycleStatus === "reviewing") {
+      result.push({
+        key: "cycle",
+        tone: "cyan",
+        icon: <Clock className="h-3 w-3" />,
+        label: cycleStatus === "generated" ? "有新提案待审阅" : "审阅进行中",
+      });
+    }
+
+    // 数据健康
+    const mdh = props.bootstrap?.marketDataHealth;
+    if (mdh && mdh.status !== "ok") {
+      result.push({
+        key: "data",
+        tone: "amber",
+        icon: <Database className="h-3 w-3" />,
+        label: mdh.status === "down" ? "市场数据不可用" : "市场数据已降级",
+      });
+    }
+
+    // bootstrap 警告
+    for (const w of props.warnings) {
+      result.push({
+        key: `warn-${w.slice(0, 20)}`,
+        tone: "amber",
+        icon: <AlertTriangle className="h-3 w-3" />,
+        label: w,
+      });
+    }
+
+    return result;
+  }, [props.currentCycle, props.bootstrap?.marketDataHealth, props.warnings]);
+
   return (
-    <>
+    <div className="space-y-2">
+      {/* ─── 系统级 Banner（认证失败、严重数据故障）─── */}
       {props.error ? (
         <DaaSurfaceNoticeBox
           tone="red"
@@ -48,27 +98,21 @@ export function WorkbenchBannerStack(props: {
         />
       ) : null}
 
-      {props.bootstrap?.marketDataHealth && props.bootstrap.marketDataHealth.status !== "ok" ? (
+      {/* 市场数据严重故障（down 状态单独 banner，降级状态已在 pills 展示） */}
+      {props.bootstrap?.marketDataHealth?.status === "down" ? (
         <DaaSurfaceNoticeBox
-          tone={props.bootstrap.marketDataHealth.status === "down" ? "red" : "amber"}
-          title={props.bootstrap.marketDataHealth.status === "down" ? "市场数据不可用" : "市场数据已降级"}
+          tone="red"
+          title="市场数据不可用"
           icon={<AlertCircle className="h-4 w-4" />}
           description={props.bootstrap.marketDataHealth.message}
         >
           <div className="font-[var(--font-mono)] text-xs text-[var(--muted)]">
-            {(() => {
-              const totalTracked = props.bootstrap.marketDataHealth.freshCount + props.bootstrap.marketDataHealth.staleCount + props.bootstrap.marketDataHealth.missingCount;
-              const jobSummary = totalTracked <= 0
-                ? "近 24h 暂无刷新样本"
-                : props.bootstrap.marketDataHealth.freshCount <= 0
-                  ? "近 24h 无新鲜行情样本"
-                  : `近 24h 失败率 ${props.bootstrap.marketDataHealth.recentJobFailureRatePct.toFixed(1)}%`;
-              return `新鲜 ${props.bootstrap.marketDataHealth.freshCount} · 过期 ${props.bootstrap.marketDataHealth.staleCount} · 缺失 ${props.bootstrap.marketDataHealth.missingCount} · ${jobSummary}`;
-            })()}
+            新鲜 {props.bootstrap.marketDataHealth.freshCount} · 过期 {props.bootstrap.marketDataHealth.staleCount} · 缺失 {props.bootstrap.marketDataHealth.missingCount} · 近 24h 失败率 {props.bootstrap.marketDataHealth.recentJobFailureRatePct.toFixed(1)}%
           </div>
         </DaaSurfaceNoticeBox>
       ) : null}
 
+      {/* ─── 执行回执 Banner ─── */}
       {props.executionReceipt ? (() => {
         const meta = executionReceiptMeta(props.executionReceipt.status);
         return (
@@ -95,6 +139,20 @@ export function WorkbenchBannerStack(props: {
           </DaaSurfaceNoticeBox>
         );
       })() : null}
-    </>
+
+      {/* ─── 业务告警 Pills（无告警时不渲染，节省空间）─── */}
+      {props.bootstrap && alerts.length > 0 ? (
+        <div className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3 sm:px-5")}>
+          <div className="flex items-center gap-2 overflow-x-auto">
+            {alerts.map((alert) => (
+              <DaaSurfaceStatusPill key={alert.key} tone={alert.tone} className="shrink-0">
+                {alert.icon}
+                <span className="ml-1">{alert.label}</span>
+              </DaaSurfaceStatusPill>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -96,9 +96,6 @@ function roleSatisfied(required: DaaAdminRole, rolesRaw: unknown): boolean {
  * - Roles are derived from the Postgres-backed auth account/session
  */
 export async function requireDaaAdminRole(req: Request, role: DaaAdminRole): Promise<NextResponse | null> {
-  // Dev bypass: DAA_PG_MEM=1 时跳过认证（仅开发/测试环境）
-  if (process.env.DAA_PG_MEM === "1") return null;
-
   const ctx = await getDaaAuthContextFromRequest(req);
   if (!ctx) return unauthorized();
   if (!roleSatisfied(role, ctx.account.roles)) return unauthorized();

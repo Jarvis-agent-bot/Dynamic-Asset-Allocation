@@ -21,7 +21,7 @@ function timingSafeCompare(a: string, b: string): boolean {
 export async function POST(req: Request) {
   return withApiHandler(async () => {
     const webhookSecret = await resolveSecret("telegram_webhook_secret");
-    if (!webhookSecret && process.env.DAA_PG_MEM !== "1") {
+    if (!webhookSecret) {
       return fail("UNAUTHORIZED", "telegram webhook secret 未配置，拒绝未认证请求", { status: 401 });
     }
     if (webhookSecret) {

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { validateExecutionRisk } from "@/src/daa/modules/workbench/workbenchExecutionService";
 
-import { resetPgMemRuntime } from "@/src/daa/__tests__/pgMemTestUtils";
+import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 import { getDaaSystemConfig, saveDaaSystemConfig, upsertDaaAssetUniverseRow } from "@/src/daa/store/daaStorePg";
 
-describe("workbench-manual-risk-check-v1", () => {
+describe.skipIf(!isTestDbAvailable())("workbench-manual-risk-check-v1", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    resetPgMemRuntime();
+    resetTestDb();
 
     const current = await getDaaSystemConfig();
     await saveDaaSystemConfig({
