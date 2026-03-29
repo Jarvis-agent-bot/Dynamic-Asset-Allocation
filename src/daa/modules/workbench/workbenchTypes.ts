@@ -775,14 +775,14 @@ export type TlhCandidate = {
   holdingQty: number;
   costBasis: number;
   currentValue: number;
-  unrealizedLoss: number;
-  unrealizedLossPct: number;
+  unrealizedLoss: number;        // negative number = loss
+  unrealizedLossPct: number;     // as percentage of cost basis
   lastPrice: number;
   fxRateToBase: number;
-  lossInBase: number;
-  washSaleBlocked: boolean;
+  lossInBase: number;            // loss converted to base currency
+  washSaleBlocked: boolean;      // true if within 30-day wash sale window
   washSaleBlockedUntil: string | null;
-  harvestable: boolean;
+  harvestable: boolean;          // true if loss is meaningful and not blocked
 };
 
 export type TlhScanResult = {

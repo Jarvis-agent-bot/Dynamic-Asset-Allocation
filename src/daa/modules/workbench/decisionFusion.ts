@@ -10,27 +10,7 @@ import {
 } from "@/src/daa/modules/marketContext/marketContextOverlay";
 import type { DaaMarketContext, DaaMarketIndicatorScope, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaFusedOpportunity } from "@/src/daa/signals/fusion";
-import type { RebalanceProposal } from "./workbenchTypes";
-
-export type ProposalDecisionContext = {
-  driftReason: string;
-  signalAction: DaaFusedOpportunity["action"] | null;
-  signalScore: number | null;
-  signalConfidence: number | null;
-  signalConflict: boolean;
-  llmAdjustment: LlmPerAssetAdjustment["adjustment"] | null;
-  llmConfidence: number | null;
-  llmRationale: string | null;
-  marketRegime?: DaaMarketRegime | null;
-  ruleBasedMarketRegime?: DaaMarketRegime | null;
-  llmMarketRegime?: DaaMarketRegime | null;
-  effectiveMarketRegime?: DaaMarketRegime | null;
-  marketScope?: DaaMarketIndicatorScope | null;
-  marketScopeLabel?: string | null;
-  marketIndicatorFlags?: string[];
-  conflictFlags: string[];
-  finalQtyMultiplier: number;
-};
+import type { ProposalDecisionContext, RebalanceProposal } from "./workbenchTypes";
 
 type FusedProposal = RebalanceProposal & {
   decisionContext: ProposalDecisionContext;

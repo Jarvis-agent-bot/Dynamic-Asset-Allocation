@@ -1,4 +1,4 @@
-import { clamp } from "@/src/core/math";
+import { clamp, meanOrNaN } from "@/src/core/math";
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { toFinite } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -44,15 +44,9 @@ export type DaaTechnicalSignal = {
 };
 
 
-function mean(values: number[]): number {
-  if (!values.length) return Number.NaN;
-  const sum = values.reduce((acc, item) => acc + item, 0);
-  return sum / values.length;
-}
-
 function std(values: number[]): number {
   if (values.length < 2) return 0;
-  const avg = mean(values);
+  const avg = meanOrNaN(values);
   const variance = values.reduce((acc, item) => acc + (item - avg) ** 2, 0) / (values.length - 1);
   return Math.sqrt(Math.max(0, variance));
 }
@@ -61,7 +55,7 @@ function sma(values: number[], period: number): number {
   if (!values.length) return Number.NaN;
   const n = Math.max(1, Math.trunc(period));
   const source = values.length >= n ? values.slice(-n) : values;
-  return mean(source);
+  return meanOrNaN(source);
 }
 
 function ema(values: number[], period: number): number {
@@ -278,7 +272,7 @@ export async function buildTechnicalSignalForSymbol(symbol: string): Promise<Daa
   const return60Pct = prev60 > 0 ? ((close - prev60) / prev60) * 100 : 0;
 
   const bandSource = closes.slice(-20);
-  const bollingerMid = mean(bandSource);
+  const bollingerMid = meanOrNaN(bandSource);
   const bandStd = std(bandSource);
   const bollingerUpper = bollingerMid + bandStd * 2;
   const bollingerLower = bollingerMid - bandStd * 2;

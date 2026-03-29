@@ -26,26 +26,4 @@ export type BacktestMetrics = {
   winRate: number;
 };
 
-export type BacktestResult = {
-  strategyId: string;
-  strategyName: string;
-  equity: number[];
-  dailyReturns: number[];
-  metrics: BacktestMetrics;
-};
-
 export type Action = "BUY" | "SELL" | "HOLD";
-
-export type Signal = {
-  date: ISODate;
-  action: Action;
-  targetWeight: number;
-  confidence: number; // 0..1
-  reasons: string[];
-};
-
-export type SignalThresholds = {
-  buyAbove: number;
-  sellBelow: number;
-  minChange: number;
-};
