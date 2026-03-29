@@ -10,6 +10,12 @@ export function mean(xs: number[]): number {
   return xs.reduce((a, b) => a + b, 0) / xs.length;
 }
 
+/** 空数组返回 NaN（表示"无数据"），区别于 mean() 的返回 0。适用于信号层。 */
+export function meanOrNaN(xs: number[]): number {
+  if (!xs.length) return NaN;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
 export function stdev(xs: number[]): number {
   if (xs.length < 2) return 0;
   const m = mean(xs);

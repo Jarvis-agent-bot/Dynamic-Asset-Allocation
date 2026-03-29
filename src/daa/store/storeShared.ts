@@ -62,6 +62,11 @@ export function toIsoString(v: unknown, fallback = "1970-01-01T00:00:00.000Z"): 
   return new Date(ms).toISOString();
 }
 
+export function toNullableNumber(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 export function toIsoStringOrNull(v: unknown): string | null {
   if (v == null) return null;
   const result = toIsoString(v, "");

@@ -1,4 +1,4 @@
-import { clamp } from "@/src/core/math";
+import { clamp, meanOrNaN } from "@/src/core/math";
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { toFinite } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -50,14 +50,9 @@ type FundamentalStats = {
 };
 
 
-function mean(values: number[]): number {
-  if (values.length <= 0) return Number.NaN;
-  return values.reduce((acc, item) => acc + item, 0) / values.length;
-}
-
 function std(values: number[]): number {
   if (values.length < 2) return 0;
-  const avg = mean(values);
+  const avg = meanOrNaN(values);
   const variance = values.reduce((acc, item) => acc + ((item - avg) ** 2), 0) / (values.length - 1);
   return Math.sqrt(Math.max(0, variance));
 }
@@ -71,7 +66,7 @@ function percentileOfLatest(values: number[], latest: number): number {
 
 function zscoreOfLatest(values: number[], latest: number): number {
   if (!(latest > 0) || values.length < 5) return 0;
-  const avg = mean(values);
+  const avg = meanOrNaN(values);
   const sigma = std(values);
   if (!(sigma > 1e-9)) return 0;
   return (latest - avg) / sigma;

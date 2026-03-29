@@ -1,34 +1,9 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import type { WorkbenchBootstrap, RebalanceProposal } from "./workbenchTypes";
+import type { WorkbenchBootstrap, RebalanceProposal, TlhCandidate, TlhScanResult } from "./workbenchTypes";
 
-// ── Types ──────────────────────────────────────────────────────────────
-
-export type TlhCandidate = {
-  assetKey: string;
-  symbol: string;
-  market: string;
-  currency: string;
-  holdingQty: number;
-  costBasis: number;
-  currentValue: number;
-  unrealizedLoss: number;      // negative number = loss
-  unrealizedLossPct: number;   // as percentage of cost basis
-  lastPrice: number;
-  fxRateToBase: number;
-  lossInBase: number;          // loss converted to base currency
-  washSaleBlocked: boolean;    // true if within 30-day wash sale window
-  washSaleBlockedUntil: string | null;
-  harvestable: boolean;        // true if loss is meaningful and not blocked
-};
-
-export type TlhScanResult = {
-  candidates: TlhCandidate[];
-  totalHarvestableBase: number;
-  totalBlockedBase: number;
-  proposals: RebalanceProposal[];
-  scannedAt: string;
-};
+// Re-export for backward compatibility
+export type { TlhCandidate, TlhScanResult };
 
 type TlhConfig = {
   enabled: boolean;

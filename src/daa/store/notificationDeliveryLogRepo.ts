@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
+import { toIsoString, toNullableNumber, parseJsonb } from "@/src/daa/store/storeShared";
 import { normalizeText } from "@/src/daa/utils/normalize";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaNotificationChannel = "telegram" | "feishu";
 
@@ -25,36 +25,6 @@ export type DaaNotificationDeliveryLog = {
   createdAt: string;
 };
 
-function toIsoString(value: unknown, fallback = new Date().toISOString()): string {
-  if (value instanceof Date) {
-    const ms = value.getTime();
-    return Number.isFinite(ms) ? new Date(ms).toISOString() : fallback;
-  }
-  const text = typeof value === "string" ? value.trim() : "";
-  if (!text) return fallback;
-  const ms = Date.parse(text);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : fallback;
-}
-
-function toNullableNumber(value: unknown): number | null {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
-}
-
-function parseJsonObject(value: unknown): Record<string, unknown> | null {
-  if (value == null) return null;
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch (err) {
-      logSwallowed("notificationDeliveryLogRepo.parseJsonb", err);
-      return null;
-    }
-  }
-  return typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-}
-
 function normalizeChannel(value: unknown): DaaNotificationChannel {
   return normalizeText(value, "telegram").toLowerCase() === "feishu" ? "feishu" : "telegram";
 }
@@ -73,8 +43,8 @@ function mapNotificationDeliveryRow(row: Record<string, unknown>): DaaNotificati
     jobId: row.job_id == null ? null : normalizeText(row.job_id) || null,
     cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
     ticketId: row.ticket_id == null ? null : normalizeText(row.ticket_id) || null,
-    requestJson: parseJsonObject(row.request_json),
-    responseJson: parseJsonObject(row.response_json),
+    requestJson: parseJsonb<Record<string, unknown> | null>(row.request_json, null),
+    responseJson: parseJsonb<Record<string, unknown> | null>(row.response_json, null),
     createdAt: toIsoString(row.created_at),
   };
 }

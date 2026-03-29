@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
+import { toIsoString, toNullableNumber, parseJsonb } from "@/src/daa/store/storeShared";
 import { normalizeText } from "@/src/daa/utils/normalize";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaJobExecutionLog = {
   jobId: string;
@@ -20,36 +20,6 @@ export type DaaJobExecutionLog = {
   createdAt: string;
 };
 
-function toIsoString(value: unknown, fallback = new Date().toISOString()): string {
-  if (value instanceof Date) {
-    const ms = value.getTime();
-    return Number.isFinite(ms) ? new Date(ms).toISOString() : fallback;
-  }
-  const text = typeof value === "string" ? value.trim() : "";
-  if (!text) return fallback;
-  const ms = Date.parse(text);
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : fallback;
-}
-
-function toNullableNumber(value: unknown): number | null {
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
-}
-
-function parseJsonObject(value: unknown): Record<string, unknown> | null {
-  if (value == null) return null;
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch (err) {
-      logSwallowed("jobExecutionLogRepo.parseJsonb", err);
-      return null;
-    }
-  }
-  return typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-}
-
 function mapJobLogRow(row: Record<string, unknown>): DaaJobExecutionLog {
   return {
     jobId: normalizeText(row.job_id),
@@ -61,7 +31,7 @@ function mapJobLogRow(row: Record<string, unknown>): DaaJobExecutionLog {
     startedAt: toIsoString(row.started_at),
     finishedAt: row.finished_at == null ? null : toIsoString(row.finished_at),
     durationMs: toNullableNumber(row.duration_ms),
-    resultJson: parseJsonObject(row.result_json),
+    resultJson: parseJsonb<Record<string, unknown> | null>(row.result_json, null),
     errorText: row.error_text == null ? null : normalizeText(row.error_text) || null,
     createdAt: toIsoString(row.created_at),
   };

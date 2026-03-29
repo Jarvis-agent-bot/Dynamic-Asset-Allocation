@@ -1,4 +1,5 @@
 import type { DriftRebalanceBacktestResult } from "../backtestDriftRebalance";
+import { toFinite } from "../utils/number";
 
 export type BacktestBenchmarkCoverage = "full" | "partial" | "missing";
 
@@ -28,11 +29,6 @@ export type BacktestAttribution = {
   };
 };
 
-function toNum(v: unknown, fallback = 0): number {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 function annualizedVolatility(dailyReturns: number[]): number {
   const values = dailyReturns.filter((x) => Number.isFinite(x));
   if (values.length <= 1) return 0;
@@ -45,7 +41,7 @@ function normalizeSeries(series: Array<{ date: string; close: number }>): Array<
   const out = new Map<string, number>();
   for (const bar of series || []) {
     const date = String(bar?.date || "").trim();
-    const close = toNum(bar?.close, Number.NaN);
+    const close = toFinite(bar?.close, Number.NaN);
     if (!date || !(close > 0)) continue;
     out.set(date, close);
   }
@@ -71,8 +67,8 @@ function buildCloseMap(series: Array<{ date: string; close: number }>): Map<stri
 }
 
 function computePeriodReturn(closeMap: Map<string, number>, startDate: string, endDate: string): number {
-  const start = toNum(closeMap.get(startDate), Number.NaN);
-  const end = toNum(closeMap.get(endDate), Number.NaN);
+  const start = toFinite(closeMap.get(startDate), Number.NaN);
+  const end = toFinite(closeMap.get(endDate), Number.NaN);
   if (!(start > 0) || !(end > 0)) return 0;
   const ret = end / start - 1;
   return Number.isFinite(ret) ? ret : 0;
@@ -162,7 +158,7 @@ function computeRealizedStatsBySymbol(input: {
     if (!startPoint || !endPoint) continue;
 
     for (const symbol of symbols) {
-      const weight = Math.max(0, toNum(startPoint.weightsBySymbolPct01?.[symbol]));
+      const weight = Math.max(0, toFinite(startPoint.weightsBySymbolPct01?.[symbol]));
       avgWeightSums[symbol] += weight;
       if (weight <= 0) continue;
 
@@ -190,7 +186,7 @@ export function computeBacktestAttribution(input: {
   benchmarkSymbol?: string;
   benchmarkSeries?: Array<{ date: string; close: number }>;
 }): BacktestAttribution {
-  const totalReturn = toNum(input.backtest.metrics.totalReturn);
+  const totalReturn = toFinite(input.backtest.metrics.totalReturn);
 
   const benchmarkSymbol = String(input.benchmarkSymbol || "SPY").trim().toUpperCase();
   const benchmarkSeries = input.benchmarkSeries?.length ? input.benchmarkSeries : (input.seriesBySymbol[benchmarkSymbol] || []);
@@ -237,7 +233,7 @@ export function computeBacktestAttribution(input: {
   const returnSeries = input.backtest.dailyReturns.length > 0 ? input.backtest.dailyReturns : [0];
   const winRate = returnSeries.filter((x) => x > 0).length / returnSeries.length;
   const volatility = annualizedVolatility(input.backtest.dailyReturns);
-  const maxDrawdown = toNum(input.backtest.metrics.maxDrawdown);
+  const maxDrawdown = toFinite(input.backtest.metrics.maxDrawdown);
   const calmar = maxDrawdown > 1e-9 ? totalReturn / maxDrawdown : 0;
 
   const rebalanceEvents = input.backtest.events
@@ -245,7 +241,7 @@ export function computeBacktestAttribution(input: {
     .map((event) => ({
       date: event.date,
       turnover: event.turnoverNotional,
-      driftBefore: Math.max(0, toNum(event.trigger.stats?.maxAbsDriftPct)),
+      driftBefore: Math.max(0, toFinite(event.trigger.stats?.maxAbsDriftPct)),
     }));
 
   return {
@@ -259,7 +255,7 @@ export function computeBacktestAttribution(input: {
     perAsset,
     rebalanceEvents,
     metrics: {
-      sharpe: toNum(input.backtest.metrics.sharpe),
+      sharpe: toFinite(input.backtest.metrics.sharpe),
       maxDrawdown,
       calmar,
       volatility,
