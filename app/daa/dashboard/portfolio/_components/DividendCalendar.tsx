@@ -53,8 +53,9 @@ export function DividendCalendar() {
         setLoading(true);
         const res = await fetch("/api/daa/read/dividends");
         if (!res.ok) throw new Error("股息数据获取失败");
-        const json = (await res.json()) as DividendReadModel;
-        setData(json);
+        const json = await res.json();
+        const payload = json.ok && json.data ? json.data : json;
+        setData(payload as DividendReadModel);
       } catch (err) {
         setError(err instanceof Error ? err.message : "未知错误");
       } finally {

@@ -91,6 +91,17 @@ export function PerformanceAttribution() {
   const data = readModel.performance;
   const p = data.period;
   const hasData = data.assetAttributions && data.assetAttributions.length > 0;
+  const hasAnyReturn = p.totalReturnPct !== 0 || p.benchmarkReturnPct !== 0;
+
+  // 无数据且无收益时，显示统一的空态提示
+  if (!hasData && !hasAnyReturn) {
+    return (
+      <DashboardErrorNotice
+        title="绩效归因"
+        description="暂无归因数据，建仓并持有一段时间后自动生成"
+      />
+    );
+  }
 
   return (
     <DaaSurfacePanel

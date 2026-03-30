@@ -41,8 +41,9 @@ export function HfHoldingsPanel() {
         setLoading(true);
         const res = await fetch("/api/daa/read/hf-holdings");
         if (!res.ok) throw new Error("大佬动向加载失败");
-        const json = (await res.json()) as HfHoldingsReadModel;
-        setData(json);
+        const json = await res.json();
+        const payload = json.ok && json.data ? json.data : json;
+        setData(payload as HfHoldingsReadModel);
       } catch (err) {
         setError(err instanceof Error ? err.message : "未知错误");
       } finally {
