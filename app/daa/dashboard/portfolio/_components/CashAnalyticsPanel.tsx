@@ -100,9 +100,10 @@ export function CashAnalyticsPanel() {
 
   if (!analytics || isEmpty) {
     return (
-      <div className={cn(daaSurfaceSubtlePanelClassName, "px-5 py-4")}>
-        <div className="text-xs text-[var(--muted)]">暂无现金数据</div>
-      </div>
+      <DashboardErrorNotice
+        title="现金分析"
+        description="暂无现金数据，请先入金"
+      />
     );
   }
 

@@ -80,9 +80,14 @@ export function DividendCalendar() {
     );
   }
 
-  // If no dividend data, don't show panel
+  // If no dividend data, show empty notice
   if (!data.upcomingDividends.length && !data.recentPayouts.length && data.summary.totalDividendsBase === 0) {
-    return null;
+    return (
+      <DashboardErrorNotice
+        title="股息日历"
+        description="暂无股息数据，持有分红资产后自动显示"
+      />
+    );
   }
 
   return (

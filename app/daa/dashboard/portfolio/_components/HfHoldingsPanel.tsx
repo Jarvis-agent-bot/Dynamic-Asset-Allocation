@@ -68,9 +68,14 @@ export function HfHoldingsPanel() {
     );
   }
 
-  // If no HF data, don't show panel
+  // If no HF data, show empty notice
   if (!data.recentChanges || data.recentChanges.length === 0) {
-    return null;
+    return (
+      <DashboardErrorNotice
+        title="大佬动向"
+        description="暂无基金经理持仓变动数据"
+      />
+    );
   }
 
   const displayItems = expanded ? data.recentChanges : data.recentChanges.slice(0, 5);
