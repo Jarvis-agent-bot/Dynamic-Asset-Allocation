@@ -13,6 +13,8 @@ import { WorkbenchActiveTabPanel } from "@/app/daa/dashboard/workbench/_componen
 import { WorkbenchDialogs } from "@/app/daa/dashboard/workbench/_components/WorkbenchDialogs";
 import { resolveWorkbenchTabFromLocation } from "@/app/daa/dashboard/workbench/_components/workbenchNavigation";
 
+import { FxExposurePanel } from "./FxExposurePanel";
+
 export default function PortfolioPageClient(props: { initialTab?: string }) {
   const wbModel = useWorkbenchPageModel({ initialTab: props.initialTab });
   const pathname = usePathname();
@@ -72,6 +74,13 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
       {wbModel.bootstrap ? (
         <SectionErrorBoundary sectionName="资产工作台">
           <WorkbenchActiveTabPanel model={wbModel} onNavigateTab={navigateToTab} />
+        </SectionErrorBoundary>
+      ) : null}
+
+      {/* 汇率敞口（纯前端计算，多币种时自动显示） */}
+      {wbModel.bootstrap ? (
+        <SectionErrorBoundary sectionName="汇率敞口">
+          <FxExposurePanel bootstrap={wbModel.bootstrap} />
         </SectionErrorBoundary>
       ) : null}
 
