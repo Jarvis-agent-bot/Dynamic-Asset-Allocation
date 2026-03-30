@@ -19,11 +19,7 @@ vi.mock("../WatchlistBuilderPanel", () => ({
   default: () => <div data-testid="watchlist-builder">watchlist-builder</div>,
 }));
 
-vi.mock("../WorkbenchCashSection", () => ({
-  WorkbenchCashSection: () => <div data-testid="cash-section">cash</div>,
-}));
-
-// WorkbenchRebalanceSection mock removed — rebalance tab moved to ActionWorkflow
+// WorkbenchCashSection & WorkbenchRebalanceSection removed — modules consolidated
 
 function createNotificationSummaryFixture(): NotificationStatusSummary {
   return {
