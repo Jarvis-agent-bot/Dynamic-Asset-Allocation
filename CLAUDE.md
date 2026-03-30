@@ -11,7 +11,7 @@ DAA Console 是面向个人投资者的单组合动态资产配置工作台。
 
 - **Framework**: Next.js 14 (App Router), React 18, TypeScript 5
 - **Styling**: Tailwind CSS, shadcn/ui, Framer Motion
-- **Database**: PostgreSQL (production) / pg-mem (dev mode via `DAA_PG_MEM=1`)
+- **Database**: PostgreSQL
 - **Auth**: Supabase Auth (email-based)
 - **LLM**: DeepSeek (primary), OpenAI-compatible fallback
 - **Charts**: Recharts

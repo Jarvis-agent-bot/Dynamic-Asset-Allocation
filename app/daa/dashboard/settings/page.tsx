@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { RefreshCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 
@@ -198,14 +197,7 @@ export default function SettingsPage() {
       />
 
       <DashboardErrorNotice title="设置操作失败" description={error} />
-      {hint && (
-        <div className="rounded-[16px] border border-emerald-500/30 bg-emerald-500/5 px-5 py-4">
-          <div className="text-sm text-emerald-400">{hint}</div>
-          <Link href="/daa/dashboard/rebalance" className="mt-2 inline-flex text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
-            立即刷新调仓建议 →
-          </Link>
-        </div>
-      )}
+      <DashboardSuccessNotice title="设置已更新" description={hint} />
 
       <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="xl:sticky xl:top-[104px] xl:self-start">

@@ -7,13 +7,6 @@
       "runtimeArgs": ["dev"],
       "port": 3000,
       "autoPort": true
-    },
-    {
-      "name": "dev-mem",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev:mem"],
-      "port": 3000,
-      "autoPort": true
     }
   ]
 }

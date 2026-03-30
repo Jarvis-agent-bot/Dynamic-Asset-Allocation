@@ -119,7 +119,6 @@ export function RebalanceProposalList(props: {
                                 </DaaSurfaceStatusPill>
                               ) : null;
                             })()}
-                            {row.reason?.includes("税务") ? <DaaSurfaceStatusPill tone="cyan">🏷️ 节税</DaaSurfaceStatusPill> : null}
                             {row.currency !== props.bootstrap.baseCurrency ? <DaaSurfaceStatusPill tone="slate">{row.currency}</DaaSurfaceStatusPill> : null}
                             <DaaSurfaceStatusPill tone={row.selected ? "cyan" : "slate"}>{row.selected ? "已纳入执行" : "未勾选"}</DaaSurfaceStatusPill>
                           </div>
