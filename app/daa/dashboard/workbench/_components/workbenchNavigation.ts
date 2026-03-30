@@ -25,8 +25,9 @@ export function resolveWorkbenchTabFromLocation(input: {
 }
 
 export function getWorkbenchHref(tab?: WorkbenchTab): string {
-  if (!tab) return "/daa/dashboard/workbench";
-  return `/daa/dashboard/workbench?tab=${tab}`;
+  if (!tab) return "/daa/dashboard/portfolio";
+  if (tab === "rebalance") return "/daa/dashboard/rebalance";
+  return `/daa/dashboard/portfolio?tab=${tab}`;
 }
 
 export function shouldHandleWorkbenchAnchorClick(

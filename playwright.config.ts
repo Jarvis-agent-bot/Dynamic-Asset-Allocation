@@ -26,6 +26,8 @@ export default defineConfig({
     url: `${BASE_URL}/daa/login`,
     reuseExistingServer: false,
     timeout: 120_000,
-    env: {},
+    env: {
+      DAA_PG_MEM: '1',
+    },
   },
 });

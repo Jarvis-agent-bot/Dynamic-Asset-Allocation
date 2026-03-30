@@ -123,6 +123,11 @@ export function ActionWorkflow(props: {
             <div>
               <span className="text-sm font-medium text-emerald-400">{stepMeta.label}</span>
               <span className="ml-2 text-xs text-[var(--muted)]">{stepMeta.hint}</span>
+              {isComplete && (
+                <Link href="/daa/dashboard/trades" className="ml-4 text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
+                  查看交易记录 →
+                </Link>
+              )}
             </div>
           </div>
           <DaaSurfaceActionButton onClick={() => void props.onGenerateCycle()} disabled={props.busy}>

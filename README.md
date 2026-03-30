@@ -98,7 +98,7 @@ DAA Console 不是实盘交易系统，也不是券商连接器管理台。
 - Next.js 14 App Router
 - TypeScript
 - Tailwind CSS
-- PostgreSQL
+- Postgres 或 pg-mem
 - Supabase Auth
 - Recharts
 - Framer Motion
@@ -297,7 +297,7 @@ createdb -h 127.0.0.1 -p 5432 daa
 DAA_DB_URL=postgresql://<user>@127.0.0.1:5432/daa
 ```
 
-必须配置 PostgreSQL 数据库连接。
+未配置时会回退到 `pg-mem`，适合临时调试，不适合保留工作台状态。
 
 ## 通知配置
 

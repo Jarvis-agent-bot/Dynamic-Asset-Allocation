@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ChevronDown, ChevronUp, Zap } from "lucide-react";
 import type { TodayActionItem, TodayConclusion } from "@/src/daa/modules/today/todayTypes";
 
@@ -94,9 +95,16 @@ export default function ActionCard({ item, overallConclusion, onDecision }: Prop
           </button>
         </div>
       ) : (
-        <p className="mt-3 text-xs text-muted-foreground">
-          已{acted === "adopted" ? "采纳" : acted === "ignored" ? "忽略" : "稍后处理"}
-        </p>
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            已{acted === "adopted" ? "采纳" : acted === "ignored" ? "忽略" : "稍后处理"}
+          </p>
+          {acted === "adopted" && (
+            <Link href="/daa/dashboard/rebalance" className="inline-flex text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
+              前往调仓 →
+            </Link>
+          )}
+        </div>
       )}
     </div>
   );

@@ -232,7 +232,7 @@ function TradesCyclesPanel({ model }: { model: TradesModel }) {
           emptyReason: "先到工作台生成第一轮建议并确认执行，这里会自动沉淀完整的时间线与状态变化；如果当前只有目标写回、没有实际成交，这里仍会保持空白。",
         })}
         className="mt-4 px-5 py-14"
-        action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>前往工作台生成建议</Link>}
+        action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>前往工作台生成建议</Link>}
       />
     );
   }
@@ -291,7 +291,7 @@ function TradesOrdersPanel({ model }: { model: TradesModel }) {
           emptyReason: "订单会在你确认执行建议后自动写入；如果这轮只是写回目标权重、还没有实际成交，这里不会生成订单记录。",
         })}
         className="mt-4 px-5 py-14"
-        action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
+        action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
       />
     );
   }
@@ -405,7 +405,7 @@ function TradesReportsPanel({ model }: { model: TradesModel }) {
             emptyReason: "当前还没有可展示的执行复盘；如果这轮只有目标写回、没有真实执行，这里不会生成复盘报告。",
           })}
           className="px-5 py-16"
-          action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
+          action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
         />
       )}
     </div>

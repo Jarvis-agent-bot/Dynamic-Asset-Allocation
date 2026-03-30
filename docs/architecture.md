@@ -56,11 +56,11 @@
 │  ⚠️ 禁止引用 src/daa/，无 DB、无网络、无副作用                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Data Layer                                                         │
-│  ┌────────────────┐ ┌─────────────────────────┐                      │
-│  │  PostgreSQL    │ │   External APIs         │                      │
-│  │  15+ 表       │ │   Yahoo, DeepSeek,      │                      │
-│  │               │ │   Xueqiu, Twitter, TG   │                      │
-│  └────────────────┘ └─────────────────────────┘                      │
+│  ┌────────────────┐ ┌────────────────┐ ┌─────────────────────────┐ │
+│  │  PostgreSQL    │ │   pg-mem       │ │   External APIs         │ │
+│  │  (Production)  │ │  (Dev/Test)    │ │   Yahoo, DeepSeek,      │ │
+│  │  15+ 表       │ │  内存数据库     │ │   Xueqiu, Twitter, TG   │ │
+│  └────────────────┘ └────────────────┘ └─────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -263,7 +263,7 @@ Twitter/X ──────┘                        ├── News Signal (RS
 |----|------|
 | Frontend | Next.js 14, React 18, TypeScript 5, Tailwind CSS, shadcn/ui, Framer Motion |
 | Backend | Node.js, Next.js API Routes |
-| Database | PostgreSQL |
+| Database | PostgreSQL (prod), pg-mem (dev) |
 | Auth | Supabase (email-based) |
 | LLM | DeepSeek (primary), OpenAI (fallback) |
 | Charts | Recharts |

@@ -114,12 +114,6 @@ Thumbs.db
 .claude/worktrees/
 .claude/settings.local.json
 
-# Tool workspaces
-.codex/
-.context/
-.gstack/
-.dev-server.log
-
 # Build / temp artifacts
 output/
 .tmp/
