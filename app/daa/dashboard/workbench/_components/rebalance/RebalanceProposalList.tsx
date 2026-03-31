@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { AlertCircle, CheckSquare2, TriangleAlert, XSquare } from "lucide-react";
 
 import {
@@ -40,9 +40,6 @@ export function RebalanceProposalList(props: {
   onToggleProposal: (assetKey: string, side: "BUY" | "SELL", selected: boolean) => Promise<void>;
   onSubmitLlmFeedback: (input: { contextId: string; type: "decision"; score: WorkbenchLlmFeedbackScore; comment?: string }) => Promise<void>;
 }) {
-  // Item 14: 内联数量编辑
-  const [editedQty, setEditedQty] = useState<Record<string, number>>({});
-
   return (
     <DaaSurfacePanel
       accent={props.currentCycle ? cycleStatusTone(props.currentCycle.status) : "slate"}
@@ -174,26 +171,9 @@ export function RebalanceProposalList(props: {
                             <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>
                               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">建议数量</div>
                               <div className="mt-1.5 flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={editedQty[`${row.assetKey}::${row.side}`] ?? row.suggestedQty}
-                                  onChange={(e) => {
-                                    setEditedQty((prev) => ({
-                                      ...prev,
-                                      [`${row.assetKey}::${row.side}`]: Number(e.target.value),
-                                    }));
-                                  }}
-                                  disabled={!props.canEditCurrentCycle}
-                                  className="h-7 w-24 rounded-lg border border-[var(--border)] bg-transparent px-2 font-[var(--font-mono)] text-[15px] text-[var(--text)] focus:border-[var(--primary)] focus:outline-none disabled:opacity-50"
-                                />
-                                {editedQty[`${row.assetKey}::${row.side}`] != null &&
-                                  editedQty[`${row.assetKey}::${row.side}`] !== row.suggestedQty && (
-                                  <span className="text-[10px] text-amber-300">
-                                    原 {row.suggestedQty.toFixed(4)}
-                                  </span>
-                                )}
+                                <span className="font-[var(--font-mono)] text-[15px] text-[var(--text)]">
+                                  {row.suggestedQty.toFixed(4)}
+                                </span>
                               </div>
                             </div>
                             <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>

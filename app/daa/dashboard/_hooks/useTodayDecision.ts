@@ -71,7 +71,8 @@ export function useTodayDecision(): TodayDecisionState {
         });
         await fetchData();
       } catch {
-        // 决策记录失败不阻塞 UI
+        // 决策记录失败不阻塞 UI，但给出提示
+        console.warn("[useTodayDecision] 决策记录提交失败");
       }
     },
     [fetchData],

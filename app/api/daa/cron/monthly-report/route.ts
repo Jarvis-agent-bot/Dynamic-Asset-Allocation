@@ -98,16 +98,16 @@ export async function POST(req: Request) {
           listDaaTradeTickets({ limit: 1000 }),
         ]);
 
-        // 筛选上月数据
+        // 筛选上月数据（使用本月 1 日作为排除边界，避免遗漏月末最后一天的数据）
         const lastMonthStart = lastMonth.toISOString();
-        const lastMonthEndStr = lastMonthEnd.toISOString();
+        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
         const monthCycles = cycles.filter((c) => {
           const ts = c.createdAt;
-          return ts >= lastMonthStart && ts <= lastMonthEndStr;
+          return ts >= lastMonthStart && ts < currentMonthStart;
         });
         const monthTickets = tickets.filter((t) => {
           const ts = t.createdAt;
-          return ts >= lastMonthStart && ts <= lastMonthEndStr;
+          return ts >= lastMonthStart && ts < currentMonthStart;
         });
 
         const holdings = bootstrap.assetUniverse.filter((a) => a.holdingQty > 0);

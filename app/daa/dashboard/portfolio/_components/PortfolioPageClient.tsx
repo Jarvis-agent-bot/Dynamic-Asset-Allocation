@@ -54,6 +54,7 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
           <button
             type="button"
             onClick={() => setEmergencyAction("liquidate")}
+            aria-label="紧急清仓所有持仓"
             className="flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:border-red-500/40 hover:bg-red-500/10"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
@@ -62,6 +63,7 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
           <button
             type="button"
             onClick={() => setEmergencyAction("freeze")}
+            aria-label="冻结所有交易操作"
             className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:border-amber-500/40 hover:bg-amber-500/10"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
@@ -124,19 +126,28 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
                   setEmergencyBusy(true);
                   try {
                     if (emergencyAction === "liquidate") {
-                      for (const h of holdingRows) {
-                        await fetch("/api/daa/workbench/execution/execute", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            assetKey: h.assetKey,
-                            side: "SELL",
-                            qty: h.holdingQty,
-                            reason: "紧急清仓",
+                      const results = await Promise.allSettled(
+                        holdingRows.map((h) =>
+                          fetch("/api/daa/workbench/execution/execute", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              assetKey: h.assetKey,
+                              side: "SELL",
+                              qty: h.holdingQty,
+                              reason: "紧急清仓",
+                            }),
                           }),
-                        });
+                        ),
+                      );
+                      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+                      const failed = results.length - succeeded;
+                      if (failed > 0) {
+                        toast.warning(`${succeeded} 笔清仓成功, ${failed} 笔失败，请检查持仓状态`);
+                      } else {
+                        toast.success(`已提交 ${holdingRows.length} 笔清仓订单`);
                       }
-                      toast.success(`已提交 ${holdingRows.length} 笔清仓订单`);
+                      void wbModel.loadBootstrap(true);
                     } else {
                       const current = await getSystemConfig();
                       await patchSystemConfig({

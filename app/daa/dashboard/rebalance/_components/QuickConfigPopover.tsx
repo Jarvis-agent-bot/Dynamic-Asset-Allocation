@@ -32,6 +32,11 @@ export function QuickConfigPopover(props: {
   }, [props.driftThresholdPct, props.maxPositionPct, props.stopLossPct, props.takeProfitPct]);
 
   const handleSave = useCallback(async () => {
+    const vals = [Number(driftThreshold), Number(maxPosition), Number(stopLoss), Number(takeProfit)];
+    if (vals.some((v) => !Number.isFinite(v) || v <= 0)) {
+      toast.error("所有参数必须为正数");
+      return;
+    }
     setSaving(true);
     try {
       const current = await getSystemConfig();
@@ -40,8 +45,8 @@ export function QuickConfigPopover(props: {
         patches: [
           { path: "rebalanceStrategy.drift.thresholdPct", value: Number(driftThreshold) / 100 },
           { path: "strategy.constraints.maxPositionPct", value: Number(maxPosition) },
-          { path: "strategy.risk.perAssetStopLossPct", value: Number(stopLoss) },
-          { path: "strategy.risk.perAssetTakeProfitPct", value: Number(takeProfit) },
+          { path: "strategy.risk.perAssetStopLossPct", value: Number(stopLoss) / 100 },
+          { path: "strategy.risk.perAssetTakeProfitPct", value: Number(takeProfit) / 100 },
         ],
       });
       toast.success("策略参数已更新");
