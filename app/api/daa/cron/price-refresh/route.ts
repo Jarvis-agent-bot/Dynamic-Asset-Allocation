@@ -12,6 +12,8 @@ import {
   updateDaaAssetUniverseLastPrice,
 } from "@/src/daa/store/daaStorePg";
 import { batchUpdateDaaAssetUniverseLastPrices } from "@/src/daa/store/assetUniverseStore";
+import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
+import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -162,6 +164,57 @@ export async function POST(req: Request) {
   logSwallowed("priceRefreshRoute.dividendExtraction", err);
         }
 
+        // ── 价格报警检测 ──
+        let priceAlertsTriggered = 0;
+        try {
+          type PriceAlertHit = { symbol: string; alertType: "above" | "below"; price: number; threshold: number };
+          const alertHits: PriceAlertHit[] = [];
+          for (const row of assetRows) {
+            const key = `${normalizeUpper(row.market, "US")}::${normalizeUpper(row.symbol)}`;
+            const priced = result.results[key];
+            if (!priced || !(priced.price > 0)) continue;
+
+            const above = row.priceAlertAbove;
+            const below = row.priceAlertBelow;
+            if (typeof above === "number" && above > 0 && priced.price >= above) {
+              alertHits.push({ symbol: row.symbol, alertType: "above", price: priced.price, threshold: above });
+            }
+            if (typeof below === "number" && below > 0 && priced.price <= below) {
+              alertHits.push({ symbol: row.symbol, alertType: "below", price: priced.price, threshold: below });
+            }
+          }
+
+          if (alertHits.length > 0) {
+            priceAlertsTriggered = alertHits.length;
+            const alertLines = alertHits.slice(0, 10).map(
+              (h) => `${h.symbol}: ${h.alertType === "above" ? "上穿" : "下穿"} ${h.threshold}（现价 ${h.price.toFixed(2)}）`,
+            );
+            const alertMsg = ["DAA 价格报警通知", `触发 ${alertHits.length} 项`, ...alertLines].join("\n");
+
+            const notif = system.config.notification;
+            const sends: Promise<boolean>[] = [];
+            if (notif.telegram.enabled) {
+              sends.push(sendTelegramByEnv(alertMsg, {
+                eventType: "price_alert",
+                triggerSource: "cron_price_refresh",
+                cycleId: null,
+                requestJson: { alerts: alertHits.slice(0, 10) },
+              }));
+            }
+            if (notif.feishu.enabled) {
+              sends.push(sendFeishuByEnv(alertMsg, {
+                eventType: "price_alert",
+                triggerSource: "cron_price_refresh",
+                cycleId: null,
+                requestJson: { alerts: alertHits.slice(0, 10) },
+              }));
+            }
+            await Promise.allSettled(sends);
+          }
+        } catch (err) {
+          logSwallowed("priceRefreshRoute.priceAlertCheck", err);
+        }
+
         return {
           requested: targets.length,
           refreshedSymbols: result.refreshed,
@@ -170,6 +223,7 @@ export async function POST(req: Request) {
           refreshedAssets: refreshedAssetKeys.length,
           assetKeys: refreshedAssetKeys,
           dividendExtracted,
+          priceAlertsTriggered,
           at: new Date().toISOString(),
         };
       },

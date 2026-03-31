@@ -95,6 +95,8 @@ export function buildAssetUniverseViewRows(input: {
       targetWeightHint: row.targetWeightHint,
       watchTags: row.watchTags,
       notes: row.notes,
+      priceAlertAbove: row.priceAlertAbove ?? null,
+      priceAlertBelow: row.priceAlertBelow ?? null,
       lastPrice: row.lastPrice,
       priceUpdatedAt: row.priceUpdatedAt,
       priceStatus,

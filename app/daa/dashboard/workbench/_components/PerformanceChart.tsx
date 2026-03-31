@@ -20,10 +20,13 @@ import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFe
 
 type Snapshot = { ts: string; totalEquity: number };
 
+type BenchmarkPoint = { ts: string; price: number };
+
 type NormalizedPoint = {
   label: string; // MM-DD
   date: string; // YYYY-MM-DD
   portfolio: number; // 归一化 %（100 = 起始）
+  benchmark?: number; // 基准归一化 %
 };
 
 /**
@@ -44,9 +47,8 @@ const CHART_COLORS = {
   primary: "hsl(199 89% 60%)",
   /** var(--primary) 背景 */
   primaryBgAlpha: "hsla(199,89%,60%,0.16)",
-  // 预留基准线：
-  // success: "hsl(160 60% 55%)",   // var(--success)
-  // warning: "hsl(43 96% 56%)",    // var(--warning)
+  /** 基准线（SPY） */
+  benchmark: "hsl(160 60% 55%)",
 } as const;
 
 const TIME_RANGES = [
@@ -66,6 +68,7 @@ type RangeKey = (typeof TIME_RANGES)[number]["key"];
 function normalizeSnapshots(
   snapshots: Snapshot[],
   days: number,
+  benchmarkData?: BenchmarkPoint[],
 ): NormalizedPoint[] {
   const sorted = [...snapshots].sort(
     (a, b) => Date.parse(a.ts) - Date.parse(b.ts),
@@ -76,11 +79,36 @@ function normalizeSnapshots(
   if (filtered.length === 0) return [];
 
   const base = filtered[0].totalEquity > 0 ? filtered[0].totalEquity : 1;
-  return filtered.map((snap) => ({
-    label: snap.ts.slice(5, 10),
-    date: snap.ts.slice(0, 10),
-    portfolio: +((snap.totalEquity / base) * 100).toFixed(2),
-  }));
+
+  // 创建基准数据的日期索引
+  const benchmarkMap = new Map<string, number>();
+  if (benchmarkData && benchmarkData.length > 0) {
+    const sortedBench = [...benchmarkData].sort(
+      (a, b) => Date.parse(a.ts) - Date.parse(b.ts),
+    );
+    const benchFiltered = cutoff ? sortedBench.filter((b) => b.ts >= cutoff) : sortedBench;
+    if (benchFiltered.length > 0) {
+      const benchBase = benchFiltered[0].price > 0 ? benchFiltered[0].price : 1;
+      for (const bp of benchFiltered) {
+        const dateKey = bp.ts.slice(0, 10);
+        benchmarkMap.set(dateKey, +((bp.price / benchBase) * 100).toFixed(2));
+      }
+    }
+  }
+
+  return filtered.map((snap) => {
+    const dateKey = snap.ts.slice(0, 10);
+    const point: NormalizedPoint = {
+      label: snap.ts.slice(5, 10),
+      date: dateKey,
+      portfolio: +((snap.totalEquity / base) * 100).toFixed(2),
+    };
+    const benchVal = benchmarkMap.get(dateKey);
+    if (benchVal != null) {
+      point.benchmark = benchVal;
+    }
+    return point;
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -89,9 +117,11 @@ function normalizeSnapshots(
 
 export const PerformanceChart = React.memo(function PerformanceChart(props: {
   snapshots: Snapshot[];
+  benchmarkData?: BenchmarkPoint[];
+  benchmarkLabel?: string;
   className?: string;
 }) {
-  const { snapshots, className } = props;
+  const { snapshots, benchmarkData, benchmarkLabel = "SPY", className } = props;
   const [range, setRange] = useState<RangeKey>("ALL");
 
   const selectedDays = useMemo(
@@ -100,8 +130,13 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
   );
 
   const data = useMemo(
-    () => normalizeSnapshots(snapshots, selectedDays),
-    [snapshots, selectedDays],
+    () => normalizeSnapshots(snapshots, selectedDays, benchmarkData),
+    [snapshots, selectedDays, benchmarkData],
+  );
+
+  const hasBenchmark = useMemo(
+    () => data.some((d) => d.benchmark != null),
+    [data],
   );
 
   // 计算收益率
@@ -110,6 +145,14 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
     const last = data[data.length - 1].portfolio;
     return +(last - 100).toFixed(2);
   }, [data]);
+
+  const benchmarkReturnPct = useMemo(() => {
+    if (!hasBenchmark || data.length < 2) return null;
+    const withBenchmark = data.filter((d) => d.benchmark != null);
+    if (withBenchmark.length < 2) return null;
+    const last = withBenchmark[withBenchmark.length - 1].benchmark!;
+    return +(last - 100).toFixed(2);
+  }, [data, hasBenchmark]);
 
   if (snapshots.length < 2) {
     return (
@@ -141,16 +184,26 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
             </button>
           ))}
         </div>
-        {returnPct !== null && (
-          <span
-            className={`text-xs font-medium ${
-              returnPct >= 0 ? "text-emerald-400" : "text-red-400"
-            }`}
-          >
-            {returnPct >= 0 ? "+" : ""}
-            {returnPct}%
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {returnPct !== null && (
+            <span
+              className={`text-xs font-medium ${
+                returnPct >= 0 ? "text-emerald-400" : "text-red-400"
+              }`}
+            >
+              我的组合 {returnPct >= 0 ? "+" : ""}{returnPct}%
+            </span>
+          )}
+          {benchmarkReturnPct !== null && (
+            <span
+              className={`text-xs font-medium ${
+                benchmarkReturnPct >= 0 ? "text-emerald-400/70" : "text-red-400/70"
+              }`}
+            >
+              {benchmarkLabel} {benchmarkReturnPct >= 0 ? "+" : ""}{benchmarkReturnPct}%
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 图表 */}
@@ -184,9 +237,9 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
                 border: `1px solid ${CHART_COLORS.tooltipBorder}`,
                 borderRadius: 14,
               }}
-              formatter={(value: number | undefined) => [
+              formatter={(value: number | undefined, name?: string) => [
                 `${(value ?? 0).toFixed(2)}%`,
-                "我的组合",
+                name ?? "",
               ]}
               labelFormatter={(label: unknown) => `日期: ${String(label)}`}
             />
@@ -205,10 +258,18 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
               dot={false}
               activeDot={{ r: 4, fill: CHART_COLORS.primary }}
             />
-            {/* 未来添加基准线：
-            <Line type="monotone" dataKey="spy" name="SPY" stroke={CHART_COLORS.success} strokeWidth={1.6} dot={false} strokeDasharray="4 2" />
-            <Line type="monotone" dataKey="balanced" name="60/40" stroke={CHART_COLORS.warning} strokeWidth={1.6} dot={false} strokeDasharray="4 2" />
-            */}
+            {hasBenchmark && (
+              <Line
+                type="monotone"
+                dataKey="benchmark"
+                name={benchmarkLabel}
+                stroke={CHART_COLORS.benchmark}
+                strokeWidth={1.6}
+                dot={false}
+                strokeDasharray="4 2"
+                connectNulls
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>

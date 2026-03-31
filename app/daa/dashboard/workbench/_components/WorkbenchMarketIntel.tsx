@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DaaSurfaceEmptyState,
   DaaSurfaceStatusPill,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
@@ -61,12 +62,22 @@ export function WorkbenchMarketIntel(props: {
       ) : null}
 
       {/* ── 市场指标仪表盘 ── */}
-      <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] p-4">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场指标</div>
-        <SectionErrorBoundary sectionName="市场指标">
-          <MarketIndicatorDashboard marketContext={props.marketContext ?? null} hideClock />
-        </SectionErrorBoundary>
-      </div>
+      {props.marketContext ? (
+        <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] p-4">
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场指标</div>
+          <SectionErrorBoundary sectionName="市场指标">
+            <MarketIndicatorDashboard marketContext={props.marketContext} hideClock />
+          </SectionErrorBoundary>
+        </div>
+      ) : (
+        <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] p-4">
+          <DaaSurfaceEmptyState
+            title="市场环境数据暂未就绪"
+            description="前往设置页面刷新市场状态层，或等待定时任务自动采集指标数据。"
+            className="py-10"
+          />
+        </div>
+      )}
     </div>
   );
 }

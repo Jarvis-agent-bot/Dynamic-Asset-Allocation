@@ -9,10 +9,10 @@ import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbe
 import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 import { usePriceStream, type PriceUpdate } from "./usePriceStream";
 
-export type WorkbenchTab = "positions" | "watchlist" | "rebalance" | "cash";
+export type WorkbenchTab = "positions" | "watchlist" | "analysis" | "rebalance" | "cash";
 
 export function normalizeWorkbenchTab(input: string): WorkbenchTab {
-  if (input === "positions" || input === "watchlist" || input === "rebalance" || input === "cash") return input;
+  if (input === "positions" || input === "watchlist" || input === "analysis" || input === "rebalance" || input === "cash") return input;
   return "positions";
 }
 

@@ -16,6 +16,14 @@ function maxIso(values: Array<string | null | undefined>): string | null {
   return new Date(Math.max(...timestamps)).toISOString();
 }
 
+export type TradeFilters = {
+  startDate?: string;
+  endDate?: string;
+  symbol?: string;
+  side?: string;
+  status?: string;
+};
+
 export function useTradesModel(input: {
   tradeLimit?: number;
   reportLimit?: number;
@@ -28,20 +36,25 @@ export function useTradesModel(input: {
   const [error, setError] = useState("");
   const [expandedReportCycleId, setExpandedReportCycleId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TradeTab>("cycles");
+  const [filters, setFilters] = useState<TradeFilters>({});
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
     else setLoading(true);
     setError("");
     try {
-      setData(await getTradesReadModel({ tradeLimit, reportLimit }));
+      setData(await getTradesReadModel({
+        tradeLimit,
+        reportLimit,
+        ...filters,
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载交易记录失败");
     } finally {
       if (silent) setRefreshing(false);
       else setLoading(false);
     }
-  }, [reportLimit, tradeLimit]);
+  }, [reportLimit, tradeLimit, filters]);
 
   useDashboardAutoRefresh(load);
 
@@ -104,6 +117,8 @@ export function useTradesModel(input: {
     totalNotional,
     realizedPnl,
     latestActivityAt,
+    filters,
+    setFilters,
   };
 }
 

@@ -200,6 +200,7 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     executeSummaryError: "",
     currentCycle: null,
     baseCurrency: "USD",
+    slippageBps: 0,
     onConfirmExecute: vi.fn(async () => undefined),
     pendingConfirm: null,
     setPendingConfirm: vi.fn(),

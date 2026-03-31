@@ -94,6 +94,8 @@ function createTradesModel(overrides: Partial<TradesModel> = {}): TradesModel {
     totalNotional: 0,
     realizedPnl: 0,
     latestActivityAt: null,
+    filters: {},
+    setFilters: vi.fn(),
     ...overrides,
   };
 }

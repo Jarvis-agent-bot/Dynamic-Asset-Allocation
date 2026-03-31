@@ -8,6 +8,7 @@ import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { emitDashboardDataUpdated, emitDashboardRefresh } from "@/app/daa/dashboard/dashboardEvents";
 import { DashboardEmptyState, DashboardErrorNotice, DashboardSuccessNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { DaaSurfaceActionButton, DaaSurfacePageHeader, DaaSurfaceSectionAnchor, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { DataHealthPanel } from "@/app/daa/dashboard/settings/_components/DataHealthPanel";
 import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_components/SettingsDataSourcesSection";
 import {
   SETTINGS_NAV_ITEMS_,
@@ -21,6 +22,7 @@ import { SettingsSecretsSection } from "@/app/daa/dashboard/settings/_components
 import { SettingsStrategySection } from "@/app/daa/dashboard/settings/_components/SettingsStrategySection";
 import { ApiClientError } from "@/src/daa/api/client";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/src/daa/modules/store/storeApi";
 
 const SETTINGS_PAGE_DESCRIPTION_ = "按职责配置再平衡策略、风控参数、数据源、人因与通知，并通过固定保存条统一提交。";
@@ -49,6 +51,9 @@ export default function SettingsPage() {
   const [baselineConfig, setBaselineConfig] = useState<DaaSystemConfig | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsNavItemId>("strategy");
   const [marketRefreshing, setMarketRefreshing] = useState(false);
+  const [dataHealthAssets, setDataHealthAssets] = useState<
+    { assetKey: string; symbol: string; market: string; priceStatus: "fresh" | "stale" | "missing" | "unsupported"; priceUpdatedAt: string | null; priceAgeSec: number | null }[]
+  >([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +73,23 @@ export default function SettingsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void getWorkbenchReadModel({ syncPrices: false }).then((wb) => {
+      setDataHealthAssets(
+        wb.bootstrap.assetUniverse.map((a) => ({
+          assetKey: a.assetKey,
+          symbol: a.symbol,
+          market: a.market,
+          priceStatus: a.priceStatus,
+          priceUpdatedAt: a.priceUpdatedAt,
+          priceAgeSec: a.priceAgeSec,
+        })),
+      );
+    }).catch(() => {
+      /* 静默失败 — 数据质量面板非关键 */
+    });
+  }, []);
 
   const isDirty = useMemo(() => {
     if (!config || !baselineConfig) return false;
@@ -124,10 +146,6 @@ export default function SettingsPage() {
 
   const handleRefreshMarketContext = useCallback(async () => {
     if (marketRefreshing) return;
-    if (isDirty) {
-      const saved = await saveConfig();
-      if (!saved) return;
-    }
     setMarketRefreshing(true);
     setError("");
     try {
@@ -143,7 +161,7 @@ export default function SettingsPage() {
     } finally {
       setMarketRefreshing(false);
     }
-  }, [isDirty, marketRefreshing, saveConfig]);
+  }, [marketRefreshing]);
 
   if (loading) {
     return (
@@ -181,14 +199,25 @@ export default function SettingsPage() {
         description={SETTINGS_PAGE_DESCRIPTION_}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
+            {isDirty ? (
+              <DaaSurfaceActionButton
+                tone="primary"
+                className="h-9 rounded-full px-4 text-xs"
+                onClick={() => void saveConfig()}
+                disabled={loading || saving}
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saving ? "保存中…" : "保存设置"}
+              </DaaSurfaceActionButton>
+            ) : null}
             <DaaSurfaceActionButton
-              tone="primary"
+              tone="slate"
               className="h-9 rounded-full px-4 text-xs"
               onClick={() => void handleRefreshMarketContext()}
               disabled={loading || saving || marketRefreshing}
             >
               <RefreshCcw className={`h-3.5 w-3.5 ${marketRefreshing ? "animate-spin" : ""}`} />
-              {marketRefreshing ? "刷新市场中…" : isDirty ? "保存并刷新市场状态层" : "立即刷新市场状态层"}
+              {marketRefreshing ? "刷新市场中…" : "刷新市场状态层"}
             </DaaSurfaceActionButton>
             <DaaSurfaceStatusPill tone={isDirty ? "amber" : "green"}>{isDirty ? "存在未保存修改" : "已与当前版本同步"}</DaaSurfaceStatusPill>
             <DaaSurfaceStatusPill tone="slate">配置版本 {version ?? "-"}</DaaSurfaceStatusPill>
@@ -241,6 +270,7 @@ export default function SettingsPage() {
             <SettingsStrategySection config={config} setConfig={setConfig} />
             <SettingsRiskSection config={config} setConfig={setConfig} />
             <SettingsDataSourcesSection config={config} setConfig={setConfig} />
+            {dataHealthAssets.length > 0 && <DataHealthPanel assets={dataHealthAssets} />}
             <SettingsDataInitSection />
             <SettingsHumanFactorSection config={config} setConfig={setConfig} />
           </section>

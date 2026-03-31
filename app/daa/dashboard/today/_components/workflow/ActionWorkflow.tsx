@@ -27,6 +27,8 @@ import type {
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
+  DriftBarChart,
+  WhatIfPreview,
   RebalanceProposalList,
   RebalanceExecutionChecklist,
   RebalanceCycleHistory,
@@ -194,6 +196,14 @@ export function ActionWorkflow(props: {
           <DaaSurfaceNoticeBox tone="amber" title="推荐路径" description="观察列表内添加标的并设置目标权重 → 生成建议 → 勾选并执行。" />
         )}
 
+        {/* Step 1 (检测): 偏移分布图 */}
+        {(stepMeta.step === "detect" || stepMeta.step === "generate") && props.driftCount > 0 && (
+          <DriftBarChart
+            rows={props.bootstrap.assetUniverse}
+            thresholdPct={props.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 5}
+          />
+        )}
+
         {/* Step 3 (审阅): 建议列表 */}
         {props.currentCycle && props.currentCycle.proposals.length > 0 && (
           <RebalanceProposalList
@@ -213,6 +223,16 @@ export function ActionWorkflow(props: {
             onSelectAllProposals={props.onSelectAllProposals}
             onToggleProposal={props.onToggleProposal}
             onSubmitLlmFeedback={props.onSubmitLlmFeedback}
+          />
+        )}
+
+        {/* Step 3.5: What-If 预览（审阅时展示当前 vs 执行后） */}
+        {props.currentCycle && props.currentCycle.proposals.some((p) => p.selected) && (
+          <WhatIfPreview
+            holdings={props.bootstrap.assetUniverse}
+            proposals={props.currentCycle.proposals}
+            cash={props.bootstrap.account.cash}
+            baseCurrency={props.bootstrap.baseCurrency}
           />
         )}
 

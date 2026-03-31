@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState, useCallback } from "react";
-import { Info, Loader2, MoreHorizontal, Search } from "lucide-react";
+import { Info, Loader2, MoreHorizontal, Search, Settings2 } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -26,6 +26,7 @@ import type {
 import {
   DaaSurfaceActionButton,
   DaaSurfaceEmptyState,
+  DaaSurfaceFilterChip,
   DaaSurfaceMiniStat,
   DaaSurfacePanel,
   DaaSurfaceStatusPill,
@@ -1234,6 +1235,66 @@ export default function AssetUniverseTable(props: {
   const [fusionBreakdownKey, setFusionBreakdownKey] = useState<string | null>(null);
   const hasKeyword = keyword.trim().length > 0;
 
+  // --- Item 20: Watchlist tag filter ---
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    for (const row of props.rows) {
+      if (row.watchEnabled && row.watchTags) {
+        for (const t of row.watchTags) tags.add(t);
+      }
+    }
+    return Array.from(tags).sort();
+  }, [props.rows]);
+
+  // --- Item 27: Sector/asset class filter ---
+  const [activeSector, setActiveSector] = useState<string | null>(null);
+
+  const allSectors = useMemo(() => {
+    const sectors = new Set<string>();
+    for (const row of props.rows) {
+      if (passFilter(row, props.view)) {
+        const label = assetClassLabel(row.assetClass);
+        if (label) sectors.add(label);
+      }
+    }
+    return Array.from(sectors).sort();
+  }, [props.rows, props.view]);
+
+  // --- Item 28: Column visibility ---
+  const COLUMN_DEFS: Array<{ id: string; label: string; alwaysVisible?: boolean }> = [
+    { id: "symbol", label: "标的", alwaysVisible: true },
+    { id: "holdings", label: "持仓" },
+    { id: "price", label: "现价" },
+    { id: "valuation", label: "市值" },
+    { id: "weight", label: "权重 / 偏离" },
+    { id: "pnl", label: "盈亏" },
+    { id: "actions", label: "操作", alwaysVisible: true },
+  ];
+
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("daa:table:visibleColumns");
+        if (saved) return new Set(JSON.parse(saved) as string[]);
+      }
+    } catch { /* ignore */ }
+    return new Set(COLUMN_DEFS.map((c) => c.id));
+  });
+  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+
+  const toggleColumn = useCallback((id: string) => {
+    setVisibleColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem("daa:table:visibleColumns", JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  const isColumnVisible = useCallback((id: string) => visibleColumns.has(id), [visibleColumns]);
+
   const fusionBreakdownData = useMemo(() => {
     if (!fusionBreakdownKey) return null;
     const insight = props.insightDataByAssetKey[fusionBreakdownKey];
@@ -1259,21 +1320,33 @@ export default function AssetUniverseTable(props: {
     const kw = keyword.trim().toLowerCase();
     return props.rows.filter((row) => {
       if (!passFilter(row, props.view)) return false;
-      if (!kw) return true;
-      const text = [
-        row.symbol,
-        row.market,
-        row.currency,
-        row.yfinanceSymbol,
-        row.notes ?? "",
-        row.watchTags.join(" "),
-        row.holdingTags.join(" "),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return text.includes(kw);
+      if (kw) {
+        const text = [
+          row.symbol,
+          row.market,
+          row.currency,
+          row.yfinanceSymbol,
+          row.notes ?? "",
+          row.watchTags.join(" "),
+          row.holdingTags.join(" "),
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!text.includes(kw)) return false;
+      }
+      // Tag filter (Item 20)
+      if (activeTag && row.watchEnabled) {
+        if (!row.watchTags.includes(activeTag)) return false;
+      } else if (activeTag && !row.watchEnabled) {
+        return false;
+      }
+      // Sector filter (Item 27)
+      if (activeSector) {
+        if (assetClassLabel(row.assetClass) !== activeSector) return false;
+      }
+      return true;
     });
-  }, [keyword, props.rows, props.view]);
+  }, [keyword, props.rows, props.view, activeTag, activeSector]);
 
   const tableEntries = useMemo(() => {
     if (props.view !== "holdings") {
@@ -1380,7 +1453,73 @@ export default function AssetUniverseTable(props: {
           {props.updatingTarget ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           {props.updatingTarget ? "处理中..." : "权重补齐 100%"}
         </DaaSurfaceActionButton>
+
+        {/* Item 28: 列配置 */}
+        <div className="relative">
+          <button
+            onClick={() => setColumnConfigOpen(!columnConfigOpen)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+            title="列配置"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+          {columnConfigOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setColumnConfigOpen(false)} />
+              <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-[12px] border border-[var(--border)] bg-[rgba(13,19,32,0.98)] p-2 shadow-lg">
+                <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">显示列</div>
+                {COLUMN_DEFS.filter((c) => !c.alwaysVisible).map((col) => (
+                  <label key={col.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-[var(--muted)] hover:bg-[rgba(255,255,255,0.04)]">
+                    <input
+                      type="checkbox"
+                      checked={isColumnVisible(col.id)}
+                      onChange={() => toggleColumn(col.id)}
+                      className="accent-[var(--primary)]"
+                    />
+                    {col.label}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Item 27: 资产类别筛选 */}
+      {allSectors.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          <DaaSurfaceFilterChip active={!activeSector} onClick={() => setActiveSector(null)}>
+            全部类别
+          </DaaSurfaceFilterChip>
+          {allSectors.map((sector) => (
+            <DaaSurfaceFilterChip
+              key={sector}
+              active={activeSector === sector}
+              onClick={() => setActiveSector(activeSector === sector ? null : sector)}
+            >
+              {sector}
+            </DaaSurfaceFilterChip>
+          ))}
+        </div>
+      )}
+
+      {/* Item 20: 观察列表标签筛选 */}
+      {props.view === "watchlist" && allTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <DaaSurfaceFilterChip active={!activeTag} onClick={() => setActiveTag(null)}>
+            全部标签
+          </DaaSurfaceFilterChip>
+          {allTags.map((tag) => (
+            <DaaSurfaceFilterChip
+              key={tag}
+              active={activeTag === tag}
+              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+            >
+              {tag}
+            </DaaSurfaceFilterChip>
+          ))}
+        </div>
+      )}
 
       {/* ───── Mobile card layout (< md) ───── */}
       <div className="md:hidden">
@@ -1416,33 +1555,34 @@ export default function AssetUniverseTable(props: {
           7 列精简视图，点击目标权重可直接编辑；详细类型、汇率等信息请展开详情查看。
         </div>
         <TooltipProvider delayDuration={120}>
-          <table className="min-w-[980px] w-full border-collapse">
+          <table className="w-full border-collapse" style={{ minWidth: `${240 + (isColumnVisible("holdings") ? 120 : 0) + (isColumnVisible("price") ? 130 : 0) + (isColumnVisible("valuation") ? 130 : 0) + (isColumnVisible("weight") ? 150 : 0) + (isColumnVisible("pnl") ? 120 : 0) + 100}px` }}>
             <colgroup>
               <col className="w-[240px]" />
-              <col className="w-[120px]" />
-              <col className="w-[130px]" />
-              <col className="w-[130px]" />
-              <col className="w-[150px]" />
-              <col className="w-[120px]" />
+              {isColumnVisible("holdings") && <col className="w-[120px]" />}
+              {isColumnVisible("price") && <col className="w-[130px]" />}
+              {isColumnVisible("valuation") && <col className="w-[130px]" />}
+              {isColumnVisible("weight") && <col className="w-[150px]" />}
+              {isColumnVisible("pnl") && <col className="w-[120px]" />}
               <col className="w-[100px]" />
             </colgroup>
             <thead>
               <tr>
                 <th className={daaSurfaceTableHeadClassName}>标的</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>持仓</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>现价</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>市值</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>权重 / 偏离</th>
-                <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>盈亏</th>
+                {isColumnVisible("holdings") && <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>持仓</th>}
+                {isColumnVisible("price") && <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>现价</th>}
+                {isColumnVisible("valuation") && <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>市值</th>}
+                {isColumnVisible("weight") && <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>权重 / 偏离</th>}
+                {isColumnVisible("pnl") && <th className={cn(daaSurfaceTableHeadClassName, "text-right")}>盈亏</th>}
                 <th className="sticky right-0 z-20 border-b border-[var(--border)] bg-[rgba(7,10,18,0.98)] px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">操作</th>
               </tr>
             </thead>
             <tbody>
               {tableEntries.map((entry) => {
+                const visibleColCount = 2 + (isColumnVisible("holdings") ? 1 : 0) + (isColumnVisible("price") ? 1 : 0) + (isColumnVisible("valuation") ? 1 : 0) + (isColumnVisible("weight") ? 1 : 0) + (isColumnVisible("pnl") ? 1 : 0);
                 if (entry.type === "group") {
                   return (
                     <tr key={`group-${entry.key}`} className="border-b border-[var(--border)]/70 bg-[rgba(255,255,255,0.03)]">
-                      <td colSpan={7} className="px-4 py-3">
+                      <td colSpan={visibleColCount} className="px-4 py-3">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span className="font-semibold text-[var(--text)]">{entry.label}（{entry.count}）</span>
                           <span className="text-[var(--muted)]">
@@ -1520,6 +1660,7 @@ export default function AssetUniverseTable(props: {
                         </Tooltip>
                       </td>
                       {/* Column 2: 持仓 — qty + cost per unit */}
+                      {isColumnVisible("holdings") && (
                       <td className="px-3 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
                         <div>{row.holdingQty.toFixed(4)}</div>
                         {row.holdingQty > 0 ? (
@@ -1528,7 +1669,9 @@ export default function AssetUniverseTable(props: {
                           </div>
                         ) : null}
                       </td>
+                      )}
                       {/* Column 3: 现价 — price + status pill */}
+                      {isColumnVisible("price") && (
                       <td className="px-3 py-3 text-right align-top font-[var(--font-mono)] text-[13px] text-[var(--text)]">
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -1544,7 +1687,9 @@ export default function AssetUniverseTable(props: {
                           </TooltipContent>
                         </Tooltip>
                       </td>
+                      )}
                       {/* Column 4: 市值 — local valuation + base currency tooltip */}
+                      {isColumnVisible("valuation") && (
                       <td className="px-3 py-3 text-right align-top font-[var(--font-mono)] text-sm text-[var(--text)]">
                         {rowValuation > 0 ? (
                           <Tooltip>
@@ -1561,7 +1706,9 @@ export default function AssetUniverseTable(props: {
                           </Tooltip>
                         ) : "-"}
                       </td>
+                      )}
                       {/* Column 5: 权重/偏离 — merged actual + target (inline edit) + gap bar */}
+                      {isColumnVisible("weight") && (
                       <WeightGapCell
                         row={row}
                         editing={isEditingTarget}
@@ -1574,7 +1721,9 @@ export default function AssetUniverseTable(props: {
                         }}
                         onSave={() => void handleSaveTarget(row)}
                       />
+                      )}
                       {/* Column 6: 盈亏 — unrealized PnL % + valuation temperature */}
+                      {isColumnVisible("pnl") && (
                       <td className="px-3 py-3 text-right align-top">
                         {rowPnlPct != null ? (
                           <div className={cn("font-[var(--font-mono)] text-xs font-semibold", rowPnlPct >= 0 ? "text-emerald-300" : "text-rose-300")}>
@@ -1585,6 +1734,7 @@ export default function AssetUniverseTable(props: {
                         )}
                         <div className={cn("mt-1 text-[10px]", valuationTemp.className)}>{valuationTemp.text}</div>
                       </td>
+                      )}
                       {/* Column 7: 操作 (sticky) — trade dropdown + more menu */}
                       <td className="sticky right-0 z-10 bg-[rgba(7,10,18,0.98)] px-3 py-3 text-right align-top">
                         <div className="flex items-center justify-end gap-1.5">
@@ -1657,7 +1807,7 @@ export default function AssetUniverseTable(props: {
 
                     {expanded ? (
                       <tr className="border-b border-[var(--border)]/70 bg-[rgba(8,12,20,0.86)]">
-                        <td colSpan={7} className="px-4 py-4">
+                        <td colSpan={visibleColCount} className="px-4 py-4">
                           {/* 快速信息条 */}
                           <div className="flex flex-wrap gap-4 border-b border-[var(--border)] px-4 py-2.5 text-xs mb-4 -mx-4 -mt-4 rounded-t-[4px]">
                             <span className="text-[var(--faint)]">类型: {rowTypeSummary(row)} · {rowTypeDetail(row)}</span>
@@ -1684,7 +1834,7 @@ export default function AssetUniverseTable(props: {
 
               {tableEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center">
+                  <td colSpan={2 + (isColumnVisible("holdings") ? 1 : 0) + (isColumnVisible("price") ? 1 : 0) + (isColumnVisible("valuation") ? 1 : 0) + (isColumnVisible("weight") ? 1 : 0) + (isColumnVisible("pnl") ? 1 : 0)} className="px-4 py-10 text-center">
                     {(() => {
                       const emptyMeta = emptyStateMeta({
                         view: props.view,

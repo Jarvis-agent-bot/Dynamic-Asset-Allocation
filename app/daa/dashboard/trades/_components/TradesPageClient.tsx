@@ -4,6 +4,7 @@ import { useTradesModel } from "@/app/daa/dashboard/_hooks/useTradesModel";
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import {
   TradesErrorState,
+  TradesFilterBar,
   TradesHeader,
   TradesLedgerSummary,
   TradesSummaryMetrics,
@@ -31,6 +32,7 @@ export default function TradesPageClient() {
     <div className="space-y-6 lg:space-y-7">
       <TradesHeader model={model} />
       <TradesSummaryMetrics model={model} />
+      <TradesFilterBar model={model} />
       <TradesLedgerSummary model={model} />
       <TradesErrorState error={model.error} />
       <TradesTabsPanel model={model} />

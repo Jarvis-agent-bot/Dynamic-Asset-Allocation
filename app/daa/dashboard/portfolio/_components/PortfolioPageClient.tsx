@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
+
+import { Dialog } from "@/components/ui/dialog";
 
 import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
+import { DaaSurfaceActionButton, DaaSurfaceDialogShell } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { getSystemConfig, patchSystemConfig } from "@/src/daa/modules/store/storeApi";
 
 import { WorkbenchPortfolioStatus } from "@/app/daa/dashboard/workbench/_components/WorkbenchPortfolioStatus";
 import { WorkbenchActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/WorkbenchActiveTabPanel";
@@ -18,6 +24,9 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
+
+  const [emergencyAction, setEmergencyAction] = useState<"liquidate" | "freeze" | null>(null);
+  const [emergencyBusy, setEmergencyBusy] = useState(false);
 
   useEffect(() => {
     const nextTab = resolveWorkbenchTabFromLocation({
@@ -35,8 +44,32 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
+  const holdingRows = wbModel.tableProps.rows.filter((r) => r.holdingQty > 0);
+
   return (
     <div className="space-y-4">
+      {/* 紧急操作入口 */}
+      {wbModel.bootstrap && holdingRows.length > 0 ? (
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setEmergencyAction("liquidate")}
+            className="flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:border-red-500/40 hover:bg-red-500/10"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            紧急清仓
+          </button>
+          <button
+            type="button"
+            onClick={() => setEmergencyAction("freeze")}
+            className="flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:border-amber-500/40 hover:bg-amber-500/10"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            冻结交易
+          </button>
+        </div>
+      ) : null}
+
       {/* 组合快照（摘要+图表，现金摘要在摘要行内） */}
       {wbModel.bootstrap ? (
         <SectionErrorBoundary sectionName="组合状态">
@@ -65,6 +98,77 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
       ) : null}
 
       <WorkbenchDialogs {...wbModel.dialogProps} />
+
+      {/* 紧急操作确认弹窗 */}
+      <Dialog open={emergencyAction !== null} onOpenChange={(open) => {
+        if (!open) setEmergencyAction(null);
+      }}>
+        <DaaSurfaceDialogShell
+          accent="red"
+          className="max-w-md"
+          title={emergencyAction === "liquidate" ? "紧急清仓全部持仓" : "冻结交易"}
+          description={
+            emergencyAction === "liquidate"
+              ? "将为所有持仓生成 SELL 订单并立即执行。此操作不可撤销。"
+              : "冻结后将无法执行任何交易，直到手动解除。"
+          }
+          footer={(
+            <div className="flex justify-end gap-2">
+              <DaaSurfaceActionButton tone="slate" onClick={() => setEmergencyAction(null)}>
+                取消
+              </DaaSurfaceActionButton>
+              <DaaSurfaceActionButton
+                tone="danger"
+                disabled={emergencyBusy}
+                onClick={async () => {
+                  setEmergencyBusy(true);
+                  try {
+                    if (emergencyAction === "liquidate") {
+                      for (const h of holdingRows) {
+                        await fetch("/api/daa/workbench/execution/execute", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            assetKey: h.assetKey,
+                            side: "SELL",
+                            qty: h.holdingQty,
+                            reason: "紧急清仓",
+                          }),
+                        });
+                      }
+                      toast.success(`已提交 ${holdingRows.length} 笔清仓订单`);
+                    } else {
+                      const current = await getSystemConfig();
+                      await patchSystemConfig({
+                        baseVersion: current.version,
+                        patches: [{ path: "strategy.execution.frozen", value: true }],
+                      });
+                      toast.success("交易已冻结");
+                    }
+                  } catch (err) {
+                    toast.error("操作失败：" + (err instanceof Error ? err.message : "未知错误"));
+                  } finally {
+                    setEmergencyBusy(false);
+                    setEmergencyAction(null);
+                  }
+                }}
+              >
+                {emergencyBusy ? "执行中…" : "确认执行"}
+              </DaaSurfaceActionButton>
+            </div>
+          )}
+        >
+          {emergencyAction === "liquidate" ? (
+            <div className="rounded-[12px] border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+              将清仓以下 {holdingRows.length} 个持仓标的
+            </div>
+          ) : (
+            <div className="rounded-[12px] border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-300">
+              冻结后所有再平衡执行将被阻止，需要在设置页手动解除冻结。
+            </div>
+          )}
+        </DaaSurfaceDialogShell>
+      </Dialog>
     </div>
   );
 }

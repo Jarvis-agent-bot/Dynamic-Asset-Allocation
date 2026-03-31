@@ -171,6 +171,7 @@ export function useWorkbenchPageModel(input: {
     executeSummaryError: executionFlow.executeSummaryError,
     currentCycle,
     baseCurrency: bootstrap?.baseCurrency || "USD",
+    slippageBps: bootstrap?.execution?.slippageBps ?? 0,
     onConfirmExecute: executionFlow.handleConfirmExecuteCycle,
     pendingConfirm,
     setPendingConfirm,

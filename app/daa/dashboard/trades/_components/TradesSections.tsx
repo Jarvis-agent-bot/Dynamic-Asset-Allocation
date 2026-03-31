@@ -5,9 +5,18 @@ import Link from "next/link";
 import { ChevronDown, ChevronUp, RefreshCcw } from "lucide-react";
 
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
-import { DashboardEmptyState, DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
-import type { TradesModel, TradeTab } from "@/app/daa/dashboard/_hooks/useTradesModel";
-import { DaaSurfaceActionButton, DaaSurfaceMetricCard, DaaSurfacePageHeader, DaaSurfacePanel, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
+import type { TradesModel, TradeTab, TradeFilters } from "@/app/daa/dashboard/_hooks/useTradesModel";
+import {
+  DaaSurfaceActionButton,
+  DaaSurfaceFilterChip,
+  DaaSurfaceEmptyState,
+  DaaSurfaceMetricCard,
+  DaaSurfacePageHeader,
+  DaaSurfacePanel,
+  DaaSurfaceStatusPill,
+  daaSurfaceDenseFieldClassName,
+} from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
 const TAB_META: Record<TradeTab, { label: string; subtitle: string }> = {
   cycles: { label: "再平衡周期", subtitle: "用时间线回顾每一次触发、状态与执行规模。" },
@@ -139,6 +148,87 @@ export function TradesSummaryMetrics({ model }: { model: TradesModel }) {
   );
 }
 
+export function TradesFilterBar({ model }: { model: TradesModel }) {
+  const hasActiveFilter = Boolean(model.filters.startDate || model.filters.endDate || model.filters.symbol || model.filters.side || model.filters.status);
+
+  function updateFilter(patch: Partial<TradeFilters>) {
+    model.setFilters((prev) => ({ ...prev, ...patch }));
+  }
+
+  return (
+    <DaaSurfacePanel accent="slate" title="筛选条件" subtitle="按时间、标的、方向或状态筛选订单与周期。">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">开始日期</label>
+          <input
+            type="date"
+            value={model.filters.startDate ?? ""}
+            onChange={(e) => updateFilter({ startDate: e.target.value || undefined })}
+            className={daaSurfaceDenseFieldClassName + " w-[140px]"}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">结束日期</label>
+          <input
+            type="date"
+            value={model.filters.endDate ?? ""}
+            onChange={(e) => updateFilter({ endDate: e.target.value || undefined })}
+            className={daaSurfaceDenseFieldClassName + " w-[140px]"}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">标的</label>
+          <input
+            type="text"
+            placeholder="如 AAPL"
+            value={model.filters.symbol ?? ""}
+            onChange={(e) => updateFilter({ symbol: e.target.value || undefined })}
+            className={daaSurfaceDenseFieldClassName + " w-[120px]"}
+          />
+        </div>
+        <div className="flex items-center gap-1.5 pb-0.5">
+          <DaaSurfaceFilterChip
+            active={model.filters.side === "BUY"}
+            onClick={() => updateFilter({ side: model.filters.side === "BUY" ? undefined : "BUY" })}
+          >
+            买入
+          </DaaSurfaceFilterChip>
+          <DaaSurfaceFilterChip
+            active={model.filters.side === "SELL"}
+            onClick={() => updateFilter({ side: model.filters.side === "SELL" ? undefined : "SELL" })}
+          >
+            卖出
+          </DaaSurfaceFilterChip>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">状态</label>
+          <select
+            value={model.filters.status ?? ""}
+            onChange={(e) => updateFilter({ status: e.target.value || undefined })}
+            className={daaSurfaceDenseFieldClassName + " w-[120px]"}
+          >
+            <option value="">全部</option>
+            <option value="ready">待执行</option>
+            <option value="submitted">已提交</option>
+            <option value="executed">已执行</option>
+            <option value="rejected">已拒绝</option>
+            <option value="canceled">已取消</option>
+          </select>
+        </div>
+        {hasActiveFilter ? (
+          <DaaSurfaceActionButton
+            tone="slate"
+            className="mb-0.5"
+            onClick={() => model.setFilters({})}
+          >
+            清除筛选
+          </DaaSurfaceActionButton>
+        ) : null}
+      </div>
+    </DaaSurfacePanel>
+  );
+}
+
 export function TradesLedgerSummary({ model }: { model: TradesModel }) {
   const archivedTotal = model.ledgerMeta.archivedCycleCount + model.ledgerMeta.archivedTradeCount + model.ledgerMeta.archivedReportCount;
   return (
@@ -223,16 +313,16 @@ export function TradesTabsPanel({ model }: { model: TradesModel }) {
 function TradesCyclesPanel({ model }: { model: TradesModel }) {
   if (model.cycles.length <= 0) {
     return (
-      <DashboardEmptyState
-        title="还没有再平衡周期"
+      <DaaSurfaceEmptyState
+        title="暂无再平衡周期"
         description={buildArchivedHint({
           title: "再平衡周期",
           ledgerStartTs: model.ledgerMeta.ledgerStartTs,
           archivedCount: model.ledgerMeta.archivedCycleCount,
-          emptyReason: "先到工作台生成第一轮建议并确认执行，这里会自动沉淀完整的时间线与状态变化；如果当前只有目标写回、没有实际成交，这里仍会保持空白。",
+          emptyReason: "生成一次调仓建议来创建您的首个周期，这里会自动沉淀完整的时间线与状态变化。",
         })}
         className="mt-4 px-5 py-14"
-        action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>前往工作台生成建议</Link>}
+        action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>前往调仓</Link>}
       />
     );
   }
@@ -262,7 +352,14 @@ function TradesCyclesPanel({ model }: { model: TradesModel }) {
         <tbody>
           {model.cycles.map((cycle) => (
             <tr key={cycle.cycleId}>
-              <TableCellMono>{cycle.cycleId.slice(0, 8)}</TableCellMono>
+              <TableCellMono>
+                <Link
+                  href={`/daa/dashboard/rebalance?cycleId=${cycle.cycleId}`}
+                  className="font-mono text-xs text-[var(--primary)] hover:underline"
+                >
+                  {cycle.cycleId.slice(0, 8)}
+                </Link>
+              </TableCellMono>
               <TableCellText><DaaSurfaceStatusPill tone={STATUS_TONE[cycle.status] ?? "slate"}>{cycleStatusLabel(cycle.status)}</DaaSurfaceStatusPill></TableCellText>
               <TableCellText>{triggerSourceLabel(cycle.triggerSource)}</TableCellText>
               <TableCellMono align="right">{cycleOrderCount(cycle)}</TableCellMono>
@@ -282,16 +379,16 @@ function TradesOrdersPanel({ model }: { model: TradesModel }) {
   const [visibleCount, setVisibleCount] = useState(ORDERS_PAGE_SIZE_);
   if (model.orders.length <= 0) {
     return (
-      <DashboardEmptyState
-        title="还没有订单记录"
+      <DaaSurfaceEmptyState
+        title="暂无订单记录"
         description={buildArchivedHint({
           title: "订单记录",
           ledgerStartTs: model.ledgerMeta.ledgerStartTs,
           archivedCount: model.ledgerMeta.archivedTradeCount,
-          emptyReason: "订单会在你确认执行建议后自动写入；如果这轮只是写回目标权重、还没有实际成交，这里不会生成订单记录。",
+          emptyReason: "订单会在您确认执行建议后自动写入，前往调仓页完成一次执行即可生成订单。",
         })}
         className="mt-4 px-5 py-14"
-        action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
+        action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>前往调仓执行</Link>}
       />
     );
   }
@@ -396,16 +493,16 @@ function TradesReportsPanel({ model }: { model: TradesModel }) {
           </div>
         );
       }) : (
-        <DashboardEmptyState
+        <DaaSurfaceEmptyState
           title="暂无复盘报告"
           description={buildArchivedHint({
             title: "复盘报告",
             ledgerStartTs: model.ledgerMeta.ledgerStartTs,
             archivedCount: model.ledgerMeta.archivedReportCount,
-            emptyReason: "当前还没有可展示的执行复盘；如果这轮只有目标写回、没有真实执行，这里不会生成复盘报告。",
+            emptyReason: "完成一次实际执行后，系统会自动生成复盘报告，包含收益归因与风控变化。",
           })}
           className="px-5 py-16"
-          action={<Link href="/daa/dashboard/workbench?tab=rebalance" className={emptyActionLinkClassName}>去工作台完成一次执行</Link>}
+          action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>前往调仓执行</Link>}
         />
       )}
     </div>
