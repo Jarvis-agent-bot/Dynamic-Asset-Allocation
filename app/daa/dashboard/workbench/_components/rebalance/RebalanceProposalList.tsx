@@ -160,10 +160,25 @@ export function RebalanceProposalList(props: {
                             })()}
                             {row.currency !== props.bootstrap.baseCurrency ? <DaaSurfaceStatusPill tone="slate">{row.currency}</DaaSurfaceStatusPill> : null}
                             <DaaSurfaceStatusPill tone={row.selected ? "cyan" : "slate"}>{row.selected ? "已纳入执行" : "未勾选"}</DaaSurfaceStatusPill>
+                            {/* 决策信号内联展示 */}
+                            {row.decisionContext?.signalAction ? (
+                              <DaaSurfaceStatusPill tone={row.decisionContext.signalAction === "open_or_add" ? "green" : row.decisionContext.signalAction === "reduce_or_avoid" ? "red" : "slate"}>
+                                信号:{row.decisionContext.signalAction === "open_or_add" ? "看多" : row.decisionContext.signalAction === "reduce_or_avoid" ? "看空" : "观望"}
+                                {row.decisionContext.signalScore != null ? ` ${row.decisionContext.signalScore}%` : ""}
+                              </DaaSurfaceStatusPill>
+                            ) : null}
+                            {row.decisionContext?.llmAdjustment ? (
+                              <DaaSurfaceStatusPill tone={row.decisionContext.llmAdjustment === "execute" || row.decisionContext.llmAdjustment === "increase_priority" ? "green" : row.decisionContext.llmAdjustment === "skip" ? "red" : "amber"}>
+                                AI:{row.decisionContext.llmAdjustment === "execute" ? "执行" : row.decisionContext.llmAdjustment === "reduce_size" ? "缩减" : row.decisionContext.llmAdjustment === "skip" ? "跳过" : "加优"}
+                              </DaaSurfaceStatusPill>
+                            ) : null}
+                            {row.decisionContext?.signalConflict ? (
+                              <DaaSurfaceStatusPill tone="red">信号冲突</DaaSurfaceStatusPill>
+                            ) : null}
                           </div>
                           {row.reason ? (
-                            <div className="text-xs leading-5 text-[var(--muted)] line-clamp-1">
-                              {row.reason.slice(0, 50)}{row.reason.length > 50 ? "…" : ""}
+                            <div className="text-xs leading-5 text-[var(--muted)] line-clamp-2">
+                              {row.reason}
                             </div>
                           ) : null}
 

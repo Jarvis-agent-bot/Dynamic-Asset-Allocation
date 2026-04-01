@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { Bot, RefreshCw } from "lucide-react";
 
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { useTodayDecision } from "@/app/daa/dashboard/_hooks/useTodayDecision";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
+import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
 import { WorkbenchNotificationBar } from "@/app/daa/dashboard/workbench/_components/WorkbenchNotificationBar";
 import { WorkbenchMarketIntel } from "@/app/daa/dashboard/workbench/_components/WorkbenchMarketIntel";
 import { WorkbenchDialogs } from "@/app/daa/dashboard/workbench/_components/WorkbenchDialogs";
 import { ActionWorkflow } from "@/app/daa/dashboard/today/_components/workflow/ActionWorkflow";
-import { TodayBrief } from "@/app/daa/dashboard/today/_components/TodayBrief";
 import { QuickConfigPopover } from "./QuickConfigPopover";
 
 export default function RebalancePageClient() {
@@ -20,7 +20,6 @@ export default function RebalancePageClient() {
   const today = useTodayDecision();
   const searchParams = useSearchParams();
   const appliedCycleIdRef = useRef<string | null>(null);
-  const [briefOpen, setBriefOpen] = useState(false);
 
   // 从 URL 参数中读取 cycleId 并自动选中对应周期
   useEffect(() => {
@@ -53,44 +52,38 @@ export default function RebalancePageClient() {
         warnings={wbModel.bootstrap?.warnings || []}
       />
 
-      {/* 快速调参 + AI 摘要 */}
-      <div className="flex items-center justify-end">
-        <QuickConfigPopover
-          driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct}
-        />
-      </div>
-
-      {/* AI 投委会摘要（可折叠） */}
-      <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)]">
-        <button
-          type="button"
-          onClick={() => setBriefOpen(!briefOpen)}
-          className="flex w-full items-center justify-between px-5 py-3 text-left transition-colors hover:bg-[rgba(255,255,255,0.02)]"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-[var(--text)]">AI 投委会摘要</span>
-            {today.model?.llmOutput?.conclusion && (
-              <span className="rounded-full bg-[rgba(56,189,248,0.12)] px-2 py-0.5 text-[10px] font-medium text-[var(--primary)]">
-                {today.model.isStale ? "数据待刷新" : "已就绪"}
-              </span>
-            )}
-          </div>
-          <ChevronDown
-            className={`h-4 w-4 text-[var(--muted)] transition-transform duration-200 ${briefOpen ? "rotate-180" : ""}`}
+      {/* AI 投委会摘要（紧凑横条）+ 快速调参 */}
+      <div className="flex items-center gap-3 rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-3">
+        <Bot className="h-4 w-4 shrink-0 text-[var(--primary)]" />
+        <div className="min-w-0 flex-1">
+          {today.loading ? (
+            <span className="text-sm text-[var(--muted)]">加载 AI 决策中…</span>
+          ) : today.model?.llmOutput?.reason ? (
+            <span className="text-sm leading-5 text-[var(--text)] line-clamp-1">
+              {today.model.llmOutput.reason}
+            </span>
+          ) : (
+            <span className="text-sm text-[var(--faint)]">AI 决策分析暂不可用</span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {today.model && (
+            <DaaSurfaceStatusPill tone={today.model.isStale ? "amber" : "green"}>
+              {today.model.isStale ? "待刷新" : "已就绪"}
+            </DaaSurfaceStatusPill>
+          )}
+          <button
+            onClick={() => void today.handleRefresh()}
+            disabled={today.refreshing}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:text-[var(--text)] disabled:opacity-50"
+            title="刷新 AI 分析"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${today.refreshing ? "animate-spin" : ""}`} />
+          </button>
+          <QuickConfigPopover
+            driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct}
           />
-        </button>
-        {briefOpen && (
-          <div className="border-t border-[var(--border)] px-5 py-4">
-            <TodayBrief
-              model={today.model}
-              loading={today.loading}
-              refreshing={today.refreshing}
-              error={today.error}
-              onRefresh={today.handleRefresh}
-              onDecision={today.handleDecision}
-            />
-          </div>
-        )}
+        </div>
       </div>
 
       {wbModel.bootstrap && wbModel.rebalanceSectionProps ? (
