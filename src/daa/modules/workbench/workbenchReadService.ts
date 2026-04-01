@@ -335,6 +335,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
   const shouldAutoRiskCycle = opts.autoRiskCycle === true;
   const runtimePortfolio = await loadRuntimePortfolioSnapshot();
 
+  const dataQualityWarnings: string[] = [];
   if (shouldSyncPrices) {
     try {
       await syncWorkbenchPrices({
@@ -343,6 +344,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
       });
     } catch (err) {
       logSwallowed("workbenchReadService.syncMarketData", err);
+      dataQualityWarnings.push("实时行情同步失败，当前展示的价格可能为缓存数据。");
     }
   }
 
@@ -385,6 +387,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     logSwallowed("workbenchReadService.readMarketCache", err);
     marketCacheReadFailed = true;
     priceContextByKey = {};
+    dataQualityWarnings.push("市场价格缓存读取异常，已回退到库内快照价格。");
   }
 
   const targetWeights = buildTargetWeightsFromConfig({
@@ -443,7 +446,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     .slice(0, 200);
 
-  const warnings: string[] = [...runtimePortfolio.warnings];
+  const warnings: string[] = [...runtimePortfolio.warnings, ...dataQualityWarnings];
   const marketDataHealth = buildWorkbenchMarketDataHealth({
     cacheReadFailed: marketCacheReadFailed,
     stats: marketCacheStats,
@@ -472,6 +475,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
   } catch (err) {
     logSwallowed("workbenchReadService.getMarketContext", err);
     marketContext = null;
+    dataQualityWarnings.push("市场环境数据获取失败，当前决策未包含市场环境因子。");
   }
 
   const rebalanceStrategy = systemRow.config.rebalanceStrategy;
@@ -556,6 +560,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
           rebalanceCycles = [createdRiskCycle, ...rebalanceCycles.filter((row) => row.cycleId !== createdRiskCycle.cycleId)];
         } catch (err) {
           logSwallowed("workbenchReadService.riskTriggerWrite", err);
+          dataQualityWarnings.push("风控触发周期写入失败，已检测到止损/止盈信号但未能生成周期。");
         }
       } else {
         await appendTriggerEventSafe({
@@ -590,6 +595,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
       assetUniverse,
       execution: {
         logs,
+        slippageBps: strategy.execution?.slippageBps ?? 0,
       },
       rebalance: {
         mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",

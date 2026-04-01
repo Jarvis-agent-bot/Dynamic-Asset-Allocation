@@ -26,6 +26,7 @@ export function WorkbenchDialogs(props: WorkbenchPageModel["dialogProps"]) {
         row={props.orderDraft?.row || null}
         side={props.orderDraft?.side || "BUY"}
         loading={props.orderSubmitting}
+        slippageBps={props.slippageBps}
         onOpenChange={(next) => {
           if (!next) props.setOrderDraft(null);
         }}

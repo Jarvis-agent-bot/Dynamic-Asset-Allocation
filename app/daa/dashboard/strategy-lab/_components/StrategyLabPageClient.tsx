@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlaskConical, Play, History, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import {
   LineChart,
   Line,
@@ -16,6 +17,7 @@ import {
 import { DashboardEmptyState, DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import {
   DaaSurfaceActionButton,
+  DaaSurfaceEmptyState,
   DaaSurfaceMetricCard,
   DaaSurfaceNoticeBox,
   DaaSurfacePageHeader,
@@ -27,6 +29,7 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
+import { applyTargetWeights } from "@/src/daa/modules/store/storeApi";
 import { runBacktest, getBacktestHistory } from "@/src/daa/modules/strategyLab/strategyLabApi";
 import type {
   StrategyLabRunParams,
@@ -121,6 +124,9 @@ export default function StrategyLabPageClient() {
   // ---------- 历史 ----------
   const [history, setHistory] = useState<StrategyLabHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // ---------- 应用权重 ----------
+  const [applying, setApplying] = useState(false);
 
   // ---------- 资产筛选 ----------
   const [assetFilter, setAssetFilter] = useState("");
@@ -544,6 +550,41 @@ export default function StrategyLabPageClient() {
                 </DaaSurfacePanel>
               ) : null}
 
+              {/* 应用回测权重为目标配置 */}
+              {result?.attribution?.perAsset && result.attribution.perAsset.length > 0 && (
+                <div className="flex items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-[var(--text)]">应用回测权重</div>
+                    <div className="mt-0.5 text-xs text-[var(--muted)]">
+                      将本次回测的平均权重作为目标配置，覆盖当前设置
+                    </div>
+                  </div>
+                  <DaaSurfaceActionButton
+                    tone="primary"
+                    disabled={applying}
+                    onClick={async () => {
+                      if (!result?.attribution?.perAsset) return;
+                      setApplying(true);
+                      try {
+                        const weights: Record<string, number> = {};
+                        for (const item of result.attribution.perAsset) {
+                          const key = item.symbol.includes(":") ? item.symbol : `US:${item.symbol}`;
+                          weights[key] = Number((item.avgWeight * 100).toFixed(2));
+                        }
+                        await applyTargetWeights(weights);
+                        toast.success("已将回测权重应用为目标配置");
+                      } catch (err) {
+                        toast.error("应用失败：" + (err instanceof Error ? err.message : "未知错误"));
+                      } finally {
+                        setApplying(false);
+                      }
+                    }}
+                  >
+                    {applying ? "应用中…" : "应用为目标权重"}
+                  </DaaSurfaceActionButton>
+                </div>
+              )}
+
               {/* 再平衡事件 */}
               {result.attribution.rebalanceEvents.length > 0 ? (
                 <DaaSurfacePanel accent="amber" title="再平衡事件" subtitle="回测期间触发的再平衡记录。">
@@ -574,7 +615,7 @@ export default function StrategyLabPageClient() {
 
           {/* -- 无结果占位 -- */}
           {!result && !running ? (
-            <DashboardEmptyState
+            <DaaSurfaceEmptyState
               title="等待回测"
               description="在左侧面板选择资产和策略，设置回测参数后点击「运行回测」开始。"
               className="px-5 py-20"
@@ -630,9 +671,9 @@ export default function StrategyLabPageClient() {
                 </table>
               </div>
             ) : (
-              <DashboardEmptyState
+              <DaaSurfaceEmptyState
                 title="暂无回测历史"
-                description={historyLoading ? "加载中…" : "运行一次回测后，结果会自动记录到这里。"}
+                description={historyLoading ? "加载中…" : "选择资产和策略，运行您的第一次回测，结果会自动记录到这里。"}
                 className="py-10"
               />
             )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 import type { TodayActionItem, TodayConclusion } from "@/src/daa/modules/today/todayTypes";
 
 type Props = {
@@ -16,7 +16,6 @@ type Props = {
 };
 
 export default function ActionCard({ item, overallConclusion, onDecision }: Props) {
-  const [expanded, setExpanded] = useState(false);
   const [acted, setActed] = useState<string | null>(null);
 
   const isDivergent = overallConclusion !== "act";
@@ -53,19 +52,11 @@ export default function ActionCard({ item, overallConclusion, onDecision }: Prop
         </div>
       </div>
 
-      {/* Expand toggle */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition"
-      >
-        {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        {expanded ? "收起" : "展开证据"}
-      </button>
-
-      {expanded && (
-        <div className="mt-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground leading-relaxed">
+      {/* 证据内联显示（限 2 行） */}
+      {item.rationale && (
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground line-clamp-2">
           {item.rationale}
-        </div>
+        </p>
       )}
 
       {/* Action buttons */}

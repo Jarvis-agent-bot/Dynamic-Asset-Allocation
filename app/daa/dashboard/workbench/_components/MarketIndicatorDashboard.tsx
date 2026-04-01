@@ -1,12 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import {
   DaaSurfaceStatusPill,
   daaSurfaceSubtlePanelClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { SkeletonIndicatorGrid } from "@/app/daa/dashboard/_components/SkeletonPatterns";
 import { cn } from "@/lib/utils";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 import { InvestmentClockWidget } from "./InvestmentClockWidget";
 import { macroCyclePhaseLabel, marketRegimeLabel, marketRegimeTone } from "./rebalance";
@@ -74,16 +78,66 @@ function normalizePhase(phase: string | undefined | null): "recovery" | "overhea
   return null;
 }
 
+/* ---------- sparkline history hook ---------- */
+
+type SparklineHistoryMap = Record<string, number[]>;
+
+function useIndicatorSparklines(indicatorKeys: DaaMarketIndicatorKey[]): SparklineHistoryMap {
+  const [history, setHistory] = useState<SparklineHistoryMap>({});
+  const keysStr = indicatorKeys.join(",");
+
+  useEffect(() => {
+    if (!keysStr) return;
+
+    const url = `/api/daa/store/market-indicators/history?keys=${encodeURIComponent(keysStr)}&days=30`;
+
+    let cancelled = false;
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.history) return;
+        const map: SparklineHistoryMap = {};
+        for (const [key, snapshots] of Object.entries(data.history)) {
+          const arr = snapshots as Array<{ rawValue: number | null }>;
+          const values = arr
+            .map((s) => s.rawValue)
+            .filter((v): v is number => v !== null && Number.isFinite(v));
+          if (values.length >= 2) {
+            map[key] = values;
+          }
+        }
+        setHistory(map);
+      })
+      .catch(() => {
+        /* 静默失败 — sparkline 为可选增强 */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [keysStr]);
+
+  return history;
+}
+
+function sparklineColor(data: number[]): string {
+  if (data.length < 2) return "hsl(188 95% 60%)";
+  return data[data.length - 1] >= data[0] ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)";
+}
+
 /* ---------- component ---------- */
 
 export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketIndicatorDashboardProps & { hideClock?: boolean }) {
+  const indicators = marketContext?.indicators || [];
+  const indicatorKeys = indicators.map((ind) => ind.key);
+  const sparklines = useIndicatorSparklines(indicatorKeys);
+
   if (!marketContext) {
     return <SkeletonIndicatorGrid count={12} />;
   }
 
   const macro = marketContext.macroCycle ?? null;
   const clockPhase = normalizePhase(macro?.phase);
-  const indicators = marketContext.indicators || [];
   const scopes = marketContext.scopes || [];
 
   return (
@@ -137,12 +191,22 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
                   </span>
                 </div>
 
-                {/* 中间: raw value + percentile */}
-                <div className="mt-2.5 flex items-baseline gap-2">
-                  <span className="font-[var(--font-mono)] text-lg text-[var(--text)]">
-                    {ind.rawValue !== null && ind.rawValue !== undefined ? ind.rawValue.toFixed(2) : "-"}
-                  </span>
-                  {ind.unit ? <span className="text-xs text-[var(--faint)]">{ind.unit}</span> : null}
+                {/* 中间: raw value + sparkline + percentile */}
+                <div className="mt-2.5 flex items-center justify-between gap-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-[var(--font-mono)] text-lg text-[var(--text)]">
+                      {ind.rawValue !== null && ind.rawValue !== undefined ? ind.rawValue.toFixed(2) : "-"}
+                    </span>
+                    {ind.unit ? <span className="text-xs text-[var(--faint)]">{ind.unit}</span> : null}
+                  </div>
+                  {sparklines[ind.key] && (
+                    <Sparkline
+                      data={sparklines[ind.key]}
+                      width={56}
+                      height={20}
+                      color={sparklineColor(sparklines[ind.key])}
+                    />
+                  )}
                 </div>
                 {ind.percentile252 !== null && ind.percentile252 !== undefined ? (
                   <div className="mt-2">

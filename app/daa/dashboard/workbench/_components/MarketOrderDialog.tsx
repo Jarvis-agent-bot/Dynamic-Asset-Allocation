@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, TriangleAlert } from "lucide-react";
 
-import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/dialog";
 import type { AssetUniverseView, WorkbenchMarketOrderPreviewResult } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -29,6 +29,7 @@ export default function MarketOrderDialog(props: {
   row: AssetUniverseView | null;
   side: "BUY" | "SELL";
   loading?: boolean;
+  slippageBps?: number;
   onOpenChange: (next: boolean) => void;
   onPreview: (input: { assetKey: string; side: "BUY" | "SELL"; qty?: number; notional?: number }) => Promise<WorkbenchMarketOrderPreviewResult>;
   onSubmit: (preview: WorkbenchMarketOrderPreviewResult) => Promise<void>;
@@ -290,6 +291,23 @@ export default function MarketOrderDialog(props: {
                   value={`${preview.currency} ${preview.fee.toFixed(4)}`}
                   hint={preview.feeRateBps != null ? `费率 ${preview.feeRateBps.toFixed(2)} bps` : "使用默认费率"}
                   tone="slate"
+                />
+                <DaaSurfaceMiniStat
+                  label="滑点预估"
+                  value={formatCurrency(
+                    preview.grossNotional * ((props.slippageBps ?? 0) / 10000),
+                    preview.currency
+                  )}
+                  hint={`${props.slippageBps ?? 0} bps`}
+                  tone="amber"
+                />
+                <DaaSurfaceMiniStat
+                  label="总交易成本"
+                  value={formatCurrency(
+                    preview.fee + preview.grossNotional * ((props.slippageBps ?? 0) / 10000),
+                    preview.currency
+                  )}
+                  tone="red"
                 />
               </div>
             </div>

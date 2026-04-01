@@ -45,6 +45,8 @@ function createTradesModel(overrides: Partial<TradesModel> = {}): TradesModel {
     setExpandedReportCycleId: vi.fn(),
     activeTab: "cycles",
     setActiveTab: vi.fn(),
+    filters: {},
+    setFilters: vi.fn(),
     ...overrides,
   };
 }

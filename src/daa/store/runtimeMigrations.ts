@@ -527,6 +527,13 @@ const MIGRATIONS_: Migration[] = [
       await query("CREATE INDEX IF NOT EXISTS idx_daa_today_cache_account_cached_desc ON daa_today_cache(account_id, cached_at DESC)");
     },
   },
+  {
+    id: "20260331_watchlist_price_alerts",
+    async apply(query) {
+      await query("ALTER TABLE daa_asset_universe ADD COLUMN IF NOT EXISTS price_alert_above NUMERIC");
+      await query("ALTER TABLE daa_asset_universe ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

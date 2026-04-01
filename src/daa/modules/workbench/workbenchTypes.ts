@@ -50,6 +50,10 @@ export type AssetUniverseView = {
   targetWeightHint: number;
   watchTags: string[];
   notes: string | null;
+  /** 价格上穿报警阈值（null 表示未设置） */
+  priceAlertAbove: number | null;
+  /** 价格下穿报警阈值（null 表示未设置） */
+  priceAlertBelow: number | null;
   lastPrice: number;
   priceUpdatedAt: string | null;
   priceStatus: WorkbenchPriceStatus;
@@ -423,6 +427,7 @@ export type WorkbenchBootstrap = {
   assetUniverse: AssetUniverseView[];
   execution: {
     logs: TradeTicket[];
+    slippageBps?: number;
   };
   rebalance: WorkbenchRebalanceConfig;
   rebalanceStrategy: RebalanceStrategyConfig;

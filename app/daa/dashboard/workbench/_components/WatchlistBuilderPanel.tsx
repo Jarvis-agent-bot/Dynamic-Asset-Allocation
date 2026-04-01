@@ -120,7 +120,7 @@ export default function WatchlistBuilderPanel(props: {
   const [featuredGroups, setFeaturedGroups] = useState<WorkbenchFeaturedAssetGroup[]>([]);
   const [featuredLoading, setFeaturedLoading] = useState(false);
   const [featuredError, setFeaturedError] = useState("");
-  const [featuredCollapsed, setFeaturedCollapsed] = useState(false);
+  const featuredCollapsed = false; // 始终展开推荐资产
   const featuredRequestIdRef = useRef(0);
   const hasActiveFilters = market !== "ALL" || assetClass !== "ALL";
 
@@ -148,9 +148,8 @@ export default function WatchlistBuilderPanel(props: {
   }, [assetClass, market, props.onListFeaturedAssets]);
 
   useEffect(() => {
-    if (featuredCollapsed) return;
     void loadFeatured();
-  }, [featuredCollapsed, loadFeatured]);
+  }, [loadFeatured]);
 
   function isJoined(input: { market: string; symbol: string }): boolean {
     return Boolean(props.joinedAssetKeys[assetKey(input)]);
@@ -201,7 +200,7 @@ export default function WatchlistBuilderPanel(props: {
       bodyClassName="space-y-5"
       action={
         <DaaSurfaceStatusPill tone="indigo">
-          {featuredCollapsed ? "推荐已折叠" : "观察池构建"}
+          观察池构建
         </DaaSurfaceStatusPill>
       }
     >
@@ -275,27 +274,12 @@ export default function WatchlistBuilderPanel(props: {
           </div>
           <div className="flex items-center gap-2">
             {featuredLoading ? <Loader2 className="h-4 w-4 animate-spin text-[var(--faint)]" /> : null}
-            <DaaSurfaceActionButton
-              tone="slate"
-              className="rounded-full px-3 py-1.5 text-xs"
-              onClick={() => setFeaturedCollapsed((prev) => !prev)}
-            >
-              {featuredCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-              {featuredCollapsed ? "展开推荐" : "收起推荐"}
-            </DaaSurfaceActionButton>
+            {/* 推荐始终展开，无需折叠按钮 */}
           </div>
         </div>
 
         <div className="mt-4">
-          {featuredCollapsed ? (
-            <DaaSurfaceEmptyState
-              title="推荐池已折叠"
-              description="保持当前筛选条件，重新展开即可查看分市场推荐名单。"
-            />
-          ) : null}
-
-          {!featuredCollapsed ? (
-            <>
+          <>
               {featuredError ? (
                 <DaaSurfaceNoticeBox tone="red" title="推荐加载失败" description={featuredError} />
               ) : null}
@@ -372,7 +356,6 @@ export default function WatchlistBuilderPanel(props: {
                 ))}
               </div>
             </>
-          ) : null}
         </div>
       </section>
 

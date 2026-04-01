@@ -461,6 +461,20 @@ export async function testSecretConnectivity(
 // Market Indicators
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 将目标权重写入系统配置 — 覆盖 strategy.targetWeights。
+ * 先读取当前版本再 patch，处理版本冲突。
+ */
+export async function applyTargetWeights(
+  weights: Record<string, number>,
+): Promise<StoreSystemConfigEnvelope> {
+  const current = await getSystemConfig();
+  return patchSystemConfig({
+    baseVersion: current.version,
+    patches: [{ path: "strategy.targetWeights", value: weights }],
+  });
+}
+
 export async function listMarketIndicatorHistory(input: {
   keys: DaaMarketIndicatorKey[];
   days?: number;

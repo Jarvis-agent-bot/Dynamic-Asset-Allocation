@@ -108,6 +108,99 @@ export async function POST(req: Request) {
   logSwallowed("driftCheckRoute.notify", err);
     }
 
+    // ── Phase C: 止损/止盈自动检测 ──
+    const riskConfig = system.config.strategy?.risk;
+    const stopLossPct = riskConfig?.perAssetStopLossPct ?? 0;
+    const takeProfitPct = riskConfig?.perAssetTakeProfitPct ?? 0;
+    const riskTriggeredAssets: Array<{
+      assetKey: string;
+      symbol: string;
+      pnlPct: number;
+      triggerType: "stop_loss" | "take_profit";
+    }> = [];
+
+    if (stopLossPct > 0 || takeProfitPct > 0) {
+      for (const asset of bootstrap.assetUniverse) {
+        if (asset.holdingQty <= 0 || !asset.costBasis || asset.costBasis <= 0) continue;
+        const unrealizedPnlPct =
+          ((asset.lastPrice - asset.costBasis) / asset.costBasis) * 100;
+
+        if (stopLossPct > 0 && unrealizedPnlPct < -(stopLossPct * 100)) {
+          riskTriggeredAssets.push({
+            assetKey: asset.assetKey,
+            symbol: asset.symbol,
+            pnlPct: unrealizedPnlPct,
+            triggerType: "stop_loss",
+          });
+        }
+        if (takeProfitPct > 0 && unrealizedPnlPct > takeProfitPct * 100) {
+          riskTriggeredAssets.push({
+            assetKey: asset.assetKey,
+            symbol: asset.symbol,
+            pnlPct: unrealizedPnlPct,
+            triggerType: "take_profit",
+          });
+        }
+      }
+    }
+
+    // 止损/止盈通知
+    let riskTriggerNotified = false;
+    if (riskTriggeredAssets.length > 0) {
+      const stopLossCount = riskTriggeredAssets.filter(
+        (a) => a.triggerType === "stop_loss",
+      ).length;
+      const takeProfitCount = riskTriggeredAssets.filter(
+        (a) => a.triggerType === "take_profit",
+      ).length;
+
+      const riskLines = riskTriggeredAssets.slice(0, 8).map(
+        (a) =>
+          `${a.symbol}: ${a.triggerType === "stop_loss" ? "止损" : "止盈"} ${a.pnlPct.toFixed(1)}%`,
+      );
+      const riskMsg = [
+        "DAA 风控触发通知",
+        `止损触发: ${stopLossCount} 项，止盈触发: ${takeProfitCount} 项`,
+        ...riskLines,
+      ].join("\n");
+
+      try {
+        const sends: Promise<boolean>[] = [];
+        if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
+          sends.push(
+            sendTelegramByEnv(riskMsg, {
+              eventType: "risk_triggered",
+              triggerSource: "cron_drift_check",
+              cycleId: null,
+              requestJson: {
+                stopLossCount,
+                takeProfitCount,
+                assets: riskTriggeredAssets.slice(0, 8),
+              },
+            }),
+          );
+        }
+        if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
+          sends.push(
+            sendFeishuByEnv(riskMsg, {
+              eventType: "risk_triggered",
+              triggerSource: "cron_drift_check",
+              cycleId: null,
+              requestJson: {
+                stopLossCount,
+                takeProfitCount,
+                assets: riskTriggeredAssets.slice(0, 8),
+              },
+            }),
+          );
+        }
+        await Promise.allSettled(sends);
+        riskTriggerNotified = sends.length > 0;
+      } catch (err) {
+        logSwallowed("driftCheckRoute.riskNotify", err);
+      }
+    }
+
     return ok({
       skipped: generated ? !generated.created : true,
       created: generated?.created ?? false,
@@ -119,6 +212,8 @@ export async function POST(req: Request) {
       driftDetected: hasDrift,
       driftedAssetCount: driftedAssets.length,
       autoGenerateEnabled: strategy.autoGenerateEnabled,
+      riskTriggeredCount: riskTriggeredAssets.length,
+      riskTriggerNotified,
       at: new Date().toISOString(),
     });
   });

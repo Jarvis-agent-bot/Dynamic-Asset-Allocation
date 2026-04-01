@@ -108,6 +108,8 @@ export type DaaStoreAssetUniverseRow = {
   targetWeightHint: number;
   watchTags: string[];
   notes: string | null;
+  priceAlertAbove: number | null;
+  priceAlertBelow: number | null;
   lastPrice: number;
   priceUpdatedAt: string | null;
   createdAt: string;

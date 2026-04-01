@@ -32,9 +32,19 @@ export async function getWorkbenchReadModel(input: {
 export async function getTradesReadModel(input: {
   tradeLimit?: number;
   reportLimit?: number;
+  startDate?: string;
+  endDate?: string;
+  symbol?: string;
+  side?: string;
+  status?: string;
 } = {}): Promise<TradesReadModel> {
   return requestReadModel<TradesReadModel>("/api/daa/read/trades", {
     tradeLimit: input.tradeLimit == null ? null : String(input.tradeLimit),
     reportLimit: input.reportLimit == null ? null : String(input.reportLimit),
+    startDate: input.startDate || null,
+    endDate: input.endDate || null,
+    symbol: input.symbol || null,
+    side: input.side || null,
+    status: input.status || null,
   });
 }

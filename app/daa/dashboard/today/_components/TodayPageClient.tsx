@@ -1,80 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowRight, Plus, Wallet, Target } from "lucide-react";
 
-import type { TodayReadModel } from "@/src/daa/modules/today/todayTypes";
+import { useTodayDecision } from "@/app/daa/dashboard/_hooks/useTodayDecision";
 import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
 import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 
 import { WorkbenchNotificationBar } from "@/app/daa/dashboard/workbench/_components/WorkbenchNotificationBar";
 
 import { TodayBrief } from "./TodayBrief";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Today decision data
-// ─────────────────────────────────────────────────────────────────────────────
-
-function useTodayDecision() {
-  const [model, setModel] = useState<TodayReadModel | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await fetch("/api/daa/today");
-      const json = await res.json();
-      if (json.ok) {
-        setModel(json.data);
-        setError(null);
-      } else {
-        setError(json.error?.message ?? "决策数据加载失败");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "网络错误");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const res = await fetch("/api/daa/today", { method: "PUT" });
-      const json = await res.json();
-      if (json.ok) {
-        setModel(json.data);
-        setError(null);
-      }
-    } catch {
-      // 刷新失败不覆盖已有数据
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  const handleDecision = useCallback(
-    async (assetKey: string, conclusion: string, userAction: string, llmReason?: string) => {
-      try {
-        await fetch("/api/daa/today", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assetKey, conclusion, userAction, llmReason }),
-        });
-        await fetchData();
-      } catch {
-        // 决策记录失败不阻塞 UI
-      }
-    },
-    [fetchData],
-  );
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  return { model, loading, refreshing, error, handleRefresh, handleDecision };
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 空组合引导流
