@@ -208,7 +208,20 @@ export async function callLlm(
       body,
     });
 
-    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    console.log("[callLlm] response status:", response.status, "ok:", response.ok);
+    const rawText = await response.text().catch((e) => {
+      console.log("[callLlm] response.text() failed:", e instanceof Error ? e.message : String(e));
+      return "";
+    });
+    console.log("[callLlm] rawText.length:", rawText.length, "rawText.preview:", rawText.slice(0, 300));
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(rawText) as Record<string, unknown>;
+    } catch (e) {
+      console.log("[callLlm] JSON.parse failed:", e instanceof Error ? e.message : String(e));
+      payload = {};
+    }
 
     if (!response.ok) {
       const errMsg = normalizeText(

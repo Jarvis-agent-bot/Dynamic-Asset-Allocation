@@ -144,14 +144,12 @@ export async function generateTodayDecision(ctx: TodayDecisionContext): Promise<
     }
 
     const prompt = buildPrompt(ctx);
+    console.log("[todayLlm] calling LLM, model:", config.model, "endpoint:", config.endpoint, "timeoutMs:", config.timeoutMs);
     const { text, raw } = await callLlm(config, prompt);
 
-    // 调试日志：输出 LLM 原始返回前 500 字符
+    // 调试日志
     console.log("[todayLlm] model:", config.model, "text.length:", text.length, "text.preview:", text.slice(0, 500));
-    if (!text) {
-      const rawStr = JSON.stringify(raw).slice(0, 500);
-      console.log("[todayLlm] empty text, raw:", rawStr);
-    }
+    console.log("[todayLlm] raw keys:", Object.keys(raw as Record<string, unknown>), "raw.preview:", JSON.stringify(raw).slice(0, 800));
 
     const parsed = parseLlmResponse(text);
 
