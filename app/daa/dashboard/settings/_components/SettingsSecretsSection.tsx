@@ -113,7 +113,7 @@ function SecretRow({
               <input
                 id={`secret-${secret.key}`}
                 name={`secret-${secret.key}`}
-                type={showValue ? "text" : "password"}
+                type={secret.sensitive && !showValue ? "password" : "text"}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder={secret.sensitive ? "输入新值…" : "输入值…"}
@@ -124,13 +124,15 @@ function SecretRow({
                   if (e.key === "Escape") { setEditing(false); setValue(""); }
                 }}
               />
-              <button
-                type="button"
-                onClick={() => setShowValue(!showValue)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--faint)] hover:text-[var(--muted)]"
-              >
-                {showValue ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              </button>
+              {secret.sensitive && (
+                <button
+                  type="button"
+                  onClick={() => setShowValue(!showValue)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--faint)] hover:text-[var(--muted)]"
+                >
+                  {showValue ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              )}
             </div>
             <DaaSurfaceActionButton
               tone="primary"
