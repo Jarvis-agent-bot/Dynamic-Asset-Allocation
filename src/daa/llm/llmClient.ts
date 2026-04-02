@@ -84,11 +84,12 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
   const secretModel = await resolveSecret("llm_model");
   const resolvedModel = normalizeText(secretModel, normalizeText(config.model, defaults.model));
 
-  // reasoner 模型推理较慢，强制最低 60s 超时
+  // LLM 调用受网络延迟和模型推理时间影响，超时不宜过短
+  // reasoner 模型推理链更长，需要额外放宽
   const isReasonerModel = resolvedModel.includes("reasoner");
-  const minTimeout = isReasonerModel ? 60000 : 2000;
-  const defaultTimeout = isReasonerModel ? 90000 : 10000;
-  const maxTimeout = isReasonerModel ? 180000 : 30000;
+  const minTimeout = isReasonerModel ? 60000 : 15000;
+  const defaultTimeout = isReasonerModel ? 90000 : 30000;
+  const maxTimeout = isReasonerModel ? 180000 : 120000;
   const timeoutMs = Math.max(minTimeout, Math.min(maxTimeout, Math.trunc(toFinite(config.timeoutMs, defaultTimeout))));
 
   return {
