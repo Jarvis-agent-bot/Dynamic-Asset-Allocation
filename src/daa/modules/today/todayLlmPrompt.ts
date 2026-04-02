@@ -145,9 +145,14 @@ export async function generateTodayDecision(ctx: TodayDecisionContext): Promise<
 
     const prompt = buildPrompt(ctx);
     const { text } = await callLlm(config, prompt);
+
+    // 临时调试日志
+    console.log("[todayLlm] model:", config.model, "timeout:", config.timeoutMs, "text.len:", text.length, "preview:", text.slice(0, 300));
+
     const parsed = parseLlmResponse(text);
 
     if (!parsed) {
+      console.log("[todayLlm] PARSE FAILED. full:", text.slice(0, 1500));
       return buildDegradedOutput("LLM 输出格式无法解析", now);
     }
 
