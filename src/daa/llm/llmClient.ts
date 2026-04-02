@@ -77,18 +77,24 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
   const provider = normalizeText(config.provider, "deepseek").toLowerCase();
 
   const defaults = getProviderDefaults(provider);
-  const timeoutMs = Math.max(2000, Math.min(30000, Math.trunc(toFinite(config.timeoutMs, 10000))));
 
   // Resolve secrets: env > DB > config defaults
   const apiKey = await resolveSecret("llm_api_key");
   const endpoint = await resolveSecret("llm_endpoint");
-  const model = await resolveSecret("llm_model");
+  const secretModel = await resolveSecret("llm_model");
+  const resolvedModel = normalizeText(secretModel, normalizeText(config.model, defaults.model));
+
+  // reasoner 模型推理较慢，默认超时适当放宽
+  const isReasonerModel = resolvedModel.includes("reasoner");
+  const defaultTimeout = isReasonerModel ? 60000 : 10000;
+  const maxTimeout = isReasonerModel ? 120000 : 30000;
+  const timeoutMs = Math.max(2000, Math.min(maxTimeout, Math.trunc(toFinite(config.timeoutMs, defaultTimeout))));
 
   return {
     enabled: Boolean(config.enabled),
     enabledInDecision: config.enabledInDecision !== false,
     provider,
-    model: normalizeText(model, normalizeText(config.model, defaults.model)),
+    model: resolvedModel,
     endpoint: normalizeText(endpoint, defaults.endpoint),
     apiKey,
     timeoutMs,
@@ -114,6 +120,9 @@ export class LlmRequestError extends Error {
 /**
  * 从 OpenAI Chat Completions 响应中提取文本。
  * 兼容 DeepSeek、OpenAI、其他 OpenAI 兼容 API。
+ *
+ * deepseek-reasoner 系列模型将推理过程放在 `reasoning_content`，
+ * 最终结果放在 `content`。若 `content` 为空则回退到 `reasoning_content`。
  */
 function extractChatCompletionsText(payload: Record<string, unknown>): string {
   const choices = Array.isArray(payload.choices) ? payload.choices : [];
@@ -121,9 +130,13 @@ function extractChatCompletionsText(payload: Record<string, unknown>): string {
   for (const choice of choices) {
     const message = (choice as Record<string, unknown>)?.message;
     if (message && typeof message === "object") {
-      const content = (message as Record<string, unknown>).content;
-      if (typeof content === "string" && content.trim()) {
-        parts.push(content.trim());
+      const msg = message as Record<string, unknown>;
+      const content = typeof msg.content === "string" ? msg.content.trim() : "";
+      const reasoning = typeof msg.reasoning_content === "string" ? msg.reasoning_content.trim() : "";
+      // 优先使用 content；若为空则回退到 reasoning_content
+      const text = content || reasoning;
+      if (text) {
+        parts.push(text);
       }
     }
   }
@@ -167,11 +180,13 @@ export async function callLlm(
   const format = resolveApiFormat(config.provider, config.endpoint);
 
   try {
+    // deepseek-reasoner 系列不支持 temperature 参数
+    const isReasoner = config.model.includes("reasoner");
     const body = format === "chat"
       ? JSON.stringify({
           model: config.model,
           messages: [{ role: "user", content: prompt }],
-          temperature: 0.3,
+          ...(isReasoner ? {} : { temperature: 0.3 }),
         })
       : JSON.stringify({
           model: config.model,
