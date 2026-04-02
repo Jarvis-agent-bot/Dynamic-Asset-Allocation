@@ -20,6 +20,8 @@ import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFe
 
 type Snapshot = { ts: string; totalEquity: number };
 
+type CashFlowEvent = { ts: string; side: "deposit" | "withdraw"; amount: number };
+
 type BenchmarkPoint = { ts: string; price: number };
 
 type NormalizedPoint = {
@@ -62,13 +64,22 @@ const TIME_RANGES = [
 type RangeKey = (typeof TIME_RANGES)[number]["key"];
 
 /* ------------------------------------------------------------------ */
-/*  归一化计算                                                          */
+/*  TWR（时间加权收益率）归一化计算                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 计算 TWR 归一化曲线。
+ *
+ * 在每个现金流事件（入金/出金）处切分区间，各区间独立计算子收益率，
+ * 再用连乘公式 ∏(1 + r_i) 得到累计 TWR，最终归一化到 100 基准。
+ *
+ * 这样入金/出金不会影响收益率，只有投资收益会反映在曲线中。
+ */
 function normalizeSnapshots(
   snapshots: Snapshot[],
   days: number,
   benchmarkData?: BenchmarkPoint[],
+  cashFlowEvents?: CashFlowEvent[],
 ): NormalizedPoint[] {
   const sorted = [...snapshots].sort(
     (a, b) => Date.parse(a.ts) - Date.parse(b.ts),
@@ -77,8 +88,6 @@ function normalizeSnapshots(
     days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
   const filtered = cutoff ? sorted.filter((s) => s.ts >= cutoff) : sorted;
   if (filtered.length === 0) return [];
-
-  const base = filtered[0].totalEquity > 0 ? filtered[0].totalEquity : 1;
 
   // 创建基准数据的日期索引
   const benchmarkMap = new Map<string, number>();
@@ -96,17 +105,57 @@ function normalizeSnapshots(
     }
   }
 
-  return filtered.map((snap) => {
+  // 构建按时间排序的现金流 map（按日期聚合净现金流）
+  const cfMap = new Map<string, number>();
+  if (cashFlowEvents && cashFlowEvents.length > 0) {
+    for (const cf of cashFlowEvents) {
+      const dateKey = cf.ts.slice(0, 10);
+      const prev = cfMap.get(dateKey) ?? 0;
+      const signed = cf.side === "deposit" ? cf.amount : -cf.amount;
+      cfMap.set(dateKey, prev + signed);
+    }
+  }
+
+  // TWR 计算：对每个快照计算累计 TWR 因子
+  // cumFactor 从 1 开始，代表每单位初始投资的增长倍数
+  let cumFactor = 1;
+  let prevEquity = filtered[0].totalEquity;
+
+  return filtered.map((snap, i) => {
     const dateKey = snap.ts.slice(0, 10);
+
+    if (i === 0) {
+      // 第一个点：基准 100
+      const point: NormalizedPoint = {
+        label: snap.ts.slice(5, 10),
+        date: dateKey,
+        portfolio: 100,
+      };
+      const benchVal = benchmarkMap.get(dateKey);
+      if (benchVal != null) point.benchmark = benchVal;
+      prevEquity = snap.totalEquity;
+      return point;
+    }
+
+    // 本区间的净现金流（在本日期发生的入金/出金）
+    const netCashFlow = cfMap.get(dateKey) ?? 0;
+
+    // 子区间收益率：(当前 equity - 本期净现金流) / 上期 equity - 1
+    // 含义：如果没有现金流入，本期 equity 应该是多少
+    const adjEquity = snap.totalEquity - netCashFlow;
+    const subReturn = prevEquity > 0 ? adjEquity / prevEquity : 1;
+    cumFactor *= subReturn;
+
+    // 更新 prevEquity 为本期实际 equity（包含现金流后的值）
+    prevEquity = snap.totalEquity;
+
     const point: NormalizedPoint = {
       label: snap.ts.slice(5, 10),
       date: dateKey,
-      portfolio: +((snap.totalEquity / base) * 100).toFixed(2),
+      portfolio: +(cumFactor * 100).toFixed(2),
     };
     const benchVal = benchmarkMap.get(dateKey);
-    if (benchVal != null) {
-      point.benchmark = benchVal;
-    }
+    if (benchVal != null) point.benchmark = benchVal;
     return point;
   });
 }
@@ -117,11 +166,12 @@ function normalizeSnapshots(
 
 export const PerformanceChart = React.memo(function PerformanceChart(props: {
   snapshots: Snapshot[];
+  cashFlowEvents?: CashFlowEvent[];
   benchmarkData?: BenchmarkPoint[];
   benchmarkLabel?: string;
   className?: string;
 }) {
-  const { snapshots, benchmarkData, benchmarkLabel = "SPY", className } = props;
+  const { snapshots, cashFlowEvents, benchmarkData, benchmarkLabel = "SPY", className } = props;
   const [range, setRange] = useState<RangeKey>("ALL");
 
   const selectedDays = useMemo(
@@ -130,8 +180,8 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
   );
 
   const data = useMemo(
-    () => normalizeSnapshots(snapshots, selectedDays, benchmarkData),
-    [snapshots, selectedDays, benchmarkData],
+    () => normalizeSnapshots(snapshots, selectedDays, benchmarkData, cashFlowEvents),
+    [snapshots, selectedDays, benchmarkData, cashFlowEvents],
   );
 
   const hasBenchmark = useMemo(

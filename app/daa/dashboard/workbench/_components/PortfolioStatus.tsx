@@ -26,6 +26,7 @@ export type PortfolioStatusProps = {
   frozenCashValue: number;
   equityDelta: { dayChange: number | null; dayChangePct: number | null; weekChange: number | null; weekChangePct: number | null } | null;
   snapshots: Array<{ ts: string; totalEquity: number }>;
+  cashFlowEvents?: Array<{ ts: string; side: "deposit" | "withdraw"; amount: number }>;
   allocationSummary: {
     topHoldings: Array<{ assetKey: string; symbol: string; value: number; weightPct: number }>;
     cashValue?: number;
@@ -103,7 +104,7 @@ export function PortfolioStatus(props: PortfolioStatusProps) {
             {!props.snapshots || props.snapshots.length === 0 ? (
               <SkeletonChart />
             ) : (
-              <PerformanceChart snapshots={props.snapshots} />
+              <PerformanceChart snapshots={props.snapshots} cashFlowEvents={props.cashFlowEvents} />
             )}
           </div>
         </SectionErrorBoundary>
