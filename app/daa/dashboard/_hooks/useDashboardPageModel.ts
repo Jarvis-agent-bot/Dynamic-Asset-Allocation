@@ -2,12 +2,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import { useWorkbenchAssetActions } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchAssetActions";
-import { useWorkbenchExecutionFlow } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchExecutionFlow";
-import { useWorkbenchRebalanceFlow } from "@/app/daa/dashboard/_hooks/workbench/useWorkbenchRebalanceFlow";
+import { useAssetActions } from "@/app/daa/dashboard/_hooks/dashboard/useAssetActions";
+import { useExecutionFlow } from "@/app/daa/dashboard/_hooks/dashboard/useExecutionFlow";
+import { useRebalanceFlow } from "@/app/daa/dashboard/_hooks/dashboard/useRebalanceFlow";
 import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
-import { useWorkbenchModel } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
-import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
+import { useDashboardModel } from "@/app/daa/dashboard/_hooks/useDashboardModel";
+import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export type PendingConfirm =
@@ -15,9 +15,9 @@ export type PendingConfirm =
   | { type: "removeWatchlist"; row: AssetUniverseView }
   | null;
 
-export type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
+export type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 
-export function useWorkbenchPageModel(input: {
+export function useDashboardPageModel(input: {
   initialTab?: string;
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
@@ -47,7 +47,7 @@ export function useWorkbenchPageModel(input: {
     loadBootstrap,
     livePrices,
     priceStreamConnected,
-  } = useWorkbenchModel(input);
+  } = useDashboardModel(input);
 
   const [busy, setBusy] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
@@ -79,7 +79,7 @@ export function useWorkbenchPageModel(input: {
     syncCycleState(nextCycle);
   }, [setCycles, syncCycleState]);
 
-  const assetActions = useWorkbenchAssetActions({
+  const assetActions = useAssetActions({
     bootstrap,
     assetRows,
     loading,
@@ -89,7 +89,7 @@ export function useWorkbenchPageModel(input: {
     setActiveTab,
   });
 
-  const rebalanceFlow = useWorkbenchRebalanceFlow({
+  const rebalanceFlow = useRebalanceFlow({
     bootstrap,
     assetRows,
     cycles,
@@ -101,7 +101,7 @@ export function useWorkbenchPageModel(input: {
     syncCycleState,
   });
 
-  const executionFlow = useWorkbenchExecutionFlow({
+  const executionFlow = useExecutionFlow({
     currentCycle,
     currentRiskCheck: rebalanceFlow.currentRiskCheck,
     selectedProposalCount: rebalanceFlow.selectedProposalCount,
@@ -220,4 +220,4 @@ export function useWorkbenchPageModel(input: {
   };
 }
 
-export type WorkbenchPageModel = ReturnType<typeof useWorkbenchPageModel>;
+export type DashboardPageModel = ReturnType<typeof useDashboardPageModel>;

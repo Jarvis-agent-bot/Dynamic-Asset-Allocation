@@ -150,10 +150,14 @@ export function TradesSummaryMetrics({ model }: { model: TradesModel }) {
 
 export function TradesFilterBar({ model }: { model: TradesModel }) {
   const hasActiveFilter = Boolean(model.filters.startDate || model.filters.endDate || model.filters.symbol || model.filters.side || model.filters.status);
+  const hasData = model.cycles.length > 0 || model.orders.length > 0;
+  const [expanded, setExpanded] = useState(false);
 
   function updateFilter(patch: Partial<TradeFilters>) {
     model.setFilters((prev) => ({ ...prev, ...patch }));
   }
+
+  if (!hasData && !hasActiveFilter) return null;
 
   return (
     <DaaSurfacePanel accent="slate" title="筛选条件" subtitle="按时间、标的、方向或状态筛选订单与周期。">

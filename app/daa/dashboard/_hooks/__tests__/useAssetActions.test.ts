@@ -2,7 +2,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { useWorkbenchAssetActions } from "../workbench/useWorkbenchAssetActions";
+import { useAssetActions } from "../dashboard/useAssetActions";
 import type {
   AssetUniverseView,
   WorkbenchBootstrap,
@@ -72,7 +72,7 @@ function makeInput(overrides?: Record<string, unknown>) {
   };
 }
 
-describe("useWorkbenchAssetActions", () => {
+describe("useAssetActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -84,7 +84,7 @@ describe("useWorkbenchAssetActions", () => {
     ];
     (searchWorkbenchAssets as ReturnType<typeof vi.fn>).mockResolvedValue(mockResults);
 
-    const { result } = renderHook(() => useWorkbenchAssetActions(makeInput()));
+    const { result } = renderHook(() => useAssetActions(makeInput()));
 
     let results: WorkbenchSearchAssetResult[] = [];
     await act(async () => {
@@ -109,7 +109,7 @@ describe("useWorkbenchAssetActions", () => {
   it("handleAddWatchlistAsset upserts and reloads", async () => {
     const { upsertWorkbenchAsset } = await import("@/src/daa/modules/workbench/workbenchApi");
     const input = makeInput();
-    const { result } = renderHook(() => useWorkbenchAssetActions(input));
+    const { result } = renderHook(() => useAssetActions(input));
 
     await act(async () => {
       await result.current.watchlistBuilderProps.onAddAsset({
@@ -131,7 +131,7 @@ describe("useWorkbenchAssetActions", () => {
   });
 
   it("handleAddManualOrder sets orderDraft", async () => {
-    const { result } = renderHook(() => useWorkbenchAssetActions(makeInput()));
+    const { result } = renderHook(() => useAssetActions(makeInput()));
 
     expect(result.current.orderDraft).toBeNull();
 
@@ -145,7 +145,7 @@ describe("useWorkbenchAssetActions", () => {
 
   it("handleAddManualOrder rejects SELL with no holdings", async () => {
     const { toast } = await import("sonner");
-    const { result } = renderHook(() => useWorkbenchAssetActions(makeInput()));
+    const { result } = renderHook(() => useAssetActions(makeInput()));
 
     const row = makeRow({ holdingQty: 0 });
     await act(async () => {
@@ -158,7 +158,7 @@ describe("useWorkbenchAssetActions", () => {
 
   it("handleSubmitLlmFeedback calls API and tracks state", async () => {
     const { submitWorkbenchLlmFeedback } = await import("@/src/daa/modules/workbench/workbenchApi");
-    const { result } = renderHook(() => useWorkbenchAssetActions(makeInput()));
+    const { result } = renderHook(() => useAssetActions(makeInput()));
 
     await act(async () => {
       await result.current.handleSubmitLlmFeedback({
@@ -177,12 +177,12 @@ describe("useWorkbenchAssetActions", () => {
 
   it("tableProps.disabled reflects busy state", () => {
     const { result: r1 } = renderHook(() =>
-      useWorkbenchAssetActions(makeInput({ busy: false, loading: false })),
+      useAssetActions(makeInput({ busy: false, loading: false })),
     );
     expect(r1.current.tableProps.disabled).toBe(false);
 
     const { result: r2 } = renderHook(() =>
-      useWorkbenchAssetActions(makeInput({ busy: true })),
+      useAssetActions(makeInput({ busy: true })),
     );
     expect(r2.current.tableProps.disabled).toBe(true);
   });

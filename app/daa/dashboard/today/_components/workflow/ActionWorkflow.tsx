@@ -4,7 +4,7 @@ import { useMemo, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, ChevronUp, Circle, MoreHorizontal } from "lucide-react";
 
-import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
+import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import {
   DaaSurfaceActionButton,
   DaaSurfaceNoticeBox,
@@ -91,7 +91,7 @@ export function ActionWorkflow(props: {
   rebalanceChecklist: WorkbenchChecklistItem[];
   rebalanceChecklistAllPassed: boolean;
   firstUnmetChecklist?: WorkbenchChecklistItem;
-  onNavigateTab: (tab: WorkbenchTab) => void;
+  onNavigateTab: (tab: DashboardTab) => void;
   onGenerateCycle: () => Promise<void>;
   onOpenExecuteDialog: (mode: "selected" | "all") => void;
   onCancelCycle: () => void;

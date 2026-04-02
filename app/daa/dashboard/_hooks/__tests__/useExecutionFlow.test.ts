@@ -2,7 +2,7 @@
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
-import { useWorkbenchExecutionFlow } from "../workbench/useWorkbenchExecutionFlow";
+import { useExecutionFlow } from "../dashboard/useExecutionFlow";
 import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 vi.mock("@/src/daa/modules/workbench/workbenchApi", () => ({
@@ -48,7 +48,7 @@ function makeInput(overrides?: Record<string, unknown>) {
   };
 }
 
-describe("useWorkbenchExecutionFlow", () => {
+describe("useExecutionFlow", () => {
   afterEach(() => {
     cleanup();
   });
@@ -60,14 +60,14 @@ describe("useWorkbenchExecutionFlow", () => {
   });
 
   it("initializes with no pending mode and no receipt", () => {
-    const { result } = renderHook(() => useWorkbenchExecutionFlow(makeInput()));
+    const { result } = renderHook(() => useExecutionFlow(makeInput()));
     expect(result.current.pendingExecuteMode).toBeNull();
     expect(result.current.executionReceipt).toBeNull();
   });
 
   it("handleOpenExecuteDialog sets pending mode for valid cycle", async () => {
     const { result } = renderHook(() =>
-      useWorkbenchExecutionFlow(makeInput({
+      useExecutionFlow(makeInput({
         currentCycle: makeCycle({ status: "generated" }),
         selectedProposalCount: 2,
       })),
@@ -81,7 +81,7 @@ describe("useWorkbenchExecutionFlow", () => {
   it("handleOpenExecuteDialog rejects completed cycle", async () => {
     const { toast } = await import("sonner");
     const { result } = renderHook(() =>
-      useWorkbenchExecutionFlow(makeInput({
+      useExecutionFlow(makeInput({
         currentCycle: makeCycle({ status: "completed" }),
       })),
     );
@@ -95,7 +95,7 @@ describe("useWorkbenchExecutionFlow", () => {
   it("handleOpenExecuteDialog rejects when risk blocks", async () => {
     const { toast } = await import("sonner");
     const { result } = renderHook(() =>
-      useWorkbenchExecutionFlow(makeInput({
+      useExecutionFlow(makeInput({
         currentRiskCheck: makeRiskCheck({ overallStatus: "block" }),
       })),
     );
@@ -109,7 +109,7 @@ describe("useWorkbenchExecutionFlow", () => {
   it("handleOpenExecuteDialog rejects selected mode with 0 proposals", async () => {
     const { toast } = await import("sonner");
     const { result } = renderHook(() =>
-      useWorkbenchExecutionFlow(makeInput({ selectedProposalCount: 0 })),
+      useExecutionFlow(makeInput({ selectedProposalCount: 0 })),
     );
     act(() => {
       result.current.handleOpenExecuteDialog("selected");
@@ -120,7 +120,7 @@ describe("useWorkbenchExecutionFlow", () => {
 
   it("handleOpenExecuteDialog allows all mode even with 0 selectedProposalCount", () => {
     const { result } = renderHook(() =>
-      useWorkbenchExecutionFlow(makeInput({
+      useExecutionFlow(makeInput({
         currentCycle: makeCycle({ status: "reviewing" }),
         selectedProposalCount: 0,
       })),
@@ -132,7 +132,7 @@ describe("useWorkbenchExecutionFlow", () => {
   });
 
   it("clearExecutionReceipt works", () => {
-    const { result } = renderHook(() => useWorkbenchExecutionFlow(makeInput({ currentCycle: null })));
+    const { result } = renderHook(() => useExecutionFlow(makeInput({ currentCycle: null })));
 
     expect(result.current.executionReceipt).toBeNull();
 

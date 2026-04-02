@@ -15,7 +15,7 @@ function isTerminalCycleStatus(status: RebalanceCycle["status"]): boolean {
   return status === "completed" || status === "cancelled";
 }
 
-export function useWorkbenchRebalanceFlow(input: {
+export function useRebalanceFlow(input: {
   bootstrap: WorkbenchBootstrap | null;
   assetRows: AssetUniverseView[];
   cycles: RebalanceCycle[];
@@ -155,7 +155,7 @@ export function useWorkbenchRebalanceFlow(input: {
     input.setBusy(true);
     try {
       const next = await patchWorkbenchRebalanceCycle(input.currentCycle.cycleId, {
-        cancel: { reason: "用户在工作台取消" },
+        cancel: { reason: "用户手动取消" },
       });
       input.syncCycleState(next);
       toast.success("已取消本次再平衡");

@@ -48,7 +48,6 @@ function resolveSection(pathname: string): string {
   if (pathname.startsWith("/daa/dashboard/today")) return "today";
   if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
   if (pathname.startsWith("/daa/dashboard/rebalance")) return "rebalance";
-  if (pathname.startsWith("/daa/dashboard/workbench")) return "today";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";

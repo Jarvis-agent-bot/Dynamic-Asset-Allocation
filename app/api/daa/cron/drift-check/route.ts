@@ -1,5 +1,6 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
+import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
@@ -108,7 +109,59 @@ export async function POST(req: Request) {
   logSwallowed("driftCheckRoute.notify", err);
     }
 
-    // ── Phase C: 止损/止盈自动检测 ──
+    // ── Phase C: auto-execute (gated by autoExecuteEnabled) ──
+    let autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string } = {
+      attempted: false,
+      executed: false,
+      ordersCount: 0,
+    };
+
+    if (
+      strategy.autoExecuteEnabled &&
+      strategy.autoGenerateEnabled &&
+      generated?.created &&
+      cycle
+    ) {
+      autoExecute.attempted = true;
+      try {
+        const execResult = await executeRebalanceViaGateway({
+          cycleId: cycle.cycleId,
+          executeMode: "all",
+          notifyMode: "fanout",
+        });
+        const executedCount = execResult.logs.filter((l) => l.status === "executed").length;
+        autoExecute.executed = executedCount > 0;
+        autoExecute.ordersCount = executedCount;
+      } catch (err) {
+        autoExecute.error = err instanceof Error ? err.message : String(err);
+        logSwallowed("driftCheckRoute.autoExecute", err);
+        const failMsg = `[自动执行失败] 漂移触发周期 ${cycle.cycleId}\n原因: ${autoExecute.error}`;
+        try {
+          const sends: Promise<boolean>[] = [];
+          if (notif.telegram.enabled && notif.telegram.onTradeExecuted) {
+            sends.push(sendTelegramByEnv(failMsg, {
+              eventType: "auto_execute_failed",
+              triggerSource: "cron_drift_check",
+              cycleId: cycle.cycleId,
+              requestJson: { error: autoExecute.error },
+            }));
+          }
+          if (notif.feishu.enabled && notif.feishu.onTradeExecuted) {
+            sends.push(sendFeishuByEnv(failMsg, {
+              eventType: "auto_execute_failed",
+              triggerSource: "cron_drift_check",
+              cycleId: cycle.cycleId,
+              requestJson: { error: autoExecute.error },
+            }));
+          }
+          await Promise.allSettled(sends);
+        } catch (notifyErr) {
+          logSwallowed("driftCheckRoute.autoExecuteNotify", notifyErr);
+        }
+      }
+    }
+
+    // ── Phase D: 止损/止盈自动检测 ──
     const riskConfig = system.config.strategy?.risk;
     const stopLossPct = riskConfig?.perAssetStopLossPct ?? 0;
     const takeProfitPct = riskConfig?.perAssetTakeProfitPct ?? 0;
@@ -212,6 +265,7 @@ export async function POST(req: Request) {
       driftDetected: hasDrift,
       driftedAssetCount: driftedAssets.length,
       autoGenerateEnabled: strategy.autoGenerateEnabled,
+      autoExecute,
       riskTriggeredCount: riskTriggeredAssets.length,
       riskTriggerNotified,
       at: new Date().toISOString(),

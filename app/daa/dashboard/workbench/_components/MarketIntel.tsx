@@ -30,7 +30,7 @@ function signalLabel(level: "info" | "warn" | "success") {
   return "信息";
 }
 
-export function WorkbenchMarketIntel(props: {
+export function MarketIntel(props: {
   marketContext: (DaaMarketContext & { macroCycle?: { phase: string; growthProxy: number; inflationProxy: number; confidence: number; label: string; favoredAssets: string[] } | null }) | null;
   signals: Signal[];
   currentCycle: RebalanceCycle | null;

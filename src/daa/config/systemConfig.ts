@@ -93,6 +93,10 @@ export type DaaSystemConfig = {
     timezone: string;
     analysisFocus: string;
     autoGenerateEnabled: boolean;
+    /** 自动驾驶：风控通过后自动执行再平衡（需同时开启 autoGenerateEnabled） */
+    autoExecuteEnabled?: boolean;
+    /** 单次自动执行最大占 NAV 百分比（默认 10%） */
+    autoExecuteMaxSinglePct?: number;
     /** P1-2: 现金分类配置（对应 classifyCash 参数）*/
     cash?: {
       operationalReservePct?: number;
@@ -249,6 +253,8 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     timezone: "Asia/Shanghai",
     analysisFocus: DEFAULT_ANALYSIS_FOCUS_,
     autoGenerateEnabled: false,
+    autoExecuteEnabled: false,
+    autoExecuteMaxSinglePct: 10,
   },
   dataSources: {
     hfFund: {

@@ -9,26 +9,26 @@ import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbe
 import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 import { usePriceStream, type PriceUpdate } from "./usePriceStream";
 
-export type WorkbenchTab = "positions" | "watchlist" | "analysis" | "rebalance" | "cash";
+export type DashboardTab = "positions" | "watchlist" | "analysis" | "rebalance" | "cash";
 
-export function normalizeWorkbenchTab(input: string): WorkbenchTab {
+export function normalizeDashboardTab(input: string): DashboardTab {
   if (input === "positions" || input === "watchlist" || input === "analysis" || input === "rebalance" || input === "cash") return input;
   return "positions";
 }
 
 function toWorkbenchErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError && error.code === "DB_ERROR") {
-    return "工作台数据服务暂时不可用，请稍后重试。";
+    return "数据服务暂时不可用，请稍后重试。";
   }
   return getApiErrorMessage(error);
 }
 
-export function useWorkbenchModel(input: {
+export function useDashboardModel(input: {
   initialTab?: string;
   syncPrices?: boolean;
   autoRiskCycle?: boolean;
 } = {}) {
-  const [activeTab, setActiveTab] = useState<WorkbenchTab>(() => normalizeWorkbenchTab(String(input.initialTab || "")));
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => normalizeDashboardTab(String(input.initialTab || "")));
   const [data, setData] = useState<WorkbenchReadModel | null>(null);
   const [currentCycle, setCurrentCycle] = useState<RebalanceCycle | null>(null);
   const [riskCheck, setRiskCheck] = useState<PreTradeRiskCheck | null>(null);

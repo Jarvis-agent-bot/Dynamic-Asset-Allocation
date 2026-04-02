@@ -2,27 +2,27 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useWorkbenchPageModel } from "../useWorkbenchPageModel";
+import { useDashboardPageModel } from "../useDashboardPageModel";
 
 const mockUseWorkbenchModel = vi.fn();
 const mockUseWorkbenchAssetActions = vi.fn();
 const mockUseWorkbenchRebalanceFlow = vi.fn();
 const mockUseWorkbenchExecutionFlow = vi.fn();
 
-vi.mock("../useWorkbenchModel", () => ({
-  useWorkbenchModel: (...args: unknown[]) => mockUseWorkbenchModel(...args),
+vi.mock("../useDashboardModel", () => ({
+  useDashboardModel: (...args: unknown[]) => mockUseWorkbenchModel(...args),
 }));
 
-vi.mock("../workbench/useWorkbenchAssetActions", () => ({
-  useWorkbenchAssetActions: (...args: unknown[]) => mockUseWorkbenchAssetActions(...args),
+vi.mock("../dashboard/useAssetActions", () => ({
+  useAssetActions: (...args: unknown[]) => mockUseWorkbenchAssetActions(...args),
 }));
 
-vi.mock("../workbench/useWorkbenchRebalanceFlow", () => ({
-  useWorkbenchRebalanceFlow: (...args: unknown[]) => mockUseWorkbenchRebalanceFlow(...args),
+vi.mock("../dashboard/useRebalanceFlow", () => ({
+  useRebalanceFlow: (...args: unknown[]) => mockUseWorkbenchRebalanceFlow(...args),
 }));
 
-vi.mock("../workbench/useWorkbenchExecutionFlow", () => ({
-  useWorkbenchExecutionFlow: (...args: unknown[]) => mockUseWorkbenchExecutionFlow(...args),
+vi.mock("../dashboard/useExecutionFlow", () => ({
+  useExecutionFlow: (...args: unknown[]) => mockUseWorkbenchExecutionFlow(...args),
 }));
 
 function createAssetActionsMock() {
@@ -110,7 +110,7 @@ function createExecutionFlowMock() {
   };
 }
 
-describe("useWorkbenchPageModel", () => {
+describe("useDashboardPageModel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseWorkbenchAssetActions.mockReturnValue(createAssetActionsMock());
@@ -160,7 +160,7 @@ describe("useWorkbenchPageModel", () => {
       priceStreamConnected: false,
     });
 
-    const { result } = renderHook(() => useWorkbenchPageModel());
+    const { result } = renderHook(() => useDashboardPageModel());
 
     expect(result.current.totalEquity).toBe(774);
     expect(result.current.availableCashValue).toBe(548);
@@ -207,7 +207,7 @@ describe("useWorkbenchPageModel", () => {
       priceStreamConnected: false,
     });
 
-    const { result } = renderHook(() => useWorkbenchPageModel());
+    const { result } = renderHook(() => useDashboardPageModel());
 
     expect(result.current.holdingsValue).toBe(150);
     expect(result.current.totalEquity).toBe(350);

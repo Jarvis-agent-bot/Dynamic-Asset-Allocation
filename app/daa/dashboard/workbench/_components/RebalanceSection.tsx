@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { Dispatch, SetStateAction } from "react";
 import { MoreHorizontal } from "lucide-react";
 
-import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
+import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import {
   DaaSurfaceActionButton,
   DaaSurfaceNoticeBox,
@@ -37,7 +37,7 @@ import {
 
 export type { WorkbenchChecklistItem };
 
-export function WorkbenchRebalanceSection(props: {
+export function RebalanceSection(props: {
   bootstrap: WorkbenchBootstrap;
   cycles: RebalanceCycle[];
   currentCycle: RebalanceCycle | null;
@@ -60,7 +60,7 @@ export function WorkbenchRebalanceSection(props: {
   rebalanceChecklist: WorkbenchChecklistItem[];
   rebalanceChecklistAllPassed: boolean;
   firstUnmetChecklist?: WorkbenchChecklistItem;
-  onNavigateTab: (tab: WorkbenchTab) => void;
+  onNavigateTab: (tab: DashboardTab) => void;
   onGenerateCycle: () => Promise<void>;
   onOpenExecuteDialog: (mode: "selected" | "all") => void;
   onCancelCycle: () => void;

@@ -50,7 +50,7 @@ function formatCashMeta(row: StoreCashLedgerEntry) {
   return tags;
 }
 
-export function WorkbenchCashSection(props: {
+export function CashSection(props: {
   baseCurrency: string;
   entries?: StoreCashLedgerEntry[];
   ledgerMeta?: DaaCurrentLedgerMeta | null;
@@ -82,7 +82,7 @@ export function WorkbenchCashSection(props: {
       const entries = await listCashLedger(100);
       setCashLedger(entries);
     } catch (err) {
-  logSwallowed("WorkbenchCashSection.loadData", err);
+  logSwallowed("CashSection.loadData", err);
     } finally {
       setLoading(false);
     }

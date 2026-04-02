@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-DAA Console 是面向个人投资者的单组合动态资产配置工作台。
+DAA Console 是面向个人投资者的单组合动态资产配置系统。
 核心流程：**资产发现 → 洞察分析 → 再平衡 → 执行 → 复盘**
 
 当前为模拟执行模式，不对接真实券商。
@@ -42,9 +42,13 @@ app/
 │   ├── hf/                     # Hedge fund manager holdings tracking
 │   └── auth/                   # Authentication
 ├── daa/dashboard/              # Frontend pages
-│   ├── workbench/              # Asset pool, insights, rebalancing UI
-│   ├── trades/                 # Trade records
-│   └── settings/               # Config, credentials, notifications
+│   ├── today/                  # 投委会 — 每日决策摘要
+│   ├── portfolio/              # 持仓 — 资产池、观察列表、权重管理
+│   ├── rebalance/              # 调仓 — 再平衡检测、生成、执行
+│   ├── trades/                 # 交易记录 — 周期、订单、复盘
+│   ├── strategy-lab/           # 策略实验室 — 回测
+│   ├── settings/               # 设置 — 策略、风控、数据源、通知
+│   └── workbench/_components/  # 共享组件与 hooks（历史目录名，组件已重命名）
 
 src/
 ├── core/                       # Pure algorithm layer (no side effects, fully testable)

@@ -3,7 +3,7 @@
 import { Dialog } from "@/components/ui/dialog";
 
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
-import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
+import type { DashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import {
   DaaSurfaceActionButton,
   DaaSurfaceDialogShell,
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 import MarketOrderDialog from "./MarketOrderDialog";
 
-export function WorkbenchDialogs(props: WorkbenchPageModel["dialogProps"]) {
+export function DashboardDialogs(props: DashboardPageModel["dialogProps"]) {
   return (
     <>
       <MarketOrderDialog
