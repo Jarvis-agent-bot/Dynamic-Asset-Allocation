@@ -84,11 +84,12 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
   const secretModel = await resolveSecret("llm_model");
   const resolvedModel = normalizeText(secretModel, normalizeText(config.model, defaults.model));
 
-  // reasoner 模型推理较慢，默认超时适当放宽
+  // reasoner 模型推理较慢，强制最低 30s 超时
   const isReasonerModel = resolvedModel.includes("reasoner");
+  const minTimeout = isReasonerModel ? 30000 : 2000;
   const defaultTimeout = isReasonerModel ? 60000 : 10000;
   const maxTimeout = isReasonerModel ? 120000 : 30000;
-  const timeoutMs = Math.max(2000, Math.min(maxTimeout, Math.trunc(toFinite(config.timeoutMs, defaultTimeout))));
+  const timeoutMs = Math.max(minTimeout, Math.min(maxTimeout, Math.trunc(toFinite(config.timeoutMs, defaultTimeout))));
 
   return {
     enabled: Boolean(config.enabled),
@@ -208,20 +209,7 @@ export async function callLlm(
       body,
     });
 
-    console.log("[callLlm] response status:", response.status, "ok:", response.ok);
-    const rawText = await response.text().catch((e) => {
-      console.log("[callLlm] response.text() failed:", e instanceof Error ? e.message : String(e));
-      return "";
-    });
-    console.log("[callLlm] rawText.length:", rawText.length, "rawText.preview:", rawText.slice(0, 300));
-
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(rawText) as Record<string, unknown>;
-    } catch (e) {
-      console.log("[callLlm] JSON.parse failed:", e instanceof Error ? e.message : String(e));
-      payload = {};
-    }
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
 
     if (!response.ok) {
       const errMsg = normalizeText(
