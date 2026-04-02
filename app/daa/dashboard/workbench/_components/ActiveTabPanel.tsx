@@ -1,7 +1,7 @@
 "use client";
 
-import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
-import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
+import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
+import type { DashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { cn } from "@/lib/utils";
 
 import { TargetWeightSummary } from "@/app/daa/dashboard/portfolio/_components/TargetWeightSummary";
@@ -13,12 +13,12 @@ import {
 
 import AssetUniverseTable from "./AssetUniverseTable";
 import WatchlistBuilderPanel from "./WatchlistBuilderPanel";
-import { WorkbenchRiskOverview } from "./WorkbenchRiskOverview";
-import { WorkbenchCashSection } from "./WorkbenchCashSection";
+import { RiskOverview } from "./RiskOverview";
+import { CashSection } from "./CashSection";
 
-export function WorkbenchActiveTabPanel(props: {
-  model: WorkbenchPageModel;
-  onNavigateTab?: (tab: WorkbenchTab) => void;
+export function ActiveTabPanel(props: {
+  model: DashboardPageModel;
+  onNavigateTab?: (tab: DashboardTab) => void;
 }) {
   const { model } = props;
 
@@ -68,7 +68,7 @@ export function WorkbenchActiveTabPanel(props: {
           {model.bootstrap ? (
             <>
               <SectionErrorBoundary sectionName="组合风险">
-                <WorkbenchRiskOverview
+                <RiskOverview
                   bootstrap={model.bootstrap}
                   snapshots={model.snapshots}
                   latestCycle={null}
@@ -76,7 +76,7 @@ export function WorkbenchActiveTabPanel(props: {
                 />
               </SectionErrorBoundary>
               <SectionErrorBoundary sectionName="现金流水">
-                <WorkbenchCashSection
+                <CashSection
                   baseCurrency={model.bootstrap.baseCurrency}
                   entries={model.cashLedger}
                   ledgerMeta={model.ledgerMeta}

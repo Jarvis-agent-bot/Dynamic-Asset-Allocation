@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture } from "@/src/daa/__tests__/testDataFactories";
 import type { NotificationStatusSummary } from "@/src/daa/notify/notificationStatus";
-import type { WorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
-import { WorkbenchActiveTabPanel } from "../WorkbenchActiveTabPanel";
+import type { DashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
+import { ActiveTabPanel } from "../ActiveTabPanel";
 
 afterEach(() => {
   cleanup();
@@ -19,11 +19,11 @@ vi.mock("../WatchlistBuilderPanel", () => ({
   default: () => <div data-testid="watchlist-builder">watchlist-builder</div>,
 }));
 
-vi.mock("../WorkbenchCashSection", () => ({
-  WorkbenchCashSection: () => <div data-testid="cash-section">cash</div>,
+vi.mock("../CashSection", () => ({
+  CashSection: () => <div data-testid="cash-section">cash</div>,
 }));
 
-// WorkbenchRebalanceSection mock removed — rebalance tab moved to ActionWorkflow
+// RebalanceSection mock removed — rebalance tab moved to ActionWorkflow
 
 function createNotificationSummaryFixture(): NotificationStatusSummary {
   return {
@@ -95,15 +95,15 @@ function createOrderPreviewFixture() {
   };
 }
 
-type WorkbenchPageModelOverrides =
-  Partial<Omit<WorkbenchPageModel, "tableProps" | "watchlistBuilderProps" | "rebalanceSectionProps" | "dialogProps">> & {
-    tableProps?: Partial<WorkbenchPageModel["tableProps"]>;
-    watchlistBuilderProps?: Partial<WorkbenchPageModel["watchlistBuilderProps"]>;
-    rebalanceSectionProps?: Partial<NonNullable<WorkbenchPageModel["rebalanceSectionProps"]>> | null;
-    dialogProps?: Partial<WorkbenchPageModel["dialogProps"]>;
+type DashboardPageModelOverrides =
+  Partial<Omit<DashboardPageModel, "tableProps" | "watchlistBuilderProps" | "rebalanceSectionProps" | "dialogProps">> & {
+    tableProps?: Partial<DashboardPageModel["tableProps"]>;
+    watchlistBuilderProps?: Partial<DashboardPageModel["watchlistBuilderProps"]>;
+    rebalanceSectionProps?: Partial<NonNullable<DashboardPageModel["rebalanceSectionProps"]>> | null;
+    dialogProps?: Partial<DashboardPageModel["dialogProps"]>;
   };
 
-function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPageModel {
+function createModel(overrides: DashboardPageModelOverrides = {}): DashboardPageModel {
   const {
     tableProps: tablePropsOverride,
     watchlistBuilderProps: watchlistBuilderPropsOverride,
@@ -116,7 +116,7 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     watchlistAssets: 5,
   };
   const baseBootstrap = buildWorkbenchBootstrapFixture();
-  const tableProps: WorkbenchPageModel["tableProps"] = {
+  const tableProps: DashboardPageModel["tableProps"] = {
     rows: [],
     baseCurrency: "USD",
     counts: { all: 0, holdings: 2, watchlist: 5, basket: 1 },
@@ -139,7 +139,7 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
     updatingTarget: false,
     ...tablePropsOverride,
   };
-  const watchlistBuilderProps: WorkbenchPageModel["watchlistBuilderProps"] = {
+  const watchlistBuilderProps: DashboardPageModel["watchlistBuilderProps"] = {
     loading: false,
     joinedAssetKeys: {},
     onListFeaturedAssets: vi.fn(async () => ({ groups: [], generatedAt: "2026-03-01T00:00:00.000Z" })),
@@ -182,7 +182,7 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
         onSelectCycle: vi.fn(),
         ...rebalanceSectionPropsOverride,
       };
-  const dialogProps: WorkbenchPageModel["dialogProps"] = {
+  const dialogProps: DashboardPageModel["dialogProps"] = {
     orderDraft: null,
     setOrderDraft: vi.fn(),
     orderSubmitting: false,
@@ -260,12 +260,12 @@ function createModel(overrides: WorkbenchPageModelOverrides = {}): WorkbenchPage
   };
 }
 
-describe("WorkbenchActiveTabPanel", () => {
+describe("ActiveTabPanel", () => {
   it("在组合页切换 tab 时优先走页面级导航回调", () => {
     const onNavigateTab = vi.fn();
     const model = createModel();
 
-    render(<WorkbenchActiveTabPanel model={model} onNavigateTab={onNavigateTab} />);
+    render(<ActiveTabPanel model={model} onNavigateTab={onNavigateTab} />);
 
     fireEvent.click(screen.getByRole("tab", { name: "持仓 2" }));
 
@@ -276,7 +276,7 @@ describe("WorkbenchActiveTabPanel", () => {
   it("观察列表直接展示补充标的面板（不折叠）", () => {
     const model = createModel();
 
-    render(<WorkbenchActiveTabPanel model={model} />);
+    render(<ActiveTabPanel model={model} />);
 
     const table = screen.getAllByTestId("asset-table-watchlist")[0];
     const builder = screen.getByTestId("watchlist-builder");

@@ -100,7 +100,7 @@ export async function executeTradeIntent(input: {
   const row = input.toolContext.readModel.bootstrap.assetUniverse.find((item) => item.symbol.toUpperCase() === intent.symbol.toUpperCase());
   if (!row) {
     return {
-      text: `${intent.symbol} 当前不在资产池里。请先在工作台加入该资产，再从聊天里直接交易。`,
+      text: `${intent.symbol} 当前不在资产池里。请先在持仓页加入该资产，再从聊天里直接交易。`,
       intentKind: "trade",
       pendingAction: input.toolContext.currentPendingAction,
     };

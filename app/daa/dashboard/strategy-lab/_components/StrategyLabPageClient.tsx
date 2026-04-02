@@ -287,7 +287,7 @@ export default function StrategyLabPageClient() {
                   <div className="px-3 py-4 text-center text-xs text-[var(--faint)]">加载资产池中…</div>
                 ) : filteredAssets.length === 0 ? (
                   <div className="px-3 py-4 text-center text-xs text-[var(--faint)]">
-                    {assets.length === 0 ? "资产池为空，请先到工作台添加资产" : "未找到匹配资产"}
+                    {assets.length === 0 ? "资产池为空，请先到持仓页添加资产" : "未找到匹配资产"}
                   </div>
                 ) : (
                   filteredAssets.map((asset) => {

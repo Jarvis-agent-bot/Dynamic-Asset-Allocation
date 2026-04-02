@@ -224,7 +224,7 @@ function emptyStateMeta(input: {
   if (input.view === "all" && input.basketCount <= 0 && input.watchlistCount <= 0) {
     return {
       title: "当前还没有可操作资产",
-      description: "先加入观察标的，工作台才会逐步形成组合和调仓范围。",
+      description: "先加入观察标的，系统才会逐步形成组合和调仓范围。",
     };
   }
   return {

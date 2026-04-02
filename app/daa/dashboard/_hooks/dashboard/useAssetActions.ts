@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { toast } from "sonner";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-import type { WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
-import type { CalibrationDraft, OrderDraft } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
+import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
+import type { CalibrationDraft, OrderDraft } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import {
   executeWorkbenchOrder,
   getWorkbenchAssetInsights,
@@ -27,14 +27,14 @@ import type {
   WorkbenchSearchAssetResult,
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
-export function useWorkbenchAssetActions(input: {
+export function useAssetActions(input: {
   bootstrap: WorkbenchBootstrap | null;
   assetRows: AssetUniverseView[];
   loading: boolean;
   busy: boolean;
   setBusy: Dispatch<SetStateAction<boolean>>;
   loadBootstrap: (silent?: boolean, preferredCycleId?: string | null) => Promise<void>;
-  setActiveTab: Dispatch<SetStateAction<WorkbenchTab>>;
+  setActiveTab: Dispatch<SetStateAction<DashboardTab>>;
 }) {
   const [targetUpdating, setTargetUpdating] = useState(false);
   const [assetActioningKey, setAssetActioningKey] = useState<string | null>(null);
@@ -71,7 +71,7 @@ export function useWorkbenchAssetActions(input: {
         if (!alive) return;
         setInsightDataByAssetKey((prev) => ({ ...prev, [row.assetKey]: data }));
       }).catch((err) => {
-        logSwallowed("useWorkbenchAssetActions.prefetchInsight", err);
+        logSwallowed("useAssetActions.prefetchInsight", err);
       }).finally(() => {
         if (!alive) return;
         setInsightLoadingByAssetKey((prev) => ({ ...prev, [row.assetKey]: false }));
@@ -125,7 +125,7 @@ export function useWorkbenchAssetActions(input: {
         pricingMode: "market",
         priceSource: preview.priceSource,
         priceSnapshotAt: preview.priceSnapshotAt ?? undefined,
-        reasonText: "来自工作台市价预览",
+        reasonText: "来自市价预览",
       });
       if (result.result.status === "executed" || result.result.status === "submitted" || result.result.status === "partially_filled") {
         const successText = result.result.status === "executed"

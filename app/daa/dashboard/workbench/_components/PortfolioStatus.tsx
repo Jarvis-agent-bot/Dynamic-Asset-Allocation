@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 const PIE_COLORS = ["#38BDF8", "#818CF8", "#34D399", "#F6AD55", "#F87171", "#A78BFA"];
 
-export type WorkbenchPortfolioStatusProps = {
+export type PortfolioStatusProps = {
   baseCurrency: string;
   totalEquity: number;
   holdingsValue: number;
@@ -36,7 +36,7 @@ export type WorkbenchPortfolioStatusProps = {
   onRefresh: () => void;
 };
 
-export function WorkbenchPortfolioStatus(props: WorkbenchPortfolioStatusProps) {
+export function PortfolioStatus(props: PortfolioStatusProps) {
   const allocationData = useMemo(() => {
     const items = (props.allocationSummary?.topHoldings || []).map((item) => ({ name: item.symbol, value: item.value }));
     const cashValue = props.allocationSummary?.cashValue || 0;
@@ -44,11 +44,12 @@ export function WorkbenchPortfolioStatus(props: WorkbenchPortfolioStatusProps) {
     return items;
   }, [props.allocationSummary]);
 
-  const syncTone = props.loading ? "slate" : props.refreshing ? "amber" : "green";
-  const syncLabel = props.loading ? "准备中" : props.refreshing ? "同步中" : "数据已同步";
+  const isEmpty = !props.totalEquity;
+  const syncTone = props.loading ? "slate" : props.refreshing ? "amber" : isEmpty ? "slate" : "green";
+  const syncLabel = props.loading ? "准备中" : props.refreshing ? "同步中" : isEmpty ? "等待入金" : "数据已同步";
 
   if (props.loading && !props.totalEquity) {
-    return <DaaSurfaceEmptyState title="正在准备工作台…" description="正在同步账户、观察列表与再平衡周期，请稍候。" />;
+    return <DaaSurfaceEmptyState title="正在准备数据…" description="正在同步账户、观察列表与再平衡周期，请稍候。" />;
   }
 
   return (

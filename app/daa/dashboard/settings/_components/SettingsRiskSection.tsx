@@ -70,6 +70,7 @@ export function SettingsRiskSection(props: {
       label: "最小交易金额",
       value: config.strategy.constraints.minNotional,
       min: 1,
+      max: 100000,
       step: 1,
       onChange: (value: number) =>
         setConfig((prev) =>
@@ -233,7 +234,7 @@ export function SettingsRiskSection(props: {
           ))}
         </div>
         <div style={{ marginTop: 12, color: "var(--muted)", fontSize: 12 }}>
-          历史研究与工作台执行摘要共享同一套执行口径：单笔 NAV 上限、手续费、滑点与成交时点。当前成交时点固定为 T+1 close。
+          历史研究与执行摘要共享同一套执行口径：单笔 NAV 上限、手续费、滑点与成交时点。当前成交时点固定为 T+1 close。
         </div>
       </SectionCard>
     </section>

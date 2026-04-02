@@ -2,7 +2,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { useWorkbenchModel, normalizeWorkbenchTab } from "../useWorkbenchModel";
+import { useDashboardModel, normalizeDashboardTab } from "../useDashboardModel";
 
 vi.mock("@/src/daa/modules/read/readApi", () => ({
   getWorkbenchReadModel: vi.fn(),
@@ -19,23 +19,23 @@ vi.mock("@/src/daa/api/client", () => ({
   getApiErrorMessage: (err: unknown) => err instanceof Error ? err.message : "Unknown error",
 }));
 
-describe("normalizeWorkbenchTab", () => {
+describe("normalizeDashboardTab", () => {
   it("returns valid tab names as-is", () => {
-    expect(normalizeWorkbenchTab("positions")).toBe("positions");
-    expect(normalizeWorkbenchTab("watchlist")).toBe("watchlist");
-    expect(normalizeWorkbenchTab("rebalance")).toBe("rebalance");
-    expect(normalizeWorkbenchTab("cash")).toBe("cash");
+    expect(normalizeDashboardTab("positions")).toBe("positions");
+    expect(normalizeDashboardTab("watchlist")).toBe("watchlist");
+    expect(normalizeDashboardTab("rebalance")).toBe("rebalance");
+    expect(normalizeDashboardTab("cash")).toBe("cash");
   });
 
   it("defaults to positions for invalid input", () => {
-    expect(normalizeWorkbenchTab("")).toBe("positions");
-    expect(normalizeWorkbenchTab("invalid")).toBe("positions");
-    expect(normalizeWorkbenchTab("discovery")).toBe("positions");
-    expect(normalizeWorkbenchTab("settings")).toBe("positions");
+    expect(normalizeDashboardTab("")).toBe("positions");
+    expect(normalizeDashboardTab("invalid")).toBe("positions");
+    expect(normalizeDashboardTab("discovery")).toBe("positions");
+    expect(normalizeDashboardTab("settings")).toBe("positions");
   });
 });
 
-describe("useWorkbenchModel", () => {
+describe("useDashboardModel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -51,7 +51,7 @@ describe("useWorkbenchModel", () => {
       cycles: [],
     });
 
-    const { result } = renderHook(() => useWorkbenchModel());
+    const { result } = renderHook(() => useDashboardModel());
 
     expect(result.current.loading).toBe(true);
 
@@ -68,7 +68,7 @@ describe("useWorkbenchModel", () => {
     const { getWorkbenchReadModel } = await import("@/src/daa/modules/read/readApi");
     (getWorkbenchReadModel as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Network error"));
 
-    const { result } = renderHook(() => useWorkbenchModel());
+    const { result } = renderHook(() => useDashboardModel());
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -82,7 +82,7 @@ describe("useWorkbenchModel", () => {
     const { getWorkbenchReadModel } = await import("@/src/daa/modules/read/readApi");
     (getWorkbenchReadModel as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Unauthorized"));
 
-    const { result } = renderHook(() => useWorkbenchModel());
+    const { result } = renderHook(() => useDashboardModel());
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -98,7 +98,7 @@ describe("useWorkbenchModel", () => {
       cycles: [],
     });
 
-    const { result } = renderHook(() => useWorkbenchModel({ initialTab: "rebalance" }));
+    const { result } = renderHook(() => useDashboardModel({ initialTab: "rebalance" }));
     expect(result.current.activeTab).toBe("rebalance");
 
     await waitFor(() => {
@@ -123,7 +123,7 @@ describe("useWorkbenchModel", () => {
       },
     });
 
-    const { result } = renderHook(() => useWorkbenchModel());
+    const { result } = renderHook(() => useDashboardModel());
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -147,7 +147,7 @@ describe("useWorkbenchModel", () => {
       cycles: [cycle],
     });
 
-    const { result } = renderHook(() => useWorkbenchModel());
+    const { result } = renderHook(() => useDashboardModel());
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);

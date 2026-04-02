@@ -2,6 +2,7 @@ import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import { buildDailyReportText } from "@/src/daa/notify/dailyReportBuilder";
@@ -42,6 +43,7 @@ type DailyAnalysisJobResult = {
   feishu: { sent: boolean };
   marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string };
   dailyReport: { sent: boolean; telegram: boolean; feishu: boolean };
+  autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string };
   at: string;
 };
 
@@ -88,8 +90,6 @@ function buildNotifyText(input: {
       lines.push(`- ${row.symbol} ${row.side === "BUY" ? "买入" : "卖出"} ${row.suggestedNotional.toFixed(2)}`);
     }
   }
-  lines.push("");
-  lines.push("备注：本系统仅自动生成建议与通知，不会自动执行交易。");
   return lines.join("\n");
 }
 
@@ -113,6 +113,9 @@ export async function POST(req: Request) {
         proposalCount: result.proposalCount,
         marketRefreshOk: result.marketRefresh?.ok,
         dailyReportSent: result.dailyReport?.sent,
+        autoExecuteAttempted: result.autoExecute?.attempted,
+        autoExecuteOk: result.autoExecute?.executed,
+        autoExecuteOrders: result.autoExecute?.ordersCount,
       }),
       handler: async ({ jobId }) => {
         const system = await getDaaSystemConfig();
@@ -134,6 +137,7 @@ export async function POST(req: Request) {
             telegram: { sent: false },
             feishu: { sent: false },
             marketRefresh: { ok: true, refreshedCount: 0 },
+            autoExecute: { attempted: false, executed: false, ordersCount: 0 },
             dailyReport: { sent: false, telegram: false, feishu: false },
             at: new Date().toISOString(),
           };
@@ -142,7 +146,7 @@ export async function POST(req: Request) {
         const notif = system.config.notification;
 
         // ── Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled) ──
-        let autoGenerate: Omit<DailyAnalysisJobResult, "dailyReport" | "at">;
+        let autoGenerate: Omit<DailyAnalysisJobResult, "dailyReport" | "at" | "autoExecute">;
 
         if (strategy.autoGenerateEnabled) {
           let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
@@ -239,7 +243,60 @@ export async function POST(req: Request) {
           };
         }
 
-        // ── Phase B: daily report (independent of autoGenerateEnabled) ──
+        // ── Phase C: auto-execute (gated by autoExecuteEnabled) ──
+        let autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string } = {
+          attempted: false,
+          executed: false,
+          ordersCount: 0,
+        };
+
+        if (
+          strategy.autoExecuteEnabled &&
+          strategy.autoGenerateEnabled &&
+          autoGenerate.created &&
+          autoGenerate.cycleId
+        ) {
+          autoExecute.attempted = true;
+          try {
+            const execResult = await executeRebalanceViaGateway({
+              cycleId: autoGenerate.cycleId,
+              executeMode: "all",
+              notifyMode: "fanout",
+            });
+            const executedCount = execResult.logs.filter((l) => l.status === "executed").length;
+            autoExecute.executed = executedCount > 0;
+            autoExecute.ordersCount = executedCount;
+          } catch (err) {
+            autoExecute.error = err instanceof Error ? err.message : String(err);
+            logSwallowed("dailyAnalysisRoute.autoExecute", err);
+            // 自动执行失败时发送失败通知
+            const failMsg = `[自动执行失败] 周期 ${autoGenerate.cycleId}\n原因: ${autoExecute.error}`;
+            try {
+              const sends: Promise<boolean>[] = [];
+              if (notif.telegram.enabled && notif.telegram.onTradeExecuted) {
+                sends.push(sendTelegramByEnv(failMsg, {
+                  eventType: "auto_execute_failed",
+                  triggerSource: "cron_daily_analysis",
+                  cycleId: autoGenerate.cycleId,
+                  requestJson: { error: autoExecute.error },
+                }));
+              }
+              if (notif.feishu.enabled && notif.feishu.onTradeExecuted) {
+                sends.push(sendFeishuByEnv(failMsg, {
+                  eventType: "auto_execute_failed",
+                  triggerSource: "cron_daily_analysis",
+                  cycleId: autoGenerate.cycleId,
+                  requestJson: { error: autoExecute.error },
+                }));
+              }
+              await Promise.allSettled(sends);
+            } catch (notifyErr) {
+              logSwallowed("dailyAnalysisRoute.autoExecuteNotify", notifyErr);
+            }
+          }
+        }
+
+        // ── Phase D: daily report (independent of autoGenerateEnabled) ──
         const wantTgReport = notif.telegram.enabled && notif.telegram.dailyReport;
         const wantFsReport = notif.feishu.enabled && notif.feishu.dailyReport;
         let dailyReport: { sent: boolean; telegram: boolean; feishu: boolean } = {
@@ -289,6 +346,7 @@ export async function POST(req: Request) {
 
         return {
           ...autoGenerate,
+          autoExecute,
           dailyReport,
           at: new Date().toISOString(),
         };

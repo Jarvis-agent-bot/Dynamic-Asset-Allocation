@@ -2,7 +2,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { useWorkbenchRebalanceFlow } from "../workbench/useWorkbenchRebalanceFlow";
+import { useRebalanceFlow } from "../dashboard/useRebalanceFlow";
 import type {
   AssetUniverseView,
   PreTradeRiskCheck,
@@ -79,14 +79,14 @@ function makeInput(overrides?: Record<string, unknown>) {
   };
 }
 
-describe("useWorkbenchRebalanceFlow", () => {
+describe("useRebalanceFlow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("computes summary from asset rows", () => {
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({
+      useRebalanceFlow(makeInput({
         assetRows: [
           makeAssetRow({ holdingQty: 100, watchEnabled: true }),
           makeAssetRow({ assetKey: "SH:000001", holdingQty: 0, watchEnabled: true }),
@@ -100,7 +100,7 @@ describe("useWorkbenchRebalanceFlow", () => {
 
   it("canExecuteSelected is false when no cycle", () => {
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({ currentCycle: null })),
+      useRebalanceFlow(makeInput({ currentCycle: null })),
     );
     expect(result.current.canExecuteAll).toBe(false);
     expect(result.current.canExecuteSelected).toBe(false);
@@ -111,7 +111,7 @@ describe("useWorkbenchRebalanceFlow", () => {
       proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({
+      useRebalanceFlow(makeInput({
         currentCycle: cycle,
         riskCheck: makeRiskCheck({ overallStatus: "block" }),
       })),
@@ -125,7 +125,7 @@ describe("useWorkbenchRebalanceFlow", () => {
       proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({
+      useRebalanceFlow(makeInput({
         currentCycle: cycle,
         riskCheck: makeRiskCheck({ overallStatus: "pass" }),
       })),
@@ -140,7 +140,7 @@ describe("useWorkbenchRebalanceFlow", () => {
       proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({
+      useRebalanceFlow(makeInput({
         currentCycle: cycle,
         riskCheck: null,
       })),
@@ -152,21 +152,21 @@ describe("useWorkbenchRebalanceFlow", () => {
   it("isCurrentCycleTerminal for completed/cancelled", () => {
     const completedCycle = makeCycle({ status: "completed" });
     const { result: r1 } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({ currentCycle: completedCycle })),
+      useRebalanceFlow(makeInput({ currentCycle: completedCycle })),
     );
     expect(r1.current.isCurrentCycleTerminal).toBe(true);
     expect(r1.current.canEditCurrentCycle).toBe(false);
 
     const cancelledCycle = makeCycle({ status: "cancelled" });
     const { result: r2 } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({ currentCycle: cancelledCycle })),
+      useRebalanceFlow(makeInput({ currentCycle: cancelledCycle })),
     );
     expect(r2.current.isCurrentCycleTerminal).toBe(true);
   });
 
   it("rebalanceChecklist reports unmet conditions", () => {
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({
+      useRebalanceFlow(makeInput({
         assetRows: [makeAssetRow({ watchEnabled: false, holdingQty: 0, targetWeightHint: 0 })],
         currentCycle: null,
         riskCheck: null,
@@ -182,7 +182,7 @@ describe("useWorkbenchRebalanceFlow", () => {
       proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({
+      useRebalanceFlow(makeInput({
         assetRows: [makeAssetRow({ watchEnabled: true, holdingQty: 100, targetWeightHint: 0.1 })],
         currentCycle: cycle,
         riskCheck: makeRiskCheck({ overallStatus: "pass" }),
@@ -193,17 +193,17 @@ describe("useWorkbenchRebalanceFlow", () => {
 
   it("cycleProgressText reflects status correctly", () => {
     const { result: r1 } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({ currentCycle: null })),
+      useRebalanceFlow(makeInput({ currentCycle: null })),
     );
     expect(r1.current.cycleProgressText).toBe("尚未生成建议");
 
     const { result: r2 } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({ currentCycle: makeCycle({ status: "completed" }) })),
+      useRebalanceFlow(makeInput({ currentCycle: makeCycle({ status: "completed" }) })),
     );
     expect(r2.current.cycleProgressText).toBe("已执行完成");
 
     const { result: r3 } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({ currentCycle: makeCycle({ status: "cancelled" }) })),
+      useRebalanceFlow(makeInput({ currentCycle: makeCycle({ status: "cancelled" }) })),
     );
     expect(r3.current.cycleProgressText).toBe("周期已取消（只读）");
   });
@@ -217,7 +217,7 @@ describe("useWorkbenchRebalanceFlow", () => {
       ],
     });
     const { result } = renderHook(() =>
-      useWorkbenchRebalanceFlow(makeInput({ currentCycle: cycle })),
+      useRebalanceFlow(makeInput({ currentCycle: cycle })),
     );
     expect(result.current.selectedProposalNotional).toBe(1500);
     expect(result.current.selectedProposalCount).toBe(2);
@@ -235,7 +235,7 @@ describe("useWorkbenchRebalanceFlow", () => {
     });
 
     const input = makeInput();
-    const { result } = renderHook(() => useWorkbenchRebalanceFlow(input));
+    const { result } = renderHook(() => useRebalanceFlow(input));
 
     await act(async () => {
       await result.current.handleGenerateCycle();

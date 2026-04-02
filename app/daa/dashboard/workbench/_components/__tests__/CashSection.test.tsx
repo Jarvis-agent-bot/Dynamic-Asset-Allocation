@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WorkbenchCashSection } from "../WorkbenchCashSection";
+import { CashSection } from "../CashSection";
 
 const mockListCashLedger = vi.fn();
 const mockAppendCashLedgerEntry = vi.fn();
@@ -12,7 +12,7 @@ vi.mock("@/src/daa/modules/store/storeApi", () => ({
   appendCashLedgerEntry: (...args: unknown[]) => mockAppendCashLedgerEntry(...args),
 }));
 
-describe("WorkbenchCashSection", () => {
+describe("CashSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -36,7 +36,7 @@ describe("WorkbenchCashSection", () => {
       },
     ]);
 
-    render(<WorkbenchCashSection baseCurrency="USD" />);
+    render(<CashSection baseCurrency="USD" />);
 
     await waitFor(() => {
       expect(screen.getByText("$108")).toBeTruthy();
@@ -50,7 +50,7 @@ describe("WorkbenchCashSection", () => {
     mockListCashLedger.mockResolvedValue([]);
 
     render(
-      <WorkbenchCashSection
+      <CashSection
         baseCurrency="USD"
         cashMutationsAllowed={false}
         readOnlyReason="当前现金由外部校准结果锁定。"
@@ -71,7 +71,7 @@ describe("WorkbenchCashSection", () => {
     mockListCashLedger.mockResolvedValue([]);
 
     render(
-      <WorkbenchCashSection
+      <CashSection
         baseCurrency="USD"
         cashMutationsAllowed
         accountBreakdown={[

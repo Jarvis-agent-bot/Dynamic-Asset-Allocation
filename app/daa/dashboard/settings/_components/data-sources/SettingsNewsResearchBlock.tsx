@@ -59,7 +59,7 @@ export function SettingsNewsResearchBlock(props: {
               <div key={key}>
                 <div style={{ fontSize: 11, color: "var(--faint)", marginBottom: 4 }}>{label}</div>
                 <NumberInput
-                  value={config.dataSources.newsFeed.fusionWeights[key]}
+                  value={Math.round(config.dataSources.newsFeed.fusionWeights[key] * 100) / 100}
                   min={0}
                   max={1}
                   step={0.05}

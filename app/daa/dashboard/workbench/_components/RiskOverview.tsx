@@ -10,7 +10,7 @@ import type {
   WorkbenchBootstrap,
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
-export function WorkbenchRiskOverview(props: {
+export function RiskOverview(props: {
   bootstrap: WorkbenchBootstrap | null;
   snapshots: DaaStoreEquitySnapshot[];
   latestCycle: RebalanceCycle | null;

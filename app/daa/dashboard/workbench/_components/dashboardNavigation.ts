@@ -1,35 +1,30 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 
-import { normalizeWorkbenchTab, type WorkbenchTab } from "@/app/daa/dashboard/_hooks/useWorkbenchModel";
+import { normalizeDashboardTab, type DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 
-export function resolveWorkbenchTabFromLocation(input: {
+export function resolveTabFromLocation(input: {
   section: string | null | undefined;
   searchTab: string | null | undefined;
-  fallbackTab: WorkbenchTab;
-}): WorkbenchTab {
+  fallbackTab: DashboardTab;
+}): DashboardTab {
   const section = String(input.section || "").trim().toLowerCase();
   if (section === "rebalance") return "rebalance";
   if (section === "cash") return "cash";
   if (section === "portfolio") {
-    return normalizeWorkbenchTab(
+    return normalizeDashboardTab(
       input.searchTab || (input.fallbackTab === "watchlist" ? "watchlist" : "positions"),
     );
   }
   if (section === "cockpit") {
-    return normalizeWorkbenchTab(input.searchTab || "positions");
+    return normalizeDashboardTab(input.searchTab || "positions");
   }
   if (input.searchTab) {
-    return normalizeWorkbenchTab(input.searchTab);
+    return normalizeDashboardTab(input.searchTab);
   }
   return input.fallbackTab;
 }
 
-export function getWorkbenchHref(tab?: WorkbenchTab): string {
-  if (!tab) return "/daa/dashboard/workbench";
-  return `/daa/dashboard/workbench?tab=${tab}`;
-}
-
-export function shouldHandleWorkbenchAnchorClick(
+export function shouldHandleAnchorClick(
   event: Pick<ReactMouseEvent<HTMLAnchorElement>, "defaultPrevented" | "button" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">,
 ): boolean {
   if (event.defaultPrevented) return false;

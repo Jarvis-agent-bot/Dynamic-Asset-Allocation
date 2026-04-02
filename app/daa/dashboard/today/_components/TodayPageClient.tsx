@@ -5,10 +5,10 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowRight, Plus, Wallet, Target } from "lucide-react";
 
 import { useTodayDecision } from "@/app/daa/dashboard/_hooks/useTodayDecision";
-import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
+import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
 
-import { WorkbenchNotificationBar } from "@/app/daa/dashboard/workbench/_components/WorkbenchNotificationBar";
+import { DashboardNotificationBar } from "@/app/daa/dashboard/workbench/_components/DashboardNotificationBar";
 
 import { TodayBrief } from "./TodayBrief";
 
@@ -41,11 +41,22 @@ function EmptyPortfolioGuide(props: { hasAssets: boolean; hasCash: boolean; hasT
     },
   ];
 
+  const doneCount = steps.filter((s) => s.done).length;
+
   return (
     <div className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-6">
       <div className="mb-4 text-center">
         <div className="text-lg font-semibold text-[var(--text)]">开始构建你的组合</div>
         <div className="mt-1 text-sm text-[var(--muted)]">完成以下步骤，即可使用调仓和分析功能</div>
+        <div className="mx-auto mt-3 flex items-center justify-center gap-2">
+          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+              style={{ width: `${(doneCount / steps.length) * 100}%` }}
+            />
+          </div>
+          <span className="text-xs tabular-nums text-[var(--muted)]">{doneCount}/{steps.length}</span>
+        </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         {steps.map((step, i) => {
@@ -96,7 +107,7 @@ export default function TodayPageClient(props: {
   initialSection?: string;
 }) {
   const today = useTodayDecision();
-  const wbModel = useWorkbenchPageModel({ initialTab: props.initialTab });
+  const wbModel = useDashboardPageModel({ initialTab: props.initialTab });
 
   const baseCurrency = wbModel.bootstrap?.baseCurrency || "USD";
   const topHoldings = useMemo(() => {
@@ -119,7 +130,7 @@ export default function TodayPageClient(props: {
   return (
     <div className="space-y-4">
       {/* ═══ 通知区 ═══ */}
-      <WorkbenchNotificationBar
+      <DashboardNotificationBar
         error={wbModel.error}
         authRequired={wbModel.authRequired}
         bootstrap={wbModel.bootstrap}

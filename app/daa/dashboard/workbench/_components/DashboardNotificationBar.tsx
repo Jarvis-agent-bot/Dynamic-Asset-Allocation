@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { AlertCircle, AlertTriangle, Clock, Database } from "lucide-react";
 
-import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
+import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import {
   DaaSurfaceActionButton,
@@ -29,7 +29,7 @@ function executionReceiptMeta(status: ExecutionReceipt["status"]): {
 }
 
 // ─── Types ───
-export function WorkbenchNotificationBar(props: {
+export function DashboardNotificationBar(props: {
   // 原 BannerStack props
   error: string;
   authRequired: boolean;
@@ -87,9 +87,9 @@ export function WorkbenchNotificationBar(props: {
       {props.error ? (
         <DaaSurfaceNoticeBox
           tone="red"
-          title="工作台加载失败"
+          title="页面加载失败"
           icon={<AlertCircle className="h-4 w-4" />}
-          description={props.authRequired ? "当前会话未登录或已失效，请重新登录后再访问工作台。" : props.error}
+          description={props.authRequired ? "当前会话未登录或已失效，请重新登录后再试一次。" : props.error}
           action={props.authRequired ? (
             <Link href="/daa/login?returnTo=%2Fdaa%2Fdashboard%2Fworkbench" className="text-xs font-medium text-[var(--primary)] underline underline-offset-4">
               前往登录

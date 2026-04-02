@@ -238,7 +238,11 @@ export function SettingsStrategySection(props: {
                 prev
                   ? {
                       ...prev,
-                      rebalanceStrategy: { ...prev.rebalanceStrategy, autoGenerateEnabled: value },
+                      rebalanceStrategy: {
+                        ...prev.rebalanceStrategy,
+                        autoGenerateEnabled: value,
+                        ...(value ? {} : { autoExecuteEnabled: false }),
+                      },
                     }
                   : prev,
               )
@@ -246,6 +250,77 @@ export function SettingsStrategySection(props: {
           >
             自动模式（自动生成再平衡建议）
           </CheckboxRow>
+
+          {config.rebalanceStrategy.autoGenerateEnabled && (
+            <div style={{ gridColumn: "1 / -1", marginTop: -4 }}>
+              <div style={{
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: "12px 16px",
+                background: "rgba(8,12,20,0.3)",
+              }}>
+                <CheckboxRow
+                  checked={config.rebalanceStrategy.autoExecuteEnabled ?? false}
+                  onChange={(value) =>
+                    setConfig((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            rebalanceStrategy: {
+                              ...prev.rebalanceStrategy,
+                              autoExecuteEnabled: value,
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                >
+                  自动驾驶（风控通过后自动执行调仓）
+                </CheckboxRow>
+
+                {config.rebalanceStrategy.autoExecuteEnabled && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                      <div>
+                        <FieldLabel>单次执行上限 (% NAV)</FieldLabel>
+                        <NumberInput
+                          value={config.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10}
+                          min={1}
+                          max={50}
+                          step={1}
+                          onChange={(value) =>
+                            setConfig((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    rebalanceStrategy: {
+                                      ...prev.rebalanceStrategy,
+                                      autoExecuteMaxSinglePct: Math.max(1, Math.min(50, value || 10)),
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div style={{
+                      marginTop: 10,
+                      padding: "8px 12px",
+                      background: "rgba(234, 179, 8, 0.08)",
+                      border: "1px solid rgba(234, 179, 8, 0.2)",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                      color: "var(--muted)",
+                    }}>
+                      自动驾驶开启后，系统将在 cron 触发生成提案并通过风控检查后自动执行交易，无需手动确认。执行结果会通过已配置的通知渠道推送。
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div style={{ gridColumn: "1 / -1" }}>
             <FieldLabel>AI 关注重点</FieldLabel>

@@ -4,19 +4,19 @@ import { useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Bot, RefreshCw } from "lucide-react";
 
-import { useWorkbenchPageModel } from "@/app/daa/dashboard/_hooks/useWorkbenchPageModel";
+import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { useTodayDecision } from "@/app/daa/dashboard/_hooks/useTodayDecision";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
-import { WorkbenchNotificationBar } from "@/app/daa/dashboard/workbench/_components/WorkbenchNotificationBar";
-import { WorkbenchMarketIntel } from "@/app/daa/dashboard/workbench/_components/WorkbenchMarketIntel";
-import { WorkbenchDialogs } from "@/app/daa/dashboard/workbench/_components/WorkbenchDialogs";
+import { DashboardNotificationBar } from "@/app/daa/dashboard/workbench/_components/DashboardNotificationBar";
+import { MarketIntel } from "@/app/daa/dashboard/workbench/_components/MarketIntel";
+import { DashboardDialogs } from "@/app/daa/dashboard/workbench/_components/DashboardDialogs";
 import { ActionWorkflow } from "@/app/daa/dashboard/today/_components/workflow/ActionWorkflow";
 import { QuickConfigPopover } from "./QuickConfigPopover";
 
 export default function RebalancePageClient() {
-  const wbModel = useWorkbenchPageModel();
+  const wbModel = useDashboardPageModel();
   const today = useTodayDecision();
   const searchParams = useSearchParams();
   const appliedCycleIdRef = useRef<string | null>(null);
@@ -42,7 +42,7 @@ export default function RebalancePageClient() {
 
   return (
     <div className="space-y-4">
-      <WorkbenchNotificationBar
+      <DashboardNotificationBar
         error={wbModel.error}
         authRequired={wbModel.authRequired}
         bootstrap={wbModel.bootstrap}
@@ -98,7 +98,7 @@ export default function RebalancePageClient() {
       {/* 市场情报（调仓时看市场环境） */}
       {wbModel.bootstrap ? (
         <SectionErrorBoundary sectionName="市场情报">
-          <WorkbenchMarketIntel
+          <MarketIntel
             marketContext={wbModel.bootstrap.marketContext ?? null}
             signals={wbModel.signals || []}
             currentCycle={wbModel.rebalanceSectionProps?.currentCycle ?? null}
@@ -106,7 +106,7 @@ export default function RebalancePageClient() {
         </SectionErrorBoundary>
       ) : null}
 
-      <WorkbenchDialogs {...wbModel.dialogProps} />
+      <DashboardDialogs {...wbModel.dialogProps} />
     </div>
   );
 }

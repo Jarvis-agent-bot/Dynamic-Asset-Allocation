@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
 
-import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/workbench/workbenchPageTypes";
+import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import {
   executeWorkbenchRebalanceCycle,
   runWorkbenchRiskCheck,
@@ -15,7 +15,7 @@ function isExecutableCycleStatus(status: RebalanceCycle["status"]): boolean {
   return status === "generated" || status === "reviewing";
 }
 
-export function useWorkbenchExecutionFlow(input: {
+export function useExecutionFlow(input: {
   currentCycle: RebalanceCycle | null;
   currentRiskCheck: PreTradeRiskCheck | null;
   selectedProposalCount: number;
