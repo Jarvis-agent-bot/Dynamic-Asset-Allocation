@@ -705,6 +705,8 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       timezone: String(rebalanceStrategy.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
       analysisFocus: String(rebalanceStrategy.analysisFocus || fallback.rebalanceStrategy.analysisFocus).trim() || fallback.rebalanceStrategy.analysisFocus,
       autoGenerateEnabled: toBool(rebalanceStrategy.autoGenerateEnabled, fallback.rebalanceStrategy.autoGenerateEnabled),
+      autoExecuteEnabled: toBool(rebalanceStrategy.autoExecuteEnabled, fallback.rebalanceStrategy.autoExecuteEnabled ?? false),
+      autoExecuteMaxSinglePct: clamp(Number(rebalanceStrategy.autoExecuteMaxSinglePct) || (fallback.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10), 1, 50),
     },
     dataSources: {
       hfFund: {
