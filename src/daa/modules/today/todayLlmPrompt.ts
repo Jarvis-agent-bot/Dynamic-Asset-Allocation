@@ -144,10 +144,19 @@ export async function generateTodayDecision(ctx: TodayDecisionContext): Promise<
     }
 
     const prompt = buildPrompt(ctx);
-    const { text } = await callLlm(config, prompt);
+    const { text, raw } = await callLlm(config, prompt);
+
+    // 调试日志：输出 LLM 原始返回前 500 字符
+    console.log("[todayLlm] model:", config.model, "text.length:", text.length, "text.preview:", text.slice(0, 500));
+    if (!text) {
+      const rawStr = JSON.stringify(raw).slice(0, 500);
+      console.log("[todayLlm] empty text, raw:", rawStr);
+    }
+
     const parsed = parseLlmResponse(text);
 
     if (!parsed) {
+      console.log("[todayLlm] parse failed, full text:", text.slice(0, 1000));
       return buildDegradedOutput("LLM 输出格式无法解析", now);
     }
 
