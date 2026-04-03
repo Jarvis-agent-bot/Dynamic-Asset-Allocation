@@ -990,6 +990,7 @@ function MobileAssetCard(props: {
   onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
   onOpenCalibration: (row: AssetUniverseView) => void;
   onToggleInlineInsights: (row: AssetUniverseView) => void;
+  onViewChart: (row: AssetUniverseView) => void;
   onSubmitLlmFeedback: (input: { contextId: string; type: "insight"; score: WorkbenchLlmFeedbackScore }) => void;
   onOpenFusionBreakdown: (assetKey: string) => void;
 }) {
@@ -1059,6 +1060,9 @@ function MobileAssetCard(props: {
             <DropdownMenuLabel className="text-xs text-[var(--faint)]">低频操作</DropdownMenuLabel>
             <DropdownMenuItem onClick={() => props.onToggleInlineInsights(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
               {props.expanded ? "收起详情" : "展开详情"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => props.onViewChart(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
+              K 线图表
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => void props.onToggleBasket(row, !inBasket)}
@@ -1132,6 +1136,7 @@ function MobileAssetCardList(props: {
   onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
   onOpenCalibration: (row: AssetUniverseView) => void;
   onToggleInlineInsights: (row: AssetUniverseView) => void;
+  onViewChart: (row: AssetUniverseView) => void;
   onSubmitLlmFeedback: (input: { contextId: string; type: "insight"; score: WorkbenchLlmFeedbackScore }) => void;
   onOpenFusionBreakdown: (assetKey: string) => void;
   hasKeyword: boolean;
@@ -1187,6 +1192,7 @@ function MobileAssetCardList(props: {
               onRemoveFromWatchlist={props.onRemoveFromWatchlist}
               onOpenCalibration={props.onOpenCalibration}
               onToggleInlineInsights={props.onToggleInlineInsights}
+              onViewChart={props.onViewChart}
               onSubmitLlmFeedback={props.onSubmitLlmFeedback}
               onOpenFusionBreakdown={props.onOpenFusionBreakdown}
             />
@@ -1213,6 +1219,7 @@ export default function AssetUniverseTable(props: {
   onToggleBasket: (row: AssetUniverseView, nextInBasket: boolean) => Promise<void>;
   onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
   onOpenCalibration: (row: AssetUniverseView) => void;
+  onViewChart?: (row: AssetUniverseView) => void;
   expandedInsightKeys: Record<string, boolean>;
   insightLoadingByAssetKey: Record<string, boolean>;
   insightErrorByAssetKey: Record<string, string>;
@@ -1542,6 +1549,7 @@ export default function AssetUniverseTable(props: {
           onRemoveFromWatchlist={props.onRemoveFromWatchlist}
           onOpenCalibration={props.onOpenCalibration}
           onToggleInlineInsights={props.onToggleInlineInsights}
+          onViewChart={props.onViewChart ?? (() => {})}
           onSubmitLlmFeedback={props.onSubmitLlmFeedback}
           onOpenFusionBreakdown={handleOpenFusionBreakdown}
           hasKeyword={hasKeyword}
@@ -1778,6 +1786,11 @@ export default function AssetUniverseTable(props: {
                               <DropdownMenuItem onClick={() => props.onToggleInlineInsights(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
                                 {expanded ? "收起详情" : "展开详情"}
                               </DropdownMenuItem>
+                              {props.onViewChart && (
+                                <DropdownMenuItem onClick={() => props.onViewChart?.(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
+                                  K 线图表
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onClick={() => void props.onToggleBasket(row, !inBasket)}
                                 disabled={actionBusy || !row.watchEnabled}

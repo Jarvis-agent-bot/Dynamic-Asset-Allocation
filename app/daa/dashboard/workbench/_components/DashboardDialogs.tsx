@@ -16,11 +16,17 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
 
+import { AssetDetailDialog } from "./AssetDetailDialog";
 import MarketOrderDialog from "./MarketOrderDialog";
 
 export function DashboardDialogs(props: DashboardPageModel["dialogProps"]) {
   return (
     <>
+      <AssetDetailDialog
+        draft={props.assetDetail}
+        onClose={() => props.setAssetDetail(null)}
+      />
+
       <MarketOrderDialog
         open={Boolean(props.orderDraft)}
         row={props.orderDraft?.row || null}

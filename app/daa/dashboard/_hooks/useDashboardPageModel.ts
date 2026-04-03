@@ -9,6 +9,7 @@ import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useDashboardModel } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetDetailDraft } from "@/app/daa/dashboard/workbench/_components/AssetDetailDialog";
 
 export type PendingConfirm =
   | { type: "cancelCycle" }
@@ -51,6 +52,7 @@ export function useDashboardPageModel(input: {
 
   const [busy, setBusy] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+  const [assetDetail, setAssetDetail] = useState<AssetDetailDraft | null>(null);
   const rawAssetRows = useMemo(() => bootstrap?.assetUniverse ?? [], [bootstrap?.assetUniverse]);
 
   // 将 SSE 实时价格合并到 assetRows（覆盖 lastPrice + 添加 priceDelta/priceDirection）
@@ -177,6 +179,8 @@ export function useDashboardPageModel(input: {
     setPendingConfirm,
     onConfirmCancelCycle: rebalanceFlow.handleCancelCycle,
     onConfirmRemoveFromWatchlist: assetActions.tableProps.onRemoveFromWatchlist,
+    assetDetail,
+    setAssetDetail,
   };
 
   const overriddenTableProps = {
@@ -184,6 +188,9 @@ export function useDashboardPageModel(input: {
     onRemoveFromWatchlist: (row: AssetUniverseView) => {
       setPendingConfirm({ type: "removeWatchlist", row });
       return Promise.resolve();
+    },
+    onViewChart: (row: AssetUniverseView) => {
+      setAssetDetail({ symbol: row.symbol, market: row.market, assetKey: row.assetKey });
     },
   };
 

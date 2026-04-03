@@ -126,6 +126,7 @@ function createModel(overrides: DashboardPageModelOverrides = {}): DashboardPage
     onToggleBasket: vi.fn(async () => undefined),
     onRemoveFromWatchlist: vi.fn(async () => undefined),
     onOpenCalibration: vi.fn(),
+    onViewChart: vi.fn(),
     expandedInsightKeys: {},
     insightLoadingByAssetKey: {},
     insightErrorByAssetKey: {},
@@ -206,6 +207,8 @@ function createModel(overrides: DashboardPageModelOverrides = {}): DashboardPage
     setPendingConfirm: vi.fn(),
     onConfirmCancelCycle: vi.fn(async () => undefined),
     onConfirmRemoveFromWatchlist: vi.fn(async () => undefined),
+    assetDetail: null,
+    setAssetDetail: vi.fn(),
     ...dialogPropsOverride,
   };
 

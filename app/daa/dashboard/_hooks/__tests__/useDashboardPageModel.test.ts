@@ -37,6 +37,7 @@ function createAssetActionsMock() {
       onToggleBasket: vi.fn(),
       onRemoveFromWatchlist: vi.fn(),
       onOpenCalibration: vi.fn(),
+      onViewChart: vi.fn(),
       expandedInsightKeys: {},
       insightLoadingByAssetKey: {},
       insightErrorByAssetKey: {},

@@ -175,8 +175,10 @@ export async function POST(req: Request) {
     if (stopLossPct > 0 || takeProfitPct > 0) {
       for (const asset of bootstrap.assetUniverse) {
         if (asset.holdingQty <= 0 || !asset.costBasis || asset.costBasis <= 0) continue;
+        // costBasis 是总成本，需要除以持仓量得到每股成本
+        const perShareCost = asset.costBasis / asset.holdingQty;
         const unrealizedPnlPct =
-          ((asset.lastPrice - asset.costBasis) / asset.costBasis) * 100;
+          ((asset.lastPrice - perShareCost) / perShareCost) * 100;
 
         if (stopLossPct > 0 && unrealizedPnlPct < -(stopLossPct * 100)) {
           riskTriggeredAssets.push({
