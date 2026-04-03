@@ -114,8 +114,10 @@ export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
     if (signalConflict && signal) {
       const penaltyFactor = signal.confidencePct >= 65 ? 0.35 : 0.55;
       multiplier *= penaltyFactor;
+      const sideZh = proposal.side === "BUY" ? "买入" : "卖出";
+      const actionZh = signal.action === "open_or_add" ? "可建仓/加仓" : signal.action === "reduce_or_avoid" ? "减仓/回避" : "观望";
       conflictFlags.push(
-        `信号冲突：漂移方向 ${proposal.side}，信号建议 ${signal.action}（评分 ${signal.finalScorePct.toFixed(0)}，置信度 ${signal.confidencePct.toFixed(0)}）`,
+        `信号冲突：漂移方向 ${sideZh}，信号建议 ${actionZh}（评分 ${signal.finalScorePct.toFixed(0)}，置信度 ${signal.confidencePct.toFixed(0)}）`,
       );
     }
 

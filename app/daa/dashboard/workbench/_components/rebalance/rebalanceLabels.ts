@@ -81,3 +81,34 @@ export function macroCyclePhaseLabel(phase: string | null | undefined): string {
   if (phase === "deflation") return "衰退";
   return "待定";
 }
+
+export function signalActionLabel(action: string | null | undefined): string {
+  if (action === "open_or_add") return "可建仓/加仓";
+  if (action === "watch") return "观望";
+  if (action === "reduce_or_avoid") return "减仓/回避";
+  return action || "—";
+}
+
+export function signalActionTone(action: string | null | undefined): DaaSurfaceTone {
+  if (action === "open_or_add") return "green";
+  if (action === "reduce_or_avoid") return "red";
+  if (action === "watch") return "amber";
+  return "slate";
+}
+
+export function llmAdjustmentLabel(adj: string | null | undefined): string {
+  if (adj === "execute") return "建议执行";
+  if (adj === "skip") return "建议跳过";
+  if (adj === "reduce_size") return "建议缩减";
+  if (adj === "increase_priority") return "建议加优";
+  return adj || "—";
+}
+
+export function stanceLabel(stance: string | null | undefined): string {
+  if (stance === "bullish") return "看多";
+  if (stance === "bearish") return "看空";
+  if (stance === "neutral") return "中性";
+  if (stance === "strong") return "强势";
+  if (stance === "weak") return "弱势";
+  return stance || "—";
+}

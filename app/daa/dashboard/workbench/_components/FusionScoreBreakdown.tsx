@@ -2,6 +2,7 @@
 
 import { Dialog } from "@/components/ui/dialog";
 import { DaaSurfaceDialogShell, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { signalActionLabel } from "@/app/daa/dashboard/workbench/_components/rebalance/rebalanceLabels";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -210,7 +211,7 @@ export function FusionScoreBreakdown({
                   {actionMeta.label}
                 </DaaSurfaceStatusPill>
                 <span className="text-xs text-[var(--muted)]">
-                  原始动作：{action || "-"}
+                  信号建议：{signalActionLabel(action)}
                 </span>
               </div>
               <div className="text-[11px] leading-5 text-[var(--muted)]">

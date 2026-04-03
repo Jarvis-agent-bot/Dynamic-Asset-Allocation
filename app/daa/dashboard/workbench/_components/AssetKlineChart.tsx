@@ -121,7 +121,11 @@ export function AssetKlineChart({
       const res = await fetch(`/api/daa/market/yfinance/price-series?${qs}`, {
         cache: "no-store",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("登录已过期，请刷新页面重新登录");
+        if (res.status === 502) throw new Error("行情数据源暂时不可用，请稍后重试");
+        throw new Error(`请求失败 (${res.status})`);
+      }
       const json = await res.json();
       const data = json?.data ?? json;
       const series: PriceBar[] = Array.isArray(data.series) ? data.series : [];
