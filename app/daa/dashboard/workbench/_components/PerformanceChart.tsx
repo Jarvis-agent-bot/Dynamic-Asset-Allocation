@@ -105,6 +105,10 @@ function normalizeSnapshots(
     }
   }
 
+  // 跳过 equity=0 的无效快照（如 ledger_reset 初始状态）
+  const meaningful = filtered.filter((s) => s.totalEquity > 0);
+  if (meaningful.length === 0) return [];
+
   // 构建按时间排序的现金流 map（按日期聚合净现金流）
   const cfMap = new Map<string, number>();
   if (cashFlowEvents && cashFlowEvents.length > 0) {
@@ -119,9 +123,9 @@ function normalizeSnapshots(
   // TWR 计算：对每个快照计算累计 TWR 因子
   // cumFactor 从 1 开始，代表每单位初始投资的增长倍数
   let cumFactor = 1;
-  let prevEquity = filtered[0].totalEquity;
+  let prevEquity = meaningful[0].totalEquity;
 
-  return filtered.map((snap, i) => {
+  return meaningful.map((snap, i) => {
     const dateKey = snap.ts.slice(0, 10);
 
     if (i === 0) {
@@ -141,9 +145,10 @@ function normalizeSnapshots(
     const netCashFlow = cfMap.get(dateKey) ?? 0;
 
     // 子区间收益率：(当前 equity - 本期净现金流) / 上期 equity - 1
-    // 含义：如果没有现金流入，本期 equity 应该是多少
+    // 如果没有现金流入，本期 equity 应该是多少
     const adjEquity = snap.totalEquity - netCashFlow;
-    const subReturn = prevEquity > 0 ? adjEquity / prevEquity : 1;
+    // 安全除法：prevEquity=0 或 adjEquity<=0 时保持 cumFactor 不变
+    const subReturn = prevEquity > 0 && adjEquity > 0 ? adjEquity / prevEquity : 1;
     cumFactor *= subReturn;
 
     // 更新 prevEquity 为本期实际 equity（包含现金流后的值）
