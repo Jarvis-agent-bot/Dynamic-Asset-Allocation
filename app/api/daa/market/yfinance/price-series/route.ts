@@ -52,14 +52,15 @@ export async function GET(req: Request) {
     }
 
     const period1 = start ? epochSecondsUtcStart(start) : NaN;
-    const endExclusiveIso = end ? addDaysIsoUtc(end, 1) : "";
-    const period2 = endExclusiveIso ? epochSecondsUtcStart(endExclusiveIso) : NaN;
+    // 当有 start 但没 end 时，默认用明天作为 end（避免 Yahoo Finance 400 错误）
+    const effectiveEnd = end ? addDaysIsoUtc(end, 1) : start ? addDaysIsoUtc(new Date().toISOString().slice(0, 10), 1) : "";
+    const period2 = effectiveEnd ? epochSecondsUtcStart(effectiveEnd) : NaN;
 
     const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
     upstream.searchParams.set("interval", "1d");
     upstream.searchParams.set("events", "div|split");
     if (start) upstream.searchParams.set("period1", String(period1));
-    if (endExclusiveIso) upstream.searchParams.set("period2", String(period2));
+    if (effectiveEnd) upstream.searchParams.set("period2", String(period2));
 
     const response = await fetch(upstream, {
       method: "GET",
