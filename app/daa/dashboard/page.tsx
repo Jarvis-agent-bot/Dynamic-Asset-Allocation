@@ -18,9 +18,6 @@ export default function DaaDashboardPage({ searchParams }: Props) {
     redirect("/daa/dashboard/rebalance");
   }
 
-  // 默认 → today
-  const params = new URLSearchParams();
-  if (section && section !== "cockpit") params.set("section", section);
-  const qs = params.toString();
-  redirect(`/daa/dashboard/today${qs ? `?${qs}` : ""}`);
+  // 默认 → 持仓页
+  redirect("/daa/dashboard/portfolio");
 }

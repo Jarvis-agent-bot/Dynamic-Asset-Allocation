@@ -13,25 +13,23 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
-type NavKey = "today" | "portfolio" | "rebalance" | "trades" | "strategy-lab" | "settings";
+type NavKey = "portfolio" | "rebalance" | "trades" | "strategy-lab" | "settings";
 type IconType = ComponentType<{ className?: string }>;
 type NavItem = { key: NavKey; href: string; label: string; shortLabel: string; Icon: IconType };
 
 function useActiveNav(): NavKey | null {
   const pathname = usePathname() || "";
-  if (pathname.startsWith("/daa/dashboard/today")) return "today";
-  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
+  if (pathname.startsWith("/daa/dashboard/portfolio") || pathname.startsWith("/daa/dashboard/today")) return "portfolio";
   if (pathname.startsWith("/daa/dashboard/rebalance")) return "rebalance";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
-  return "today";
+  return "portfolio";
 }
 
 function useNavItems(): NavItem[] {
   return useMemo(
     () => [
-      { key: "today" as const, href: "/daa/dashboard/today", label: "投委会", shortLabel: "投委会", Icon: Gauge },
       { key: "portfolio" as const, href: "/daa/dashboard/portfolio", label: "持仓", shortLabel: "持仓", Icon: Briefcase },
       { key: "rebalance" as const, href: "/daa/dashboard/rebalance", label: "调仓", shortLabel: "调仓", Icon: RefreshCw },
       { key: "trades" as const, href: "/daa/dashboard/trades", label: "交易记录", shortLabel: "交易", Icon: ClipboardList },

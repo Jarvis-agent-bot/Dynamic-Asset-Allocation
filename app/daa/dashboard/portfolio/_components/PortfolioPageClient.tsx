@@ -17,9 +17,12 @@ import { PortfolioStatus } from "@/app/daa/dashboard/workbench/_components/Portf
 import { ActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/ActiveTabPanel";
 import { DashboardDialogs } from "@/app/daa/dashboard/workbench/_components/DashboardDialogs";
 import { resolveTabFromLocation } from "@/app/daa/dashboard/workbench/_components/dashboardNavigation";
+import { TodayBrief } from "@/app/daa/dashboard/today/_components/TodayBrief";
+import { useTodayDecision } from "@/app/daa/dashboard/_hooks/useTodayDecision";
 
 export default function PortfolioPageClient(props: { initialTab?: string }) {
   const wbModel = useDashboardPageModel({ initialTab: props.initialTab });
+  const today = useTodayDecision();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,6 +92,20 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
             refreshing={wbModel.refreshing}
             priceStreamConnected={wbModel.priceStreamConnected}
             onRefresh={() => void wbModel.loadBootstrap(true)}
+          />
+        </SectionErrorBoundary>
+      ) : null}
+
+      {/* AI 决策简报 */}
+      {wbModel.bootstrap && wbModel.totalEquity > 0 ? (
+        <SectionErrorBoundary sectionName="AI 决策">
+          <TodayBrief
+            model={today.model}
+            loading={today.loading}
+            refreshing={today.refreshing}
+            error={today.error}
+            onRefresh={today.handleRefresh}
+            onDecision={today.handleDecision}
           />
         </SectionErrorBoundary>
       ) : null}

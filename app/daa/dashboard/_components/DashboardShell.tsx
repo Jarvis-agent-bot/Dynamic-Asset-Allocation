@@ -16,13 +16,9 @@ type Props = {
 };
 
 const SECTION_META: Record<string, { label: string; hint: string }> = {
-  today: {
-    label: "投委会",
-    hint: "今日决策摘要 — 今天要不要动作？",
-  },
   portfolio: {
     label: "持仓",
-    hint: "资产配置与观察列表管理",
+    hint: "资产配置、AI 决策与观察列表管理",
   },
   rebalance: {
     label: "调仓",
@@ -45,17 +41,16 @@ const SECTION_META: Record<string, { label: string; hint: string }> = {
 const DEFAULT_SECTION_META = { label: "控制台", hint: "" };
 
 function resolveSection(pathname: string): string {
-  if (pathname.startsWith("/daa/dashboard/today")) return "today";
-  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
+  if (pathname.startsWith("/daa/dashboard/portfolio") || pathname.startsWith("/daa/dashboard/today")) return "portfolio";
   if (pathname.startsWith("/daa/dashboard/rebalance")) return "rebalance";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
   if (pathname.startsWith("/daa/dashboard/settings")) return "settings";
-  return "today";
+  return "portfolio";
 }
 
 export default function DashboardShell({ children }: Props) {
-  const pathname = usePathname() || "/daa/dashboard/today";
+  const pathname = usePathname() || "/daa/dashboard/portfolio";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [hydrated, setHydrated] = useState(false);
 
@@ -94,7 +89,7 @@ export default function DashboardShell({ children }: Props) {
           <div className={cn("border-b border-[var(--border)]", sidebarCollapsed ? "px-2 py-3" : "px-3 py-3")}>
             <div className={cn("flex items-center", sidebarCollapsed ? "flex-col gap-2" : "gap-2.5")}>
               <Link
-                href="/daa/dashboard/today"
+                href="/daa/dashboard/portfolio"
                 aria-label="DAA dashboard"
                 className="group relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ fontFamily: "var(--font-mono)" }}
