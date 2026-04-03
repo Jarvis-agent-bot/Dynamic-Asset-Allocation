@@ -86,7 +86,7 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
             frozenCashValue={wbModel.frozenCashValue}
             equityDelta={wbModel.equityDelta}
             snapshots={wbModel.snapshots || []}
-            cashFlowEvents={wbModel.cashLedger?.filter((e) => e.side === "deposit" || e.side === "withdraw").map((e) => ({ ts: e.ts, side: e.side as "deposit" | "withdraw", amount: e.amountInAccountBase ?? e.amount })) ?? []}
+            cashFlowEvents={wbModel.cashLedger?.filter((e) => (e.side === "deposit" || e.side === "withdraw") && e.entryKind === "manual").map((e) => ({ ts: e.ts, side: e.side as "deposit" | "withdraw", amount: e.amountInAccountBase ?? e.amount })) ?? []}
             allocationSummary={wbModel.allocationSummary}
             loading={wbModel.loading && !wbModel.bootstrap}
             refreshing={wbModel.refreshing}

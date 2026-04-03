@@ -122,14 +122,21 @@ function normalizeSnapshots(
 
   // TWR 计算：对每个快照计算累计 TWR 因子
   // cumFactor 从 1 开始，代表每单位初始投资的增长倍数
+  //
+  // 关键：现金流只在对应日期的第一次出现时扣除（"消耗"模式），
+  // 避免同一天多条快照重复扣除。第一条快照的日期也不扣除
+  // （因为第一条快照本身已经包含了入金后的状态）。
   let cumFactor = 1;
   let prevEquity = meaningful[0].totalEquity;
+  const firstDate = meaningful[0].ts.slice(0, 10);
+  const consumedDates = new Set<string>();
+  // 第一天的现金流不扣除（第一条快照就是入金后的基准）
+  consumedDates.add(firstDate);
 
   return meaningful.map((snap, i) => {
     const dateKey = snap.ts.slice(0, 10);
 
     if (i === 0) {
-      // 第一个点：基准 100
       const point: NormalizedPoint = {
         label: snap.ts.slice(5, 10),
         date: dateKey,
@@ -141,17 +148,17 @@ function normalizeSnapshots(
       return point;
     }
 
-    // 本区间的净现金流（在本日期发生的入金/出金）
-    const netCashFlow = cfMap.get(dateKey) ?? 0;
+    // 仅对该日期首次出现时扣除现金流，避免同一天多条快照重复扣除
+    let netCashFlow = 0;
+    if (!consumedDates.has(dateKey) && cfMap.has(dateKey)) {
+      netCashFlow = cfMap.get(dateKey)!;
+      consumedDates.add(dateKey);
+    }
 
-    // 子区间收益率：(当前 equity - 本期净现金流) / 上期 equity - 1
-    // 如果没有现金流入，本期 equity 应该是多少
+    // 子区间收益率：(当前 equity - 本期净现金流) / 上期 equity
     const adjEquity = snap.totalEquity - netCashFlow;
-    // 安全除法：prevEquity=0 或 adjEquity<=0 时保持 cumFactor 不变
     const subReturn = prevEquity > 0 && adjEquity > 0 ? adjEquity / prevEquity : 1;
     cumFactor *= subReturn;
-
-    // 更新 prevEquity 为本期实际 equity（包含现金流后的值）
     prevEquity = snap.totalEquity;
 
     const point: NormalizedPoint = {
