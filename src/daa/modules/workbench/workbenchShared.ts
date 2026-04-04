@@ -126,8 +126,11 @@ function getZonedYmd(date: Date, timeZone: string): {
     };
 }
 
-function isCalendarMonthDue(month: number, frequency: "monthly" | "quarterly" | "semi_annual" | "annual"): boolean {
-    if (frequency === "monthly")
+type CalendarFrequency = "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
+
+function isCalendarMonthDue(month: number, frequency: CalendarFrequency): boolean {
+    // every_3_days 和 weekly 不依赖月份判断，始终返回 true（由 nextCalendarDueDate 控制实际间隔）
+    if (frequency === "every_3_days" || frequency === "weekly" || frequency === "monthly")
         return true;
     if (frequency === "quarterly")
         return month === 1 || month === 4 || month === 7 || month === 10;
@@ -139,9 +142,23 @@ function isCalendarMonthDue(month: number, frequency: "monthly" | "quarterly" | 
 function buildCalendarPeriodKey(input: {
     date: Date;
     timeZone: string;
-    frequency: "monthly" | "quarterly" | "semi_annual" | "annual";
+    frequency: CalendarFrequency;
 }): string {
-    const { year, month } = getZonedYmd(input.date, input.timeZone);
+    const { year, month, day } = getZonedYmd(input.date, input.timeZone);
+    if (input.frequency === "every_3_days") {
+        // 按 3 天一个周期，用 epoch day 整除 3
+        const epochDay = Math.floor(input.date.getTime() / 86_400_000);
+        return `3d-${Math.floor(epochDay / 3)}`;
+    }
+    if (input.frequency === "weekly") {
+        // ISO 周号
+        const d = new Date(Date.UTC(year, month - 1, day));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
+        return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+    }
     if (input.frequency === "annual")
         return `${year}`;
     if (input.frequency === "semi_annual")
@@ -152,11 +169,28 @@ function buildCalendarPeriodKey(input: {
 }
 
 function nextCalendarDueDate(input: {
-    frequency: "monthly" | "quarterly" | "semi_annual" | "annual";
+    frequency: CalendarFrequency;
     dayOfMonth: number;
     nowMs?: number;
 }): string {
     const now = new Date(input.nowMs ?? Date.now());
+
+    // every_3_days: 从当前时间起每 3 天
+    if (input.frequency === "every_3_days") {
+        const candidate = new Date(now.getTime() + 3 * 86_400_000);
+        candidate.setUTCHours(0, 0, 0, 0);
+        return toIsoByMs(candidate.getTime());
+    }
+
+    // weekly: 下一个周一（dayOfMonth 被忽略）
+    if (input.frequency === "weekly") {
+        const candidate = new Date(now.getTime());
+        candidate.setUTCHours(0, 0, 0, 0);
+        const daysUntilMonday = (8 - (candidate.getUTCDay() || 7)) % 7 || 7;
+        candidate.setUTCDate(candidate.getUTCDate() + daysUntilMonday);
+        return toIsoByMs(candidate.getTime());
+    }
+
     const stepMonths = input.frequency === "quarterly"
         ? 3
         : (input.frequency === "semi_annual" ? 6 : (input.frequency === "annual" ? 12 : 1));

@@ -80,7 +80,7 @@ export type DaaSystemConfig = {
   rebalanceStrategy: {
     calendar: {
       enabled: boolean;
-      frequency: "monthly" | "quarterly" | "semi_annual" | "annual";
+      frequency: "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
       dayOfMonth: number;
     };
     drift: {
@@ -528,6 +528,8 @@ function normalizeCalendarFrequency(
   fallback: DaaSystemConfig["rebalanceStrategy"]["calendar"]["frequency"],
 ): DaaSystemConfig["rebalanceStrategy"]["calendar"]["frequency"] {
   const text = String(value || "").trim().toLowerCase();
+  if (text === "every_3_days" || text === "every_3days" || text === "3days") return "every_3_days";
+  if (text === "weekly") return "weekly";
   if (text === "quarterly") return "quarterly";
   if (text === "semi_annual" || text === "semi-annual" || text === "semiannual") return "semi_annual";
   if (text === "annual" || text === "yearly") return "annual";

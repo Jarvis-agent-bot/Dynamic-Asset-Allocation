@@ -61,6 +61,8 @@ export function SettingsStrategySection(props: {
                 )
               }
             >
+              <option value="every_3_days">每三天</option>
+              <option value="weekly">每周</option>
               <option value="monthly">每月</option>
               <option value="quarterly">每季度</option>
               <option value="semi_annual">每半年</option>

@@ -222,7 +222,7 @@ type RebalanceCashConfig = {
 export type RebalanceStrategyConfig = {
   calendar: {
     enabled: boolean;
-    frequency: "monthly" | "quarterly" | "semi_annual" | "annual";
+    frequency: "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
     dayOfMonth: number;
   };
   drift: {
