@@ -15,6 +15,22 @@ const nextConfig = {
   // both `/foo` and `/foo/` render 200.
   trailingSlash: false,
   skipTrailingSlashRedirect: true,
+
+  // 开发环境将 API 请求代理到线上服务器（beforeFiles 优先于本地 route handler）
+  async rewrites() {
+    const apiTarget = process.env.DAA_API_PROXY_TARGET;
+    if (!apiTarget) return [];
+    return {
+      beforeFiles: [
+        {
+          source: "/api/daa/:path*",
+          destination: `${apiTarget}/api/daa/:path*`,
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
 };
 
 if (distDir) {

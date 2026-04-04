@@ -38,15 +38,16 @@ export function TargetWeightSummary(props: { rows: AssetRow[] }) {
     [props.rows],
   );
 
+  // targetWeightHint 是 0~1 小数形式，需要 ×100 转为百分比
   const totalWeight = useMemo(
-    () => basketRows.reduce((sum, r) => sum + r.targetWeightHint, 0),
+    () => basketRows.reduce((sum, r) => sum + r.targetWeightHint * 100, 0),
     [basketRows],
   );
 
   const pieData = useMemo(() => {
     const items = basketRows.map((r) => ({
       name: r.symbol,
-      value: r.targetWeightHint,
+      value: r.targetWeightHint * 100,
     }));
     const remaining = 100 - totalWeight;
     if (remaining > 0.5) {

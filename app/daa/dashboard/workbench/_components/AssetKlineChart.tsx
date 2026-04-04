@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type CandlestickData,
   type HistogramData,
   type LineData,
+  type IPriceLine,
   type Time,
   ColorType,
   CrosshairMode,
@@ -114,14 +117,27 @@ function formatVolume(v: number): string {
 /*  组件                                                               */
 /* ------------------------------------------------------------------ */
 
+export type KlineTradeMarker = {
+  date: string;
+  side: "BUY" | "SELL";
+  qty: number;
+  price: number;
+};
+
 export function AssetKlineChart({
   symbol,
   market,
   className,
+  tradeMarkers,
+  costBasisPerShare,
 }: {
   symbol: string;
   market: string;
   className?: string;
+  /** 交易标记（买卖点） */
+  tradeMarkers?: KlineTradeMarker[];
+  /** 成本价（单价），用于画水平线 */
+  costBasisPerShare?: number | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -131,6 +147,8 @@ export function AssetKlineChart({
   const volumeSeriesRef = useRef<ISeriesApi<any> | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const maSeriesRefs = useRef<ISeriesApi<any>[]>([]);
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const costLineRef = useRef<IPriceLine | null>(null);
 
   const [range, setRange] = useState<RangeKey>("6M");
   const [bars, setBars] = useState<PriceBar[]>([]);
@@ -301,6 +319,11 @@ export function AssetKlineChart({
 
     return () => {
       observer.disconnect();
+      if (markersPluginRef.current) {
+        markersPluginRef.current.detach();
+        markersPluginRef.current = null;
+      }
+      costLineRef.current = null;
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -330,10 +353,81 @@ export function AssetKlineChart({
       }
     });
 
+    // 交易标记（BUY 绿色向上三角 / SELL 红色向下三角）
+    if (markersPluginRef.current) {
+      markersPluginRef.current.detach();
+      markersPluginRef.current = null;
+    }
+    if (tradeMarkers?.length && candleSeriesRef.current) {
+      const barDates = new Set(bars.map((b) => b.date));
+      // 同一天可能有多笔交易，合并显示
+      const dayMap = new Map<string, { buys: number; sells: number }>();
+      for (const m of tradeMarkers) {
+        if (!barDates.has(m.date)) continue;
+        const entry = dayMap.get(m.date) ?? { buys: 0, sells: 0 };
+        if (m.side === "BUY") entry.buys += m.qty;
+        else entry.sells += m.qty;
+        dayMap.set(m.date, entry);
+      }
+      // 交易所风格：小圆点标记在 K 线上方/下方，不显示文字避免遮挡
+      const markerData = [...dayMap.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .flatMap(([date, agg]) => {
+          const out: Array<{
+            time: Time;
+            position: "belowBar" | "aboveBar";
+            color: string;
+            shape: "circle" | "arrowUp" | "arrowDown";
+            size: number;
+            text: string;
+          }> = [];
+          if (agg.buys > 0) {
+            out.push({
+              time: date as Time,
+              position: "belowBar",
+              color: "#22c55e",
+              shape: "circle",
+              size: 0.5,
+              text: `B ${agg.buys.toFixed(2)}`,
+            });
+          }
+          if (agg.sells > 0) {
+            out.push({
+              time: date as Time,
+              position: "aboveBar",
+              color: "#ef4444",
+              shape: "circle",
+              size: 0.5,
+              text: `S ${agg.sells.toFixed(2)}`,
+            });
+          }
+          return out;
+        });
+      if (markerData.length > 0) {
+        markersPluginRef.current = createSeriesMarkers(candleSeriesRef.current, markerData);
+      }
+    }
+
+    // 成本价水平线
+    if (costLineRef.current && candleSeriesRef.current) {
+      candleSeriesRef.current.removePriceLine(costLineRef.current);
+      costLineRef.current = null;
+    }
+    if (costBasisPerShare != null && costBasisPerShare > 0 && candleSeriesRef.current) {
+      costLineRef.current = candleSeriesRef.current.createPriceLine({
+        price: costBasisPerShare,
+        color: "hsl(45 93% 47%)",
+        lineWidth: 1,
+        lineStyle: 2, // Dashed
+        axisLabelVisible: true,
+        title: `成本 ${costBasisPerShare.toFixed(2)}`,
+      });
+    }
+
     if (candles.length > 0) {
       chartRef.current?.timeScale().fitContent();
     }
-  }, [bars, maConfigs]);
+  }, [bars, maConfigs, tradeMarkers, costBasisPerShare]);
 
   // 切换 MA 可见性
   const toggleMA = useCallback((period: number) => {

@@ -5,14 +5,16 @@ import type { DashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboard
 import { cn } from "@/lib/utils";
 
 import { TargetWeightSummary } from "@/app/daa/dashboard/portfolio/_components/TargetWeightSummary";
+import { PortfolioHoldingsList } from "@/app/daa/dashboard/portfolio/_components/PortfolioHoldingsList";
+import { WatchlistItemList } from "@/app/daa/dashboard/portfolio/_components/WatchlistItemList";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import {
   DaaSurfaceEmptyState,
   DaaSurfacePanel,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
+import { WatchlistSearchBar } from "@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar";
 import AssetUniverseTable from "./AssetUniverseTable";
-import WatchlistBuilderPanel from "./WatchlistBuilderPanel";
 import { RiskOverview } from "./RiskOverview";
 import { CashSection } from "./CashSection";
 
@@ -50,15 +52,20 @@ export function ActiveTabPanel(props: {
         ))}
       </div>
 
-      {/* 持仓表 */}
-      {model.activeTab === "positions" ? <AssetUniverseTable {...model.tableProps} view="holdings" /> : null}
+      {/* 持仓列表（OKX 风格） */}
+      {model.activeTab === "positions" ? (
+        <PortfolioHoldingsList
+          rows={model.tableProps.rows}
+          baseCurrency={model.bootstrap?.baseCurrency || "USD"}
+        />
+      ) : null}
 
-      {/* 观察列表 + 添加新标的（直接展示，不折叠） */}
+      {/* 观察列表（OKX 风格） + 搜索添加 */}
       {model.activeTab === "watchlist" ? (
         <div className="space-y-4">
           <TargetWeightSummary rows={model.tableProps.rows} />
-          <AssetUniverseTable {...model.tableProps} view="watchlist" />
-          <WatchlistBuilderPanel {...model.watchlistBuilderProps} />
+          <WatchlistSearchBar {...model.watchlistBuilderProps} />
+          <WatchlistItemList rows={model.tableProps.rows} />
         </div>
       ) : null}
 

@@ -31,6 +31,12 @@ type NormalizedPoint = {
   benchmark?: number; // 基准归一化 %
 };
 
+type EquityPoint = {
+  label: string;
+  date: string;
+  equity: number;
+};
+
 /**
  * 图表配色常量 — 对应 CSS 变量的静态值。
  * Recharts 部分 prop（tick.fill、contentStyle 等）不支持 CSS var()，
@@ -176,14 +182,30 @@ function normalizeSnapshots(
 /*  组件                                                               */
 /* ------------------------------------------------------------------ */
 
+/** 构建实际权益金额曲线（不归一化） */
+function buildEquityCurve(snapshots: Snapshot[], days: number): EquityPoint[] {
+  const sorted = [...snapshots].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+  const cutoff = days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
+  const filtered = cutoff ? sorted.filter((s) => s.ts >= cutoff) : sorted;
+  return filtered
+    .filter((s) => s.totalEquity > 0)
+    .map((s) => ({
+      label: s.ts.slice(5, 10),
+      date: s.ts.slice(0, 10),
+      equity: +s.totalEquity.toFixed(2),
+    }));
+}
+
 export const PerformanceChart = React.memo(function PerformanceChart(props: {
   snapshots: Snapshot[];
   cashFlowEvents?: CashFlowEvent[];
   benchmarkData?: BenchmarkPoint[];
   benchmarkLabel?: string;
   className?: string;
+  /** "equity" = 实际金额曲线（默认），"twr" = TWR 归一化收益率 */
+  mode?: "equity" | "twr";
 }) {
-  const { snapshots, cashFlowEvents, benchmarkData, benchmarkLabel = "SPY", className } = props;
+  const { snapshots, cashFlowEvents, benchmarkData, benchmarkLabel = "SPY", className, mode = "equity" } = props;
   const [range, setRange] = useState<RangeKey>("ALL");
 
   const selectedDays = useMemo(
@@ -191,30 +213,47 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
     [range],
   );
 
-  const data = useMemo(
+  const twrData = useMemo(
     () => normalizeSnapshots(snapshots, selectedDays, benchmarkData, cashFlowEvents),
     [snapshots, selectedDays, benchmarkData, cashFlowEvents],
   );
 
-  const hasBenchmark = useMemo(
-    () => data.some((d) => d.benchmark != null),
-    [data],
+  const equityData = useMemo(
+    () => buildEquityCurve(snapshots, selectedDays),
+    [snapshots, selectedDays],
   );
 
-  // 计算收益率
+  const data = mode === "twr" ? twrData : equityData;
+
+  const hasBenchmark = useMemo(
+    () => mode === "twr" && twrData.some((d) => d.benchmark != null),
+    [mode, twrData],
+  );
+
+  // 计算收益率（TWR 模式）
   const returnPct = useMemo(() => {
-    if (data.length < 2) return null;
-    const last = data[data.length - 1].portfolio;
+    if (mode !== "twr" || twrData.length < 2) return null;
+    const last = twrData[twrData.length - 1].portfolio;
     return +(last - 100).toFixed(2);
-  }, [data]);
+  }, [mode, twrData]);
+
+  // 实际金额变化（equity 模式）
+  const equityChange = useMemo(() => {
+    if (mode !== "equity" || equityData.length < 2) return null;
+    const first = equityData[0].equity;
+    const last = equityData[equityData.length - 1].equity;
+    const change = last - first;
+    const pct = first > 0 ? (change / first) * 100 : 0;
+    return { last, change, pct };
+  }, [mode, equityData]);
 
   const benchmarkReturnPct = useMemo(() => {
-    if (!hasBenchmark || data.length < 2) return null;
-    const withBenchmark = data.filter((d) => d.benchmark != null);
+    if (!hasBenchmark || twrData.length < 2) return null;
+    const withBenchmark = twrData.filter((d) => d.benchmark != null);
     if (withBenchmark.length < 2) return null;
     const last = withBenchmark[withBenchmark.length - 1].benchmark!;
     return +(last - 100).toFixed(2);
-  }, [data, hasBenchmark]);
+  }, [twrData, hasBenchmark]);
 
   if (snapshots.length < 2) {
     return (
@@ -247,7 +286,12 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
           ))}
         </div>
         <div className="flex items-center gap-3">
-          {returnPct !== null && (
+          {mode === "equity" && equityChange ? (
+            <span className={`text-xs font-medium ${equityChange.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              ${equityChange.last.toLocaleString(undefined, { maximumFractionDigits: 0 })} ({equityChange.pct >= 0 ? "+" : ""}{equityChange.pct.toFixed(2)}%)
+            </span>
+          ) : null}
+          {mode === "twr" && returnPct !== null && (
             <span
               className={`text-xs font-medium ${
                 returnPct >= 0 ? "text-emerald-400" : "text-red-400"
@@ -289,9 +333,9 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
               tick={{ fill: CHART_COLORS.muted, fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              width={42}
-              domain={["auto", "auto"]}
-              tickFormatter={(v: number) => `${v.toFixed(0)}`}
+              width={mode === "equity" ? 58 : 42}
+              domain={mode === "equity" ? [(min: number) => Math.floor(min * 0.995), (max: number) => Math.ceil(max * 1.005)] : ["auto", "auto"]}
+              tickFormatter={(v: number) => mode === "equity" ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : `${v.toFixed(0)}`}
             />
             <Tooltip
               contentStyle={{
@@ -300,7 +344,9 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
                 borderRadius: 14,
               }}
               formatter={(value: number | undefined, name?: string) => [
-                `${(value ?? 0).toFixed(2)}%`,
+                mode === "equity"
+                  ? `$${(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                  : `${(value ?? 0).toFixed(2)}%`,
                 name ?? "",
               ]}
               labelFormatter={(label: unknown) => `日期: ${String(label)}`}
@@ -313,8 +359,8 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
             />
             <Line
               type="monotone"
-              dataKey="portfolio"
-              name="我的组合"
+              dataKey={mode === "equity" ? "equity" : "portfolio"}
+              name={mode === "equity" ? "权益" : "我的组合"}
               stroke={CHART_COLORS.primary}
               strokeWidth={2.2}
               dot={false}
