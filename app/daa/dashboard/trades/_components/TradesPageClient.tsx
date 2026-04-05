@@ -4,10 +4,8 @@ import { useTradesModel } from "@/app/daa/dashboard/_hooks/useTradesModel";
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import {
   TradesErrorState,
-  TradesFilterBar,
   TradesHeader,
-  TradesLedgerSummary,
-  TradesSummaryMetrics,
+  TradesCompactOverview,
   TradesTabsPanel,
 } from "@/app/daa/dashboard/trades/_components/TradesSections";
 
@@ -16,7 +14,7 @@ export default function TradesPageClient() {
 
   if (model.loading) {
     return (
-      <div className="space-y-6 lg:space-y-7">
+      <div className="space-y-4">
         <TradesHeader model={model} />
         <DashboardEmptyState
           title="正在加载交易记录…"
@@ -29,11 +27,9 @@ export default function TradesPageClient() {
   }
 
   return (
-    <div className="space-y-6 lg:space-y-7">
+    <div className="space-y-4">
       <TradesHeader model={model} />
-      <TradesSummaryMetrics model={model} />
-      <TradesFilterBar model={model} />
-      <TradesLedgerSummary model={model} />
+      <TradesCompactOverview model={model} />
       <TradesErrorState error={model.error} />
       <TradesTabsPanel model={model} />
     </div>

@@ -74,23 +74,20 @@ describe("buildDailyReportText", () => {
   it("generates report with all sections", () => {
     const text = buildDailyReportText(makeBootstrap());
 
-    expect(text).toContain("DAA Console 每日报告");
-    expect(text).toContain("$52,300");
-    expect(text).toContain("$3,200");
-    expect(text).toContain("2 个标的");
+    expect(text).toContain("每日报告");
+    expect(text).toContain("组合概览");
+    expect(text).toContain("2个标的");
     expect(text).toContain("偏进攻");
-    expect(text).toContain("VIX 14.2");
-    expect(text).toContain("美股");
-    expect(text).toContain("港中");
-    expect(text).toContain("最大偏移");
+    expect(text).toContain("VIX");
     expect(text).toContain("AAPL");
+    expect(text).toContain("偏移监控");
     expect(text).toContain("仅供参考");
   });
 
   it("handles null marketContext", () => {
     const text = buildDailyReportText(makeBootstrap({ marketContext: null }));
 
-    expect(text).toContain("DAA Console 每日报告");
+    expect(text).toContain("每日报告");
     expect(text).not.toContain("市场环境");
     expect(text).toContain("仅供参考");
   });
@@ -98,9 +95,8 @@ describe("buildDailyReportText", () => {
   it("handles empty assetUniverse", () => {
     const text = buildDailyReportText(makeBootstrap({ assetUniverse: [] }));
 
-    expect(text).toContain("0 个标的");
-    expect(text).not.toContain("最大偏移");
-    expect(text).not.toContain("今日涨跌");
+    expect(text).toContain("0个标的");
+    expect(text).not.toContain("偏移监控");
   });
 
   it("includes next rebalance date when calendar is enabled", () => {

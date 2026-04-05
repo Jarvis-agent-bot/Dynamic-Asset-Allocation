@@ -2,435 +2,299 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, RefreshCcw } from "lucide-react";
+import { ChevronDown, ChevronUp, Filter, RefreshCcw } from "lucide-react";
 
 import { formatCurrency, formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import type { TradesModel, TradeTab, TradeFilters } from "@/app/daa/dashboard/_hooks/useTradesModel";
+import { cn } from "@/lib/utils";
 import {
   DaaSurfaceActionButton,
   DaaSurfaceFilterChip,
   DaaSurfaceEmptyState,
-  DaaSurfaceMetricCard,
   DaaSurfacePageHeader,
-  DaaSurfacePanel,
   DaaSurfaceStatusPill,
   daaSurfaceDenseFieldClassName,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
-const TAB_META: Record<TradeTab, { label: string; subtitle: string }> = {
-  cycles: { label: "再平衡周期", subtitle: "用时间线回顾每一次触发、状态与执行规模。" },
-  orders: { label: "订单明细", subtitle: "查看买卖方向、数量、价格、所属周期与更新时间。" },
-  reports: { label: "复盘报告", subtitle: "聚焦执行效果、收益归因与风险变化。" },
-};
+/* ------------------------------------------------------------------ */
+/*  Label helpers                                                      */
+/* ------------------------------------------------------------------ */
 
 const STATUS_TONE: Record<string, "cyan" | "amber" | "green" | "indigo" | "slate"> = {
-  generated: "indigo",
-  reviewing: "amber",
-  executing: "cyan",
-  completed: "green",
-  cancelled: "slate",
+  generated: "indigo", reviewing: "amber", executing: "cyan", completed: "green", cancelled: "slate",
 };
 
-const emptyActionLinkClassName = "inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-strong)] bg-[var(--elevated)] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--text)]";
-
-function cycleStatusLabel(status: string): string {
-  if (status === "generated") return "已生成";
-  if (status === "reviewing") return "审阅中";
-  if (status === "executing") return "执行中";
-  if (status === "completed") return "已完成";
-  if (status === "cancelled") return "已取消";
-  return status;
+function cycleStatusLabel(s: string): string {
+  return { generated: "已生成", reviewing: "审阅中", executing: "执行中", completed: "已完成", cancelled: "已取消" }[s] || s;
 }
 
-function orderStatusLabel(status: string): string {
-  if (status === "ready") return "待执行";
-  if (status === "submitted") return "已提交";
-  if (status === "partially_filled") return "部分成交";
-  if (status === "executed") return "已执行";
-  if (status === "rejected") return "已拒绝";
-  if (status === "canceled") return "已取消";
-  return status;
+function orderStatusLabel(s: string): string {
+  return { ready: "待执行", submitted: "已提交", partially_filled: "部分成交", executed: "已执行", rejected: "已拒绝", canceled: "已取消" }[s] || s;
 }
 
-function orderStatusTone(status: string): "cyan" | "amber" | "green" | "indigo" | "slate" {
-  if (status === "ready") return "cyan";
-  if (status === "submitted") return "indigo";
-  if (status === "partially_filled") return "amber";
-  if (status === "executed") return "green";
-  if (status === "rejected") return "amber";
-  if (status === "canceled") return "slate";
-  return "slate";
+function orderStatusTone(s: string): "cyan" | "amber" | "green" | "indigo" | "slate" {
+  return { ready: "cyan" as const, submitted: "indigo" as const, partially_filled: "amber" as const, executed: "green" as const, rejected: "amber" as const, canceled: "slate" as const }[s] || "slate";
 }
 
-function orderSideLabel(side: string): string {
-  const normalized = String(side || "").trim().toLowerCase();
-  if (normalized === "buy") return "买入";
-  if (normalized === "sell") return "卖出";
-  return side;
+function triggerSourceLabel(s: string): string {
+  return { calendar: "定期", drift: "偏移", risk: "风险", cash_idle: "现金闲置" }[s] || "手动";
 }
 
-function triggerSourceLabel(triggerSource: string): string {
-  if (triggerSource === "calendar") return "定期触发";
-  if (triggerSource === "drift") return "偏移触发";
-  if (triggerSource === "risk") return "风险触发";
-  if (triggerSource === "cash_idle") return "现金闲置触发";
-  return "手动触发";
-}
-
-function buildArchivedHint(input: {
-  title: string;
-  ledgerStartTs: string | null;
-  archivedCount: number;
-  emptyReason: string;
-}): string {
-  if (input.archivedCount > 0 && input.ledgerStartTs) {
-    return `${input.title} 当前只展示 ${formatDateTime(input.ledgerStartTs)} 之后的数据；更早的 ${input.archivedCount} 条历史记录已归档，所以这里会保持空白。`;
-  }
-  return input.emptyReason;
-}
-
-function TableHeadCell({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return (
-    <th className="border-b border-[var(--border)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]" style={{ textAlign: align }}>
-      {children}
-    </th>
-  );
-}
-
-function TableCellMono({ children, align = "left", className = "" }: { children: React.ReactNode; align?: "left" | "right"; className?: string }) {
-  return (
-    <td className={`border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--text)] ${className}`} style={{ textAlign: align, fontFamily: "var(--font-mono)" }}>
-      {children}
-    </td>
-  );
-}
-
-function TableCellText({ children, align = "left", className = "" }: { children: React.ReactNode; align?: "left" | "right"; className?: string }) {
-  return (
-    <td className={`border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)] ${className}`} style={{ textAlign: align }}>
-      {children}
-    </td>
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  Header                                                             */
+/* ------------------------------------------------------------------ */
 
 export function TradesHeader({ model }: { model: TradesModel }) {
   return (
     <DaaSurfacePageHeader
       title="交易记录"
-      description="查看调仓周期、订单明细和执行回顾。"
-      actions={(
+      description="调仓周期、订单明细和执行回顾"
+      actions={
         <DaaSurfaceActionButton onClick={() => void model.load(true)} disabled={model.loading || model.refreshing}>
-          <RefreshCcw className={`h-4 w-4 ${model.refreshing ? "animate-spin" : ""}`} />
-          {model.refreshing ? "刷新中…" : "刷新数据"}
+          <RefreshCcw className={cn("h-4 w-4", model.refreshing && "animate-spin")} />
+          {model.refreshing ? "刷新中…" : "刷新"}
         </DaaSurfaceActionButton>
-      )}
+      }
     />
   );
 }
 
-export function TradesSummaryMetrics({ model }: { model: TradesModel }) {
-  const activityLabel = model.latestActivityAt ? `最近活动 ${formatDateTime(model.latestActivityAt)}` : "等待首个执行周期";
-  const notionalLabel = model.executedOrderCount <= 0
-    ? "仅统计已执行订单"
-    : model.manualExecutedNotional > 0 && model.cycleExecutedNotional > 0
-      ? `周期 ${formatCurrency(model.cycleExecutedNotional, model.baseCurrency)} · 手工 ${formatCurrency(model.manualExecutedNotional, model.baseCurrency)}`
-      : model.manualExecutedNotional > 0
-        ? "当前全部来自手工成交"
-        : "当前全部来自再平衡周期";
-  return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <DaaSurfaceMetricCard label="再平衡周期" value={`${model.cycles.length}`} subLabel={`已完成 ${model.completedCycleCount} 个`} accent="cyan" />
-      <DaaSurfaceMetricCard label="订单记录" value={`${model.orders.length}`} subLabel={`成交 ${model.executedOrderCount} 笔`} accent="green" />
-      <DaaSurfaceMetricCard label="成交金额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} subLabel={notionalLabel} accent="amber" />
-      <DaaSurfaceMetricCard label="已实现收益" value={formatCurrency(model.realizedPnl, model.baseCurrency)} subLabel={activityLabel} accent="indigo" />
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  Compact overview: metrics + filter in one row                      */
+/* ------------------------------------------------------------------ */
 
-export function TradesFilterBar({ model }: { model: TradesModel }) {
+export function TradesCompactOverview({ model }: { model: TradesModel }) {
+  const [showFilters, setShowFilters] = useState(false);
   const hasActiveFilter = Boolean(model.filters.startDate || model.filters.endDate || model.filters.symbol || model.filters.side || model.filters.status);
-  const hasData = model.cycles.length > 0 || model.orders.length > 0;
-  const [expanded, setExpanded] = useState(false);
 
   function updateFilter(patch: Partial<TradeFilters>) {
     model.setFilters((prev) => ({ ...prev, ...patch }));
   }
 
-  if (!hasData && !hasActiveFilter) return null;
-
   return (
-    <DaaSurfacePanel accent="slate" title="筛选条件" subtitle="按时间、标的、方向或状态筛选订单与周期。">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">开始日期</label>
-          <input
-            type="date"
-            value={model.filters.startDate ?? ""}
-            onChange={(e) => updateFilter({ startDate: e.target.value || undefined })}
-            className={daaSurfaceDenseFieldClassName + " w-[140px]"}
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">结束日期</label>
-          <input
-            type="date"
-            value={model.filters.endDate ?? ""}
-            onChange={(e) => updateFilter({ endDate: e.target.value || undefined })}
-            className={daaSurfaceDenseFieldClassName + " w-[140px]"}
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">标的</label>
-          <input
-            type="text"
-            placeholder="如 AAPL"
-            value={model.filters.symbol ?? ""}
-            onChange={(e) => updateFilter({ symbol: e.target.value || undefined })}
-            className={daaSurfaceDenseFieldClassName + " w-[120px]"}
-          />
-        </div>
-        <div className="flex items-center gap-1.5 pb-0.5">
-          <DaaSurfaceFilterChip
-            active={model.filters.side === "BUY"}
-            onClick={() => updateFilter({ side: model.filters.side === "BUY" ? undefined : "BUY" })}
+    <div className="space-y-3">
+      {/* 概览指标行 */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-3">
+        <Metric label="再平衡" value={`${model.cycles.length}`} sub={`完成 ${model.completedCycleCount}`} />
+        <Separator />
+        <Metric label="订单" value={`${model.orders.length}`} sub={`成交 ${model.executedOrderCount}`} />
+        <Separator />
+        <Metric label="成交额" value={formatCurrency(model.executedOrderNotional, model.baseCurrency)} />
+        <Separator />
+        <Metric label="已实现 P&L" value={formatCurrency(model.realizedPnl, model.baseCurrency)} tone={model.realizedPnl >= 0 ? "green" : "red"} />
+
+        <div className="ml-auto flex items-center gap-2">
+          {model.latestActivityAt ? (
+            <span className="text-[11px] text-[var(--faint)]">最近 {formatDateTime(model.latestActivityAt)}</span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              "flex items-center gap-1 rounded-[8px] px-2 py-1 text-xs transition-colors",
+              showFilters || hasActiveFilter ? "bg-[rgba(56,189,248,0.12)] text-[var(--primary)]" : "text-[var(--muted)] hover:text-[var(--text)]",
+            )}
           >
-            买入
-          </DaaSurfaceFilterChip>
-          <DaaSurfaceFilterChip
-            active={model.filters.side === "SELL"}
-            onClick={() => updateFilter({ side: model.filters.side === "SELL" ? undefined : "SELL" })}
-          >
-            卖出
-          </DaaSurfaceFilterChip>
+            <Filter className="h-3.5 w-3.5" />
+            筛选{hasActiveFilter ? " ●" : ""}
+          </button>
         </div>
-        <div className="space-y-1">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">状态</label>
-          <select
-            value={model.filters.status ?? ""}
-            onChange={(e) => updateFilter({ status: e.target.value || undefined })}
-            className={daaSurfaceDenseFieldClassName + " w-[120px]"}
-          >
-            <option value="">全部</option>
-            <option value="ready">待执行</option>
-            <option value="submitted">已提交</option>
-            <option value="executed">已执行</option>
-            <option value="rejected">已拒绝</option>
-            <option value="canceled">已取消</option>
-          </select>
-        </div>
-        {hasActiveFilter ? (
-          <DaaSurfaceActionButton
-            tone="slate"
-            className="mb-0.5"
-            onClick={() => model.setFilters({})}
-          >
-            清除筛选
-          </DaaSurfaceActionButton>
-        ) : null}
       </div>
-    </DaaSurfacePanel>
+
+      {/* 可折叠筛选区 */}
+      {showFilters ? (
+        <div className="flex flex-wrap items-end gap-3 rounded-[12px] border border-[var(--border)] bg-[rgba(8,12,20,0.3)] px-4 py-3">
+          <label className="space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">开始</span>
+            <input type="date" value={model.filters.startDate ?? ""} onChange={(e) => updateFilter({ startDate: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[130px]")} />
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">结束</span>
+            <input type="date" value={model.filters.endDate ?? ""} onChange={(e) => updateFilter({ endDate: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[130px]")} />
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">标的</span>
+            <input type="text" placeholder="AAPL" value={model.filters.symbol ?? ""} onChange={(e) => updateFilter({ symbol: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[100px]")} />
+          </label>
+          <div className="flex items-center gap-1.5 pb-0.5">
+            <DaaSurfaceFilterChip active={model.filters.side === "BUY"} onClick={() => updateFilter({ side: model.filters.side === "BUY" ? undefined : "BUY" })}>买入</DaaSurfaceFilterChip>
+            <DaaSurfaceFilterChip active={model.filters.side === "SELL"} onClick={() => updateFilter({ side: model.filters.side === "SELL" ? undefined : "SELL" })}>卖出</DaaSurfaceFilterChip>
+          </div>
+          <label className="space-y-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">状态</span>
+            <select value={model.filters.status ?? ""} onChange={(e) => updateFilter({ status: e.target.value || undefined })} className={cn(dasSurfaceDenseFieldClassName, "w-[100px]")}>
+              <option value="">全部</option>
+              <option value="ready">待执行</option>
+              <option value="submitted">已提交</option>
+              <option value="executed">已执行</option>
+              <option value="rejected">已拒绝</option>
+              <option value="canceled">已取消</option>
+            </select>
+          </label>
+          {hasActiveFilter ? (
+            <DaaSurfaceActionButton tone="slate" className="mb-0.5 text-xs" onClick={() => model.setFilters({})}>清除</DaaSurfaceActionButton>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-export function TradesLedgerSummary({ model }: { model: TradesModel }) {
-  const archivedTotal = model.ledgerMeta.archivedCycleCount + model.ledgerMeta.archivedTradeCount + model.ledgerMeta.archivedReportCount;
+function Metric(props: { label: string; value: string; sub?: string; tone?: "green" | "red" }) {
   return (
-    <DaaSurfacePanel
-      accent="indigo"
-      title="当前账本窗口"
-      subtitle="交易页不再混展示旧测试历史；这里直接告诉你当前起点和已归档数量。"
-    >
-      <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <DaaSurfaceStatusPill tone="indigo">当前账本</DaaSurfaceStatusPill>
-            <span className="text-xs text-[var(--faint)]">
-              {model.ledgerMeta.ledgerStartTs ? `起点 ${formatDateTime(model.ledgerMeta.ledgerStartTs)}` : "尚未建立账本起点"}
-            </span>
-          </div>
-          <div className="mt-3 text-sm text-[var(--text)]">期初余额 {formatCurrency(model.ledgerMeta.openingBalance, model.baseCurrency)}</div>
-          <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            当前页的周期、订单和复盘都只统计这次账本起点之后的执行，避免旧测试数据继续混入审计视图。
-          </div>
-        </div>
-
-        <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <DaaSurfaceStatusPill tone={archivedTotal > 0 ? "amber" : "green"}>{archivedTotal > 0 ? "已有归档" : "无归档历史"}</DaaSurfaceStatusPill>
-          </div>
-          <div className="mt-3 grid gap-2 text-sm text-[var(--text)] sm:grid-cols-3">
-            <div>归档周期 {model.ledgerMeta.archivedCycleCount}</div>
-            <div>归档订单 {model.ledgerMeta.archivedTradeCount}</div>
-            <div>归档报告 {model.ledgerMeta.archivedReportCount}</div>
-          </div>
-          <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            {archivedTotal > 0 ? "如果当前列表为空，先看这里；很可能是旧历史已被归档，而不是数据没有落库。" : "当前环境下还没有被裁剪掉的历史测试记录。"}
-          </div>
-        </div>
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{props.label}</div>
+      <div className={cn("font-[var(--font-mono)] text-sm font-semibold", props.tone === "green" ? "text-emerald-400" : props.tone === "red" ? "text-red-400" : "text-[var(--text)]")}>
+        {props.value}
       </div>
-    </DaaSurfacePanel>
+      {props.sub ? <div className="text-[10px] text-[var(--faint)]">{props.sub}</div> : null}
+    </div>
   );
 }
+
+function Separator() {
+  return <div className="hidden h-8 w-px bg-[var(--border)] md:block" />;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Error state                                                        */
+/* ------------------------------------------------------------------ */
 
 export function TradesErrorState({ error }: { error: string }) {
   return <DashboardErrorNotice title="交易记录加载失败" description={error} />;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Tabs panel                                                         */
+/* ------------------------------------------------------------------ */
+
+const TAB_META: Record<TradeTab, string> = {
+  cycles: "再平衡周期",
+  orders: "订单明细",
+  reports: "复盘报告",
+};
+
 export function TradesTabsPanel({ model }: { model: TradesModel }) {
-  const tabMeta = TAB_META[model.activeTab];
   return (
-    <DaaSurfacePanel accent="slate" title="视图切换" subtitle="周期是一级视角，订单与复盘是二级明细。">
-      <div className="grid gap-2 rounded-2xl border border-[var(--border)] bg-[rgba(8,12,20,0.45)] p-2 sm:grid-cols-3">
-        {(Object.keys(TAB_META) as TradeTab[]).map((tab) => {
-          const active = tab === model.activeTab;
-          return (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => model.setActiveTab(tab)}
-              className={[
-                "rounded-[16px] border px-4 py-3 text-left transition-colors",
-                active
-                  ? "border-[var(--primary)]/35 bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-                  : "border-transparent bg-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[var(--hover)] hover:text-[var(--text)]",
-              ].join(" ")}
-            >
-              <div className="text-sm font-semibold">{TAB_META[tab].label}</div>
-              <div className="mt-1 text-xs text-[var(--faint)]">{TAB_META[tab].subtitle}</div>
-            </button>
-          );
-        })}
+    <div className="space-y-3">
+      {/* Tab 切换 */}
+      <div className="inline-flex rounded-[12px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-1" role="tablist">
+        {(Object.keys(TAB_META) as TradeTab[]).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={tab === model.activeTab}
+            onClick={() => model.setActiveTab(tab)}
+            className={cn(
+              "rounded-[10px] px-3 py-2 text-sm transition-colors",
+              tab === model.activeTab ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
+            )}
+          >
+            {TAB_META[tab]}
+          </button>
+        ))}
       </div>
 
-      <div className="mt-4 rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-3 text-sm text-[var(--muted)]">
-        {tabMeta.subtitle}
-      </div>
-
-      {model.activeTab === "cycles" ? <TradesCyclesPanel model={model} /> : null}
-      {model.activeTab === "orders" ? <TradesOrdersPanel model={model} /> : null}
-      {model.activeTab === "reports" ? <TradesReportsPanel model={model} /> : null}
-    </DaaSurfacePanel>
+      {model.activeTab === "cycles" ? <CyclesPanel model={model} /> : null}
+      {model.activeTab === "orders" ? <OrdersPanel model={model} /> : null}
+      {model.activeTab === "reports" ? <ReportsPanel model={model} /> : null}
+    </div>
   );
 }
 
-function TradesCyclesPanel({ model }: { model: TradesModel }) {
+/* ------------------------------------------------------------------ */
+/*  Cycles                                                             */
+/* ------------------------------------------------------------------ */
+
+function CyclesPanel({ model }: { model: TradesModel }) {
   if (model.cycles.length <= 0) {
     return (
       <DaaSurfaceEmptyState
         title="暂无再平衡周期"
-        description={buildArchivedHint({
-          title: "再平衡周期",
-          ledgerStartTs: model.ledgerMeta.ledgerStartTs,
-          archivedCount: model.ledgerMeta.archivedCycleCount,
-          emptyReason: "生成一次调仓建议来创建您的首个周期，这里会自动沉淀完整的时间线与状态变化。",
-        })}
-        className="mt-4 px-5 py-14"
-        action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>前往调仓</Link>}
+        description="前往调仓页生成首个再平衡建议。"
+        className="py-14"
+        action={<Link href="/daa/dashboard/rebalance" className="text-sm text-[var(--primary)] hover:underline">前往调仓 →</Link>}
       />
     );
   }
 
-  const cycleOrderCount = (cycle: TradesModel["cycles"][number]): number => {
-    if (!cycle.executionSummary) return cycle.executedOrders.length;
-    return (
-      (cycle.executionSummary.ordersExecuted ?? 0)
-      + (cycle.executionSummary.ordersSubmitted ?? 0)
-      + (cycle.executionSummary.ordersFailed ?? 0)
-    );
-  };
-
   return (
-    <div className="mt-4 overflow-hidden rounded-[18px] border border-[var(--border)]">
+    <div className="overflow-hidden rounded-[14px] border border-[var(--border)]">
       <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
         <thead>
           <tr>
-            <TableHeadCell>周期</TableHeadCell>
-            <TableHeadCell>状态</TableHeadCell>
-            <TableHeadCell>触发源</TableHeadCell>
-            <TableHeadCell align="right">订单数</TableHeadCell>
-            <TableHeadCell align="right">执行金额</TableHeadCell>
-            <TableHeadCell align="right">创建时间</TableHeadCell>
+            <TH>周期</TH><TH>状态</TH><TH>触发</TH><TH align="right">订单</TH><TH align="right">金额</TH><TH align="right">时间</TH>
           </tr>
         </thead>
         <tbody>
-          {model.cycles.map((cycle) => (
-            <tr key={cycle.cycleId}>
-              <TableCellMono>
-                <Link
-                  href={`/daa/dashboard/rebalance?cycleId=${cycle.cycleId}`}
-                  className="font-mono text-xs text-[var(--primary)] hover:underline"
-                >
-                  {cycle.cycleId.slice(0, 8)}
-                </Link>
-              </TableCellMono>
-              <TableCellText><DaaSurfaceStatusPill tone={STATUS_TONE[cycle.status] ?? "slate"}>{cycleStatusLabel(cycle.status)}</DaaSurfaceStatusPill></TableCellText>
-              <TableCellText>{triggerSourceLabel(cycle.triggerSource)}</TableCellText>
-              <TableCellMono align="right">{cycleOrderCount(cycle)}</TableCellMono>
-              <TableCellMono align="right">{formatCurrency(cycle.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</TableCellMono>
-              <TableCellText align="right">{formatDateTime(cycle.createdAt)}</TableCellText>
-            </tr>
-          ))}
+          {model.cycles.map((c) => {
+            const count = c.executionSummary ? (c.executionSummary.ordersExecuted ?? 0) + (c.executionSummary.ordersSubmitted ?? 0) + (c.executionSummary.ordersFailed ?? 0) : c.executedOrders.length;
+            return (
+              <tr key={c.cycleId} className="transition-colors hover:bg-[rgba(255,255,255,0.02)]">
+                <TD mono><Link href={`/daa/dashboard/rebalance?cycleId=${c.cycleId}`} className="text-[var(--primary)] hover:underline">{c.cycleId.slice(0, 8)}</Link></TD>
+                <TD><DaaSurfaceStatusPill tone={STATUS_TONE[c.status] ?? "slate"}>{cycleStatusLabel(c.status)}</DaaSurfaceStatusPill></TD>
+                <TD>{triggerSourceLabel(c.triggerSource)}</TD>
+                <TD mono align="right">{count}</TD>
+                <TD mono align="right">{formatCurrency(c.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</TD>
+                <TD align="right">{formatDateTime(c.createdAt)}</TD>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-const ORDERS_PAGE_SIZE_ = 50;
+/* ------------------------------------------------------------------ */
+/*  Orders                                                             */
+/* ------------------------------------------------------------------ */
 
-function TradesOrdersPanel({ model }: { model: TradesModel }) {
-  const [visibleCount, setVisibleCount] = useState(ORDERS_PAGE_SIZE_);
+function OrdersPanel({ model }: { model: TradesModel }) {
+  const [visibleCount, setVisibleCount] = useState(50);
+
   if (model.orders.length <= 0) {
     return (
       <DaaSurfaceEmptyState
         title="暂无订单记录"
-        description={buildArchivedHint({
-          title: "订单记录",
-          ledgerStartTs: model.ledgerMeta.ledgerStartTs,
-          archivedCount: model.ledgerMeta.archivedTradeCount,
-          emptyReason: "订单会在您确认执行建议后自动写入，前往调仓页完成一次执行即可生成订单。",
-        })}
-        className="mt-4 px-5 py-14"
-        action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>前往调仓执行</Link>}
+        description="完成一次调仓执行后订单会自动出现。"
+        className="py-14"
+        action={<Link href="/daa/dashboard/rebalance" className="text-sm text-[var(--primary)] hover:underline">前往调仓 →</Link>}
       />
     );
   }
 
   return (
-    <div className="mt-4 overflow-hidden rounded-[18px] border border-[var(--border)]">
+    <div className="overflow-hidden rounded-[14px] border border-[var(--border)]">
       <table className="w-full border-collapse bg-[rgba(8,12,20,0.32)]">
         <thead>
           <tr>
-            <TableHeadCell>订单</TableHeadCell>
-            <TableHeadCell>方向</TableHeadCell>
-            <TableHeadCell>状态</TableHeadCell>
-            <TableHeadCell align="right">数量</TableHeadCell>
-            <TableHeadCell align="right">价格</TableHeadCell>
-            <TableHeadCell align="right">更新时间</TableHeadCell>
+            <TH>标的</TH><TH>方向</TH><TH>状态</TH><TH align="right">数量</TH><TH align="right">价格</TH><TH align="right">时间</TH>
           </tr>
         </thead>
         <tbody>
-          {model.orders.slice(0, visibleCount).map((order) => (
-            <tr key={order.ticketId}>
-              <TableCellMono>{order.symbol}</TableCellMono>
-              <TableCellText>{orderSideLabel(order.side)}</TableCellText>
-              <TableCellText><DaaSurfaceStatusPill tone={orderStatusTone(order.status)}>{orderStatusLabel(order.status)}</DaaSurfaceStatusPill></TableCellText>
-              <TableCellMono align="right">{order.qty.toFixed(4)}</TableCellMono>
-              <TableCellMono align="right">{formatCurrency(order.avgFillPrice || order.price, order.instrumentCurrency || "USD")}</TableCellMono>
-              <TableCellText align="right">{formatDateTime(order.updatedAt)}</TableCellText>
+          {model.orders.slice(0, visibleCount).map((o) => (
+            <tr key={o.ticketId} className="transition-colors hover:bg-[rgba(255,255,255,0.02)]">
+              <TD mono>{o.symbol}</TD>
+              <TD>
+                <span className={o.side === "BUY" ? "text-emerald-400" : "text-red-400"}>
+                  {o.side === "BUY" ? "买入" : "卖出"}
+                </span>
+              </TD>
+              <TD><DaaSurfaceStatusPill tone={orderStatusTone(o.status)}>{orderStatusLabel(o.status)}</DaaSurfaceStatusPill></TD>
+              <TD mono align="right">{o.qty.toFixed(4)}</TD>
+              <TD mono align="right">{formatCurrency(o.avgFillPrice || o.price, o.instrumentCurrency || "USD")}</TD>
+              <TD align="right">{formatDateTime(o.updatedAt)}</TD>
             </tr>
           ))}
         </tbody>
       </table>
       {model.orders.length > visibleCount ? (
-        <div className="border-t border-[var(--border)] px-4 py-3 text-center">
-          <button
-            type="button"
-            className="text-xs font-medium text-[var(--primary)] transition-colors hover:text-[var(--text)]"
-            onClick={() => setVisibleCount((prev) => prev + ORDERS_PAGE_SIZE_)}
-          >
-            加载更多（还有 {model.orders.length - visibleCount} 条）
+        <div className="border-t border-[var(--border)] px-4 py-2 text-center">
+          <button type="button" className="text-xs text-[var(--primary)] hover:underline" onClick={() => setVisibleCount((p) => p + 50)}>
+            加载更多（剩余 {model.orders.length - visibleCount}）
           </button>
         </div>
       ) : null}
@@ -438,77 +302,105 @@ function TradesOrdersPanel({ model }: { model: TradesModel }) {
   );
 }
 
-function TradesReportsPanel({ model }: { model: TradesModel }) {
+/* ------------------------------------------------------------------ */
+/*  Reports                                                            */
+/* ------------------------------------------------------------------ */
+
+function ReportsPanel({ model }: { model: TradesModel }) {
+  if (model.sortedReports.length <= 0) {
+    return (
+      <DaaSurfaceEmptyState
+        title="暂无复盘报告"
+        description="完成一次实际执行后会自动生成复盘报告。"
+        className="py-14"
+        action={<Link href="/daa/dashboard/rebalance" className="text-sm text-[var(--primary)] hover:underline">前往调仓 →</Link>}
+      />
+    );
+  }
+
   return (
-    <div className="mt-4 space-y-3">
-      {model.sortedReports.length > 0 ? model.sortedReports.map((report) => {
-        const expanded = model.expandedReportCycleId === report.cycleId;
+    <div className="space-y-2">
+      {model.sortedReports.map((r) => {
+        const expanded = model.expandedReportCycleId === r.cycleId;
+        const orderCount = (r.executionSummary?.ordersExecuted ?? 0) + (r.executionSummary?.ordersSubmitted ?? 0) + (r.executionSummary?.ordersFailed ?? 0);
         return (
-          <div key={report.cycleId} className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.34)] p-4">
+          <div key={r.cycleId} className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.34)]">
             <button
               type="button"
-              onClick={() => model.setExpandedReportCycleId(expanded ? null : report.cycleId)}
-              className="flex w-full items-center justify-between gap-3 text-left"
+              onClick={() => model.setExpandedReportCycleId(expanded ? null : r.cycleId)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
             >
-              <div>
-                <div className="font-[var(--font-mono)] text-sm text-[var(--text)]">{report.cycleId.slice(0, 8)}</div>
-                <div className="mt-1 text-xs text-[var(--faint)]">{formatDateTime(report.reportCreatedAt)}</div>
+              <div className="flex items-center gap-3">
+                <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">{r.cycleId.slice(0, 8)}</span>
+                <DaaSurfaceStatusPill tone={STATUS_TONE[r.status] ?? "slate"}>{cycleStatusLabel(r.status)}</DaaSurfaceStatusPill>
+                <span className="text-xs text-[var(--faint)]">{triggerSourceLabel(r.triggerSource)}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <DaaSurfaceStatusPill tone={STATUS_TONE[report.status] ?? "slate"}>{cycleStatusLabel(report.status)}</DaaSurfaceStatusPill>
+              <div className="flex items-center gap-3">
+                <span className="hidden text-xs text-[var(--faint)] sm:inline">{formatDateTime(r.reportCreatedAt)}</span>
                 {expanded ? <ChevronUp className="h-4 w-4 text-[var(--faint)]" /> : <ChevronDown className="h-4 w-4 text-[var(--faint)]" />}
               </div>
             </button>
 
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(24,34,54,0.72)] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">执行概览</div>
-                <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
-                  <div>订单数 {(report.executionSummary?.ordersExecuted ?? 0) + (report.executionSummary?.ordersSubmitted ?? 0) + (report.executionSummary?.ordersFailed ?? 0)}</div>
-                  <div>成交金额 {formatCurrency(report.executionSummary?.totalNotional ?? 0, model.baseCurrency)}</div>
-                  <div>手续费 {formatCurrency(report.pnlAttribution.feeTotal, model.baseCurrency)}</div>
-                </div>
-              </div>
-              <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(24,34,54,0.72)] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">收益归因</div>
-                <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
-                  <div>已实现 {formatCurrency(report.pnlAttribution.realizedPnl, model.baseCurrency)}</div>
-                  <div>未实现 {formatCurrency(report.pnlAttribution.unrealizedPnl, model.baseCurrency)}</div>
-                  <div>汇率影响 {formatCurrency(report.pnlAttribution.fxImpact, model.baseCurrency)}</div>
-                </div>
-              </div>
-              <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(24,34,54,0.72)] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">风控变化</div>
-                <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
-                  <div>回撤 {report.riskDelta.maxDrawdownBefore.toFixed(2)}% → {report.riskDelta.maxDrawdownAfter.toFixed(2)}%</div>
-                  <div>集中度 {report.riskDelta.hhiBefore.toFixed(2)}% → {report.riskDelta.hhiAfter.toFixed(2)}%</div>
-                  <div>最大漂移 {report.riskDelta.maxDriftBefore.toFixed(2)}% → {report.riskDelta.maxDriftAfter.toFixed(2)}%</div>
-                </div>
-              </div>
-            </div>
-
             {expanded ? (
-              <div className="mt-4 rounded-[16px] border border-dashed border-[var(--border-strong)] bg-[rgba(8,12,20,0.28)] p-4 text-sm text-[var(--muted)]">
-                <div>触发源：{triggerSourceLabel(report.triggerSource)}</div>
-                <div className="mt-2">前后权益：{formatCurrency(report.beforeSnapshot.totalEquity, model.baseCurrency)} → {formatCurrency(report.afterSnapshot.totalEquity, model.baseCurrency)}</div>
-                <div className="mt-2">贡献前三：{report.pnlAttribution.topContributors.slice(0, 3).map((item) => `${item.symbol} ${formatCurrency(item.pnl, model.baseCurrency)}`).join("；") || "-"}</div>
+              <div className="border-t border-[var(--border)] px-4 py-3 space-y-3">
+                {/* 三列指标 */}
+                <div className="grid gap-3 md:grid-cols-3">
+                  <MetricBlock title="执行概览" items={[
+                    `订单 ${orderCount}`,
+                    `金额 ${formatCurrency(r.executionSummary?.totalNotional ?? 0, model.baseCurrency)}`,
+                    `费用 ${formatCurrency(r.pnlAttribution.feeTotal, model.baseCurrency)}`,
+                  ]} />
+                  <MetricBlock title="收益归因" items={[
+                    `已实现 ${formatCurrency(r.pnlAttribution.realizedPnl, model.baseCurrency)}`,
+                    `未实现 ${formatCurrency(r.pnlAttribution.unrealizedPnl, model.baseCurrency)}`,
+                    `汇率 ${formatCurrency(r.pnlAttribution.fxImpact, model.baseCurrency)}`,
+                  ]} />
+                  <MetricBlock title="风控变化" items={[
+                    `回撤 ${r.riskDelta.maxDrawdownBefore.toFixed(1)}% → ${r.riskDelta.maxDrawdownAfter.toFixed(1)}%`,
+                    `集中度 ${r.riskDelta.hhiBefore.toFixed(1)}% → ${r.riskDelta.hhiAfter.toFixed(1)}%`,
+                    `漂移 ${r.riskDelta.maxDriftBefore.toFixed(1)}% → ${r.riskDelta.maxDriftAfter.toFixed(1)}%`,
+                  ]} />
+                </div>
+                {/* 权益变化 + 贡献 */}
+                <div className="flex flex-wrap gap-4 text-xs text-[var(--muted)]">
+                  <span>权益 {formatCurrency(r.beforeSnapshot.totalEquity, model.baseCurrency)} → {formatCurrency(r.afterSnapshot.totalEquity, model.baseCurrency)}</span>
+                  <span>贡献前三: {r.pnlAttribution.topContributors.slice(0, 3).map((c) => `${c.symbol} ${formatCurrency(c.pnl, model.baseCurrency)}`).join("、") || "—"}</span>
+                </div>
               </div>
             ) : null}
           </div>
         );
-      }) : (
-        <DaaSurfaceEmptyState
-          title="暂无复盘报告"
-          description={buildArchivedHint({
-            title: "复盘报告",
-            ledgerStartTs: model.ledgerMeta.ledgerStartTs,
-            archivedCount: model.ledgerMeta.archivedReportCount,
-            emptyReason: "完成一次实际执行后，系统会自动生成复盘报告，包含收益归因与风控变化。",
-          })}
-          className="px-5 py-16"
-          action={<Link href="/daa/dashboard/rebalance" className={emptyActionLinkClassName}>前往调仓执行</Link>}
-        />
-      )}
+      })}
     </div>
   );
 }
+
+function MetricBlock(props: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-[10px] border border-[var(--border)] bg-[rgba(24,34,54,0.6)] px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">{props.title}</div>
+      <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
+        {props.items.map((item, i) => <div key={i}>{item}</div>)}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Table primitives                                                   */
+/* ------------------------------------------------------------------ */
+
+function TH({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
+  return <th className="border-b border-[var(--border)] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]" style={{ textAlign: align }}>{children}</th>;
+}
+
+function TD({ children, align = "left", mono }: { children: React.ReactNode; align?: "left" | "right"; mono?: boolean }) {
+  return (
+    <td className={cn("border-b border-[var(--border)] px-4 py-2.5 text-sm", mono ? "font-[var(--font-mono)] text-[var(--text)]" : "text-[var(--muted)]")} style={{ textAlign: align }}>
+      {children}
+    </td>
+  );
+}
+
+// Fix: import name typo guard
+const dasSurfaceDenseFieldClassName = daaSurfaceDenseFieldClassName;

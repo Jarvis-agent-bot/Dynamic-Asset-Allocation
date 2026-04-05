@@ -15,8 +15,12 @@ vi.mock("../AssetUniverseTable", () => ({
   default: ({ view }: { view: string }) => <div data-testid={`asset-table-${view}`}>{view}</div>,
 }));
 
-vi.mock("../WatchlistBuilderPanel", () => ({
-  default: () => <div data-testid="watchlist-builder">watchlist-builder</div>,
+vi.mock("@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar", () => ({
+  WatchlistSearchBar: () => <div data-testid="watchlist-search">watchlist-search</div>,
+}));
+
+vi.mock("@/app/daa/dashboard/portfolio/_components/WatchlistItemList", () => ({
+  WatchlistItemList: () => <div data-testid="watchlist-items">watchlist-items</div>,
 }));
 
 vi.mock("../CashSection", () => ({
@@ -276,16 +280,16 @@ describe("ActiveTabPanel", () => {
     expect(model.setActiveTab).not.toHaveBeenCalled();
   });
 
-  it("观察列表直接展示补充标的面板（不折叠）", () => {
+  it("观察列表展示搜索栏和列表", () => {
     const model = createModel();
 
     render(<ActiveTabPanel model={model} />);
 
-    const table = screen.getAllByTestId("asset-table-watchlist")[0];
-    const builder = screen.getByTestId("watchlist-builder");
+    const search = screen.getByTestId("watchlist-search");
+    const items = screen.getByTestId("watchlist-items");
 
-    // builder 始终显示在 table 之后
-    expect(Boolean(table.compareDocumentPosition(builder) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    // 搜索栏在列表之前
+    expect(Boolean(search.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
   // 调仓已从 Tab 移到独立的 ActionWorkflow 模块，调仓导航测试不再适用
