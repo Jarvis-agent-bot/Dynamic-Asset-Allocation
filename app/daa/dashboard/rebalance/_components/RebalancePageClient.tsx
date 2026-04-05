@@ -105,102 +105,104 @@ export default function RebalancePageClient() {
         </div>
       </div>
 
-      {/* 两栏主体 */}
+      {/* ── 两栏决策区域 ── */}
       {wbModel.bootstrap && rp ? (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-          {/* ── 左侧：市场环境 + 提案列表 + 市场指标 ── */}
-          <div className="space-y-4">
-            <SectionErrorBoundary sectionName="市场环境">
-              <MarketContextCard
-                marketContext={wbModel.bootstrap.marketContext ?? null}
-                aiSnapshot={aiSnapshot}
-              />
-            </SectionErrorBoundary>
+        <>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+            {/* 左侧：市场环境 + 提案列表 */}
+            <div className="space-y-4">
+              <SectionErrorBoundary sectionName="市场环境">
+                <MarketContextCard
+                  marketContext={wbModel.bootstrap.marketContext ?? null}
+                  aiSnapshot={aiSnapshot}
+                />
+              </SectionErrorBoundary>
 
-            <SectionErrorBoundary sectionName="调仓建议">
-              <RebalanceProposalList
-                bootstrap={wbModel.bootstrap}
+              {driftCount > 0 ? (
+                <SectionErrorBoundary sectionName="漂移概览">
+                  <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                      漂移概览 ({driftCount} 项超阈值)
+                    </div>
+                    <DriftBarChart
+                      rows={wbModel.tableProps.rows}
+                      thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
+                      maxItems={8}
+                    />
+                  </div>
+                </SectionErrorBoundary>
+              ) : null}
+
+              <SectionErrorBoundary sectionName="调仓建议">
+                <RebalanceProposalList
+                  bootstrap={wbModel.bootstrap}
+                  currentCycle={rp.currentCycle}
+                  currentRiskCheck={rp.currentRiskCheck}
+                  busy={rp.busy}
+                  isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
+                  canEditCurrentCycle={rp.canEditCurrentCycle}
+                  buyProposalCount={rp.buyProposalCount}
+                  sellProposalCount={rp.sellProposalCount}
+                  selectedProposalNotional={rp.selectedProposalNotional}
+                  expandedProposalDecisionKeys={rp.expandedProposalDecisionKeys}
+                  setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
+                  llmFeedbackSubmittingByContext={rp.llmFeedbackSubmittingByContext}
+                  llmFeedbackScoreByContext={rp.llmFeedbackScoreByContext}
+                  onSelectAllProposals={rp.onSelectAllProposals}
+                  onToggleProposal={rp.onToggleProposal}
+                  onSubmitLlmFeedback={rp.onSubmitLlmFeedback}
+                  onGenerateCycle={rp.onGenerateCycle}
+                />
+              </SectionErrorBoundary>
+            </div>
+
+            {/* 右侧：执行面板 + What-If 预览 */}
+            <div className="space-y-4">
+              <ExecutionPanel
                 currentCycle={rp.currentCycle}
                 currentRiskCheck={rp.currentRiskCheck}
+                baseCurrency={wbModel.bootstrap.baseCurrency}
                 busy={rp.busy}
-                isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
-                canEditCurrentCycle={rp.canEditCurrentCycle}
-                buyProposalCount={rp.buyProposalCount}
-                sellProposalCount={rp.sellProposalCount}
+                selectedProposalCount={rp.selectedProposalCount}
                 selectedProposalNotional={rp.selectedProposalNotional}
-                expandedProposalDecisionKeys={rp.expandedProposalDecisionKeys}
-                setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
-                llmFeedbackSubmittingByContext={rp.llmFeedbackSubmittingByContext}
-                llmFeedbackScoreByContext={rp.llmFeedbackScoreByContext}
-                onSelectAllProposals={rp.onSelectAllProposals}
-                onToggleProposal={rp.onToggleProposal}
-                onSubmitLlmFeedback={rp.onSubmitLlmFeedback}
+                canExecuteAll={rp.canExecuteAll}
+                canExecuteSelected={rp.canExecuteSelected}
+                isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
+                rebalanceChecklistAllPassed={rp.rebalanceChecklistAllPassed}
                 onGenerateCycle={rp.onGenerateCycle}
+                onOpenExecuteDialog={rp.onOpenExecuteDialog}
+                onCancelCycle={rp.onCancelCycle}
+              />
+
+              {rp.selectedProposalCount > 0 && rp.currentCycle ? (
+                <SectionErrorBoundary sectionName="执行预览">
+                  <WhatIfPreview
+                    holdings={wbModel.tableProps.rows.filter((r) => r.holdingQty > 0).map((r) => ({
+                      assetKey: r.assetKey,
+                      symbol: r.symbol,
+                      holdingQty: r.holdingQty,
+                      lastPrice: r.lastPrice,
+                      actualWeightPct: r.actualWeightPct ?? 0,
+                      fxRateToBase: r.fxRateToBase,
+                    }))}
+                    proposals={rp.currentCycle.proposals ?? []}
+                    cash={wbModel.bootstrap.account.cash}
+                    baseCurrency={wbModel.bootstrap.baseCurrency}
+                  />
+                </SectionErrorBoundary>
+              ) : null}
+            </div>
+          </div>
+
+          {/* ── 全宽：市场指标仪表盘（美林时钟 + 指标概览 + scope 分析） ── */}
+          {wbModel.bootstrap.marketContext ? (
+            <SectionErrorBoundary sectionName="市场指标">
+              <MarketIndicatorDashboard
+                marketContext={wbModel.bootstrap.marketContext}
               />
             </SectionErrorBoundary>
-          </div>
-
-          {/* ── 右侧：执行面板 + 漂移 + What-If + 市场指标 ── */}
-          <div className="space-y-4">
-            <ExecutionPanel
-              currentCycle={rp.currentCycle}
-              currentRiskCheck={rp.currentRiskCheck}
-              baseCurrency={wbModel.bootstrap.baseCurrency}
-              busy={rp.busy}
-              selectedProposalCount={rp.selectedProposalCount}
-              selectedProposalNotional={rp.selectedProposalNotional}
-              canExecuteAll={rp.canExecuteAll}
-              canExecuteSelected={rp.canExecuteSelected}
-              isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
-              rebalanceChecklistAllPassed={rp.rebalanceChecklistAllPassed}
-              onGenerateCycle={rp.onGenerateCycle}
-              onOpenExecuteDialog={rp.onOpenExecuteDialog}
-              onCancelCycle={rp.onCancelCycle}
-            />
-
-            {driftCount > 0 ? (
-              <SectionErrorBoundary sectionName="漂移概览">
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
-                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
-                    漂移概览 ({driftCount} 项超阈值)
-                  </div>
-                  <DriftBarChart
-                    rows={wbModel.tableProps.rows}
-                    thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
-                    maxItems={8}
-                  />
-                </div>
-              </SectionErrorBoundary>
-            ) : null}
-
-            {rp.selectedProposalCount > 0 && rp.currentCycle ? (
-              <SectionErrorBoundary sectionName="执行预览">
-                <WhatIfPreview
-                  holdings={wbModel.tableProps.rows.filter((r) => r.holdingQty > 0).map((r) => ({
-                    assetKey: r.assetKey,
-                    symbol: r.symbol,
-                    holdingQty: r.holdingQty,
-                    lastPrice: r.lastPrice,
-                    actualWeightPct: r.actualWeightPct ?? 0,
-                    fxRateToBase: r.fxRateToBase,
-                  }))}
-                  proposals={rp.currentCycle.proposals ?? []}
-                  cash={wbModel.bootstrap.account.cash}
-                  baseCurrency={wbModel.bootstrap.baseCurrency}
-                />
-              </SectionErrorBoundary>
-            ) : null}
-
-            {/* 市场指标仪表盘（美林时钟 + 指标概览 + scope 分析） */}
-            {wbModel.bootstrap.marketContext ? (
-              <SectionErrorBoundary sectionName="市场指标">
-                <MarketIndicatorDashboard
-                  marketContext={wbModel.bootstrap.marketContext}
-                />
-              </SectionErrorBoundary>
-            ) : null}
-          </div>
-        </div>
+          ) : null}
+        </>
       ) : null}
 
       <DashboardDialogs {...wbModel.dialogProps} />
