@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     if (denied) return denied;
 
     // Rate limit: 每 IP 每分钟 5 次
-    if (checkRateLimit("indicator-series", req, { windowMs: 60_000, max: 5 })) {
+    if (checkRateLimit("indicator-series", req, { windowMs: 60_000, max: 30 })) {
       return fail("RATE_LIMITED", "请求过于频繁，请稍后重试", { status: 429 });
     }
 

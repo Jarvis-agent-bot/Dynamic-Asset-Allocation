@@ -7,8 +7,8 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
-import { marketRegimeLabel, marketRegimeTone } from "@/app/daa/dashboard/workbench/_components/rebalance/rebalanceLabels";
+import { marketRegimeTone } from "@/app/daa/dashboard/workbench/_components/rebalance/rebalanceLabels";
+import type { DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 import { IndicatorChart } from "./IndicatorChart";
 import { PercentileDistribution } from "./PercentileDistribution";
@@ -38,28 +38,35 @@ type IndicatorSeriesData = {
 
 export default function IndicatorDetailClient(props: { indicatorKey: string }) {
   const router = useRouter();
-  const wbModel = useDashboardPageModel();
   const [data, setData] = useState<IndicatorSeriesData | null>(null);
+  const [snapshot, setSnapshot] = useState<DaaMarketIndicatorSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     setLoading(true);
     setError("");
-    fetch(`/api/daa/market/indicator-series?key=${encodeURIComponent(props.indicatorKey)}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
+
+    // 并行加载：指标序列 + 轻量级 bootstrap（只取 marketContext）
+    Promise.all([
+      fetch(`/api/daa/market/indicator-series?key=${encodeURIComponent(props.indicatorKey)}`)
+        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        .then((j) => j.data ?? j),
+      fetch("/api/daa/read/workbench?syncPrices=0")
+        .then((r) => r.ok ? r.json() : null)
+        .then((j) => {
+          const indicators = j?.data?.bootstrap?.marketContext?.indicators ?? [];
+          return indicators.find((i: DaaMarketIndicatorSnapshot) => i.key === props.indicatorKey) ?? null;
+        })
+        .catch(() => null),
+    ])
+      .then(([seriesData, snap]) => {
+        setData(seriesData);
+        setSnapshot(snap);
       })
-      .then((j) => setData(j.data ?? j))
       .catch((e) => setError(e instanceof Error ? e.message : "加载失败"))
       .finally(() => setLoading(false));
   }, [props.indicatorKey]);
-
-  // 从 bootstrap 获取当前指标快照
-  const snapshot = useMemo(() => {
-    return wbModel.bootstrap?.marketContext?.indicators.find((i) => i.key === props.indicatorKey) ?? null;
-  }, [wbModel.bootstrap?.marketContext, props.indicatorKey]);
 
   if (loading) {
     return (

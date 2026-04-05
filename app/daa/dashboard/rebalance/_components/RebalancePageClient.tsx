@@ -138,18 +138,9 @@ export default function RebalancePageClient() {
                 onGenerateCycle={rp.onGenerateCycle}
               />
             </SectionErrorBoundary>
-
-            {/* 市场指标仪表盘（美林时钟 + 7 维指标 + scope 分析） */}
-            {wbModel.bootstrap.marketContext ? (
-              <SectionErrorBoundary sectionName="市场指标">
-                <MarketIndicatorDashboard
-                  marketContext={wbModel.bootstrap.marketContext}
-                />
-              </SectionErrorBoundary>
-            ) : null}
           </div>
 
-          {/* ── 右侧：执行面板 + 漂移 + What-If + 历史 ── */}
+          {/* ── 右侧：执行面板 + 漂移 + What-If + 市场指标 ── */}
           <div className="space-y-4">
             <ExecutionPanel
               currentCycle={rp.currentCycle}
@@ -200,7 +191,14 @@ export default function RebalancePageClient() {
               </SectionErrorBoundary>
             ) : null}
 
-            {/* 历史周期已移至交易记录页 */}
+            {/* 市场指标仪表盘（美林时钟 + 指标概览 + scope 分析） */}
+            {wbModel.bootstrap.marketContext ? (
+              <SectionErrorBoundary sectionName="市场指标">
+                <MarketIndicatorDashboard
+                  marketContext={wbModel.bootstrap.marketContext}
+                />
+              </SectionErrorBoundary>
+            ) : null}
           </div>
         </div>
       ) : null}
