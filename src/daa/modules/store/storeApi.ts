@@ -458,6 +458,52 @@ export async function testSecretConnectivity(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Telegram Webhook
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type TelegramWebhookInfo = {
+  url: string;
+  hasCustomCertificate: boolean;
+  pendingUpdateCount: number;
+  lastErrorDate: number | null;
+  lastErrorMessage: string | null;
+  botUsername: string | null;
+};
+
+export type TelegramWebhookRegisterResult = {
+  success: boolean;
+  botUsername: string;
+  webhookUrl: string;
+  allowlist: string;
+  info: TelegramWebhookInfo;
+  message: string;
+};
+
+export async function registerTelegramWebhook(allowlist?: string): Promise<TelegramWebhookRegisterResult> {
+  return requestData<TelegramWebhookRegisterResult>("/api/daa/store/secrets/telegram-webhook", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "register", allowlist }),
+  });
+}
+
+export async function getTelegramWebhookStatus(): Promise<TelegramWebhookInfo> {
+  return requestData<TelegramWebhookInfo>("/api/daa/store/secrets/telegram-webhook", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "status" }),
+  });
+}
+
+export async function unregisterTelegramWebhook(): Promise<{ success: boolean; description: string }> {
+  return requestData<{ success: boolean; description: string }>("/api/daa/store/secrets/telegram-webhook", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "unregister" }),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Market Indicators
 // ─────────────────────────────────────────────────────────────────────────────
 

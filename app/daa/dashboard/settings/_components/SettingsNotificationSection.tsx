@@ -11,8 +11,11 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import {
   listNotificationDeliveries,
   testSecretConnectivity,
+  registerTelegramWebhook,
+  getTelegramWebhookStatus,
   type StoreNotificationDeliveryEntry,
   type StoreNotificationStatusSummary,
+  type TelegramWebhookInfo,
 } from "@/src/daa/modules/store/storeApi";
 
 import {
@@ -131,7 +134,7 @@ function formatDerivedDailySchedule(analysisTimeUtc: string): {
   if (!matched) {
     return {
       title: "未识别自动分析时间",
-      hint: "请先在“再平衡策略”里填写合法的 UTC 时间（HH:MM），通知和每日报告会跟随这一时间窗口。",
+      hint: "请先在再平衡策略里填写合法的 UTC 时间（HH:MM），通知和每日报告会跟随这一时间窗口。",
     };
   }
   const hour = Number(matched[1]);
@@ -193,6 +196,10 @@ function ChannelConfigCard(props: {
   onSendTest: () => void;
   testing: boolean;
   testDisabledReason?: string | null;
+  /** Telegram only: webhook 注册 */
+  webhookInfo?: TelegramWebhookInfo | null;
+  webhookRegistering?: boolean;
+  onRegisterWebhook?: () => void;
 }) {
   const eventsText = props.statusLoading
     ? "已生效触发：读取中"
@@ -263,6 +270,44 @@ function ChannelConfigCard(props: {
         ) : null}
       </div>
 
+      {/* Webhook 注册（仅 Telegram） */}
+      {props.onRegisterWebhook ? (
+        <div style={{ ...statusTileStyle, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--faint)" }}>Webhook</div>
+            <DaaSurfaceStatusPill tone={props.webhookInfo?.url ? "green" : "amber"}>
+              {props.webhookInfo?.url ? "已注册" : "未注册"}
+            </DaaSurfaceStatusPill>
+          </div>
+          {props.webhookInfo?.url ? (
+            <div style={{ marginTop: 8, fontSize: 11, color: "var(--muted)", lineHeight: 1.7 }}>
+              <div>URL: {props.webhookInfo.url}</div>
+              <div>Bot: @{props.webhookInfo.botUsername || "unknown"}</div>
+              {props.webhookInfo.pendingUpdateCount > 0 ? (
+                <div>待处理消息: {props.webhookInfo.pendingUpdateCount}</div>
+              ) : null}
+              {props.webhookInfo.lastErrorMessage ? (
+                <div style={{ color: "#fca5a5" }}>错误: {props.webhookInfo.lastErrorMessage}</div>
+              ) : null}
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
+              Webhook 未注册，对话助手无法接收消息。点击下方按钮一键完成注册。
+            </div>
+          )}
+          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={props.onRegisterWebhook}
+              disabled={props.webhookRegistering}
+              style={{ ...secondaryButtonStyle, opacity: props.webhookRegistering ? 0.6 : 1, cursor: props.webhookRegistering ? "not-allowed" : "pointer" }}
+            >
+              {props.webhookRegistering ? "注册中…" : props.webhookInfo?.url ? "重新注册 Webhook" : "注册 Webhook"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>触发事件</div>
         <button
@@ -314,6 +359,8 @@ export function SettingsNotificationSection(props: {
   const [refreshing, setRefreshing] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [testingChannel, setTestingChannel] = useState<"telegram" | "feishu" | null>(null);
+  const [webhookInfo, setWebhookInfo] = useState<TelegramWebhookInfo | null>(null);
+  const [webhookRegistering, setWebhookRegistering] = useState(false);
 
   const loadStatus = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -343,6 +390,36 @@ export function SettingsNotificationSection(props: {
     return () => window.removeEventListener(DAA_DASHBOARD_DATA_UPDATED_EVENT, onSaved);
   }, [loadStatus]);
 
+  // Webhook 状态加载
+  const loadWebhookInfo = useCallback(async () => {
+    try {
+      const info = await getTelegramWebhookStatus();
+      setWebhookInfo(info);
+    } catch { /* 忽略 — 可能 bot token 未配置 */ }
+  }, []);
+
+  useEffect(() => {
+    void loadWebhookInfo();
+  }, [loadWebhookInfo]);
+
+  const handleRegisterWebhook = useCallback(async () => {
+    setWebhookRegistering(true);
+    try {
+      const result = await registerTelegramWebhook();
+      if (result.success) {
+        toast.success(`Webhook 已注册到 @${result.botUsername}`);
+        setWebhookInfo(result.info);
+        await loadStatus(true);
+      } else {
+        toast.error("Webhook 注册失败");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Webhook 注册失败");
+    } finally {
+      setWebhookRegistering(false);
+    }
+  }, [loadStatus]);
+
   const handleSendTest = useCallback(async (channel: "telegram" | "feishu") => {
     const key = channel === "telegram" ? "telegram_bot_token" : "feishu_webhook_url";
     setTestingChannel(channel);
@@ -369,7 +446,7 @@ export function SettingsNotificationSection(props: {
     <section id="settings-notification" className="scroll-mt-28">
       <SectionCard
         title="通知"
-        description="先看真实运行态，再改待保存开关，避免把“当前生效”和“草稿修改”混在一起。"
+        description="先看真实运行态，再改待保存开关，避免把当前生效和草稿修改混在一起。"
       >
         <div style={{ display: "grid", gap: 16 }}>
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12 }}>
@@ -444,7 +521,7 @@ export function SettingsNotificationSection(props: {
               </div>
             </div>
             <div style={{ marginTop: 5, fontSize: 11, color: "var(--faint)" }}>
-              如需调整，请回到“再平衡策略”修改自动分析时间；保存后会在下一次 cron 窗口生效。
+              如需调整，请回到"再平衡策略"修改自动分析时间；保存后会在下一次 cron 窗口生效。
             </div>
           </div>
 
@@ -542,7 +619,10 @@ export function SettingsNotificationSection(props: {
               statusLoading={statusLoading}
               onSendTest={() => void handleSendTest("telegram")}
               testing={testingChannel === "telegram"}
-              testDisabledReason={telegramSummary?.configured ? null : "请先在“凭证”区保存 Telegram Bot Token 与 Chat ID，再发送测试消息。"}
+              testDisabledReason={telegramSummary?.configured ? null : "请先在凭证区保存 Telegram Bot Token 与 Chat ID，再发送测试消息。"}
+              webhookInfo={webhookInfo}
+              webhookRegistering={webhookRegistering}
+              onRegisterWebhook={handleRegisterWebhook}
             />
 
             <ChannelConfigCard
@@ -637,7 +717,7 @@ export function SettingsNotificationSection(props: {
               statusLoading={statusLoading}
               onSendTest={() => void handleSendTest("feishu")}
               testing={testingChannel === "feishu"}
-              testDisabledReason={feishuSummary?.configured ? null : "请先在“凭证”区保存飞书 Webhook，再发送测试消息。"}
+              testDisabledReason={feishuSummary?.configured ? null : "请先在凭证区保存飞书 Webhook，再发送测试消息。"}
             />
           </div>
 
