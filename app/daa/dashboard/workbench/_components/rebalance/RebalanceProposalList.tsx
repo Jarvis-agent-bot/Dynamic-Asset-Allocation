@@ -1,6 +1,6 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
+import { useMemo, type Dispatch, type SetStateAction } from "react";
 import { AlertCircle, CheckSquare2, TriangleAlert, XSquare } from "lucide-react";
 
 import {
@@ -40,6 +40,15 @@ export function RebalanceProposalList(props: {
   onToggleProposal: (assetKey: string, side: "BUY" | "SELL", selected: boolean) => Promise<void>;
   onSubmitLlmFeedback: (input: { contextId: string; type: "decision"; score: WorkbenchLlmFeedbackScore; comment?: string }) => Promise<void>;
 }) {
+  // 预计算漂移 map 避免 O(N*M) 查找
+  const driftMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of props.currentCycle?.driftSnapshot ?? []) {
+      m.set(d.assetKey, d.driftPct);
+    }
+    return m;
+  }, [props.currentCycle?.driftSnapshot]);
+
   return (
     <DaaSurfacePanel
       accent={props.currentCycle ? cycleStatusTone(props.currentCycle.status) : "slate"}
@@ -150,31 +159,21 @@ export function RebalanceProposalList(props: {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-[var(--font-mono)] text-[15px] font-semibold text-[var(--text)]">{row.symbol}</span>
                             <DaaSurfaceStatusPill tone={row.side === "BUY" ? "green" : "amber"}>{row.side === "BUY" ? "买入" : "卖出"}</DaaSurfaceStatusPill>
+                            {/* 金额直接显示 */}
+                            <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">{formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)}</span>
+                            {/* 漂移（仅超阈值时显示） */}
                             {(() => {
-                              const drift = props.currentCycle?.driftSnapshot?.find((d) => d.assetKey === row.assetKey);
-                              return drift ? (
-                                <DaaSurfaceStatusPill tone={Math.abs(drift.driftPct) >= 0.05 ? "amber" : "slate"}>
-                                  漂移 {(drift.driftPct * 100).toFixed(1)}%
-                                </DaaSurfaceStatusPill>
+                              const drift = driftMap.get(row.assetKey);
+                              return drift && Math.abs(drift) >= 0.03 ? (
+                                <span className="text-xs text-amber-400">偏离 {(drift * 100).toFixed(1)}%</span>
                               ) : null;
                             })()}
-                            {row.currency !== props.bootstrap.baseCurrency ? <DaaSurfaceStatusPill tone="slate">{row.currency}</DaaSurfaceStatusPill> : null}
-                            <DaaSurfaceStatusPill tone={row.selected ? "cyan" : "slate"}>{row.selected ? "已纳入执行" : "未勾选"}</DaaSurfaceStatusPill>
-                            {/* 决策信号内联展示 */}
-                            {row.decisionContext?.signalAction ? (
-                              <DaaSurfaceStatusPill tone={row.decisionContext.signalAction === "open_or_add" ? "green" : row.decisionContext.signalAction === "reduce_or_avoid" ? "red" : "slate"}>
-                                信号:{row.decisionContext.signalAction === "open_or_add" ? "看多" : row.decisionContext.signalAction === "reduce_or_avoid" ? "看空" : "观望"}
-                                {row.decisionContext.signalScore != null ? ` ${row.decisionContext.signalScore}%` : ""}
-                              </DaaSurfaceStatusPill>
-                            ) : null}
-                            {row.decisionContext?.llmAdjustment ? (
-                              <DaaSurfaceStatusPill tone={row.decisionContext.llmAdjustment === "execute" || row.decisionContext.llmAdjustment === "increase_priority" ? "green" : row.decisionContext.llmAdjustment === "skip" ? "red" : "amber"}>
-                                AI:{row.decisionContext.llmAdjustment === "execute" ? "执行" : row.decisionContext.llmAdjustment === "reduce_size" ? "缩减" : row.decisionContext.llmAdjustment === "skip" ? "跳过" : "加优"}
-                              </DaaSurfaceStatusPill>
-                            ) : null}
+                            {/* 冲突警告 */}
                             {row.decisionContext?.signalConflict ? (
-                              <DaaSurfaceStatusPill tone="red">信号冲突</DaaSurfaceStatusPill>
+                              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">冲突</span>
                             ) : null}
+                            {/* 跨币种标记 */}
+                            {row.currency !== props.bootstrap.baseCurrency ? <span className="text-[10px] text-[var(--faint)]">{row.currency}</span> : null}
                           </div>
                           {row.reason ? (
                             <div className="text-xs leading-5 text-[var(--muted)] line-clamp-2">
@@ -182,23 +181,9 @@ export function RebalanceProposalList(props: {
                             </div>
                           ) : null}
 
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>
-                              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">建议数量</div>
-                              <div className="mt-1.5 flex items-center gap-2">
-                                <span className="font-[var(--font-mono)] text-[15px] text-[var(--text)]">
-                                  {row.suggestedQty.toFixed(4)}
-                                </span>
-                              </div>
-                            </div>
-                            <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>
-                              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">建议金额</div>
-                              <div className="mt-1.5 font-[var(--font-mono)] text-[15px] text-[var(--text)]">{formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)}</div>
-                            </div>
-                            <div className={cn(daaSurfaceSubtlePanelClassName, "px-3 py-2.5")}>
-                              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">参考价格</div>
-                              <div className="mt-1.5 font-[var(--font-mono)] text-[15px] text-[var(--text)]">{formatCurrency(row.price, row.currency)}</div>
-                            </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--faint)]">
+                            <span>数量 <span className="font-[var(--font-mono)] text-[var(--muted)]">{row.suggestedQty.toFixed(4)}</span></span>
+                            <span>价格 <span className="font-[var(--font-mono)] text-[var(--muted)]">{formatCurrency(row.price, row.currency)}</span></span>
                           </div>
 
                           <button

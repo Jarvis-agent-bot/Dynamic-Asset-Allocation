@@ -85,24 +85,18 @@ export default function RebalancePageClient() {
         warnings={wbModel.bootstrap?.warnings || []}
       />
 
-      {/* 顶部 AI 摘要栏 + 快速配置 */}
-      <div className="flex items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-2.5">
-        <Bot className="h-4 w-4 shrink-0 text-[var(--primary)]" />
-        <div className="min-w-0 flex-1">
-          {today.loading ? (
-            <span className="text-sm text-[var(--muted)]">加载 AI 决策中...</span>
-          ) : today.model?.llmOutput?.reason ? (
-            <span className="text-sm leading-5 text-[var(--text)] line-clamp-1">{today.model.llmOutput.reason}</span>
-          ) : (
-            <span className="text-sm text-[var(--faint)]">AI 决策分析暂不可用</span>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
+      {/* 顶部工具栏：AI 状态 + 刷新 + 快速配置 */}
+      <div className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Bot className="h-4 w-4 text-[var(--primary)]" />
+          <span className="text-sm text-[var(--muted)]">AI 决策</span>
           {today.model && (
             <DaaSurfaceStatusPill tone={today.model.isStale ? "amber" : "green"}>
               {today.model.isStale ? "待刷新" : "已就绪"}
             </DaaSurfaceStatusPill>
           )}
+        </div>
+        <div className="flex items-center gap-2">
           <button
             onClick={() => void today.handleRefresh()}
             disabled={today.refreshing}
@@ -118,7 +112,7 @@ export default function RebalancePageClient() {
       {/* 两栏主体 */}
       {wbModel.bootstrap && rp ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-          {/* 左侧：市场环境 + 提案列表 */}
+          {/* 左侧：市场环境 + 漂移概览 + 提案列表 */}
           <div className="space-y-4">
             <SectionErrorBoundary sectionName="市场环境">
               <MarketContextCard
@@ -126,6 +120,21 @@ export default function RebalancePageClient() {
                 aiSnapshot={aiSnapshot}
               />
             </SectionErrorBoundary>
+
+            {driftCount > 0 ? (
+              <SectionErrorBoundary sectionName="漂移概览">
+                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                    漂移概览 ({driftCount} 项超阈值)
+                  </div>
+                  <DriftBarChart
+                    rows={wbModel.tableProps.rows}
+                    thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
+                    maxItems={8}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            ) : null}
 
             <SectionErrorBoundary sectionName="调仓建议">
               <RebalanceProposalList
@@ -182,19 +191,6 @@ export default function RebalancePageClient() {
                   cash={wbModel.bootstrap.account.cash}
                   baseCurrency={wbModel.bootstrap.baseCurrency}
                 />
-              </SectionErrorBoundary>
-            ) : null}
-
-            {driftCount > 0 ? (
-              <SectionErrorBoundary sectionName="漂移概览">
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)] mb-2">漂移概览</div>
-                  <DriftBarChart
-                    rows={wbModel.tableProps.rows}
-                    thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
-                    maxItems={8}
-                  />
-                </div>
               </SectionErrorBoundary>
             ) : null}
 
