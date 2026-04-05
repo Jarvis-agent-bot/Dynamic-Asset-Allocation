@@ -12,24 +12,18 @@ import { getSystemConfig, patchSystemConfig } from "@/src/daa/modules/store/stor
 
 export function QuickConfigPopover(props: {
   driftThresholdPct?: number;
-  maxPositionPct?: number;
-  stopLossPct?: number;
-  takeProfitPct?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [driftThreshold, setDriftThreshold] = useState(String((props.driftThresholdPct ?? 0.05) * 100));
-  const [maxPosition, setMaxPosition] = useState(String(props.maxPositionPct ?? 20));
-  const [stopLoss, setStopLoss] = useState(String(props.stopLossPct ?? 10));
-  const [takeProfit, setTakeProfit] = useState(String(props.takeProfitPct ?? 30));
+  const [maxPosition, setMaxPosition] = useState("20");
+  const [stopLoss, setStopLoss] = useState("10");
+  const [takeProfit, setTakeProfit] = useState("30");
   const [saving, setSaving] = useState(false);
 
   // Sync with props
   useEffect(() => {
     setDriftThreshold(String((props.driftThresholdPct ?? 0.05) * 100));
-    setMaxPosition(String(props.maxPositionPct ?? 20));
-    setStopLoss(String(props.stopLossPct ?? 10));
-    setTakeProfit(String(props.takeProfitPct ?? 30));
-  }, [props.driftThresholdPct, props.maxPositionPct, props.stopLossPct, props.takeProfitPct]);
+  }, [props.driftThresholdPct]);
 
   const handleSave = useCallback(async () => {
     const vals = [Number(driftThreshold), Number(maxPosition), Number(stopLoss), Number(takeProfit)];

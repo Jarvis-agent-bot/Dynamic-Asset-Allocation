@@ -39,6 +39,8 @@ export function RebalanceProposalList(props: {
   onSelectAllProposals: (selected: boolean) => Promise<void>;
   onToggleProposal: (assetKey: string, side: "BUY" | "SELL", selected: boolean) => Promise<void>;
   onSubmitLlmFeedback: (input: { contextId: string; type: "decision"; score: WorkbenchLlmFeedbackScore; comment?: string }) => Promise<void>;
+  /** 空状态生成按钮回调 */
+  onGenerateCycle?: () => Promise<void>;
 }) {
   // 预计算漂移 map 避免 O(N*M) 查找
   const driftMap = useMemo(() => {
@@ -92,13 +94,14 @@ export function RebalanceProposalList(props: {
                   清空勾选
                 </DaaSurfaceActionButton>
 
-                {/* 批量筛选 */}
+                {/* 批量筛选：先全部取消再逐一选中符合条件的 */}
                 <DaaSurfaceFilterChip
-                  onClick={() => {
+                  onClick={async () => {
+                    await props.onSelectAllProposals(false);
                     const cycle = props.currentCycle;
                     if (!cycle) return;
-                    for (const p of cycle.proposals) {
-                      void props.onToggleProposal(p.assetKey, p.side, p.side === "BUY");
+                    for (const p of cycle.proposals.filter((x) => x.side === "BUY")) {
+                      void props.onToggleProposal(p.assetKey, p.side, true);
                     }
                   }}
                   disabled={!props.canEditCurrentCycle}
@@ -106,32 +109,21 @@ export function RebalanceProposalList(props: {
                   仅买入
                 </DaaSurfaceFilterChip>
                 <DaaSurfaceFilterChip
-                  onClick={() => {
+                  onClick={async () => {
+                    await props.onSelectAllProposals(false);
                     const cycle = props.currentCycle;
                     if (!cycle) return;
-                    for (const p of cycle.proposals) {
-                      void props.onToggleProposal(p.assetKey, p.side, p.side === "SELL");
+                    for (const p of cycle.proposals.filter((x) => x.side === "SELL")) {
+                      void props.onToggleProposal(p.assetKey, p.side, true);
                     }
                   }}
                   disabled={!props.canEditCurrentCycle}
                 >
                   仅卖出
                 </DaaSurfaceFilterChip>
-                <DaaSurfaceFilterChip
-                  onClick={() => {
-                    const cycle = props.currentCycle;
-                    if (!cycle) return;
-                    for (const p of cycle.proposals) {
-                      void props.onToggleProposal(p.assetKey, p.side, p.suggestedNotional > 1000);
-                    }
-                  }}
-                  disabled={!props.canEditCurrentCycle}
-                >
-                  金额&gt;$1000
-                </DaaSurfaceFilterChip>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {props.currentCycle.proposals.map((row) => {
                   const proposalKey = `${row.assetKey}-${row.side}`;
                   const contextId = `decision:${props.currentCycle?.cycleId}:${row.assetKey}:${row.side}`;
@@ -140,7 +132,7 @@ export function RebalanceProposalList(props: {
                     <div
                       key={proposalKey}
                       className={cn(
-                        "rounded-[18px] border p-4 transition-colors",
+                        "rounded-[14px] border px-4 py-3 transition-colors",
                         row.selected
                           ? "border-[rgba(56,189,248,0.28)] bg-[rgba(56,189,248,0.08)]"
                           : "border-[var(--border)] bg-[rgba(8,12,20,0.48)]",
@@ -155,9 +147,9 @@ export function RebalanceProposalList(props: {
                           disabled={!props.canEditCurrentCycle}
                           aria-label={`选中 ${row.symbol} 提案`}
                         />
-                        <div className="min-w-0 flex-1 space-y-3">
+                        <div className="min-w-0 flex-1 space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-[var(--font-mono)] text-[15px] font-semibold text-[var(--text)]">{row.symbol}</span>
+                            <span className="font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">{row.symbol}</span>
                             <DaaSurfaceStatusPill tone={row.side === "BUY" ? "green" : "amber"}>{row.side === "BUY" ? "买入" : "卖出"}</DaaSurfaceStatusPill>
                             {/* 金额直接显示 */}
                             <span className="font-[var(--font-mono)] text-sm text-[var(--text)]">{formatCurrency(row.suggestedNotional, props.bootstrap.baseCurrency)}</span>
@@ -176,26 +168,21 @@ export function RebalanceProposalList(props: {
                             {row.currency !== props.bootstrap.baseCurrency ? <span className="text-[10px] text-[var(--faint)]">{row.currency}</span> : null}
                           </div>
                           {row.reason ? (
-                            <div className="text-xs leading-5 text-[var(--muted)] line-clamp-2">
-                              {row.reason}
-                            </div>
+                            <div className="text-xs leading-5 text-[var(--muted)] line-clamp-1">{row.reason}</div>
                           ) : null}
 
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--faint)]">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--faint)]">
                             <span>数量 <span className="font-[var(--font-mono)] text-[var(--muted)]">{row.suggestedQty.toFixed(4)}</span></span>
                             <span>价格 <span className="font-[var(--font-mono)] text-[var(--muted)]">{formatCurrency(row.price, row.currency)}</span></span>
+                            <button
+                              type="button"
+                              onClick={() => props.setExpandedProposalDecisionKeys((prev) => ({ ...prev, [proposalKey]: !prev[proposalKey] }))}
+                              className="text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+                              aria-expanded={decisionExpanded}
+                            >
+                              {decisionExpanded ? "▼ 收起" : "▶ 详情"}
+                            </button>
                           </div>
-
-                          <button
-                            type="button"
-                            onClick={() => props.setExpandedProposalDecisionKeys((prev) => ({ ...prev, [proposalKey]: !prev[proposalKey] }))}
-                            className="flex items-center gap-1.5 text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
-                            aria-expanded={decisionExpanded}
-                            aria-label="展开/收起详情"
-                          >
-                            <span className="text-[9px]">{decisionExpanded ? "▼" : "▶"}</span>
-                            执行说明与决策上下文
-                          </button>
                           {decisionExpanded ? (
                             <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-2.5 px-4 py-3.5")}>
                               <div className="text-sm leading-6 text-[var(--text)]">{row.reason}</div>
@@ -250,7 +237,15 @@ export function RebalanceProposalList(props: {
           )}
         </div>
       ) : (
-        <DaaSurfaceEmptyState title="尚无再平衡周期" description="请先点击「生成/刷新建议」，再勾选建议并执行。" />
+        <DaaSurfaceEmptyState
+          title="尚无调仓建议"
+          description="生成建议后，可在此审阅并勾选执行。"
+          action={props.onGenerateCycle ? (
+            <DaaSurfaceActionButton tone="primary" onClick={() => void props.onGenerateCycle!()}>
+              生成调仓建议
+            </DaaSurfaceActionButton>
+          ) : undefined}
+        />
       )}
     </DaaSurfacePanel>
   );

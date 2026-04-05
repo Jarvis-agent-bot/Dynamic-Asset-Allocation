@@ -154,6 +154,7 @@ export default function RebalancePageClient() {
                 onSelectAllProposals={rp.onSelectAllProposals}
                 onToggleProposal={rp.onToggleProposal}
                 onSubmitLlmFeedback={rp.onSubmitLlmFeedback}
+                onGenerateCycle={rp.onGenerateCycle}
               />
             </SectionErrorBoundary>
           </div>

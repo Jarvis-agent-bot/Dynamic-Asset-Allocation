@@ -7,7 +7,7 @@ export default function RebalancePage() {
     <div className="space-y-6">
       <DaaSurfacePageHeader
         title="调仓"
-        description="再平衡工作流 — 检测、生成、审阅、执行"
+        description="查看市场环境，审阅建议并执行再平衡"
       />
       <Suspense fallback={<div className="py-12 text-center text-sm text-muted-foreground">正在加载…</div>}>
         <RebalancePageClient />
