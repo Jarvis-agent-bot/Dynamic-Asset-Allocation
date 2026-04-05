@@ -10,10 +10,15 @@ import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErr
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
 import { DashboardNotificationBar } from "@/app/daa/dashboard/workbench/_components/DashboardNotificationBar";
-import { MarketIntel } from "@/app/daa/dashboard/workbench/_components/MarketIntel";
 import { DashboardDialogs } from "@/app/daa/dashboard/workbench/_components/DashboardDialogs";
-import { ActionWorkflow } from "@/app/daa/dashboard/today/_components/workflow/ActionWorkflow";
+import { RebalanceProposalList } from "@/app/daa/dashboard/workbench/_components/rebalance/RebalanceProposalList";
+import { WhatIfPreview } from "@/app/daa/dashboard/workbench/_components/rebalance/WhatIfPreview";
+import { DriftBarChart } from "@/app/daa/dashboard/workbench/_components/rebalance/DriftBarChart";
+import { RebalanceCycleHistory } from "@/app/daa/dashboard/workbench/_components/rebalance/RebalanceCycleHistory";
+
 import { QuickConfigPopover } from "./QuickConfigPopover";
+import { MarketContextCard } from "./MarketContextCard";
+import { ExecutionPanel } from "./ExecutionPanel";
 
 export default function RebalancePageClient() {
   const wbModel = useDashboardPageModel();
@@ -40,6 +45,34 @@ export default function RebalancePageClient() {
     ).length;
   }, [wbModel.tableProps.rows, wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct]);
 
+  const rp = wbModel.rebalanceSectionProps;
+
+  // AI snapshot from today decision or cycle LLM snapshot
+  const aiSnapshot = useMemo(() => {
+    const llm = today.model?.llmOutput;
+    const cycleSnapshot = rp?.currentCycle?.llmDecisionSnapshot;
+
+    // 优先用 cycle 的 LLM snapshot（包含完整分析），回退到 today decision
+    if (cycleSnapshot) {
+      return {
+        summary: cycleSnapshot.summary ?? undefined,
+        reasoning: cycleSnapshot.reasoning ?? undefined,
+        keyRisks: cycleSnapshot.keyRisks ?? undefined,
+        keyOpportunities: cycleSnapshot.keyOpportunities ?? undefined,
+        cashAdvice: cycleSnapshot.cashAdvice ?? undefined,
+        cashRationale: cycleSnapshot.cashRationale ?? undefined,
+        overallConfidence: cycleSnapshot.overallConfidence ?? undefined,
+      };
+    }
+
+    if (!llm) return null;
+    return {
+      summary: llm.reason || undefined,
+      keyRisks: llm.riskWarning ? [llm.riskWarning] : undefined,
+      keyOpportunities: llm.dissent ? [llm.dissent] : undefined,
+    };
+  }, [today.model?.llmOutput, rp?.currentCycle?.llmDecisionSnapshot]);
+
   return (
     <div className="space-y-4">
       <DashboardNotificationBar
@@ -48,20 +81,18 @@ export default function RebalancePageClient() {
         bootstrap={wbModel.bootstrap}
         executionReceipt={wbModel.executionReceipt}
         onClearExecutionReceipt={wbModel.clearExecutionReceipt}
-        currentCycle={wbModel.rebalanceSectionProps?.currentCycle ?? null}
+        currentCycle={rp?.currentCycle ?? null}
         warnings={wbModel.bootstrap?.warnings || []}
       />
 
-      {/* AI 投委会摘要（紧凑横条）+ 快速调参 */}
-      <div className="flex items-center gap-3 rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-5 py-3">
+      {/* 顶部 AI 摘要栏 + 快速配置 */}
+      <div className="flex items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-2.5">
         <Bot className="h-4 w-4 shrink-0 text-[var(--primary)]" />
         <div className="min-w-0 flex-1">
           {today.loading ? (
-            <span className="text-sm text-[var(--muted)]">加载 AI 决策中…</span>
+            <span className="text-sm text-[var(--muted)]">加载 AI 决策中...</span>
           ) : today.model?.llmOutput?.reason ? (
-            <span className="text-sm leading-5 text-[var(--text)] line-clamp-1">
-              {today.model.llmOutput.reason}
-            </span>
+            <span className="text-sm leading-5 text-[var(--text)] line-clamp-1">{today.model.llmOutput.reason}</span>
           ) : (
             <span className="text-sm text-[var(--faint)]">AI 决策分析暂不可用</span>
           )}
@@ -80,30 +111,102 @@ export default function RebalancePageClient() {
           >
             <RefreshCw className={`h-3.5 w-3.5 ${today.refreshing ? "animate-spin" : ""}`} />
           </button>
-          <QuickConfigPopover
-            driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct}
-          />
+          <QuickConfigPopover driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct} />
         </div>
       </div>
 
-      {wbModel.bootstrap && wbModel.rebalanceSectionProps ? (
-        <SectionErrorBoundary sectionName="调仓工作流">
-          <ActionWorkflow
-            {...wbModel.rebalanceSectionProps}
-            driftCount={driftCount}
-          />
-        </SectionErrorBoundary>
-      ) : null}
+      {/* 两栏主体 */}
+      {wbModel.bootstrap && rp ? (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+          {/* 左侧：市场环境 + 提案列表 */}
+          <div className="space-y-4">
+            <SectionErrorBoundary sectionName="市场环境">
+              <MarketContextCard
+                marketContext={wbModel.bootstrap.marketContext ?? null}
+                aiSnapshot={aiSnapshot}
+              />
+            </SectionErrorBoundary>
 
-      {/* 市场情报（调仓时看市场环境） */}
-      {wbModel.bootstrap ? (
-        <SectionErrorBoundary sectionName="市场情报">
-          <MarketIntel
-            marketContext={wbModel.bootstrap.marketContext ?? null}
-            signals={wbModel.signals || []}
-            currentCycle={wbModel.rebalanceSectionProps?.currentCycle ?? null}
-          />
-        </SectionErrorBoundary>
+            <SectionErrorBoundary sectionName="调仓建议">
+              <RebalanceProposalList
+                bootstrap={wbModel.bootstrap}
+                currentCycle={rp.currentCycle}
+                currentRiskCheck={rp.currentRiskCheck}
+                busy={rp.busy}
+                isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
+                canEditCurrentCycle={rp.canEditCurrentCycle}
+                buyProposalCount={rp.buyProposalCount}
+                sellProposalCount={rp.sellProposalCount}
+                selectedProposalNotional={rp.selectedProposalNotional}
+                expandedProposalDecisionKeys={rp.expandedProposalDecisionKeys}
+                setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
+                llmFeedbackSubmittingByContext={rp.llmFeedbackSubmittingByContext}
+                llmFeedbackScoreByContext={rp.llmFeedbackScoreByContext}
+                onSelectAllProposals={rp.onSelectAllProposals}
+                onToggleProposal={rp.onToggleProposal}
+                onSubmitLlmFeedback={rp.onSubmitLlmFeedback}
+              />
+            </SectionErrorBoundary>
+          </div>
+
+          {/* 右侧：执行面板 + What-If + 漂移 + 历史 */}
+          <div className="space-y-4">
+            <ExecutionPanel
+              currentCycle={rp.currentCycle}
+              currentRiskCheck={rp.currentRiskCheck}
+              baseCurrency={wbModel.bootstrap.baseCurrency}
+              busy={rp.busy}
+              selectedProposalCount={rp.selectedProposalCount}
+              selectedProposalNotional={rp.selectedProposalNotional}
+              canExecuteAll={rp.canExecuteAll}
+              canExecuteSelected={rp.canExecuteSelected}
+              isCurrentCycleTerminal={rp.isCurrentCycleTerminal}
+              rebalanceChecklistAllPassed={rp.rebalanceChecklistAllPassed}
+              onGenerateCycle={rp.onGenerateCycle}
+              onOpenExecuteDialog={rp.onOpenExecuteDialog}
+              onCancelCycle={rp.onCancelCycle}
+            />
+
+            {rp.selectedProposalCount > 0 && rp.currentCycle ? (
+              <SectionErrorBoundary sectionName="执行预览">
+                <WhatIfPreview
+                  holdings={wbModel.tableProps.rows.filter((r) => r.holdingQty > 0).map((r) => ({
+                    assetKey: r.assetKey,
+                    symbol: r.symbol,
+                    holdingQty: r.holdingQty,
+                    lastPrice: r.lastPrice,
+                    actualWeightPct: r.actualWeightPct ?? 0,
+                    fxRateToBase: r.fxRateToBase,
+                  }))}
+                  proposals={rp.currentCycle.proposals ?? []}
+                  cash={wbModel.bootstrap.account.cash}
+                  baseCurrency={wbModel.bootstrap.baseCurrency}
+                />
+              </SectionErrorBoundary>
+            ) : null}
+
+            {driftCount > 0 ? (
+              <SectionErrorBoundary sectionName="漂移概览">
+                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)] mb-2">漂移概览</div>
+                  <DriftBarChart
+                    rows={wbModel.tableProps.rows}
+                    thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
+                    maxItems={8}
+                  />
+                </div>
+              </SectionErrorBoundary>
+            ) : null}
+
+            <SectionErrorBoundary sectionName="历史周期">
+              <RebalanceCycleHistory
+                cycles={rp.cycles}
+                currentCycleId={rp.currentCycle?.cycleId ?? null}
+                onSelectCycle={rp.onSelectCycle}
+              />
+            </SectionErrorBoundary>
+          </div>
+        </div>
       ) : null}
 
       <DashboardDialogs {...wbModel.dialogProps} />
