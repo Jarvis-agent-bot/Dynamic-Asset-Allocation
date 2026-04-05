@@ -7,6 +7,8 @@ import {
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { daaPgPool } from "@/src/daa/pg/daaPg";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
 
@@ -107,14 +109,55 @@ function defaultStart(): string {
 
 type PricePoint = { date: string; close: number };
 
+/**
+ * DB 优先获取价格序列：
+ * 1. 先查 daa_market_price_history_v1
+ * 2. 数据充足且不超过 2 天 → 直接返回（0 次外部请求）
+ * 3. 否则只补缺失天数 → 新数据写回 DB
+ */
 async function fetchPriceSeries(symbol: string, start: string): Promise<{
   symbol: string;
   data: PricePoint[];
   error?: string;
 }> {
+  const normalized = normalizeYfinanceSymbol(symbol);
+  const normalizedUpper = normalized.toUpperCase();
+
+  // Step 1: 从 DB 查缓存
+  let dbData: PricePoint[] = [];
   try {
-    const normalized = normalizeYfinanceSymbol(symbol);
-    const period1 = Math.floor(new Date(start).getTime() / 1000);
+    const pool = daaPgPool();
+    const result = await pool.query(
+      `SELECT DISTINCT ON (as_of_ts::date)
+         as_of_ts::date::text AS date, price
+       FROM daa_market_price_history_v1
+       WHERE UPPER(symbol) = $1 AND as_of_ts >= $2::date
+       ORDER BY as_of_ts::date, as_of_ts DESC`,
+      [normalizedUpper, start],
+    );
+    dbData = result.rows
+      .filter((r: Record<string, unknown>) => r.price != null && Number.isFinite(Number(r.price)))
+      .map((r: Record<string, unknown>) => ({ date: String(r.date).slice(0, 10), close: Number(r.price) }));
+  } catch (e) {
+    logSwallowed("indicator-series.dbRead", e);
+  }
+
+  // Step 2: 判断是否需要补数据
+  const today = new Date().toISOString().slice(0, 10);
+  const latestDbDate = dbData.length > 0 ? dbData[dbData.length - 1].date : null;
+  const daysSinceLatest = latestDbDate
+    ? Math.floor((Date.parse(today) - Date.parse(latestDbDate)) / 86_400_000)
+    : Infinity;
+
+  // DB 有 100+ 天数据且最近 2 天内有更新 → 直接返回
+  if (dbData.length >= 100 && daysSinceLatest <= 2) {
+    return { symbol, data: dbData };
+  }
+
+  // Step 3: 从 Yahoo Finance 补数据（只拉增量或全量）
+  try {
+    const fetchStart = latestDbDate && dbData.length >= 100 ? latestDbDate : start;
+    const period1 = Math.floor(new Date(fetchStart).getTime() / 1000);
     const url = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalized)}`);
     url.searchParams.set("interval", "1d");
     url.searchParams.set("period1", String(period1));
@@ -125,7 +168,9 @@ async function fetchPriceSeries(symbol: string, start: string): Promise<{
     });
 
     if (!res.ok) {
-      return { symbol, data: [], error: `HTTP ${res.status}` };
+      // Yahoo 失败时降级返回 DB 缓存
+      if (dbData.length > 0) return { symbol, data: dbData };
+      return { symbol, data: [], error: `Yahoo HTTP ${res.status}` };
     }
 
     const json = await res.json() as { chart?: { result?: Array<{
@@ -133,23 +178,63 @@ async function fetchPriceSeries(symbol: string, start: string): Promise<{
       indicators?: { adjclose?: Array<{ adjclose?: number[] }>; quote?: Array<{ close?: number[] }> };
     }> } };
 
-    const result = json?.chart?.result?.[0];
-    if (!result?.timestamp) return { symbol, data: [] };
+    const chartResult = json?.chart?.result?.[0];
+    if (!chartResult?.timestamp) {
+      return { symbol, data: dbData.length > 0 ? dbData : [] };
+    }
 
-    const timestamps = result.timestamp;
-    const closes = result.indicators?.adjclose?.[0]?.adjclose ?? result.indicators?.quote?.[0]?.close ?? [];
+    const timestamps = chartResult.timestamp;
+    const closes = chartResult.indicators?.adjclose?.[0]?.adjclose ?? chartResult.indicators?.quote?.[0]?.close ?? [];
 
-    const data: PricePoint[] = [];
+    const freshData: PricePoint[] = [];
     for (let i = 0; i < timestamps.length; i++) {
       const close = closes[i];
       if (close == null || !Number.isFinite(close)) continue;
       const date = new Date(timestamps[i] * 1000).toISOString().slice(0, 10);
-      data.push({ date, close });
+      freshData.push({ date, close });
     }
 
-    return { symbol, data };
+    // Step 4: 新数据写回 DB（fire-and-forget）
+    if (freshData.length > 0) {
+      void writeHistoryToDb(normalizedUpper, freshData).catch((e) => logSwallowed("indicator-series.dbWrite", e));
+    }
+
+    // 合并：DB 历史 + 新拉取（日期去重取新）
+    return { symbol, data: mergeByDate(dbData, freshData) };
   } catch (e) {
+    // 外部调用失败时降级返回 DB 缓存
+    if (dbData.length > 0) return { symbol, data: dbData };
     return { symbol, data: [], error: e instanceof Error ? e.message : "未知错误" };
+  }
+}
+
+function mergeByDate(dbData: PricePoint[], freshData: PricePoint[]): PricePoint[] {
+  const map = new Map<string, number>();
+  for (const p of dbData) map.set(p.date, p.close);
+  for (const p of freshData) map.set(p.date, p.close); // fresh 覆盖旧数据
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, close]) => ({ date, close }));
+}
+
+async function writeHistoryToDb(symbol: string, data: PricePoint[]): Promise<void> {
+  const pool = daaPgPool();
+  for (let i = 0; i < data.length; i += 50) {
+    const batch = data.slice(i, i + 50);
+    const values: string[] = [];
+    const params: unknown[] = [];
+    for (const p of batch) {
+      const idx = params.length;
+      values.push(`($${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5}, $${idx + 6}, $${idx + 7}, NOW(), NULL)`);
+      params.push("yfinance", "US", symbol, `${p.date}T00:00:00Z`, p.close, "USD", "indicator_series_cache");
+    }
+    await pool.query(
+      `INSERT INTO daa_market_price_history_v1
+        (provider, market, symbol, as_of_ts, price, currency, source, fetched_at, raw_ref_id)
+       VALUES ${values.join(",")}
+       ON CONFLICT (provider, market, symbol, as_of_ts) DO NOTHING`,
+      params,
+    );
   }
 }
 
