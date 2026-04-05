@@ -14,7 +14,7 @@ import { DashboardDialogs } from "@/app/daa/dashboard/workbench/_components/Dash
 import { RebalanceProposalList } from "@/app/daa/dashboard/workbench/_components/rebalance/RebalanceProposalList";
 import { WhatIfPreview } from "@/app/daa/dashboard/workbench/_components/rebalance/WhatIfPreview";
 import { DriftBarChart } from "@/app/daa/dashboard/workbench/_components/rebalance/DriftBarChart";
-import { RebalanceCycleHistory } from "@/app/daa/dashboard/workbench/_components/rebalance/RebalanceCycleHistory";
+// RebalanceCycleHistory 已移至交易记录页，调仓页不再显示
 import { MarketIndicatorDashboard } from "@/app/daa/dashboard/workbench/_components/MarketIndicatorDashboard";
 
 import { QuickConfigPopover } from "./QuickConfigPopover";
@@ -200,13 +200,7 @@ export default function RebalancePageClient() {
               </SectionErrorBoundary>
             ) : null}
 
-            <SectionErrorBoundary sectionName="历史周期">
-              <RebalanceCycleHistory
-                cycles={rp.cycles}
-                currentCycleId={rp.currentCycle?.cycleId ?? null}
-                onSelectCycle={rp.onSelectCycle}
-              />
-            </SectionErrorBoundary>
+            {/* 历史周期已移至交易记录页 */}
           </div>
         </div>
       ) : null}
