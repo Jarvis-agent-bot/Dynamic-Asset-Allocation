@@ -67,7 +67,11 @@ export function DriftBarChart(props: {
               border: `1px solid ${CHART_COLORS.tooltipBorder}`,
               borderRadius: 8,
               fontSize: 12,
+              color: "#e2e8f0",
             }}
+            itemStyle={{ color: "#e2e8f0" }}
+            labelStyle={{ color: "#94a3b8" }}
+            cursor={{ fill: "rgba(255,255,255,0.04)" }}
             formatter={(value: number | undefined) => [`${(value ?? 0) > 0 ? "+" : ""}${(value ?? 0).toFixed(2)}%`, "偏移"]}
           />
           <ReferenceLine x={thresholdPct} stroke="hsla(45,93%,55%,0.4)" strokeDasharray="4 4" label={{ value: `+${thresholdPct}%`, fill: "hsl(45 93% 55%)", fontSize: 10, position: "top" }} />
