@@ -181,7 +181,11 @@ export function MarketIndicatorDashboard({ marketContext, hideClock }: MarketInd
             {indicators.map((ind) => (
               <div
                 key={ind.key}
-                className={cn(daaSurfaceSubtlePanelClassName, "px-4 py-3.5")}
+                role="button"
+                tabIndex={0}
+                onClick={() => window.location.href = `/daa/dashboard/rebalance/indicator/${encodeURIComponent(ind.key)}`}
+                onKeyDown={(e) => { if (e.key === "Enter") window.location.href = `/daa/dashboard/rebalance/indicator/${encodeURIComponent(ind.key)}`; }}
+                className={cn(daaSurfaceSubtlePanelClassName, "cursor-pointer px-4 py-3.5 transition-colors hover:border-[var(--primary)]/30")}
               >
                 {/* 顶部: label + scope */}
                 <div className="flex items-center justify-between gap-2">

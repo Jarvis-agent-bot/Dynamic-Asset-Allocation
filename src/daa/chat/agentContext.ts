@@ -122,8 +122,17 @@ export function buildContextDigest(readModel: Awaited<ReturnType<typeof buildWor
     .join("；");
   const topSignals = (readModel.signals || []).slice(0, 4).map((item) => item.text).join("；");
   const marketScopes = (readModel.bootstrap.marketContext?.scopes || [])
-    .slice(0, 3)
-    .map((item) => `${item.label}:${item.regime}`)
+    .slice(0, 5)
+    .map((item) => `${item.label}:${item.regime}(buyScale=${item.buyScale})`)
+    .join("；");
+  // 展示 top 8 市场指标的具体数值
+  const marketIndicators = (readModel.bootstrap.marketContext?.indicators || [])
+    .slice(0, 8)
+    .map((item) => {
+      const val = item.rawValue != null ? `${item.rawValue}${item.unit || ""}` : "N/A";
+      const pct = item.percentile252 != null ? `${item.percentile252.toFixed(0)}%位` : "";
+      return `${item.label} ${val}${pct ? ` (${pct})` : ""}`;
+    })
     .join("；");
   const latestCycle = readModel.bootstrap.latestCycle;
   return [
@@ -131,7 +140,9 @@ export function buildContextDigest(readModel: Awaited<ReturnType<typeof buildWor
     `总权益: ${formatMoney(readModel.allocationSummary.totalEquity, readModel.bootstrap.baseCurrency)}`,
     `持仓: ${topHoldings || "暂无"}`,
     `可用现金: ${formatMoney(readModel.allocationSummary.investableCash, readModel.bootstrap.baseCurrency)}`,
-    `市场状态: ${marketScopes || "暂无"}`,
+    `市场态势: ${readModel.bootstrap.marketContext?.regime || "未知"}`,
+    `市场区域: ${marketScopes || "暂无"}`,
+    `市场指标: ${marketIndicators || "暂无"}`,
     `数据健康: ${readModel.bootstrap.marketDataHealth?.message || "未知"}`,
     `最新周期: ${latestCycle ? `${latestCycle.cycleId.slice(0, 8)} / ${latestCycle.status} / ${latestCycle.triggerSource}` : "暂无"}`,
     `重要信号: ${topSignals || "暂无"}`,

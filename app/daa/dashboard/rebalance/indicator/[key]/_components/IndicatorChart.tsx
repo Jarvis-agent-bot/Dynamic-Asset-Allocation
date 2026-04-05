@@ -1,0 +1,105 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart,
+} from "recharts";
+import { cn } from "@/lib/utils";
+
+const COLORS = {
+  primary: "hsl(199 89% 60%)",
+  muted: "hsl(215 16% 57%)",
+  grid: "hsla(215,16%,57%,0.12)",
+  tooltipBg: "hsl(222 47% 11%)",
+  tooltipBorder: "hsla(215,16%,57%,0.2)",
+  band: "hsla(199,89%,60%,0.08)",
+};
+
+const TIME_RANGES = [
+  { key: "1M", label: "1月", days: 30 },
+  { key: "3M", label: "3月", days: 90 },
+  { key: "6M", label: "6月", days: 180 },
+  { key: "1Y", label: "1年", days: 365 },
+] as const;
+
+type RangeKey = (typeof TIME_RANGES)[number]["key"];
+
+export function IndicatorChart(props: {
+  series: Array<{ date: string; value: number }>;
+  label: string;
+  unit: string;
+}) {
+  const [range, setRange] = useState<RangeKey>("6M");
+
+  const data = useMemo(() => {
+    const days = TIME_RANGES.find((r) => r.key === range)?.days ?? 180;
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    return props.series
+      .filter((p) => p.date >= cutoff)
+      .map((p) => ({ label: p.date.slice(5), date: p.date, value: p.value }));
+  }, [props.series, range]);
+
+  const changePct = useMemo(() => {
+    if (data.length < 2) return null;
+    const first = data[0].value;
+    const last = data[data.length - 1].value;
+    return first > 0 ? ((last - first) / first) * 100 : null;
+  }, [data]);
+
+  if (data.length < 2) {
+    return <div className="flex h-[300px] items-center justify-center text-sm text-[var(--muted)]">数据不足</div>;
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex gap-1">
+          {TIME_RANGES.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => setRange(r.key)}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                range === r.key ? "bg-[hsla(199,89%,60%,0.16)] text-[hsl(199,89%,60%)]" : "text-[var(--muted)] hover:text-[var(--text)]",
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+        {changePct != null ? (
+          <span className={cn("text-xs font-medium", changePct >= 0 ? "text-emerald-400" : "text-red-400")}>
+            {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
+          </span>
+        ) : null}
+      </div>
+
+      <div className="h-[300px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={COLORS.grid} vertical={false} />
+            <XAxis dataKey="label" tick={{ fill: COLORS.muted, fontSize: 11 }} tickLine={false} axisLine={false} />
+            <YAxis
+              tick={{ fill: COLORS.muted, fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              width={50}
+              domain={["auto", "auto"]}
+              tickFormatter={(v: number) => `${v.toFixed(props.unit === "x" ? 2 : 1)}${props.unit === "%" ? "%" : ""}`}
+            />
+            <Tooltip
+              contentStyle={{ backgroundColor: COLORS.tooltipBg, border: `1px solid ${COLORS.tooltipBorder}`, borderRadius: 10, color: "#e2e8f0" }}
+              itemStyle={{ color: "#e2e8f0" }}
+              labelStyle={{ color: "#94a3b8" }}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={((v: number) => [`${v.toFixed(4)} ${props.unit}`, props.label]) as any}
+              labelFormatter={(l) => `日期: ${l}`}
+            />
+            <Line type="monotone" dataKey="value" stroke={COLORS.primary} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}

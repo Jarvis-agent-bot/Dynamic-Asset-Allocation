@@ -121,11 +121,23 @@ function sanitizeForPrompt(value: string, maxLen = 100): string {
 
 function formatMarketContextForPrompt(marketContext: DaaMarketContext | null | undefined): string {
   if (!marketContext) return "市场状态层未启用或暂无可用快照";
-  const reasons = marketContext.reasons.slice(0, 3).join("; ") || "无";
-  const indicators = marketContext.indicators.slice(0, 4).map((item) => (
-    `${item.label}:值=${item.rawValue == null ? "N/A" : item.rawValue}${item.unit || ""},分位=${item.percentile252 == null ? "N/A" : item.percentile252.toFixed(1)}%,说明=${item.reason}`
-  )).join(" | ");
-  return `riskOffScore=${marketContext.riskOffScorePct.toFixed(1)}, regime=${marketContext.regime}, buyScale=${marketContext.buyScale.toFixed(2)}, highRiskBuyScale=${marketContext.highRiskBuyScale.toFixed(2)}, reasons=${reasons}, indicators=${indicators}`;
+  const reasons = marketContext.reasons.slice(0, 5).join("; ") || "无";
+  // 展示全部指标（不再 slice(0,4)），包含趋势和 Z-score
+  const indicators = marketContext.indicators.map((item) => {
+    const parts = [
+      `${item.label}:值=${item.rawValue == null ? "N/A" : item.rawValue}${item.unit || ""}`,
+      `分位=${item.percentile252 == null ? "N/A" : item.percentile252.toFixed(0)}%`,
+    ];
+    if (item.zscore60 != null) parts.push(`z=${item.zscore60.toFixed(1)}`);
+    if (item.trend7dPct != null) parts.push(`7d=${item.trend7dPct > 0 ? "+" : ""}${item.trend7dPct.toFixed(1)}%`);
+    if (item.trend30dPct != null) parts.push(`30d=${item.trend30dPct > 0 ? "+" : ""}${item.trend30dPct.toFixed(1)}%`);
+    parts.push(item.reason);
+    return parts.join(",");
+  }).join(" | ");
+  const scopes = marketContext.scopes.length > 0
+    ? `, scopes=[${marketContext.scopes.map((s) => `${s.label}:${s.regime}(buyScale=${s.buyScale})`).join(", ")}]`
+    : "";
+  return `riskOffScore=${marketContext.riskOffScorePct.toFixed(1)}, regime=${marketContext.regime}, buyScale=${marketContext.buyScale.toFixed(2)}, highRiskBuyScale=${marketContext.highRiskBuyScale.toFixed(2)}, reasons=${reasons}, indicators=[${indicators}]${scopes}`;
 }
 
 function buildDecisionPrompt(input: LlmDecisionInput): string {
