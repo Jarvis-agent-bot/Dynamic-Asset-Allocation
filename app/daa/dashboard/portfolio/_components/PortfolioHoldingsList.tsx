@@ -68,13 +68,14 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; onCli
 
   const sparkData = useSparklineData(row.yfinanceSymbol || row.symbol, row.market, visible);
 
-  // costBasis 是总成本（非单价），直接与 valuationBase 比较
-  const totalCost = row.costBasis ?? 0;
+  // costBasis 是标的货币的总成本，需要乘 fxRateToBase 转为基准货币
+  const costInstrument = row.costBasis ?? 0;
+  const fx = row.fxRateToBase ?? 1;
+  const costInBase = costInstrument * fx;
   const valBase = row.valuationBase ?? 0;
-  const pnl = totalCost > 0 && valBase > 0
-    ? ((valBase - totalCost) / totalCost) * 100
+  const pnl = costInBase > 0 && valBase > 0
+    ? ((valBase - costInBase) / costInBase) * 100
     : null;
-  const pnlAmount = totalCost > 0 && valBase > 0 ? valBase - totalCost : null;
 
   const priceDelta = (row as Record<string, unknown>).priceDelta as number | undefined;
   const priceChangePercent = priceDelta != null && row.lastPrice > 0

@@ -19,12 +19,15 @@ export function AssetInfoBar(props: {
     ? (priceDelta / (row.lastPrice - priceDelta)) * 100
     : null;
 
-  // 成本与盈亏（costBasis 是总成本）
-  const totalCost = row.costBasis ?? 0;
+  // 成本与盈亏
+  // costBasis 是标的货币的总成本，需要乘 fxRateToBase 转为基准货币
+  const costInstrument = row.costBasis ?? 0;
+  const fx = row.fxRateToBase ?? 1;
+  const costInBase = costInstrument * fx;
   const valBase = row.valuationBase ?? 0;
-  const costPerShare = row.holdingQty > 0 && totalCost > 0 ? totalCost / row.holdingQty : null;
-  const pnlAmount = totalCost > 0 && valBase > 0 ? valBase - totalCost : null;
-  const pnlPct = totalCost > 0 && valBase > 0 ? ((valBase - totalCost) / totalCost) * 100 : null;
+  const costPerShare = row.holdingQty > 0 && costInstrument > 0 ? costInstrument / row.holdingQty : null;
+  const pnlAmount = costInBase > 0 && valBase > 0 ? valBase - costInBase : null;
+  const pnlPct = costInBase > 0 && valBase > 0 ? ((valBase - costInBase) / costInBase) * 100 : null;
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-4">
@@ -69,7 +72,7 @@ export function AssetInfoBar(props: {
           </span>
           {costPerShare != null ? (
             <span>
-              成本 <span className="font-[var(--font-mono)] text-[var(--text)]">
+              均价 <span className="font-[var(--font-mono)] text-[var(--text)]">
                 {formatCurrency(costPerShare, row.currency)}
               </span>
             </span>
