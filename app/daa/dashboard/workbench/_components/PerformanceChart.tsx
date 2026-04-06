@@ -205,55 +205,50 @@ export const PerformanceChart = React.memo(function PerformanceChart(props: {
   /** "equity" = 实际金额曲线（默认），"twr" = TWR 归一化收益率 */
   mode?: "equity" | "twr";
 }) {
-  const { snapshots, cashFlowEvents, benchmarkData, benchmarkLabel = "SPY", className, mode = "equity" } = props;
+  const { snapshots, benchmarkLabel = "SPY", className, mode = "equity" } = props;
   const [range, setRange] = useState<RangeKey>("ALL");
+  const [serverData, setServerData] = useState<{
+    series: Array<Record<string, unknown>>;
+    changePct: number | null;
+    lastEquity?: number;
+  } | null>(null);
 
   const selectedDays = useMemo(
     () => TIME_RANGES.find((r) => r.key === range)?.days ?? 0,
     [range],
   );
 
-  const twrData = useMemo(
-    () => normalizeSnapshots(snapshots, selectedDays, benchmarkData, cashFlowEvents),
-    [snapshots, selectedDays, benchmarkData, cashFlowEvents],
-  );
+  // 从后端获取预计算的曲线数据
+  React.useEffect(() => {
+    const params = new URLSearchParams({ mode, days: String(selectedDays) });
+    fetch(`/api/daa/read/performance-chart?${params}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const d = j?.data ?? j;
+        if (d?.series) setServerData(d);
+      })
+      .catch(() => {});
+  }, [mode, selectedDays]);
 
-  const equityData = useMemo(
-    () => buildEquityCurve(snapshots, selectedDays),
-    [snapshots, selectedDays],
-  );
+  // 优先用后端数据；后端未就绪时 fallback 到本地计算
+  const data = useMemo(() => {
+    if (serverData?.series?.length) return serverData.series;
+    if (mode === "equity") return buildEquityCurve(snapshots, selectedDays);
+    return normalizeSnapshots(snapshots, selectedDays, undefined, props.cashFlowEvents);
+  }, [serverData, mode, snapshots, selectedDays, props.cashFlowEvents]);
 
-  const data = mode === "twr" ? twrData : equityData;
+  const hasBenchmark = false; // 后端暂不返回 benchmark
+  const returnPct = useMemo(() => serverData?.changePct ?? null, [serverData]);
 
-  const hasBenchmark = useMemo(
-    () => mode === "twr" && twrData.some((d) => d.benchmark != null),
-    [mode, twrData],
-  );
-
-  // 计算收益率（TWR 模式）
-  const returnPct = useMemo(() => {
-    if (mode !== "twr" || twrData.length < 2) return null;
-    const last = twrData[twrData.length - 1].portfolio;
-    return +(last - 100).toFixed(2);
-  }, [mode, twrData]);
-
-  // 实际金额变化（equity 模式）
   const equityChange = useMemo(() => {
-    if (mode !== "equity" || equityData.length < 2) return null;
-    const first = equityData[0].equity;
-    const last = equityData[equityData.length - 1].equity;
-    const change = last - first;
-    const pct = first > 0 ? (change / first) * 100 : 0;
-    return { last, change, pct };
-  }, [mode, equityData]);
+    if (mode !== "equity") return null;
+    if (serverData?.lastEquity != null && serverData.changePct != null) {
+      return { last: serverData.lastEquity, change: 0, pct: serverData.changePct };
+    }
+    return null;
+  }, [mode, serverData]);
 
-  const benchmarkReturnPct = useMemo(() => {
-    if (!hasBenchmark || twrData.length < 2) return null;
-    const withBenchmark = twrData.filter((d) => d.benchmark != null);
-    if (withBenchmark.length < 2) return null;
-    const last = withBenchmark[withBenchmark.length - 1].benchmark!;
-    return +(last - 100).toFixed(2);
-  }, [twrData, hasBenchmark]);
+  const benchmarkReturnPct: number | null = null;
 
   if (snapshots.length < 2) {
     return (

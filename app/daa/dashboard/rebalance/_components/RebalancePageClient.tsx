@@ -177,16 +177,10 @@ export default function RebalancePageClient() {
               {rp.selectedProposalCount > 0 && rp.currentCycle ? (
                 <SectionErrorBoundary sectionName="执行预览">
                   <WhatIfPreview
-                    holdings={wbModel.tableProps.rows.filter((r) => r.holdingQty > 0).map((r) => ({
-                      assetKey: r.assetKey,
-                      symbol: r.symbol,
-                      holdingQty: r.holdingQty,
-                      lastPrice: r.lastPrice,
-                      actualWeightPct: r.actualWeightPct ?? 0,
-                      fxRateToBase: r.fxRateToBase,
-                    }))}
-                    proposals={rp.currentCycle.proposals ?? []}
-                    cash={wbModel.bootstrap.account.cash}
+                    cycleId={rp.currentCycle.cycleId}
+                    selectedProposalKeys={rp.currentCycle.proposals
+                      .filter((p) => p.selected)
+                      .map((p) => `${p.assetKey}-${p.side}`)}
                     baseCurrency={wbModel.bootstrap.baseCurrency}
                   />
                 </SectionErrorBoundary>

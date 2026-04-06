@@ -229,9 +229,10 @@ export function ActionWorkflow(props: {
         {/* Step 3.5: What-If 预览（审阅时展示当前 vs 执行后） */}
         {props.currentCycle && props.currentCycle.proposals.some((p) => p.selected) && (
           <WhatIfPreview
-            holdings={props.bootstrap.assetUniverse}
-            proposals={props.currentCycle.proposals}
-            cash={props.bootstrap.account.cash}
+            cycleId={props.currentCycle.cycleId}
+            selectedProposalKeys={props.currentCycle.proposals
+              .filter((p) => p.selected)
+              .map((p) => `${p.assetKey}-${p.side}`)}
             baseCurrency={props.bootstrap.baseCurrency}
           />
         )}
