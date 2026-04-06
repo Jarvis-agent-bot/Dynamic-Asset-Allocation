@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 
-import { Briefcase, ClipboardList, FlaskConical, Gauge, Menu, RefreshCw, Settings } from "lucide-react";
+import { Briefcase, ClipboardList, FlaskConical, Menu, RefreshCw, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -45,29 +45,6 @@ type SidebarNavProps = {
   onNavigate?: () => void;
 };
 
-function sidebarLinkClassName(input: { collapsed: boolean; isActive: boolean }) {
-  const base = input.collapsed
-    ? "mx-auto flex h-10 w-10 items-center justify-center rounded-lg"
-    : "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2";
-
-  const tone = input.isActive
-    ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-    : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.05)] hover:text-[var(--text)]";
-
-  return cn(
-    "group relative transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    base,
-    tone,
-  );
-}
-
-function sidebarIconClassName(input: { isActive: boolean }) {
-  return cn(
-    "h-[18px] w-[18px] shrink-0 transition-colors duration-150",
-    input.isActive ? "text-[var(--primary)]" : "text-[var(--muted)] group-hover:text-[var(--text)]",
-  );
-}
-
 function SidebarLink(props: {
   item: NavItem;
   collapsed: boolean;
@@ -75,17 +52,35 @@ function SidebarLink(props: {
   onNavigate?: () => void;
 }) {
   const { item, collapsed, isActive, onNavigate } = props;
+
   const content = (
     <Link
       href={item.href}
       aria-current={isActive ? "page" : undefined}
       title={collapsed ? item.label : undefined}
       onClick={onNavigate}
-      className={sidebarLinkClassName({ collapsed, isActive })}
+      className={cn(
+        "group relative flex items-center rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        collapsed ? "mx-auto h-10 w-10 justify-center" : "w-full gap-3 px-3 py-2.5",
+        isActive
+          ? "bg-[rgba(255,255,255,0.08)] text-[var(--text)]"
+          : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]",
+      )}
     >
-      <item.Icon className={sidebarIconClassName({ isActive })} aria-hidden="true" />
+      {/* 左侧活跃指示条 */}
+      {isActive && !collapsed ? (
+        <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--primary)]" />
+      ) : null}
+
+      <item.Icon
+        className={cn(
+          "h-[18px] w-[18px] shrink-0 transition-colors duration-200",
+          isActive ? "text-[var(--primary)]" : "text-[var(--faint)] group-hover:text-[var(--muted)]",
+        )}
+        aria-hidden="true"
+      />
       {!collapsed ? (
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{item.label}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-[-0.01em]">{item.label}</span>
       ) : null}
     </Link>
   );
@@ -108,7 +103,7 @@ export function DaaSidebarNav({ collapsed = false, onNavigate }: SidebarNavProps
 
   return (
     <TooltipProvider delayDuration={120}>
-      <nav className="flex flex-col gap-0.5" aria-label="DAA 主导航">
+      <nav className="flex flex-col gap-1" aria-label="DAA 主导航">
         {items.map((item) => (
           <SidebarLink
             key={item.key}
@@ -142,15 +137,16 @@ export function DaaMobileNav() {
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="w-72 border-r px-0"
-        style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+        className="w-[260px] border-r-0 px-0"
+        style={{ background: "rgba(10,14,22,0.98)", borderColor: "transparent" }}
       >
-        <SheetHeader className="border-b border-[var(--border)] px-4 pb-3 pt-4">
-          <SheetTitle className="text-left text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
+        <SheetHeader className="px-4 pb-4 pt-5">
+          <SheetTitle className="flex items-center gap-2.5 text-left text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,#38BDF8,#818CF8)] text-[11px] font-bold text-white" style={{ fontFamily: "var(--font-mono)" }}>D</span>
             {DAA_BRAND_NAME}
           </SheetTitle>
         </SheetHeader>
-        <nav className="mt-2 flex flex-col gap-0.5 px-2" aria-label="DAA 主导航">
+        <nav className="flex flex-col gap-1 px-3" aria-label="DAA 主导航">
           {items.map((item) => {
             const isActive = active === item.key;
             return (
@@ -160,13 +156,14 @@ export function DaaMobileNav() {
                 aria-current={isActive ? "page" : undefined}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   isActive
-                    ? "bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
-                    : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.05)] hover:text-[var(--text)]",
+                    ? "bg-[rgba(255,255,255,0.08)] text-[var(--text)]"
+                    : "text-[var(--muted)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]",
                 )}
               >
-                <item.Icon className={sidebarIconClassName({ isActive })} aria-hidden="true" />
+                {isActive ? <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--primary)]" /> : null}
+                <item.Icon className={cn("h-[18px] w-[18px] shrink-0", isActive ? "text-[var(--primary)]" : "text-[var(--faint)]")} aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
               </Link>
             );

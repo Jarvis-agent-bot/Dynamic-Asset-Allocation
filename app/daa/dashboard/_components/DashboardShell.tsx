@@ -18,23 +18,23 @@ type Props = {
 const SECTION_META: Record<string, { label: string; hint: string }> = {
   portfolio: {
     label: "持仓",
-    hint: "资产配置、AI 决策与观察列表管理",
+    hint: "资产配置与观察列表管理",
   },
   rebalance: {
     label: "调仓",
-    hint: "再平衡工作流 — 检测、生成、审阅、执行",
+    hint: "查看市场环境，审阅建议并执行再平衡",
   },
   trades: {
     label: "交易记录",
-    hint: "周期、订单与复盘报告审计中心",
+    hint: "周期、订单与复盘报告",
   },
   "strategy-lab": {
     label: "策略实验室",
-    hint: "回测资产配置策略，对比基准收益",
+    hint: "回测资产配置策略",
   },
   settings: {
     label: "设置",
-    hint: "策略、风控、数据源与通知配置",
+    hint: "策略、风控与通知配置",
   },
 };
 
@@ -80,18 +80,21 @@ export default function DashboardShell({ children }: Props) {
       </a>
 
       <div className="flex min-h-screen w-full overflow-x-clip bg-transparent">
+        {/* ─── 侧边栏（Claude 风格：无边框、微妙背景差、圆角导航） ─── */}
         <aside
           className={cn(
-            "daa-shell-surface daa-scrollbar hidden h-screen shrink-0 border-r border-[var(--border)] transition-[width] duration-300 ease-out lg:sticky lg:top-0 lg:flex lg:flex-col",
-            sidebarCollapsed ? "w-16" : "w-[216px]",
+            "daa-scrollbar hidden h-screen shrink-0 transition-[width] duration-300 ease-out lg:sticky lg:top-0 lg:flex lg:flex-col",
+            "bg-[rgba(6,10,18,0.6)]",
+            sidebarCollapsed ? "w-[60px]" : "w-[220px]",
           )}
         >
-          <div className={cn("border-b border-[var(--border)]", sidebarCollapsed ? "px-2 py-3" : "px-3 py-3")}>
-            <div className={cn("flex items-center", sidebarCollapsed ? "flex-col gap-2" : "gap-2.5")}>
+          {/* 顶部：Logo + 品牌名 + 折叠按钮 */}
+          <div className={cn("flex-shrink-0", sidebarCollapsed ? "px-2.5 py-4" : "px-3.5 py-4")}>
+            <div className={cn("flex items-center", sidebarCollapsed ? "flex-col gap-3" : "gap-2.5")}>
               <Link
                 href="/daa/dashboard/portfolio"
                 aria-label="DAA dashboard"
-                className="group relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xs font-bold text-white transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ fontFamily: "var(--font-mono)" }}
               >
                 <span className="absolute inset-0 bg-[linear-gradient(135deg,#38BDF8,#818CF8)]" />
@@ -109,36 +112,48 @@ export default function DashboardShell({ children }: Props) {
                 onClick={toggleSidebar}
                 aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
                 title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--faint)] transition-all hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                {sidebarCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
               </button>
             </div>
           </div>
 
-          <div className={cn("flex-1 overflow-y-auto", sidebarCollapsed ? "px-1.5 py-2" : "px-2 py-2")}>
+          {/* 导航区 */}
+          <div className={cn("flex-1 overflow-y-auto", sidebarCollapsed ? "px-1.5 py-1" : "px-2.5 py-1")}>
             <DaaSidebarNav collapsed={sidebarCollapsed} />
           </div>
 
+          {/* 底部：用户头像（展开时显示） */}
+          {!sidebarCollapsed ? (
+            <div className="flex-shrink-0 px-3.5 py-3">
+              <div className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-[var(--muted)] transition-colors hover:bg-[rgba(255,255,255,0.04)]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[rgba(255,255,255,0.08)] text-[11px] font-semibold text-[var(--text)]">
+                  U
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12px] font-medium text-[var(--text)]">账户</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </aside>
 
         <main className="min-w-0 flex-1 overflow-x-clip">
-          <header className="sticky top-0 z-30 hidden border-b border-[var(--border)] bg-[rgba(8,12,20,0.86)] backdrop-blur-xl lg:block">
-            <div className="flex h-14 items-center gap-4 px-6">
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 text-sm">
-                  <span className="font-medium text-[var(--text)]">{currentSection.label}</span>
-                  <span className="text-[var(--faint)]">&mdash;</span>
-                  <span className="text-[13px] text-[var(--muted)]">{currentSection.hint}</span>
-                </div>
+          {/* ─── 顶部栏（桌面）─── */}
+          <header className="sticky top-0 z-30 hidden border-b border-[rgba(255,255,255,0.06)] bg-[rgba(8,12,20,0.86)] backdrop-blur-xl lg:block">
+            <div className="flex h-12 items-center gap-4 px-6">
+              <div className="min-w-0 flex-1">
+                <span className="text-sm font-medium text-[var(--text)]">{currentSection.label}</span>
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <DaaUserMenuDialog />
               </div>
             </div>
           </header>
 
-          <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[rgba(8,12,20,0.92)] backdrop-blur-xl lg:hidden">
+          {/* ─── 顶部栏（移动） ─── */}
+          <header className="sticky top-0 z-30 border-b border-[rgba(255,255,255,0.06)] bg-[rgba(8,12,20,0.92)] backdrop-blur-xl lg:hidden">
             <div className="flex h-12 items-center justify-between gap-3 px-4">
               <div className="flex min-w-0 items-center gap-2.5">
                 <Suspense fallback={<div className="h-7 w-7 rounded bg-[var(--elevated)]" />}>
@@ -154,7 +169,7 @@ export default function DashboardShell({ children }: Props) {
 
           <section
             id="daa-dashboard-main-content"
-            className="min-w-0 w-full max-w-full overflow-x-clip px-4 py-5 sm:px-5 lg:px-7 lg:py-7"
+            className="min-w-0 w-full max-w-full overflow-x-clip px-4 py-5 sm:px-5 lg:px-7 lg:py-6"
           >
             <div className="mx-auto max-w-[1440px]">{children}</div>
           </section>
