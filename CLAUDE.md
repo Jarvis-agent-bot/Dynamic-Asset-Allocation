@@ -124,6 +124,26 @@ Default weights: Human 35% + Technical 25% + News 20% + Valuation 20%
 - `btcVolatility` — Crypto volatility
 - `goldSilverRatio` — Risk-off/on signal
 
+### Market Data Caching Strategy (强制规范)
+
+所有需要历史价格数据的接口**必须**使用通用缓存函数，**禁止**直接调用 Yahoo Finance：
+
+```typescript
+import { fetchPriceSeriesWithCache, fetchMultiplePriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+```
+
+缓存流程：DB 优先 → 判断新鲜度 → 按需补增量 → 异步写回 DB → 外部失败时降级返回缓存。
+
+| 层级 | 表 | 用途 | TTL |
+|------|---|------|-----|
+| 快照 | `daa_market_price_snapshot` | 每个 symbol 最新价 | 15 分钟 fresh / 48 小时 stale |
+| 历史 | `daa_market_price_history_v1` | 按日价格序列 | 永久（cron 定期刷新） |
+| 指标 | `daa_market_indicator_snapshot_v1` | 指标百分位/趋势 | 由 cron 刷新间隔决定 |
+| 原始 | `daa_external_payload_raw_v1` | Yahoo 原始响应 | 90 天 |
+
+**不直接调 Yahoo 的接口**：indicator-series、insights、daily-analysis、drift-check
+**允许直接调 Yahoo 的接口**：price-refresh cron（它是刷新源头）、fx-refresh cron
+
 ### Rebalancing Strategies
 - Calendar-based (monthly / quarterly / semi-annual / annual)
 - Drift-based (threshold-triggered, configurable)
