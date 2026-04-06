@@ -45,6 +45,9 @@ export type AssetUniverseView = {
   holdingQty: number;
   holdingPrice: number;
   costBasis: number | null;
+  costBasisInBase: number | null;
+  unrealizedPnlBase: number | null;
+  unrealizedPnlPct: number | null;
   holdingTags: string[];
   watchEnabled: boolean;
   targetWeightHint: number;

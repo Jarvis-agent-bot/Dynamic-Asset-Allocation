@@ -76,6 +76,11 @@ export function buildAssetUniverseViewRows(input: {
       yfinanceSymbol,
     });
 
+    const valBase = valuation?.baseValue ?? 0;
+    const costInBase = row.costBasisInBase ?? ((row.costBasis ?? 0) * (fxRateToBase ?? 1));
+    const unrealizedPnlBase = valBase > 0 && costInBase > 0 ? valBase - costInBase : null;
+    const unrealizedPnlPct = costInBase > 0 ? ((valBase - costInBase) / costInBase) * 100 : null;
+
     return {
       assetKey: row.assetKey,
       symbol: row.symbol,
@@ -90,6 +95,9 @@ export function buildAssetUniverseViewRows(input: {
       holdingQty: row.holdingQty,
       holdingPrice: row.holdingPrice,
       costBasis: row.costBasis,
+      costBasisInBase: costInBase > 0 ? costInBase : null,
+      unrealizedPnlBase,
+      unrealizedPnlPct,
       holdingTags: row.holdingTags,
       watchEnabled: row.watchEnabled,
       targetWeightHint: row.targetWeightHint,

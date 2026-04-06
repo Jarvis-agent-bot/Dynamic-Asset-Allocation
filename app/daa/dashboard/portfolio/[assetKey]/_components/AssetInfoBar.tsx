@@ -19,15 +19,13 @@ export function AssetInfoBar(props: {
     ? (priceDelta / (row.lastPrice - priceDelta)) * 100
     : null;
 
-  // 成本与盈亏
-  // costBasis 是标的货币的总成本，需要乘 fxRateToBase 转为基准货币
-  const costInstrument = row.costBasis ?? 0;
-  const fx = row.fxRateToBase ?? 1;
-  const costInBase = costInstrument * fx;
+  // 成本与盈亏 — 优先使用 DB 侧预计算的基准货币成本
+  const costInBase = row.costBasisInBase ?? 0;
   const valBase = row.valuationBase ?? 0;
+  const costInstrument = row.costBasis ?? 0;
   const costPerShare = row.holdingQty > 0 && costInstrument > 0 ? costInstrument / row.holdingQty : null;
-  const pnlAmount = costInBase > 0 && valBase > 0 ? valBase - costInBase : null;
-  const pnlPct = costInBase > 0 && valBase > 0 ? ((valBase - costInBase) / costInBase) * 100 : null;
+  const pnlAmount = row.unrealizedPnlBase ?? null;
+  const pnlPct = row.unrealizedPnlPct ?? null;
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-4">

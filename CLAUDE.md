@@ -124,6 +124,23 @@ Default weights: Human 35% + Technical 25% + News 20% + Valuation 20%
 - `btcVolatility` — Crypto volatility
 - `goldSilverRatio` — Risk-off/on signal
 
+### Base Currency Convention (强制规范)
+
+系统基准货币为 USD（`strategy.account.baseCurrency`），**所有面向用户的金额必须用基准货币**。
+
+| 字段 | 币种 | 用途 |
+|------|------|------|
+| `costBasis` | 标的货币 | 审计、成本单价展示（K线成本线） |
+| `costBasisInBase` | 基准货币 | PnL 计算、用户展示 |
+| `valuationBase` | 基准货币 | 当前市值 |
+| `unrealizedPnlBase` | 基准货币 | 浮动盈亏金额 |
+| `unrealizedPnlPct` | 百分比 | 浮动盈亏百分比 |
+
+**规则**：
+- FX 转换只在交易入库时做一次（锁定交易时汇率），不随汇率浮动
+- 前端组件**禁止**手动做 `costBasis * fxRateToBase`，直接用 `row.unrealizedPnlPct`
+- PnL 在 `assetUniverseService.ts` 统一计算，前端只展示
+
 ### Market Data Caching Strategy (强制规范)
 
 所有需要历史价格数据的接口**必须**使用通用缓存函数，**禁止**直接调用 Yahoo Finance：

@@ -20,6 +20,8 @@ export type DaaStorePosition = {
   qty: number;
   price: number;
   costBasis: number | null;
+  /** 基准货币的总成本（交易时 FX 汇率锁定） */
+  costBasisInBase: number | null;
   tags: string[];
   updatedAt: string;
 };
@@ -103,6 +105,7 @@ export type DaaStoreAssetUniverseRow = {
   holdingQty: number;
   holdingPrice: number;
   costBasis: number | null;
+  costBasisInBase: number | null;
   holdingTags: string[];
   watchEnabled: boolean;
   targetWeightHint: number;

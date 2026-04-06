@@ -534,6 +534,43 @@ const MIGRATIONS_: Migration[] = [
       await query("ALTER TABLE daa_asset_universe ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
     },
   },
+  {
+    id: "20260406_cost_basis_in_base",
+    async apply(query) {
+      // 新增基准货币的成本列
+      await query("ALTER TABLE daa_positions_v2 ADD COLUMN IF NOT EXISTS cost_basis_in_base NUMERIC");
+      await query("ALTER TABLE daa_asset_universe ADD COLUMN IF NOT EXISTS cost_basis_in_base NUMERIC");
+
+      // 回填：用当前 FX 汇率 × costBasis（最佳近似值）
+      // USD 标的直接 1:1，非 USD 标的查 FX 表
+      await query(`
+        UPDATE daa_positions_v2 p
+        SET cost_basis_in_base = CASE
+          WHEN UPPER(p.currency) = 'USD' THEN p.cost_basis
+          ELSE p.cost_basis * COALESCE(
+            (SELECT f.rate FROM daa_fx_rates f
+             WHERE UPPER(f.base_ccy) = UPPER(p.currency) AND UPPER(f.quote_ccy) = 'USD'
+             LIMIT 1),
+            (SELECT 1.0 / NULLIF(f.rate, 0) FROM daa_fx_rates f
+             WHERE UPPER(f.base_ccy) = 'USD' AND UPPER(f.quote_ccy) = UPPER(p.currency)
+             LIMIT 1)
+          )
+        END
+        WHERE p.cost_basis IS NOT NULL AND p.cost_basis > 0
+          AND (p.cost_basis_in_base IS NULL OR p.cost_basis_in_base = 0)
+      `);
+
+      // 同步到 asset_universe
+      await query(`
+        UPDATE daa_asset_universe u
+        SET cost_basis_in_base = p.cost_basis_in_base
+        FROM daa_positions_v2 p
+        WHERE p.asset_key = u.asset_key
+          AND p.cost_basis_in_base IS NOT NULL
+          AND (u.cost_basis_in_base IS NULL OR u.cost_basis_in_base = 0)
+      `);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

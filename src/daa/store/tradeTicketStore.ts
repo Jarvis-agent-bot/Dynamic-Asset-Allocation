@@ -2320,7 +2320,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ticketMap.set(ticket.ticketId, ticket);
       }
 
-      const positionsRes = await query("SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 FOR UPDATE");
+      const positionsRes = await query("SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 FOR UPDATE");
       const positionsMap = new Map<string, DaaStorePosition>();
       for (const row of positionsRes.rows as Array<Record<string, unknown>>) {
         const pos = mapPositionRow(row);
@@ -2370,6 +2370,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           qty: 0,
           price: ticket.price,
           costBasis: 0,
+          costBasisInBase: 0,
           tags: [],
           updatedAt: nowIso,
         };
@@ -2421,11 +2422,14 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             ? Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)))
             : 0;
           const nextCostBasis = prevCostBasis + grossNotional;
+          const prevCostBasisInBase = existingPosition.costBasisInBase ?? (prevCostBasis * fxRate);
+          const nextCostBasisInBase = prevCostBasisInBase + notionalInBase;
           positionsMap.set(positionKey, {
             ...existingPosition,
             qty: nextQty,
             price: ticket.price,
             costBasis: nextCostBasis,
+            costBasisInBase: nextCostBasisInBase,
             currency: ticket.instrumentCurrency,
             updatedAt: nowIso,
           });
@@ -2453,11 +2457,15 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           } else {
             const prevCostBasis = Math.max(0, toFiniteNumber(existingPosition.costBasis, prevQty * Math.max(0, existingPosition.price)));
             const costPerUnit = prevQty > 0 ? prevCostBasis / prevQty : 0;
+            const prevCostBasisInBase = existingPosition.costBasisInBase ?? (prevCostBasis * fxRate);
+            const costPerUnitInBase = prevQty > 0 ? prevCostBasisInBase / prevQty : 0;
+            const nextCostBasisInBase = costPerUnitInBase * nextQty;
             positionsMap.set(positionKey, {
               ...existingPosition,
               qty: nextQty,
               price: ticket.price,
               costBasis: Math.max(0, costPerUnit * nextQty),
+              costBasisInBase: Math.max(0, nextCostBasisInBase),
               updatedAt: nowIso,
             });
           }
@@ -2527,7 +2535,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
       }
 
       await query(
-        "UPDATE daa_asset_universe SET holding_qty = 0, holding_price = 0, cost_basis = NULL, holding_tags = '{}'::TEXT[], updated_at = NOW() WHERE holding_qty > 0",
+        "UPDATE daa_asset_universe SET holding_qty = 0, holding_price = 0, cost_basis = NULL, cost_basis_in_base = NULL, holding_tags = '{}'::TEXT[], updated_at = NOW() WHERE holding_qty > 0",
       );
       for (const position of positionsMap.values()) {
         if (position.qty <= 0) continue;
@@ -2536,9 +2544,9 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         await query(
           `
             INSERT INTO daa_asset_universe (
-              asset_key, symbol, market, currency, holding_qty, holding_price, cost_basis, holding_tags, last_price, price_updated_at, created_at, updated_at
+              asset_key, symbol, market, currency, holding_qty, holding_price, cost_basis, cost_basis_in_base, holding_tags, last_price, price_updated_at, created_at, updated_at
             ) VALUES (
-              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW()
+              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW()
             )
             ON CONFLICT (asset_key) DO UPDATE
             SET
@@ -2548,6 +2556,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
               holding_qty = EXCLUDED.holding_qty,
               holding_price = EXCLUDED.holding_price,
               cost_basis = EXCLUDED.cost_basis,
+              cost_basis_in_base = EXCLUDED.cost_basis_in_base,
               holding_tags = EXCLUDED.holding_tags,
               last_price = CASE
                 WHEN EXCLUDED.holding_price > 0 THEN EXCLUDED.holding_price
@@ -2567,6 +2576,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             position.qty,
             position.price,
             position.costBasis,
+            position.costBasisInBase,
             position.tags,
             lastPrice,
             priceUpdatedAt,
@@ -2584,6 +2594,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           qty: position.qty,
           price: position.price,
           costBasis: position.costBasis,
+          costBasisInBase: position.costBasisInBase,
           tags: position.tags,
           updatedAt: position.updatedAt,
         })),
@@ -2628,7 +2639,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ticketIds,
       );
       const latestPositionsRows = await query(
-        "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
+        "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
       );
 
       await query("COMMIT");
@@ -2649,6 +2660,7 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
             qty: Math.max(0, toFiniteNumber(item.qty)),
             price: Math.max(0, toFiniteNumber(item.price)),
             costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
+            costBasisInBase: item.cost_basis_in_base == null ? null : toFiniteNumber(item.cost_basis_in_base),
             tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
             updatedAt: toIsoString(item.updated_at),
           } satisfies DaaStorePosition;

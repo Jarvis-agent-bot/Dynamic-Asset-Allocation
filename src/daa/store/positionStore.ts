@@ -34,6 +34,7 @@ export type DaaPositionSnapshotRow = {
   qty: number;
   price: number;
   costBasis: number | null;
+  costBasisInBase: number | null;
   tags: string[];
   updatedAt: string;
 };
@@ -50,6 +51,7 @@ export function normalizePositionSnapshotRow(row: Partial<DaaPositionSnapshotRow
     qty: Math.max(0, toFiniteNumber(row.qty, 0)),
     price: Math.max(0, toFiniteNumber(row.price, 0)),
     costBasis: row.costBasis == null ? null : Math.max(0, toFiniteNumber(row.costBasis, 0)),
+    costBasisInBase: row.costBasisInBase == null ? null : Math.max(0, toFiniteNumber(row.costBasisInBase, 0)),
     tags: Array.isArray(row.tags) ? row.tags.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean) : [],
     updatedAt: toIsoString(row.updatedAt, new Date().toISOString()),
   };
@@ -65,9 +67,9 @@ export async function replacePositionsV2SnapshotInTx(
     if (!row || !(row.qty > 0)) continue;
     await query(
       `INSERT INTO daa_positions_v2 (
-         asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+         asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
        )`,
       [
         row.assetKey,
@@ -77,6 +79,7 @@ export async function replacePositionsV2SnapshotInTx(
         row.qty,
         row.price,
         row.costBasis,
+        row.costBasisInBase,
         row.tags,
         row.updatedAt,
       ],
@@ -96,9 +99,9 @@ export async function syncSinglePositionV2InTx(
   }
   await query(
     `INSERT INTO daa_positions_v2 (
-       asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+       asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
      )
      ON CONFLICT (asset_key) DO UPDATE
      SET
@@ -108,6 +111,7 @@ export async function syncSinglePositionV2InTx(
        qty = EXCLUDED.qty,
        price = EXCLUDED.price,
        cost_basis = EXCLUDED.cost_basis,
+       cost_basis_in_base = EXCLUDED.cost_basis_in_base,
        tags = EXCLUDED.tags,
        updated_at = EXCLUDED.updated_at`,
     [
@@ -118,6 +122,7 @@ export async function syncSinglePositionV2InTx(
       normalized.qty,
       normalized.price,
       normalized.costBasis,
+      normalized.costBasisInBase,
       normalized.tags,
       normalized.updatedAt,
     ],
@@ -136,6 +141,7 @@ export function mapPositionRow(row: Record<string, unknown>): DaaStorePosition {
     qty: toFiniteNumber(row.qty),
     price: toFiniteNumber(row.price),
     costBasis: row.cost_basis == null ? null : toFiniteNumber(row.cost_basis),
+    costBasisInBase: row.cost_basis_in_base == null ? null : toFiniteNumber(row.cost_basis_in_base),
     tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x)).filter(Boolean) : [],
     updatedAt: toIsoString(row.updated_at),
   };
@@ -153,6 +159,7 @@ export function mapBrokerPositionRow(row: Record<string, unknown>): DaaStorePosi
     qty: Math.max(0, toFiniteNumber(row.qty)),
     price: Math.max(0, toFiniteNumber(row.price)),
     costBasis: row.cost_basis == null ? null : Math.max(0, toFiniteNumber(row.cost_basis)),
+    costBasisInBase: null,
     tags: Array.isArray(row.tags) ? row.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
     updatedAt: toIsoString(row.updated_at),
   };
@@ -162,7 +169,7 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
+      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -177,6 +184,7 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
         qty: Math.max(0, toFiniteNumber(item.qty)),
         price: Math.max(0, toFiniteNumber(item.price)),
         costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
+        costBasisInBase: item.cost_basis_in_base == null ? null : toFiniteNumber(item.cost_basis_in_base),
         tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
@@ -190,7 +198,7 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
     await query("BEGIN");
     try {
       await query(
-        "UPDATE daa_asset_universe SET holding_qty = 0, holding_price = 0, cost_basis = NULL, holding_tags = '{}'::TEXT[], updated_at = NOW()",
+        "UPDATE daa_asset_universe SET holding_qty = 0, holding_price = 0, cost_basis = NULL, cost_basis_in_base = NULL, holding_tags = '{}'::TEXT[], updated_at = NOW()",
       );
       for (const raw of rows) {
         const symbol = normalizeText(raw.symbol).toUpperCase();
@@ -266,7 +274,7 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
     }
 
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
+      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -281,6 +289,7 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
         qty: Math.max(0, toFiniteNumber(item.qty)),
         price: Math.max(0, toFiniteNumber(item.price)),
         costBasis: item.cost_basis == null ? null : Math.max(0, toFiniteNumber(item.cost_basis)),
+        costBasisInBase: item.cost_basis_in_base == null ? null : toFiniteNumber(item.cost_basis_in_base),
         tags: Array.isArray(item.tags) ? item.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [],
         updatedAt: toIsoString(item.updated_at),
       } satisfies DaaStorePosition;
