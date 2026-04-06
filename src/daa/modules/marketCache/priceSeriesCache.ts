@@ -111,6 +111,30 @@ export async function fetchMultiplePriceSeriesWithCache(
   return Promise.all(symbols.map((s) => fetchPriceSeriesWithCache(s, start, opts)));
 }
 
+/**
+ * 批量获取多个 symbol 的迷你走势数据（sparkline）。
+ * 返回 Map<symbol, number[]>，每个 symbol 最近 N 天的 close 价格数组。
+ */
+export async function fetchSparklinesBatch(
+  symbols: string[],
+  days: number = 30,
+): Promise<Record<string, number[]>> {
+  if (symbols.length === 0) return {};
+  const start = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  const results = await fetchMultiplePriceSeriesWithCache(symbols, start, {
+    minDbDays: 15, // sparkline 不需要 100 天
+    maxStaleDays: 3, // 允许 3 天 stale
+    timeoutMs: 5000,
+  });
+  const out: Record<string, number[]> = {};
+  for (const r of results) {
+    if (r.data.length > 0) {
+      out[r.symbol] = r.data.map((p) => p.close);
+    }
+  }
+  return out;
+}
+
 // ─── Internal ────────────────────────────────────────────────
 
 async function queryPriceHistory(symbolUpper: string, start: string): Promise<CachedPricePoint[]> {

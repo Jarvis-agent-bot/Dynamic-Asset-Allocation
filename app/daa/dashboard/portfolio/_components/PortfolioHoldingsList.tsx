@@ -1,72 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { DaaSurfaceEmptyState, DaaSurfacePanel } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
+import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
-
-/* ------------------------------------------------------------------ */
-/*  Sparkline 数据懒加载 hook                                          */
-/* ------------------------------------------------------------------ */
-
-function useSparklineData(symbol: string, market: string, visible: boolean) {
-  const [data, setData] = useState<number[] | null>(null);
-  const fetched = useRef(false);
-
-  useEffect(() => {
-    if (!visible || fetched.current || !symbol) return;
-    fetched.current = true;
-
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
-
-    const params = new URLSearchParams({
-      symbol,
-      start: start.toISOString().slice(0, 10),
-      end: end.toISOString().slice(0, 10),
-    });
-
-    fetch(`/api/daa/market/yfinance/price-series?${params}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (json?.series?.length) {
-          setData(json.series.map((p: { close: number }) => p.close));
-        }
-      })
-      .catch(() => {});
-  }, [symbol, market, visible]);
-
-  return data;
-}
 
 /* ------------------------------------------------------------------ */
 /*  单行组件                                                           */
 /* ------------------------------------------------------------------ */
 
-function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; onClick: () => void }) {
-  const { row, baseCurrency } = props;
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
-      { rootMargin: "100px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const sparkData = useSparklineData(row.yfinanceSymbol || row.symbol, row.market, visible);
+function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; sparkData: number[] | null; onClick: () => void }) {
+  const { row, baseCurrency, sparkData } = props;
 
   // costBasis 是标的货币的总成本，需要乘 fxRateToBase 转为基准货币
   const costInstrument = row.costBasis ?? 0;
@@ -87,7 +38,6 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; onCli
 
   return (
     <div
-      ref={ref}
       role="button"
       tabIndex={0}
       onClick={props.onClick}
@@ -193,6 +143,13 @@ export function PortfolioHoldingsList(props: {
 
   const holdingRows = useMemo(() => rows.filter((r) => r.holdingQty > 0), [rows]);
 
+  // 批量获取所有持仓的 sparkline（1 次 API 调用替代 N 次）
+  const sparklineSymbols = useMemo(
+    () => holdingRows.map((r) => r.yfinanceSymbol || r.symbol),
+    [holdingRows],
+  );
+  const sparklines = useSparklines(sparklineSymbols);
+
   // 自动生成有数据的分类 tab
   const availableCategories = useMemo(() => {
     const keys = new Set(holdingRows.map((r) => holdingCategoryKey(r.market, r.assetClass)));
@@ -253,6 +210,7 @@ export function PortfolioHoldingsList(props: {
             key={row.assetKey}
             row={row}
             baseCurrency={baseCurrency}
+            sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
             onClick={() => handleRowClick(row)}
           />
         ))}

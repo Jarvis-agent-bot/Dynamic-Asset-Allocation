@@ -1,66 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Eye } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
+import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
+import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
-
-/* ------------------------------------------------------------------ */
-/*  Sparkline 懒加载                                                    */
-/* ------------------------------------------------------------------ */
-
-function useSparklineData(symbol: string, visible: boolean) {
-  const [data, setData] = useState<number[] | null>(null);
-  const fetched = useRef(false);
-
-  useEffect(() => {
-    if (!visible || fetched.current || !symbol) return;
-    fetched.current = true;
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
-    const params = new URLSearchParams({
-      symbol,
-      start: start.toISOString().slice(0, 10),
-      end: end.toISOString().slice(0, 10),
-    });
-    fetch(`/api/daa/market/yfinance/price-series?${params}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (json?.series?.length) setData(json.series.map((p: { close: number }) => p.close));
-      })
-      .catch(() => {});
-  }, [symbol, visible]);
-
-  return data;
-}
 
 /* ------------------------------------------------------------------ */
 /*  单行                                                               */
 /* ------------------------------------------------------------------ */
 
-function WatchlistRow(props: { row: AssetUniverseView; onClick: () => void }) {
-  const { row } = props;
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) setVisible(true); },
-      { rootMargin: "100px" },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  const sparkData = useSparklineData(row.yfinanceSymbol || row.symbol, visible);
+function WatchlistRow(props: { row: AssetUniverseView; sparkData: number[] | null; onClick: () => void }) {
+  const { row, sparkData } = props;
 
   const priceDelta = (row as Record<string, unknown>).priceDelta as number | undefined;
   const changePct = priceDelta != null && row.lastPrice > 0
@@ -75,7 +31,6 @@ function WatchlistRow(props: { row: AssetUniverseView; onClick: () => void }) {
 
   return (
     <div
-      ref={ref}
       role="button"
       tabIndex={0}
       onClick={props.onClick}
@@ -170,6 +125,10 @@ export function WatchlistItemList(props: { rows: AssetUniverseView[] }) {
 
   const watchRows = useMemo(() => rows.filter((r) => r.watchEnabled), [rows]);
 
+  // 批量 sparkline（1 次 API）
+  const sparklineSymbols = useMemo(() => watchRows.map((r) => r.yfinanceSymbol || r.symbol), [watchRows]);
+  const sparklines = useSparklines(sparklineSymbols);
+
   const availableCategories = useMemo(() => {
     const keys = new Set(watchRows.map((r) => holdingCategoryKey(r.market, r.assetClass)));
     return HOLDING_CATEGORY_META.filter((m) => m.key === "all" || keys.has(m.key));
@@ -217,6 +176,7 @@ export function WatchlistItemList(props: { rows: AssetUniverseView[] }) {
           <WatchlistRow
             key={row.assetKey}
             row={row}
+            sparkData={sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null}
             onClick={() => handleRowClick(row)}
           />
         ))}
