@@ -117,7 +117,10 @@ export async function generateWorkbenchRebalanceCycle(
     const timeZone = normalizeTimeZoneOrUtc(strategy.timezone);
     const today = getZonedYmd(now, timeZone);
     const dueDay = Math.max(1, Math.min(28, Math.trunc(strategy.calendar.dayOfMonth || 1)));
-    if (today.day !== dueDay || !isCalendarMonthDue(today.month, strategy.calendar.frequency)) {
+
+    // every_3_days 和 weekly 不依赖 dayOfMonth，由 periodKey 去重控制实际间隔
+    const isHighFrequency = strategy.calendar.frequency === "every_3_days" || strategy.calendar.frequency === "weekly";
+    if (!isHighFrequency && (today.day !== dueDay || !isCalendarMonthDue(today.month, strategy.calendar.frequency))) {
       return skipWithLatest(
         `当前不在定期再平衡窗口（${timeZone} 每${strategy.calendar.frequency === "monthly"
           ? "月"
