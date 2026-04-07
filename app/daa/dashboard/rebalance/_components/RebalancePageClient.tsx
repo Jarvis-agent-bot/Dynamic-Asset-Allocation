@@ -14,7 +14,7 @@ import { DashboardDialogs } from "@/app/daa/dashboard/workbench/_components/Dash
 import { RebalanceProposalList } from "@/app/daa/dashboard/workbench/_components/rebalance/RebalanceProposalList";
 import { WhatIfPreview } from "@/app/daa/dashboard/workbench/_components/rebalance/WhatIfPreview";
 import { DriftBarChart } from "@/app/daa/dashboard/workbench/_components/rebalance/DriftBarChart";
-// RebalanceCycleHistory 已移至交易记录页，调仓页不再显示
+// 历史周期已移至交易记录页
 import { MarketIndicatorDashboard } from "@/app/daa/dashboard/workbench/_components/MarketIndicatorDashboard";
 
 import { QuickConfigPopover } from "./QuickConfigPopover";

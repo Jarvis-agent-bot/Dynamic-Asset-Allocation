@@ -359,22 +359,6 @@ pnpm typecheck    # TypeScript 检查
 pnpm gates        # 完整门控（test + typecheck + build）
 ```
 
-## 开发验证
-
-```bash
-pnpm test
-pnpm run typecheck
-pnpm run build:check
-```
-
-常用单项检查：
-
-```bash
-pnpm exec vitest run src/daa/__tests__/assistantChatRoutes.test.ts
-pnpm exec vitest run src/daa/__tests__/workbenchTradeFlowRoute.test.ts
-pnpm exec vitest run src/daa/__tests__/dashboardReadModelGraph.test.ts
-```
-
 ## 当前阶段的真实边界
 
 现在这套系统最准确的描述是：

@@ -1,10 +1,7 @@
 export { DriftBarChart } from "./DriftBarChart";
 export { WhatIfPreview } from "./WhatIfPreview";
-export { RebalanceAiInsight } from "./RebalanceAiInsight";
 export { RebalanceProposalList } from "./RebalanceProposalList";
 export { RebalanceRiskAlerts } from "./RebalanceRiskAlerts";
-export { RebalanceExecutionChecklist, type WorkbenchChecklistItem } from "./RebalanceExecutionChecklist";
-export { RebalanceCycleHistory } from "./RebalanceCycleHistory";
 export {
   cycleStatusLabel,
   cycleStatusTone,
@@ -17,4 +14,6 @@ export {
   riskRuleLabel,
   riskItemStatusLabel,
   riskItemTone,
+  signalActionLabel,
+  llmAdjustmentLabel,
 } from "./rebalanceLabels";
