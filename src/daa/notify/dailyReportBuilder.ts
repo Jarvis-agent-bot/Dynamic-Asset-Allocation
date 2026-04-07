@@ -3,7 +3,7 @@ import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 /**
  * Build a daily report text from WorkbenchBootstrap data.
- * Uses Telegram MarkdownV2 style with structured layout.
+ * Uses Telegram HTML parse mode for clean formatting (no MarkdownV2 escape issues).
  */
 export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
   const now = new Date();
@@ -12,7 +12,7 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
   const lines: string[] = [];
 
   // ─── Header ───
-  lines.push(`📊 *${esc(DAA_BRAND_NAME)} 每日报告* ${esc(dateStr)}`);
+  lines.push(`📊 <b>${h(DAA_BRAND_NAME)} 每日报告</b> ${h(dateStr)}`);
   lines.push("");
 
   // ─── Portfolio overview ───
@@ -21,44 +21,44 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
   const holdings = bootstrap.assetUniverse.filter((a) => a.holdingQty > 0);
   const holdingsValue = holdings.reduce((s, a) => s + (a.valuationBase ?? 0), 0);
 
-  lines.push("*💰 组合概览*");
-  lines.push(`\`总权益  ${fmtMoney(equity ?? 0)}\``);
-  lines.push(`\`持仓    ${fmtMoney(holdingsValue)}  (${holdings.length}个标的)\``);
-  lines.push(`\`现金    ${fmtMoney(cash)}\``);
+  lines.push("💰 <b>组合概览</b>");
+  lines.push(`总权益  <code>${fmtMoney(equity ?? 0)}</code>`);
+  lines.push(`持仓    <code>${fmtMoney(holdingsValue)}</code>  (${holdings.length}个标的)`);
+  lines.push(`现金    <code>${fmtMoney(cash)}</code>`);
   lines.push("");
 
   // ─── Holdings table ───
   if (holdings.length > 0) {
-    lines.push("*📋 持仓明细*");
-    lines.push(`\`${"标的".padEnd(10)}${"市值".padStart(10)}${"权重".padStart(8)}${"盈亏".padStart(8)}\``);
-    lines.push(`\`${"─".repeat(36)}\``);
+    lines.push("📋 <b>持仓明细</b>");
+    lines.push("<pre>");
+    lines.push(`${"标的".padEnd(12)}${"市值".padStart(8)}${"权重".padStart(7)}${"盈亏".padStart(8)}`);
+    lines.push("─".repeat(35));
 
     const sorted = [...holdings].sort((a, b) => (b.valuationBase ?? 0) - (a.valuationBase ?? 0));
-    for (const h of sorted.slice(0, 8)) {
-      const sym = h.symbol.padEnd(10).slice(0, 10);
-      const val = fmtMoney(h.valuationBase ?? 0).padStart(10);
-      const wt = `${(h.actualWeightPct ?? 0).toFixed(1)}%`.padStart(8);
-      const cost = h.costBasis ?? 0;
-      const pnlPct = cost > 0 ? (((h.valuationBase ?? 0) - cost) / cost) * 100 : 0;
+    for (const row of sorted.slice(0, 8)) {
+      const sym = row.symbol.padEnd(12).slice(0, 12);
+      const val = fmtMoney(row.valuationBase ?? 0).padStart(8);
+      const wt = `${(row.actualWeightPct ?? 0).toFixed(1)}%`.padStart(7);
+      // 使用 unrealizedPnlPct（基准货币 PnL），fallback 到 costBasisInBase 计算
+      const pnlPct = computePnlPct(row);
       const pnl = `${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%`.padStart(8);
-      lines.push(`\`${sym}${val}${wt}${pnl}\``);
+      lines.push(`${sym}${val}${wt}${pnl}`);
     }
+    lines.push("</pre>");
     lines.push("");
   }
 
   // ─── Market context ───
   const mc = bootstrap.marketContext;
   if (mc) {
-    lines.push("*🌍 市场环境*");
+    lines.push("🌍 <b>市场环境</b>");
     const vix = mc.indicators.find((i) => i.key === "vix");
-    const vixStr = vix ? `VIX ${fmtNum(vix.rawValue ?? 0)}` : "";
+    const vixStr = vix ? ` | VIX ${fmtNum(vix.rawValue ?? 0)}` : "";
 
-    lines.push(`综合: ${regimeEmoji(mc.regime)} ${regimeLabel(mc.regime)}${vixStr ? ` \\| ${esc(vixStr)}` : ""}`);
+    lines.push(`综合: ${regimeEmoji(mc.regime)} ${regimeLabel(mc.regime)}${vixStr}`);
 
-    if (mc.scopes.length > 0) {
-      for (const s of mc.scopes) {
-        lines.push(`  ${regimeEmoji(s.regime)} ${esc(s.label)}: ${regimeLabel(s.regime)}`);
-      }
+    for (const s of mc.scopes) {
+      lines.push(`  ${regimeEmoji(s.regime)} ${h(s.label)}: ${regimeLabel(s.regime)}`);
     }
     lines.push("");
   }
@@ -70,14 +70,14 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
 
   if (withGap.length > 0) {
     const thresholdPct = bootstrap.rebalanceStrategy.drift.thresholdPct * 100;
-    lines.push("*⚖️ 偏移监控*");
+    lines.push("⚖️ <b>偏移监控</b>");
 
     for (const a of withGap.slice(0, 5)) {
       const gap = a.gapPct!;
       const alert = Math.abs(gap) >= thresholdPct ? " ⚠️" : "";
-      lines.push(`  ${esc(a.symbol)}: ${gap >= 0 ? "\\+" : ""}${esc(fmtNum(gap))}%${alert}`);
+      lines.push(`  ${h(a.symbol)}: ${gap >= 0 ? "+" : ""}${fmtNum(gap)}%${alert}`);
     }
-    lines.push(`  _阈值: ${esc(fmtNum(thresholdPct))}%_`);
+    lines.push(`  <i>阈值: ${fmtNum(thresholdPct)}%</i>`);
     lines.push("");
   }
 
@@ -96,12 +96,12 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
     const losers = withChange.filter((a) => a.changePct < -0.01).sort((a, b) => a.changePct - b.changePct).slice(0, 3);
 
     if (gainers.length > 0 || losers.length > 0) {
-      lines.push("*📈 今日涨跌*");
+      lines.push("📈 <b>今日涨跌</b>");
       for (const g of gainers) {
-        lines.push(`  🟢 ${esc(g.symbol)} \\+${esc(fmtNum(Math.abs(g.changePct)))}%`);
+        lines.push(`  🟢 ${h(g.symbol)} +${fmtNum(Math.abs(g.changePct))}%`);
       }
       for (const l of losers) {
-        lines.push(`  🔴 ${esc(l.symbol)} \\-${esc(fmtNum(Math.abs(l.changePct)))}%`);
+        lines.push(`  🔴 ${h(l.symbol)} -${fmtNum(Math.abs(l.changePct))}%`);
       }
       lines.push("");
     }
@@ -111,23 +111,41 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
   const reminders: string[] = [];
   if (bootstrap.rebalanceStrategy.calendar.enabled) {
     const nextDay = bootstrap.rebalanceStrategy.calendar.dayOfMonth;
-    const nextDate = computeNextRebalanceDate(now, nextDay);
-    reminders.push(`下次定期再平衡: ${nextDate}`);
+    const freq = bootstrap.rebalanceStrategy.calendar.frequency;
+    if (freq === "every_3_days" || freq === "weekly") {
+      reminders.push(`定期再平衡: 每${freq === "every_3_days" ? "3天" : "周"}自动触发`);
+    } else {
+      const nextDate = computeNextRebalanceDate(now, nextDay);
+      reminders.push(`下次定期再平衡: ${nextDate}`);
+    }
   }
   if (reminders.length > 0) {
-    lines.push("*🔔 提醒*");
+    lines.push("🔔 <b>提醒</b>");
     for (const r of reminders) {
-      lines.push(`• ${esc(r)}`);
+      lines.push(`• ${h(r)}`);
     }
     lines.push("");
   }
 
-  lines.push("_仅供参考，不构成投资建议。_");
+  lines.push("<i>仅供参考，不构成投资建议。</i>");
 
   return lines.join("\n");
 }
 
+/** 返回 "HTML" 作为 Telegram parseMode */
+export const DAILY_REPORT_PARSE_MODE = "HTML";
+
 // ─── Helpers ───
+
+function computePnlPct(row: { unrealizedPnlPct?: number | null; costBasisInBase?: number | null; costBasis?: number | null; valuationBase?: number | null; fxRateToBase?: number | null }): number {
+  // 优先使用服务层预计算的 PnL
+  if (row.unrealizedPnlPct != null && Number.isFinite(row.unrealizedPnlPct)) return row.unrealizedPnlPct;
+  // Fallback: costBasisInBase
+  const costInBase = row.costBasisInBase ?? ((row.costBasis ?? 0) * (row.fxRateToBase ?? 1));
+  const val = row.valuationBase ?? 0;
+  if (costInBase > 0 && val > 0) return ((val - costInBase) / costInBase) * 100;
+  return 0;
+}
 
 function fmtNum(n: number): string {
   return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "N/A";
@@ -140,8 +158,9 @@ function fmtMoney(n: number): string {
   return `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
-function esc(text: string): string {
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+/** HTML escape for Telegram HTML mode */
+function h(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function regimeLabel(regime: string): string {
@@ -160,13 +179,11 @@ function regimeEmoji(regime: string): string {
 }
 
 function computeNextRebalanceDate(now: Date, dayOfMonth: number): string {
-  const y = now.getFullYear();
   const m = now.getMonth();
   const today = now.getDate();
-
   if (today < dayOfMonth) {
-    return `${String(m + 1).padStart(2, "0")}\\-${String(dayOfMonth).padStart(2, "0")}`;
+    return `${String(m + 1).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
   }
-  const next = new Date(y, m + 1, 1);
-  return `${String(next.getMonth() + 1).padStart(2, "0")}\\-${String(dayOfMonth).padStart(2, "0")}`;
+  const next = new Date(now.getFullYear(), m + 1, 1);
+  return `${String(next.getMonth() + 1).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}`;
 }

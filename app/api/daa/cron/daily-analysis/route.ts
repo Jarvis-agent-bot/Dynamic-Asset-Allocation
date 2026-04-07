@@ -5,7 +5,7 @@ import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketI
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
-import { buildDailyReportText } from "@/src/daa/notify/dailyReportBuilder";
+import { buildDailyReportText, DAILY_REPORT_PARSE_MODE } from "@/src/daa/notify/dailyReportBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
@@ -318,6 +318,7 @@ export async function POST(req: Request) {
                   triggerSource: "cron_daily_analysis",
                   jobId,
                   cycleId: autoGenerate.cycleId,
+                  parseMode: DAILY_REPORT_PARSE_MODE as "HTML",
                   requestJson: {
                     reportType: "daily_analysis",
                   },

@@ -97,6 +97,7 @@ export async function sendTelegramByEnv(message: string, meta?: {
   cycleId?: string | null;
   ticketId?: string | null;
   requestJson?: Record<string, unknown> | null;
+  parseMode?: "HTML" | "Markdown" | null;
 }): Promise<boolean> {
   const botToken = await resolveSecret("telegram_bot_token");
   const chatId = await resolveSecret("telegram_chat_id");
@@ -111,7 +112,7 @@ export async function sendTelegramByEnv(message: string, meta?: {
       responseJson: null,
     };
   } else {
-    result = await sendTelegramMessage({ botToken, chatId, text: message });
+    result = await sendTelegramMessage({ botToken, chatId, text: message, parseMode: meta?.parseMode });
   }
 
   if (meta) {
