@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     try {
       const priceResult = await pool.query(
         `SELECT COUNT(*) AS cnt FROM daa_job_execution_logs
-         WHERE job_type = 'price_refresh' AND status = 'ok'
+         WHERE job_type = 'cron_price_refresh' AND status = 'succeeded'
          AND started_at >= NOW() - INTERVAL '35 minutes'`,
       );
       const priceOk = Number(priceResult.rows[0]?.cnt) > 0;
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     try {
       const indicatorResult = await pool.query(
         `SELECT COUNT(*) AS cnt FROM daa_job_execution_logs
-         WHERE job_type = 'market_indicators_refresh' AND status = 'ok'
+         WHERE job_type = 'cron_market_indicators_refresh' AND status = 'succeeded'
          AND started_at >= NOW() - INTERVAL '65 minutes'`,
       );
       const indicatorOk = Number(indicatorResult.rows[0]?.cnt) > 0;
