@@ -218,10 +218,57 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Dividend refresh | 1:30am UTC | Dividend data |
 | Cache cleanup | 8:20pm UTC | Stale data removal |
 
+## Chat/Agent 架构
+
+### 对话入口
+- **Web**: `GET /api/daa/chat/sessions` + `POST /api/daa/chat/messages`
+- **Telegram**: `POST /api/daa/chat/telegram/webhook`（需要先在设置页注册 Webhook）
+
+### Agent 组件
+
+| 组件 | 文件 | 职责 |
+|------|------|------|
+| Orchestrator | `src/daa/chat/chatOrchestrator.ts` | 接收消息 → 加载上下文 → 规划意图 → 执行工具 → 返回结果 |
+| Intent Parser | `src/daa/chat/assistantIntentRules.ts` | 正则 + 关键词匹配 11 种意图 |
+| LLM Planner | `src/daa/chat/assistantIntentPlanning.ts` | 不确定意图时调 LLM 辅助规划 |
+| Tool Registry | `src/daa/chat/agentTools.ts` | 12 个工具（持仓查询/风险/市场/再平衡/交易/自由问答） |
+| Context Builder | `src/daa/chat/agentContext.ts` | 构建上下文摘要（持仓+指标+信号+周期） |
+| Session Memory | `src/daa/chat/chatRepo.ts` | 会话+消息+摘要+待确认动作 |
+| Channel Adapters | `src/daa/chat/channelAdapters.ts` | Web/Telegram 双通道适配 |
+
+### 意图类型
+`help` | `portfolio_status` | `risk_status` | `market_status` | `latest_cycle` | `rebalance_generate` | `rebalance_execute` | `confirm_action` | `cancel_action` | `trade` | `llm_answer`
+
+### 待确认动作
+交易和再平衡执行需要用户确认（TTL 10 分钟），存储在 `daa_chat_session_memory.metaJson.pendingAction`。
+
 ## Notifications
 
 Supported channels: Email (Resend), Telegram Bot, Feishu (Lark) Webhook.
 Configured via Settings page or `daa_system_config_v2` in database.
+
+## Error Handling Conventions (强制规范)
+
+| 场景 | 处理方式 | 示例 |
+|------|---------|------|
+| 外部 API 失败（Yahoo/LLM） | `logSwallowed` + 降级返回缓存 | priceSeriesCache 降级到 DB 缓存 |
+| DB 查询失败 | `logSwallowed` + 返回空/默认值 | agentContext 加载失败返回空摘要 |
+| 用户输入验证 | `fail()` + 400 状态码 + 明确错误信息 | API route 参数校验 |
+| 权限拒绝 | `mapDeniedResponse()` + 401/403 | 所有 API route 入口 |
+| 不可恢复的逻辑错误 | `throw new Error()` | 缺少必须的配置项 |
+
+**规则**：
+- **禁止** `catch {}` 空块（必须至少 `logSwallowed`）
+- **禁止** 在 cron job 中 throw（会中断后续任务）
+- 前端组件用 `SectionErrorBoundary` 包裹，单个模块崩溃不影响整页
+- `logSwallowed(scope, error)` 统一格式：`[scope] swallowed: error.message`
+
+## Architecture Constraints (强制约束)
+
+- **单租户**：所有表用硬编码 `'default'` 账户。不支持多用户/多组合。
+- **baseCurrency 不可变**：系统基准货币一旦设定（默认 USD）不应更改，否则历史 PnL 失真。
+- **src/core/ 零副作用**：纯算法层禁止 import `src/daa/`、`pg`、`fetch` 等。
+- **DB 优先缓存**：所有历史价格接口必须走 `priceSeriesCache`，禁止直调 Yahoo。
 
 ## Not Yet Implemented
 

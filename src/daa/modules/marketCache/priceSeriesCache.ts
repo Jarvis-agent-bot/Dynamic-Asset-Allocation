@@ -32,6 +32,8 @@ export type PriceSeriesCacheOptions = {
   maxStaleDays?: number;
   /** Yahoo 请求超时（默认 8000ms） */
   timeoutMs?: number;
+  /** 批量请求时的最大并发数（默认 10） */
+  concurrency?: number;
 };
 
 const DEFAULT_MIN_DB_DAYS = 100;
@@ -101,14 +103,24 @@ export async function fetchPriceSeriesWithCache(
 }
 
 /**
- * 批量获取多个 symbol 的价格序列（并行，复用缓存）。
+ * 批量获取多个 symbol 的价格序列（并发限制 + 复用缓存）。
+ * 默认最多 10 个并发 Yahoo 请求，避免被封 IP。
  */
 export async function fetchMultiplePriceSeriesWithCache(
   symbols: string[],
   start: string,
   opts: PriceSeriesCacheOptions = {},
 ): Promise<PriceSeriesCacheResult[]> {
-  return Promise.all(symbols.map((s) => fetchPriceSeriesWithCache(s, start, opts)));
+  const concurrency = opts.concurrency ?? 10;
+  const results: PriceSeriesCacheResult[] = [];
+
+  for (let i = 0; i < symbols.length; i += concurrency) {
+    const batch = symbols.slice(i, i + concurrency);
+    const batchResults = await Promise.all(batch.map((s) => fetchPriceSeriesWithCache(s, start, opts)));
+    results.push(...batchResults);
+  }
+
+  return results;
 }
 
 /**
@@ -197,8 +209,22 @@ function mergeByDate(dbData: CachedPricePoint[], freshData: CachedPricePoint[]):
     .map(([date, close]) => ({ date, close }));
 }
 
+/** 从 symbol 推导 market（而非硬编码 US） */
+function inferMarketFromSymbol(symbol: string): string {
+  const s = symbol.toUpperCase();
+  if (s.endsWith(".HK")) return "HK";
+  if (s.endsWith(".SS") || s.endsWith(".SZ")) return "CN";
+  if (s.includes("-USD") || s.includes("-EUR") || s.includes("-GBP")) return "CRYPTO";
+  if (s.startsWith("^")) return "INDEX";
+  if (s.includes("=F")) return "COMMODITY";
+  return "US";
+}
+
 async function writePriceHistory(symbolUpper: string, data: CachedPricePoint[]): Promise<void> {
   const pool = daaPgPool();
+  const market = inferMarketFromSymbol(symbolUpper);
+  const currency = market === "HK" ? "HKD" : market === "CN" ? "CNY" : "USD";
+
   for (let i = 0; i < data.length; i += 50) {
     const batch = data.slice(i, i + 50);
     const values: string[] = [];
@@ -206,7 +232,7 @@ async function writePriceHistory(symbolUpper: string, data: CachedPricePoint[]):
     for (const p of batch) {
       const idx = params.length;
       values.push(`($${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5}, $${idx + 6}, $${idx + 7}, NOW(), NULL)`);
-      params.push("yfinance", "US", symbolUpper, `${p.date}T00:00:00Z`, p.close, "USD", "price_series_cache");
+      params.push("yfinance", market, symbolUpper, `${p.date}T00:00:00Z`, p.close, currency, "price_series_cache");
     }
     await pool.query(
       `INSERT INTO daa_market_price_history_v1
