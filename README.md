@@ -257,57 +257,107 @@ pnpm dev
 http://localhost:3000/daa/dashboard
 ```
 
-## 必要配置
+## 环境变量完整清单
 
-### 认证
+### 必需（系统无法启动）
 
-需要 Supabase Auth：
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `DAA_DB_URL` | PostgreSQL 连接 | `postgresql://daa:daa@localhost:5432/daa` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase 项目 URL | `https://xxx.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase 公钥（客户端安全） | `sb_publishable_xxx` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase 管理密钥（仅服务端） | `sb_secret_xxx` |
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+### 推荐（核心功能依赖）
 
-如果你要做管理员初始化，仍然需要给账号加上 `editor` 或 `viewer` 角色。
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `DAA_LLM_API_KEY` | LLM API 密钥 | `sk-xxx` |
+| `DAA_LLM_ENDPOINT` | LLM 端点 | `https://api.deepseek.com/v1/chat/completions` |
+| `DAA_LLM_MODEL` | LLM 模型名 | `deepseek-chat` |
+| `DAA_CRON_TOKEN` | Cron 定时任务认证 | `openssl rand -hex 32` 生成 |
 
-### LLM
+### 安全（生产环境必需）
 
-建议至少配置：
+| 变量 | 说明 | 默认行为 |
+|------|------|---------|
+| `DAA_SECRETS_ENCRYPTION_KEY` | Secrets 加密密钥 | 未设时从 DB URL 派生（不安全） |
 
-- `DAA_LLM_API_KEY`
-- `DAA_LLM_ENDPOINT`
-- `DAA_LLM_MODEL`
+### 可选（通知与对话）
 
-说明：
+| 变量 | 说明 |
+|------|------|
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token（也可在设置页配置） |
+| `TELEGRAM_CHAT_ID` | Telegram 默认接收人 |
+| `TELEGRAM_WEBHOOK_SECRET` | Webhook 验证密钥（设置页可一键注册） |
+| `TELEGRAM_ALLOWLIST` | 允许与 Bot 对话的用户 ID |
+| `FEISHU_WEBHOOK_URL` | 飞书 Webhook URL |
+| `FRED_API_KEY` | FRED 宏观经济数据 API |
+| `TWITTERDATA_TOKEN` | Twitter 数据 API |
 
-- 对话助手的动作规划与自由回答依赖 LLM
-- 再平衡里的结构化 AI 决策也依赖 LLM
-- 如果不配，系统会退化到非 LLM 路径，但体验会明显变弱
+> 通知类凭证优先级：环境变量 > 数据库加密存储 > 空。
+> 大部分凭证可在 Settings 页面的"凭证"区直接配置，无需写环境变量。
 
-### 数据库
+### 开发专用
 
-推荐直接接 Postgres，避免开发时热更新后数据丢失：
+| 变量 | 说明 | 默认 |
+|------|------|------|
+| `DAA_AUTH_DEV_DEFAULT_ACCOUNT` | 是否自动创建 dev 账户 | `false`（opt-in） |
+| `DAA_AUTH_DEV_DEFAULT_USERNAME` | dev 账户用户名 | `admin` |
+| `DAA_AUTH_DEV_DEFAULT_PASSWORD` | dev 账户密码 | `admin123` |
+| `DAA_API_PROXY_TARGET` | 开发时 API 代理到线上 | 空（不代理） |
+
+## 部署
+
+### Docker Compose（推荐）
 
 ```bash
-pg_isready -h 127.0.0.1 -p 5432
-createdb -h 127.0.0.1 -p 5432 daa
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env，填写必需变量
+
+# 2. 生成安全密钥
+echo "DAA_CRON_TOKEN=$(openssl rand -hex 32)" >> .env
+echo "DAA_SECRETS_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
+
+# 3. 启动
+docker compose up -d
+
+# 4. 验证
+docker ps  # 应有 daa-web, daa-cron, postgres 三个容器
+curl -s http://localhost:3000/daa/login  # 应返回 200
 ```
 
-`.env.local`：
+### VPS 部署更新
 
 ```bash
-DAA_DB_URL=postgresql://<user>@127.0.0.1:5432/daa
+ssh your-vps "cd /opt/Dynamic-Asset-Allocation && git pull origin main && docker compose build --no-cache daa-web && docker compose up -d daa-web"
 ```
 
-必须配置 PostgreSQL 数据库连接。
+### Telegram 对话助手配置
 
-## 通知配置
+1. 在设置页填写 Bot Token 和 Chat ID
+2. 点击"注册 Webhook"按钮（自动完成 webhook URL + secret + allowlist）
+3. 在 Telegram 给 Bot 发消息测试
 
-可选：
+## 本地开发
 
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `FEISHU_WEBHOOK_URL`
+```bash
+pnpm install
+cp .env.example .env.local
+# 编辑 .env.local，填写数据库和 Supabase 配置
+pnpm dev
+```
 
-通知开关在 Settings 页面控制。凭证也可以写入系统内部的 secrets 存储。
+打开 `http://localhost:3000/daa/dashboard`
+
+## 开发验证
+
+```bash
+pnpm test         # 单元测试
+pnpm typecheck    # TypeScript 检查
+pnpm gates        # 完整门控（test + typecheck + build）
+```
 
 ## 开发验证
 
