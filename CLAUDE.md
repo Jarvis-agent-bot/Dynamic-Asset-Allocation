@@ -177,6 +177,21 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 `daa_target_allocations`, `daa_market_price_snapshots`, `daa_watchlist_entries`,
 `daa_strategy_lab_run_snapshots`, `daa_job_execution_logs`
 
+### 双写模式（技术债务）
+
+当前存在两套并行的数据模型：
+
+| 旧模型 | 新模型（规范化） | 说明 |
+|--------|----------------|------|
+| `daa_asset_universe`（单表存所有） | `daa_asset_master` + `daa_portfolio_positions` + `daa_watchlist_entries` + `daa_target_allocations` | 旧表仍在双写 |
+
+**废弃计划**（按阶段推进）：
+1. ✅ 当前：双写（两套表同步更新，通过 `tradeTicketStore.ts` 的 sync 逻辑）
+2. 🔜 下一步：将所有写入统一到规范化表，`daa_asset_universe` 改为只读视图或物化查询
+3. 最终：删除 `daa_asset_universe` 表，`assetUniverseStore.ts` 改为从规范化表 JOIN 读取
+
+**新功能开发时**：优先使用规范化表（`daa_portfolio_positions` 等），避免直接写 `daa_asset_universe`。
+
 ## Key Files
 
 | Purpose | Path |
@@ -217,6 +232,7 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Fund manager holdings | 8am UTC | Hedge fund tracking |
 | Dividend refresh | 1:30am UTC | Dividend data |
 | Cache cleanup | 8:20pm UTC | Stale data removal |
+| Health check | Every 30 min | 检查 price-refresh/indicators 是否正常，失败时 TG 告警 |
 
 ## Chat/Agent 架构
 
