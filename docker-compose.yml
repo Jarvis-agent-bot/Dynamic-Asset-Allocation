@@ -14,7 +14,8 @@ services:
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - DAA_CRON_TOKEN=${DAA_CRON_TOKEN:-bf7626cf4558342362a45367d01780c4}
+      # Cron token: 必须在 .env 或 shell 中设置 DAA_CRON_TOKEN；不再提供硬编码默认值
+      - DAA_CRON_TOKEN=${DAA_CRON_TOKEN:?请设置 DAA_CRON_TOKEN 环境变量 (openssl rand -hex 32)}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
@@ -27,7 +28,7 @@ services:
     depends_on:
       - daa-web
     environment:
-      - DAA_CRON_TOKEN=${DAA_CRON_TOKEN:-bf7626cf4558342362a45367d01780c4}
+      - DAA_CRON_TOKEN=${DAA_CRON_TOKEN:?请设置 DAA_CRON_TOKEN 环境变量}
     entrypoint: >
       sh -c "
         apk add --no-cache curl &&

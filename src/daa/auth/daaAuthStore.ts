@@ -367,10 +367,10 @@ const DAA_DEV_DEFAULT_PASSWORD_ = "admin123";
 function isDevDefaultAccountEnabled(): boolean {
   if ((process.env.NODE_ENV || "").toLowerCase() === "production") return false;
 
+  // 默认关闭（opt-in），必须显式设为 true/1/on 才启用
   const raw = String(process.env.DAA_AUTH_DEV_DEFAULT_ACCOUNT || "").trim().toLowerCase();
-  if (!raw) return true;
-  if (raw === "0" || raw === "false" || raw === "off") return false;
-  return true;
+  if (raw === "1" || raw === "true" || raw === "on") return true;
+  return false;
 }
 
 export async function ensureDevDefaultDaaAuthAccount(): Promise<{ created: boolean; account: DaaAuthAccount | null }> {
