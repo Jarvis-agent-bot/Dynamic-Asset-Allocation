@@ -16,7 +16,6 @@ import {
 import { WatchlistSearchBar } from "@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar";
 import AssetUniverseTable from "./AssetUniverseTable";
 import { RiskOverview } from "./RiskOverview";
-import { CashSection } from "./CashSection";
 
 export function ActiveTabPanel(props: {
   model: DashboardPageModel;
@@ -69,36 +68,23 @@ export function ActiveTabPanel(props: {
         </div>
       ) : null}
 
-      {/* 分析面板 — 风险、现金分析 */}
+      {/* 分析面板 — 风控概览（现金流水已移至交易记录页，入金/出金已提至组合概览） */}
       {model.activeTab === "analysis" ? (
         <div className="space-y-4">
           {model.bootstrap ? (
-            <>
-              <SectionErrorBoundary sectionName="组合风险">
-                <RiskOverview
-                  bootstrap={model.bootstrap}
-                  snapshots={model.snapshots}
-                  latestCycle={null}
-                  currentRiskCheck={null}
-                />
-              </SectionErrorBoundary>
-              <SectionErrorBoundary sectionName="现金流水">
-                <CashSection
-                  baseCurrency={model.bootstrap.baseCurrency}
-                  entries={model.cashLedger}
-                  ledgerMeta={model.ledgerMeta}
-                  cashMutationsAllowed={model.bootstrap.account.cashMutationsAllowed}
-                  readOnlyReason={model.bootstrap.account.readOnlyReason}
-                  accountBreakdown={model.bootstrap.account.accountBreakdown}
-                  onCashChanged={() => void model.loadBootstrap(true)}
-                />
-              </SectionErrorBoundary>
-            </>
+            <SectionErrorBoundary sectionName="组合风险">
+              <RiskOverview
+                bootstrap={model.bootstrap}
+                snapshots={model.snapshots}
+                latestCycle={null}
+                currentRiskCheck={null}
+              />
+            </SectionErrorBoundary>
           ) : (
-            <DaaSurfacePanel accent="indigo" title="组合分析" subtitle="风险、归因与现金分析">
+            <DaaSurfacePanel accent="indigo" title="组合分析" subtitle="风险概览与归因">
               <DaaSurfaceEmptyState
                 title="分析面板"
-                description="现金分析、汇率敞口、风险仪表盘和绩效归因将在此展示"
+                description="风险仪表盘和绩效归因将在此展示"
               />
             </DaaSurfacePanel>
           )}

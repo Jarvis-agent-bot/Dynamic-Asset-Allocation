@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowDown, ArrowUp, RefreshCcw } from "lucide-react";
+import { ArrowDown, ArrowUp, Minus, Plus, RefreshCcw } from "lucide-react";
 import { Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { DashboardEmptyState } from "@/app/daa/dashboard/_components/DashboardFeedback";
@@ -35,6 +35,9 @@ export type PortfolioStatusProps = {
   refreshing: boolean;
   priceStreamConnected?: boolean;
   onRefresh: () => void;
+  /** 入金/出金回调（不传则不显示按钮） */
+  onDeposit?: () => void;
+  onWithdraw?: () => void;
 };
 
 export function PortfolioStatus(props: PortfolioStatusProps) {
@@ -82,6 +85,18 @@ export function PortfolioStatus(props: PortfolioStatusProps) {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {props.onDeposit ? (
+              <DaaSurfaceActionButton tone="success" onClick={props.onDeposit}>
+                <Plus className="h-3.5 w-3.5" />
+                入金
+              </DaaSurfaceActionButton>
+            ) : null}
+            {props.onWithdraw ? (
+              <DaaSurfaceActionButton tone="warning" onClick={props.onWithdraw}>
+                <Minus className="h-3.5 w-3.5" />
+                出金
+              </DaaSurfaceActionButton>
+            ) : null}
             <DaaSurfaceStatusPill tone="slate">本地模拟</DaaSurfaceStatusPill>
             <DaaSurfaceStatusPill tone={syncTone}>{syncLabel}</DaaSurfaceStatusPill>
             {props.priceStreamConnected != null && (
