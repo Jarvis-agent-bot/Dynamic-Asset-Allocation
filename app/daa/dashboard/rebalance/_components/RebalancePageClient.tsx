@@ -91,6 +91,9 @@ export default function RebalancePageClient() {
               {today.model.isStale ? "待刷新" : "已就绪"}
             </DaaSurfaceStatusPill>
           )}
+          <DaaSurfaceStatusPill tone={wbModel.priceStreamConnected ? "green" : "slate"}>
+            {wbModel.priceStreamConnected ? "实时" : "离线"}
+          </DaaSurfaceStatusPill>
         </div>
         <div className="flex items-center gap-2">
           <button
