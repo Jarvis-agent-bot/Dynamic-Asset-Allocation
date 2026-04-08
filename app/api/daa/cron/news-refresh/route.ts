@@ -6,7 +6,7 @@ import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaSto
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { createHash } from "crypto";
+import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 
 export const runtime = "nodejs";
 
@@ -57,18 +57,35 @@ async function resolveSymbolsWithMarket(): Promise<SymbolWithMarket[]> {
   return [...seen.values()];
 }
 
-/** 已推送事件缓存（内存级，重启后清空；DB 级去重通过 notification_delivery_log 实现） */
-const pushedEventKeys = new Set<string>();
-
-/** 检测重大事件并发送 TG 推送（同一事件只推一次） */
+/** 检测重大事件并发送 TG 推送（同一 symbol+type 24 小时内只推一次） */
 async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
   let pushed = 0;
+  // 局部变量：本次执行内的快速去重（避免同一批次重复查 DB）
+  const batchPushedKeys = new Set<string>();
+
   for (const signal of signals) {
     if (signal.llmMajorEvent && signal.llmMajorEvent.impact === "high") {
-      // 去重 key = symbol + 事件类型 + 描述 hash（避免截断碰撞）
-      const descHash = createHash("sha256").update(signal.llmMajorEvent.description).digest("hex").slice(0, 12);
-      const eventKey = `${signal.symbol}:${signal.llmMajorEvent.type}:${descHash}`;
-      if (pushedEventKeys.has(eventKey)) continue;
+      const eventKey = `${signal.symbol}:${signal.llmMajorEvent.type}`;
+
+      // 1) 本次批量内去重
+      if (batchPushedKeys.has(eventKey)) continue;
+
+      // 2) DB 级去重：24 小时内同一 symbol + eventType 已推过则跳过
+      try {
+        const alreadySent = await hasRecentMajorEventNotification({
+          symbol: signal.symbol,
+          majorEventType: signal.llmMajorEvent.type,
+          withinHours: 24,
+        });
+        if (alreadySent) {
+          batchPushedKeys.add(eventKey);
+          continue;
+        }
+      } catch (e) {
+        logSwallowed("newsRefresh.majorEventDedup", e);
+        // DB 查询失败时保守跳过，防止误推
+        continue;
+      }
 
       try {
         const message = [
@@ -85,18 +102,18 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
           eventType: "news_major_event",
           triggerSource: "cron_news_refresh",
           parseMode: null,
+          requestJson: {
+            symbol: signal.symbol,
+            majorEventType: signal.llmMajorEvent.type,
+            majorEventDesc: signal.llmMajorEvent.description.slice(0, 200),
+          },
         });
-        pushedEventKeys.add(eventKey);
+        batchPushedKeys.add(eventKey);
         pushed++;
       } catch (e) {
         logSwallowed("newsRefresh.majorEventPush", e);
       }
     }
-  }
-  // 防止内存无限增长：超过 200 条时清理最早的
-  if (pushedEventKeys.size > 200) {
-    const arr = [...pushedEventKeys];
-    for (let i = 0; i < arr.length - 100; i++) pushedEventKeys.delete(arr[i]);
   }
   return pushed;
 }

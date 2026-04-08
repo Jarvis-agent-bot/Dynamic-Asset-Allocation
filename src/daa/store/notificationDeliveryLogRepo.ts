@@ -99,6 +99,51 @@ export async function appendNotificationDeliveryLog(input: {
   });
 }
 
+/**
+ * 检查指定 symbol + eventType 是否在最近 N 小时内已成功推送过重大新闻通知。
+ * 用于 news-refresh cron 的 DB 级去重，防止 Serverless 冷启动后重复推送。
+ */
+export async function hasRecentMajorEventNotification(input: {
+  symbol: string;
+  majorEventType: string;
+  withinHours?: number;
+}): Promise<boolean> {
+  await ensureDaaStoreSchemaPg();
+  const hours = input.withinHours ?? 24;
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT 1 FROM daa_notification_delivery_logs
+       WHERE event_type = 'news_major_event'
+         AND success = TRUE
+         AND created_at > NOW() - make_interval(hours => $1)
+         AND request_json->>'symbol' = $2
+         AND request_json->>'majorEventType' = $3
+       LIMIT 1`,
+      [hours, input.symbol, input.majorEventType],
+    );
+    return result.rows.length > 0;
+  });
+}
+
+/**
+ * 检查今天是否已成功发送过指定 eventType 的通知。
+ * 用于每日报告等每天只发一次的通知去重。
+ */
+export async function hasTodayNotification(eventType: string): Promise<boolean> {
+  await ensureDaaStoreSchemaPg();
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT 1 FROM daa_notification_delivery_logs
+       WHERE event_type = $1
+         AND success = TRUE
+         AND created_at >= CURRENT_DATE
+       LIMIT 1`,
+      [eventType],
+    );
+    return result.rows.length > 0;
+  });
+}
+
 export async function listNotificationDeliveryLogs(input: {
   limit?: number;
   channel?: DaaNotificationChannel | null;

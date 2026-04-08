@@ -60,7 +60,7 @@ export async function buildDailyReportText(bootstrap: WorkbenchBootstrap): Promi
         );
         const newsRow = newsResult.rows[0] as Record<string, unknown> | undefined;
         if (newsRow?.llm_summary) {
-          const summary = String(newsRow.llm_summary).slice(0, 60);
+          const summary = String(newsRow.llm_summary).slice(0, 120);
           lines.push(`  📰 ${h(row.symbol)}: ${h(summary)}`);
         }
       }
@@ -81,6 +81,27 @@ export async function buildDailyReportText(bootstrap: WorkbenchBootstrap): Promi
 
     for (const s of mc.scopes) {
       lines.push(`  ${regimeEmoji(s.regime)} ${h(s.label)}: ${regimeLabel(s.regime)}`);
+    }
+
+    // 关键市场指标百分位
+    const keyIndicators = mc.indicators
+      .filter((i) => i.rawValue != null && i.percentile252 != null)
+      .slice(0, 6);
+    if (keyIndicators.length > 0) {
+      lines.push("");
+      lines.push("📐 <b>关键指标</b>");
+      lines.push("<pre>");
+      lines.push(`${"指标".padEnd(10)}${"值".padStart(7)}${"百分位".padStart(6)}${"趋势".padStart(6)}`);
+      for (const ind of keyIndicators) {
+        const label = indicatorShortLabel(ind.key).padEnd(10).slice(0, 10);
+        const val = fmtNum(ind.rawValue ?? 0).padStart(7);
+        const pct = `${Math.round(ind.percentile252 ?? 0)}%`.padStart(6);
+        const trend7d = ind.trend7dPct != null
+          ? `${ind.trend7dPct >= 0 ? "+" : ""}${fmtNum(ind.trend7dPct)}%`.padStart(6)
+          : "   N/A";
+        lines.push(`${label}${val}${pct}${trend7d}`);
+      }
+      lines.push("</pre>");
     }
     lines.push("");
   }
@@ -183,6 +204,24 @@ function fmtMoney(n: number): string {
 /** HTML escape for Telegram HTML mode */
 function h(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function indicatorShortLabel(key: string): string {
+  const map: Record<string, string> = {
+    vix: "VIX",
+    qqq_spy_ratio: "QQQ/SPY",
+    fxi_volatility: "FXI波动",
+    kweb_fxi_ratio: "科技/中概",
+    btc_eth_ratio: "BTC/ETH",
+    btc_volatility: "BTC波动",
+    gold_silver_ratio: "金银比",
+    yield_curve_spread: "利差",
+    usd_strength: "美元",
+    credit_spread: "信用利差",
+    inflation_expectation: "通胀预期",
+    market_breadth: "市场广度",
+  };
+  return map[key] || key;
 }
 
 function regimeLabel(regime: string): string {

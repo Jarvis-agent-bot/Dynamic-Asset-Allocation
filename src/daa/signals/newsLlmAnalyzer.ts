@@ -78,8 +78,8 @@ export async function analyzeNewsWithLlm(input: {
 }): Promise<LlmNewsAnalysis> {
   if (input.items.length === 0) return DEFAULT_ANALYSIS;
 
-  await acquireSlot();
   try {
+    await acquireSlot();
     const config = await resolveLlmConfig();
     if (!config.enabled || !config.apiKey) return DEFAULT_ANALYSIS;
 
@@ -107,12 +107,23 @@ ${newsLines}
   "actionHint": "<关注|无影响|警惕>"
 }
 
-majorEvent 判定标准（必须严格遵守）：
-- impact="high" 仅限：财报发布（实际数据，非预测）、并购/收购公告、监管处罚/调查、重大诉讼裁决、CEO/CFO 变动、停牌/退市风险
+majorEvent 判定标准（必须严格遵守，宁可漏判也不要误判）：
+- impact="high" 仅限以下情况的**首次报道**（后续评论、解读、分析师观点不算）：
+  · 财报首次公布（当天第一条报道，且包含实际营收/利润数据）
+  · 并购/收购正式公告
+  · 监管处罚/调查正式通知
+  · 重大诉讼裁决
+  · CEO/CFO 变动公告
+  · 停牌/退市风险公告
+- 以下不属于 high：
+  · 财报发布后的后续报道、市场反应、分析师点评（即使提到具体数据）
+  · "业绩创纪录增长"、"利润下滑"等评论性标题
+  · 产品发布、战略合作、评级变动（这些是 medium）
 - impact="medium"：产品发布、战略合作、评级变动、大额回购/增发
 - impact="low"：分析师观点、市场传闻、行业一般新闻
 - 普通的价格波动、市场评论、分析师预测不算重大事件，应填 null
-- 如果新闻都是日常报道没有突发事件，majorEvent 必须为 null`;
+- 如果新闻都是日常报道没有突发事件，majorEvent 必须为 null
+- 当你无法确定是否为首次报道时，默认填 impact="medium" 而非 "high"`;
 
     const result = await callLlm(config, prompt);
     return parseLlmResponse(result.text);

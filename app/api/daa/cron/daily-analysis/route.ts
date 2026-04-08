@@ -9,6 +9,7 @@ import { buildDailyReportText, DAILY_REPORT_PARSE_MODE } from "@/src/daa/notify/
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -307,41 +308,43 @@ export async function POST(req: Request) {
 
         if (wantTgReport || wantFsReport) {
           try {
-            const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
-            const reportText = await buildDailyReportText(bootstrap);
+            // 当日去重：防止 cron 重试或手动触发导致重复发送
+            const alreadySentToday = await hasTodayNotification("daily_report").catch(() => false);
+            if (alreadySentToday) {
+              console.log("[dailyAnalysis] 每日报告已于今日发送，跳过重复发送");
+            } else {
+              const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+              const reportText = await buildDailyReportText(bootstrap);
 
-            const sends: Promise<void>[] = [];
-            if (wantTgReport) {
-              sends.push(
-                sendTelegramByEnv(reportText, {
-                  eventType: "daily_report",
-                  triggerSource: "cron_daily_analysis",
-                  jobId,
-                  cycleId: autoGenerate.cycleId,
-                  parseMode: DAILY_REPORT_PARSE_MODE as "HTML",
-                  requestJson: {
-                    reportType: "daily_analysis",
-                  },
-                }).then((sent) => { dailyReport.telegram = sent; }),
-              );
+              const sends: Promise<void>[] = [];
+              if (wantTgReport) {
+                sends.push(
+                  sendTelegramByEnv(reportText, {
+                    eventType: "daily_report",
+                    triggerSource: "cron_daily_analysis",
+                    jobId,
+                    cycleId: autoGenerate.cycleId,
+                    parseMode: DAILY_REPORT_PARSE_MODE as "HTML",
+                    requestJson: { reportType: "daily_analysis" },
+                  }).then((sent) => { dailyReport.telegram = sent; }),
+                );
+              }
+              if (wantFsReport) {
+                sends.push(
+                  sendFeishuByEnv(reportText, {
+                    eventType: "daily_report",
+                    triggerSource: "cron_daily_analysis",
+                    jobId,
+                    cycleId: autoGenerate.cycleId,
+                    requestJson: { reportType: "daily_analysis" },
+                  }).then((sent) => { dailyReport.feishu = sent; }),
+                );
+              }
+              await Promise.allSettled(sends);
+              dailyReport.sent = dailyReport.telegram || dailyReport.feishu;
             }
-            if (wantFsReport) {
-              sends.push(
-                sendFeishuByEnv(reportText, {
-                  eventType: "daily_report",
-                  triggerSource: "cron_daily_analysis",
-                  jobId,
-                  cycleId: autoGenerate.cycleId,
-                  requestJson: {
-                    reportType: "daily_analysis",
-                  },
-                }).then((sent) => { dailyReport.feishu = sent; }),
-              );
-            }
-            await Promise.allSettled(sends);
-            dailyReport.sent = dailyReport.telegram || dailyReport.feishu;
           } catch (err) {
-  logSwallowed("dailyAnalysisRoute.dailyReport", err);
+            logSwallowed("dailyAnalysisRoute.dailyReport", err);
           }
         }
 

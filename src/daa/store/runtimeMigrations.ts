@@ -582,6 +582,17 @@ const MIGRATIONS_: Migration[] = [
       await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS item_hash_set TEXT");
     },
   },
+  {
+    id: "20260408_notif_dedup_major_event_idx",
+    async apply(query) {
+      // 重大新闻推送去重查询的 partial index
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_daa_notif_dedup_major_event
+        ON daa_notification_delivery_logs (event_type, success, created_at DESC)
+        WHERE event_type = 'news_major_event' AND success = TRUE
+      `);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

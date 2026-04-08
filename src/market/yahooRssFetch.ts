@@ -77,6 +77,7 @@ export async function fetchYahooRssFeedBySymbol(symbolRaw: string, limit = 20): 
     const response = await fetch(rss, {
       method: "GET",
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
       headers: {
         accept: "application/rss+xml, application/xml;q=0.9, */*;q=0.8",
         "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
