@@ -221,6 +221,38 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 
 ## Cron Jobs (Scheduled Tasks)
 
+### Cron 日志规范（强制规范）
+
+所有 cron job **必须**使用 `runLoggedJob()` 包装业务逻辑，统一写入 `daa_job_execution_logs` 表。
+**禁止**使用旧的 `appendDaaIngestJobLog()`（技术债务，逐步废弃）。
+
+```typescript
+import { runLoggedJob } from "@/src/daa/jobs/jobService";
+
+const execution = await runLoggedJob({
+  req,
+  jobType: "cron_xxx",           // 必须以 cron_ 前缀
+  triggerSource: "cron_xxx",
+  handler: async () => { ... },   // 业务逻辑
+  summarize: (result) => ({ ... }), // 摘要（存入 result_json）
+});
+```
+
+### 数据清理策略（强制规范）
+
+由 `cache-cleanup` cron（每日 00:20 UTC）统一执行：
+
+| 数据 | 表 | 保留期 |
+|------|---|--------|
+| 原始 API 响应 | `daa_external_payload_raw_v1` | 90 天 |
+| 价格快照(非 fresh) | `daa_market_price_snapshot` | 30 天 |
+| 市场指标快照 | `daa_market_indicator_snapshot_v1` | 90 天 |
+| 新闻 item | `daa_news_item_snapshot_v1` | 30 天 |
+| 通知记录 | `daa_notification_delivery_log` | 180 天 |
+| Job 日志 | `daa_job_execution_logs` + `_ingest_` | 90 天 |
+| 价格历史 | `daa_market_price_history_v1` | **永久** |
+| 权益快照 | `daa_equity_snapshots_v2` | **永久** |
+
 | Job | Schedule | Purpose |
 |-----|----------|---------|
 | Price refresh | Every 15 min | Update market prices |

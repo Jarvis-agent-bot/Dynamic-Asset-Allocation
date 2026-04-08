@@ -1,7 +1,7 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
-import { cleanupMarketCacheRawPayload } from "@/src/daa/modules/marketCache/marketCacheService";
+import { runUnifiedDataCleanup } from "@/src/daa/modules/marketCache/marketCacheService";
 
 export const runtime = "nodejs";
 
@@ -15,11 +15,11 @@ export async function POST(req: Request) {
 
     const execution = await runLoggedJob({
       req,
-      jobType: "market_cache_cleanup",
+      jobType: "cron_cache_cleanup",
       triggerSource: "cron_cache_cleanup",
       idempotencyKey: req.headers.get("x-daa-idempotency-key"),
       summarize: (result) => result && typeof result === "object" ? result as Record<string, unknown> : {},
-      handler: async () => cleanupMarketCacheRawPayload(),
+      handler: async () => runUnifiedDataCleanup(),
     });
 
     return ok({
@@ -30,4 +30,3 @@ export async function POST(req: Request) {
     });
   });
 }
-

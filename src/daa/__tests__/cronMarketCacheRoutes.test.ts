@@ -16,6 +16,14 @@ vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({
     removed: 0,
     at: "2026-03-06T00:00:00.000Z",
   })),
+  runUnifiedDataCleanup: vi.fn(async () => ({
+    raw_payloads: 0,
+    price_snapshots: 0,
+    indicator_snapshots: 0,
+    news_items: 0,
+    notification_logs: 0,
+    job_logs: 0,
+  })),
 }));
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
@@ -56,7 +64,7 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
 
 import { POST as priceRefreshPost } from "@/app/api/daa/cron/price-refresh/route";
 import { POST as cacheCleanupPost } from "@/app/api/daa/cron/cache-cleanup/route";
-import { cleanupMarketCacheRawPayload, refreshMarketPrices } from "@/src/daa/modules/marketCache/marketCacheService";
+import { cleanupMarketCacheRawPayload, refreshMarketPrices, runUnifiedDataCleanup } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 function buildMarketCacheConfig(input?: {
@@ -118,9 +126,13 @@ describe("cron-market-cache-routes-v1", () => {
   });
 
   it("cache-cleanup 返回删除计数", async () => {
-    vi.mocked(cleanupMarketCacheRawPayload).mockResolvedValue({
-      removed: 7,
-      at: "2026-03-06T00:00:00.000Z",
+    vi.mocked(runUnifiedDataCleanup).mockResolvedValue({
+      raw_payloads: 7,
+      price_snapshots: 0,
+      indicator_snapshots: 0,
+      news_items: 3,
+      notification_logs: 0,
+      job_logs: 0,
     });
 
     const response = await cacheCleanupPost(new Request("http://localhost/api/daa/cron/cache-cleanup", { method: "POST" }));
@@ -128,6 +140,7 @@ describe("cron-market-cache-routes-v1", () => {
 
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
-    expect(json.data.removed).toBe(7);
+    expect(json.data.raw_payloads).toBe(7);
+    expect(json.data.news_items).toBe(3);
   });
 });

@@ -638,16 +638,72 @@ export async function getMarketCacheHealth(provider = DEFAULT_PROVIDER_) {
 export async function cleanupMarketCacheRawPayload(nowIso?: string): Promise<{ removed: number; at: string }> {
   const at = nowIso ? new Date(nowIso).toISOString() : new Date().toISOString();
   const removed = await deleteExpiredDaaExternalPayloadRaw(at);
-  await appendDaaIngestJobLog({
-    jobType: "market_cache_cleanup",
-    triggerSource: "cron",
-    status: "ok",
-    startedAt: at,
-    finishedAt: new Date().toISOString(),
-    totalCount: removed,
-    successCount: removed,
-    failureCount: 0,
-    diagnosticsJson: { removed },
-  });
   return { removed, at };
+}
+
+/**
+ * 统一数据清理：清理所有有 TTL 的表。
+ * 由 cache-cleanup cron 每日调用。
+ *
+ * 保留策略：
+ * - 原始 API 响应: 90 天
+ * - 价格快照(非 fresh): 30 天
+ * - 市场指标快照: 90 天
+ * - 新闻 item: 30 天
+ * - 通知记录: 180 天
+ * - Job 日志: 90 天
+ */
+export async function runUnifiedDataCleanup(): Promise<Record<string, number>> {
+  const { daaPgPool } = await import("@/src/daa/pg/daaPg");
+  const pool = daaPgPool();
+  const results: Record<string, number> = {};
+
+  // 1. 原始 API 响应：90 天（已有逻辑）
+  const rawResult = await cleanupMarketCacheRawPayload();
+  results.raw_payloads = rawResult.removed;
+
+  // 2. 旧价格快照（非 fresh）：30 天
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_market_price_snapshot WHERE fetched_at < NOW() - INTERVAL '30 days' AND status != 'fresh'",
+    );
+    results.price_snapshots = r.rowCount ?? 0;
+  } catch { results.price_snapshots = 0; }
+
+  // 3. 旧市场指标快照：90 天
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_market_indicator_snapshot_v1 WHERE created_at < NOW() - INTERVAL '90 days'",
+    );
+    results.indicator_snapshots = r.rowCount ?? 0;
+  } catch { results.indicator_snapshots = 0; }
+
+  // 4. 旧新闻 item：30 天
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_news_item_snapshot_v1 WHERE updated_at < NOW() - INTERVAL '30 days'",
+    );
+    results.news_items = r.rowCount ?? 0;
+  } catch { results.news_items = 0; }
+
+  // 5. 旧通知记录：180 天
+  try {
+    const r = await pool.query(
+      "DELETE FROM daa_notification_delivery_log WHERE created_at < NOW() - INTERVAL '180 days'",
+    );
+    results.notification_logs = r.rowCount ?? 0;
+  } catch { results.notification_logs = 0; }
+
+  // 6. 旧 job 日志：90 天
+  try {
+    const r1 = await pool.query(
+      "DELETE FROM daa_job_execution_logs WHERE started_at < NOW() - INTERVAL '90 days'",
+    );
+    const r2 = await pool.query(
+      "DELETE FROM daa_ingest_job_log_v1 WHERE started_at < NOW() - INTERVAL '90 days'",
+    );
+    results.job_logs = (r1.rowCount ?? 0) + (r2.rowCount ?? 0);
+  } catch { results.job_logs = 0; }
+
+  return results;
 }

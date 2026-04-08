@@ -126,51 +126,24 @@ function stanceFromScore(scorePct: number): DaaMarketRegime | "neutral" {
   return "neutral";
 }
 
+/**
+ * 使用通用缓存层获取每日收盘价（DB 优先 + 按需补增量，不再每次全量拉 Yahoo）。
+ * 从 336 次 Yahoo 请求/天 → ~7 次（首次）+ 后续 ~0 次（DB 缓存命中）。
+ */
 async function fetchDailyCloseBars(symbolRaw: string, days: number): Promise<DailyCloseBar[]> {
+  const { fetchPriceSeriesWithCache } = await import("@/src/daa/modules/marketCache/priceSeriesCache");
   const symbol = normalizeYfinanceSymbol(symbolRaw);
   if (!symbol) return [];
   const safeDays = Math.max(40, Math.trunc(days));
-  const end = new Date().toISOString().slice(0, 10);
-  const start = addDaysIsoUtc(end, -safeDays - 14);
-  const period1 = epochSecondsUtcStart(start);
-  const period2 = epochSecondsUtcStart(addDaysIsoUtc(end, 1));
-
-  const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-  upstream.searchParams.set("interval", "1d");
-  upstream.searchParams.set("events", "div|split");
-  upstream.searchParams.set("period1", String(period1));
-  upstream.searchParams.set("period2", String(period2));
+  const start = addDaysIsoUtc(new Date().toISOString().slice(0, 10), -safeDays - 14);
 
   try {
-    const response = await fetch(upstream, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-        "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
-      },
+    const result = await fetchPriceSeriesWithCache(symbol, start, {
+      minDbDays: Math.floor(safeDays * 0.8), // DB 有 80% 数据就认为够用
+      maxStaleDays: 2,
+      timeoutMs: 8000,
     });
-    if (!response.ok) return [];
-    const payload = await response.json() as any;
-    if (payload?.chart?.error) return [];
-    const timestamps = Array.isArray(payload?.chart?.result?.[0]?.timestamp)
-      ? payload.chart.result[0].timestamp
-      : [];
-    const closes = Array.isArray(payload?.chart?.result?.[0]?.indicators?.quote?.[0]?.close)
-      ? payload.chart.result[0].indicators.quote[0].close
-      : [];
-
-    const out: DailyCloseBar[] = [];
-    for (let i = 0; i < Math.min(timestamps.length, closes.length); i += 1) {
-      const close = Number(closes[i]);
-      const ts = Number(timestamps[i]);
-      if (!(close > 0) || !Number.isFinite(ts)) continue;
-      out.push({
-        date: new Date(ts * 1000).toISOString().slice(0, 10),
-        close,
-      });
-    }
-    return out.slice(-safeDays);
+    return result.data.slice(-safeDays).map((p) => ({ date: p.date, close: p.close }));
   } catch (err) {
     logSwallowed("marketIndicatorService.fetchDailyCloses", err);
     return [];

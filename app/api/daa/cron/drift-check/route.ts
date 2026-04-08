@@ -1,5 +1,6 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
+import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
@@ -18,6 +19,28 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
+    const execution = await runLoggedJob({
+      req,
+      jobType: "cron_drift_check",
+      triggerSource: "cron_drift_check",
+      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      summarize: (r) => {
+        const result = r as Record<string, unknown>;
+        return { created: result.created, driftedAssetCount: result.driftedAssetCount, riskTriggeredCount: result.riskTriggeredCount };
+      },
+      handler: async () => runDriftCheck(),
+    });
+
+    return ok({
+      ...(execution.result as Record<string, unknown>),
+      requestId: execution.requestId,
+      jobId: execution.jobId,
+      durationMs: execution.durationMs,
+    });
+  });
+}
+
+async function runDriftCheck() {
     const system = await getDaaSystemConfig();
     const strategy = system.config.rebalanceStrategy;
 
@@ -256,7 +279,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return ok({
+    return {
       skipped: generated ? !generated.created : true,
       created: generated?.created ?? false,
       skippedByCooldown: generated?.skippedByCooldown ?? false,
@@ -271,7 +294,6 @@ export async function POST(req: Request) {
       riskTriggeredCount: riskTriggeredAssets.length,
       riskTriggerNotified,
       at: new Date().toISOString(),
-    });
-  });
+    };
 }
 
