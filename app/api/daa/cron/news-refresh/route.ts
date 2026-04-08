@@ -40,11 +40,18 @@ async function resolveSymbols(): Promise<string[]> {
   return [...out];
 }
 
-/** 检测重大事件并发送 TG 推送 */
+/** 已推送事件缓存（内存级，重启后清空；DB 级去重通过 notification_delivery_log 实现） */
+const pushedEventKeys = new Set<string>();
+
+/** 检测重大事件并发送 TG 推送（同一事件只推一次） */
 async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
   let pushed = 0;
   for (const signal of signals) {
     if (signal.llmMajorEvent && signal.llmMajorEvent.impact === "high") {
+      // 去重 key = symbol + 事件类型 + 描述前20字
+      const eventKey = `${signal.symbol}:${signal.llmMajorEvent.type}:${signal.llmMajorEvent.description.slice(0, 20)}`;
+      if (pushedEventKeys.has(eventKey)) continue;
+
       try {
         const message = [
           `⚡ ${signal.symbol} 重大新闻`,
@@ -61,11 +68,17 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
           triggerSource: "cron_news_refresh",
           parseMode: null,
         });
+        pushedEventKeys.add(eventKey);
         pushed++;
       } catch (e) {
         logSwallowed("newsRefresh.majorEventPush", e);
       }
     }
+  }
+  // 防止内存无限增长：超过 200 条时清理最早的
+  if (pushedEventKeys.size > 200) {
+    const arr = [...pushedEventKeys];
+    for (let i = 0; i < arr.length - 100; i++) pushedEventKeys.delete(arr[i]);
   }
   return pushed;
 }
