@@ -129,7 +129,22 @@ export async function listRecentAgentLearningEvents(limit = 8): Promise<DaaAgent
 export async function buildAgentLearningDigest(limit = 6): Promise<string> {
   const items = await listRecentAgentLearningEvents(limit);
   if (items.length === 0) return "暂无可复用的历史复盘经验。";
-  return items.map((item) => (
+
+  const lines = items.map((item) => (
     `${item.createdAt.slice(0, 10)} | ${item.eventType} | ${item.title} | ${item.summary}`
-  )).join("\n");
+  ));
+
+  // 统计 outcome_verdict 事件的准确率
+  const verdictEvents = items.filter(i => i.eventType === "outcome_verdict");
+  if (verdictEvents.length > 0) {
+    const correct = verdictEvents.filter(i => {
+      const v = i.contextJson?.verdict as string;
+      return v === "actionable_move" || v === "correct_hold" || v === "correct_skip";
+    }).length;
+    const missed = verdictEvents.filter(i => i.contextJson?.verdict === "missed_opportunity").length;
+    const unexpected = verdictEvents.filter(i => i.contextJson?.verdict === "unexpected_move").length;
+    lines.push(`\n历史决策表现: 最近${verdictEvents.length}次后验中, ${correct}次正确, ${missed}次错失机会, ${unexpected}次意外波动.`);
+  }
+
+  return lines.join("\n");
 }

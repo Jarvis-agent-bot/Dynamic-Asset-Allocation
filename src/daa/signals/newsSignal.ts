@@ -58,6 +58,7 @@ const FRESHNESS_HALF_LIFE_HOURS = 72;
 export async function buildNewsSignalForSymbol(
   symbol: string,
   market = "US",
+  opts?: { technicalVolatilityHint?: { absReturn20dPct: number; rsi14: number } | null },
 ): Promise<DaaNewsSignal | null> {
   const normalizedSymbol = symbol.trim().toUpperCase();
   if (!normalizedSymbol) return null;
@@ -95,8 +96,13 @@ export async function buildNewsSignalForSymbol(
 
   // Step 4: 判断是否需要 LLM 分析
   const currentHashSet = computeItemHashSet(rawItems);
+  // 技术异常波动时缩短缓存 TTL 至 30 分钟（正常 2 小时），但仍要求新闻内容有变化
+  const hint = opts?.technicalVolatilityHint;
+  const technicalVolatile = hint != null
+    && (hint.absReturn20dPct > 8 || hint.rsi14 < 25 || hint.rsi14 > 80);
+  const effectiveTtl = technicalVolatile ? 30 * 60 * 1000 : NEWS_SIGNAL_CACHE_TTL_MS;
   const needReanalyze = !cached
-    || (Date.now() - Date.parse(cached.generatedAt)) > NEWS_SIGNAL_CACHE_TTL_MS
+    || (Date.now() - Date.parse(cached.generatedAt)) > effectiveTtl
     || cached.itemHashSet !== currentHashSet;
 
   // Step 5: LLM 分析
@@ -161,6 +167,8 @@ export async function buildNewsSignals(opts: {
   symbols?: string[];
   symbolsWithMarket?: Array<{ symbol: string; market: string }>;
   query?: string;
+  /** 技术信号波动 hint：异常波动时强制重新 LLM 分析新闻 */
+  technicalHints?: Map<string, { absReturn20dPct: number; rsi14: number }>;
 }): Promise<DaaNewsSignal[]> {
   const { parseSymbolsFromNewsQuery } = await import("@/src/market/yahooRssFetch");
   const symbolsFromQuery = opts.query ? parseSymbolsFromNewsQuery(opts.query) : [];
@@ -187,7 +195,8 @@ export async function buildNewsSignals(opts: {
     const batchResults = await Promise.all(
       batch.map((sym) => {
         const market = marketMap.get(sym.toUpperCase()) || "US";
-        return buildNewsSignalForSymbol(sym, market).catch((e) => {
+        const hint = opts.technicalHints?.get(sym.toUpperCase()) ?? null;
+        return buildNewsSignalForSymbol(sym, market, { technicalVolatilityHint: hint }).catch((e) => {
           logSwallowed(`newsSignal.batch.${sym}`, e);
           return null;
         });

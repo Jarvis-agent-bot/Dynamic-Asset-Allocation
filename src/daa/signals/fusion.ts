@@ -1,4 +1,5 @@
 import { clamp } from "@/src/core/math";
+import { DEFAULT_STRATEGY_PARAMS, type DaaStrategyParams } from "@/src/daa/config/systemConfig";
 import type { DaaHumanSignal } from "@/src/daa/hf/humanSignals";
 import type { MacroCyclePhase } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaNewsSignal } from "@/src/daa/signals/newsSignal";
@@ -79,16 +80,19 @@ function normalizeWeights(weights?: Partial<DaaFusionWeights>): DaaFusionWeights
   };
 }
 
-function conflictPenalty(input: {
-  humanScore: number;
-  newsScore: number;
-  technicalScore: number;
-  valuationScore: number;
-  humanConfidence: number;
-  newsConfidence: number;
-  technicalConfidence: number;
-  valuationConfidence: number;
-}): { penalty: number; reasons: string[] } {
+function conflictPenalty(
+  input: {
+    humanScore: number;
+    newsScore: number;
+    technicalScore: number;
+    valuationScore: number;
+    humanConfidence: number;
+    newsConfidence: number;
+    technicalConfidence: number;
+    valuationConfidence: number;
+  },
+  params: DaaStrategyParams["signalFusion"],
+): { penalty: number; reasons: string[] } {
   const reasons: string[] = [];
   let penalty = 0;
 
@@ -98,32 +102,32 @@ function conflictPenalty(input: {
   const v = input.valuationScore;
 
   if (h >= 65 && t <= 40 && input.humanConfidence >= 55 && input.technicalConfidence >= 45) {
-    penalty += 9;
+    penalty += params.conflictPenalties[0];
     reasons.push("人因与技术信号冲突");
   }
 
   if (n >= 62 && t <= 40 && input.newsConfidence >= 50 && input.technicalConfidence >= 45) {
-    penalty += 7;
+    penalty += params.conflictPenalties[1];
     reasons.push("新闻与技术信号冲突");
   }
 
   if (h <= 40 && t >= 65 && input.humanConfidence >= 50 && input.technicalConfidence >= 50) {
-    penalty += 5;
+    penalty += params.conflictPenalties[2];
     reasons.push("人因偏弱但技术偏强");
   }
 
   if (t >= 72 && v <= 35 && input.technicalConfidence >= 50 && input.valuationConfidence >= 40) {
-    penalty += 4;
+    penalty += params.conflictPenalties[3];
     reasons.push("技术偏强但估值偏贵");
   }
 
   if (t <= 35 && v >= 65 && input.technicalConfidence >= 45 && input.valuationConfidence >= 40) {
-    penalty += 3;
+    penalty += params.conflictPenalties[4];
     reasons.push("估值偏便宜但技术趋势仍弱");
   }
 
   return {
-    penalty: clamp(penalty, 0, 25),
+    penalty: clamp(penalty, 0, params.maxConflictPenalty),
     reasons,
   };
 }
@@ -135,37 +139,36 @@ const MACRO_PHASE_LABEL_: Record<MacroCyclePhase, string> = {
   deflation: "衰退",
 };
 
-function macroCycleAdjustment(phase: MacroCyclePhase | null | undefined, assetClass: string | null | undefined): number {
+function macroCycleAdjustment(
+  phase: MacroCyclePhase | null | undefined,
+  assetClass: string | null | undefined,
+  params: DaaStrategyParams["signalFusion"],
+): number {
   if (!phase || !assetClass) return 0;
   const cls = assetClass.toUpperCase();
-  if (phase === "stagflation") {
-    if (cls === "EQUITY" || cls === "ETF") return -5;
-    if (cls === "COMMODITY") return 5;
-  }
-  if (phase === "deflation") {
-    if (cls === "BOND") return 5;
-    if (cls === "COMMODITY") return -3;
-  }
-  if (phase === "overheating") {
-    if (cls === "COMMODITY") return 3;
-  }
-  if (phase === "recovery") {
-    if (cls === "EQUITY" || cls === "ETF") return 3;
-  }
-  return 0;
+  return params.macroCycleAdjustments[`${phase}:${cls}`] ?? 0;
 }
 
-function inferAction(score: number, confidence: number, riskTags: string[]): DaaOpportunityAction {
+function inferAction(
+  score: number,
+  confidence: number,
+  riskTags: string[],
+  params: DaaStrategyParams["signalFusion"],
+): DaaOpportunityAction {
   if (riskTags.includes("thesis_drift") || riskTags.includes("weak_actor_quality")) {
     return "reduce_or_avoid";
   }
 
-  if (score >= 72 && confidence >= 58) return "open_or_add";
-  if (score >= 56 && confidence >= 42) return "watch";
+  if (score >= params.actionThresholds.openOrAdd.score && confidence >= params.actionThresholds.openOrAdd.confidence) return "open_or_add";
+  if (score >= params.actionThresholds.watch.score && confidence >= params.actionThresholds.watch.confidence) return "watch";
   return "reduce_or_avoid";
 }
 
-export function buildFusedOpportunities(input: BuildFusedOpportunitiesInput): DaaFusedOpportunity[] {
+export function buildFusedOpportunities(
+  input: BuildFusedOpportunitiesInput,
+  strategyParams?: DaaStrategyParams["signalFusion"],
+): DaaFusedOpportunity[] {
+  const params = strategyParams ?? DEFAULT_STRATEGY_PARAMS.signalFusion;
   const symbols = [...new Set((input.symbols ?? []).map((x) => normalizeSymbol(x)).filter(Boolean))];
   if (!symbols.length) return [];
 
@@ -209,23 +212,23 @@ export function buildFusedOpportunities(input: BuildFusedOpportunitiesInput): Da
       newsConfidence,
       technicalConfidence,
       valuationConfidence,
-    });
+    }, params);
 
     const assetClass = input.assetClasses?.[symbol] ?? null;
-    const macroAdj = macroCycleAdjustment(input.macroCyclePhase, assetClass);
+    const macroAdj = macroCycleAdjustment(input.macroCyclePhase, assetClass, params);
     const finalScore = clamp(weighted + macroAdj - conflict.penalty, 0, 100);
     const confidence = clamp(
-      humanConfidence * 0.42
-      + newsConfidence * 0.2
-      + technicalConfidence * 0.23
-      + valuationConfidence * 0.15
-      - conflict.penalty * 0.45,
+      humanConfidence * params.confidenceWeights.human
+      + newsConfidence * params.confidenceWeights.news
+      + technicalConfidence * params.confidenceWeights.technical
+      + valuationConfidence * params.confidenceWeights.valuation
+      - conflict.penalty * params.conflictConfidenceImpact,
       0,
       100,
     );
 
     const riskTags = [...(human?.riskTags ?? [])];
-    const action = inferAction(finalScore, confidence, riskTags);
+    const action = inferAction(finalScore, confidence, riskTags, params);
 
     const reasons: string[] = [];
     if (human) reasons.push(`人因评分 ${humanScore.toFixed(1)}%`);

@@ -28,6 +28,8 @@ export type LlmRuntimeConfig = {
   endpoint: string;
   apiKey: string;
   timeoutMs: number;
+  /** 规划器使用的模型（便宜/快速） */
+  plannerModel?: string;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +102,7 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
     endpoint: normalizeText(endpoint, defaults.endpoint),
     apiKey,
     timeoutMs,
+    plannerModel: config.plannerModel ? String(config.plannerModel) : undefined,
   };
 }
 
@@ -176,22 +179,24 @@ function extractResponsesApiText(payload: Record<string, unknown>): string {
 export async function callLlm(
   config: LlmRuntimeConfig,
   prompt: string,
+  opts?: { modelOverride?: string },
 ): Promise<{ text: string; raw: unknown }> {
+  const effectiveModel = opts?.modelOverride || config.model;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
   const format = resolveApiFormat(config.provider, config.endpoint);
 
   try {
     // deepseek-reasoner 系列不支持 temperature 参数
-    const isReasoner = config.model.includes("reasoner");
+    const isReasoner = effectiveModel.includes("reasoner");
     const body = format === "chat"
       ? JSON.stringify({
-          model: config.model,
+          model: effectiveModel,
           messages: [{ role: "user", content: prompt }],
           ...(isReasoner ? {} : { temperature: 0.3 }),
         })
       : JSON.stringify({
-          model: config.model,
+          model: effectiveModel,
           input: prompt,
         });
 

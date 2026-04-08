@@ -1,5 +1,5 @@
 import { clamp } from "@/src/core/math";
-import type { DaaMarketIndicatorsConfig } from "@/src/daa/config/systemConfig";
+import { DEFAULT_STRATEGY_PARAMS, type DaaMarketIndicatorsConfig, type DaaStrategyParams } from "@/src/daa/config/systemConfig";
 import type { LlmDecisionOutput, LlmPerAssetAdjustment } from "@/src/daa/llm/llmDecision";
 import { MARKET_SCOPE_LABEL_ZH_, resolveMarketScopeForAsset } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import {
@@ -22,6 +22,7 @@ type DecisionFusionInput = {
   llmDecision: LlmDecisionOutput;
   marketContext?: DaaMarketContext | null;
   marketConfig?: Pick<DaaMarketIndicatorsConfig, "overlays"> | null;
+  strategyParams?: DaaStrategyParams["decisionFusion"];
   assetMetaBySymbol?: Record<string, {
     market?: string;
     assetClass?: string;
@@ -32,6 +33,12 @@ type DecisionFusionInput = {
     holdingTags?: string[];
     watchTags?: string[];
   }>;
+  /** 持仓约束：用于 concentration cap（可选，不传则不做 cap） */
+  concentrationConstraints?: {
+    totalEquity: number;
+    maxPositionPct: number;
+    currentValuationBySymbol: Record<string, number>;
+  } | null;
 };
 
 type DecisionFusionResult = {
@@ -42,8 +49,6 @@ type DecisionFusionResult = {
   llmStatus: LlmDecisionOutput["status"];
   llmSummary: string;
 };
-
-const DESELECT_THRESHOLD = 0.15;
 
 
 function buildMarketIndicatorFlags(marketContext: DaaMarketContext | null | undefined, scopeKeys: string[]): string[] {
@@ -85,6 +90,7 @@ function marketRegimeLabelZhLocal(regime: DaaMarketRegime | null | undefined): s
 export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
 
   const { draftProposals, fusedOpportunities, llmDecision, marketContext } = input;
+  const dfParams = input.strategyParams ?? DEFAULT_STRATEGY_PARAMS.decisionFusion;
   const fusionWarnings: string[] = [];
   const signalMap = new Map<string, DaaFusedOpportunity>();
   for (const opp of fusedOpportunities) {
@@ -112,7 +118,7 @@ export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
         || (proposal.side === "SELL" && signal.action === "open_or_add"));
 
     if (signalConflict && signal) {
-      const penaltyFactor = signal.confidencePct >= 65 ? 0.35 : 0.55;
+      const penaltyFactor = signal.confidencePct >= 65 ? dfParams.highConfidencePenalty : dfParams.lowConfidencePenalty;
       multiplier *= penaltyFactor;
       const sideZh = proposal.side === "BUY" ? "买入" : "卖出";
       const actionZh = signal.action === "open_or_add" ? "可建仓/加仓" : signal.action === "reduce_or_avoid" ? "减仓/回避" : "观望";
@@ -121,7 +127,13 @@ export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
       );
     }
 
-    if (llmAdj && llmAdj.confidencePct >= 40 && llmDecision.status === "ok") {
+    // 无 LLM 调整时降级至 80%（避免裸执行）
+    if (!llmAdj && llmDecision.status === "ok") {
+      multiplier *= dfParams.noLlmDegradation;
+      conflictFlags.push(`AI 未审核此资产，按 ${Math.round(dfParams.noLlmDegradation * 100)}% 漂移规模执行`);
+    }
+
+    if (llmAdj && llmAdj.confidencePct >= dfParams.confidenceGate && llmDecision.status === "ok") {
       switch (llmAdj.adjustment) {
         case "skip":
           multiplier = 0;
@@ -137,8 +149,8 @@ export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
         }
         case "increase_priority": {
           if (signalConflict && llmAdj.confidencePct >= 65) {
-            multiplier = Math.min(1, multiplier * 1.4);
-            conflictFlags.push(`AI 高优先级缓解信号冲突（+40% 恢复）：${llmAdj.rationale || "无具体原因"}`);
+            multiplier = Math.min(1, multiplier * dfParams.conflictRecovery);
+            conflictFlags.push(`AI 高优先级缓解信号冲突（+${Math.round((dfParams.conflictRecovery - 1) * 100)}% 恢复）：${llmAdj.rationale || "无具体原因"}`);
           } else {
             conflictFlags.push(`AI 标记为高优先级：${llmAdj.rationale || "信号一致，建议重点执行"}`);
           }
@@ -146,8 +158,8 @@ export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
         }
         case "execute": {
           if (signalConflict && llmAdj.confidencePct >= 65) {
-            multiplier = Math.min(1, multiplier * 1.4);
-            conflictFlags.push(`AI 缓解信号冲突（+40% 恢复）：${llmAdj.rationale || "无具体原因"}`);
+            multiplier = Math.min(1, multiplier * dfParams.conflictRecovery);
+            conflictFlags.push(`AI 缓解信号冲突（+${Math.round((dfParams.conflictRecovery - 1) * 100)}% 恢复）：${llmAdj.rationale || "无具体原因"}`);
           }
           break;
         }
@@ -196,8 +208,25 @@ export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
       );
     }
 
+    // ── Concentration cap：防止融合后仓位超过 maxPositionPct ──
+    const cc = input.concentrationConstraints;
+    if (cc && proposal.side === "BUY" && cc.totalEquity > 0 && multiplier > 0) {
+      const currentVal = cc.currentValuationBySymbol[symbol] ?? 0;
+      const projectedVal = currentVal + proposal.suggestedNotional * multiplier;
+      const projectedWeightPct = (projectedVal / cc.totalEquity) * 100;
+      const limitPct = cc.maxPositionPct * 100;
+      if (projectedWeightPct > limitPct && proposal.suggestedNotional > 0) {
+        const safeNotional = Math.max(0, limitPct / 100 * cc.totalEquity - currentVal);
+        const cappedMultiplier = safeNotional / proposal.suggestedNotional;
+        multiplier = clamp(cappedMultiplier, 0, multiplier);
+        conflictFlags.push(
+          `仓位约束：当前 ${(currentVal / cc.totalEquity * 100).toFixed(1)}%，上限 ${limitPct.toFixed(0)}%，执行系数已调整至 ${(multiplier * 100).toFixed(0)}%`,
+        );
+      }
+    }
+
     multiplier = clamp(multiplier, 0, 1);
-    const selected = multiplier > DESELECT_THRESHOLD && proposal.selected;
+    const selected = multiplier > dfParams.deselectThreshold && proposal.selected;
     const finalQty = proposal.suggestedQty * multiplier;
     const finalNotional = proposal.suggestedNotional * multiplier;
 

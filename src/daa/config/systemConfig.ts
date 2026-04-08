@@ -42,6 +42,93 @@ export type DaaMarketIndicatorsConfig = {
   };
 };
 
+// ─── Strategy Params（可调参数，从硬编码提取为配置）─────────────────────
+
+export type DaaStrategyParams = {
+  signalFusion: {
+    /** 冲突惩罚 [人因vs技术, 新闻vs技术, 人因弱+技术强, 技术强+估值贵, 技术弱+估值便宜] */
+    conflictPenalties: [number, number, number, number, number];
+    maxConflictPenalty: number;
+    conflictConfidenceImpact: number;
+    actionThresholds: {
+      openOrAdd: { score: number; confidence: number };
+      watch: { score: number; confidence: number };
+    };
+    confidenceWeights: { human: number; news: number; technical: number; valuation: number };
+    macroCycleAdjustments: Record<string, number>;
+  };
+  decisionFusion: {
+    highConfidencePenalty: number;
+    lowConfidencePenalty: number;
+    noLlmDegradation: number;
+    conflictRecovery: number;
+    deselectThreshold: number;
+    confidenceGate: number;
+    respectLlmWeights: boolean;
+  };
+  marketRegime: {
+    riskOffThreshold: number;
+    riskOnThreshold: number;
+  };
+};
+
+export const DEFAULT_STRATEGY_PARAMS: DaaStrategyParams = {
+  signalFusion: {
+    conflictPenalties: [9, 7, 5, 4, 3],
+    maxConflictPenalty: 25,
+    conflictConfidenceImpact: 0.45,
+    actionThresholds: {
+      openOrAdd: { score: 72, confidence: 58 },
+      watch: { score: 56, confidence: 42 },
+    },
+    confidenceWeights: { human: 0.42, news: 0.2, technical: 0.23, valuation: 0.15 },
+    macroCycleAdjustments: {
+      "stagflation:EQUITY": -5, "stagflation:ETF": -5, "stagflation:COMMODITY": 5,
+      "deflation:BOND": 5, "deflation:COMMODITY": -3,
+      "overheating:COMMODITY": 3,
+      "recovery:EQUITY": 3, "recovery:ETF": 3,
+    },
+  },
+  decisionFusion: {
+    highConfidencePenalty: 0.35,
+    lowConfidencePenalty: 0.55,
+    noLlmDegradation: 0.8,
+    conflictRecovery: 1.4,
+    deselectThreshold: 0.15,
+    confidenceGate: 40,
+    respectLlmWeights: false,
+  },
+  marketRegime: {
+    riskOffThreshold: 65,
+    riskOnThreshold: 40,
+  },
+};
+
+/** 合并用户自定义参数与默认值（深合并，缺失字段用默认值填充） */
+export function resolveStrategyParams(
+  partial?: Partial<DaaStrategyParams> | null,
+): DaaStrategyParams {
+  if (!partial) return DEFAULT_STRATEGY_PARAMS;
+  const d = DEFAULT_STRATEGY_PARAMS;
+  const sf = partial.signalFusion;
+  const df = partial.decisionFusion;
+  return {
+    signalFusion: {
+      conflictPenalties: sf?.conflictPenalties ?? d.signalFusion.conflictPenalties,
+      maxConflictPenalty: sf?.maxConflictPenalty ?? d.signalFusion.maxConflictPenalty,
+      conflictConfidenceImpact: sf?.conflictConfidenceImpact ?? d.signalFusion.conflictConfidenceImpact,
+      actionThresholds: {
+        openOrAdd: { ...d.signalFusion.actionThresholds.openOrAdd, ...sf?.actionThresholds?.openOrAdd },
+        watch: { ...d.signalFusion.actionThresholds.watch, ...sf?.actionThresholds?.watch },
+      },
+      confidenceWeights: { ...d.signalFusion.confidenceWeights, ...sf?.confidenceWeights },
+      macroCycleAdjustments: sf?.macroCycleAdjustments ?? d.signalFusion.macroCycleAdjustments,
+    },
+    decisionFusion: { ...d.decisionFusion, ...df },
+    marketRegime: { ...d.marketRegime, ...partial.marketRegime },
+  };
+}
+
 export type DaaSystemConfig = {
   strategy: {
     account: {
@@ -76,6 +163,8 @@ export type DaaSystemConfig = {
       enforceOnExecution: boolean;
     };
     targetWeights: Record<string, number>;
+    /** 可调策略参数（信号融合、决策融合、市场环境阈值） */
+    strategyParams?: Partial<DaaStrategyParams>;
   };
   rebalanceStrategy: {
     calendar: {
@@ -152,6 +241,8 @@ export type DaaSystemConfig = {
       model: string;
       timeoutMs: number;
       enabledInDecision: boolean;
+      /** 规划器使用的模型（默认与决策器相同） */
+      plannerModel?: string;
     };
     marketIndicators: DaaMarketIndicatorsConfig;
   };

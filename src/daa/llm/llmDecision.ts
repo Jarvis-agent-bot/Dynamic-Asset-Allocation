@@ -52,6 +52,10 @@ export type LlmPerAssetAdjustment = {
     news: number;
     valuation: number;
   };
+  /** V3: AI 对四维信号的解读（可选） */
+  signalInterpretation?: string;
+  /** V3: 该资产的具体风险点（可选） */
+  riskFactors?: string[];
 };
 
 /** LLM 结构化决策输出 */
@@ -86,6 +90,8 @@ export type LlmDecisionOutput = {
   generatedAt: string;
   /** 跳过/失败的原因码 */
   reasonCode?: string;
+  /** V3: LLM 的整体市场叙事（可选） */
+  marketNarrative?: string;
 };
 
 export type LlmDecisionInput = {
@@ -104,11 +110,35 @@ export type LlmDecisionInput = {
   analysisFocus: string;
   marketContext?: DaaMarketContext | null;
   recentLearningsText?: string | null;
+  /** 持仓约束上下文，让 LLM 感知仓位集中度限制 */
+  positionConstraints?: {
+    maxPositionPct: number;
+    currentWeights: Array<{
+      symbol: string;
+      currentWeightPct: number;
+      headroomPct: number;
+    }>;
+    hhiPct: number;
+  } | null;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal Helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+function formatPositionConstraints(constraints: LlmDecisionInput["positionConstraints"]): string {
+  if (!constraints || !constraints.currentWeights.length) return "暂无持仓约束数据";
+  const lines: string[] = [];
+  lines.push(`单一仓位上限: ${(constraints.maxPositionPct * 100).toFixed(0)}%`);
+  lines.push(`当前集中度 HHI: ${constraints.hhiPct.toFixed(1)}`);
+  lines.push("各资产仓位:");
+  for (const w of constraints.currentWeights) {
+    const headroom = w.headroomPct.toFixed(1);
+    const warn = w.headroomPct < 3 ? " ⚠️接近上限" : "";
+    lines.push(`  ${w.symbol}: 当前 ${w.currentWeightPct.toFixed(1)}%, 距上限余量 ${headroom}%${warn}`);
+  }
+  return lines.join("\n");
+}
 
 /**
  * P0-1: 清理用户/信号输入后再注入 LLM prompt，防止 prompt injection。
@@ -201,34 +231,56 @@ function formatSignalDetailsForPrompt(o: DaaFusedOpportunity): string {
   return lines.join("\n");
 }
 
+/** 分析师自主决策模式 — LLM 基于目标和约束自主推理 */
 function buildDecisionPrompt(input: LlmDecisionInput): string {
   const { baseCurrency, totalEquity, cashClassification: cc } = input;
 
   const proposalLines = input.draftProposals.length > 0
-    ? input.draftProposals.slice(0, 12).map((p) =>
+    ? input.draftProposals.slice(0, 16).map((p) =>
         `  - ${p.symbol}: ${p.side}, 偏移${(p.driftPct * 100).toFixed(2)}%, 建议规模 ${p.suggestedNotional.toFixed(0)} ${baseCurrency}`,
       ).join("\n")
     : "  (无漂移建议，组合接近目标)";
 
-  // 信号详情：传递每个资产的四维原始信号，而非只传聚合分数
-  const signalDetails = input.fusedOpportunities.length > 0
-    ? input.fusedOpportunities.slice(0, 8).map((o) => formatSignalDetailsForPrompt(o)).join("\n\n")
-    : "(暂无可用信号)";
+  const proposalSymbolSet = new Set(input.draftProposals.map((p) => p.symbol.toUpperCase()));
+  const oppMap = new Map(input.fusedOpportunities.map((o) => [o.symbol.toUpperCase(), o]));
+  const primaryOpps = input.draftProposals
+    .map((p) => oppMap.get(p.symbol.toUpperCase()))
+    .filter((o): o is DaaFusedOpportunity => o != null);
+  const secondaryOpps = input.fusedOpportunities
+    .filter((o) => !proposalSymbolSet.has(o.symbol.toUpperCase()))
+    .slice(0, 4);
+  const signalParts: string[] = [];
+  if (primaryOpps.length > 0) {
+    signalParts.push(primaryOpps.map((o) => formatSignalDetailsForPrompt(o)).join("\n\n"));
+  }
+  if (secondaryOpps.length > 0) {
+    signalParts.push("--- 其他观察资产（精简） ---");
+    signalParts.push(secondaryOpps.map((o) =>
+      `  ${o.symbol}: 综合${o.finalScorePct.toFixed(0)}分, ${o.action}, 置信${o.confidencePct.toFixed(0)}%`,
+    ).join("\n"));
+  }
+  const signalDetails = signalParts.length > 0 ? signalParts.join("\n\n") : "(暂无可用信号)";
 
   const cashLines = [
     `总现金: ${cc.totalCash.toFixed(0)} ${baseCurrency}`,
     `运营储备: ${cc.operationalReserve.toFixed(0)} (${(cc.operationalReservePct * 100).toFixed(1)}%)`,
     `策略性现金(货基): ${cc.strategicCash.toFixed(0)} (偏移${(cc.strategicCashDriftPct * 100).toFixed(2)}%)`,
     `可投闲置: ${cc.investableIdle.toFixed(0)} (${(cc.investableIdlePct * 100).toFixed(1)}%, 已${cc.cashIdleDays}天)`,
-    `近期入金冷静期: ${cc.recentDepositCooldownActive ? "是（请勿催促配置）" : "否"}`,
+    `近期入金冷静期: ${cc.recentDepositCooldownActive ? "是" : "否"}`,
   ].join("\n  ");
 
   const warningText = input.warnings.slice(0, 5).join("; ") || "无";
   const marketContextText = formatMarketContextForPrompt(input.marketContext);
   const learningsText = normalizeText(input.recentLearningsText, "暂无可复用的历史复盘经验。");
 
-  return `你是 DAA 量化投资决策助手。你将看到每个资产的四维信号详情（人因/技术/新闻/估值），
-请基于这些原始数据自主判断各维度权重并输出结构化决策。不要给下单指令，只给调整系数和理由。
+  return `你是 DAA 组合分析师。你的任务是基于四维信号（人因/技术/新闻/估值）和市场环境，
+独立分析每个资产的投资价值，给出调整建议和推理依据。你有完整的决策自主权。
+
+## 你的目标
+1. 最大化组合的风险调整后收益
+2. 控制单资产和组合整体的下行风险
+3. 避免过度交易（除非信号明确且置信度高）
+4. 在不确定时偏保守 — 宁可少赚不可多亏
 
 ## 基本信息
 - 基准货币: ${baseCurrency}
@@ -238,10 +290,10 @@ function buildDecisionPrompt(input: LlmDecisionInput): string {
 ## 当前市场环境
 ${marketContextText}
 
-## 最近复盘经验
+## 历史复盘与决策表现
 ${learningsText}
 
-## 纯数学漂移建议（等待你的信号修正）
+## 纯数学漂移建议（等待你的分析修正）
 ${proposalLines}
 
 ## 各资产四维信号详情
@@ -250,51 +302,52 @@ ${signalDetails}
 ## 现金状态
   ${cashLines}
 
+## 持仓约束
+${formatPositionConstraints(input.positionConstraints)}
+
 ## 系统风险告警
 ${warningText}
 
-## 请严格按以下 JSON 结构输出（不要包含任何其他文字）：
+## 约束（不可违反）
+- 仓位上限: 每个资产不可超过上方标注的最大仓位百分比
+- 如果某资产距仓位上限余量 < 3%，必须大幅缩减或跳过
+- 入金冷静期为"是"时，cashAdvice 必须是 "hold" 或 "await_signal"
+- perAssetAdjustments 只包含漂移建议中出现的资产
+- rationale 必须引用具体数据（RSI 值、价格变化百分比、基金经理动向等）
+
+## 分析指引（非强制，供参考）
+- 多数信号看空但漂移要求买入时 → 谨慎缩减
+- 信号与漂移方向一致 + 高置信度 → 可全量或优先执行
+- 市场防守期（risk_off）→ 买入操作整体偏保守
+- 缺乏信号数据的资产 → 可按漂移执行但规模适度保守
+- 权重分配参考: 财报季提高新闻权重，强趋势提高技术权重，基金经理密集操作提高人因权重
+
+## 输出 JSON 结构（严格遵守，不要包含其他文字）：
 {
   "marketRegime": "risk_on 或 risk_off 或 transitional",
+  "marketNarrative": "50字以内，你对当前市场的整体判断",
   "overallConfidence": 0到100,
   "perAssetAdjustments": [
     {
       "symbol": "资产代码（大写）",
       "suggestedWeights": { "human": 0到100, "technical": 0到100, "news": 0到100, "valuation": 0到100 },
       "adjustment": "execute 或 reduce_size 或 skip 或 increase_priority",
-      "sizeMagnitude": 0到1（1.0=全量, 0.5=半仓, 0=等同skip）,
+      "sizeMagnitude": 0到1,
       "confidencePct": 0到100,
-      "rationale": "中文说明，120字以内，需引用具体的新闻/指标/基金经理数据"
+      "rationale": "中文说明，120字以内，引用具体数据",
+      "signalInterpretation": "你如何解读这个资产的四维信号，80字以内",
+      "riskFactors": ["该资产的主要风险点1", "风险点2"]
     }
   ],
   "cashAdvice": "hold 或 deploy_to_underweight 或 await_signal",
-  "cashRationale": "现金建议说明，20字以内",
-  "summary": "一句话总体市场判断，50字以内",
+  "cashRationale": "20字以内",
+  "summary": "一句话总体判断，50字以内",
   "keyRisks": ["风险点1", "风险点2"],
   "keyOpportunities": ["机会1", "机会2"],
-  "reasoning": "整体推理说明，200字以内中文，简要阐述本次决策的核心逻辑和依据"
+  "reasoning": "200字以内，阐述本次决策的核心逻辑、你如何权衡各信号、你的主要顾虑"
+}`;
 }
 
-## 权重分配指引（suggestedWeights 总和必须=100）：
-- 财报季或重大新闻密集时：新闻权重可提到 30-40%
-- 强趋势市场（动量 strong + RSI 单方向）：技术权重可提到 35-40%
-- 基金经理集中加减仓时：人因权重可提到 40-50%
-- 估值极端（温度 cheap/expensive）时：估值权重可提到 30-35%
-- 不确定时使用默认：人因30/技术25/新闻25/估值20
-
-## 决策规则（必须遵守）：
-1. 多数信号看空 + 漂移方向=BUY → adjustment="reduce_size", sizeMagnitude<=0.5
-2. 多数信号看多 + 漂移方向=BUY, 且 confidencePct>=65 → adjustment="increase_priority"
-3. 信号与漂移一致 → adjustment="execute", sizeMagnitude=1.0
-4. 无信号数据的资产 → adjustment="execute", sizeMagnitude=1.0（以漂移为准）
-5. 近期入金冷静期为"是" → cashAdvice 必须是 "hold" 或 "await_signal"
-6. cashAdvice="deploy_to_underweight" 仅在闲置>7天 + 闲置>10% + 存在低配资产时
-7. marketRegime="risk_off" → 所有 BUY 的 sizeMagnitude ≤ 0.7
-8. perAssetAdjustments 只包含漂移建议中出现的资产
-9. rationale 必须引用具体数据（如"RSI 72超买"、"Q1营收超预期12%"），禁止泛泛而谈`;
-}
-
-// ──────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 // JSON Parser
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,6 +400,11 @@ function parsePerAssetAdjustments(raw: unknown): LlmPerAssetAdjustment[] {
         confidencePct: Math.max(0, Math.min(100, toFinite(item.confidencePct, 50))),
         rationale: normalizeText(item.rationale).slice(0, 120),
         suggestedWeights,
+        // V3 optional fields
+        signalInterpretation: item.signalInterpretation ? normalizeText(item.signalInterpretation).slice(0, 120) : undefined,
+        riskFactors: Array.isArray(item.riskFactors)
+          ? item.riskFactors.map((r: unknown) => normalizeText(r)).filter(Boolean).slice(0, 5)
+          : undefined,
       };
     })
     .filter((item): item is LlmPerAssetAdjustment => item !== null);
@@ -387,6 +445,7 @@ function parseLlmJsonOutput(jsonText: string): Omit<LlmDecisionOutput, "status" 
       ? obj.keyOpportunities.map((o) => normalizeText(o)).filter(Boolean).slice(0, 3)
       : [],
     reasoning: normalizeText(obj.reasoning).slice(0, 200) || undefined,
+    marketNarrative: obj.marketNarrative ? normalizeText(obj.marketNarrative).slice(0, 100) : undefined,
   };
 }
 

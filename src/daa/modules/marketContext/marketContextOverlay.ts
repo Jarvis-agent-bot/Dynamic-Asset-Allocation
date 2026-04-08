@@ -53,9 +53,14 @@ export function rankMarketIndicatorReasons(input: {
     .map((item) => item.reason);
 }
 
-export function deriveMarketRegime(riskOffScorePct: number): DaaMarketRegime {
-  if (riskOffScorePct >= 65) return "risk_off";
-  if (riskOffScorePct < 40) return "risk_on";
+export function deriveMarketRegime(
+  riskOffScorePct: number,
+  thresholds?: { riskOffThreshold: number; riskOnThreshold: number },
+): DaaMarketRegime {
+  const riskOff = thresholds?.riskOffThreshold ?? 65;
+  const riskOn = thresholds?.riskOnThreshold ?? 40;
+  if (riskOffScorePct >= riskOff) return "risk_off";
+  if (riskOffScorePct < riskOn) return "risk_on";
   return "transitional";
 }
 

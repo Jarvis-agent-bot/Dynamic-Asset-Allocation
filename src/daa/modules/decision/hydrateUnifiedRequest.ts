@@ -496,7 +496,10 @@ function withCandidateTargetWeights(
   return { weights: normalizeWeightMap(next), addedTargets };
 }
 
-export async function hydrateUnifiedRequestWithSignals(request: DaaUnifiedRequest): Promise<HydrateUnifiedRequestResult> {
+export async function hydrateUnifiedRequestWithSignals(
+  request: DaaUnifiedRequest,
+  opts?: { signalPlan?: Map<string, import("@/src/daa/signals/opportunityService").SignalPlanEntry> },
+): Promise<HydrateUnifiedRequestResult> {
   const [persistedCandidates, persistedFxRates] = await Promise.all([
     listDaaCandidateAssets(),
     listDaaFxRates(),
@@ -524,7 +527,7 @@ export async function hydrateUnifiedRequestWithSignals(request: DaaUnifiedReques
     if (key) symbols.add(key);
   }
 
-  const panel = await buildOpportunityPanel({ symbols: [...symbols] });
+  const panel = await buildOpportunityPanel({ symbols: [...symbols], signalPlan: opts?.signalPlan });
   const fusedHumanSignals = buildFusedHumanSignals(panel);
 
   const { weights, addedTargets } = withCandidateTargetWeights(normalizedTargetWeights, panel, mergedCandidates);

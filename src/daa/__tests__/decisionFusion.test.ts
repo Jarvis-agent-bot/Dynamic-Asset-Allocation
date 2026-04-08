@@ -198,6 +198,7 @@ describe("decision-fusion-v2", () => {
     expect(result.proposals[0]?.decisionContext?.ruleBasedMarketRegime).toBe("transitional");
     expect(result.proposals[0]?.decisionContext?.llmMarketRegime).toBe("risk_off");
     expect(result.proposals[0]?.decisionContext?.effectiveMarketRegime).toBe("risk_off");
-    expect(result.proposals[0]?.suggestedNotional).toBeCloseTo(850, 6);
+    // 1000 × 0.8 (AI 未审核降级) × 0.85 (市场 buyScale) = 680
+    expect(result.proposals[0]?.suggestedNotional).toBeCloseTo(680, 6);
   });
 });

@@ -12,11 +12,23 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { listUncheckedDecisions, updateDecisionOutcome } from "@/src/daa/store/todayStore";
 import { batchReadAssetPriceSnapshots } from "@/src/daa/store/assetUniverseStore";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+
+export type OutcomeDetail = {
+  symbol: string;
+  verdict: string;
+  priceChangePct: number;
+  direction: string;
+  daysElapsed: number;
+  conclusion: string;
+  userAction: string;
+};
 
 export type OutcomeCheckResult = {
   checked: number;
   updated: number;
   errors: number;
+  details: OutcomeDetail[];
 };
 
 /**
@@ -32,6 +44,7 @@ export async function checkDecisionOutcomes(): Promise<OutcomeCheckResult> {
   let checked = 0;
   let updated = 0;
   let errors = 0;
+  const details: OutcomeDetail[] = [];
 
   // 批量获取所有涉及资产的当前价格
   const assetKeys = [...new Set(unchecked.map((d) => d.assetKey))];
@@ -76,6 +89,8 @@ export async function checkDecisionOutcomes(): Promise<OutcomeCheckResult> {
         verdict = Math.abs(priceChangePct) < 3 ? "correct_hold" : "unexpected_move";
       }
 
+      const daysElapsed = Math.round((Date.now() - new Date(decision.createdAt).getTime()) / 86400000);
+
       await updateDecisionOutcome(decision.id, {
         status: "checked",
         priceAtDecision,
@@ -83,17 +98,28 @@ export async function checkDecisionOutcomes(): Promise<OutcomeCheckResult> {
         priceChangePct: Math.round(priceChangePct * 100) / 100,
         direction,
         verdict,
-        daysElapsed: Math.round((Date.now() - new Date(decision.createdAt).getTime()) / 86400000),
+        daysElapsed,
         checkedAt: new Date().toISOString(),
       });
       updated++;
+
+      const parsed = parseDaaAssetKey(decision.assetKey);
+      details.push({
+        symbol: parsed?.symbol ?? decision.assetKey,
+        verdict,
+        priceChangePct: Math.round(priceChangePct * 100) / 100,
+        direction,
+        daysElapsed,
+        conclusion: decision.conclusion,
+        userAction: decision.userAction,
+      });
     } catch (err) {
       logSwallowed(`decisionOutcomeService.check[${decision.id}]`, err);
       errors++;
     }
   }
 
-  return { checked, updated, errors };
+  return { checked, updated, errors, details };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

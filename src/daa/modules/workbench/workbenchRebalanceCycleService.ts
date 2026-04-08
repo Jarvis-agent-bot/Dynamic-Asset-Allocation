@@ -1,6 +1,8 @@
 import { normalizeDaaCurrencyCode, parseDaaAssetKey } from "@/src/daa/assetKey";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
-import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
+import { runLlmPlanning, type PlannerOutput } from "@/src/daa/agent/llmPlanner";
+import type { SignalPlanEntry } from "@/src/daa/signals/opportunityService";
+import { getStrategyExecutionConfig, resolveStrategyParams } from "@/src/daa/config/systemConfig";
 import { runLlmDecision } from "@/src/daa/llm/llmDecision";
 import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
 import { hydrateUnifiedRequestWithSignals } from "@/src/daa/modules/decision/hydrateUnifiedRequest";
@@ -52,12 +54,31 @@ import {
   isCalendarMonthDue,
   isPastUtcTime,
   mapStoreCycleToView,
+  computeHhiPct,
   normalizeText,
   normalizeTimeZoneOrUtc,
   toCycleReportSnapshot,
   toFinite,
   toIsoByMs,
 } from "./workbenchShared";
+
+/** 将规划器输出转换为 opportunityService 需要的 signalPlan Map */
+function buildSignalPlanMap(planner: PlannerOutput): Map<string, SignalPlanEntry> {
+  const map = new Map<string, SignalPlanEntry>();
+  for (const target of planner.analysisTargets) {
+    map.set(target.symbol.toUpperCase(), {
+      requiredSignals: new Set(target.requiredSignals),
+      suggestedWeights: target.suggestedWeights
+        ? (() => {
+            const w = target.suggestedWeights!;
+            const sum = Math.max(1, w.human + w.technical + w.news + w.valuation);
+            return { human: w.human / sum, news: w.news / sum, technical: w.technical / sum, valuation: w.valuation / sum };
+          })()
+        : undefined,
+    });
+  }
+  return map;
+}
 
 export async function generateWorkbenchRebalanceCycle(
   input: GenerateRebalanceCycleInput = {},
@@ -326,12 +347,45 @@ export async function generateWorkbenchRebalanceCycle(
     };
   }
 
+  // ── Step B.5: 规划器 — AI 决定需要深入分析哪些资产 ──────────────
+  let plannerOutput: PlannerOutput | null = null;
+  if (draft.proposals.length > 0) {
+    try {
+      plannerOutput = await runLlmPlanning({
+        baseCurrency: bootstrap.baseCurrency,
+        totalEquity: bootstrap.account.totalEquity ?? 0,
+        draftProposals: draft.proposals.map((p) => ({
+          symbol: p.symbol,
+          side: p.side,
+          driftPct: (p.side === "SELL" ? 1 : -1) * p.suggestedNotional / Math.max(1, bootstrap.account.totalEquity ?? 1),
+          suggestedNotional: p.suggestedNotional,
+        })),
+        marketRegime: marketContext?.regime ?? "transitional",
+        marketRiskOffScore: marketContext?.riskOffScorePct ?? 50,
+        holdingCount: bootstrap.assetUniverse.filter((r) => r.holdingQty > 0).length,
+        recentLearningsText: recentLearningsText || "",
+      });
+      if (plannerOutput.status === "ok") {
+        const skipped = plannerOutput.skipDetailSymbols.length;
+        const targeted = plannerOutput.analysisTargets.length;
+        bootstrap.warnings.push(`规划器: ${targeted}个资产深入分析, ${skipped}个跳过详细分析. ${plannerOutput.strategyNote}`);
+      }
+    } catch (err) {
+      logSwallowed("workbenchRebalanceCycleService.planner", err);
+    }
+  }
+
+  // 构建 signalPlan（规划器输出 → opportunityService 可用格式）
+  const signalPlan = plannerOutput?.status === "ok"
+    ? buildSignalPlanMap(plannerOutput)
+    : undefined;
+
   // ── Step C: 信号富化（四路信号融合）────────────────────────────────
   // 对 draft proposals 中涉及的资产，获取 fused opportunities
   let fusedOpportunities: Awaited<ReturnType<typeof hydrateUnifiedRequestWithSignals>>["opportunityPanel"]["opportunities"] = [];
   try {
     const { request: unifiedRequest } = await buildUnifiedRequestFromStore();
-    const hydrated = await hydrateUnifiedRequestWithSignals(unifiedRequest);
+    const hydrated = await hydrateUnifiedRequestWithSignals(unifiedRequest, { signalPlan });
     fusedOpportunities = hydrated.opportunityPanel.opportunities;
   } catch (err) {
     logSwallowed("workbenchRebalanceCycleService.hydrateSignals", err);
@@ -343,16 +397,31 @@ export async function generateWorkbenchRebalanceCycle(
     || strategy.analysisFocus
     || DEFAULT_ANALYSIS_FOCUS_;
 
+  // 构建持仓约束上下文，让 LLM 感知仓位集中度限制
+  const totalEquity = bootstrap.account.totalEquity ?? 0;
+  const maxPositionPct = systemRow.config.strategy.constraints.maxPositionPct;
+  const maxPositionPctDisplay = maxPositionPct * 100;
+  const proposalSymbols = new Set(draft.proposals.map((p) => p.symbol.toUpperCase()));
+  const holdingWeights = bootstrap.assetUniverse
+    .filter((row) => proposalSymbols.has(row.symbol.toUpperCase()) && row.holdingQty > 0)
+    .map((row) => ({
+      symbol: row.symbol,
+      currentWeightPct: row.actualWeightPct ?? 0,
+      headroomPct: Math.max(0, maxPositionPctDisplay - (row.actualWeightPct ?? 0)),
+    }));
+  const allWeights = bootstrap.assetUniverse
+    .filter((row) => row.holdingQty > 0 && (row.actualWeightPct ?? 0) > 0)
+    .map((row) => row.actualWeightPct ?? 0);
+  const hhiPct = computeHhiPct(allWeights);
+
   const llmDecision = await runLlmDecision({
     baseCurrency: bootstrap.baseCurrency,
-    totalEquity: bootstrap.account.totalEquity ?? 0,
+    totalEquity,
     cashClassification,
     draftProposals: draft.proposals.map((p) => ({
       symbol: p.symbol,
       side: p.side,
-      // P0-3: driftPct 需要带符号：BUY=负（低配），SELL=正（超配）
-      // suggestedNotional 始终为正值，需根据 side 还原方向
-      driftPct: (p.side === "SELL" ? 1 : -1) * p.suggestedNotional / Math.max(1, bootstrap.account.totalEquity ?? 1),
+      driftPct: (p.side === "SELL" ? 1 : -1) * p.suggestedNotional / Math.max(1, totalEquity),
       suggestedNotional: p.suggestedNotional,
     })),
     fusedOpportunities,
@@ -360,6 +429,11 @@ export async function generateWorkbenchRebalanceCycle(
     analysisFocus,
     marketContext,
     recentLearningsText,
+    positionConstraints: {
+      maxPositionPct,
+      currentWeights: holdingWeights,
+      hhiPct,
+    },
   });
 
   // ── Step E: 三层决策融合（drift × signal × LLM）──────────────────
@@ -375,6 +449,12 @@ export async function generateWorkbenchRebalanceCycle(
       watchTags: row.watchTags,
     }]),
   );
+  const currentValuationBySymbol = Object.fromEntries(
+    bootstrap.assetUniverse
+      .filter((row) => row.holdingQty > 0)
+      .map((row) => [row.symbol.toUpperCase(), row.valuationBase ?? 0]),
+  );
+  const strategyParams = resolveStrategyParams(systemRow.config.strategy.strategyParams);
   const fusionResult = fuseDecision({
     draftProposals: draft.proposals,
     fusedOpportunities,
@@ -382,6 +462,12 @@ export async function generateWorkbenchRebalanceCycle(
     marketContext,
     marketConfig: systemRow.config.dataSources.marketIndicators,
     assetMetaBySymbol,
+    concentrationConstraints: {
+      totalEquity,
+      maxPositionPct,
+      currentValuationBySymbol,
+    },
+    strategyParams: strategyParams.decisionFusion,
   });
 
   // 将融合警告追加到系统 warnings

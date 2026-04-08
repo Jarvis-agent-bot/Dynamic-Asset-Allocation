@@ -112,8 +112,29 @@ src/
 `{MARKET}:{SYMBOL}` — e.g., `US:AAPL`, `HK:0700.HK`, `CRYPTO:BTC-USD`
 See `src/daa/assetKey.ts` for parsing/normalization utilities.
 
-### Signal Fusion (Three Dimensions + Human)
+### AI 决策架构（Structured Agent）
+
+再平衡决策流程采用双阶段 LLM 架构：
+
+```
+漂移计算 → 规划器(LLM) → 选择性信号采集 → 融合 → 决策器(LLM) → Guardrails → 执行
+                                                        ↑
+                                                  outcome 反馈闭环
+```
+
+**规划器**（`src/daa/agent/llmPlanner.ts`）：用便宜模型分析漂移提案，决定每个资产需要采集哪些信号（技术/估值/新闻/人因），跳过不需要深入分析的资产。
+
+**决策器**（`src/daa/llm/llmDecision.ts`）：分析师模式，基于目标和约束自主推理，输出调整建议 + 信号解读 + 风险分析。
+
+**Guardrails**（`src/daa/modules/workbench/decisionFusion.ts`）：不可绕过的硬约束 — 仓位上限 cap、信号冲突惩罚、市场 regime 缩放。
+
+**反馈闭环**：决策后验结果（`decisionOutcomeService.ts`）→ agent learning events（`agentLearningRepo.ts`）→ 下次决策的历史表现段。
+
+**可调参数**（`DaaStrategyParams` in `systemConfig.ts`）：信号融合阈值、冲突惩罚系数、决策融合参数、市场 regime 阈值均可通过 `strategy.strategyParams` 配置覆盖。
+
+### Signal Fusion (Four Dimensions)
 Default weights: Human 35% + Technical 25% + News 20% + Valuation 20%
+（通过 `dataSources.newsFeed.fusionWeights` 配置，或由 LLM 动态建议）
 
 ### Market Indicators (7 dimensions)
 - `vix` — S&P 500 volatility
@@ -201,6 +222,7 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Rebalancing engine | `src/core/rebalanceCore.ts` |
 | Signal fusion | `src/daa/signals/fusion.ts` |
 | System config model | `src/daa/config/systemConfig.ts` |
+| Strategy params (可调阈值) | `src/daa/config/systemConfig.ts` (`DaaStrategyParams`) |
 | Market data client | `src/market/marketDataClient.ts` |
 | DB schema migrations | `src/daa/store/runtimeMigrations.ts` |
 | Workbench types | `src/daa/modules/workbench/workbenchTypes.ts` |
@@ -209,6 +231,12 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Asset key utilities | `src/daa/assetKey.ts` |
 | API rate limiting | `src/daa/api/rateLimit.ts` |
 | Market data constants | `src/market/constants.ts` |
+| LLM 规划器 | `src/daa/agent/llmPlanner.ts` |
+| LLM 决策器 | `src/daa/llm/llmDecision.ts` |
+| 决策融合 (Guardrails) | `src/daa/modules/workbench/decisionFusion.ts` |
+| Agent Tool 注册表 | `src/daa/agent/agentToolRegistry.ts` |
+| Agent 学习记忆 | `src/daa/agent/agentLearningRepo.ts` |
+| 决策后验服务 | `src/daa/modules/today/decisionOutcomeService.ts` |
 
 ## Development Conventions
 

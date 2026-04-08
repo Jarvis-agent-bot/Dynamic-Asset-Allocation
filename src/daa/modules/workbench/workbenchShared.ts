@@ -299,7 +299,7 @@ async function buildHfSignalMap(): Promise<Map<string, HfSignalSummary>> {
     return map;
 }
 
-function computeHhiPct(weightsPct: number[]): number {
+export function computeHhiPct(weightsPct: number[]): number {
     if (!weightsPct.length)
         return 0;
     return weightsPct.reduce((sum, weight) => sum + ((weight / 100) ** 2), 0) * 100;

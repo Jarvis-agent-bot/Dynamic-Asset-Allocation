@@ -4,6 +4,7 @@ import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSign
 import { buildTechnicalSignals, type DaaTechnicalSignal } from "@/src/daa/signals/technicalSignal";
 import { buildValuationSignals, type DaaValuationSignal } from "@/src/daa/signals/valuationSignal";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import type { SignalType } from "@/src/daa/agent/agentToolRegistry";
 
 export type DaaOpportunityPanel = {
   generatedAt: string;
@@ -65,11 +66,19 @@ function resolveFusionWeights(config: Record<string, unknown>): DaaFusionWeights
   };
 }
 
+export type SignalPlanEntry = {
+  requiredSignals: Set<SignalType>;
+  suggestedWeights?: DaaFusionWeights;
+};
+
 export async function buildOpportunityPanel(input: {
   symbols: string[];
   fundCodes?: string[];
+  /** Phase 2: 选择性信号采集 — 由规划器 LLM 生成 */
+  signalPlan?: Map<string, SignalPlanEntry>;
 }): Promise<DaaOpportunityPanel> {
   const symbols = [...new Set((input.symbols ?? []).map((item) => normalizeSymbol(item)).filter(Boolean))];
+  const plan = input.signalPlan;
 
   const [system, batch] = await Promise.all([
     getDaaSystemConfig(),
@@ -79,16 +88,33 @@ export async function buildOpportunityPanel(input: {
   const newsProvider = String(newsConfig.provider || "yahoo_rss").trim() || "yahoo_rss";
   const newsQuery = String(newsConfig.query || "").trim();
   const newsSymbols = parseSymbolsFromConfig(newsConfig.symbols);
-  const finalNewsSymbols = [...new Set([...symbols, ...newsSymbols])];
   const newsEnabled = newsConfig.enabled !== false;
   const valuationEnabled = newsConfig.valuationEnabled !== false;
 
+  // Phase 2: 如果有 signalPlan，只对 plan 中包含且指定了该信号的 symbol 采集
+  const needsSignal = (sym: string, signal: SignalType): boolean => {
+    if (!plan) return true; // 无 plan 时全量采集
+    const entry = plan.get(sym);
+    if (!entry) return false; // 不在 plan 中（skipDetail）= 不采集
+    return entry.requiredSignals.has(signal);
+  };
+
+  const newsSymbolsFiltered = plan
+    ? [...new Set([...symbols.filter((s) => needsSignal(s, "news")), ...newsSymbols])]
+    : [...new Set([...symbols, ...newsSymbols])];
+  const technicalSymbolsFiltered = plan ? symbols.filter((s) => needsSignal(s, "technical")) : symbols;
+  const valuationSymbolsFiltered = plan ? symbols.filter((s) => needsSignal(s, "valuation")) : symbols;
+
   const [newsSignals, technicalSignals, valuationSignals] = await Promise.all([
-    newsEnabled && newsProvider === "yahoo_rss"
-      ? buildNewsSignals({ symbols: finalNewsSymbols, query: newsQuery })
+    newsEnabled && newsProvider === "yahoo_rss" && newsSymbolsFiltered.length > 0
+      ? buildNewsSignals({ symbols: newsSymbolsFiltered, query: newsQuery })
       : Promise.resolve([] as DaaNewsSignal[]),
-    buildTechnicalSignals(symbols),
-    buildValuationSignals(symbols),
+    technicalSymbolsFiltered.length > 0
+      ? buildTechnicalSignals(technicalSymbolsFiltered)
+      : Promise.resolve([] as DaaTechnicalSignal[]),
+    valuationSymbolsFiltered.length > 0
+      ? buildValuationSignals(valuationSymbolsFiltered)
+      : Promise.resolve([] as DaaValuationSignal[]),
   ]);
 
   const weights = resolveFusionWeights(newsConfig as unknown as Record<string, unknown>);
