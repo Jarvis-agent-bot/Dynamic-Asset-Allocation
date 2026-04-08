@@ -8,6 +8,43 @@ import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { RawNewsItem } from "./newsProviders";
 
+// ---------------------------------------------------------------------------
+// P1-1: LLM 并发限制 — 防止 30+ symbol 批量刷新时打爆 LLM API
+// ---------------------------------------------------------------------------
+const LLM_CONCURRENCY = 3;
+let _running = 0;
+const _queue: Array<() => void> = [];
+
+function acquireSlot(): Promise<void> {
+  if (_running < LLM_CONCURRENCY) {
+    _running++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => _queue.push(resolve));
+}
+
+function releaseSlot(): void {
+  const next = _queue.shift();
+  if (next) {
+    next(); // 不减 _running，slot 直接移交
+  } else {
+    _running--;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// P2-5: 新闻文本消毒 — 去除控制字符和潜在注入
+// ---------------------------------------------------------------------------
+function sanitizeText(text: string, maxLen = 200): string {
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // 控制字符
+    .replace(/<[^>]*>/g, "")                              // HTML 标签
+    .replace(/\{[\s\S]*?\}/g, (m) =>                      // 保留纯文本大括号，去除可疑 JSON
+      m.length > 30 ? "" : m)
+    .trim()
+    .slice(0, maxLen);
+}
+
 export type LlmNewsAnalysis = {
   sentimentScore: number;     // -100 ~ +100
   summary: string;            // 1-2 句概括
@@ -41,15 +78,17 @@ export async function analyzeNewsWithLlm(input: {
 }): Promise<LlmNewsAnalysis> {
   if (input.items.length === 0) return DEFAULT_ANALYSIS;
 
+  await acquireSlot();
   try {
     const config = await resolveLlmConfig();
     if (!config.enabled || !config.apiKey) return DEFAULT_ANALYSIS;
 
     const newsLines = input.items.slice(0, 10).map((item, i) => {
       const date = item.publishedAt ? item.publishedAt.slice(0, 10) : "未知日期";
-      const source = item.source || "未知来源";
-      const summary = item.summary ? ` — ${item.summary.slice(0, 100)}` : "";
-      return `${i + 1}. [${date}] ${item.title} (${source})${summary}`;
+      const source = sanitizeText(item.source || "未知来源", 30);
+      const title = sanitizeText(item.title, 150);
+      const summary = item.summary ? ` — ${sanitizeText(item.summary, 100)}` : "";
+      return `${i + 1}. [${date}] ${title} (${source})${summary}`;
     }).join("\n");
 
     const prompt = `你是金融新闻分析师。以下是 ${input.symbol} 最近的新闻：
@@ -80,6 +119,8 @@ majorEvent 判定标准（必须严格遵守）：
   } catch (e) {
     logSwallowed("newsLlmAnalyzer.analyze", e);
     return DEFAULT_ANALYSIS;
+  } finally {
+    releaseSlot();
   }
 }
 

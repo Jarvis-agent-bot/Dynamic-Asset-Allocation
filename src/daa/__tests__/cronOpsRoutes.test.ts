@@ -294,7 +294,11 @@ describe("cron-ops-routes-v1", () => {
     expect(json.data.signals).toBe(2);
     expect(json.data.items).toBe(3);
     expect(vi.mocked(buildNewsSignals)).toHaveBeenCalledWith({
-      symbols: ["TSLA", "BABA", "MSFT"],
+      symbolsWithMarket: [
+        { symbol: "TSLA", market: "US" },
+        { symbol: "BABA", market: "US" },
+        { symbol: "MSFT", market: "US" },
+      ],
     });
     // news-refresh 现在使用 runLoggedJob 而非 appendDaaIngestJobLog
     expect(json.data.jobId).toBeTruthy();

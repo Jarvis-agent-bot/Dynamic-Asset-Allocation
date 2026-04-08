@@ -6,6 +6,7 @@ import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaSto
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { createHash } from "crypto";
 
 export const runtime = "nodejs";
 
@@ -13,31 +14,47 @@ function normalizeUpper(value: unknown): string {
   return String(value || "").trim().toUpperCase();
 }
 
-async function resolveSymbols(): Promise<string[]> {
+type SymbolWithMarket = { symbol: string; market: string };
+
+/** 将 region (US/HK/CN) 映射到 newsProvider 需要的 market */
+function regionToMarket(region: string): string {
+  const map: Record<string, string> = { US: "US", HK: "HK", CN: "CN", JP: "JP", EU: "EU" };
+  return map[region.toUpperCase()] || "US";
+}
+
+/** 根据 symbol 后缀猜测 market（针对非 asset universe 来源的 symbol） */
+function guessMarketFromSymbol(symbol: string): string {
+  if (symbol.endsWith(".HK")) return "HK";
+  if (symbol.endsWith(".SS") || symbol.endsWith(".SZ")) return "CN";
+  if (symbol.endsWith(".T")) return "JP";
+  return "US";
+}
+
+async function resolveSymbolsWithMarket(): Promise<SymbolWithMarket[]> {
   const [system, assets] = await Promise.all([
     getDaaSystemConfig(),
     listDaaAssetUniverse(),
   ]);
 
-  const out = new Set<string>();
+  const seen = new Map<string, SymbolWithMarket>();
   const newsFeed = system.config.dataSources.newsFeed;
   if (newsFeed.enabled === false) return [];
 
   for (const symbol of newsFeed.symbols || []) {
     const key = normalizeUpper(symbol);
-    if (key) out.add(key);
+    if (key && !seen.has(key)) seen.set(key, { symbol: key, market: guessMarketFromSymbol(key) });
   }
   for (const symbol of parseSymbolsFromNewsQuery(newsFeed.query || "")) {
     const key = normalizeUpper(symbol);
-    if (key) out.add(key);
+    if (key && !seen.has(key)) seen.set(key, { symbol: key, market: guessMarketFromSymbol(key) });
   }
   for (const row of assets) {
     if (!(row.holdingQty > 0) && row.watchEnabled === false) continue;
     const key = normalizeUpper(row.symbol);
-    if (key) out.add(key);
+    if (key && !seen.has(key)) seen.set(key, { symbol: key, market: regionToMarket(row.region || "US") });
   }
 
-  return [...out];
+  return [...seen.values()];
 }
 
 /** 已推送事件缓存（内存级，重启后清空；DB 级去重通过 notification_delivery_log 实现） */
@@ -48,8 +65,9 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
   let pushed = 0;
   for (const signal of signals) {
     if (signal.llmMajorEvent && signal.llmMajorEvent.impact === "high") {
-      // 去重 key = symbol + 事件类型 + 描述前20字
-      const eventKey = `${signal.symbol}:${signal.llmMajorEvent.type}:${signal.llmMajorEvent.description.slice(0, 20)}`;
+      // 去重 key = symbol + 事件类型 + 描述 hash（避免截断碰撞）
+      const descHash = createHash("sha256").update(signal.llmMajorEvent.description).digest("hex").slice(0, 12);
+      const eventKey = `${signal.symbol}:${signal.llmMajorEvent.type}:${descHash}`;
       if (pushedEventKeys.has(eventKey)) continue;
 
       try {
@@ -101,12 +119,12 @@ export async function POST(req: Request) {
         return { symbols: result.refreshedSymbols, signals: result.signals, majorEvents: result.majorEventsPushed };
       },
       handler: async () => {
-        const symbols = await resolveSymbols();
-        if (symbols.length === 0) {
+        const symbolsWithMarket = await resolveSymbolsWithMarket();
+        if (symbolsWithMarket.length === 0) {
           return { refreshedSymbols: 0, signals: 0, items: 0, majorEventsPushed: 0 };
         }
 
-        const signals = await buildNewsSignals({ symbols });
+        const signals = await buildNewsSignals({ symbolsWithMarket });
         const signalRows = signals.length;
         const itemRows = signals.reduce((acc, s) => acc + s.items.length, 0);
 
@@ -114,7 +132,7 @@ export async function POST(req: Request) {
         const majorEventsPushed = await checkMajorEvents(signals);
 
         return {
-          refreshedSymbols: symbols.length,
+          refreshedSymbols: symbolsWithMarket.length,
           signals: signalRows,
           items: itemRows,
           majorEventsPushed,
