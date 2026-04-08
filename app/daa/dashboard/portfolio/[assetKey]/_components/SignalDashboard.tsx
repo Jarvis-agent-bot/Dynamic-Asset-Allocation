@@ -65,6 +65,12 @@ function buildNewsTooltip(insight: WorkbenchAssetInsightResponse): string {
   if (!insight.news) return "暂无新闻信号数据";
   const parts: string[] = [`评分 ${insight.news.scorePct.toFixed(0)}`];
   parts.push(`${insight.news.evidenceCount} 条新闻`);
+  // 优先使用 LLM 新闻摘要（v2）
+  const llmSummary = (insight.news as Record<string, unknown>).llmSummary as string | undefined;
+  if (llmSummary) {
+    parts.push(llmSummary.length > 50 ? llmSummary.slice(0, 50) + "…" : llmSummary);
+    return parts.join("，");
+  }
   if (insight.news.aiSummary?.summary) {
     const summary = insight.news.aiSummary.summary;
     parts.push(summary.length > 40 ? summary.slice(0, 40) + "…" : summary);

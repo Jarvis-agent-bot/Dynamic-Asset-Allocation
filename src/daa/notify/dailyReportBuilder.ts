@@ -1,11 +1,12 @@
 import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 /**
  * Build a daily report text from WorkbenchBootstrap data.
  * Uses Telegram HTML parse mode for clean formatting (no MarkdownV2 escape issues).
  */
-export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
+export async function buildDailyReportText(bootstrap: WorkbenchBootstrap): Promise<string> {
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
 
@@ -45,6 +46,27 @@ export function buildDailyReportText(bootstrap: WorkbenchBootstrap): string {
       lines.push(`${sym}${val}${wt}${pnl}`);
     }
     lines.push("</pre>");
+
+    // 每个持仓的新闻摘要（如果有 LLM 分析）
+    try {
+      const { daaPgPool } = await import("@/src/daa/pg/daaPg");
+      const pool = daaPgPool();
+      for (const row of sorted.slice(0, 4)) {
+        const newsResult = await pool.query(
+          `SELECT llm_summary, llm_action_hint FROM daa_news_signal_snapshot_v1
+           WHERE symbol = $1 AND llm_summary IS NOT NULL
+           ORDER BY generated_at DESC LIMIT 1`,
+          [row.symbol],
+        );
+        const newsRow = newsResult.rows[0] as Record<string, unknown> | undefined;
+        if (newsRow?.llm_summary) {
+          const summary = String(newsRow.llm_summary).slice(0, 60);
+          lines.push(`  📰 ${h(row.symbol)}: ${h(summary)}`);
+        }
+      }
+    } catch (e) {
+      logSwallowed("dailyReport.newsSummary", e);
+    }
     lines.push("");
   }
 

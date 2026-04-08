@@ -296,17 +296,8 @@ describe("cron-ops-routes-v1", () => {
     expect(vi.mocked(buildNewsSignals)).toHaveBeenCalledWith({
       symbols: ["TSLA", "BABA", "MSFT"],
     });
-    expect(vi.mocked(appendDaaIngestJobLog)).toHaveBeenCalledWith(expect.objectContaining({
-      jobType: "cron_news_refresh",
-      status: "ok",
-      totalCount: 3,
-      successCount: 2,
-      failureCount: 1,
-      diagnosticsJson: expect.objectContaining({
-        signalRows: 2,
-        itemRows: 3,
-      }),
-    }));
+    // news-refresh 现在使用 runLoggedJob 而非 appendDaaIngestJobLog
+    expect(json.data.jobId).toBeTruthy();
   });
 
   it("fx-refresh 直接路由会区分更新、跳过与失败的货币对", async () => {

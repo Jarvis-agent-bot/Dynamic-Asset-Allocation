@@ -308,7 +308,7 @@ export async function POST(req: Request) {
         if (wantTgReport || wantFsReport) {
           try {
             const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
-            const reportText = buildDailyReportText(bootstrap);
+            const reportText = await buildDailyReportText(bootstrap);
 
             const sends: Promise<void>[] = [];
             if (wantTgReport) {

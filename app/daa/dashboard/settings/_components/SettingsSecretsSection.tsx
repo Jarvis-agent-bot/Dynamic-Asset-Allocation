@@ -28,10 +28,19 @@ const GROUP_META: Record<string, { label: string; order: number }> = {
   cron: { label: "定时任务", order: 4 },
   fred: { label: "FRED 宏观数据", order: 5 },
   twitter_data: { label: "Twitter 数据", order: 6 },
+  finnhub: { label: "Finnhub 新闻", order: 7 },
 };
 
-const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "fred_api_key"]);
+const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "fred_api_key", "finnhub_api_key"]);
 const DELIVERABLE_KEYS = new Set(["telegram_bot_token", "feishu_webhook_url"]);
+
+/** 凭证注册/获取链接 */
+const SECRET_URLS: Record<string, { label: string; url: string }> = {
+  finnhub_api_key: { label: "Finnhub 注册", url: "https://finnhub.io/register" },
+  fred_api_key: { label: "FRED 申请", url: "https://fred.stlouisfed.org/docs/api/api_key.html" },
+  llm_api_key: { label: "DeepSeek 控制台", url: "https://platform.deepseek.com/api_keys" },
+  twitterdata_token: { label: "TwitterData", url: "https://pro.twitterdata.com" },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SecretRow
@@ -94,6 +103,16 @@ function SecretRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-medium text-[var(--text)]">{secret.label}</span>
+          {SECRET_URLS[secret.key] ? (
+            <a
+              href={SECRET_URLS[secret.key].url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-[var(--primary)] hover:underline"
+            >
+              {SECRET_URLS[secret.key].label} ↗
+            </a>
+          ) : null}
           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
             secret.source === "env"
               ? "bg-blue-500/10 text-blue-400"

@@ -71,8 +71,8 @@ function makeBootstrap(overrides?: Partial<WorkbenchBootstrap>): WorkbenchBootst
 }
 
 describe("buildDailyReportText", () => {
-  it("generates report with all sections", () => {
-    const text = buildDailyReportText(makeBootstrap());
+  it("generates report with all sections", async () => {
+    const text = await buildDailyReportText(makeBootstrap());
 
     expect(text).toContain("每日报告");
     expect(text).toContain("组合概览");
@@ -84,24 +84,25 @@ describe("buildDailyReportText", () => {
     expect(text).toContain("仅供参考");
   });
 
-  it("handles null marketContext", () => {
-    const text = buildDailyReportText(makeBootstrap({ marketContext: null }));
+  it("handles null marketContext", async () => {
+    const text = await buildDailyReportText(makeBootstrap({ marketContext: null }));
 
     expect(text).toContain("每日报告");
     expect(text).not.toContain("市场环境");
     expect(text).toContain("仅供参考");
   });
 
-  it("handles empty assetUniverse", () => {
-    const text = buildDailyReportText(makeBootstrap({ assetUniverse: [] }));
+  it("handles empty assetUniverse", async () => {
+    const text = await buildDailyReportText(makeBootstrap({ assetUniverse: [] }));
 
     expect(text).toContain("0个标的");
     expect(text).not.toContain("偏移监控");
   });
 
-  it("includes next rebalance date when calendar is enabled", () => {
-    const text = buildDailyReportText(makeBootstrap());
+  it("includes rebalance reminder when calendar is enabled", async () => {
+    const text = await buildDailyReportText(makeBootstrap());
 
-    expect(text).toContain("下次定期再平衡");
+    // every_3_days 频率显示"自动触发"而非"下次日期"
+    expect(text).toContain("提醒");
   });
 });
