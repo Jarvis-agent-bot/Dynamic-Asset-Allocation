@@ -141,9 +141,9 @@ async function fetchDailyCloseBars(symbolRaw: string, days: number): Promise<Dai
 
   try {
     const result = await fetchPriceSeriesWithCache(symbol, start, {
-      minDbDays: Math.floor(safeDays * 0.8), // DB 有 80% 数据就认为够用
-      maxStaleDays: 0, // 指标刷新需要最新数据，不接受 stale
-      timeoutMs: 8000,
+      minDbDays: Math.floor(safeDays * 0.8), // 需要 80% 天数才走增量，否则全量拉
+      maxStaleDays: 0, // 指标刷新需要最新数据，每次都尝试补数据
+      timeoutMs: 10000,
     });
     return result.data.slice(-safeDays).map((p) => ({ date: p.date, close: p.close }));
   } catch (err) {
