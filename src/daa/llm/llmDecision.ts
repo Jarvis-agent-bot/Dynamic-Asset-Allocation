@@ -45,6 +45,13 @@ export type LlmPerAssetAdjustment = {
   confidencePct: number;
   /** 简短中文说明（120字以内，需引用具体数据）*/
   rationale: string;
+  /** LLM 建议的四维信号权重（总和=100，可选） */
+  suggestedWeights?: {
+    human: number;
+    technical: number;
+    news: number;
+    valuation: number;
+  };
 };
 
 /** LLM 结构化决策输出 */
@@ -140,6 +147,60 @@ function formatMarketContextForPrompt(marketContext: DaaMarketContext | null | u
   return `riskOffScore=${marketContext.riskOffScorePct.toFixed(1)}, regime=${marketContext.regime}, buyScale=${marketContext.buyScale.toFixed(2)}, highRiskBuyScale=${marketContext.highRiskBuyScale.toFixed(2)}, reasons=${reasons}, indicators=[${indicators}]${scopes}`;
 }
 
+/**
+ * 格式化单个资产的四维信号详情，供 LLM 做出更精准的决策。
+ * 替代之前只传 "综合评分68, 置信度72, 原因=[...]" 的简略模式。
+ */
+function formatSignalDetailsForPrompt(o: DaaFusedOpportunity): string {
+  const lines: string[] = [`### ${o.symbol} (综合${o.finalScorePct.toFixed(0)}分, ${o.action})`];
+
+  // 人因信号
+  if (o.human) {
+    const h = o.human;
+    lines.push(`  人因: 评分${h.aggregatedScorePct.toFixed(0)}, 置信${h.confidencePct.toFixed(0)}%, 趋势${h.momentumRegime}, 立场${h.stance}, ${h.evidenceCount}个基金`);
+  } else {
+    lines.push(`  人因: 无数据`);
+  }
+
+  // 技术信号
+  if (o.technical) {
+    const t = o.technical;
+    const rsi = t.metrics.rsi14;
+    const macdDir = t.metrics.macdHist > 0 ? "偏多" : t.metrics.macdHist < 0 ? "偏空" : "中性";
+    lines.push(`  技术: 评分${t.scorePct.toFixed(0)}, 动量${t.momentumRegime}, RSI ${rsi.toFixed(0)}, MACD${macdDir}, 20日收益${t.metrics.return20Pct.toFixed(1)}%, 回撤${t.metrics.drawdown30Pct.toFixed(1)}%`);
+  } else {
+    lines.push(`  技术: 无数据`);
+  }
+
+  // 新闻信号
+  if (o.news) {
+    const n = o.news;
+    lines.push(`  新闻: 评分${n.scorePct.toFixed(0)}, ${n.evidenceCount}条`);
+    // 使用 LLM 新闻摘要（v2 新增）
+    const llmSummary = (n as Record<string, unknown>).llmSummary as string | undefined;
+    if (llmSummary) {
+      lines.push(`    摘要: ${sanitizeForPrompt(llmSummary, 80)}`);
+    }
+    const llmDrivers = (n as Record<string, unknown>).llmDrivers as { bullish?: string[]; bearish?: string[] } | undefined;
+    if (llmDrivers) {
+      if (llmDrivers.bullish?.length) lines.push(`    利好: ${llmDrivers.bullish.slice(0, 2).map((d) => sanitizeForPrompt(d, 30)).join(" | ")}`);
+      if (llmDrivers.bearish?.length) lines.push(`    利空: ${llmDrivers.bearish.slice(0, 2).map((d) => sanitizeForPrompt(d, 30)).join(" | ")}`);
+    }
+  } else {
+    lines.push(`  新闻: 无数据`);
+  }
+
+  // 估值信号
+  if (o.valuation) {
+    const v = o.valuation;
+    lines.push(`  估值: 评分${v.scorePct.toFixed(0)}, 温度${v.temperature}, 90天百分位${v.metrics.percentile90.toFixed(0)}%, z-score${v.metrics.zscore60.toFixed(1)}`);
+  } else {
+    lines.push(`  估值: 无数据`);
+  }
+
+  return lines.join("\n");
+}
+
 function buildDecisionPrompt(input: LlmDecisionInput): string {
   const { baseCurrency, totalEquity, cashClassification: cc } = input;
 
@@ -149,14 +210,10 @@ function buildDecisionPrompt(input: LlmDecisionInput): string {
       ).join("\n")
     : "  (无漂移建议，组合接近目标)";
 
-  const signalLines = input.fusedOpportunities.length > 0
-    ? input.fusedOpportunities.slice(0, 10).map((o) => {
-        const safeReasons = o.reasons.slice(0, 2)
-          .map((r) => sanitizeForPrompt(r, 40))
-          .join("; ");
-        return `  - ${o.symbol}: 综合评分${o.finalScorePct.toFixed(1)}, 置信度${o.confidencePct.toFixed(1)}, 行动=${o.action}, 原因=[${safeReasons}]`;
-      }).join("\n")
-    : "  (暂无可用信号)";
+  // 信号详情：传递每个资产的四维原始信号，而非只传聚合分数
+  const signalDetails = input.fusedOpportunities.length > 0
+    ? input.fusedOpportunities.slice(0, 8).map((o) => formatSignalDetailsForPrompt(o)).join("\n\n")
+    : "(暂无可用信号)";
 
   const cashLines = [
     `总现金: ${cc.totalCash.toFixed(0)} ${baseCurrency}`,
@@ -170,8 +227,8 @@ function buildDecisionPrompt(input: LlmDecisionInput): string {
   const marketContextText = formatMarketContextForPrompt(input.marketContext);
   const learningsText = normalizeText(input.recentLearningsText, "暂无可复用的历史复盘经验。");
 
-  return `你是 DAA 量化投资决策助手，负责在再平衡流程中提供结构化决策参考。
-请严格基于以下数据输出 JSON 格式的调整建议。不要给下单指令，只给调整系数和简短原因。
+  return `你是 DAA 量化投资决策助手。你将看到每个资产的四维信号详情（人因/技术/新闻/估值），
+请基于这些原始数据自主判断各维度权重并输出结构化决策。不要给下单指令，只给调整系数和理由。
 
 ## 基本信息
 - 基准货币: ${baseCurrency}
@@ -187,8 +244,8 @@ ${learningsText}
 ## 纯数学漂移建议（等待你的信号修正）
 ${proposalLines}
 
-## 四路信号融合结果（人因35%/新闻20%/技术25%/估值20%）
-${signalLines}
+## 各资产四维信号详情
+${signalDetails}
 
 ## 现金状态
   ${cashLines}
@@ -203,10 +260,11 @@ ${warningText}
   "perAssetAdjustments": [
     {
       "symbol": "资产代码（大写）",
+      "suggestedWeights": { "human": 0到100, "technical": 0到100, "news": 0到100, "valuation": 0到100 },
       "adjustment": "execute 或 reduce_size 或 skip 或 increase_priority",
-      "sizeMagnitude": 0到1（1.0=全量, 0.5=半仓, 0=等同skip）, 
+      "sizeMagnitude": 0到1（1.0=全量, 0.5=半仓, 0=等同skip）,
       "confidencePct": 0到100,
-      "rationale": "中文说明，120字以内，需引用具体数据（如指标值、偏移百分比）"
+      "rationale": "中文说明，120字以内，需引用具体的新闻/指标/基金经理数据"
     }
   ],
   "cashAdvice": "hold 或 deploy_to_underweight 或 await_signal",
@@ -217,15 +275,23 @@ ${warningText}
   "reasoning": "整体推理说明，200字以内中文，简要阐述本次决策的核心逻辑和依据"
 }
 
+## 权重分配指引（suggestedWeights 总和必须=100）：
+- 财报季或重大新闻密集时：新闻权重可提到 30-40%
+- 强趋势市场（动量 strong + RSI 单方向）：技术权重可提到 35-40%
+- 基金经理集中加减仓时：人因权重可提到 40-50%
+- 估值极端（温度 cheap/expensive）时：估值权重可提到 30-35%
+- 不确定时使用默认：人因30/技术25/新闻25/估值20
+
 ## 决策规则（必须遵守）：
-1. 信号 action=reduce_or_avoid + 漂移方向=BUY → adjustment="reduce_size", sizeMagnitude<=0.5
-2. 信号 action=open_or_add + 漂移方向=BUY, 且 confidencePct>=65 → adjustment="increase_priority"
+1. 多数信号看空 + 漂移方向=BUY → adjustment="reduce_size", sizeMagnitude<=0.5
+2. 多数信号看多 + 漂移方向=BUY, 且 confidencePct>=65 → adjustment="increase_priority"
 3. 信号与漂移一致 → adjustment="execute", sizeMagnitude=1.0
-4. 无信号数据的资产（不在信号列表中）→ adjustment="execute", sizeMagnitude=1.0（以漂移为准，不降权）
-5. 如果近期入金冷静期为"是" → cashAdvice 必须是 "hold" 或 "await_signal"，禁止 "deploy_to_underweight"
-6. cashAdvice="deploy_to_underweight" 仅在闲置超过7天 + 闲置比例>10% + 存在明确低配资产时才建议
-7. marketRegime="risk_off" 时，所有 BUY 方向的 sizeMagnitude 不超过 0.7
-8. perAssetAdjustments 只包含漂移建议中出现的资产，不要凭空添加其他资产`;
+4. 无信号数据的资产 → adjustment="execute", sizeMagnitude=1.0（以漂移为准）
+5. 近期入金冷静期为"是" → cashAdvice 必须是 "hold" 或 "await_signal"
+6. cashAdvice="deploy_to_underweight" 仅在闲置>7天 + 闲置>10% + 存在低配资产时
+7. marketRegime="risk_off" → 所有 BUY 的 sizeMagnitude ≤ 0.7
+8. perAssetAdjustments 只包含漂移建议中出现的资产
+9. rationale 必须引用具体数据（如"RSI 72超买"、"Q1营收超预期12%"），禁止泛泛而谈`;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -263,12 +329,24 @@ function parsePerAssetAdjustments(raw: unknown): LlmPerAssetAdjustment[] {
       const adjustment = VALID_ADJUSTMENTS.has(String(item.adjustment || ""))
         ? (item.adjustment as LlmPerAssetAdjustment["adjustment"])
         : "execute";
+      // 解析 LLM 建议的四维权重（可选字段）
+      const rawWeights = item.suggestedWeights as Record<string, unknown> | undefined;
+      const suggestedWeights = rawWeights && typeof rawWeights === "object"
+        ? {
+            human: Math.max(0, Math.min(100, toFinite(rawWeights.human, 30))),
+            technical: Math.max(0, Math.min(100, toFinite(rawWeights.technical, 25))),
+            news: Math.max(0, Math.min(100, toFinite(rawWeights.news, 25))),
+            valuation: Math.max(0, Math.min(100, toFinite(rawWeights.valuation, 20))),
+          }
+        : undefined;
+
       return {
         symbol,
         adjustment,
         sizeMagnitude: Math.max(0, Math.min(1, toFinite(item.sizeMagnitude, 1.0))),
         confidencePct: Math.max(0, Math.min(100, toFinite(item.confidencePct, 50))),
         rationale: normalizeText(item.rationale).slice(0, 120),
+        suggestedWeights,
       };
     })
     .filter((item): item is LlmPerAssetAdjustment => item !== null);

@@ -233,6 +233,7 @@ export function fuseDecision(input: DecisionFusionInput): DecisionFusionResult {
       llmAdjustment: (llmAdj && llmDecision.status === "ok") ? llmAdj.adjustment : null,
       llmConfidence: (llmAdj && llmDecision.status === "ok") ? llmAdj.confidencePct : null,
       llmRationale: (llmAdj && llmDecision.status === "ok") ? llmAdj.rationale : null,
+      llmSuggestedWeights: (llmAdj && llmDecision.status === "ok") ? llmAdj.suggestedWeights ?? null : null,
       marketRegime: effectiveProposalMarketRegime,
       ruleBasedMarketRegime,
       llmMarketRegime,

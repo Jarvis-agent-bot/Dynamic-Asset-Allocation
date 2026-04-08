@@ -117,6 +117,8 @@ export type ProposalDecisionContext = {
   conflictFlags: string[];
   /** 最终建议量倍数（0-1）*/
   finalQtyMultiplier: number;
+  /** LLM 建议的四维信号权重（审计用） */
+  llmSuggestedWeights?: { human: number; technical: number; news: number; valuation: number } | null;
 };
 
 export type RebalanceProposal = {
