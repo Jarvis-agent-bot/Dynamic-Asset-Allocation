@@ -197,11 +197,13 @@ async function runDriftCheck() {
 
     if (stopLossPct > 0 || takeProfitPct > 0) {
       for (const asset of bootstrap.assetUniverse) {
-        if (asset.holdingQty <= 0 || !asset.costBasis || asset.costBasis <= 0) continue;
-        // costBasis 是总成本，需要除以持仓量得到每股成本
-        const perShareCost = asset.costBasis / asset.holdingQty;
-        const unrealizedPnlPct =
-          ((asset.lastPrice - perShareCost) / perShareCost) * 100;
+        if (asset.holdingQty <= 0) continue;
+        // 优先使用基准货币的 PnL（含 FX 转换），避免跨货币误判
+        const unrealizedPnlPct = asset.unrealizedPnlPct
+          ?? (asset.costBasisInBase && asset.costBasisInBase > 0 && asset.valuationBase
+            ? ((asset.valuationBase - asset.costBasisInBase) / asset.costBasisInBase) * 100
+            : null);
+        if (unrealizedPnlPct == null) continue;
 
         if (stopLossPct > 0 && unrealizedPnlPct < -(stopLossPct * 100)) {
           riskTriggeredAssets.push({

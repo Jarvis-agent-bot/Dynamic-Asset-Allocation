@@ -31,7 +31,7 @@ export function AssetCompareDialog(props: {
     { label: "当前价格", render: (a) => formatCurrency(a.lastPrice, a.currency) },
     { label: "资产类别", render: (a) => a.assetClass },
     { label: "持仓数量", render: (a) => a.holdingQty > 0 ? String(a.holdingQty) : "\u2014" },
-    { label: "目标权重", render: (a) => a.targetWeightHint > 0 ? formatPercent(a.targetWeightHint) : "\u2014" },
+    { label: "目标权重", render: (a) => a.targetWeightHint > 0 ? formatPercent(a.targetWeightHint * 100) : "\u2014" },
     { label: "实际权重", render: (a) => formatPercent(a.actualWeightPct) },
     {
       label: "偏移",
