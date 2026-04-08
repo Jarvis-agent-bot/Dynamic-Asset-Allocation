@@ -64,9 +64,16 @@ ${newsLines}
     "bullish": ["<利好因素1>", "<利好因素2>"],
     "bearish": ["<利空因素1>", "<利空因素2>"]
   },
-  "majorEvent": <如果有重大事件则填写 {"type":"earnings|merger|regulatory|lawsuit|product","impact":"high|medium|low","description":"简述"}，否则 null>,
+  "majorEvent": <见下方判定标准，不符合则填 null>,
   "actionHint": "<关注|无影响|警惕>"
-}`;
+}
+
+majorEvent 判定标准（必须严格遵守）：
+- impact="high" 仅限：财报发布（实际数据，非预测）、并购/收购公告、监管处罚/调查、重大诉讼裁决、CEO/CFO 变动、停牌/退市风险
+- impact="medium"：产品发布、战略合作、评级变动、大额回购/增发
+- impact="low"：分析师观点、市场传闻、行业一般新闻
+- 普通的价格波动、市场评论、分析师预测不算重大事件，应填 null
+- 如果新闻都是日常报道没有突发事件，majorEvent 必须为 null`;
 
     const result = await callLlm(config, prompt);
     return parseLlmResponse(result.text);
