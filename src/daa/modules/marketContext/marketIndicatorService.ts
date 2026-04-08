@@ -127,8 +127,10 @@ function stanceFromScore(scorePct: number): DaaMarketRegime | "neutral" {
 }
 
 /**
- * 使用通用缓存层获取每日收盘价（DB 优先 + 按需补增量，不再每次全量拉 Yahoo）。
- * 从 336 次 Yahoo 请求/天 → ~7 次（首次）+ 后续 ~0 次（DB 缓存命中）。
+ * 使用通用缓存层获取每日收盘价（DB 优先 + 按需补增量）。
+ *
+ * 关键：maxStaleDays=0 确保每次都尝试补最新数据（指标需要盘中价格）。
+ * 但 DB 有历史数据时只拉增量（最近几天），不再全量拉 270 天。
  */
 async function fetchDailyCloseBars(symbolRaw: string, days: number): Promise<DailyCloseBar[]> {
   const { fetchPriceSeriesWithCache } = await import("@/src/daa/modules/marketCache/priceSeriesCache");
@@ -140,7 +142,7 @@ async function fetchDailyCloseBars(symbolRaw: string, days: number): Promise<Dai
   try {
     const result = await fetchPriceSeriesWithCache(symbol, start, {
       minDbDays: Math.floor(safeDays * 0.8), // DB 有 80% 数据就认为够用
-      maxStaleDays: 2,
+      maxStaleDays: 0, // 指标刷新需要最新数据，不接受 stale
       timeoutMs: 8000,
     });
     return result.data.slice(-safeDays).map((p) => ({ date: p.date, close: p.close }));
