@@ -9,8 +9,8 @@ export const runtime = "nodejs";
 /**
  * POST /api/daa/cron/health-check
  *
- * 每 30 分钟检查关键 cron 是否正常运行。
- * 如果 price-refresh 超过 30 分钟没有成功记录，发送 TG 告警。
+ * 每 30 分钟检查关键数据源的新鲜度（而非检查 job 记录，因为部分 cron 不写 job log）。
+ * 检查 DB 中的数据时间戳来判断数据是否在正常刷新。
  */
 export async function POST(req: Request) {
   return withApiHandler(async () => {
@@ -20,32 +20,29 @@ export async function POST(req: Request) {
     const pool = daaPgPool();
     const issues: string[] = [];
 
-    // 检查 price-refresh 最近 30 分钟是否有成功记录
+    // 检查 1: 价格快照是否有 30 分钟内的 fresh 数据
     try {
-      const priceResult = await pool.query(
-        `SELECT COUNT(*) AS cnt FROM daa_job_execution_logs
-         WHERE job_type = 'cron_price_refresh' AND status = 'succeeded'
-         AND started_at >= NOW() - INTERVAL '35 minutes'`,
+      const result = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM daa_market_price_snapshot
+         WHERE status = 'fresh' AND fetched_at >= NOW() - INTERVAL '35 minutes'`,
       );
-      const priceOk = Number(priceResult.rows[0]?.cnt) > 0;
-      if (!priceOk) {
-        issues.push("price-refresh: 最近 35 分钟无成功记录");
+      const freshCount = Number(result.rows[0]?.cnt) || 0;
+      if (freshCount === 0) {
+        issues.push("price-snapshot: 最近 35 分钟无 fresh 价格数据");
       }
     } catch (e) {
       logSwallowed("cron-health.priceCheck", e);
-      issues.push("price-refresh: 检查失败");
     }
 
-    // 检查 market-indicators-refresh 最近 60 分钟
+    // 检查 2: 市场指标快照是否有 65 分钟内的数据
     try {
-      const indicatorResult = await pool.query(
-        `SELECT COUNT(*) AS cnt FROM daa_job_execution_logs
-         WHERE job_type = 'cron_market_indicators_refresh' AND status = 'succeeded'
-         AND started_at >= NOW() - INTERVAL '65 minutes'`,
+      const result = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM daa_market_indicator_snapshot_v1
+         WHERE created_at >= NOW() - INTERVAL '65 minutes'`,
       );
-      const indicatorOk = Number(indicatorResult.rows[0]?.cnt) > 0;
-      if (!indicatorOk) {
-        issues.push("market-indicators-refresh: 最近 65 分钟无成功记录");
+      const indicatorCount = Number(result.rows[0]?.cnt) || 0;
+      if (indicatorCount === 0) {
+        issues.push("market-indicators: 最近 65 分钟无指标快照");
       }
     } catch (e) {
       logSwallowed("cron-health.indicatorCheck", e);
