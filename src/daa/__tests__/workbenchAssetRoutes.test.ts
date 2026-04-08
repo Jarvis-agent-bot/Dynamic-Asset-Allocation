@@ -181,6 +181,10 @@ function buildOpportunityPanelFixture(): DaaOpportunityPanel {
       sourceCredibility: 0.7,
       freshness: 0.8,
     }],
+    llmSummary: null,
+    llmDrivers: null,
+    llmMajorEvent: null,
+    llmActionHint: null,
   }];
   return {
     generatedAt: "2026-03-01T00:00:00.000Z",

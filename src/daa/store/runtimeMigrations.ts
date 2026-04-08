@@ -571,6 +571,17 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260408_news_llm_analysis",
+    async apply(query) {
+      // 新闻信号表新增 LLM 分析字段
+      await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_summary TEXT");
+      await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_drivers_json JSONB");
+      await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_major_event_json JSONB");
+      await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_action_hint TEXT");
+      await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS item_hash_set TEXT");
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

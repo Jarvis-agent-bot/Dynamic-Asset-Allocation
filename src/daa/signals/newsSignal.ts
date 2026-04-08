@@ -1,13 +1,29 @@
+/**
+ * newsSignal.ts — 新闻信号核心模块（v2 重构）
+ *
+ * 多数据源（Finnhub + Yahoo RSS）+ LLM 语义分析。
+ * 替代原来的关键词匹配方式。
+ *
+ * 缓存策略：
+ * - 新闻 item: 每次刷新都拉取（去重写入 DB）
+ * - LLM 分析: 2 小时 TTL，或新闻 item 有变化时重新分析
+ */
+
+import { createHash } from "node:crypto";
 import { clamp } from "@/src/core/math";
-import { fetchYahooRssFeedBySymbol, parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import {
-  appendDaaExternalPayloadRaw,
   getDaaNewsSignalSnapshotBySymbol,
-  listDaaNewsItemsBySymbol,
   upsertDaaNewsItemSnapshots,
   upsertDaaNewsSignalSnapshots,
 } from "@/src/daa/store/daaStorePg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { fetchNewsForSymbol } from "./newsProviderRouter";
+import { computeItemHashSet } from "./newsProviderRouter";
+import { sourceCredibility } from "./newsProviders";
+import { analyzeNewsWithLlm, type LlmNewsAnalysis } from "./newsLlmAnalyzer";
+import type { RawNewsItem } from "./newsProviders";
+
+// ─── Types ───────────────────────────────────────────────────
 
 export type DaaNewsSignalItem = {
   symbol: string;
@@ -26,361 +42,260 @@ export type DaaNewsSignal = {
   evidenceCount: number;
   reasons: string[];
   items: DaaNewsSignalItem[];
+  // LLM 分析结果（v2 新增）
+  llmSummary: string | null;
+  llmDrivers: { bullish: string[]; bearish: string[] } | null;
+  llmMajorEvent: { type: string; impact: string; description: string } | null;
+  llmActionHint: string | null;
 };
 
-const NEWS_SIGNAL_CACHE_MAX_AGE_MS_ = 30 * 60 * 1000;
-const NEWS_RAW_RETENTION_DAYS_ = 90;
-const TWITTER_SEARCH_TIMEOUT_MS_ = 10_000;
-const TWITTER_SOURCE_CREDIBILITY_ = 0.6;
+// ─── Constants ───────────────────────────────────────────────
 
+const NEWS_SIGNAL_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 小时 LLM 分析缓存
+const FRESHNESS_HALF_LIFE_HOURS = 72;
 
-function domainFromLink(link: string | null | undefined): string {
-  const text = String(link || "").trim();
-  if (!text) return "";
+// ─── Core Functions ──────────────────────────────────────────
+
+/**
+ * 为单个 symbol 构建新闻信号（多源 + LLM）。
+ */
+export async function buildNewsSignalForSymbol(
+  symbol: string,
+  market = "US",
+): Promise<DaaNewsSignal | null> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (!normalizedSymbol) return null;
+
+  // Step 1: 检查 LLM 分析缓存
+  const cached = await getCachedSignal(normalizedSymbol);
+
+  // Step 2: 从多数据源拉取最新新闻
+  let rawItems: RawNewsItem[] = [];
   try {
-    return new URL(text).hostname.toLowerCase();
-  } catch (err) {
-    logSwallowed("newsSignal.domainFromLink", err);
-    return "";
-  }
-}
-
-function sourceCredibilityByDomain(domain: string): number {
-  const value = String(domain || "").toLowerCase();
-  if (!value) return 0.65;
-
-  const official = ["sec.gov", "hkex.com.hk", "sse.com.cn", "szse.cn", "gov.cn"];
-  const mainstream = ["reuters.com", "bloomberg.com", "wsj.com", "ft.com", "cnbc.com", "yahoo.com"];
-  const medium = ["marketwatch.com", "investing.com", "finance.yahoo.com", "benzinga.com"];
-
-  if (official.some((x) => value === x || value.endsWith(`.${x}`))) return 1;
-  if (mainstream.some((x) => value === x || value.endsWith(`.${x}`))) return 0.88;
-  if (medium.some((x) => value === x || value.endsWith(`.${x}`))) return 0.75;
-  return 0.62;
-}
-
-const POSITIVE_TERMS = [
-  "beat",
-  "surge",
-  "upgrade",
-  "buyback",
-  "record",
-  "outperform",
-  "growth",
-  "获批",
-  "增长",
-  "上调",
-  "创新高",
-  "回购",
-];
-
-const NEGATIVE_TERMS = [
-  "downgrade",
-  "lawsuit",
-  "fraud",
-  "probe",
-  "drop",
-  "decline",
-  "risk",
-  "warning",
-  "亏损",
-  "下调",
-  "裁员",
-  "调查",
-  "违约",
-  "暴跌",
-];
-
-function sentimentFromText(text: string): number {
-  const normalized = String(text || "").toLowerCase();
-  if (!normalized) return 0;
-
-  let score = 0;
-  for (const token of POSITIVE_TERMS) {
-    if (normalized.includes(token.toLowerCase())) score += 1;
-  }
-  for (const token of NEGATIVE_TERMS) {
-    if (normalized.includes(token.toLowerCase())) score -= 1;
+    rawItems = await fetchNewsForSymbol(normalizedSymbol, market, 7);
+  } catch (e) {
+    logSwallowed("newsSignal.fetch", e);
   }
 
-  return clamp(score / 3, -1, 1);
-}
-
-function freshnessDecayByTs(ts: string): number {
-  const ms = Date.parse(String(ts || ""));
-  if (!Number.isFinite(ms)) return 0.4;
-  const ageHours = Math.max(0, (Date.now() - ms) / 3600000);
-  const halfLifeHours = 72;
-  const decay = 2 ** (-ageHours / halfLifeHours);
-  return clamp(decay, 0.08, 1);
-}
-
-function parseTs(pubDate: string | undefined): string {
-  const raw = String(pubDate || "").trim();
-  if (!raw) return new Date().toISOString();
-  const ms = Date.parse(raw);
-  if (!Number.isFinite(ms)) return new Date().toISOString();
-  return new Date(ms).toISOString();
-}
-
-function scoreFromNewsItem(item: DaaNewsSignalItem): number {
-  const base = 55 + item.sentimentScore * 22;
-  const adjusted = base * item.sourceCredibility * item.freshness;
-  return clamp(adjusted, 0, 100);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Twitter 数据源
-// ─────────────────────────────────────────────────────────────────────────────
-
-type TwitterTimelineEntry = {
-  content?: {
-    itemContent?: {
-      tweet_results?: {
-        result?: {
-          legacy?: {
-            full_text?: string;
-            created_at?: string;
-          };
-        };
-      };
-    };
-  };
-};
-
-function parseTweetEntries(payload: unknown): Array<{ text: string; createdAt: string }> {
-  if (!payload || typeof payload !== "object") return [];
-  const entries = (payload as Record<string, unknown>).entries;
-  if (!Array.isArray(entries)) return [];
-  const out: Array<{ text: string; createdAt: string }> = [];
-  for (const entry of entries as TwitterTimelineEntry[]) {
-    const legacy = entry?.content?.itemContent?.tweet_results?.result?.legacy;
-    const text = String(legacy?.full_text || "").trim();
-    if (!text) continue;
-    const createdAt = String(legacy?.created_at || "").trim();
-    out.push({ text, createdAt });
-  }
-  return out;
-}
-
-async function fetchTwitterNewsForSymbol(symbol: string, token: string): Promise<DaaNewsSignalItem[]> {
-  const upstream = new URL("https://pro.twitterdata.com/SearchTimeline");
-  upstream.searchParams.set("rawQuery", symbol);
-  upstream.searchParams.set("token", token);
-  upstream.searchParams.set("limit", "10");
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TWITTER_SEARCH_TIMEOUT_MS_);
-  try {
-    const response = await fetch(upstream, {
-      method: "GET",
-      headers: { accept: "application/json" },
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    if (!response.ok) return [];
-    const payload = await response.json() as unknown;
-    const tweets = parseTweetEntries(payload);
-    return tweets.map((tweet) => {
-      const ts = parseTs(tweet.createdAt);
-      return {
-        symbol,
-        title: tweet.text.slice(0, 200),
-        link: null,
-        ts,
-        sentimentScore: sentimentFromText(tweet.text),
-        sourceCredibility: TWITTER_SOURCE_CREDIBILITY_,
-        freshness: freshnessDecayByTs(ts),
-      };
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export async function buildNewsSignalForSymbol(symbol: string): Promise<DaaNewsSignal | null> {
-  const normalized = String(symbol || "").trim().toUpperCase();
-  if (!normalized) return null;
-
-  try {
-    const [cachedSignal, cachedItems] = await Promise.all([
-      getDaaNewsSignalSnapshotBySymbol({ provider: "yahoo_rss", symbol: normalized }),
-      listDaaNewsItemsBySymbol({ provider: "yahoo_rss", symbol: normalized, limit: 20 }),
-    ]);
-    if (cachedSignal) {
-      const ageMs = Date.now() - Date.parse(cachedSignal.generatedAt);
-      if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= NEWS_SIGNAL_CACHE_MAX_AGE_MS_) {
-        return {
-          symbol: normalized,
-          scorePct: Number(cachedSignal.scorePct.toFixed(2)),
-          confidencePct: Number(cachedSignal.confidencePct.toFixed(2)),
-          evidenceCount: cachedSignal.evidenceCount,
-          reasons: cachedSignal.reasonsJson,
-          items: cachedItems.map((item) => ({
-            symbol: normalized,
-            title: item.title,
-            link: item.link || null,
-            ts: item.publishedAt || item.fetchedAt,
-            sentimentScore: item.sentimentScore,
-            sourceCredibility: item.sourceCredibility,
-            freshness: item.freshness,
-          })),
-        };
-      }
-    }
-  } catch (err) {
-    logSwallowed("newsSignal.fetchNewsSignal.cache", err);
-  }
-
-  const feedResult = await fetchYahooRssFeedBySymbol(normalized, 25);
-  const rssItems = feedResult.items;
-  const fetchedAt = new Date().toISOString();
-  let rawRefId: string | null = null;
-  if (feedResult.requestUrl || feedResult.payloadText) {
+  // Step 3: 转换 + 存储新闻 item
+  const newsItems = rawItems.map((item) => toNewsSignalItem(normalizedSymbol, item));
+  if (newsItems.length > 0) {
     try {
-      const raw = await appendDaaExternalPayloadRaw({
-        provider: "yahoo_rss",
-        resource: "yahoo_rss.headline",
-        subjectKey: normalized,
-        requestUrl: feedResult.requestUrl,
-        requestJson: {
-          symbol: normalized,
-          limit: 25,
-        },
-        responseStatus: feedResult.status,
-        responseHeadersJson: feedResult.responseHeaders,
-        payloadText: feedResult.payloadText || null,
-        payloadJson: null,
-        fetchedAt,
-        expireAt: new Date(Date.now() + NEWS_RAW_RETENTION_DAYS_ * 24 * 3600 * 1000).toISOString(),
-      });
-      rawRefId = raw.id;
-    } catch (err) {
-      logSwallowed("newsSignal.appendRawPayload", err);
-      rawRefId = null;
+      await upsertDaaNewsItemSnapshots(newsItems.map((item) => ({
+        provider: "multi",
+        symbol: normalizedSymbol,
+        itemHash: hashNewsItem(item.title, item.link, item.ts),
+        title: item.title,
+        link: item.link,
+        publishedAt: item.ts,
+        sentimentScore: item.sentimentScore,
+        sourceCredibility: item.sourceCredibility,
+        freshness: item.freshness,
+      })));
+    } catch (e) {
+      logSwallowed("newsSignal.upsertItems", e);
     }
   }
 
-  const items: DaaNewsSignalItem[] = rssItems.map((item) => {
-    const text = `${item.title} ${item.summary || ""}`.trim();
-    const ts = parseTs(item.pubDate);
-    const domain = domainFromLink(item.link);
-    return {
-      symbol: normalized,
-      title: item.title,
-      link: item.link || null,
-      ts,
-      sentimentScore: sentimentFromText(text),
-      sourceCredibility: sourceCredibilityByDomain(domain),
-      freshness: freshnessDecayByTs(ts),
-    };
+  // Step 4: 判断是否需要重新 LLM 分析
+  const currentHashSet = computeItemHashSet(rawItems);
+  const needReanalyze = !cached
+    || (Date.now() - Date.parse(cached.generatedAt)) > NEWS_SIGNAL_CACHE_TTL_MS
+    || cached.itemHashSet !== currentHashSet;
+
+  // Step 5: LLM 分析（或用缓存）
+  let llmAnalysis: LlmNewsAnalysis | null = null;
+  if (needReanalyze && rawItems.length > 0) {
+    llmAnalysis = await analyzeNewsWithLlm({ symbol: normalizedSymbol, items: rawItems });
+  }
+
+  // Step 6: 构建信号
+  const signal = buildSignalFromAnalysis({
+    symbol: normalizedSymbol,
+    items: newsItems,
+    llmAnalysis,
+    cached,
   });
 
-  // 合并 Twitter 数据（如果 token 可用）
-  const twitterToken = (process.env.TWITTERDATA_TOKEN || process.env.DAA_TWITTERDATA_TOKEN || "").trim();
-  if (twitterToken) {
-    try {
-      const tweets = await fetchTwitterNewsForSymbol(normalized, twitterToken);
-      items.push(...tweets);
-    } catch (err) {
-      logSwallowed("newsSignal.twitter", err);
-    }
-  }
-
-  if (!items.length) {
-    return {
-      symbol: normalized,
-      scorePct: 50,
-      confidencePct: 35,
-      evidenceCount: 0,
-      reasons: ["无近期新闻样本"],
-      items: [],
-    };
-  }
-
-  const totalWeight = items.reduce((acc, item) => acc + item.sourceCredibility * item.freshness, 0);
-  const scorePct = totalWeight > 0
-    ? items.reduce((acc, item) => acc + scoreFromNewsItem(item), 0) / items.length
-    : 50;
-
-  const positiveCount = items.filter((item) => item.sentimentScore > 0.2).length;
-  const negativeCount = items.filter((item) => item.sentimentScore < -0.2).length;
-
-  const confidencePct = clamp(
-    35
-    + Math.min(35, items.length * 4)
-    + Math.min(20, totalWeight * 3)
-    - (positiveCount > 0 && negativeCount > 0 ? 8 : 0),
-    0,
-    100,
-  );
-
-  const reasons: string[] = [];
-  if (positiveCount > negativeCount) reasons.push("新闻情绪偏正面");
-  else if (negativeCount > positiveCount) reasons.push("新闻情绪偏负面");
-  else reasons.push("新闻情绪中性");
-  reasons.push(`采样${items.length}条资讯`);
-
-  const signal: DaaNewsSignal = {
-    symbol: normalized,
-    scorePct: Number(clamp(scorePct, 0, 100).toFixed(2)),
-    confidencePct: Number(confidencePct.toFixed(2)),
-    evidenceCount: items.length,
-    reasons,
-    items: items
-      .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
-      .slice(0, 12),
-  };
-
+  // Step 7: 存储信号快照
   try {
     await upsertDaaNewsSignalSnapshots([{
-      provider: "yahoo_rss",
-      symbol: normalized,
+      provider: "multi",
+      symbol: normalizedSymbol,
       scorePct: signal.scorePct,
       confidencePct: signal.confidencePct,
       evidenceCount: signal.evidenceCount,
       reasonsJson: signal.reasons,
-      generatedAt: fetchedAt,
+      generatedAt: new Date().toISOString(),
     }]);
-    await upsertDaaNewsItemSnapshots(signal.items.map((item) => ({
-      provider: "yahoo_rss",
-      symbol: normalized,
-      title: item.title,
-      link: item.link,
-      publishedAt: item.ts,
-      fetchedAt,
-      sentimentScore: item.sentimentScore,
-      sourceCredibility: item.sourceCredibility,
-      freshness: item.freshness,
-      rawRefId,
-    })));
-  } catch (err) {
-    logSwallowed("newsSignal.persistSignal", err);
+
+    // 写入 LLM 扩展字段
+    if (llmAnalysis || signal.llmSummary) {
+      const { daaPgPool } = await import("@/src/daa/pg/daaPg");
+      const pool = daaPgPool();
+      await pool.query(
+        `UPDATE daa_news_signal_snapshot_v1
+         SET llm_summary = $1, llm_drivers_json = $2, llm_major_event_json = $3, llm_action_hint = $4, item_hash_set = $5
+         WHERE provider = 'multi' AND symbol = $6`,
+        [
+          signal.llmSummary,
+          signal.llmDrivers ? JSON.stringify(signal.llmDrivers) : null,
+          signal.llmMajorEvent ? JSON.stringify(signal.llmMajorEvent) : null,
+          signal.llmActionHint,
+          currentHashSet,
+          normalizedSymbol,
+        ],
+      ).catch((e) => logSwallowed("newsSignal.upsertLlm", e));
+    }
+  } catch (e) {
+    logSwallowed("newsSignal.upsertSignal", e);
   }
 
   return signal;
 }
 
-const NEWS_SIGNALS_CONCURRENCY_ = 4;
-
+/**
+ * 批量构建新闻信号。
+ */
 export async function buildNewsSignals(opts: {
   symbols?: string[];
   query?: string;
 }): Promise<DaaNewsSignal[]> {
-  const manualSymbols = Array.isArray(opts.symbols)
-    ? opts.symbols.map((x) => String(x || "").trim().toUpperCase()).filter(Boolean)
-    : [];
-  const querySymbols = parseSymbolsFromNewsQuery(opts.query || "");
-  const symbols = [...new Set([...manualSymbols, ...querySymbols])];
-  if (!symbols.length) return [];
+  const { parseSymbolsFromNewsQuery } = await import("@/src/market/yahooRssFetch");
+  const symbolsFromQuery = opts.query ? parseSymbolsFromNewsQuery(opts.query) : [];
+  const allSymbols = [...new Set([...(opts.symbols || []), ...symbolsFromQuery])].filter(Boolean);
 
-  const out: DaaNewsSignal[] = [];
-  for (let i = 0; i < symbols.length; i += NEWS_SIGNALS_CONCURRENCY_) {
-    const chunk = symbols.slice(i, i + NEWS_SIGNALS_CONCURRENCY_);
-    const results = await Promise.allSettled(chunk.map((s) => buildNewsSignalForSymbol(s)));
-    for (const result of results) {
-      if (result.status === "fulfilled" && result.value) out.push(result.value);
+  if (allSymbols.length === 0) return [];
+
+  const results: DaaNewsSignal[] = [];
+  const concurrency = 4;
+
+  for (let i = 0; i < allSymbols.length; i += concurrency) {
+    const batch = allSymbols.slice(i, i + concurrency);
+    const batchResults = await Promise.all(
+      batch.map((sym) => buildNewsSignalForSymbol(sym).catch((e) => {
+        logSwallowed(`newsSignal.batch.${sym}`, e);
+        return null;
+      })),
+    );
+    for (const r of batchResults) {
+      if (r) results.push(r);
     }
   }
-  return out;
+
+  return results;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
+
+async function getCachedSignal(symbol: string): Promise<{
+  scorePct: number;
+  confidencePct: number;
+  generatedAt: string;
+  itemHashSet: string | null;
+  llmSummary: string | null;
+  llmDrivers: { bullish: string[]; bearish: string[] } | null;
+  llmMajorEvent: { type: string; impact: string; description: string } | null;
+  llmActionHint: string | null;
+} | null> {
+  try {
+    const snapshot = await getDaaNewsSignalSnapshotBySymbol({ provider: "multi", symbol });
+    if (!snapshot) return null;
+
+    const { daaPgPool } = await import("@/src/daa/pg/daaPg");
+    const pool = daaPgPool();
+    const ext = await pool.query(
+      `SELECT llm_summary, llm_drivers_json, llm_major_event_json, llm_action_hint, item_hash_set
+       FROM daa_news_signal_snapshot_v1
+       WHERE provider = 'multi' AND symbol = $1`,
+      [symbol],
+    );
+    const row = ext.rows[0] as Record<string, unknown> | undefined;
+
+    return {
+      scorePct: snapshot.scorePct,
+      confidencePct: snapshot.confidencePct,
+      generatedAt: snapshot.generatedAt,
+      itemHashSet: row?.item_hash_set ? String(row.item_hash_set) : null,
+      llmSummary: row?.llm_summary ? String(row.llm_summary) : null,
+      llmDrivers: row?.llm_drivers_json ? row.llm_drivers_json as { bullish: string[]; bearish: string[] } : null,
+      llmMajorEvent: row?.llm_major_event_json ? row.llm_major_event_json as { type: string; impact: string; description: string } : null,
+      llmActionHint: row?.llm_action_hint ? String(row.llm_action_hint) : null,
+    };
+  } catch (e) {
+    logSwallowed("newsSignal.getCached", e);
+    return null;
+  }
+}
+
+function buildSignalFromAnalysis(input: {
+  symbol: string;
+  items: DaaNewsSignalItem[];
+  llmAnalysis: LlmNewsAnalysis | null;
+  cached: Awaited<ReturnType<typeof getCachedSignal>>;
+}): DaaNewsSignal {
+  const { symbol, items, llmAnalysis, cached } = input;
+
+  const analysis = llmAnalysis ?? (cached ? {
+    sentimentScore: (cached.scorePct - 50) * 2,
+    summary: cached.llmSummary || "暂无分析",
+    drivers: cached.llmDrivers || { bullish: [], bearish: [] },
+    majorEvent: cached.llmMajorEvent || null,
+    actionHint: cached.llmActionHint || "无影响",
+  } : null);
+
+  const scorePct = analysis
+    ? clamp(50 + analysis.sentimentScore / 2, 0, 100)
+    : 50;
+
+  const hasLlm = !!analysis && analysis.summary !== "暂无分析";
+  const confidencePct = clamp(
+    30
+    + Math.min(30, items.length * 4)
+    + (hasLlm ? 25 : 0),
+    0, 100,
+  );
+
+  const reasons: string[] = [];
+  if (analysis) {
+    if (analysis.summary && analysis.summary !== "暂无分析") reasons.push(analysis.summary);
+    for (const b of (analysis.drivers.bullish || []).slice(0, 2)) reasons.push(`利好: ${b}`);
+    for (const b of (analysis.drivers.bearish || []).slice(0, 2)) reasons.push(`利空: ${b}`);
+  }
+  if (reasons.length === 0) {
+    reasons.push(items.length > 0 ? `近期 ${items.length} 条新闻` : "无近期新闻");
+  }
+
+  return {
+    symbol,
+    scorePct: +scorePct.toFixed(2),
+    confidencePct: +confidencePct.toFixed(2),
+    evidenceCount: items.length,
+    reasons,
+    items: items.slice(0, 12),
+    llmSummary: analysis?.summary ?? null,
+    llmDrivers: analysis?.drivers ?? null,
+    llmMajorEvent: analysis?.majorEvent ?? null,
+    llmActionHint: analysis?.actionHint ?? null,
+  };
+}
+
+function toNewsSignalItem(symbol: string, raw: RawNewsItem): DaaNewsSignalItem {
+  const publishedAt = raw.publishedAt ? new Date(raw.publishedAt).toISOString() : new Date().toISOString();
+  const ageHours = Math.max(0, (Date.now() - Date.parse(publishedAt)) / (1000 * 60 * 60));
+  const freshness = clamp(Math.pow(2, -ageHours / FRESHNESS_HALF_LIFE_HOURS), 0.08, 1);
+
+  return {
+    symbol,
+    title: raw.title,
+    link: raw.link || null,
+    ts: publishedAt,
+    sentimentScore: 0,
+    sourceCredibility: sourceCredibility(raw.source),
+    freshness,
+  };
+}
+
+function hashNewsItem(title: string, link: string | null, ts: string): string {
+  return createHash("sha1").update(`${title}::${link || ""}::${ts}`).digest("hex").slice(0, 20);
 }

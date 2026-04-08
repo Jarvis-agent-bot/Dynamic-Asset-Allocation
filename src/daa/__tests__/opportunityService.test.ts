@@ -126,6 +126,10 @@ function buildNewsSignalFixture(): DaaNewsSignal {
     evidenceCount: 0,
     reasons: [],
     items: [],
+    llmSummary: null,
+    llmDrivers: null,
+    llmMajorEvent: null,
+    llmActionHint: null,
   };
 }
 

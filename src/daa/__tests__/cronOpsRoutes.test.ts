@@ -233,6 +233,10 @@ function buildNewsSignalFixture(input: {
       sourceCredibility: 0.8,
       freshness: 0.9,
     })),
+    llmSummary: null,
+    llmDrivers: null,
+    llmMajorEvent: null,
+    llmActionHint: null,
   };
 }
 
