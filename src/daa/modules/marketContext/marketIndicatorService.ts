@@ -142,7 +142,7 @@ async function fetchDailyCloseBars(symbolRaw: string, days: number): Promise<Dai
   try {
     const result = await fetchPriceSeriesWithCache(symbol, start, {
       minDbDays: Math.floor(safeDays * 0.8), // 需要 80% 天数才走增量，否则全量拉
-      maxStaleDays: 0, // 指标刷新需要最新数据，每次都尝试补数据
+      maxStaleDays: 1, // 允许 1 天 stale（避免频繁拉 Yahoo 触发 429）
       timeoutMs: 10000,
     });
     return result.data.slice(-safeDays).map((p) => ({ date: p.date, close: p.close }));
@@ -249,7 +249,7 @@ function finalizeIndicatorRow(input: {
 async function computeVixIndicator(getBars: (symbol: string, days: number) => Promise<DailyCloseBar[]>): Promise<ComputedIndicatorRow | null> {
   const bars = await getBars("^VIX", 270);
   const closes = bars.map((item) => item.close).filter((item) => item > 0);
-  if (closes.length < 30) return null;
+  if (closes.length < 15) return null; // 降低门槛：15 天即可计算（数据少时百分位精度下降但有输出）
   const sample = closes.slice(-252);
   const latest = sample[sample.length - 1];
   const percentile252 = percentileOfLatest(sample);
@@ -331,7 +331,7 @@ async function computeRealizedVolIndicator(input: {
 }): Promise<ComputedIndicatorRow | null> {
   const bars = await input.getBars(input.symbol, 320);
   const closes = bars.map((item) => item.close).filter((item) => item > 0);
-  if (closes.length < 50) return null;
+  if (closes.length < 15) return null; // 降低门槛：15 天即可计算波动率
   const rollingVols = buildRollingVolPct(closes, 20);
   if (rollingVols.length < 40) return null;
   const sample = rollingVols.slice(-252);
