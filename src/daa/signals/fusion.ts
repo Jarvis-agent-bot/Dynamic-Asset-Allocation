@@ -1,3 +1,8 @@
+/**
+ * @deprecated 旧 AI-Assisted Pipeline 的固定权重信号融合，将被 Cognitive Agent 替代。
+ * Agent 自主决定每个资产的信号权重，不再使用固定 35/25/20/20。
+ * 清理计划：等 Cognitive Agent 接管 rebalance 提案生成后删除
+ */
 import { clamp } from "@/src/core/math";
 import { DEFAULT_STRATEGY_PARAMS, type DaaStrategyParams } from "@/src/daa/config/systemConfig";
 import type { DaaHumanSignal } from "@/src/daa/hf/humanSignals";

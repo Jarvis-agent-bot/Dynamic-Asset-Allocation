@@ -8,6 +8,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
+import AgentRail from "./AgentRail";
 import { cn } from "@/lib/utils";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
@@ -176,9 +177,12 @@ export default function DashboardShell({ children }: Props) {
             id="daa-dashboard-main-content"
             className="min-w-0 w-full max-w-full overflow-x-clip px-4 py-5 sm:px-5 lg:px-7 lg:py-6"
           >
-            <div className="mx-auto max-w-[1440px]">{children}</div>
+            <div className="mx-auto max-w-[1440px] xl:mr-[280px]">{children}</div>
           </section>
         </main>
+
+        {/* Agent Rail — 全站常驻认知面板 */}
+        <AgentRail />
       </div>
     </>
   );

@@ -1,4 +1,6 @@
 /**
+ * @deprecated 旧 AI-Assisted Pipeline 组件，将被 Cognitive Agent OS 替代。
+ *
  * llmPlanner.ts — Phase 2 规划器。
  *
  * 在信号采集前调用 LLM（便宜模型），让 AI 决定：
@@ -8,6 +10,9 @@
  * - 分析重点
  *
  * 降级：LLM 调用失败时返回全量采集计划。
+ *
+ * 替代方案：src/daa/agent/cognitiveGraph.ts 的 prioritizeNode + investigateNode
+ * 清理计划：等 Cognitive Agent 接管 rebalance 提案生成后删除
  */
 
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";

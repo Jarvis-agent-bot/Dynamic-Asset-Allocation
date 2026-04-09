@@ -10,7 +10,7 @@ describe("dashboard-read-model-graph-v1", () => {
   it("workbench/trades 页面不再直接依赖旧读 API 组合函数", () => {
     const root = process.cwd();
     const files = [
-      path.join(root, "app/daa/dashboard/today/_components/TodayPageClient.tsx"),
+      // TodayPageClient.tsx 已删除（被 AgentBriefingView 替代）
       path.join(root, "app/daa/dashboard/trades/page.tsx"),
       path.join(root, "app/daa/dashboard/trades/_components/TradesPageClient.tsx"),
     ];

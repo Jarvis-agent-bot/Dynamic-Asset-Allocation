@@ -1,4 +1,8 @@
 /**
+ * @deprecated 旧 AI-Assisted Pipeline 组件，将被 Cognitive Agent OS 替代。
+ * 替代方案：src/daa/agent/cognitiveGraph.ts 的 investigateNode
+ * 清理计划：等 Cognitive Agent 接管 rebalance 提案生成后删除
+ *
  * llmDecision.ts
  *
  * LLM 决策分析 V2 —— LLM 从"旁观者"升级为"参与者"。

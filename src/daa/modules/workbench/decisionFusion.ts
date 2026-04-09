@@ -1,3 +1,8 @@
+/**
+ * @deprecated 旧 AI-Assisted Pipeline 的 guardrails 层，将被 Cognitive Agent OS 替代。
+ * 替代方案：Agent 在推理时自行考虑约束（prompt 内），仅保留 position cap 硬约束。
+ * 清理计划：等 Cognitive Agent 接管 rebalance 提案生成后删除
+ */
 import { clamp } from "@/src/core/math";
 import { DEFAULT_STRATEGY_PARAMS, type DaaMarketIndicatorsConfig, type DaaStrategyParams } from "@/src/daa/config/systemConfig";
 import type { LlmDecisionOutput, LlmPerAssetAdjustment } from "@/src/daa/llm/llmDecision";
