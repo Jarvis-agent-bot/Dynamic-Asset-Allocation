@@ -14,6 +14,10 @@ import { withDaaPgClient, toIsoString, type DaaTxQueryFn } from "./storeShared";
 import type { DaaStoreAssetUniverseRow } from "./storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
 import { buildPositionKey, syncSinglePositionV2InTx } from "./positionStore";
+import {
+  upsertAssetMasterInTx, upsertWatchlistEntryInTx,
+  upsertTargetAllocationInTx, updateMarketPriceSnapshotInTx,
+} from "./assetMasterStore";
 
 function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeCurrencyAlias(value, fallback);
@@ -54,33 +58,39 @@ export function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAsset
 }
 
 export const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
-  "u.asset_key",
-  "u.symbol",
-  "u.market",
-  "u.currency",
-  "u.asset_class",
-  "u.region",
-  "u.exchange",
-  "u.instrument_type",
-  "u.market_group",
+  "am.asset_key",
+  "am.symbol",
+  "am.market",
+  "am.currency",
+  "am.asset_class",
+  "am.region",
+  "am.exchange",
+  "am.instrument_type",
+  "am.market_group",
   "COALESCE(p.qty, 0) AS holding_qty",
   "COALESCE(p.price, 0) AS holding_price",
   "p.cost_basis",
   "p.cost_basis_in_base",
   "COALESCE(p.tags, '{}'::TEXT[]) AS holding_tags",
-  "u.watch_enabled",
-  "u.target_weight_hint",
-  "u.watch_tags",
-  "u.notes",
-  "u.price_alert_above",
-  "u.price_alert_below",
-  "u.last_price",
-  "u.price_updated_at",
-  "u.created_at",
-  "u.updated_at",
+  "COALESCE(we.watch_enabled, FALSE) AS watch_enabled",
+  "COALESCE(ta.target_weight_hint, 0) AS target_weight_hint",
+  "COALESCE(we.watch_tags, '{}'::TEXT[]) AS watch_tags",
+  "we.notes",
+  "we.price_alert_above",
+  "we.price_alert_below",
+  "COALESCE(mps.last_price, 0) AS last_price",
+  "mps.price_updated_at",
+  "am.created_at",
+  "am.updated_at",
 ].join(", ");
 
-export const ASSET_UNIVERSE_FROM_SQL_ = "FROM daa_asset_universe u LEFT JOIN daa_positions_v2 p ON p.asset_key = u.asset_key";
+export const ASSET_UNIVERSE_FROM_SQL_ = [
+  "FROM daa_asset_master am",
+  "LEFT JOIN daa_positions_v2 p ON p.asset_key = am.asset_key",
+  "LEFT JOIN daa_watchlist_entries we ON we.asset_key = am.asset_key",
+  "LEFT JOIN daa_target_allocations ta ON ta.asset_key = am.asset_key",
+  "LEFT JOIN daa_market_price_snapshots mps ON mps.asset_key = am.asset_key",
+].join(" ");
 
 
 export async function selectAssetUniverseRowByKeyInTx(
@@ -88,7 +98,7 @@ export async function selectAssetUniverseRowByKeyInTx(
   assetKey: string,
 ): Promise<DaaStoreAssetUniverseRow | null> {
   const result = await query(
-    `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE u.asset_key = $1 LIMIT 1`,
+    `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $1 LIMIT 1`,
     [assetKey],
   );
   if (!result.rows.length) return null;
@@ -98,7 +108,7 @@ export async function selectAssetUniverseRowByKeyInTx(
 export async function listDaaAssetUniverse(): Promise<DaaStoreAssetUniverseRow[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    const result = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} ORDER BY u.symbol ASC, u.market ASC`);
+    const result = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} ORDER BY am.symbol ASC, am.market ASC`);
     return result.rows.map((row) => mapAssetUniverseRow(row as Record<string, unknown>));
   });
 }
@@ -116,14 +126,7 @@ export async function updateDaaAssetUniverseLastPrice(input: {
     if (!(lastPrice > 0)) throw new Error("lastPrice must be > 0");
     const priceUpdatedAt = toIsoString(input.priceUpdatedAt, new Date().toISOString());
 
-    const result = await query(
-      `UPDATE daa_asset_universe
-       SET last_price = $2, price_updated_at = $3, updated_at = NOW()
-       WHERE asset_key = $1
-       RETURNING asset_key`,
-      [assetKey, lastPrice, priceUpdatedAt],
-    );
-    if (!result.rows.length) return null;
+    await updateMarketPriceSnapshotInTx(query as DaaTxQueryFn, assetKey, lastPrice, priceUpdatedAt);
     return selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, assetKey);
   });
 }
@@ -148,7 +151,6 @@ export async function batchUpdateDaaAssetUniverseLastPrices(
 
     if (validItems.length === 0) return [];
 
-    // 构建 VALUES 列表用于批量 UPDATE
     const params: (string | number)[] = [];
     const valuesClauses: string[] = [];
     for (let i = 0; i < validItems.length; i++) {
@@ -158,11 +160,13 @@ export async function batchUpdateDaaAssetUniverseLastPrices(
     }
 
     const result = await query(
-      `UPDATE daa_asset_universe AS u
-       SET last_price = v.price, price_updated_at = v.updated_at, updated_at = NOW()
-       FROM (VALUES ${valuesClauses.join(", ")}) AS v(asset_key, price, updated_at)
-       WHERE u.asset_key = v.asset_key
-       RETURNING u.asset_key`,
+      `INSERT INTO daa_market_price_snapshots AS mps (asset_key, last_price, price_updated_at, updated_at)
+       VALUES ${valuesClauses.join(", ")}
+       ON CONFLICT (asset_key) DO UPDATE SET
+         last_price = EXCLUDED.last_price,
+         price_updated_at = EXCLUDED.price_updated_at,
+         updated_at = NOW()
+       RETURNING mps.asset_key`,
       params,
     );
 
@@ -189,10 +193,11 @@ export async function batchReadAssetPriceSnapshots(
     if (params.length === 0) return [];
     const placeholders = params.map((_, i) => `$${i + 1}`).join(", ");
     const result = await query(
-      `SELECT asset_key, symbol, last_price, price_updated_at, currency
-       FROM daa_asset_universe
-       WHERE asset_key IN (${placeholders})
-         AND last_price IS NOT NULL AND last_price > 0`,
+      `SELECT am.asset_key, am.symbol, mps.last_price, mps.price_updated_at, am.currency
+       FROM daa_asset_master am
+       JOIN daa_market_price_snapshots mps ON mps.asset_key = am.asset_key
+       WHERE am.asset_key IN (${placeholders})
+         AND mps.last_price IS NOT NULL AND mps.last_price > 0`,
       params,
     );
     return result.rows.map((row: Record<string, unknown>) => ({
@@ -240,50 +245,18 @@ export async function upsertDaaAssetUniverseRow(input: {
     const lastPrice = Math.max(0, toFiniteNumber(input.lastPrice));
     const priceUpdatedAt = lastPrice > 0 ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null;
 
-    const result = await query(
-      `INSERT INTO daa_asset_universe (
-        asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group,
-        watch_enabled, target_weight_hint, watch_tags, notes, last_price, price_updated_at, created_at, updated_at
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW()
-      )
-      ON CONFLICT (asset_key) DO UPDATE
-      SET
-        symbol = EXCLUDED.symbol,
-        market = EXCLUDED.market,
-        currency = EXCLUDED.currency,
-        asset_class = EXCLUDED.asset_class,
-        region = EXCLUDED.region,
-        exchange = EXCLUDED.exchange,
-        instrument_type = EXCLUDED.instrument_type,
-        market_group = EXCLUDED.market_group,
-        watch_enabled = EXCLUDED.watch_enabled,
-        target_weight_hint = EXCLUDED.target_weight_hint,
-        watch_tags = EXCLUDED.watch_tags,
-        notes = EXCLUDED.notes,
-        last_price = CASE WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.last_price ELSE daa_asset_universe.last_price END,
-        price_updated_at = CASE WHEN EXCLUDED.last_price > 0 THEN COALESCE(EXCLUDED.price_updated_at, NOW()) ELSE daa_asset_universe.price_updated_at END,
-        updated_at = NOW()
-      RETURNING asset_key`,
-      [
-        assetKey,
-        symbol,
-        market,
-        currency,
-        assetClass,
-        region,
-        exchange,
-        instrumentType,
-        marketGroup,
-        watchEnabled,
-        targetWeightHint,
-        watchTags,
-        notes,
-        lastPrice,
-        priceUpdatedAt,
-      ],
-    );
-    return (await selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, normalizeText(result.rows[0]?.asset_key, assetKey)))!;
+    const txQuery = query as DaaTxQueryFn;
+    await upsertAssetMasterInTx(txQuery, {
+      assetKey, symbol, market, currency, assetClass, region, exchange, instrumentType, marketGroup,
+    });
+    await upsertWatchlistEntryInTx(txQuery, {
+      assetKey, watchEnabled, watchTags, notes,
+    });
+    await upsertTargetAllocationInTx(txQuery, assetKey, targetWeightHint);
+    if (lastPrice > 0) {
+      await updateMarketPriceSnapshotInTx(txQuery, assetKey, lastPrice, priceUpdatedAt || new Date().toISOString());
+    }
+    return (await selectAssetUniverseRowByKeyInTx(txQuery, assetKey))!;
   });
 }
 
@@ -312,10 +285,10 @@ export async function patchDaaAssetUniverseRow(input: {
     if (!parsed) throw new Error("assetKey is required");
     const assetKey = buildPositionKey(parsed.symbol, parsed.market);
 
-    // 使用事务包裹 UPDATE + 持仓同步，保证一致性
-    await query("BEGIN");
+    const txQuery = query as DaaTxQueryFn;
+    await txQuery("BEGIN");
     try {
-      const currentRes = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE u.asset_key = $1 LIMIT 1`, [assetKey]);
+      const currentRes = await txQuery(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $1 LIMIT 1`, [assetKey]);
       if (!currentRes.rows.length) throw new Error(`asset not found: ${assetKey}`);
       const current = mapAssetUniverseRow(currentRes.rows[0] as Record<string, unknown>);
 
@@ -341,47 +314,20 @@ export async function patchDaaAssetUniverseRow(input: {
         priceUpdatedAt: input.priceUpdatedAt === undefined ? current.priceUpdatedAt : (input.priceUpdatedAt ? toIsoString(input.priceUpdatedAt, new Date().toISOString()) : null),
       };
 
-      const updatedRes = await query(
-        `UPDATE daa_asset_universe
-         SET
-           currency = $2,
-           asset_class = $3,
-           region = $4,
-           exchange = $5,
-           instrument_type = $6,
-           market_group = $7,
-           watch_enabled = $8,
-           target_weight_hint = $9,
-           holding_qty = $10,
-           holding_price = $11,
-           cost_basis = $12,
-           watch_tags = $13,
-           notes = $14,
-           last_price = $15,
-           price_updated_at = $16,
-           updated_at = NOW()
-         WHERE asset_key = $1
-         RETURNING asset_key`,
-        [
-          assetKey,
-          next.currency,
-          next.assetClass,
-          next.region,
-          next.exchange,
-          next.instrumentType,
-          next.marketGroup,
-          next.watchEnabled,
-          next.targetWeightHint,
-          next.holdingQty,
-          next.holdingPrice,
-          next.costBasis,
-          next.watchTags,
-          next.notes,
-          next.lastPrice,
-          next.priceUpdatedAt,
-        ],
-      );
-      await syncSinglePositionV2InTx(query as DaaTxQueryFn, {
+      // 写入规范化表
+      await upsertAssetMasterInTx(txQuery, {
+        assetKey, symbol: next.symbol, market: next.market, currency: next.currency,
+        assetClass: next.assetClass, region: next.region, exchange: next.exchange,
+        instrumentType: next.instrumentType, marketGroup: next.marketGroup,
+      });
+      await upsertWatchlistEntryInTx(txQuery, {
+        assetKey, watchEnabled: next.watchEnabled, watchTags: next.watchTags, notes: next.notes,
+      });
+      await upsertTargetAllocationInTx(txQuery, assetKey, next.targetWeightHint);
+      if (next.lastPrice > 0 && next.priceUpdatedAt) {
+        await updateMarketPriceSnapshotInTx(txQuery, assetKey, next.lastPrice, next.priceUpdatedAt);
+      }
+      await syncSinglePositionV2InTx(txQuery, {
         assetKey,
         symbol: current.symbol,
         market: current.market,
@@ -392,12 +338,12 @@ export async function patchDaaAssetUniverseRow(input: {
         tags: current.holdingTags,
         updatedAt: new Date().toISOString(),
       });
-      const row = await selectAssetUniverseRowByKeyInTx(query as DaaTxQueryFn, normalizeText(updatedRes.rows[0]?.asset_key, assetKey));
+      const row = await selectAssetUniverseRowByKeyInTx(txQuery, assetKey);
       if (!row) throw new Error(`patch succeeded but row not found: ${assetKey}`);
-      await query("COMMIT");
+      await txQuery("COMMIT");
       return row;
     } catch (err) {
-      await query("ROLLBACK").catch(() => {});
+      await (query as DaaTxQueryFn)("ROLLBACK").catch(() => {});
       throw err;
     }
   });

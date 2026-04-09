@@ -2534,56 +2534,17 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         });
       }
 
-      await query(
-        "UPDATE daa_asset_universe SET holding_qty = 0, holding_price = 0, cost_basis = NULL, cost_basis_in_base = NULL, holding_tags = '{}'::TEXT[], updated_at = NOW() WHERE holding_qty > 0",
-      );
+      // 确保每个持仓资产在 asset_master 中存在
       for (const position of positionsMap.values()) {
         if (position.qty <= 0) continue;
-        const lastPrice = position.price > 0 ? position.price : 0;
-        const priceUpdatedAt = position.price > 0 ? nowIso : null;
-        await query(
-          `
-            INSERT INTO daa_asset_universe (
-              asset_key, symbol, market, currency, holding_qty, holding_price, cost_basis, cost_basis_in_base, holding_tags, last_price, price_updated_at, created_at, updated_at
-            ) VALUES (
-              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW()
-            )
-            ON CONFLICT (asset_key) DO UPDATE
-            SET
-              symbol = EXCLUDED.symbol,
-              market = EXCLUDED.market,
-              currency = EXCLUDED.currency,
-              holding_qty = EXCLUDED.holding_qty,
-              holding_price = EXCLUDED.holding_price,
-              cost_basis = EXCLUDED.cost_basis,
-              cost_basis_in_base = EXCLUDED.cost_basis_in_base,
-              holding_tags = EXCLUDED.holding_tags,
-              last_price = CASE
-                WHEN EXCLUDED.holding_price > 0 THEN EXCLUDED.holding_price
-                ELSE daa_asset_universe.last_price
-              END,
-              price_updated_at = CASE
-                WHEN EXCLUDED.holding_price > 0 THEN NOW()
-                ELSE daa_asset_universe.price_updated_at
-              END,
-              updated_at = NOW()
-          `,
-          [
-            buildPositionKey(position.symbol, position.market),
-            position.symbol,
-            position.market,
-            position.currency,
-            position.qty,
-            position.price,
-            position.costBasis,
-            position.costBasisInBase,
-            position.tags,
-            lastPrice,
-            priceUpdatedAt,
-          ],
+        const assetKey = buildPositionKey(position.symbol, position.market);
+        await (query as DaaTxQueryFn)(
+          `INSERT INTO daa_asset_master (asset_key, symbol, market, currency, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,NOW(),NOW())
+           ON CONFLICT (asset_key) DO NOTHING`,
+          [assetKey, position.symbol, position.market, position.currency],
         );
       }
-      await query("DELETE FROM daa_asset_universe WHERE watch_enabled = FALSE AND holding_qty <= 0");
       await replacePositionsV2SnapshotInTx(
         query as DaaTxQueryFn,
         [...positionsMap.values()].map((position) => ({

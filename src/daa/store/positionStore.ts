@@ -13,6 +13,7 @@ import {
 } from "./storeShared";
 import type { DaaStorePosition, DaaStoreBrokerKind } from "./storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
+import { ensureAssetMasterExistsInTx, deleteOrphanedAssetsInTx } from "./assetMasterStore";
 
 function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeCurrencyAlias(value, fallback);
@@ -195,61 +196,22 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
 export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    await query("BEGIN");
+    const txQuery = query as DaaTxQueryFn;
+    await txQuery("BEGIN");
     try {
-      await query(
-        "UPDATE daa_asset_universe SET holding_qty = 0, holding_price = 0, cost_basis = NULL, cost_basis_in_base = NULL, holding_tags = '{}'::TEXT[], updated_at = NOW()",
-      );
+      // 确保每个持仓资产在 asset_master 中存在
       for (const raw of rows) {
         const symbol = normalizeText(raw.symbol).toUpperCase();
         if (!symbol) continue;
         const market = normalizeText(raw.market, "US").toUpperCase();
         const assetKey = buildPositionKey(symbol, market);
         const currency = normalizeText(raw.currency, "USD").toUpperCase();
-        const qty = Math.max(0, toFiniteNumber(raw.qty));
-        const price = Math.max(0, toFiniteNumber(raw.price));
-        const lastPrice = price > 0 ? price : 0;
-        const priceUpdatedAt = price > 0 ? new Date().toISOString() : null;
-        const costBasis = raw.costBasis == null ? null : Math.max(0, toFiniteNumber(raw.costBasis));
-        const tags = Array.isArray(raw.tags)
-          ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
-          : [];
-
-        await query(
-          `
-            INSERT INTO daa_asset_universe (
-              asset_key, symbol, market, currency, holding_qty, holding_price, cost_basis, holding_tags, last_price, price_updated_at, created_at, updated_at
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
-            )
-            ON CONFLICT (asset_key) DO UPDATE
-            SET
-              symbol = EXCLUDED.symbol,
-              market = EXCLUDED.market,
-              currency = EXCLUDED.currency,
-              holding_qty = EXCLUDED.holding_qty,
-              holding_price = EXCLUDED.holding_price,
-              cost_basis = EXCLUDED.cost_basis,
-              holding_tags = EXCLUDED.holding_tags,
-              last_price = CASE
-                WHEN EXCLUDED.holding_price > 0 THEN EXCLUDED.holding_price
-                ELSE daa_asset_universe.last_price
-              END,
-              price_updated_at = CASE
-                WHEN EXCLUDED.holding_price > 0 THEN NOW()
-                ELSE daa_asset_universe.price_updated_at
-              END,
-              updated_at = NOW()
-          `,
-          [assetKey, symbol, market, currency, qty, price, costBasis, tags, lastPrice, priceUpdatedAt],
-        );
+        await ensureAssetMasterExistsInTx(txQuery, { assetKey, symbol, market, currency });
       }
 
-      await query(
-        "DELETE FROM daa_asset_universe WHERE watch_enabled = FALSE AND holding_qty <= 0",
-      );
+      // 原子替换持仓快照
       await replacePositionsV2SnapshotInTx(
-        query as DaaTxQueryFn,
+        txQuery,
         rows.map((raw) => ({
           assetKey: raw.assetKey,
           symbol: raw.symbol,
@@ -263,10 +225,12 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
         })),
       );
 
-      await query("COMMIT");
+      // 清理孤儿资产
+      await deleteOrphanedAssetsInTx(txQuery);
+      await txQuery("COMMIT");
     } catch (error) {
       try {
-        await query("ROLLBACK");
+        await txQuery("ROLLBACK");
       } catch (err) {
         logSwallowed("positionStore.rollback", err);
       }
@@ -359,35 +323,12 @@ export async function replaceDaaBrokerPositions(input: {
           ],
         );
 
-        await query(
-          `INSERT INTO daa_asset_universe (
-             asset_key, symbol, market, currency, last_price, price_updated_at, created_at, updated_at
-           ) VALUES (
-             $1, $2, $3, $4, $5, $6, NOW(), NOW()
-           )
-           ON CONFLICT (asset_key) DO UPDATE
-           SET
-             symbol = EXCLUDED.symbol,
-             market = EXCLUDED.market,
-             currency = EXCLUDED.currency,
-             last_price = CASE
-               WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.last_price
-               ELSE daa_asset_universe.last_price
-             END,
-             price_updated_at = CASE
-               WHEN EXCLUDED.last_price > 0 THEN EXCLUDED.price_updated_at
-               ELSE daa_asset_universe.price_updated_at
-             END,
-             updated_at = NOW()`,
-          [
-            row.assetKey,
-            row.symbol,
-            row.market,
-            row.currency,
-            row.price,
-            row.price > 0 ? row.updatedAt : null,
-          ],
-        );
+        await ensureAssetMasterExistsInTx(query as DaaTxQueryFn, {
+          assetKey: row.assetKey,
+          symbol: row.symbol,
+          market: row.market,
+          currency: row.currency,
+        });
       }
       await query("COMMIT");
     } catch (error) {

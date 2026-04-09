@@ -5,6 +5,7 @@
 export * from "./storeTypes";
 export * from "./accountStore";
 export * from "./assetUniverseStore";
+export * from "./assetMasterStore";
 export * from "./positionStore";
 export * from "./portfolioStore";
 export * from "./fxStore";

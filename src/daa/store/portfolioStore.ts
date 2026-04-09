@@ -12,6 +12,10 @@ import { withDaaPgClient, parseJsonb, toIsoString, type DaaTxQueryFn } from "./s
 import type { DaaStoreEquitySnapshot, DaaStoreHumanIngestState, DaaStoreCandidateAsset } from "./storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
 import { buildPositionKey } from "./positionStore";
+import {
+  upsertAssetMasterInTx, upsertWatchlistEntryInTx,
+  upsertTargetAllocationInTx, deleteOrphanedAssetsInTx,
+} from "./assetMasterStore";
 
 function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeCurrencyAlias(value, fallback);
@@ -130,7 +134,14 @@ export async function listDaaCandidateAssets(): Promise<DaaStoreCandidateAsset[]
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, watch_enabled, target_weight_hint, watch_tags, notes, created_at, updated_at FROM daa_asset_universe WHERE watch_enabled = TRUE ORDER BY symbol ASC, market ASC",
+      `SELECT am.asset_key, am.symbol, am.market, am.currency,
+              we.watch_enabled, COALESCE(ta.target_weight_hint, 0) AS target_weight_hint,
+              we.watch_tags, we.notes, am.created_at, am.updated_at
+       FROM daa_asset_master am
+       JOIN daa_watchlist_entries we ON we.asset_key = am.asset_key
+       LEFT JOIN daa_target_allocations ta ON ta.asset_key = am.asset_key
+       WHERE we.watch_enabled = TRUE
+       ORDER BY am.symbol ASC, am.market ASC`,
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -155,10 +166,15 @@ export async function replaceDaaCandidateAssets(
 ): Promise<DaaStoreCandidateAsset[]> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
-    await query("BEGIN");
+    const txQuery = query as DaaTxQueryFn;
+    await txQuery("BEGIN");
     try {
-      await query(
-        "UPDATE daa_asset_universe SET watch_enabled = FALSE, target_weight_hint = 0, watch_tags = '{}'::TEXT[], notes = NULL, updated_at = NOW()",
+      // 清除所有观察列表标记
+      await txQuery(
+        "UPDATE daa_watchlist_entries SET watch_enabled = FALSE, watch_tags = '{}'::TEXT[], notes = NULL, updated_at = NOW()",
+      );
+      await txQuery(
+        "UPDATE daa_target_allocations SET target_weight_hint = 0, updated_at = NOW()",
       );
       for (const raw of rows) {
         const symbol = normalizeText(raw.symbol).toUpperCase();
@@ -171,34 +187,18 @@ export async function replaceDaaCandidateAssets(
         const tags = Array.isArray(raw.tags) ? raw.tags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean) : [];
         const notes = normalizeText(raw.notes || "");
 
-        await query(
-          `
-            INSERT INTO daa_asset_universe (
-              asset_key, symbol, market, currency, watch_enabled, target_weight_hint, watch_tags, notes, created_at, updated_at
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
-            )
-            ON CONFLICT (asset_key) DO UPDATE
-            SET
-              symbol = EXCLUDED.symbol,
-              market = EXCLUDED.market,
-              currency = EXCLUDED.currency,
-              watch_enabled = EXCLUDED.watch_enabled,
-              target_weight_hint = EXCLUDED.target_weight_hint,
-              watch_tags = EXCLUDED.watch_tags,
-              notes = EXCLUDED.notes,
-              updated_at = NOW()
-          `,
-          [assetKey, symbol, market, currency, enabled, targetWeightHint, tags, notes || null],
-        );
+        await upsertAssetMasterInTx(txQuery, { assetKey, symbol, market, currency });
+        await upsertWatchlistEntryInTx(txQuery, {
+          assetKey, watchEnabled: enabled, watchTags: tags, notes: notes || null,
+        });
+        await upsertTargetAllocationInTx(txQuery, assetKey, targetWeightHint);
       }
-      await query(
-        "DELETE FROM daa_asset_universe WHERE watch_enabled = FALSE AND holding_qty <= 0",
-      );
-      await query("COMMIT");
+      // 清理无持仓且未关注的孤儿资产
+      await deleteOrphanedAssetsInTx(txQuery);
+      await txQuery("COMMIT");
     } catch (error) {
       try {
-        await query("ROLLBACK");
+        await txQuery("ROLLBACK");
       } catch (err) {
         logSwallowed("portfolioStore.rollback", err);
       }
@@ -206,7 +206,14 @@ export async function replaceDaaCandidateAssets(
     }
 
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, watch_enabled, target_weight_hint, watch_tags, notes, created_at, updated_at FROM daa_asset_universe WHERE watch_enabled = TRUE ORDER BY symbol ASC, market ASC",
+      `SELECT am.asset_key, am.symbol, am.market, am.currency,
+              we.watch_enabled, COALESCE(ta.target_weight_hint, 0) AS target_weight_hint,
+              we.watch_tags, we.notes, am.created_at, am.updated_at
+       FROM daa_asset_master am
+       JOIN daa_watchlist_entries we ON we.asset_key = am.asset_key
+       LEFT JOIN daa_target_allocations ta ON ta.asset_key = am.asset_key
+       WHERE we.watch_enabled = TRUE
+       ORDER BY am.symbol ASC, am.market ASC`,
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -238,9 +245,9 @@ export async function buildPortfolioSnapshotFromAssetUniverseInTx(
         p.currency,
         p.qty AS holding_qty,
         p.price AS holding_price,
-        COALESCE(u.last_price, p.price, 0) AS last_price
+        COALESCE(mps.last_price, p.price, 0) AS last_price
       FROM daa_positions_v2 p
-      LEFT JOIN daa_asset_universe u ON u.asset_key = p.asset_key
+      LEFT JOIN daa_market_price_snapshots mps ON mps.asset_key = p.asset_key
       WHERE p.qty > 0
     `),
     query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates"),
