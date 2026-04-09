@@ -16,7 +16,6 @@ vi.mock("@/src/daa/cron/auth", () => ({
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaExternalPayloadRaw: vi.fn(),
   appendDaaFxRateHistoryRows: vi.fn(),
-  appendDaaIngestJobLog: vi.fn(),
   getDaaSystemConfig: vi.fn(),
   listDaaAssetUniverse: vi.fn(),
   listDaaFxRates: vi.fn(),
@@ -92,7 +91,6 @@ import {
   type DaaStoreIngestJobLog,
   appendDaaExternalPayloadRaw,
   appendDaaFxRateHistoryRows,
-  appendDaaIngestJobLog,
   getDaaSystemConfig,
   listDaaAssetUniverse,
   listDaaFxRates,
@@ -248,7 +246,6 @@ beforeEach(() => {
   vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfig());
   vi.mocked(listDaaAssetUniverse).mockResolvedValue([]);
   vi.mocked(listDaaFxRates).mockResolvedValue([]);
-  vi.mocked(appendDaaIngestJobLog).mockResolvedValue(buildIngestJobLogFixture());
   vi.mocked(appendDaaExternalPayloadRaw).mockResolvedValue(buildExternalPayloadRawFixture());
   vi.mocked(appendDaaFxRateHistoryRows).mockResolvedValue(0);
   vi.mocked(upsertDaaFxRates).mockResolvedValue([]);
@@ -300,7 +297,7 @@ describe("cron-ops-routes-v1", () => {
         { symbol: "MSFT", market: "US" },
       ],
     });
-    // news-refresh 现在使用 runLoggedJob 而非 appendDaaIngestJobLog
+    // news-refresh 使用 runLoggedJob 记录日志
     expect(json.data.jobId).toBeTruthy();
   });
 

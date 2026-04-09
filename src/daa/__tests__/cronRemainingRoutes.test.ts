@@ -32,7 +32,6 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
       },
     },
   })),
-  appendDaaIngestJobLog: vi.fn(async () => null),
 }));
 
 vi.mock('@/src/daa/modules/workbench/workbenchReadService', () => ({
@@ -114,7 +113,7 @@ import { refreshMarketIndicators } from '@/src/daa/modules/marketContext/marketI
 import { buildWorkbenchBootstrap } from '@/src/daa/modules/workbench/workbenchReadService';
 import { generateWorkbenchRebalanceCycle } from '@/src/daa/modules/workbench/workbenchRebalanceCycleService';
 import { runHumanIngest } from '@/src/daa/hf/hfService';
-import { appendDaaIngestJobLog, getDaaSystemConfig } from '@/src/daa/store/daaStorePg';
+import { getDaaSystemConfig } from '@/src/daa/store/daaStorePg';
 
 function buildDriftConfig(input: {
   autoGenerateEnabled: boolean;

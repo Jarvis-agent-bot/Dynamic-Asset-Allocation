@@ -130,46 +130,6 @@ export async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toI
   });
 }
 
-export async function appendDaaIngestJobLog(input: {
-  jobType: string;
-  triggerSource?: string;
-  status?: DaaStoreIngestJobStatus;
-  startedAt?: string;
-  finishedAt?: string;
-  totalCount?: number;
-  successCount?: number;
-  failureCount?: number;
-  diagnosticsJson?: Record<string, unknown>;
-}): Promise<DaaStoreIngestJobLog> {
-  await ensureDaaMarketCacheSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const jobId = randomUUID();
-    const jobType = normalizeText(input.jobType, "unknown");
-    const triggerSource = normalizeText(input.triggerSource, "manual");
-    const status = normalizeIngestJobStatus(input.status, "ok");
-    const startedAt = toIsoString(input.startedAt, new Date().toISOString());
-    const finishedAt = toIsoString(input.finishedAt, new Date().toISOString());
-    const totalCount = Math.max(0, Math.trunc(toFiniteNumber(input.totalCount, 0)));
-    const successCount = Math.max(0, Math.trunc(toFiniteNumber(input.successCount, 0)));
-    const failureCount = Math.max(0, Math.trunc(toFiniteNumber(input.failureCount, 0)));
-    const diagnosticsJson = input.diagnosticsJson && typeof input.diagnosticsJson === "object" ? input.diagnosticsJson : {};
-    await query(
-      `INSERT INTO daa_ingest_job_log_v1
-        (job_id, job_type, trigger_source, status, started_at, finished_at, total_count, success_count, failure_count, diagnostics_json)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)`,
-      [jobId, jobType, triggerSource, status, startedAt, finishedAt, totalCount, successCount, failureCount, JSON.stringify(diagnosticsJson)],
-    );
-    const result = await query(
-      `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
-       FROM daa_ingest_job_log_v1
-       WHERE job_id = $1
-       LIMIT 1`,
-      [jobId],
-    );
-    return mapIngestJobLogRow(result.rows[0] as Record<string, unknown>);
-  });
-}
-
 export async function listDaaIngestJobLogs(input: {
   jobType?: string;
   limit?: number;
