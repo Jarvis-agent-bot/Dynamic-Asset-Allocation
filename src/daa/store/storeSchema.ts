@@ -714,18 +714,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           await query("DELETE FROM daa_equity_snapshots_v2");
           await query("DELETE FROM daa_positions_v2");
           await query("DELETE FROM daa_account_state_v2");
-          await query(
-            `UPDATE daa_asset_universe
-             SET holding_qty = 0,
-                 holding_price = 0,
-                 cost_basis = NULL,
-                 holding_tags = '{}'::TEXT[],
-                 updated_at = NOW()
-             WHERE holding_qty > 0
-                OR holding_price > 0
-                OR cost_basis IS NOT NULL
-                OR holding_tags <> '{}'::TEXT[]`,
-          );
           const account = await ensureAccountStateRowInTx(query as any);
           const resetTs = new Date().toISOString();
           await query(

@@ -6,7 +6,6 @@ import type {
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
   appendDaaExternalPayloadRaw: vi.fn(async () => ({ id: "raw_test_1" })),
-  appendDaaIngestJobLog: vi.fn(async () => ({ jobId: "job_test_1" })),
   appendDaaMarketPriceHistoryRows: vi.fn(async () => 0),
   deleteExpiredDaaExternalPayloadRaw: vi.fn(async () => 0),
   getDaaMarketCacheHealthStats: vi.fn(async () => ({

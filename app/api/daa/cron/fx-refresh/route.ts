@@ -3,12 +3,12 @@ import { requireCronAuth } from "@/src/daa/cron/auth";
 import {
   appendDaaExternalPayloadRaw,
   appendDaaFxRateHistoryRows,
-  appendDaaIngestJobLog,
   getDaaSystemConfig,
   listDaaAssetUniverse,
   listDaaFxRates,
   upsertDaaFxRates,
 } from "@/src/daa/store/daaStorePg";
+import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -262,146 +262,125 @@ export async function POST(req: Request) {
       toFxPairsFromAssets(strategyBase, assetRows),
     );
 
-    if (fxPairs.length === 0) {
-      const finishedAt = new Date().toISOString();
-      await appendDaaIngestJobLog({
-        jobType: "cron_fx_refresh",
-        triggerSource: "cron_fx_refresh",
-        status: "ok",
-        startedAt: finishedAt,
-        finishedAt,
-        totalCount: 0,
-        successCount: 0,
-        failureCount: 0,
-        diagnosticsJson: { reason: "no_pairs" },
-      });
-      return ok({
-        updatedPairs: [],
-        skippedPairs: [],
-        failures: [],
-        at: finishedAt,
-      });
-    }
-
-    const nowIso = new Date().toISOString();
-    const today = toShanghaiDay(new Date(nowIso));
-    const existingByPair = new Map(existingRates.map((row) => [
-      `${normalizeCcy(row.baseCcy)}/${normalizeCcy(row.quoteCcy)}`,
-      row,
-    ]));
-
-    const rowsToUpsert: Array<{ baseCcy: string; quoteCcy: string; rate: number; source: string; asOfTs: string }> = [];
-    const fxHistoryRows: Array<{
-      provider: string;
-      baseCcy: string;
-      quoteCcy: string;
-      asOfTs: string;
-      rate: number;
-      status: "fresh" | "error";
-      fetchedAt: string;
-      errorCode?: string | null;
-      errorMessage?: string | null;
-      rawRefId?: string | null;
-    }> = [];
-    const updatedPairs: string[] = [];
-    const skippedPairs: string[] = [];
-    const failures: string[] = [];
-
-    for (const pair of fxPairs) {
-      if (toBusinessDay(existingByPair.get(pair.pair)?.asOfTs) === today) {
-        skippedPairs.push(pair.pair);
-        continue;
-      }
-
-      const fetchResult = await fetchYfinanceFxRate(pair.baseCcy, pair.quoteCcy);
-      let rawRefId: string | null = null;
-      if (fetchResult.payloadJson || fetchResult.payloadText) try {
-        const raw = await appendDaaExternalPayloadRaw({
-          provider: "yfinance",
-          resource: "yfinance.fx.chart",
-          subjectKey: pair.pair,
-          requestUrl: `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(`${pair.baseCcy}${pair.quoteCcy}=X`)}`,
-          requestJson: {
-            baseCcy: pair.baseCcy,
-            quoteCcy: pair.quoteCcy,
-            pair: pair.pair,
-          },
-          responseStatus: fetchResult.status,
-          responseHeadersJson: fetchResult.responseHeadersJson,
-          payloadJson: fetchResult.payloadJson,
-          payloadText: fetchResult.payloadText || null,
-          fetchedAt: nowIso,
-          expireAt: new Date(Date.now() + rawRetentionDays * 24 * 3600 * 1000).toISOString(),
-        });
-        rawRefId = raw.id;
-      } catch (err) {
-        logSwallowed("fxRefreshRoute.appendRaw", err);
-        rawRefId = null;
-      }
-
-      if (fetchResult.ok) {
-        rowsToUpsert.push({
-          baseCcy: pair.baseCcy,
-          quoteCcy: pair.quoteCcy,
-          rate: fetchResult.rate,
-          source: "cron_daily_pull",
-          asOfTs: nowIso,
-        });
-        fxHistoryRows.push({
-          provider: "yfinance",
-          baseCcy: pair.baseCcy,
-          quoteCcy: pair.quoteCcy,
-          asOfTs: nowIso,
-          rate: fetchResult.rate,
-          status: "fresh",
-          fetchedAt: nowIso,
-          rawRefId,
-        });
-        updatedPairs.push(pair.pair);
-      } else {
-        failures.push(`${pair.pair}:${fetchResult.errorMessage || fetchResult.errorCode || "unknown"}`);
-        fxHistoryRows.push({
-          provider: "yfinance",
-          baseCcy: pair.baseCcy,
-          quoteCcy: pair.quoteCcy,
-          asOfTs: nowIso,
-          rate: 0,
-          status: "error",
-          fetchedAt: nowIso,
-          errorCode: fetchResult.errorCode,
-          errorMessage: fetchResult.errorMessage,
-          rawRefId,
-        });
-      }
-    }
-
-    if (rowsToUpsert.length > 0) {
-      await upsertDaaFxRates(rowsToUpsert);
-    }
-    if (fxHistoryRows.length > 0) {
-      await appendDaaFxRateHistoryRows(fxHistoryRows);
-    }
-
-    await appendDaaIngestJobLog({
+    const execution = await runLoggedJob({
+      req,
       jobType: "cron_fx_refresh",
       triggerSource: "cron_fx_refresh",
-      status: failures.length <= 0 ? "ok" : updatedPairs.length > 0 ? "partial" : "failed",
-      startedAt: nowIso,
-      finishedAt: new Date().toISOString(),
-      totalCount: fxPairs.length,
-      successCount: updatedPairs.length,
-      failureCount: failures.length,
-      diagnosticsJson: {
-        skippedCount: skippedPairs.length,
+      handler: async () => {
+        if (fxPairs.length === 0) {
+          return { updatedPairs: [] as string[], skippedPairs: [] as string[], failures: [] as string[], at: new Date().toISOString() };
+        }
+
+        const nowIso = new Date().toISOString();
+        const today = toShanghaiDay(new Date(nowIso));
+        const existingByPair = new Map(existingRates.map((row) => [
+          `${normalizeCcy(row.baseCcy)}/${normalizeCcy(row.quoteCcy)}`,
+          row,
+        ]));
+
+        const rowsToUpsert: Array<{ baseCcy: string; quoteCcy: string; rate: number; source: string; asOfTs: string }> = [];
+        const fxHistoryRows: Array<{
+          provider: string;
+          baseCcy: string;
+          quoteCcy: string;
+          asOfTs: string;
+          rate: number;
+          status: "fresh" | "error";
+          fetchedAt: string;
+          errorCode?: string | null;
+          errorMessage?: string | null;
+          rawRefId?: string | null;
+        }> = [];
+        const updatedPairs: string[] = [];
+        const skippedPairs: string[] = [];
+        const failures: string[] = [];
+
+        for (const pair of fxPairs) {
+          if (toBusinessDay(existingByPair.get(pair.pair)?.asOfTs) === today) {
+            skippedPairs.push(pair.pair);
+            continue;
+          }
+
+          const fetchResult = await fetchYfinanceFxRate(pair.baseCcy, pair.quoteCcy);
+          let rawRefId: string | null = null;
+          if (fetchResult.payloadJson || fetchResult.payloadText) try {
+            const raw = await appendDaaExternalPayloadRaw({
+              provider: "yfinance",
+              resource: "yfinance.fx.chart",
+              subjectKey: pair.pair,
+              requestUrl: `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(`${pair.baseCcy}${pair.quoteCcy}=X`)}`,
+              requestJson: {
+                baseCcy: pair.baseCcy,
+                quoteCcy: pair.quoteCcy,
+                pair: pair.pair,
+              },
+              responseStatus: fetchResult.status,
+              responseHeadersJson: fetchResult.responseHeadersJson,
+              payloadJson: fetchResult.payloadJson,
+              payloadText: fetchResult.payloadText || null,
+              fetchedAt: nowIso,
+              expireAt: new Date(Date.now() + rawRetentionDays * 24 * 3600 * 1000).toISOString(),
+            });
+            rawRefId = raw.id;
+          } catch (err) {
+            logSwallowed("fxRefreshRoute.appendRaw", err);
+            rawRefId = null;
+          }
+
+          if (fetchResult.ok) {
+            rowsToUpsert.push({
+              baseCcy: pair.baseCcy,
+              quoteCcy: pair.quoteCcy,
+              rate: fetchResult.rate,
+              source: "cron_daily_pull",
+              asOfTs: nowIso,
+            });
+            fxHistoryRows.push({
+              provider: "yfinance",
+              baseCcy: pair.baseCcy,
+              quoteCcy: pair.quoteCcy,
+              asOfTs: nowIso,
+              rate: fetchResult.rate,
+              status: "fresh",
+              fetchedAt: nowIso,
+              rawRefId,
+            });
+            updatedPairs.push(pair.pair);
+          } else {
+            failures.push(`${pair.pair}:${fetchResult.errorMessage || fetchResult.errorCode || "unknown"}`);
+            fxHistoryRows.push({
+              provider: "yfinance",
+              baseCcy: pair.baseCcy,
+              quoteCcy: pair.quoteCcy,
+              asOfTs: nowIso,
+              rate: 0,
+              status: "error",
+              fetchedAt: nowIso,
+              errorCode: fetchResult.errorCode,
+              errorMessage: fetchResult.errorMessage,
+              rawRefId,
+            });
+          }
+        }
+
+        if (rowsToUpsert.length > 0) {
+          await upsertDaaFxRates(rowsToUpsert);
+        }
+        if (fxHistoryRows.length > 0) {
+          await appendDaaFxRateHistoryRows(fxHistoryRows);
+        }
+
+        return { updatedPairs, skippedPairs, failures, at: nowIso };
       },
+      summarize: (result) => ({
+        totalCount: fxPairs.length,
+        successCount: result.updatedPairs.length,
+        failureCount: result.failures.length,
+        skippedCount: result.skippedPairs.length,
+      }),
     });
 
-    return ok({
-      updatedPairs,
-      skippedPairs,
-      failures,
-      at: nowIso,
-    });
+    return ok({ ...execution.result, jobId: execution.jobId });
   });
 }
 

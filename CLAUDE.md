@@ -286,7 +286,6 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 ### Cron 日志规范（强制规范）
 
 所有 cron job **必须**使用 `runLoggedJob()` 包装业务逻辑，统一写入 `daa_job_execution_logs` 表。
-**禁止**使用旧的 `appendDaaIngestJobLog()`（技术债务，逐步废弃）。
 
 ```typescript
 import { runLoggedJob } from "@/src/daa/jobs/jobService";

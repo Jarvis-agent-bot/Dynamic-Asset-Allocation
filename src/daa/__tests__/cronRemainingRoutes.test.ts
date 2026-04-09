@@ -277,19 +277,11 @@ describe('cron-remaining-routes-v1', () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data.signalCount).toBe(3);
-    expect(vi.mocked(appendDaaIngestJobLog)).toHaveBeenCalledWith(expect.objectContaining({
-      jobType: 'cron_hf_ingest',
-      status: 'partial',
-      totalCount: 3,
-      successCount: 3,
-      failureCount: 1,
-      diagnosticsJson: expect.objectContaining({
-        sourceStatus: 'fallback_seed',
-      }),
-    }));
+    // hf-ingest 现在使用 runLoggedJob，job 日志通过 jobService 记录
+    expect(json.data.jobId).toBeTruthy();
   });
 
-  it('hf-ingest 失败时会记录 failed job log 并返回 500', async () => {
+  it('hf-ingest 失败时返回 500', async () => {
     vi.mocked(runHumanIngest).mockRejectedValue(new Error('hf upstream down'));
 
     const response = await hfIngestPost(new Request('http://localhost/api/daa/cron/hf-ingest', { method: 'POST' }));
@@ -299,12 +291,6 @@ describe('cron-remaining-routes-v1', () => {
     expect(json.ok).toBe(false);
     expect(json.error.code).toBe('INTERNAL_ERROR');
     expect(json.error.message).toBe('internal server error');
-    expect(vi.mocked(appendDaaIngestJobLog)).toHaveBeenCalledWith(expect.objectContaining({
-      jobType: 'cron_hf_ingest',
-      status: 'failed',
-      failureCount: 1,
-      diagnosticsJson: { error: 'hf upstream down' },
-    }));
   });
 
   it('market-indicators-refresh GET 返回刷新结果', async () => {

@@ -383,16 +383,8 @@ describe("cron-ops-routes-v1", () => {
         errorCode: "http_502",
       }),
     ]));
-    expect(vi.mocked(appendDaaIngestJobLog)).toHaveBeenCalledWith(expect.objectContaining({
-      jobType: "cron_fx_refresh",
-      status: "partial",
-      totalCount: 3,
-      successCount: 1,
-      failureCount: 1,
-      diagnosticsJson: expect.objectContaining({
-        skippedCount: 1,
-      }),
-    }));
+    // fx-refresh 现在使用 runLoggedJob，job 日志通过 jobService 记录
+    expect(json.data.jobId).toBeTruthy();
   });
 
   it("daily-analysis 在关闭自动生成时跳过生成但仍可发送每日报告", async () => {

@@ -1,7 +1,6 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   appendDaaExternalPayloadRaw,
-  appendDaaIngestJobLog,
   appendDaaMarketPriceHistoryRows,
   deleteExpiredDaaExternalPayloadRaw,
   getDaaMarketCacheHealthStats,
@@ -601,27 +600,6 @@ export async function refreshMarketPrices(input: {
   const refreshed = rows.filter((row) => row.price > 0).length;
   const stale = rows.filter((row) => row.priceStatus === "stale").length;
   const missing = rows.filter((row) => row.priceStatus === "missing").length;
-  const totalCount = rows.length;
-  const successCount = refreshed;
-  const failureCount = Math.max(0, totalCount - refreshed);
-  const triggerSource = normalizeText(input.triggerSource, "manual");
-  const jobType = /^cron/i.test(triggerSource) ? "cron_price_refresh" : "market_cache_refresh";
-
-  await appendDaaIngestJobLog({
-    jobType,
-    triggerSource,
-    status: failureCount <= 0 ? "ok" : successCount > 0 ? "partial" : "failed",
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    totalCount,
-    successCount,
-    failureCount,
-    diagnosticsJson: {
-      stale,
-      missing,
-      provider: normalizeText(input.provider, DEFAULT_PROVIDER_),
-    },
-  });
 
   return {
     refreshed,
