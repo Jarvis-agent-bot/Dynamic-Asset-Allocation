@@ -6,7 +6,7 @@
  */
 
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
-import type { ResearchThread, AgentMemory } from "@/src/daa/agent/cognitiveTypes";
+import type { ResearchThread, AgentMemory, Surprise, DailyBriefing } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 
 // ── Prioritize 节点 Prompt ──
@@ -155,4 +155,112 @@ ${ctx.portfolio.holdings
 \`\`\`
 
 只输出 JSON，不要其他文字。`;
+}
+
+// ── Surface 节点 Prompt ──
+
+export function buildSurfacePrompt(ctx: {
+  portfolio: PortfolioSnapshot;
+  market: MarketSnapshot;
+  theses: ResearchThread[];
+  surprises: Surprise[];
+  thesesUpdated: number;
+  memoriesCreated: number;
+}): string {
+  const surpriseText = ctx.surprises.length > 0
+    ? ctx.surprises.map(s => `- [${s.severityScore}/10] ${sanitizeForPrompt(s.title, 60)}: ${sanitizeForPrompt(s.description, 100)}`).join("\n")
+    : "本次调查无意外发现";
+
+  const thesisText = ctx.theses
+    .slice(0, 15)
+    .map(t => {
+      const daysSinceUpdate = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+      const relatedHolding = ctx.portfolio.holdings.find(h => t.assetKeys.includes(h.assetKey));
+      const weight = relatedHolding ? (relatedHolding.weightPct * 100).toFixed(1) + "%" : "无持仓";
+      return `- "${sanitizeForPrompt(t.title, 50)}" conviction=${t.conviction} 权重=${weight} ${daysSinceUpdate}天前更新`;
+    }).join("\n");
+
+  return `你是一个投资研究操作系统的「日报编辑」。请基于今日调查结果生成一份简报。
+
+## 组合概况
+总权益: $${ctx.portfolio.totalEquity.toFixed(0)}
+现金占比: ${(ctx.portfolio.cashPct * 100).toFixed(1)}%
+市场 Regime: ${ctx.market?.regime ?? "unknown"}
+VIX: ${ctx.market?.vix ?? "N/A"}
+
+## 今日调查成果
+论点更新: ${ctx.thesesUpdated} 个
+新记忆: ${ctx.memoriesCreated} 条
+
+## 意外发现
+${surpriseText}
+
+## 当前活跃论点
+${thesisText}
+
+## 任务
+生成三类输出：
+1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 中总结，如果没有则说明市场与预期一致）
+2. **认知缺口**：哪些持仓权重高（>5%）但论点久未更新（>14天）或 conviction 为 uncertain
+3. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法
+
+## 输出格式（严格 JSON）
+\`\`\`json
+{
+  "surprises": [
+    { "title": "意外标题", "description": "描述", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "建议" }
+  ],
+  "cognitionGaps": [
+    { "assetKey": "US:NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 30, "uncertaintyReason": "原因", "suggestedInvestigation": "建议" }
+  ],
+  "mindChangeConditions": [
+    { "thesisTitle": "论点标题", "currentConviction": "high", "conditions": ["条件1"], "monitoringIndicators": ["VIX"] }
+  ]
+}
+\`\`\`
+
+只输出 JSON，不要其他文字。`;
+}
+
+// ── Telegram 格式化 ──
+
+export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
+  totalTokens: number;
+  durationMs: number;
+  thesesCount: number;
+  memoriesCount: number;
+}): string {
+  const lines: string[] = [];
+  lines.push("<b>\u{1F9E0} Agent 日报</b>\n");
+
+  if (briefing.surprises.length > 0) {
+    lines.push("<b>\u26A1 今日意外</b>");
+    for (const s of briefing.surprises.slice(0, 3)) {
+      lines.push(`• [${s.severityScore}/10] ${s.title}`);
+      lines.push(`  ${s.description.slice(0, 80)}`);
+    }
+    lines.push("");
+  } else {
+    lines.push("<b>\u26A1 今日意外</b>\n市场与预期一致，无重大意外。\n");
+  }
+
+  if (briefing.cognitionGaps.length > 0) {
+    lines.push("<b>\u{1F50D} 认知缺口</b>");
+    for (const g of briefing.cognitionGaps.slice(0, 3)) {
+      lines.push(`• ${g.assetKey} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未调查`);
+    }
+    lines.push("");
+  }
+
+  if (briefing.mindChangeConditions.length > 0) {
+    lines.push("<b>\u{1F504} 改观条件</b>");
+    for (const m of briefing.mindChangeConditions.slice(0, 3)) {
+      lines.push(`• "${m.thesisTitle}" (${m.currentConviction})`);
+      lines.push(`  改变条件: ${m.conditions.slice(0, 2).join("; ")}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(`<i>\u{1F4CA} 论点: ${meta.thesesCount} | 记忆: ${meta.memoriesCount} | Tokens: ${meta.totalTokens} | ${(meta.durationMs / 1000).toFixed(1)}s</i>`);
+  return lines.join("\n");
 }

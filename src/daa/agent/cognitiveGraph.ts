@@ -6,8 +6,8 @@
 
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { CognitiveStateAnnotation, type CognitiveState, type CognitiveUpdate, type PortfolioSnapshot, type MarketSnapshot, type NewsSnapshot } from "@/src/daa/agent/cognitiveState";
-import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread } from "@/src/daa/agent/cognitiveTypes";
-import { buildPrioritizePrompt, buildInvestigatePrompt } from "@/src/daa/agent/cognitivePrompts";
+import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread, DailyBriefing, CognitionGap, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
+import { buildPrioritizePrompt, buildInvestigatePrompt, buildSurfacePrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
@@ -535,6 +535,74 @@ VIX: ${state.market?.vix ?? "N/A"}
   }
 }
 
+// ── Surface 节点（生成 DailyBriefing + 可选 TG 推送）──
+
+async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
+  const t0 = Date.now();
+  try {
+    const theses = await thesisStore.getActiveTheses();
+    const memCount = await memoryStore.countMemories();
+
+    const prompt = buildSurfacePrompt({
+      portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
+      market: state.market ?? { regime: "unknown", vix: null, indicators: {} },
+      theses,
+      surprises: state.surprises ?? [],
+      thesesUpdated: state.thesesUpdated ?? 0,
+      memoriesCreated: state.memoriesCreated ?? 0,
+    });
+
+    const { data, tokensUsed } = await callDeepSeekJson<{
+      surprises: Surprise[];
+      cognitionGaps: CognitionGap[];
+      mindChangeConditions: MindChangeCondition[];
+    }>(prompt, "cognitiveGraph.surface");
+
+    const briefing: DailyBriefing = {
+      surprises: data?.surprises ?? state.surprises ?? [],
+      cognitionGaps: data?.cognitionGaps ?? [],
+      mindChangeConditions: data?.mindChangeConditions ?? [],
+      thesesUpdated: state.thesesUpdated ?? 0,
+      memoriesCreated: state.memoriesCreated ?? 0,
+      totalTokens: (state.totalTokens ?? 0) + tokensUsed,
+      estimatedCost: ((state.totalTokens ?? 0) + tokensUsed) * 0.000001, // DeepSeek pricing estimate
+    };
+
+    // 尝试推送 Telegram（非阻塞）
+    try {
+      const { sendTelegramByEnv } = await import("@/src/daa/notify/telegram");
+      const tgText = formatBriefingForTelegram(briefing, {
+        totalTokens: briefing.totalTokens,
+        durationMs: Date.now() - t0,
+        thesesCount: theses.length,
+        memoriesCount: memCount,
+      });
+      sendTelegramByEnv(tgText, {
+        eventType: "agent_briefing",
+        triggerSource: "cognitive_agent",
+        parseMode: "HTML",
+      }).catch(e => logSwallowed("cognitiveGraph.surface.telegram", e));
+    } catch (e) {
+      logSwallowed("cognitiveGraph.surface.telegramImport", e);
+    }
+
+    return {
+      totalTokens: tokensUsed,
+      reasoningTraces: [{
+        node: "surface",
+        threadId: null,
+        input: `${theses.length} theses, ${(state.surprises ?? []).length} surprises`,
+        output: `briefing: ${briefing.surprises.length} surprises, ${briefing.cognitionGaps.length} gaps, ${briefing.mindChangeConditions.length} conditions`,
+        tokensUsed,
+        durationMs: Date.now() - t0,
+      }],
+    };
+  } catch (e) {
+    logSwallowed("cognitiveGraph.surface", e);
+    return { errors: [`surface: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+}
+
 // ── Graph 组装 ──
 
 function buildCognitiveGraph() {
@@ -545,6 +613,7 @@ function buildCognitiveGraph() {
     .addNode("reflect", reflectNode)
     .addNode("next_target", loadNextTarget)
     .addNode("review", reviewNode)
+    .addNode("surface", surfaceNode)
     .addEdge(START, "observe")
     .addEdge("observe", "prioritize")
     .addConditionalEdges("prioritize", (state: CognitiveState) => {
@@ -553,7 +622,6 @@ function buildCognitiveGraph() {
     })
     .addConditionalEdges("investigate", (state: CognitiveState) => {
       if (state.investigateResult?.thesisChanged) return "reflect";
-      // conviction 没变 → 直接到下一个目标
       if (state.investigationQueue.length > 1) return "next_target";
       return "review";
     })
@@ -565,7 +633,8 @@ function buildCognitiveGraph() {
       if (state.currentTarget) return "investigate";
       return "review";
     })
-    .addEdge("review", END);
+    .addEdge("review", "surface")
+    .addEdge("surface", END);
 
   const checkpointer = new MemorySaver();
   return graph.compile({ checkpointer });
