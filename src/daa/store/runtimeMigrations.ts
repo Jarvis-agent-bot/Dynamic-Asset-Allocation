@@ -693,6 +693,44 @@ const MIGRATIONS_: Migration[] = [
       await query(`CREATE INDEX IF NOT EXISTS idx_thesis_reviews_thread ON daa_thesis_reviews(thread_id, created_at DESC)`);
     },
   },
+  {
+    id: "20260409_migrate_learning_to_memory",
+    async apply(query) {
+      // 将旧 agent_learning_events 中的 outcome_verdict 数据迁移到 agent_memory
+      // 仅在旧表存在且新表为空时执行
+      const oldTableExists = await query(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_name = 'daa_agent_learning_events'
+        ) AS exists
+      `);
+      if (!oldTableExists.rows[0]?.exists) return;
+
+      const newCount = await query(`SELECT COUNT(*) AS cnt FROM daa_agent_memory`);
+      if (Number(newCount.rows[0]?.cnt ?? 0) > 0) return; // 已有数据，跳过
+
+      // 迁移学习事件为 "lesson" 类型的记忆
+      await query(`
+        INSERT INTO daa_agent_memory (id, memory_type, content, source_run_ids, relevance_tags, strength, created_at, last_accessed)
+        SELECT
+          gen_random_uuid()::text,
+          'lesson',
+          COALESCE(title, '') || ': ' || COALESCE(summary, ''),
+          ARRAY[]::text[],
+          CASE
+            WHEN symbol IS NOT NULL THEN ARRAY[symbol]
+            ELSE ARRAY[]::text[]
+          END,
+          1.0,
+          created_at,
+          created_at
+        FROM daa_agent_learning_events
+        WHERE event_type = 'outcome_verdict'
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

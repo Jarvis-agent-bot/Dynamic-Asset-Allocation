@@ -2,8 +2,23 @@
 
 ## Project Overview
 
-DAA Console 是面向个人投资者的单组合动态资产配置系统。
-核心流程：**资产发现 → 洞察分析 → 再平衡 → 执行 → 复盘**
+DAA Console 是面向个人投资者的单组合动态资产配置系统，品牌名 **DeepLedger**。
+
+### 架构模式：Cognitive Agent OS（AI-Native）
+
+系统已从"AI-Assisted Pipeline"（固定权重信号融合 → LLM 打分 → 硬 guardrails）升级为 **thesis-driven Cognitive Agent**：
+
+```
+旧架构 (v0.2.0, @deprecated):
+  Cron → 信号 → 固定权重融合 → LLM Planner → LLM Decider → Guardrails → 执行
+
+新架构 (Cognitive Agent OS):
+  observe → prioritize → investigate ⇄ reflect → review → surface → END
+     ↑                                                         ↓
+  cron/手动                                              TG 日报推送
+```
+
+核心理念：系统不问"该买什么"，而是维护一组持续演化的**投资论点（Thesis）**，每天问"我现在最可能错在哪里"。
 
 当前为模拟执行模式，不对接真实券商。
 
@@ -112,29 +127,64 @@ src/
 `{MARKET}:{SYMBOL}` — e.g., `US:AAPL`, `HK:0700.HK`, `CRYPTO:BTC-USD`
 See `src/daa/assetKey.ts` for parsing/normalization utilities.
 
-### AI 决策架构（Structured Agent）
+### Cognitive Agent OS（AI-Native 架构，当前）
+
+基于 LangGraph.js 的 thesis-driven 认知 Agent，通过 `systemConfig.agentMode` 切换。
+
+**工作流**（`src/daa/agent/cognitiveGraph.ts`）：
+```
+observe → prioritize → investigate ⇄ reflect → review → surface → END
+```
+
+| 节点 | 职责 | LLM 调用 |
+|------|------|---------|
+| `observe` | 读取持仓 + 市场指标 + 新闻 | 否 |
+| `prioritize` | 选择 1-3 个最需调查的 thesis | 是（投委会主席） |
+| `investigate` | 收集证据 + 推理 + 更新 thesis | 是（研究分析师） |
+| `reflect` | conviction 变化时反思 + 生成记忆 | 是（首席风控官） |
+| `review` | 到期 thesis 复盘 + 评分 | 是（复盘审计师） |
+| `surface` | 生成 DailyBriefing + TG 推送 | 是（日报编辑） |
+
+**数据模型**（5 张表）：
+- `daa_research_threads` — 研究论点
+- `daa_evidence_items` — 证据链
+- `daa_agent_runs` — 运行记录
+- `daa_agent_memory` — 长期记忆（pgvector 384 维）
+- `daa_thesis_reviews` — 决策复盘
+
+**三类输出**（DailyBriefing）：
+1. **今日意外** — 最不符合现有认知的市场变化
+2. **认知缺口** — 高权重但久未调查的持仓
+3. **改观条件** — 什么会让 Agent 改变当前判断
+
+**API**：
+- `POST /api/daa/agent/run` — 手动触发 Agent 循环
+- `POST /api/daa/agent/bootstrap` — 初始化 thesis（扫描持仓）
+- `GET /api/daa/agent/theses` — 获取活跃论点
+- `POST /api/daa/cron/cognitive-agent` — 定时 cron
+
+**UI**：
+- Today 页 → Agent Briefing 视图
+- Agent Rail → 全站右侧认知面板（xl 屏幕）
+
+### AI 决策架构（Structured Agent）— @deprecated
+
+> 旧架构，通过 `agentMode: 'legacy'` 访问。标记为 @deprecated。
 
 再平衡决策流程采用双阶段 LLM 架构：
 
 ```
 漂移计算 → 规划器(LLM) → 选择性信号采集 → 融合 → 决策器(LLM) → Guardrails → 执行
-                                                        ↑
-                                                  outcome 反馈闭环
 ```
 
-**规划器**（`src/daa/agent/llmPlanner.ts`）：用便宜模型分析漂移提案，决定每个资产需要采集哪些信号（技术/估值/新闻/人因），跳过不需要深入分析的资产。
+**规划器**（`src/daa/agent/llmPlanner.ts` @deprecated）
+**决策器**（`src/daa/llm/llmDecision.ts` @deprecated）
+**Guardrails**（`src/daa/modules/workbench/decisionFusion.ts` @deprecated）
+**信号融合**（`src/daa/signals/fusion.ts` @deprecated）
 
-**决策器**（`src/daa/llm/llmDecision.ts`）：分析师模式，基于目标和约束自主推理，输出调整建议 + 信号解读 + 风险分析。
-
-**Guardrails**（`src/daa/modules/workbench/decisionFusion.ts`）：不可绕过的硬约束 — 仓位上限 cap、信号冲突惩罚、市场 regime 缩放。
-
-**反馈闭环**：决策后验结果（`decisionOutcomeService.ts`）→ agent learning events（`agentLearningRepo.ts`）→ 下次决策的历史表现段。
-
-**可调参数**（`DaaStrategyParams` in `systemConfig.ts`）：信号融合阈值、冲突惩罚系数、决策融合参数、市场 regime 阈值均可通过 `strategy.strategyParams` 配置覆盖。
-
-### Signal Fusion (Four Dimensions)
+### Signal Fusion (Four Dimensions) — @deprecated
 Default weights: Human 35% + Technical 25% + News 20% + Valuation 20%
-（通过 `dataSources.newsFeed.fusionWeights` 配置，或由 LLM 动态建议）
+（Cognitive Agent 模式下不使用固定权重，Agent 自主决定每个资产的信号权重）
 
 ### Market Indicators (7 dimensions)
 - `vix` — S&P 500 volatility
@@ -231,11 +281,22 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Asset key utilities | `src/daa/assetKey.ts` |
 | API rate limiting | `src/daa/api/rateLimit.ts` |
 | Market data constants | `src/market/constants.ts` |
-| LLM 规划器 | `src/daa/agent/llmPlanner.ts` |
-| LLM 决策器 | `src/daa/llm/llmDecision.ts` |
-| 决策融合 (Guardrails) | `src/daa/modules/workbench/decisionFusion.ts` |
+| **Cognitive Agent 工作流** | `src/daa/agent/cognitiveGraph.ts` |
+| Cognitive Agent 类型 | `src/daa/agent/cognitiveTypes.ts` |
+| Cognitive Agent 状态 | `src/daa/agent/cognitiveState.ts` |
+| Cognitive Agent Prompts | `src/daa/agent/cognitivePrompts.ts` |
+| Agent Rebalance 适配器 | `src/daa/agent/agentRebalanceAdapter.ts` |
+| Thesis Store | `src/daa/agent/store/thesisStore.ts` |
+| Memory Store (pgvector) | `src/daa/agent/store/memoryStore.ts` |
+| Agent Run Store | `src/daa/agent/store/agentRunStore.ts` |
+| Thesis Bootstrap | `src/daa/agent/bootstrap.ts` |
+| Embedding (384d) | `src/daa/agent/embedding.ts` |
+| LLM 规划器 @deprecated | `src/daa/agent/llmPlanner.ts` |
+| LLM 决策器 @deprecated | `src/daa/llm/llmDecision.ts` |
+| 决策融合 @deprecated | `src/daa/modules/workbench/decisionFusion.ts` |
+| 信号融合 @deprecated | `src/daa/signals/fusion.ts` |
 | Agent Tool 注册表 | `src/daa/agent/agentToolRegistry.ts` |
-| Agent 学习记忆 | `src/daa/agent/agentLearningRepo.ts` |
+| Agent 学习记忆 (旧) | `src/daa/agent/agentLearningRepo.ts` |
 | 决策后验服务 | `src/daa/modules/today/decisionOutcomeService.ts` |
 
 ## Development Conventions

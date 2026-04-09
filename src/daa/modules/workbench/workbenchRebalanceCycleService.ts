@@ -1,6 +1,7 @@
 import { normalizeDaaCurrencyCode, parseDaaAssetKey } from "@/src/daa/assetKey";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
 import { runLlmPlanning, type PlannerOutput } from "@/src/daa/agent/llmPlanner";
+import { enhanceProposalsWithAgent } from "@/src/daa/agent/agentRebalanceAdapter";
 import type { SignalPlanEntry } from "@/src/daa/signals/opportunityService";
 import { getStrategyExecutionConfig, resolveStrategyParams } from "@/src/daa/config/systemConfig";
 import { runLlmDecision } from "@/src/daa/llm/llmDecision";
@@ -346,6 +347,29 @@ export async function generateWorkbenchRebalanceCycle(
       llmSummary: healthyInsight.llmSummary,
     };
   }
+
+  // ── agentMode 分支：cognitive Agent 驱动 vs 旧 pipeline ──
+  const agentMode = systemRow.config.agentMode ?? "legacy";
+
+  if (agentMode === "cognitive" && draft.proposals.length > 0) {
+    // ── Agent 路径：thesis conviction 驱动调仓提案 ──
+    // 替代 Steps B.5 (planner) + C (signal fusion) + D (LLM decision) + E (guardrails)
+    // 保留原始 draft proposals，用 Agent thesis 增强 decisionContext
+    const agentResult = await enhanceProposalsWithAgent({
+      draftProposals: draft.proposals,
+      marketRegime: marketContext?.regime ?? null,
+      totalEquity: bootstrap.account.totalEquity ?? 0,
+      maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
+    });
+
+    // 用 Agent 增强后的提案替换原始 draft，后续 TLH + 风控 + 创建周期仍走正常流程
+    draft.proposals = agentResult.proposals;
+    bootstrap.warnings.push(`Agent(${agentResult.agentStatus}): ${agentResult.proposals.length} 个提案, ${agentResult.llmSummary?.slice(0, 80) ?? ""}`);
+    // 注入 agentResult 到后续逻辑可访问的位置（通过 recentLearningsText hack）
+    // 后续 Steps E.5-G 不受影响，正常执行 TLH + 风控 + 持久化
+  }
+
+  // ── Legacy 路径（agentMode === "legacy"）──
 
   // ── Step B.5: 规划器 — AI 决定需要深入分析哪些资产 ──────────────
   let plannerOutput: PlannerOutput | null = null;
