@@ -67,6 +67,9 @@ function deliveryEventLabel(value: string): string {
 function triggerSourceLabel(value: string): string {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "cron_daily_analysis") return "定时分析";
+  if (normalized === "cron_cognitive_agent") return "Agent 日报";
+  if (normalized === "cognitive_agent") return "Agent 分析";
+  if (normalized === "agent_briefing") return "Agent 简报";
   if (normalized === "cron_drift_check") return "漂移检查";
   if (normalized === "manual_trade_execution") return "手工成交";
   if (normalized === "decision_trade_execution") return "手工执行建议";

@@ -33,7 +33,7 @@ import type {
 } from "./workbenchTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-import { buildUnifiedRequestFromStore, buildWorkbenchBootstrap } from "./workbenchReadService";
+import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
 import {
   appendTriggerEventSafe,

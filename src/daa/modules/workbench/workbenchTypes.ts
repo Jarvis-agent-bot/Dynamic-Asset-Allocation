@@ -76,11 +76,8 @@ export type RebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | 
 type RebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
 
 /**
- * 每个 proposal 上的决策上下文（由 decisionFusion 注入）。
+ * 每个 proposal 上的决策上下文（由 agentRebalanceAdapter 注入）。
  * 记录完整的决策链路，供 UI 展示和审计追踪。
- *
- * P0-4: 使用精确的字面量联合类型（而非 string），确保与 decisionFusion 的
- * ProposalDecisionContext 结构完全兼容，无需 as unknown as 类型转换。
  */
 export type ProposalDecisionContext = {
   /** 原始 drift 触发原因 */
@@ -135,7 +132,7 @@ export type RebalanceProposal = {
   hfContribution: string | null;
   /**
    * 三层决策上下文（drift × signal × LLM）。
-   * 由 decisionFusion 注入，旧数据此字段为 null。
+   * 由 agentRebalanceAdapter 注入，旧数据此字段为 null。
    */
   decisionContext?: ProposalDecisionContext | null;
 };
