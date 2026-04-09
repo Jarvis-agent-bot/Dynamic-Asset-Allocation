@@ -1,8 +1,7 @@
 /**
  * Cognitive Agent OS — LangGraph 工作流
  *
- * Weekend 1 最小闭环：observe → prioritize → investigate → END
- * 后续 Weekend 添加：reflect / review / surface 节点
+ * 完整循环：observe → prioritize → investigate → reflect → (next_target → investigate)* → review → END
  */
 
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
@@ -13,12 +12,16 @@ import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
+import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-// ── 工具导入（现有信号生成器） ──
+// ── 工具导入（现有信号生成器 + 数据服务） ──
 
 import { buildTechnicalSignalForSymbol } from "@/src/daa/signals/technicalSignal";
 import { buildValuationSignalForSymbol } from "@/src/daa/signals/valuationSignal";
+import { buildNewsSignalForSymbol } from "@/src/daa/signals/newsSignal";
+import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
+import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
 
 // ── 辅助：调用 DeepSeek ──
 
@@ -51,44 +54,67 @@ function estimateTokens(text: string): number {
 async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
   try {
-    // 获取活跃 thesis
     const activeTheses = await thesisStore.getActiveTheses();
 
-    // 组合和市场数据暂时用占位符（需要连接现有 service）
-    // Weekend 2 会对接 assetUniverseStore 和 marketIndicatorService
-    const portfolio: PortfolioSnapshot = {
-      holdings: [],
-      totalEquity: 0,
-      cashPct: 0,
-    };
-
-    const market: MarketSnapshot = {
-      regime: "unknown",
-      vix: null,
-      indicators: {},
-    };
-
-    const news: NewsSnapshot = { items: [] };
-
-    // 尝试加载真实数据（如果 service 可用）
+    // 1. 组合数据
+    const portfolio: PortfolioSnapshot = { holdings: [], totalEquity: 0, cashPct: 0 };
     try {
-      const { listDaaAssetUniverse } = await import("@/src/daa/store/assetUniverseStore");
       const rows = await listDaaAssetUniverse();
-      const holdingRows = rows.filter((r: Record<string, unknown>) => Number(r.holding_qty ?? 0) > 0);
-      const totalValue = holdingRows.reduce((sum: number, r: Record<string, unknown>) => {
-        return sum + Number(r.holding_qty ?? 0) * Number(r.last_price ?? 0);
-      }, 0);
-      portfolio.holdings = holdingRows.map((r: Record<string, unknown>) => ({
-        assetKey: String(r.asset_key ?? ""),
-        symbol: String(r.symbol ?? ""),
-        holdingQty: Number(r.holding_qty ?? 0),
-        lastPrice: Number(r.last_price ?? 0),
-        weightPct: totalValue > 0 ? (Number(r.holding_qty ?? 0) * Number(r.last_price ?? 0)) / totalValue : 0,
-        unrealizedPnlPct: r.unrealized_pnl_pct != null ? Number(r.unrealized_pnl_pct) : null,
+      const holdingRows = rows.filter(r => r.holdingQty > 0);
+      const totalValue = holdingRows.reduce((sum, r) => sum + r.holdingQty * r.lastPrice, 0);
+      portfolio.holdings = holdingRows.map(r => ({
+        assetKey: r.assetKey,
+        symbol: r.symbol,
+        holdingQty: r.holdingQty,
+        lastPrice: r.lastPrice,
+        weightPct: totalValue > 0 ? (r.holdingQty * r.lastPrice) / totalValue : 0,
+        unrealizedPnlPct: r.costBasisInBase != null && r.costBasisInBase > 0
+          ? (r.lastPrice * r.holdingQty - r.costBasisInBase) / r.costBasisInBase
+          : null,
       }));
       portfolio.totalEquity = totalValue;
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.portfolio", e);
+    }
+
+    // 2. 市场指标（从 DB 缓存读取）
+    const market: MarketSnapshot = { regime: "unknown", vix: null, indicators: {} };
+    try {
+      const snapshots = await listLatestDaaMarketIndicatorSnapshots();
+      const vixSnap = snapshots.find(s => s.key === "vix");
+      market.vix = vixSnap?.rawValue ?? null;
+      // 推导 regime：找到 riskOffScorePct 最高的 scope
+      const riskOffScores = snapshots.map(s => s.riskOffScorePct).filter(v => v > 0);
+      const avgRiskOff = riskOffScores.length > 0 ? riskOffScores.reduce((a, b) => a + b, 0) / riskOffScores.length : 50;
+      market.regime = avgRiskOff > 65 ? "risk_off" : avgRiskOff < 40 ? "risk_on" : "transitional";
+      market.indicators = Object.fromEntries(
+        snapshots.slice(0, 10).map(s => [s.key, {
+          value: s.rawValue,
+          percentile: s.percentile252 ?? 50,
+          stance: s.stance,
+        }]),
+      );
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.market", e);
+    }
+
+    // 3. 最近新闻（从 DB 缓存读取，不调外部 API）
+    const news: NewsSnapshot = { items: [] };
+    try {
+      // 获取持仓资产的最近新闻
+      const holdingSymbols = portfolio.holdings.slice(0, 10).map(h => h.symbol);
+      for (const sym of holdingSymbols.slice(0, 5)) {
+        const items = await listDaaNewsItemsBySymbol({ symbol: sym, limit: 3 });
+        for (const item of items) {
+          news.items.push({
+            symbol: sym,
+            title: item.title ?? "",
+            ts: item.publishedAt ?? item.fetchedAt ?? "",
+          });
+        }
+      }
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.news", e);
     }
 
     return {
@@ -96,7 +122,7 @@ async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
       market,
       news,
       activeTheses,
-      toolsCalled: [{ tool: "observe", input: {}, outputSummary: `${activeTheses.length} theses, ${portfolio.holdings.length} holdings`, durationMs: Date.now() - t0 }],
+      toolsCalled: [{ tool: "observe", input: {}, outputSummary: `${activeTheses.length} theses, ${portfolio.holdings.length} holdings, ${news.items.length} news, regime=${market.regime}`, durationMs: Date.now() - t0 }],
     };
   } catch (e) {
     logSwallowed("cognitiveGraph.observe", e);
@@ -221,8 +247,20 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
             metrics: signal.metrics,
             reasons: signal.reasons,
           } : null;
+        } else if (toolName === "news" && thread.assetKeys[0]) {
+          const symbol = thread.assetKeys[0].split(":")[1] ?? thread.assetKeys[0];
+          const market = thread.assetKeys[0].split(":")[0] ?? "US";
+          const signal = await buildNewsSignalForSymbol(symbol, market);
+          evidence.news = signal ? {
+            scorePct: signal.scorePct,
+            evidenceCount: signal.evidenceCount,
+            llmSummary: signal.llmSummary,
+            llmDrivers: signal.llmDrivers,
+            llmMajorEvent: signal.llmMajorEvent,
+            reasons: signal.reasons,
+            items: signal.items?.slice(0, 5).map(i => ({ title: i.title, ts: i.ts })),
+          } : null;
         }
-        // news 和其他工具留给 Weekend 2
       } catch (e) {
         logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e);
         evidence[toolName] = { error: String(e) };
@@ -296,6 +334,207 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
   }
 }
 
+// ── Reflect 节点（DeepSeek checkpoint — 只在 conviction 变化时有意义）──
+
+async function reflectNode(state: CognitiveState): Promise<CognitiveUpdate> {
+  const t0 = Date.now();
+  const result = state.investigateResult;
+  const thread = state.currentThread;
+
+  // 如果 conviction 没变，跳过反思
+  if (!result?.thesisChanged || !thread) {
+    return {};
+  }
+
+  try {
+    const prompt = `你是一个投资研究操作系统的「首席风控官」。刚刚一个研究论点发生了判断变化，你需要反思。
+
+## 论点变化
+标题: ${sanitizeForPrompt(thread.title, 80)}
+旧判断: ${sanitizeForPrompt(thread.thesisText, 200)}
+新判断: ${sanitizeForPrompt(result.updatedThesis ?? "", 200)}
+旧信念: ${thread.conviction} → 新信念: ${result.newConviction ?? thread.conviction}
+
+## 证据摘要
+${sanitizeForPrompt(result.evidenceSummary, 300)}
+
+## 任务
+1. 这个变化是否合理？有没有过度反应的风险？
+2. 之前有没有类似的判断变化模式？
+3. 是否有值得长期记住的教训？
+
+## 输出格式（严格 JSON）
+\`\`\`json
+{
+  "reflectionSummary": "反思总结",
+  "overreactionRisk": "low/medium/high",
+  "newMemory": {
+    "type": "lesson",
+    "content": "值得记住的教训（如果有的话，没有则设为 null）"
+  }
+}
+\`\`\`
+
+只输出 JSON，不要其他文字。`;
+
+    const { data, tokensUsed } = await callDeepSeekJson<{
+      reflectionSummary: string;
+      overreactionRisk: string;
+      newMemory: { type: string; content: string } | null;
+    }>(prompt, "cognitiveGraph.reflect");
+
+    let newMemCount = 0;
+    if (data?.newMemory?.content) {
+      const emb = await generateEmbedding(data.newMemory.content);
+      await memoryStore.createMemory({
+        memoryType: (data.newMemory.type as "lesson" | "pattern" | "preference" | "fact") || "lesson",
+        content: data.newMemory.content,
+        relevanceTags: thread.tags,
+        embedding: emb,
+      });
+      newMemCount = 1;
+    }
+
+    return {
+      memoriesCreated: newMemCount,
+      totalTokens: tokensUsed,
+      reasoningTraces: [{
+        node: "reflect",
+        threadId: thread.id,
+        input: `conviction change: ${thread.conviction} → ${result.newConviction}`,
+        output: data ? `risk=${data.overreactionRisk}, memory=${newMemCount > 0 ? "created" : "none"}` : "no result",
+        tokensUsed,
+        durationMs: Date.now() - t0,
+      }],
+    };
+  } catch (e) {
+    logSwallowed("cognitiveGraph.reflect", e);
+    return { errors: [`reflect: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+}
+
+// ── Next Target 辅助节点 ──
+
+async function loadNextTarget(state: CognitiveState): Promise<CognitiveUpdate> {
+  const queue = Array.isArray(state.investigationQueue) ? state.investigationQueue : [];
+  const remaining = queue.slice(1);
+  const next = remaining[0] ?? null;
+
+  let currentThread: ResearchThread | null = null;
+  if (next?.threadId) {
+    currentThread = await thesisStore.getThesisById(next.threadId);
+  }
+
+  return {
+    investigationQueue: remaining,
+    currentTarget: next,
+    currentThread,
+    investigateResult: null,
+  };
+}
+
+// ── Review 节点（检查到期待复盘的 thesis）──
+
+async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
+  const t0 = Date.now();
+  try {
+    const dueTheses = await thesisStore.getDueReviews();
+    if (dueTheses.length === 0) return {};
+
+    let totalTokens = 0;
+    const traces: ReasoningTrace[] = [];
+
+    for (const thread of dueTheses.slice(0, 3)) {
+      try {
+        const prompt = `你是一个投资研究操作系统的「复盘审计师」。以下论点已到复盘日期。
+
+## 论点信息
+标题: ${sanitizeForPrompt(thread.title, 80)}
+当时判断: ${sanitizeForPrompt(thread.thesisText, 200)}
+信念强度: ${thread.conviction}
+创建时间: ${thread.createdAt}
+
+## 当前市场
+Regime: ${state.market?.regime ?? "unknown"}
+VIX: ${state.market?.vix ?? "N/A"}
+
+## 任务
+评估这个论点到目前为止是否准确。
+
+## 输出格式（严格 JSON）
+\`\`\`json
+{
+  "actualOutcome": "实际发生了什么",
+  "accuracyScore": 0.7,
+  "lesson": "从这次复盘中学到的教训（如果有）",
+  "shouldArchive": false
+}
+\`\`\`
+
+只输出 JSON，不要其他文字。`;
+
+        const { data, tokensUsed } = await callDeepSeekJson<{
+          actualOutcome: string;
+          accuracyScore: number;
+          lesson: string | null;
+          shouldArchive: boolean;
+        }>(prompt, "cognitiveGraph.review");
+
+        totalTokens += tokensUsed;
+
+        if (data) {
+          // 保存复盘记录
+          const { randomUUID } = await import("node:crypto");
+          const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
+          await withDaaPgClient(async ({ query }) => {
+            await query(
+              `INSERT INTO daa_thesis_reviews (id, thread_id, review_window, thesis_at_time, conviction_at_time, actual_outcome, accuracy_score, lessons_learned)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [randomUUID(), thread.id, "30d", thread.thesisText, thread.conviction, data.actualOutcome, data.accuracyScore, data.lesson],
+            );
+          });
+
+          // 生成教训记忆
+          if (data.lesson) {
+            const emb = await generateEmbedding(data.lesson);
+            await memoryStore.createMemory({
+              memoryType: "lesson",
+              content: data.lesson,
+              relevanceTags: thread.tags,
+              embedding: emb,
+            });
+          }
+
+          // 更新 thesis：设定下次复盘或归档
+          if (data.shouldArchive) {
+            await thesisStore.updateThesis(thread.id, { status: "archived" });
+          } else {
+            await thesisStore.updateThesis(thread.id, {
+              reviewAt: new Date(Date.now() + 30 * 86400000),
+            });
+          }
+        }
+
+        traces.push({
+          node: "review",
+          threadId: thread.id,
+          input: thread.title,
+          output: data ? `accuracy=${data.accuracyScore}, archive=${data.shouldArchive}` : "no result",
+          tokensUsed,
+          durationMs: Date.now() - t0,
+        });
+      } catch (e) {
+        logSwallowed(`cognitiveGraph.review.${thread.id}`, e);
+      }
+    }
+
+    return { totalTokens, reasoningTraces: traces };
+  } catch (e) {
+    logSwallowed("cognitiveGraph.review", e);
+    return { errors: [`review: ${e instanceof Error ? e.message : String(e)}`] };
+  }
+}
+
 // ── Graph 组装 ──
 
 function buildCognitiveGraph() {
@@ -303,15 +542,30 @@ function buildCognitiveGraph() {
     .addNode("observe", observeNode)
     .addNode("prioritize", prioritizeNode)
     .addNode("investigate", investigateNode)
+    .addNode("reflect", reflectNode)
+    .addNode("next_target", loadNextTarget)
+    .addNode("review", reviewNode)
     .addEdge(START, "observe")
     .addEdge("observe", "prioritize")
     .addConditionalEdges("prioritize", (state: CognitiveState) => {
       if (state.currentTarget && state.currentThread) return "investigate";
-      return END; // 无调查目标 → 结束
+      return "review"; // 无调查目标 → 跳到复盘
     })
-    .addEdge("investigate", END); // Weekend 1：调查完直接结束
-
-  // Weekend 2 将添加：investigate → reflect → next_target → investigate 循环
+    .addConditionalEdges("investigate", (state: CognitiveState) => {
+      if (state.investigateResult?.thesisChanged) return "reflect";
+      // conviction 没变 → 直接到下一个目标
+      if (state.investigationQueue.length > 1) return "next_target";
+      return "review";
+    })
+    .addConditionalEdges("reflect", (state: CognitiveState) => {
+      if (state.investigationQueue.length > 1) return "next_target";
+      return "review";
+    })
+    .addConditionalEdges("next_target", (state: CognitiveState) => {
+      if (state.currentTarget) return "investigate";
+      return "review";
+    })
+    .addEdge("review", END);
 
   const checkpointer = new MemorySaver();
   return graph.compile({ checkpointer });
