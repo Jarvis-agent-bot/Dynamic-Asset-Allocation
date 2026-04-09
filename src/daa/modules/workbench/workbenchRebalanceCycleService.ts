@@ -33,7 +33,7 @@ import type {
 } from "./workbenchTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-import { buildUnifiedRequestFromStore, buildWorkbenchBootstrap } from "./workbenchReadService";
+import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
 import {
   appendTriggerEventSafe,
@@ -370,7 +370,7 @@ export async function generateWorkbenchRebalanceCycle(
 
   const llmDecisionSnapshot: Record<string, unknown> | null = {
     status: agentResult.agentStatus,
-    agentMode: "cognitive",
+    agentMode: "cognitive", // Cognitive Agent OS 是唯一模式
     summary: agentResult.llmSummary,
     marketRegime: agentResult.marketRegime,
     tokensUsed: agentResult.tokensUsed,

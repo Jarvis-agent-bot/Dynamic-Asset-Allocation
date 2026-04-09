@@ -57,15 +57,6 @@ export type DaaStrategyParams = {
     confidenceWeights: { human: number; news: number; technical: number; valuation: number };
     macroCycleAdjustments: Record<string, number>;
   };
-  decisionFusion: {
-    highConfidencePenalty: number;
-    lowConfidencePenalty: number;
-    noLlmDegradation: number;
-    conflictRecovery: number;
-    deselectThreshold: number;
-    confidenceGate: number;
-    respectLlmWeights: boolean;
-  };
   marketRegime: {
     riskOffThreshold: number;
     riskOnThreshold: number;
@@ -89,15 +80,6 @@ export const DEFAULT_STRATEGY_PARAMS: DaaStrategyParams = {
       "recovery:EQUITY": 3, "recovery:ETF": 3,
     },
   },
-  decisionFusion: {
-    highConfidencePenalty: 0.35,
-    lowConfidencePenalty: 0.55,
-    noLlmDegradation: 0.8,
-    conflictRecovery: 1.4,
-    deselectThreshold: 0.15,
-    confidenceGate: 40,
-    respectLlmWeights: false,
-  },
   marketRegime: {
     riskOffThreshold: 65,
     riskOnThreshold: 40,
@@ -111,7 +93,6 @@ export function resolveStrategyParams(
   if (!partial) return DEFAULT_STRATEGY_PARAMS;
   const d = DEFAULT_STRATEGY_PARAMS;
   const sf = partial.signalFusion;
-  const df = partial.decisionFusion;
   return {
     signalFusion: {
       conflictPenalties: sf?.conflictPenalties ?? d.signalFusion.conflictPenalties,
@@ -124,16 +105,11 @@ export function resolveStrategyParams(
       confidenceWeights: { ...d.signalFusion.confidenceWeights, ...sf?.confidenceWeights },
       macroCycleAdjustments: sf?.macroCycleAdjustments ?? d.signalFusion.macroCycleAdjustments,
     },
-    decisionFusion: { ...d.decisionFusion, ...df },
     marketRegime: { ...d.marketRegime, ...partial.marketRegime },
   };
 }
 
-export type DaaAgentMode = "cognitive" | "legacy";
-
 export type DaaSystemConfig = {
-  /** Cognitive Agent OS 模式。'cognitive' 使用 thesis-driven Agent，'legacy' 使用旧 pipeline。 */
-  agentMode?: DaaAgentMode;
   strategy: {
     account: {
       baseCurrency: CurrencyCode;
