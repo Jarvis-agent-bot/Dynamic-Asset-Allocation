@@ -8,6 +8,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
+import AgentRail from "./AgentRail";
 import { cn } from "@/lib/utils";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
@@ -16,6 +17,10 @@ type Props = {
 };
 
 const SECTION_META: Record<string, { label: string; hint: string }> = {
+  today: {
+    label: "Agent",
+    hint: "认知 Agent 日报与研究论点",
+  },
   portfolio: {
     label: "持仓",
     hint: "资产配置与观察列表管理",
@@ -41,7 +46,8 @@ const SECTION_META: Record<string, { label: string; hint: string }> = {
 const DEFAULT_SECTION_META = { label: "控制台", hint: "" };
 
 function resolveSection(pathname: string): string {
-  if (pathname.startsWith("/daa/dashboard/portfolio") || pathname.startsWith("/daa/dashboard/today")) return "portfolio";
+  if (pathname.startsWith("/daa/dashboard/today")) return "today";
+  if (pathname.startsWith("/daa/dashboard/portfolio")) return "portfolio";
   if (pathname.startsWith("/daa/dashboard/rebalance")) return "rebalance";
   if (pathname.startsWith("/daa/dashboard/trades")) return "trades";
   if (pathname.startsWith("/daa/dashboard/strategy-lab")) return "strategy-lab";
@@ -171,9 +177,12 @@ export default function DashboardShell({ children }: Props) {
             id="daa-dashboard-main-content"
             className="min-w-0 w-full max-w-full overflow-x-clip px-4 py-5 sm:px-5 lg:px-7 lg:py-6"
           >
-            <div className="mx-auto max-w-[1440px]">{children}</div>
+            <div className="mx-auto max-w-[1440px] xl:mr-[280px]">{children}</div>
           </section>
         </main>
+
+        {/* Agent Rail — 全站常驻认知面板 */}
+        <AgentRail />
       </div>
     </>
   );

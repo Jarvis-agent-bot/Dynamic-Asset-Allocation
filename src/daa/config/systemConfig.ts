@@ -129,7 +129,11 @@ export function resolveStrategyParams(
   };
 }
 
+export type DaaAgentMode = "cognitive" | "legacy";
+
 export type DaaSystemConfig = {
+  /** Cognitive Agent OS 模式。'cognitive' 使用 thesis-driven Agent，'legacy' 使用旧 pipeline。 */
+  agentMode?: DaaAgentMode;
   strategy: {
     account: {
       baseCurrency: CurrencyCode;

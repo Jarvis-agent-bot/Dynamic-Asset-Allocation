@@ -1,6 +1,13 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import AgentBriefingView from "./_components/AgentBriefingView";
 
-/** 投委会页面已合并至持仓页。保留路由以兼容旧链接。 */
+/** Agent 日报 — Cognitive Agent OS 的主入口 */
 export default function TodayPage() {
-  redirect("/daa/dashboard/portfolio");
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
+      <Suspense fallback={<div className="py-20 text-center text-sm text-[var(--muted)]">加载中...</div>}>
+        <AgentBriefingView />
+      </Suspense>
+    </div>
+  );
 }
