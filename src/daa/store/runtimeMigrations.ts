@@ -593,6 +593,106 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+
+  // ── Cognitive Agent OS ──
+
+  {
+    id: "20260409_pgvector_extension",
+    async apply(query) {
+      await query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    },
+  },
+  {
+    id: "20260409_cognitive_agent_tables",
+    async apply(query) {
+      // 研究线索：Agent 的认知单元
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_research_threads (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          thesis_text TEXT NOT NULL,
+          conviction TEXT NOT NULL DEFAULT 'medium',
+          invalidation_conditions TEXT,
+          review_at TIMESTAMPTZ,
+          asset_keys TEXT[] DEFAULT '{}',
+          tags TEXT[] DEFAULT '{}',
+          priority_score NUMERIC DEFAULT 0.5,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+
+      // 证据链：支撑或反驳 thesis 的每条证据
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_evidence_items (
+          id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL REFERENCES daa_research_threads(id) ON DELETE CASCADE,
+          evidence_type TEXT NOT NULL,
+          source TEXT NOT NULL,
+          content TEXT NOT NULL,
+          data_snapshot JSONB,
+          confidence NUMERIC DEFAULT 0.5,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_evidence_thread ON daa_evidence_items(thread_id, created_at DESC)`);
+
+      // Agent 运行记录
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_agent_runs (
+          id TEXT PRIMARY KEY,
+          trigger TEXT NOT NULL,
+          langgraph_thread_id TEXT,
+          status TEXT NOT NULL DEFAULT 'running',
+          target_thread_ids TEXT[],
+          graph_state JSONB,
+          tools_called JSONB DEFAULT '[]',
+          reasoning_traces JSONB DEFAULT '[]',
+          surprises JSONB DEFAULT '[]',
+          briefing JSONB,
+          total_tokens INT DEFAULT 0,
+          total_cost_usd NUMERIC DEFAULT 0,
+          duration_ms INT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          completed_at TIMESTAMPTZ
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_agent_runs_created ON daa_agent_runs(created_at DESC)`);
+
+      // Agent 长期记忆（pgvector 语义检索）
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_agent_memory (
+          id TEXT PRIMARY KEY,
+          memory_type TEXT NOT NULL,
+          content TEXT NOT NULL,
+          source_run_ids TEXT[] DEFAULT '{}',
+          relevance_tags TEXT[] DEFAULT '{}',
+          embedding vector(384),
+          strength NUMERIC DEFAULT 1.0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_accessed TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+
+      // 决策复盘
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_thesis_reviews (
+          id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL REFERENCES daa_research_threads(id) ON DELETE CASCADE,
+          review_window TEXT NOT NULL,
+          thesis_at_time TEXT NOT NULL,
+          conviction_at_time TEXT NOT NULL,
+          actual_outcome TEXT,
+          accuracy_score NUMERIC,
+          lessons_learned TEXT,
+          generated_memory_ids TEXT[] DEFAULT '{}',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_thesis_reviews_thread ON daa_thesis_reviews(thread_id, created_at DESC)`);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

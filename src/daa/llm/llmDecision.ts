@@ -140,17 +140,7 @@ function formatPositionConstraints(constraints: LlmDecisionInput["positionConstr
   return lines.join("\n");
 }
 
-/**
- * P0-1: 清理用户/信号输入后再注入 LLM prompt，防止 prompt injection。
- * 移除反引号、方括号、换行，限制最大长度。
- */
-function sanitizeForPrompt(value: string, maxLen = 100): string {
-  return value
-    .replace(/[`\[\]\n\r]/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim()
-    .slice(0, maxLen);
-}
+import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prompt Builder

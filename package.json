@@ -17,6 +17,9 @@
     "typecheck:core": "tsc -p tsconfig.core.json"
   },
   "dependencies": {
+    "@langchain/core": "1.1.39",
+    "@langchain/deepseek": "1.0.23",
+    "@langchain/langgraph": "1.2.8",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-slot": "^1.2.4",
@@ -30,6 +33,7 @@
     "lucide-react": "^0.564.0",
     "next": "14.2.5",
     "pg": "^8.18.0",
+    "pgvector": "0.2.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "recharts": "^3.7.0",
