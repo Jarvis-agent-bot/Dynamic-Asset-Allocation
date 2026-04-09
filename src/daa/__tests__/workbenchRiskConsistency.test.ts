@@ -1,45 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
 
-vi.mock("@/src/daa/modules/workbench/decisionFusion", async () => {
-  const actual = await vi.importActual<typeof import("@/src/daa/modules/workbench/decisionFusion")>(
-    "@/src/daa/modules/workbench/decisionFusion",
-  );
-  return {
-    ...actual,
-    fuseDecision: vi.fn((input: Parameters<typeof actual.fuseDecision>[0]) => ({
-      proposals: input.draftProposals.map((proposal) => ({
-        ...proposal,
-        suggestedQty: proposal.suggestedQty * 0.7,
-        suggestedNotional: proposal.suggestedNotional * 0.7,
-        decisionContext: {
-          driftReason: proposal.reason,
-          signalAction: null,
-          signalScore: null,
-          signalConfidence: null,
-          signalConflict: false,
-          llmAdjustment: null,
-          llmConfidence: null,
-          llmRationale: null,
-          marketRegime: null,
-          ruleBasedMarketRegime: null,
-          llmMarketRegime: null,
-          effectiveMarketRegime: null,
-          marketScope: null,
-          marketScopeLabel: null,
-          marketIndicatorFlags: [],
-          conflictFlags: ["mock scale 70%"],
-          finalQtyMultiplier: 0.7,
-        },
-      })),
-      marketRegime: null,
-      overallConfidence: 0.7,
-      fusionWarnings: [],
-      llmStatus: "skipped",
-      llmSummary: "mocked fusion",
+// Agent 模式：mock enhanceProposalsWithAgent 替代旧的 fuseDecision mock
+vi.mock("@/src/daa/agent/agentRebalanceAdapter", () => ({
+  enhanceProposalsWithAgent: vi.fn(async (input: { draftProposals: Array<{ suggestedQty: number; suggestedNotional: number; reason: string; [k: string]: unknown }> }) => ({
+    proposals: input.draftProposals.map((p) => ({
+      ...p,
+      suggestedQty: Math.round(p.suggestedQty * 0.7),
+      suggestedNotional: p.suggestedNotional * 0.7,
+      reason: p.reason + " | Agent: mock (medium)",
+      decisionContext: {
+        driftReason: p.reason,
+        signalAction: "watch",
+        signalScore: 60,
+        signalConfidence: 60,
+        signalConflict: false,
+        llmAdjustment: "reduce_size",
+        llmConfidence: 55,
+        llmRationale: "[Agent] mock thesis (medium)",
+        finalQtyMultiplier: 0.7,
+        conflictFlags: [],
+        marketRegime: null,
+      },
     })),
-  };
-});
+    llmSummary: "mocked agent",
+    marketRegime: null,
+    agentStatus: "ok",
+    tokensUsed: 0,
+  })),
+}));
 
 import {
   createDaaRebalanceCycle,

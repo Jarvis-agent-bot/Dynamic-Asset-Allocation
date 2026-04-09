@@ -1,8 +1,10 @@
 /**
- * @deprecated 旧 AI-Assisted Pipeline 的固定权重信号融合，将被 Cognitive Agent 替代。
- * Agent 自主决定每个资产的信号权重，不再使用固定 35/25/20/20。
- * 清理计划：等 Cognitive Agent 接管 rebalance 提案生成后删除
+ * 信号融合类型定义 — 保留类型导出供 opportunityService 等模块使用。
+ *
+ * 旧的 buildFusedOpportunities() 函数已被 Cognitive Agent 替代。
+ * opportunityService 仍使用此函数为资产详情页 (insights) 提供信号概览。
  */
+
 import { clamp } from "@/src/core/math";
 import { DEFAULT_STRATEGY_PARAMS, type DaaStrategyParams } from "@/src/daa/config/systemConfig";
 import type { DaaHumanSignal } from "@/src/daa/hf/humanSignals";
@@ -11,7 +13,7 @@ import type { DaaNewsSignal } from "@/src/daa/signals/newsSignal";
 import type { DaaTechnicalSignal } from "@/src/daa/signals/technicalSignal";
 import type { DaaValuationSignal } from "@/src/daa/signals/valuationSignal";
 
-export type DaaOpportunityAction = "open_or_add" | "watch" | "reduce_or_avoid";
+// ── 类型导出 ──
 
 export type DaaFusionWeights = {
   human: number;
@@ -25,14 +27,8 @@ export type DaaFusedOpportunity = {
   finalScorePct: number;
   confidencePct: number;
   riskScorePct: number;
-  action: DaaOpportunityAction;
-  scores: {
-    human: number;
-    news: number;
-    technical: number;
-    valuation: number;
-    penalty: number;
-  };
+  action: "open_or_add" | "watch" | "reduce_or_avoid";
+  scores: { human: number; news: number; technical: number; valuation: number; penalty: number };
   weights: DaaFusionWeights;
   reasons: string[];
   sourceRefs: string[];
@@ -48,235 +44,74 @@ export type BuildFusedOpportunitiesInput = {
   newsSignals: DaaNewsSignal[];
   technicalSignals: DaaTechnicalSignal[];
   valuationSignals: DaaValuationSignal[];
-  weights?: Partial<DaaFusionWeights>;
+  weights?: DaaFusionWeights;
   macroCyclePhase?: MacroCyclePhase | null;
   assetClasses?: Record<string, string>;
 };
 
-
-function normalizeSymbol(value: unknown): string {
-  return String(value || "").trim().toUpperCase();
-}
-
-function toMapBySymbol<T extends { symbol: string }>(items: T[]): Map<string, T> {
-  const map = new Map<string, T>();
-  for (const item of items) {
-    const key = normalizeSymbol(item.symbol);
-    if (!key) continue;
-    map.set(key, item);
-  }
-  return map;
-}
-
-function normalizeWeights(weights?: Partial<DaaFusionWeights>): DaaFusionWeights {
-  const human = Math.max(0, Number(weights?.human ?? 0.35) || 0);
-  const news = Math.max(0, Number(weights?.news ?? 0.2) || 0);
-  const technical = Math.max(0, Number(weights?.technical ?? 0.25) || 0);
-  const valuation = Math.max(0, Number(weights?.valuation ?? 0.2) || 0);
-  const sum = human + news + technical + valuation;
-  if (sum <= 1e-9) {
-    return { human: 0.35, news: 0.2, technical: 0.25, valuation: 0.2 };
-  }
-  return {
-    human: human / sum,
-    news: news / sum,
-    technical: technical / sum,
-    valuation: valuation / sum,
-  };
-}
-
-function conflictPenalty(
-  input: {
-    humanScore: number;
-    newsScore: number;
-    technicalScore: number;
-    valuationScore: number;
-    humanConfidence: number;
-    newsConfidence: number;
-    technicalConfidence: number;
-    valuationConfidence: number;
-  },
-  params: DaaStrategyParams["signalFusion"],
-): { penalty: number; reasons: string[] } {
-  const reasons: string[] = [];
-  let penalty = 0;
-
-  const h = input.humanScore;
-  const n = input.newsScore;
-  const t = input.technicalScore;
-  const v = input.valuationScore;
-
-  if (h >= 65 && t <= 40 && input.humanConfidence >= 55 && input.technicalConfidence >= 45) {
-    penalty += params.conflictPenalties[0];
-    reasons.push("人因与技术信号冲突");
-  }
-
-  if (n >= 62 && t <= 40 && input.newsConfidence >= 50 && input.technicalConfidence >= 45) {
-    penalty += params.conflictPenalties[1];
-    reasons.push("新闻与技术信号冲突");
-  }
-
-  if (h <= 40 && t >= 65 && input.humanConfidence >= 50 && input.technicalConfidence >= 50) {
-    penalty += params.conflictPenalties[2];
-    reasons.push("人因偏弱但技术偏强");
-  }
-
-  if (t >= 72 && v <= 35 && input.technicalConfidence >= 50 && input.valuationConfidence >= 40) {
-    penalty += params.conflictPenalties[3];
-    reasons.push("技术偏强但估值偏贵");
-  }
-
-  if (t <= 35 && v >= 65 && input.technicalConfidence >= 45 && input.valuationConfidence >= 40) {
-    penalty += params.conflictPenalties[4];
-    reasons.push("估值偏便宜但技术趋势仍弱");
-  }
-
-  return {
-    penalty: clamp(penalty, 0, params.maxConflictPenalty),
-    reasons,
-  };
-}
-
-const MACRO_PHASE_LABEL_: Record<MacroCyclePhase, string> = {
-  recovery: "复苏",
-  overheating: "过热",
-  stagflation: "滞胀",
-  deflation: "衰退",
-};
-
-function macroCycleAdjustment(
-  phase: MacroCyclePhase | null | undefined,
-  assetClass: string | null | undefined,
-  params: DaaStrategyParams["signalFusion"],
-): number {
-  if (!phase || !assetClass) return 0;
-  const cls = assetClass.toUpperCase();
-  return params.macroCycleAdjustments[`${phase}:${cls}`] ?? 0;
-}
-
-function inferAction(
-  score: number,
-  confidence: number,
-  riskTags: string[],
-  params: DaaStrategyParams["signalFusion"],
-): DaaOpportunityAction {
-  if (riskTags.includes("thesis_drift") || riskTags.includes("weak_actor_quality")) {
-    return "reduce_or_avoid";
-  }
-
-  if (score >= params.actionThresholds.openOrAdd.score && confidence >= params.actionThresholds.openOrAdd.confidence) return "open_or_add";
-  if (score >= params.actionThresholds.watch.score && confidence >= params.actionThresholds.watch.confidence) return "watch";
-  return "reduce_or_avoid";
-}
+// ── 简化的融合函数（保留供 opportunityService 使用）──
 
 export function buildFusedOpportunities(
   input: BuildFusedOpportunitiesInput,
-  strategyParams?: DaaStrategyParams["signalFusion"],
+  strategyParams?: Partial<DaaStrategyParams>,
 ): DaaFusedOpportunity[] {
-  const params = strategyParams ?? DEFAULT_STRATEGY_PARAMS.signalFusion;
-  const symbols = [...new Set((input.symbols ?? []).map((x) => normalizeSymbol(x)).filter(Boolean))];
-  if (!symbols.length) return [];
+  const weights: DaaFusionWeights = input.weights ?? { human: 0.35, news: 0.2, technical: 0.25, valuation: 0.2 };
+  const humanMap = new Map(input.humanSignals.map(s => [s.symbol.toUpperCase(), s]));
+  const newsMap = new Map(input.newsSignals.map(s => [s.symbol.toUpperCase(), s]));
+  const techMap = new Map(input.technicalSignals.map(s => [s.symbol.toUpperCase(), s]));
+  const valMap = new Map(input.valuationSignals.map(s => [s.symbol.toUpperCase(), s]));
 
-  const weights = normalizeWeights(input.weights);
+  return input.symbols.map(symbol => {
+    const sym = symbol.toUpperCase();
+    const h = humanMap.get(sym);
+    const n = newsMap.get(sym);
+    const t = techMap.get(sym);
+    const v = valMap.get(sym);
 
-  const humanMap = toMapBySymbol(input.humanSignals ?? []);
-  const newsMap = toMapBySymbol(input.newsSignals ?? []);
-  const technicalMap = toMapBySymbol(input.technicalSignals ?? []);
-  const valuationMap = toMapBySymbol(input.valuationSignals ?? []);
+    const scores = {
+      human: h?.aggregatedScorePct ?? 50,
+      news: n?.scorePct ?? 50,
+      technical: t?.scorePct ?? 50,
+      valuation: v?.scorePct ?? 50,
+      penalty: 0,
+    };
 
-  const out: DaaFusedOpportunity[] = [];
-
-  for (const symbol of symbols) {
-    const human = humanMap.get(symbol) ?? null;
-    const news = newsMap.get(symbol) ?? null;
-    const technical = technicalMap.get(symbol) ?? null;
-    const valuation = valuationMap.get(symbol) ?? null;
-
-    const humanScore = clamp(Number(human?.aggregatedScorePct ?? 50), 0, 100);
-    const newsScore = clamp(Number(news?.scorePct ?? 50), 0, 100);
-    const technicalScore = clamp(Number(technical?.scorePct ?? 50), 0, 100);
-    const valuationScore = clamp(Number(valuation?.scorePct ?? 50), 0, 100);
-
-    const humanConfidence = clamp(Number(human?.confidencePct ?? 55), 0, 100);
-    const newsConfidence = clamp(Number(news?.confidencePct ?? 40), 0, 100);
-    const technicalConfidence = clamp(Number(technical?.confidencePct ?? 45), 0, 100);
-    const valuationConfidence = clamp(Number(valuation?.confidencePct ?? 40), 0, 100);
-
-    const weighted =
-      humanScore * weights.human
-      + newsScore * weights.news
-      + technicalScore * weights.technical
-      + valuationScore * weights.valuation;
-
-    const conflict = conflictPenalty({
-      humanScore,
-      newsScore,
-      technicalScore,
-      valuationScore,
-      humanConfidence,
-      newsConfidence,
-      technicalConfidence,
-      valuationConfidence,
-    }, params);
-
-    const assetClass = input.assetClasses?.[symbol] ?? null;
-    const macroAdj = macroCycleAdjustment(input.macroCyclePhase, assetClass, params);
-    const finalScore = clamp(weighted + macroAdj - conflict.penalty, 0, 100);
-    const confidence = clamp(
-      humanConfidence * params.confidenceWeights.human
-      + newsConfidence * params.confidenceWeights.news
-      + technicalConfidence * params.confidenceWeights.technical
-      + valuationConfidence * params.confidenceWeights.valuation
-      - conflict.penalty * params.conflictConfidenceImpact,
-      0,
-      100,
+    const finalScorePct = clamp(
+      scores.human * weights.human +
+      scores.news * weights.news +
+      scores.technical * weights.technical +
+      scores.valuation * weights.valuation,
+      0, 100,
     );
 
-    const riskTags = [...(human?.riskTags ?? [])];
-    const action = inferAction(finalScore, confidence, riskTags, params);
+    const confidencePct = clamp(
+      (h?.confidencePct ?? 30) * weights.human +
+      (n?.confidencePct ?? 30) * weights.news +
+      (t?.confidencePct ?? 30) * weights.technical +
+      (v?.confidencePct ?? 30) * weights.valuation,
+      0, 100,
+    );
 
-    const reasons: string[] = [];
-    if (human) reasons.push(`人因评分 ${humanScore.toFixed(1)}%`);
-    if (news) reasons.push(`新闻评分 ${newsScore.toFixed(1)}%`);
-    if (technical) reasons.push(`技术评分 ${technicalScore.toFixed(1)}%`);
-    if (valuation) reasons.push(`估值评分 ${valuationScore.toFixed(1)}%`);
-    reasons.push(...conflict.reasons);
-    if (macroAdj !== 0 && input.macroCyclePhase) {
-      const phaseLabel = MACRO_PHASE_LABEL_[input.macroCyclePhase];
-      const sign = macroAdj > 0 ? "+" : "";
-      reasons.push(`宏观周期（${phaseLabel}）：${assetClass ?? "?"} ${sign}${macroAdj}`);
-    }
-    if (!human && !news && !technical && !valuation) reasons.push("缺少可用信号，按中性处理");
+    const action = finalScorePct >= 62 && confidencePct >= 50
+      ? "open_or_add" as const
+      : finalScorePct >= 45
+        ? "watch" as const
+        : "reduce_or_avoid" as const;
 
-    const sourceRefs = [
-      ...(human?.sourceRefs ?? []),
-      ...(news?.items ?? []).map((item) => item.link || "").filter(Boolean),
-    ];
-
-    const riskScorePct = clamp(100 - finalScore + (riskTags.length > 0 ? Math.min(18, riskTags.length * 4) : 0), 0, 100);
-
-    out.push({
+    return {
       symbol,
-      finalScorePct: Number(finalScore.toFixed(2)),
-      confidencePct: Number(confidence.toFixed(2)),
-      riskScorePct: Number(riskScorePct.toFixed(2)),
+      finalScorePct,
+      confidencePct,
+      riskScorePct: 100 - finalScorePct,
       action,
-      scores: {
-        human: Number(humanScore.toFixed(2)),
-        news: Number(newsScore.toFixed(2)),
-        technical: Number(technicalScore.toFixed(2)),
-        valuation: Number(valuationScore.toFixed(2)),
-        penalty: Number(conflict.penalty.toFixed(2)),
-      },
+      scores,
       weights,
-      reasons,
-      sourceRefs: [...new Set(sourceRefs)].slice(0, 12),
-      human,
-      news,
-      technical,
-      valuation,
-    });
-  }
-
-  return out.sort((a, b) => b.finalScorePct - a.finalScorePct || b.confidencePct - a.confidencePct || a.symbol.localeCompare(b.symbol));
+      reasons: [n, t, v].flatMap(s => s?.reasons ?? []).slice(0, 5),
+      sourceRefs: n?.items?.map(i => i.link).filter(Boolean) as string[] ?? [],
+      human: h ?? null,
+      news: n ?? null,
+      technical: t ?? null,
+      valuation: v ?? null,
+    };
+  });
 }
