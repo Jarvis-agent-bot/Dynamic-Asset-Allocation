@@ -221,8 +221,6 @@ export type DaaSystemConfig = {
       model: string;
       timeoutMs: number;
       enabledInDecision: boolean;
-      /** 规划器使用的模型（默认与决策器相同） */
-      plannerModel?: string;
     };
     marketIndicators: DaaMarketIndicatorsConfig;
   };

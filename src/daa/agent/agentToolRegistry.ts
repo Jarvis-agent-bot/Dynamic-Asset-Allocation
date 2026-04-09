@@ -1,8 +1,7 @@
 /**
  * Agent Tool Registry — 通用 Tool 抽象接口。
  *
- * Phase 2: 供规划器 prompt 参考（让 LLM 知道可以请求哪些信号）。
- * Phase 3: 供 ReAct Agent 直接调用（tool-use function calling）。
+ * 供 Cognitive Agent 的 prompt 参考，定义可请求的信号类型。
  */
 
 // ─── Tool Definition（描述型，不含执行逻辑）────────────────────────

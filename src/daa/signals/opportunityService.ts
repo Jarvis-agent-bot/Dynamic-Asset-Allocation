@@ -74,7 +74,7 @@ export type SignalPlanEntry = {
 export async function buildOpportunityPanel(input: {
   symbols: string[];
   fundCodes?: string[];
-  /** Phase 2: 选择性信号采集 — 由规划器 LLM 生成 */
+  /** 选择性信号采集（用于 insights 展示筛选） */
   signalPlan?: Map<string, SignalPlanEntry>;
 }): Promise<DaaOpportunityPanel> {
   const symbols = [...new Set((input.symbols ?? []).map((item) => normalizeSymbol(item)).filter(Boolean))];
@@ -91,7 +91,7 @@ export async function buildOpportunityPanel(input: {
   const newsEnabled = newsConfig.enabled !== false;
   const valuationEnabled = newsConfig.valuationEnabled !== false;
 
-  // Phase 2: 如果有 signalPlan，只对 plan 中包含且指定了该信号的 symbol 采集
+  // 如果有 signalPlan，只对 plan 中包含且指定了该信号的 symbol 采集
   const needsSignal = (sym: string, signal: SignalType): boolean => {
     if (!plan) return true; // 无 plan 时全量采集
     const entry = plan.get(sym);

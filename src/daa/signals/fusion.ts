@@ -1,8 +1,7 @@
 /**
- * 信号融合类型定义 — 保留类型导出供 opportunityService 等模块使用。
+ * 信号融合 — 仅用于资产详情页 (insights) 的信号概览展示，不参与再平衡决策。
  *
- * 旧的 buildFusedOpportunities() 函数已被 Cognitive Agent 替代。
- * opportunityService 仍使用此函数为资产详情页 (insights) 提供信号概览。
+ * 再平衡决策由 Cognitive Agent (cognitiveGraph.ts) 驱动。
  */
 
 import { clamp } from "@/src/core/math";

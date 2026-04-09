@@ -6,16 +6,12 @@ DAA Console 是面向个人投资者的单组合动态资产配置系统，品�
 
 ### 架构模式：Cognitive Agent OS（AI-Native）
 
-系统已从"AI-Assisted Pipeline"（固定权重信号融合 → LLM 打分 → 硬 guardrails）升级为 **thesis-driven Cognitive Agent**：
+系统采用 **thesis-driven Cognitive Agent** 架构：
 
 ```
-旧架构 (v0.2.0, @deprecated):
-  Cron → 信号 → 固定权重融合 → LLM Planner → LLM Decider → Guardrails → 执行
-
-新架构 (Cognitive Agent OS):
-  observe → prioritize → investigate ⇄ reflect → review → surface → END
-     ↑                                                         ↓
-  cron/手动                                              TG 日报推送
+observe → prioritize → investigate ⇄ reflect → review → surface → END
+   ↑                                                         ↓
+cron/手动                                              TG 日报推送
 ```
 
 核心理念：系统不问"该买什么"，而是维护一组持续演化的**投资论点（Thesis）**，每天问"我现在最可能错在哪里"。
@@ -167,25 +163,6 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 - Today 页 → Agent Briefing 视图
 - Agent Rail → 全站右侧认知面板（xl 屏幕）
 
-### AI 决策架构（Structured Agent）— @deprecated
-
-> 旧架构，通过 `agentMode: 'legacy'` 访问。标记为 @deprecated。
-
-再平衡决策流程采用双阶段 LLM 架构：
-
-```
-漂移计算 → 规划器(LLM) → 选择性信号采集 → 融合 → 决策器(LLM) → Guardrails → 执行
-```
-
-**规划器**（`src/daa/agent/llmPlanner.ts` @deprecated）
-**决策器**（`src/daa/llm/llmDecision.ts` @deprecated）
-**Guardrails**（`src/daa/modules/workbench/decisionFusion.ts` @deprecated）
-**信号融合**（`src/daa/signals/fusion.ts` @deprecated）
-
-### Signal Fusion (Four Dimensions) — @deprecated
-Default weights: Human 35% + Technical 25% + News 20% + Valuation 20%
-（Cognitive Agent 模式下不使用固定权重，Agent 自主决定每个资产的信号权重）
-
 ### Market Indicators (7 dimensions)
 - `vix` — S&P 500 volatility
 - `qqqSpyRatio` — Growth vs Value
@@ -291,12 +268,9 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Agent Run Store | `src/daa/agent/store/agentRunStore.ts` |
 | Thesis Bootstrap | `src/daa/agent/bootstrap.ts` |
 | Embedding (384d) | `src/daa/agent/embedding.ts` |
-| LLM 规划器 @deprecated | `src/daa/agent/llmPlanner.ts` |
-| LLM 决策器 @deprecated | `src/daa/llm/llmDecision.ts` |
-| 决策融合 @deprecated | `src/daa/modules/workbench/decisionFusion.ts` |
-| 信号融合 @deprecated | `src/daa/signals/fusion.ts` |
 | Agent Tool 注册表 | `src/daa/agent/agentToolRegistry.ts` |
-| Agent 学习记忆 (旧) | `src/daa/agent/agentLearningRepo.ts` |
+| Agent 学习记忆 | `src/daa/agent/agentLearningRepo.ts` |
+| 信号概览（insights 展示用） | `src/daa/signals/fusion.ts` |
 | 决策后验服务 | `src/daa/modules/today/decisionOutcomeService.ts` |
 
 ## Development Conventions

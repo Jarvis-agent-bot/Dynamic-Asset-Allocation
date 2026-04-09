@@ -370,7 +370,6 @@ export async function generateWorkbenchRebalanceCycle(
 
   const llmDecisionSnapshot: Record<string, unknown> | null = {
     status: agentResult.agentStatus,
-    agentMode: "cognitive",
     summary: agentResult.llmSummary,
     marketRegime: agentResult.marketRegime,
     tokensUsed: agentResult.tokensUsed,

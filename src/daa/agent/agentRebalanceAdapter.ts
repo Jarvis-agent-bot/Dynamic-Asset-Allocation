@@ -1,8 +1,7 @@
 /**
  * Agent Rebalance Adapter — 用 Cognitive Agent 的 thesis 数据驱动调仓决策
  *
- * 替代旧 pipeline 的 Steps B.5-E（planner → signal fusion → LLM decision → guardrails）。
- * 保留 Step A（纯数学漂移计算）和 Step F-G（风控 + 持久化）。
+ * 基于 thesis conviction 调整漂移提案量，保留纯数学漂移计算和风控持久化。
  *
  * 逻辑：
  * 1. 从 daa_research_threads 读取每个漂移资产的 thesis + conviction

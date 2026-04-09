@@ -28,8 +28,6 @@ export type LlmRuntimeConfig = {
   endpoint: string;
   apiKey: string;
   timeoutMs: number;
-  /** 规划器使用的模型（便宜/快速） */
-  plannerModel?: string;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,7 +100,6 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
     endpoint: normalizeText(endpoint, defaults.endpoint),
     apiKey,
     timeoutMs,
-    plannerModel: config.plannerModel ? String(config.plannerModel) : undefined,
   };
 }
 
