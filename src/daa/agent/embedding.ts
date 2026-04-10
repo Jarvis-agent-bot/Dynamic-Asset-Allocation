@@ -88,7 +88,7 @@ async function resolveEmbeddingConfig(): Promise<ResolvedEmbeddingConfig | null>
 
   const defaults = PROVIDER_DEFAULTS[provider];
 
-  // 2. 读取 API Key：专用 env > DB secrets > 复用 LLM key
+  // 2. 读取 API Key：DB secrets（embedding_api_key）> 复用 LLM key
   let apiKey = "";
   try {
     apiKey = await resolveSecret("embedding_api_key");
@@ -96,18 +96,27 @@ async function resolveEmbeddingConfig(): Promise<ResolvedEmbeddingConfig | null>
     // ignore
   }
   if (!apiKey) {
-    try {
-      apiKey = await resolveSecret("llm_api_key");
-    } catch {
-      apiKey = "";
+    // SiliconFlow provider 不能复用 DeepSeek 的 key，只有同 provider 时才复用
+    const llmProvider = process.env.DAA_LLM_PROVIDER?.toLowerCase().trim() || "deepseek";
+    if (provider === llmProvider || provider === "deepseek") {
+      try {
+        apiKey = await resolveSecret("llm_api_key");
+      } catch {
+        apiKey = "";
+      }
     }
   }
 
-  if (!apiKey) return null; // 无 key，降级到 hash
+  if (!apiKey) return null; // 无 key
 
-  // 3. endpoint / model 可自定义
-  const endpoint = process.env.DAA_EMBEDDING_ENDPOINT?.trim() || defaults.endpoint;
-  const model = process.env.DAA_EMBEDDING_MODEL?.trim() || defaults.model;
+  // 3. endpoint / model 可自定义（env > DB secrets > 默认值）
+  let endpoint = "";
+  try { endpoint = await resolveSecret("embedding_endpoint"); } catch { /* ignore */ }
+  if (!endpoint) endpoint = defaults.endpoint;
+
+  let model = "";
+  try { model = await resolveSecret("embedding_model"); } catch { /* ignore */ }
+  if (!model) model = defaults.model;
 
   return { provider, endpoint, model, apiKey, supportsNativeDim: defaults.supportsNativeDim };
 }

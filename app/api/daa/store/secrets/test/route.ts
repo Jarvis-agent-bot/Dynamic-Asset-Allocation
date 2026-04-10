@@ -192,6 +192,33 @@ async function testFeishu(mode: TestMode): Promise<TestResult> {
   }
 }
 
+async function testEmbedding(): Promise<TestResult> {
+  const start = Date.now();
+  try {
+    const { getEmbeddingProviderInfo, generateEmbedding } = await import("@/src/daa/agent/embedding");
+    const info = await getEmbeddingProviderInfo();
+
+    if (!info.isRealEmbedding) {
+      return { key: "embedding_api_key", success: false, message: "Embedding API Key 未配置", latencyMs: Date.now() - start };
+    }
+
+    const vec = await generateEmbedding("连通性测试");
+    const nonZero = vec.filter(v => v !== 0).length;
+    if (nonZero === 0) {
+      return { key: "embedding_api_key", success: false, message: "返回零向量，API 可能异常", latencyMs: Date.now() - start };
+    }
+
+    return {
+      key: "embedding_api_key",
+      success: true,
+      message: `连通正常 (${info.model}@${new URL(info.endpoint).hostname}, ${vec.length}维)`,
+      latencyMs: Date.now() - start,
+    };
+  } catch (e) {
+    return { key: "embedding_api_key", success: false, message: e instanceof Error ? e.message : String(e), latencyMs: Date.now() - start };
+  }
+}
+
 /** POST — test connectivity for a specific secret. */
 export async function POST(req: Request) {
   return withApiHandler(async () => {
@@ -213,6 +240,8 @@ export async function POST(req: Request) {
       result = await testFeishu(mode);
     } else if (body.key === "fred_api_key") {
       result = await testFred();
+    } else if (body.key === "embedding_api_key") {
+      result = await testEmbedding();
     }
 
     if (!result) {
