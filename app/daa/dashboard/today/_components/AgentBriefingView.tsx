@@ -40,6 +40,16 @@ interface Thesis {
   updatedAt: string;
 }
 
+interface DailyBriefing {
+  surprises: Surprise[];
+  cognitionGaps: CognitionGap[];
+  mindChangeConditions: MindChangeCondition[];
+  thesesUpdated: number;
+  memoriesCreated: number;
+  totalTokens: number;
+  estimatedCost: number;
+}
+
 interface AgentStatus {
   theses: Thesis[];
   latestRun: {
@@ -47,6 +57,7 @@ interface AgentStatus {
     status: string;
     createdAt: string;
     totalTokens: number;
+    briefing: DailyBriefing | null;
   } | null;
   memoryCount: number;
 }
@@ -120,6 +131,7 @@ export default function AgentBriefingView() {
 
   const theses = status?.theses ?? [];
   const hasTheses = theses.length > 0;
+  const briefing = status?.latestRun?.briefing ?? null;
 
   return (
     <div className="space-y-6">
@@ -183,6 +195,9 @@ export default function AgentBriefingView() {
         </div>
       )}
 
+      {/* 日报三大板块 */}
+      {briefing && <BriefingPanels briefing={briefing} />}
+
       {/* 活跃论点列表 */}
       {hasTheses && (
         <div className="space-y-3">
@@ -234,8 +249,119 @@ export default function AgentBriefingView() {
       {status?.latestRun && (
         <div className="text-xs text-[var(--faint)]">
           最近运行: {new Date(status.latestRun.createdAt).toLocaleString("zh-CN")} · {status.latestRun.status} · {status.latestRun.totalTokens} tokens
+          {briefing?.estimatedCost ? ` · $${briefing.estimatedCost.toFixed(4)}` : ""}
         </div>
       )}
     </div>
+  );
+}
+
+// ── 日报三大板块组件 ──
+
+function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
+  const hasSurprises = briefing.surprises.length > 0;
+  const hasGaps = briefing.cognitionGaps.length > 0;
+  const hasConditions = briefing.mindChangeConditions.length > 0;
+
+  if (!hasSurprises && !hasGaps && !hasConditions) return null;
+
+  return (
+    <div className="space-y-3">
+      {/* 今日意外 */}
+      {hasSurprises && (
+        <div className="rounded-xl border border-amber-500/15 bg-amber-500/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-amber-300">
+            <Zap className="h-3.5 w-3.5" />
+            今日意外
+          </h3>
+          <div className="space-y-2">
+            {briefing.surprises.slice(0, 5).map((s, i) => (
+              <div key={i} className="text-xs">
+                <div className="flex items-center gap-2">
+                  <SeverityBadge score={s.severityScore} />
+                  <span className="font-medium text-[var(--text)]">{s.title}</span>
+                </div>
+                <p className="mt-0.5 pl-7 text-[var(--muted)]">{s.description}</p>
+                {s.suggestedAction && (
+                  <p className="mt-0.5 pl-7 text-amber-400/80">→ {s.suggestedAction}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 认知缺口 */}
+      {hasGaps && (
+        <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-300">
+            <Search className="h-3.5 w-3.5" />
+            认知缺口
+          </h3>
+          <div className="space-y-2">
+            {briefing.cognitionGaps.slice(0, 5).map((g, i) => (
+              <div key={i} className="flex items-start justify-between text-xs">
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium text-[var(--text)]">{g.assetKey}</span>
+                  <span className="ml-2 text-[var(--faint)]">权重 {(g.portfolioWeight * 100).toFixed(1)}%</span>
+                  <p className="mt-0.5 text-[var(--muted)]">{g.uncertaintyReason}</p>
+                  {g.suggestedInvestigation && (
+                    <p className="mt-0.5 text-blue-400/80">→ {g.suggestedInvestigation}</p>
+                  )}
+                </div>
+                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400">
+                  {g.daysSinceLastInvestigation}天未查
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 改观条件 */}
+      {hasConditions && (
+        <div className="rounded-xl border border-purple-500/15 bg-purple-500/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-purple-300">
+            <RotateCcw className="h-3.5 w-3.5" />
+            改观条件
+          </h3>
+          <div className="space-y-2">
+            {briefing.mindChangeConditions.slice(0, 5).map((m, i) => {
+              const convColor =
+                m.currentConviction === "high" ? "text-emerald-400" :
+                m.currentConviction === "medium" ? "text-amber-400" :
+                m.currentConviction === "low" ? "text-red-400" : "text-[var(--faint)]";
+              return (
+                <div key={i} className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-[var(--text)]">{m.thesisTitle}</span>
+                    <span className={`text-[10px] font-medium ${convColor}`}>{m.currentConviction}</span>
+                  </div>
+                  <ul className="mt-0.5 list-inside list-disc pl-2 text-[var(--muted)]">
+                    {m.conditions.slice(0, 3).map((c, j) => <li key={j}>{c}</li>)}
+                  </ul>
+                  {m.monitoringIndicators.length > 0 && (
+                    <div className="mt-0.5 pl-2 text-[var(--faint)]">
+                      监控: {m.monitoringIndicators.join(", ")}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SeverityBadge({ score }: { score: number }) {
+  const bg = score >= 8 ? "bg-red-500/20 text-red-400" :
+    score >= 5 ? "bg-amber-500/20 text-amber-400" :
+    "bg-blue-500/20 text-blue-400";
+  return (
+    <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${bg}`}>
+      {score}
+    </span>
   );
 }

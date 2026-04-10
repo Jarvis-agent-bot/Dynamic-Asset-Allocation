@@ -190,6 +190,35 @@ export async function createThesisReview(data: {
   });
 }
 
+/**
+ * P2-9: 查找与给定 assetKeys 和标题相似的已有活跃 thesis。
+ * 用于去重：同一资产组合且标题有 substring 重叠时视为重复。
+ */
+export async function findSimilarThesis(assetKeys: string[], title: string): Promise<ResearchThread | null> {
+  if (assetKeys.length === 0) return null;
+  return withDaaPgClient(async ({ query }) => {
+    // 查找同一 assetKeys 且 status=active 的 thesis
+    const res = await query(
+      `SELECT * FROM daa_research_threads
+       WHERE status = 'active' AND asset_keys && $1
+       ORDER BY updated_at DESC
+       LIMIT 10`,
+      [assetKeys],
+    );
+    if (res.rows.length === 0) return null;
+
+    // 简单标题相似度：任一方标题是另一方的子串
+    const titleLower = title.toLowerCase();
+    for (const row of res.rows) {
+      const existingTitle = String(row.title).toLowerCase();
+      if (titleLower.includes(existingTitle) || existingTitle.includes(titleLower)) {
+        return mapThreadRow(row);
+      }
+    }
+    return null;
+  });
+}
+
 export async function countThreads(): Promise<number> {
   return withDaaPgClient(async ({ query }) => {
     const res = await query(`SELECT COUNT(*) as cnt FROM daa_research_threads`);

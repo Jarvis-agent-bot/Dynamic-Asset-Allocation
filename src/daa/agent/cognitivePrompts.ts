@@ -77,6 +77,19 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
 }
 \`\`\`
 
+## 示例输出
+\`\`\`json
+{
+  "targets": [
+    {"threadId": "a1b2c3d4", "reason": "NVDA 权重15%但论点20天未更新，且近期有重大新闻", "dataNeeded": ["technical", "news"]},
+    {"threadId": null, "reason": "VIX 突破25但无对应宏观避险论点", "dataNeeded": ["technical"]}
+  ],
+  "newThreads": [
+    {"title": "市场波动率飙升的避险策略", "initialThesis": "VIX 突破25暗示市场恐慌情绪升温，需评估是否增加避险仓位", "assetKeys": ["US:GLD", "US:TLT"], "tags": ["宏观", "避险"]}
+  ]
+}
+\`\`\`
+
 只输出 JSON，不要其他文字。`;
 }
 
@@ -154,6 +167,21 @@ ${ctx.portfolio.holdings
 }
 \`\`\`
 
+## 示例输出
+\`\`\`json
+{
+  "thesisChanged": true,
+  "updatedThesis": "NVDA 受AI基础设施需求支撑，短期估值偏高但长期增长逻辑未变",
+  "newConviction": "medium",
+  "evidenceType": "contradicting",
+  "evidenceSummary": "技术面RSI超买(78)，估值PE达65x历史高位，但新闻面显示数据中心订单超预期",
+  "surprises": [{"title": "数据中心订单超预期", "description": "Q2订单同比增长120%，显著高于市场预期的80%", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "关注下季财报确认趋势"}],
+  "invalidationConditions": "PE回落至50x以下且RSI回到60以下",
+  "suggestedReviewDays": 7,
+  "nextActions": ["追踪竞争对手AMD的AI芯片进展"]
+}
+\`\`\`
+
 只输出 JSON，不要其他文字。`;
 }
 
@@ -219,6 +247,15 @@ ${thesisText}
 }
 \`\`\`
 
+## 示例输出
+\`\`\`json
+{
+  "surprises": [{"title": "黄金突破历史新高", "description": "GLD单日涨幅3.2%，突破$2100，与美元走强矛盾", "relatedThesisId": null, "severityScore": 8, "suggestedAction": "检查避险资产配置是否充足"}],
+  "cognitionGaps": [{"assetKey": "US:NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 22, "uncertaintyReason": "AI芯片竞争格局快速变化", "suggestedInvestigation": "对比AMD MI300X最新benchmark数据"}],
+  "mindChangeConditions": [{"thesisTitle": "美股科技股长期看多", "currentConviction": "high", "conditions": ["VIX持续30+超过10个交易日", "10Y国债收益率突破5.5%"], "monitoringIndicators": ["VIX", "TNX"]}]
+}
+\`\`\`
+
 只输出 JSON，不要其他文字。`;
 }
 
@@ -258,6 +295,15 @@ ${sanitizeForPrompt(ctx.evidenceSummary, 300)}
 }
 \`\`\`
 
+## 示例输出
+\`\`\`json
+{
+  "reflectionSummary": "从medium调至low属于合理降级，RSI超买+PE高位的双重压力下降低信念合理，但需注意避免在短期波动中频繁调整conviction",
+  "overreactionRisk": "low",
+  "newMemory": {"type": "pattern", "content": "当RSI>75且PE>历史90%分位时，短期回调概率高，应考虑降低conviction至medium/low"}
+}
+\`\`\`
+
 只输出 JSON，不要其他文字。`;
 }
 
@@ -267,6 +313,7 @@ export function buildReviewPrompt(ctx: {
   thread: ResearchThread;
   marketRegime: string;
   vix: number | null;
+  priceChangeText?: string;
 }): string {
   return `你是一个投资研究操作系统的「复盘审计师」。以下论点已到复盘日期。
 
@@ -275,13 +322,14 @@ export function buildReviewPrompt(ctx: {
 当时判断: ${sanitizeForPrompt(ctx.thread.thesisText, 200)}
 信念强度: ${ctx.thread.conviction}
 创建时间: ${ctx.thread.createdAt}
+${ctx.priceChangeText ? `\n## 实际市场表现${ctx.priceChangeText}` : ""}
 
 ## 当前市场
 Regime: ${ctx.marketRegime}
 VIX: ${ctx.vix ?? "N/A"}
 
 ## 任务
-评估这个论点到目前为止是否准确。
+基于论点创建时的判断和实际市场表现，评估准确度。accuracyScore 0=完全错误 1=完全准确。
 
 ## 输出格式（严格 JSON）
 \`\`\`json
@@ -289,6 +337,16 @@ VIX: ${ctx.vix ?? "N/A"}
   "actualOutcome": "实际发生了什么",
   "accuracyScore": 0.7,
   "lesson": "从这次复盘中学到的教训（如果有）",
+  "shouldArchive": false
+}
+\`\`\`
+
+## 示例输出
+\`\`\`json
+{
+  "actualOutcome": "看多NVDA的判断基本正确，期间上涨18%，但波动超预期，中间有一次12%回撤",
+  "accuracyScore": 0.7,
+  "lesson": "高波动资产即使方向正确也需要设置止损，conviction=high不等于低风险",
   "shouldArchive": false
 }
 \`\`\`

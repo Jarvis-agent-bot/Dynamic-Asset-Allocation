@@ -2,6 +2,22 @@
  * Agent Tool Registry — 通用 Tool 抽象接口。
  *
  * 供 Cognitive Agent 的 prompt 参考，定义可请求的信号类型。
+ *
+ * ## Phase 3 规划（LLM-driven Tool Calling）
+ *
+ * 当前状态：Phase 2 — 工具定义已注册，但 investigateNode 中是硬编码调用。
+ *
+ * Phase 3 目标：让 LLM 自行决定调用哪些工具（ReAct 模式）。
+ * - 每个 AgentToolEntry 需实现 executor 函数
+ * - investigateNode 改为向 LLM 传递工具列表 → LLM 返回 tool_calls → 路由执行
+ * - 需要：工具输入校验、执行超时、结果截断
+ * - 依赖：LLM 支持 function calling（DeepSeek V3 已支持）
+ *
+ * TODO Phase 3:
+ * - [ ] 为每个 AGENT_TOOL_DEFINITIONS 实现 executor
+ * - [ ] 在 cognitiveGraph.ts 中实现 ReAct 循环（tool_call → execute → observe → 继续推理）
+ * - [ ] 添加工具调用限制（每次 investigate 最多 5 次工具调用）
+ * - [ ] 工具执行超时保护（单个工具 30s）
  */
 
 // ─── Tool Definition（描述型，不含执行逻辑）────────────────────────

@@ -45,6 +45,10 @@ export async function createMemory(data: {
  * 语义检索：通过 pgvector 余弦相似度搜索最相关的记忆。
  * 如果没有 embedding，退回到 tag 匹配。
  */
+/**
+ * 语义检索：通过 pgvector 余弦相似度搜索最相关的记忆。
+ * P2-10: 支持 tags 参数优先召回与特定 thesis 关联的记忆。
+ */
 export async function recallMemory(opts: {
   queryEmbedding?: number[];
   tags?: string[];

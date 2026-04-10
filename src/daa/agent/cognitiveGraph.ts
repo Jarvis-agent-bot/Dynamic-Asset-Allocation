@@ -22,31 +22,101 @@ import { buildValuationSignalForSymbol } from "@/src/daa/signals/valuationSignal
 import { buildNewsSignalForSymbol } from "@/src/daa/signals/newsSignal";
 import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
 import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
+import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
+import { findSimilarThesis } from "@/src/daa/agent/store/thesisStore";
 
-// ── 辅助：调用 DeepSeek ──
+// ── 常量 ──
 
-async function callDeepSeekJson<T>(prompt: string, scope: string): Promise<{ data: T | null; tokensUsed: number }> {
-  try {
-    const config = await resolveLlmConfig();
-    if (!config) return { data: null, tokensUsed: 0 };
-    const { text } = await callLlm(config, prompt);
-    // 从 markdown code block 或纯 JSON 中提取
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
-    if (!jsonMatch) {
-      logSwallowed(`${scope}.noJson`, new Error("LLM 输出中未找到 JSON"));
-      return { data: null, tokensUsed: estimateTokens(prompt + text) };
-    }
-    const parsed = JSON.parse(jsonMatch[1].trim()) as T;
-    return { data: parsed, tokensUsed: estimateTokens(prompt + text) };
-  } catch (e) {
-    logSwallowed(scope, e);
-    return { data: null, tokensUsed: 0 };
-  }
+/** DeepSeek 平均成本：input $0.14/M + output $0.28/M，取均值 $0.21/M */
+export const DEEPSEEK_AVG_COST_PER_TOKEN = 0.00000021;
+
+/** 连续 LLM 失败次数阈值，超过后跳过剩余 LLM 调用 */
+const CIRCUIT_BREAKER_THRESHOLD = 3;
+
+// ── 辅助：调用 DeepSeek（含重试 + 熔断）──
+
+/** 判断错误是否可重试（网络错误/超时/429） */
+function isRetryableError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const msg = e.message.toLowerCase();
+  return msg.includes("timeout") || msg.includes("econnreset") || msg.includes("enotfound")
+    || msg.includes("429") || msg.includes("rate limit") || msg.includes("fetch failed");
 }
 
-function estimateTokens(text: string): number {
+/**
+ * 带重试的 LLM JSON 调用。
+ * - 最多重试 2 次（共 3 次尝试），指数退避
+ * - 仅对网络/超时/429 错误重试，JSON 解析失败不重试
+ */
+async function callDeepSeekJson<T>(prompt: string, scope: string, maxRetries = 2): Promise<{ data: T | null; tokensUsed: number }> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const config = await resolveLlmConfig();
+      if (!config) return { data: null, tokensUsed: 0 };
+      const { text } = await callLlm(config, prompt);
+      // 从 markdown code block 或纯 JSON 中提取
+      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
+      if (!jsonMatch) {
+        logSwallowed(`${scope}.noJson`, new Error("LLM 输出中未找到 JSON"));
+        return { data: null, tokensUsed: estimateTokens(prompt + text) };
+      }
+      const parsed = JSON.parse(jsonMatch[1].trim()) as T;
+      return { data: parsed, tokensUsed: estimateTokens(prompt + text) };
+    } catch (e) {
+      lastError = e;
+      if (attempt < maxRetries && isRetryableError(e)) {
+        const delay = 1000 * Math.pow(2, attempt); // 1s, 2s
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      // JSON 解析失败或最后一次尝试 → 不再重试
+      break;
+    }
+  }
+  logSwallowed(scope, lastError);
+  return { data: null, tokensUsed: 0 };
+}
+
+export function estimateTokens(text: string): number {
   // 粗略估计：中文约 1.5 token/字，英文约 0.75 token/词
   return Math.ceil(text.length * 0.5);
+}
+
+// ── 辅助：LLM 输出结构校验 ──
+
+/**
+ * 轻量 JSON shape 校验。检查必填 key 是否存在且类型匹配。
+ * @returns 错误消息数组，空数组表示通过
+ */
+export function validateShape(
+  data: unknown,
+  schema: Record<string, "string" | "number" | "boolean" | "array" | "object">,
+): string[] {
+  if (data == null || typeof data !== "object") return ["data is null or not an object"];
+  const obj = data as Record<string, unknown>;
+  const errors: string[] = [];
+  for (const [key, expectedType] of Object.entries(schema)) {
+    const val = obj[key];
+    if (val === undefined || val === null) {
+      errors.push(`缺少必填字段: ${key}`);
+      continue;
+    }
+    if (expectedType === "array" && !Array.isArray(val)) {
+      errors.push(`字段 ${key} 应为 array，实际为 ${typeof val}`);
+    } else if (expectedType === "object" && (typeof val !== "object" || Array.isArray(val))) {
+      errors.push(`字段 ${key} 应为 object，实际为 ${typeof val}`);
+    } else if (expectedType !== "array" && expectedType !== "object" && typeof val !== expectedType) {
+      errors.push(`字段 ${key} 应为 ${expectedType}，实际为 ${typeof val}`);
+    }
+  }
+  return errors;
+}
+
+/** 检查当前 cycle 是否应该触发熔断（连续 LLM 失败过多） */
+function shouldCircuitBreak(errors: string[]): boolean {
+  const llmFailures = errors.filter(e => e.includes("DeepSeek") || e.includes("LLM") || e.includes("noJson")).length;
+  return llmFailures >= CIRCUIT_BREAKER_THRESHOLD;
 }
 
 // ── Observe 节点（代码驱动，不调 LLM）──
@@ -158,9 +228,24 @@ async function prioritizeNode(state: CognitiveState): Promise<CognitiveUpdate> {
       };
     }
 
-    // 创建新 thesis（如果 LLM 建议）
+    // P0-2: 校验 LLM 输出结构
+    const valErrors = validateShape(data, { targets: "array" });
+    if (valErrors.length > 0) {
+      return {
+        errors: valErrors.map(e => `prioritize.validation: ${e}`),
+        totalTokens: tokensUsed,
+      };
+    }
+
+    // 创建新 thesis（如果 LLM 建议），P2-9: 去重检查
     for (const nt of data.newThreads ?? []) {
       try {
+        // 检查是否存在相似 thesis
+        const existing = await findSimilarThesis(nt.assetKeys ?? [], nt.title);
+        if (existing) {
+          logSwallowed("cognitiveGraph.prioritize.dedup", new Error(`跳过重复 thesis: "${nt.title}" 已有类似 "${existing.title}"`));
+          continue;
+        }
         const created = await thesisStore.createResearchThread({
           title: nt.title,
           thesisText: nt.initialThesis,
@@ -222,60 +307,61 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
   }
 
   try {
-    // 1. 收集证据（调用工具）
+    // P1-5: 熔断检查
+    if (shouldCircuitBreak(state.errors ?? [])) {
+      return { errors: ["investigate: 熔断 — 连续 LLM 失败次数过多，跳过"] };
+    }
+
+    // 1. 收集证据（P2-11: 并行调用工具）
     const evidence: Record<string, unknown> = {};
     const newToolsCalled: ToolCallRecord[] = [];
+    const symbol = thread.assetKeys[0]?.split(":")[1] ?? thread.assetKeys[0] ?? "";
+    const market = thread.assetKeys[0]?.split(":")[0] ?? "US";
 
+    const toolPromises: Array<{ name: string; promise: Promise<unknown>; t0: number }> = [];
     for (const toolName of target.dataNeeded) {
+      if (!thread.assetKeys[0]) continue;
       const toolT0 = Date.now();
-      try {
-        if (toolName === "technical" && thread.assetKeys[0]) {
-          const symbol = thread.assetKeys[0].split(":")[1] ?? thread.assetKeys[0];
-          const signal = await buildTechnicalSignalForSymbol(symbol);
-          evidence.technical = signal ? {
-            scorePct: signal.scorePct,
-            momentumRegime: signal.momentumRegime,
-            metrics: signal.metrics,
-            reasons: signal.reasons,
-          } : null;
-        } else if (toolName === "valuation" && thread.assetKeys[0]) {
-          const symbol = thread.assetKeys[0].split(":")[1] ?? thread.assetKeys[0];
-          const signal = await buildValuationSignalForSymbol(symbol);
-          evidence.valuation = signal ? {
-            scorePct: signal.scorePct,
-            temperature: signal.temperature,
-            metrics: signal.metrics,
-            reasons: signal.reasons,
-          } : null;
-        } else if (toolName === "news" && thread.assetKeys[0]) {
-          const symbol = thread.assetKeys[0].split(":")[1] ?? thread.assetKeys[0];
-          const market = thread.assetKeys[0].split(":")[0] ?? "US";
-          const signal = await buildNewsSignalForSymbol(symbol, market);
-          evidence.news = signal ? {
-            scorePct: signal.scorePct,
-            evidenceCount: signal.evidenceCount,
-            llmSummary: signal.llmSummary,
-            llmDrivers: signal.llmDrivers,
-            llmMajorEvent: signal.llmMajorEvent,
-            reasons: signal.reasons,
-            items: signal.items?.slice(0, 5).map(i => ({ title: i.title, ts: i.ts })),
-          } : null;
-        }
-      } catch (e) {
-        logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e);
-        evidence[toolName] = { error: String(e) };
+      if (toolName === "technical") {
+        toolPromises.push({ name: toolName, t0: toolT0, promise: buildTechnicalSignalForSymbol(symbol).catch(e => { logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e); return null; }) });
+      } else if (toolName === "valuation") {
+        toolPromises.push({ name: toolName, t0: toolT0, promise: buildValuationSignalForSymbol(symbol).catch(e => { logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e); return null; }) });
+      } else if (toolName === "news") {
+        toolPromises.push({ name: toolName, t0: toolT0, promise: buildNewsSignalForSymbol(symbol, market).catch(e => { logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e); return null; }) });
       }
+    }
+
+    // 并行等待所有信号
+    const results = await Promise.allSettled(toolPromises.map(p => p.promise));
+    for (let i = 0; i < toolPromises.length; i++) {
+      const { name: toolName, t0: toolT0 } = toolPromises[i];
+      const result = results[i];
+      const signal = result.status === "fulfilled" ? result.value : null;
+
+      if (toolName === "technical" && signal && typeof signal === "object") {
+        const s = signal as Record<string, unknown>;
+        evidence.technical = { scorePct: s.scorePct, momentumRegime: s.momentumRegime, metrics: s.metrics, reasons: s.reasons };
+      } else if (toolName === "valuation" && signal && typeof signal === "object") {
+        const s = signal as Record<string, unknown>;
+        evidence.valuation = { scorePct: s.scorePct, temperature: s.temperature, metrics: s.metrics, reasons: s.reasons };
+      } else if (toolName === "news" && signal && typeof signal === "object") {
+        const s = signal as Record<string, unknown>;
+        evidence.news = { scorePct: s.scorePct, evidenceCount: s.evidenceCount, llmSummary: s.llmSummary, llmDrivers: s.llmDrivers, llmMajorEvent: s.llmMajorEvent, reasons: s.reasons, items: Array.isArray(s.items) ? (s.items as Array<Record<string, unknown>>).slice(0, 5).map(i => ({ title: i.title, ts: i.ts })) : [] };
+      } else if (!signal) {
+        evidence[toolName] = { error: result.status === "rejected" ? String(result.reason) : "null result" };
+      }
+
       newToolsCalled.push({
         tool: toolName,
         input: { assetKeys: thread.assetKeys },
-        outputSummary: evidence[toolName] ? "ok" : "failed",
+        outputSummary: evidence[toolName] && !(evidence[toolName] as Record<string, unknown>).error ? "ok" : "failed",
         durationMs: Date.now() - toolT0,
       });
     }
 
-    // 2. 检索相关记忆
+    // 2. 检索相关记忆（P2-10: 带 thesis 关联）
     const queryEmb = await generateEmbedding(thread.title + " " + thread.thesisText);
-    const memories = await memoryStore.recallMemory({ queryEmbedding: queryEmb, limit: 5 });
+    const memories = await memoryStore.recallMemory({ queryEmbedding: queryEmb, tags: [thread.id, ...thread.tags], limit: 5 });
 
     // 3. DeepSeek 推理
     const prompt = buildInvestigatePrompt({
@@ -288,6 +374,14 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
     const { data: result, tokensUsed } = await callDeepSeekJson<InvestigateOutput>(
       prompt, "cognitiveGraph.investigate",
     );
+
+    // P0-2: 校验 investigate 输出
+    if (result) {
+      const valErrors = validateShape(result, { thesisChanged: "boolean", evidenceType: "string", evidenceSummary: "string" });
+      if (valErrors.length > 0) {
+        logSwallowed("cognitiveGraph.investigate.validation", new Error(valErrors.join("; ")));
+      }
+    }
 
     // 4. 执行 thesis 更新
     if (result?.thesisChanged && result.updatedThesis) {
@@ -346,6 +440,11 @@ async function reflectNode(state: CognitiveState): Promise<CognitiveUpdate> {
     return {};
   }
 
+  // P1-5: 熔断检查
+  if (shouldCircuitBreak(state.errors ?? [])) {
+    return { errors: ["reflect: 熔断 — 跳过"] };
+  }
+
   try {
     const prompt = buildReflectPrompt({
       thread,
@@ -360,13 +459,22 @@ async function reflectNode(state: CognitiveState): Promise<CognitiveUpdate> {
       newMemory: { type: string; content: string } | null;
     }>(prompt, "cognitiveGraph.reflect");
 
+    // P0-2: 校验 reflect 输出
+    if (data) {
+      const valErrors = validateShape(data, { reflectionSummary: "string", overreactionRisk: "string" });
+      if (valErrors.length > 0) {
+        logSwallowed("cognitiveGraph.reflect.validation", new Error(valErrors.join("; ")));
+      }
+    }
+
     let newMemCount = 0;
     if (data?.newMemory?.content) {
       const emb = await generateEmbedding(data.newMemory.content);
+      // P2-10: 在 relevanceTags 中加入当前 threadId
       await memoryStore.createMemory({
         memoryType: (data.newMemory.type as "lesson" | "pattern" | "preference" | "fact") || "lesson",
         content: data.newMemory.content,
-        relevanceTags: thread.tags,
+        relevanceTags: [thread.id, ...thread.tags],
         embedding: emb,
       });
       newMemCount = 1;
@@ -414,6 +522,12 @@ async function loadNextTarget(state: CognitiveState): Promise<CognitiveUpdate> {
 
 async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
+
+  // P1-5: 熔断检查
+  if (shouldCircuitBreak(state.errors ?? [])) {
+    return { errors: ["review: 熔断 — 跳过"] };
+  }
+
   try {
     const dueTheses = await thesisStore.getDueReviews();
     if (dueTheses.length === 0) return {};
@@ -423,10 +537,33 @@ async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
 
     for (const thread of dueTheses.slice(0, 3)) {
       try {
+        // P1-6: 获取 thesis 关联资产的价格变动作为 ground truth
+        let priceChangeText = "";
+        if (thread.assetKeys[0]) {
+          try {
+            const sym = thread.assetKeys[0].split(":")[1] ?? thread.assetKeys[0];
+            const createdDate = new Date(thread.createdAt);
+            const daysSinceCreation = Math.floor((Date.now() - createdDate.getTime()) / 86400000);
+            if (daysSinceCreation > 0 && sym) {
+              const cacheResult = await fetchPriceSeriesWithCache(sym, `${Math.min(daysSinceCreation + 5, 365)}d`);
+              const series = cacheResult?.data ?? [];
+              if (series.length >= 2) {
+                const firstPrice = series[0].close;
+                const lastPrice = series[series.length - 1].close;
+                const changePct = ((lastPrice - firstPrice) / firstPrice * 100).toFixed(1);
+                priceChangeText = `\n该资产在论点存续期间(${daysSinceCreation}天)内涨跌幅为 ${changePct}%（从 $${firstPrice.toFixed(2)} 到 $${lastPrice.toFixed(2)}）`;
+              }
+            }
+          } catch (e) {
+            logSwallowed("cognitiveGraph.review.priceChange", e);
+          }
+        }
+
         const prompt = buildReviewPrompt({
           thread,
           marketRegime: state.market?.regime ?? "unknown",
           vix: state.market?.vix ?? null,
+          priceChangeText,
         });
 
         const { data, tokensUsed } = await callDeepSeekJson<{
@@ -437,6 +574,14 @@ async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
         }>(prompt, "cognitiveGraph.review");
 
         totalTokens += tokensUsed;
+
+        // P0-2: 校验 review 输出
+        if (data) {
+          const valErrors = validateShape(data, { actualOutcome: "string", accuracyScore: "number", shouldArchive: "boolean" });
+          if (valErrors.length > 0) {
+            logSwallowed(`cognitiveGraph.review.validation.${thread.id}`, new Error(valErrors.join("; ")));
+          }
+        }
 
         if (data) {
           // 保存复盘记录（通过 store 层）
@@ -499,29 +644,51 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
     const theses = await thesisStore.getActiveTheses();
     const memCount = await memoryStore.countMemories();
 
-    const prompt = buildSurfacePrompt({
-      portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
-      market: state.market ?? { regime: "unknown", vix: null, indicators: {} },
-      theses,
-      surprises: state.surprises ?? [],
-      thesesUpdated: state.thesesUpdated ?? 0,
-      memoriesCreated: state.memoriesCreated ?? 0,
-    });
+    let data: { surprises: Surprise[]; cognitionGaps: CognitionGap[]; mindChangeConditions: MindChangeCondition[] } | null = null;
+    let tokensUsed = 0;
 
-    const { data, tokensUsed } = await callDeepSeekJson<{
-      surprises: Surprise[];
-      cognitionGaps: CognitionGap[];
-      mindChangeConditions: MindChangeCondition[];
-    }>(prompt, "cognitiveGraph.surface");
+    // P1-5: 熔断检查 — surface 节点跳过 LLM 但仍生成基本 briefing
+    if (!shouldCircuitBreak(state.errors ?? [])) {
+      const prompt = buildSurfacePrompt({
+        portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
+        market: state.market ?? { regime: "unknown", vix: null, indicators: {} },
+        theses,
+        surprises: state.surprises ?? [],
+        thesesUpdated: state.thesesUpdated ?? 0,
+        memoriesCreated: state.memoriesCreated ?? 0,
+      });
 
+      const llmResult = await callDeepSeekJson<{
+        surprises: Surprise[];
+        cognitionGaps: CognitionGap[];
+        mindChangeConditions: MindChangeCondition[];
+      }>(prompt, "cognitiveGraph.surface");
+      data = llmResult.data;
+      tokensUsed = llmResult.tokensUsed;
+
+      // P0-2: 校验 surface 输出
+      if (data) {
+        const valErrors = validateShape(data, { surprises: "array", cognitionGaps: "array", mindChangeConditions: "array" });
+        if (valErrors.length > 0) {
+          logSwallowed("cognitiveGraph.surface.validation", new Error(valErrors.join("; ")));
+          // 保留有效部分
+          if (!Array.isArray(data.surprises)) data.surprises = [];
+          if (!Array.isArray(data.cognitionGaps)) data.cognitionGaps = [];
+          if (!Array.isArray(data.mindChangeConditions)) data.mindChangeConditions = [];
+        }
+      }
+    }
+
+    // P0-3: 使用实际 DeepSeek 定价
+    const totalTkn = (state.totalTokens ?? 0) + tokensUsed;
     const briefing: DailyBriefing = {
       surprises: data?.surprises ?? state.surprises ?? [],
       cognitionGaps: data?.cognitionGaps ?? [],
       mindChangeConditions: data?.mindChangeConditions ?? [],
       thesesUpdated: state.thesesUpdated ?? 0,
       memoriesCreated: state.memoriesCreated ?? 0,
-      totalTokens: (state.totalTokens ?? 0) + tokensUsed,
-      estimatedCost: ((state.totalTokens ?? 0) + tokensUsed) * 0.000001, // DeepSeek pricing estimate
+      totalTokens: totalTkn,
+      estimatedCost: totalTkn * DEEPSEEK_AVG_COST_PER_TOKEN,
     };
 
     // 尝试推送 Telegram（非阻塞）
@@ -631,13 +798,26 @@ export async function runCognitiveAgentCycle(trigger: "scheduled" | "manual" | "
     );
 
     const durationMs = Date.now() - t0;
+    // 构造 briefing 用于持久化
+    const totalTkn = result.totalTokens ?? 0;
+    const briefing: DailyBriefing = {
+      surprises: result.surprises ?? [],
+      cognitionGaps: [],
+      mindChangeConditions: [],
+      thesesUpdated: result.thesesUpdated ?? 0,
+      memoriesCreated: result.memoriesCreated ?? 0,
+      totalTokens: totalTkn,
+      estimatedCost: totalTkn * DEEPSEEK_AVG_COST_PER_TOKEN,
+    };
     await completeAgentRun(run.id, {
       status: (result.errors?.length ?? 0) > 0 ? "completed_with_errors" : "completed",
       targetThreadIds: result.investigationQueue?.map((t: InvestigationTarget) => t.threadId).filter(Boolean) as string[] ?? [],
       toolsCalled: result.toolsCalled ?? [],
       reasoningTraces: result.reasoningTraces ?? [],
       surprises: result.surprises ?? [],
-      totalTokens: result.totalTokens ?? 0,
+      briefing,
+      totalTokens: totalTkn,
+      totalCostUsd: briefing.estimatedCost,
       durationMs,
     });
 

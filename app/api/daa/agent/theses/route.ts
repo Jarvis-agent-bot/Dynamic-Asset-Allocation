@@ -27,6 +27,7 @@ export async function GET(req: Request) {
         createdAt: latestRun.createdAt,
         thesesUpdated: latestRun.reasoningTraces.filter(t => t.node === "investigate").length,
         totalTokens: latestRun.totalTokens,
+        briefing: latestRun.briefing ?? null,
       } : null,
       memoryCount,
     });
