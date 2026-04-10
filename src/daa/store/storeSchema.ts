@@ -250,33 +250,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             ON daa_portfolio_ledger_events(ticket_id)
             WHERE ticket_id IS NOT NULL;
 
-          CREATE TABLE IF NOT EXISTS daa_asset_universe (
-            asset_key TEXT PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            market TEXT NOT NULL DEFAULT 'US',
-            currency TEXT NOT NULL DEFAULT 'USD',
-            asset_class TEXT NOT NULL DEFAULT 'EQUITY',
-            region TEXT NOT NULL DEFAULT 'GLOBAL',
-            exchange TEXT NOT NULL DEFAULT '',
-            instrument_type TEXT NOT NULL DEFAULT 'STOCK',
-            market_group TEXT NOT NULL DEFAULT 'GLOBAL_EQUITY',
-            holding_qty NUMERIC NOT NULL DEFAULT 0,
-            holding_price NUMERIC NOT NULL DEFAULT 0,
-            cost_basis NUMERIC,
-            holding_tags TEXT[] NOT NULL DEFAULT '{}',
-            watch_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-            target_weight_hint NUMERIC NOT NULL DEFAULT 0,
-            watch_tags TEXT[] NOT NULL DEFAULT '{}',
-            notes TEXT,
-            last_price NUMERIC NOT NULL DEFAULT 0,
-            price_updated_at TIMESTAMPTZ,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          );
-
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_asset_universe_symbol_market
-            ON daa_asset_universe(symbol, market);
-
           CREATE TABLE IF NOT EXISTS daa_price_history (
             symbol TEXT NOT NULL,
             ts TIMESTAMPTZ NOT NULL,
@@ -595,17 +568,6 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_fee NUMERIC NOT NULL DEFAULT 0");
         await query("ALTER TABLE daa_trade_journal ADD COLUMN IF NOT EXISTS execution_order_id TEXT");
         await query("DROP INDEX IF EXISTS idx_daa_trade_journal_execution_order_unique");
-        await ensureTableColumn(query as any, "daa_asset_universe", "asset_class", "TEXT NOT NULL DEFAULT 'EQUITY'");
-        await ensureTableColumn(query as any, "daa_asset_universe", "region", "TEXT NOT NULL DEFAULT 'GLOBAL'");
-        await ensureTableColumn(query as any, "daa_asset_universe", "exchange", "TEXT NOT NULL DEFAULT ''");
-        await ensureTableColumn(query as any, "daa_asset_universe", "instrument_type", "TEXT NOT NULL DEFAULT 'STOCK'");
-        await ensureTableColumn(query as any, "daa_asset_universe", "market_group", "TEXT NOT NULL DEFAULT 'GLOBAL_EQUITY'");
-        await query(
-          "CREATE INDEX IF NOT EXISTS idx_daa_asset_universe_market_class_region ON daa_asset_universe(market, asset_class, region)",
-        );
-        await query(
-          "CREATE INDEX IF NOT EXISTS idx_daa_asset_universe_watch_enabled_updated_desc ON daa_asset_universe(watch_enabled, updated_at DESC)",
-        );
         await ensureTableColumn(query as any, "daa_trade_tickets", "basket_id", "TEXT");
         await ensureTableColumn(query as any, "daa_trade_tickets", "asset_key", "TEXT");
         await ensureTableColumn(query as any, "daa_trade_tickets", "cycle_id", "TEXT");

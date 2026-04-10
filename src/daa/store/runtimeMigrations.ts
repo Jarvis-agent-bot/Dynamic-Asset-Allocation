@@ -118,6 +118,7 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260309_asset_domain_foundation",
     async apply(query) {
+      // 创建规范化表（CREATE TABLE IF NOT EXISTS 保证幂等）
       await query(`
         CREATE TABLE IF NOT EXISTS daa_asset_master (
           asset_key TEXT PRIMARY KEY,
@@ -164,73 +165,28 @@ const MIGRATIONS_: Migration[] = [
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
+      // 历史数据种子（从旧 daa_asset_universe 同步，仅在该表存在时执行）
+      if (!(await tableExists(query, "daa_asset_universe"))) return;
 
       await query(`
-        INSERT INTO daa_asset_master (
-          asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at
-        )
+        INSERT INTO daa_asset_master (asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at)
         SELECT asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET symbol = EXCLUDED.symbol,
-            market = EXCLUDED.market,
-            currency = EXCLUDED.currency,
-            asset_class = EXCLUDED.asset_class,
-            region = EXCLUDED.region,
-            exchange = EXCLUDED.exchange,
-            instrument_type = EXCLUDED.instrument_type,
-            market_group = EXCLUDED.market_group,
-            updated_at = EXCLUDED.updated_at
+        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
       `);
-
       await query(`
-        INSERT INTO daa_portfolio_positions (
-          asset_key, holding_qty, holding_price, cost_basis, holding_tags, updated_at
-        )
-        SELECT asset_key, holding_qty, holding_price, cost_basis, holding_tags, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET holding_qty = EXCLUDED.holding_qty,
-            holding_price = EXCLUDED.holding_price,
-            cost_basis = EXCLUDED.cost_basis,
-            holding_tags = EXCLUDED.holding_tags,
-            updated_at = EXCLUDED.updated_at
-      `);
-
-      await query(`
-        INSERT INTO daa_watchlist_entries (
-          asset_key, watch_enabled, watch_tags, notes, created_at, updated_at
-        )
+        INSERT INTO daa_watchlist_entries (asset_key, watch_enabled, watch_tags, notes, created_at, updated_at)
         SELECT asset_key, watch_enabled, watch_tags, notes, created_at, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET watch_enabled = EXCLUDED.watch_enabled,
-            watch_tags = EXCLUDED.watch_tags,
-            notes = EXCLUDED.notes,
-            updated_at = EXCLUDED.updated_at
+        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
       `);
-
       await query(`
-        INSERT INTO daa_target_allocations (
-          asset_key, target_weight_hint, updated_at
-        )
+        INSERT INTO daa_target_allocations (asset_key, target_weight_hint, updated_at)
         SELECT asset_key, target_weight_hint, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET target_weight_hint = EXCLUDED.target_weight_hint,
-            updated_at = EXCLUDED.updated_at
+        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
       `);
-
       await query(`
-        INSERT INTO daa_market_price_snapshots (
-          asset_key, last_price, price_updated_at, updated_at
-        )
+        INSERT INTO daa_market_price_snapshots (asset_key, last_price, price_updated_at, updated_at)
         SELECT asset_key, last_price, price_updated_at, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET last_price = EXCLUDED.last_price,
-            price_updated_at = EXCLUDED.price_updated_at,
-            updated_at = EXCLUDED.updated_at
+        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
       `);
     },
   },
@@ -737,68 +693,15 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260409_normalize_watchlist_price_alerts",
     async apply(query) {
-      // watchlist_entries 补齐 price_alert 列
       await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_above NUMERIC");
       await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
-
-      // 从 daa_asset_universe 回填 price_alert 到 watchlist_entries
+      // 历史回填：仅在旧表存在时从 daa_asset_universe 同步
+      if (!(await tableExists(query, "daa_asset_universe"))) return;
       await query(`
         UPDATE daa_watchlist_entries we
-        SET price_alert_above = u.price_alert_above,
-            price_alert_below = u.price_alert_below
+        SET price_alert_above = u.price_alert_above, price_alert_below = u.price_alert_below
         FROM daa_asset_universe u
-        WHERE u.asset_key = we.asset_key
-          AND (u.price_alert_above IS NOT NULL OR u.price_alert_below IS NOT NULL)
-      `);
-
-      // 全量重新同步 daa_asset_master（确保所有资产都在）
-      await query(`
-        INSERT INTO daa_asset_master (
-          asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at
-        )
-        SELECT asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET symbol = EXCLUDED.symbol, market = EXCLUDED.market, currency = EXCLUDED.currency,
-            asset_class = EXCLUDED.asset_class, region = EXCLUDED.region, exchange = EXCLUDED.exchange,
-            instrument_type = EXCLUDED.instrument_type, market_group = EXCLUDED.market_group,
-            updated_at = EXCLUDED.updated_at
-      `);
-
-      // 全量重新同步 daa_market_price_snapshots
-      await query(`
-        INSERT INTO daa_market_price_snapshots (asset_key, last_price, price_updated_at, updated_at)
-        SELECT asset_key, last_price, price_updated_at, updated_at
-        FROM daa_asset_universe
-        WHERE last_price IS NOT NULL AND last_price > 0
-        ON CONFLICT (asset_key) DO UPDATE
-        SET last_price = EXCLUDED.last_price,
-            price_updated_at = EXCLUDED.price_updated_at,
-            updated_at = EXCLUDED.updated_at
-      `);
-
-      // 全量重新同步 daa_watchlist_entries
-      await query(`
-        INSERT INTO daa_watchlist_entries (asset_key, watch_enabled, watch_tags, notes, price_alert_above, price_alert_below, created_at, updated_at)
-        SELECT asset_key, watch_enabled, watch_tags, notes, price_alert_above, price_alert_below, created_at, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET watch_enabled = EXCLUDED.watch_enabled,
-            watch_tags = EXCLUDED.watch_tags,
-            notes = EXCLUDED.notes,
-            price_alert_above = EXCLUDED.price_alert_above,
-            price_alert_below = EXCLUDED.price_alert_below,
-            updated_at = EXCLUDED.updated_at
-      `);
-
-      // 全量重新同步 daa_target_allocations
-      await query(`
-        INSERT INTO daa_target_allocations (asset_key, target_weight_hint, updated_at)
-        SELECT asset_key, target_weight_hint, updated_at
-        FROM daa_asset_universe
-        ON CONFLICT (asset_key) DO UPDATE
-        SET target_weight_hint = EXCLUDED.target_weight_hint,
-            updated_at = EXCLUDED.updated_at
+        WHERE u.asset_key = we.asset_key AND (u.price_alert_above IS NOT NULL OR u.price_alert_below IS NOT NULL)
       `);
     },
   },
