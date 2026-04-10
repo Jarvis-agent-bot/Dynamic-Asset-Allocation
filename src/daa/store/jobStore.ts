@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { withDaaPgClient, parseJsonb, toIsoString } from "./storeShared";
-import type { DaaStoreExternalPayloadRaw, DaaStoreIngestJobLog, DaaStoreIngestJobStatus } from "./storeTypes";
+import type { DaaStoreExternalPayloadRaw } from "./storeTypes";
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
 
 const RAW_PAYLOAD_SELECT_COLUMNS_ = [
@@ -25,25 +25,6 @@ const RAW_PAYLOAD_SELECT_COLUMNS_ = [
   "created_at",
 ].join(", ");
 
-const INGEST_JOB_LOG_SELECT_COLUMNS_ = [
-  "job_id",
-  "job_type",
-  "trigger_source",
-  "status",
-  "started_at",
-  "finished_at",
-  "total_count",
-  "success_count",
-  "failure_count",
-  "diagnostics_json",
-].join(", ");
-
-function normalizeIngestJobStatus(value: unknown, fallback: DaaStoreIngestJobStatus = "ok"): DaaStoreIngestJobStatus {
-  const status = normalizeText(value, fallback).toLowerCase();
-  if (status === "ok" || status === "partial" || status === "failed") return status;
-  return fallback;
-}
-
 function mapExternalPayloadRawRow(row: Record<string, unknown>): DaaStoreExternalPayloadRaw {
   return {
     id: normalizeText(row.id),
@@ -59,21 +40,6 @@ function mapExternalPayloadRawRow(row: Record<string, unknown>): DaaStoreExterna
     fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
     expireAt: toIsoString(row.expire_at, new Date().toISOString()),
     createdAt: toIsoString(row.created_at, new Date().toISOString()),
-  };
-}
-
-function mapIngestJobLogRow(row: Record<string, unknown>): DaaStoreIngestJobLog {
-  return {
-    jobId: normalizeText(row.job_id),
-    jobType: normalizeText(row.job_type),
-    triggerSource: normalizeText(row.trigger_source, "manual"),
-    status: normalizeIngestJobStatus(row.status, "ok"),
-    startedAt: toIsoString(row.started_at, new Date().toISOString()),
-    finishedAt: toIsoString(row.finished_at, new Date().toISOString()),
-    totalCount: Math.max(0, Math.trunc(toFiniteNumber(row.total_count, 0))),
-    successCount: Math.max(0, Math.trunc(toFiniteNumber(row.success_count, 0))),
-    failureCount: Math.max(0, Math.trunc(toFiniteNumber(row.failure_count, 0))),
-    diagnosticsJson: parseJsonb<Record<string, unknown>>(row.diagnostics_json, {}),
   };
 }
 
@@ -130,35 +96,6 @@ export async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toI
   });
 }
 
-export async function listDaaIngestJobLogs(input: {
-  jobType?: string;
-  limit?: number;
-} = {}): Promise<DaaStoreIngestJobLog[]> {
-  await ensureDaaMarketCacheSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
-    if (input.jobType) {
-      const result = await query(
-        `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
-         FROM daa_ingest_job_log_v1
-         WHERE job_type = $1
-         ORDER BY started_at DESC
-         LIMIT $2`,
-        [normalizeText(input.jobType), limit],
-      );
-      return result.rows.map((row) => mapIngestJobLogRow(row as Record<string, unknown>));
-    }
-    const result = await query(
-      `SELECT ${INGEST_JOB_LOG_SELECT_COLUMNS_}
-       FROM daa_ingest_job_log_v1
-       ORDER BY started_at DESC
-       LIMIT $1`,
-      [limit],
-    );
-    return result.rows.map((row) => mapIngestJobLogRow(row as Record<string, unknown>));
-  });
-}
-
 export async function getDaaMarketCacheHealthStats(provider = "yfinance"): Promise<{
   provider: string;
   totalSnapshots: number;
@@ -189,10 +126,10 @@ export async function getDaaMarketCacheHealthStats(provider = "yfinance"): Promi
 
     const jobsRes = await query(
       `SELECT
-         SUM(total_count)::INT AS total_count,
-         SUM(success_count)::INT AS success_count,
-         SUM(failure_count)::INT AS failure_count
-       FROM daa_ingest_job_log_v1
+         COUNT(*)::INT AS total_count,
+         SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END)::INT AS success_count,
+         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)::INT AS failure_count
+       FROM daa_job_execution_logs
        WHERE job_type IN ('market_cache_refresh', 'cron_price_refresh')
          AND started_at >= NOW() - INTERVAL '24 hours'`,
       [],

@@ -920,20 +920,6 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
         CREATE INDEX IF NOT EXISTS idx_daa_external_payload_raw_v1_expire_at
           ON daa_external_payload_raw_v1(expire_at);
 
-        CREATE TABLE IF NOT EXISTS daa_ingest_job_log_v1 (
-          job_id TEXT PRIMARY KEY,
-          job_type TEXT NOT NULL,
-          trigger_source TEXT NOT NULL DEFAULT 'manual',
-          status TEXT NOT NULL CHECK (status IN ('ok','partial','failed')),
-          started_at TIMESTAMPTZ NOT NULL,
-          finished_at TIMESTAMPTZ NOT NULL,
-          total_count INTEGER NOT NULL DEFAULT 0,
-          success_count INTEGER NOT NULL DEFAULT 0,
-          failure_count INTEGER NOT NULL DEFAULT 0,
-          diagnostics_json JSONB NOT NULL DEFAULT '{}'::jsonb
-        );
-        CREATE INDEX IF NOT EXISTS idx_daa_ingest_job_log_v1_job_type_started_desc
-          ON daa_ingest_job_log_v1(job_type, started_at DESC);
       `);
       await query("COMMIT");
     } catch (error) {

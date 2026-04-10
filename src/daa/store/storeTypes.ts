@@ -133,8 +133,6 @@ export type DaaStoreMarketPriceStatus = "fresh" | "stale" | "missing" | "error" 
 
 export type DaaStoreFxRateHistoryStatus = "fresh" | "stale" | "missing" | "error";
 
-export type DaaStoreIngestJobStatus = "ok" | "partial" | "failed";
-
 export type DaaStoreMarketPriceSnapshot = {
   provider: string;
   market: string;
@@ -264,19 +262,6 @@ export type DaaStoreExternalPayloadRaw = {
   fetchedAt: string;
   expireAt: string;
   createdAt: string;
-};
-
-export type DaaStoreIngestJobLog = {
-  jobId: string;
-  jobType: string;
-  triggerSource: string;
-  status: DaaStoreIngestJobStatus;
-  startedAt: string;
-  finishedAt: string;
-  totalCount: number;
-  successCount: number;
-  failureCount: number;
-  diagnosticsJson: Record<string, unknown>;
 };
 
 export type DaaStoreCashLedgerSide = "deposit" | "withdraw";

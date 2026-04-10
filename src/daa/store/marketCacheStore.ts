@@ -14,9 +14,7 @@ import type {
   DaaStoreFxRateHistory, DaaStoreFxRateHistoryStatus,
   DaaStoreNewsItemSnapshot, DaaStoreNewsSignalSnapshot,
   DaaStoreMarketIndicatorSnapshot, DaaStoreHfHoldingSnapshot, DaaStoreHfSignalSnapshot,
-  DaaStoreIngestJobStatus,
   DaaStoreExternalPayloadRaw,
-  DaaStoreIngestJobLog,
 } from "./storeTypes";
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
 import { normalizeMarketIndicatorKey, normalizeMarketRegimeStore } from "./rebalanceCycleStore";
@@ -113,12 +111,6 @@ function normalizeMarketPriceStatus(value: unknown, fallback: DaaStoreMarketPric
 function normalizeFxHistoryStatus(value: unknown, fallback: DaaStoreFxRateHistoryStatus = "fresh"): DaaStoreFxRateHistoryStatus {
   const status = normalizeText(value, fallback).toLowerCase();
   if (status === "fresh" || status === "stale" || status === "missing" || status === "error") return status;
-  return fallback;
-}
-
-function normalizeIngestJobStatus(value: unknown, fallback: DaaStoreIngestJobStatus = "ok"): DaaStoreIngestJobStatus {
-  const status = normalizeText(value, fallback).toLowerCase();
-  if (status === "ok" || status === "partial" || status === "failed") return status;
   return fallback;
 }
 
@@ -233,21 +225,6 @@ function mapExternalPayloadRawRow(row: Record<string, unknown>): DaaStoreExterna
     fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
     expireAt: toIsoString(row.expire_at, new Date().toISOString()),
     createdAt: toIsoString(row.created_at, new Date().toISOString()),
-  };
-}
-
-function mapIngestJobLogRow(row: Record<string, unknown>): DaaStoreIngestJobLog {
-  return {
-    jobId: normalizeText(row.job_id),
-    jobType: normalizeText(row.job_type),
-    triggerSource: normalizeText(row.trigger_source, "manual"),
-    status: normalizeIngestJobStatus(row.status, "ok"),
-    startedAt: toIsoString(row.started_at, new Date().toISOString()),
-    finishedAt: toIsoString(row.finished_at, new Date().toISOString()),
-    totalCount: Math.max(0, Math.trunc(toFiniteNumber(row.total_count, 0))),
-    successCount: Math.max(0, Math.trunc(toFiniteNumber(row.success_count, 0))),
-    failureCount: Math.max(0, Math.trunc(toFiniteNumber(row.failure_count, 0))),
-    diagnosticsJson: parseJsonb<Record<string, unknown>>(row.diagnostics_json, {}),
   };
 }
 

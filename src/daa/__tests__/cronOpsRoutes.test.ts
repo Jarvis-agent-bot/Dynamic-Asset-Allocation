@@ -88,7 +88,6 @@ import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSign
 import {
   type DaaStoreExternalPayloadRaw,
   type DaaStoreFxRate,
-  type DaaStoreIngestJobLog,
   appendDaaExternalPayloadRaw,
   appendDaaFxRateHistoryRows,
   getDaaSystemConfig,
@@ -180,21 +179,6 @@ function buildExternalPayloadRawFixture(): DaaStoreExternalPayloadRaw {
     fetchedAt: "2026-03-01T00:00:00.000Z",
     expireAt: "2026-06-01T00:00:00.000Z",
     createdAt: "2026-03-01T00:00:00.000Z",
-  };
-}
-
-function buildIngestJobLogFixture(): DaaStoreIngestJobLog {
-  return {
-    jobId: "job-1",
-    jobType: "fixture",
-    triggerSource: "manual",
-    status: "ok",
-    startedAt: "2026-03-01T00:00:00.000Z",
-    finishedAt: "2026-03-01T00:00:01.000Z",
-    totalCount: 0,
-    successCount: 0,
-    failureCount: 0,
-    diagnosticsJson: {},
   };
 }
 
