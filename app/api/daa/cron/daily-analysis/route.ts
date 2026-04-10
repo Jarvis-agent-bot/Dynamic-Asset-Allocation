@@ -53,7 +53,7 @@ function buildNotifyText(input: {
   triggerReason: string;
   riskStatus: string;
   proposals: Array<{ symbol: string; side: "BUY" | "SELL"; suggestedNotional: number }>;
-  llmDecisionSnapshot?: {
+  agentDecisionSnapshot?: {
     status: string;
     summary: string;
     keyRisks: string[];
@@ -68,7 +68,7 @@ function buildNotifyText(input: {
   lines.push(`风控状态：${input.riskStatus}`);
 
   // AI summary section
-  const snap = input.llmDecisionSnapshot;
+  const snap = input.agentDecisionSnapshot;
   if (snap && snap.status === "ok" && snap.summary) {
     lines.push("");
     lines.push("*AI 判断*");
@@ -182,7 +182,7 @@ export async function POST(req: Request) {
                 side: row.side,
                 suggestedNotional: row.suggestedNotional,
               })),
-              llmDecisionSnapshot: cycle.llmDecisionSnapshot ?? null,
+              agentDecisionSnapshot: cycle.agentDecisionSnapshot ?? null,
             });
 
             const sends: Promise<boolean>[] = [];

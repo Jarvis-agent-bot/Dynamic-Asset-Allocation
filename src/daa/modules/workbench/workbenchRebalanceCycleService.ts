@@ -368,7 +368,7 @@ export async function generateWorkbenchRebalanceCycle(
       : null,
   ].filter(Boolean).join("\n");
 
-  const llmDecisionSnapshot: Record<string, unknown> | null = {
+  const agentDecisionSnapshot: Record<string, unknown> | null = {
     status: agentResult.agentStatus,
     summary: agentResult.llmSummary,
     marketRegime: agentResult.marketRegime,
@@ -385,7 +385,7 @@ export async function generateWorkbenchRebalanceCycle(
     riskCheck,
     notes: cycleNotes || null,
     marketContext,
-    llmDecisionSnapshot,
+    agentDecisionSnapshot,
   });
 
   await appendTriggerEventSafe({

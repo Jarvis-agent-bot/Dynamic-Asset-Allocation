@@ -48,7 +48,7 @@ export default function RebalancePageClient() {
   const rp = wbModel.rebalanceSectionProps;
 
   const aiSnapshot = useMemo(() => {
-    const cycleSnapshot = rp?.currentCycle?.llmDecisionSnapshot;
+    const cycleSnapshot = rp?.currentCycle?.agentDecisionSnapshot;
     const llm = today.model?.llmOutput;
     if (cycleSnapshot) {
       return {
@@ -67,7 +67,7 @@ export default function RebalancePageClient() {
       keyRisks: llm.riskWarning ? [llm.riskWarning] : undefined,
       keyOpportunities: llm.dissent ? [llm.dissent] : undefined,
     };
-  }, [today.model?.llmOutput, rp?.currentCycle?.llmDecisionSnapshot]);
+  }, [today.model?.llmOutput, rp?.currentCycle?.agentDecisionSnapshot]);
 
   return (
     <div className="space-y-4">

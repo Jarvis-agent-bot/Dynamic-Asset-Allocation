@@ -802,6 +802,24 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260410_rename_llm_decision_snapshot_key",
+    async apply(query) {
+      // 重命名 JSONB 中嵌入的 __llmDecisionSnapshot → __agentDecisionSnapshot
+      // rebalance_cycles 表的 market_context_json 字段
+      const hasCycles = await tableExists(query, "daa_rebalance_cycles");
+      if (!hasCycles) return;
+
+      await query(`
+        UPDATE daa_rebalance_cycles
+        SET market_context_json = (
+          market_context_json - '__llmDecisionSnapshot'
+          || jsonb_build_object('__agentDecisionSnapshot', market_context_json->'__llmDecisionSnapshot')
+        )
+        WHERE market_context_json ? '__llmDecisionSnapshot'
+      `);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

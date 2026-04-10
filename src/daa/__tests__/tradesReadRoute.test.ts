@@ -60,7 +60,7 @@ function buildCycleFixture(
     cancelReason: null,
     notes: null,
     marketContext: null,
-    llmDecisionSnapshot: null,
+    agentDecisionSnapshot: null,
     createdAt: "2026-03-01T00:00:00.000Z",
     ...overrides,
   };

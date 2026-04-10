@@ -751,9 +751,9 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
     cancelReason: row.cancel_reason == null ? null : normalizeText(row.cancel_reason) || null,
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
     marketContext: row.market_context_json == null ? null : normalizeMarketContextJson(parseJsonb<Record<string, unknown>>(row.market_context_json, {})),
-    llmDecisionSnapshot: (() => {
+    agentDecisionSnapshot: (() => {
       const mcRaw = parseJsonb<Record<string, unknown>>(row.market_context_json, {});
-      const snap = mcRaw?.__llmDecisionSnapshot;
+      const snap = mcRaw?.__agentDecisionSnapshot;
       return snap && typeof snap === "object" && !Array.isArray(snap) ? (snap as Record<string, unknown>) : null;
     })(),
     createdAt: toIsoString(row.created_at),
@@ -1457,10 +1457,10 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
     const notes = input.notes == null ? null : normalizeText(input.notes) || null;
     const marketContext = input.marketContext == null ? null : normalizeMarketContextJson(input.marketContext);
 
-    // Embed llmDecisionSnapshot inside market_context_json to avoid schema change
+    // Embed agentDecisionSnapshot inside market_context_json to avoid schema change
     const marketContextWithSnapshot = {
       ...(marketContext ?? {}),
-      ...(input.llmDecisionSnapshot ? { __llmDecisionSnapshot: input.llmDecisionSnapshot } : {}),
+      ...(input.agentDecisionSnapshot ? { __agentDecisionSnapshot: input.agentDecisionSnapshot } : {}),
     };
 
     const inserted = await query(

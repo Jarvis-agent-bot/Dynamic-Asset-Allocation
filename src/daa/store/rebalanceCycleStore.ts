@@ -330,9 +330,9 @@ function mapRebalanceCycleRow(row: Record<string, unknown>): DaaStoreRebalanceCy
     cancelReason: row.cancel_reason == null ? null : normalizeText(row.cancel_reason) || null,
     notes: row.notes == null ? null : normalizeText(row.notes) || null,
     marketContext: row.market_context_json == null ? null : normalizeMarketContextJson(parseJsonb<Record<string, unknown>>(row.market_context_json, {})),
-    llmDecisionSnapshot: (() => {
+    agentDecisionSnapshot: (() => {
       const mcRaw = parseJsonb<Record<string, unknown>>(row.market_context_json, {});
-      const snap = mcRaw?.__llmDecisionSnapshot;
+      const snap = mcRaw?.__agentDecisionSnapshot;
       return snap && typeof snap === "object" && !Array.isArray(snap) ? (snap as Record<string, unknown>) : null;
     })(),
     createdAt: toIsoString(row.created_at),

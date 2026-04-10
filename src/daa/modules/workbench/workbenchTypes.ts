@@ -188,7 +188,7 @@ export type RebalanceCycle = {
   cancelReason: string | null;
   notes: string | null;
   marketContext?: DaaMarketContext | null;
-  llmDecisionSnapshot?: {
+  agentDecisionSnapshot?: {
     status: string;
     marketRegime: string;
     overallConfidence: number;

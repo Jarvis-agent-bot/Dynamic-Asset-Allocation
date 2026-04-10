@@ -527,7 +527,7 @@ export type DaaStoreRebalanceCycle = {
   cancelReason: string | null;
   notes: string | null;
   marketContext?: DaaMarketContext | null;
-  llmDecisionSnapshot?: Record<string, unknown> | null;
+  agentDecisionSnapshot?: Record<string, unknown> | null;
   createdAt: string;
 };
 
@@ -618,7 +618,7 @@ export type DaaStoreCreateRebalanceCycleInput = {
   riskCheck: DaaStorePreTradeRiskCheck;
   notes?: string | null;
   marketContext?: DaaMarketContext | null;
-  llmDecisionSnapshot?: Record<string, unknown> | null;
+  agentDecisionSnapshot?: Record<string, unknown> | null;
 };
 
 export type DaaStorePatchRebalanceCycleInput = {
