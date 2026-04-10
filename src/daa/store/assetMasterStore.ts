@@ -182,7 +182,7 @@ export async function batchUpdateMarketPriceSnapshots(
     }
 
     const result = await query(
-      `INSERT INTO daa_market_price_snapshots AS mps (asset_key, last_price, price_updated_at, updated_at)
+      `INSERT INTO daa_market_price_snapshots AS mps (asset_key, last_price, price_updated_at)
        VALUES ${valuesClauses.join(", ")}
        ON CONFLICT (asset_key) DO UPDATE SET
          last_price = EXCLUDED.last_price,
