@@ -171,6 +171,25 @@ export async function getDueReviews(): Promise<ResearchThread[]> {
   });
 }
 
+export async function createThesisReview(data: {
+  threadId: string;
+  reviewWindow: string;
+  thesisAtTime: string;
+  convictionAtTime: string;
+  actualOutcome: string;
+  accuracyScore: number;
+  lessonsLearned: string | null;
+}): Promise<void> {
+  await withDaaPgClient(async ({ query }) => {
+    const id = randomUUID();
+    await query(
+      `INSERT INTO daa_thesis_reviews (id, thread_id, review_window, thesis_at_time, conviction_at_time, actual_outcome, accuracy_score, lessons_learned)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, data.threadId, data.reviewWindow, data.thesisAtTime, data.convictionAtTime, data.actualOutcome, data.accuracyScore, data.lessonsLearned],
+    );
+  });
+}
+
 export async function countThreads(): Promise<number> {
   return withDaaPgClient(async ({ query }) => {
     const res = await query(`SELECT COUNT(*) as cnt FROM daa_research_threads`);

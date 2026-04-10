@@ -1,67 +1,260 @@
 /**
  * Embedding 工具 — 为 Agent 记忆生成 384 维向量
  *
- * v0 实现：使用 DeepSeek 的文本能力生成简化的关键词向量。
- * 未来可替换为 sentence-transformers 本地推理或 DeepSeek embedding API。
+ * 可插拔 provider 架构：
+ * 1. SiliconFlow（默认推荐，免费额度，BGE-M3 中英双语优秀）
+ * 2. DeepSeek embedding-v2（极便宜 ~$0.01/M tokens，768 维）
+ * 3. OpenAI text-embedding-3-small（$0.02/M tokens，支持 dimensions=384）
+ *
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │  推荐：SiliconFlow 免费 API                                  │
+ * │                                                             │
+ * │  1. 注册: https://cloud.siliconflow.cn/                     │
+ * │  2. 创建 API Key: 控制台 → API 密钥 → 新建                    │
+ * │  3. 配置 .env.local:                                        │
+ * │     DAA_EMBEDDING_PROVIDER=siliconflow                      │
+ * │     DAA_EMBEDDING_API_KEY=sk-xxx                            │
+ * │                                                             │
+ * │  免费额度包含 BGE-M3 模型（1024 维，中英双语表现优秀）          │
+ * │  官方文档: https://docs.siliconflow.cn/api-reference/embeddings │
+ * └─────────────────────────────────────────────────────────────┘
+ *
+ * 配置优先级：env var > DB secrets > 复用 LLM API key
+ *
+ * 环境变量：
+ * - DAA_EMBEDDING_PROVIDER: siliconflow | deepseek | openai（默认 siliconflow）
+ * - DAA_EMBEDDING_API_KEY: embedding 专用 key（可选，默认复用 LLM key）
+ * - DAA_EMBEDDING_ENDPOINT: 自定义 endpoint（可选）
+ * - DAA_EMBEDDING_MODEL: 自定义模型名（可选）
  */
 
+import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+
+// ── 常量 ──
+
+const TARGET_DIM = 384;
+const TIMEOUT_MS = 15_000;
+
+// ── Provider 配置 ──
+
+type EmbeddingProvider = "siliconflow" | "deepseek" | "openai";
+
+interface ProviderConfig {
+  endpoint: string;
+  model: string;
+  outputDim: number; // 原始输出维度
+  supportsNativeDim: boolean; // 是否支持 dimensions 参数
+}
+
+const PROVIDER_DEFAULTS: Record<Exclude<EmbeddingProvider, "hash">, ProviderConfig> = {
+  siliconflow: {
+    endpoint: "https://api.siliconflow.cn/v1/embeddings",
+    model: "BAAI/bge-m3",
+    outputDim: 1024,
+    supportsNativeDim: false,
+  },
+  deepseek: {
+    endpoint: "https://api.deepseek.com/v1/embeddings",
+    model: "deepseek-embedding-v2",
+    outputDim: 768,
+    supportsNativeDim: false,
+  },
+  openai: {
+    endpoint: "https://api.openai.com/v1/embeddings",
+    model: "text-embedding-3-small",
+    outputDim: 1536,
+    supportsNativeDim: true, // 支持 dimensions 参数
+  },
+};
+
+// ── 配置解析 ──
+
+interface ResolvedEmbeddingConfig {
+  provider: EmbeddingProvider;
+  endpoint: string;
+  model: string;
+  apiKey: string;
+  supportsNativeDim: boolean;
+}
+
+async function resolveEmbeddingConfig(): Promise<ResolvedEmbeddingConfig | null> {
+  // 1. 读取 provider
+  const providerEnv = process.env.DAA_EMBEDDING_PROVIDER?.toLowerCase().trim() || "";
+  const provider: EmbeddingProvider =
+    providerEnv === "deepseek" ? "deepseek"
+    : providerEnv === "openai" ? "openai"
+    : "siliconflow"; // 默认
+
+  const defaults = PROVIDER_DEFAULTS[provider];
+
+  // 2. 读取 API Key：专用 env > DB secrets > 复用 LLM key
+  let apiKey = "";
+  try {
+    apiKey = await resolveSecret("embedding_api_key");
+  } catch {
+    // ignore
+  }
+  if (!apiKey) {
+    try {
+      apiKey = await resolveSecret("llm_api_key");
+    } catch {
+      apiKey = "";
+    }
+  }
+
+  if (!apiKey) return null; // 无 key，降级到 hash
+
+  // 3. endpoint / model 可自定义
+  const endpoint = process.env.DAA_EMBEDDING_ENDPOINT?.trim() || defaults.endpoint;
+  const model = process.env.DAA_EMBEDDING_MODEL?.trim() || defaults.model;
+
+  return { provider, endpoint, model, apiKey, supportsNativeDim: defaults.supportsNativeDim };
+}
+
+// ── API 调用 ──
+
+async function callEmbeddingApi(config: ResolvedEmbeddingConfig, text: string): Promise<number[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    // OpenAI 兼容格式（SiliconFlow / DeepSeek / OpenAI 都支持）
+    const body: Record<string, unknown> = {
+      model: config.model,
+      input: text,
+      encoding_format: "float",
+    };
+
+    // OpenAI text-embedding-3 支持原生维度截断
+    if (config.supportsNativeDim) {
+      body.dimensions = TARGET_DIM;
+    }
+
+    const response = await fetch(config.endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      throw new Error(`Embedding API ${response.status}: ${errBody.slice(0, 200)}`);
+    }
+
+    const payload = (await response.json()) as {
+      data?: Array<{ embedding?: number[] }>;
+    };
+
+    const rawEmbedding = payload.data?.[0]?.embedding;
+    if (!rawEmbedding || rawEmbedding.length === 0) {
+      throw new Error("Embedding API 返回空向量");
+    }
+
+    // 截断到 TARGET_DIM（如果 API 不支持原生维度控制）
+    return truncateAndNormalize(rawEmbedding, TARGET_DIM);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 截断高维向量到目标维度并重新 L2 归一化。
+ * MRL（Matryoshka Representation Learning）训练的模型支持直接截断。
+ */
+function truncateAndNormalize(vec: number[], dim: number): number[] {
+  const truncated = vec.length > dim ? vec.slice(0, dim) : vec;
+
+  // L2 归一化
+  let norm = 0;
+  for (let i = 0; i < truncated.length; i++) norm += truncated[i] * truncated[i];
+  norm = Math.sqrt(norm) || 1;
+
+  return truncated.map(v => Math.round((v / norm) * 1e6) / 1e6);
+}
+
+// ── 公共 API ──
+
+/** 缓存配置解析结果（进程生命周期内） */
+let _configCache: { resolved: ResolvedEmbeddingConfig | null; resolvedAt: number } | null = null;
+const CONFIG_CACHE_TTL = 5 * 60_000; // 5 分钟
+
+async function getConfig(): Promise<ResolvedEmbeddingConfig | null> {
+  if (_configCache && Date.now() - _configCache.resolvedAt < CONFIG_CACHE_TTL) {
+    return _configCache.resolved;
+  }
+  const resolved = await resolveEmbeddingConfig();
+  _configCache = { resolved, resolvedAt: Date.now() };
+  return resolved;
+}
+
+/** 已输出过配置缺失警告（避免刷屏） */
+let _warnedNoConfig = false;
 
 /**
  * 生成文本的 384 维 embedding 向量。
  *
- * v0 策略：简单的哈希向量。不依赖外部 embedding API，零成本。
- * 通过字符级哈希 + 词频统计生成伪向量，用于 pgvector 的余弦相似度搜索。
- * 语义精度有限，但对于 <100 条记忆足够区分不同主题。
+ * 使用真实 Embedding API（SiliconFlow/DeepSeek/OpenAI）。
+ * 未配置 API key 时返回零向量并打印警告。
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
-    return hashEmbedding(text, 384);
+    const config = await getConfig();
+
+    if (!config) {
+      if (!_warnedNoConfig) {
+        _warnedNoConfig = true;
+        console.warn(
+          "[embedding] ⚠️ Embedding API 未配置，记忆语义检索不可用。\n" +
+          "  推荐使用 SiliconFlow 免费 API:\n" +
+          "  1. 注册 https://cloud.siliconflow.cn/\n" +
+          "  2. 在 .env.local 添加:\n" +
+          "     DAA_EMBEDDING_PROVIDER=siliconflow\n" +
+          "     DAA_EMBEDDING_API_KEY=sk-xxx\n",
+        );
+      }
+      return Array(TARGET_DIM).fill(0);
+    }
+
+    return await callEmbeddingApi(config, text);
   } catch (e) {
     logSwallowed("embedding.generate", e);
-    return Array(384).fill(0);
+    return Array(TARGET_DIM).fill(0);
   }
 }
 
 /**
- * 确定性哈希 embedding：基于字符 n-gram 频率。
- * 同一文本总是产生相同的向量（deterministic）。
- * 相似文本产生相似的向量（locality-sensitive）。
+ * 批量生成 embedding（减少 API 调用次数）。
+ * 注意：当前逐条调用，未来可优化为批量 API。
  */
-function hashEmbedding(text: string, dim: number): number[] {
-  const normalized = text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  const vec = new Float64Array(dim);
-
-  // 字符级 trigram 哈希
-  for (let i = 0; i < normalized.length - 2; i++) {
-    const trigram = normalized.slice(i, i + 3);
-    const h = simpleHash(trigram);
-    const idx = Math.abs(h) % dim;
-    vec[idx] += h > 0 ? 1 : -1;
-  }
-
-  // 词级哈希（补充语义粒度）
-  const words = normalized.split(" ").filter(w => w.length > 1);
-  for (const word of words) {
-    const h = simpleHash(word);
-    const idx = Math.abs(h) % dim;
-    vec[idx] += (h > 0 ? 1 : -1) * 2; // 词权重高于 trigram
-  }
-
-  // L2 归一化
-  let norm = 0;
-  for (let i = 0; i < dim; i++) norm += vec[i] * vec[i];
-  norm = Math.sqrt(norm) || 1;
-  const result: number[] = new Array(dim);
-  for (let i = 0; i < dim; i++) result[i] = Math.round((vec[i] / norm) * 1e6) / 1e6;
-
-  return result;
+export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+  return Promise.all(texts.map(t => generateEmbedding(t)));
 }
 
-function simpleHash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+/** 返回当前使用的 embedding provider 信息（用于诊断） */
+export async function getEmbeddingProviderInfo(): Promise<{
+  provider: string;
+  model: string;
+  endpoint: string;
+  isRealEmbedding: boolean;
+}> {
+  const config = await getConfig();
+  if (config) {
+    return {
+      provider: config.provider,
+      model: config.model,
+      endpoint: config.endpoint,
+      isRealEmbedding: true,
+    };
   }
-  return h;
+  return {
+    provider: "none",
+    model: "未配置 — 请设置 DAA_EMBEDDING_API_KEY",
+    endpoint: "https://cloud.siliconflow.cn/",
+    isRealEmbedding: false,
+  };
 }

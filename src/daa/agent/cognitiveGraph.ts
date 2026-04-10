@@ -7,12 +7,12 @@
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { CognitiveStateAnnotation, type CognitiveState, type CognitiveUpdate, type PortfolioSnapshot, type MarketSnapshot, type NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread, DailyBriefing, CognitionGap, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
-import { buildPrioritizePrompt, buildInvestigatePrompt, buildSurfacePrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import { buildPrioritizePrompt, buildInvestigatePrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
-import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
+
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 // ── 工具导入（现有信号生成器 + 数据服务） ──
@@ -347,35 +347,12 @@ async function reflectNode(state: CognitiveState): Promise<CognitiveUpdate> {
   }
 
   try {
-    const prompt = `你是一个投资研究操作系统的「首席风控官」。刚刚一个研究论点发生了判断变化，你需要反思。
-
-## 论点变化
-标题: ${sanitizeForPrompt(thread.title, 80)}
-旧判断: ${sanitizeForPrompt(thread.thesisText, 200)}
-新判断: ${sanitizeForPrompt(result.updatedThesis ?? "", 200)}
-旧信念: ${thread.conviction} → 新信念: ${result.newConviction ?? thread.conviction}
-
-## 证据摘要
-${sanitizeForPrompt(result.evidenceSummary, 300)}
-
-## 任务
-1. 这个变化是否合理？有没有过度反应的风险？
-2. 之前有没有类似的判断变化模式？
-3. 是否有值得长期记住的教训？
-
-## 输出格式（严格 JSON）
-\`\`\`json
-{
-  "reflectionSummary": "反思总结",
-  "overreactionRisk": "low/medium/high",
-  "newMemory": {
-    "type": "lesson",
-    "content": "值得记住的教训（如果有的话，没有则设为 null）"
-  }
-}
-\`\`\`
-
-只输出 JSON，不要其他文字。`;
+    const prompt = buildReflectPrompt({
+      thread,
+      updatedThesis: result.updatedThesis ?? "",
+      newConviction: result.newConviction ?? thread.conviction,
+      evidenceSummary: result.evidenceSummary,
+    });
 
     const { data, tokensUsed } = await callDeepSeekJson<{
       reflectionSummary: string;
@@ -446,32 +423,11 @@ async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
 
     for (const thread of dueTheses.slice(0, 3)) {
       try {
-        const prompt = `你是一个投资研究操作系统的「复盘审计师」。以下论点已到复盘日期。
-
-## 论点信息
-标题: ${sanitizeForPrompt(thread.title, 80)}
-当时判断: ${sanitizeForPrompt(thread.thesisText, 200)}
-信念强度: ${thread.conviction}
-创建时间: ${thread.createdAt}
-
-## 当前市场
-Regime: ${state.market?.regime ?? "unknown"}
-VIX: ${state.market?.vix ?? "N/A"}
-
-## 任务
-评估这个论点到目前为止是否准确。
-
-## 输出格式（严格 JSON）
-\`\`\`json
-{
-  "actualOutcome": "实际发生了什么",
-  "accuracyScore": 0.7,
-  "lesson": "从这次复盘中学到的教训（如果有）",
-  "shouldArchive": false
-}
-\`\`\`
-
-只输出 JSON，不要其他文字。`;
+        const prompt = buildReviewPrompt({
+          thread,
+          marketRegime: state.market?.regime ?? "unknown",
+          vix: state.market?.vix ?? null,
+        });
 
         const { data, tokensUsed } = await callDeepSeekJson<{
           actualOutcome: string;
@@ -483,15 +439,15 @@ VIX: ${state.market?.vix ?? "N/A"}
         totalTokens += tokensUsed;
 
         if (data) {
-          // 保存复盘记录
-          const { randomUUID } = await import("node:crypto");
-          const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
-          await withDaaPgClient(async ({ query }) => {
-            await query(
-              `INSERT INTO daa_thesis_reviews (id, thread_id, review_window, thesis_at_time, conviction_at_time, actual_outcome, accuracy_score, lessons_learned)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [randomUUID(), thread.id, "30d", thread.thesisText, thread.conviction, data.actualOutcome, data.accuracyScore, data.lesson],
-            );
+          // 保存复盘记录（通过 store 层）
+          await thesisStore.createThesisReview({
+            threadId: thread.id,
+            reviewWindow: "30d",
+            thesisAtTime: thread.thesisText,
+            convictionAtTime: thread.conviction,
+            actualOutcome: data.actualOutcome,
+            accuracyScore: data.accuracyScore,
+            lessonsLearned: data.lesson,
           });
 
           // 生成教训记忆
@@ -676,7 +632,7 @@ export async function runCognitiveAgentCycle(trigger: "scheduled" | "manual" | "
 
     const durationMs = Date.now() - t0;
     await completeAgentRun(run.id, {
-      status: (result.errors?.length ?? 0) > 0 ? "completed" : "completed",
+      status: (result.errors?.length ?? 0) > 0 ? "completed_with_errors" : "completed",
       targetThreadIds: result.investigationQueue?.map((t: InvestigationTarget) => t.threadId).filter(Boolean) as string[] ?? [],
       toolsCalled: result.toolsCalled ?? [],
       reasoningTraces: result.reasoningTraces ?? [],

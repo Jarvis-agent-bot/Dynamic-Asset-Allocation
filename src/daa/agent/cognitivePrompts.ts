@@ -222,6 +222,80 @@ ${thesisText}
 只输出 JSON，不要其他文字。`;
 }
 
+// ── Reflect 节点 Prompt ──
+
+export function buildReflectPrompt(ctx: {
+  thread: ResearchThread;
+  updatedThesis: string;
+  newConviction: string;
+  evidenceSummary: string;
+}): string {
+  return `你是一个投资研究操作系统的「首席风控官」。刚刚一个研究论点发生了判断变化，你需要反思。
+
+## 论点变化
+标题: ${sanitizeForPrompt(ctx.thread.title, 80)}
+旧判断: ${sanitizeForPrompt(ctx.thread.thesisText, 200)}
+新判断: ${sanitizeForPrompt(ctx.updatedThesis, 200)}
+旧信念: ${ctx.thread.conviction} → 新信念: ${ctx.newConviction}
+
+## 证据摘要
+${sanitizeForPrompt(ctx.evidenceSummary, 300)}
+
+## 任务
+1. 这个变化是否合理？有没有过度反应的风险？
+2. 之前有没有类似的判断变化模式？
+3. 是否有值得长期记住的教训？
+
+## 输出格式（严格 JSON）
+\`\`\`json
+{
+  "reflectionSummary": "反思总结",
+  "overreactionRisk": "low/medium/high",
+  "newMemory": {
+    "type": "lesson",
+    "content": "值得记住的教训（如果有的话，没有则设为 null）"
+  }
+}
+\`\`\`
+
+只输出 JSON，不要其他文字。`;
+}
+
+// ── Review 节点 Prompt ──
+
+export function buildReviewPrompt(ctx: {
+  thread: ResearchThread;
+  marketRegime: string;
+  vix: number | null;
+}): string {
+  return `你是一个投资研究操作系统的「复盘审计师」。以下论点已到复盘日期。
+
+## 论点信息
+标题: ${sanitizeForPrompt(ctx.thread.title, 80)}
+当时判断: ${sanitizeForPrompt(ctx.thread.thesisText, 200)}
+信念强度: ${ctx.thread.conviction}
+创建时间: ${ctx.thread.createdAt}
+
+## 当前市场
+Regime: ${ctx.marketRegime}
+VIX: ${ctx.vix ?? "N/A"}
+
+## 任务
+评估这个论点到目前为止是否准确。
+
+## 输出格式（严格 JSON）
+\`\`\`json
+{
+  "actualOutcome": "实际发生了什么",
+  "accuracyScore": 0.7,
+  "lesson": "从这次复盘中学到的教训（如果有）",
+  "shouldArchive": false
+}
+\`\`\`
+
+只输出 JSON，不要其他文字。`;
+}
+
 // ── Telegram 格式化 ──
 
 export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {

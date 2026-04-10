@@ -42,7 +42,7 @@ export interface EvidenceItem {
 
 // ── Agent 运行记录 ──
 
-export type AgentRunStatus = "running" | "completed" | "failed" | "interrupted";
+export type AgentRunStatus = "running" | "completed" | "completed_with_errors" | "failed" | "interrupted";
 export type AgentTrigger = "scheduled" | "manual" | "event_driven";
 
 export interface ToolCallRecord {
