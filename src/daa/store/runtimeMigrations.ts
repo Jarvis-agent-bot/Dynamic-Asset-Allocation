@@ -723,6 +723,21 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260410_upgrade_embedding_vector_1024",
+    async apply(query) {
+      // 升级 embedding 列从 vector(384) → vector(1024)（BGE-M3 原始维度）
+      // 同时清空旧的哈希伪向量（语义无意义）
+      const hasTable = await tableExists(query, "daa_agent_memory");
+      if (!hasTable) return;
+
+      // 清空旧的 hash 伪向量（384 维，语义无用）
+      await query(`UPDATE daa_agent_memory SET embedding = NULL WHERE embedding IS NOT NULL`);
+
+      // ALTER COLUMN TYPE 修改 vector 维度
+      await query(`ALTER TABLE daa_agent_memory ALTER COLUMN embedding TYPE vector(1024)`);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

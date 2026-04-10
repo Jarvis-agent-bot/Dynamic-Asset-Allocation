@@ -1,10 +1,10 @@
 /**
- * Embedding 工具 — 为 Agent 记忆生成 384 维向量
+ * Embedding 工具 — 为 Agent 记忆生成 1024 维向量
  *
  * 可插拔 provider 架构：
  * 1. SiliconFlow（默认推荐，免费额度，BGE-M3 中英双语优秀）
  * 2. DeepSeek embedding-v2（极便宜 ~$0.01/M tokens，768 维）
- * 3. OpenAI text-embedding-3-small（$0.02/M tokens，支持 dimensions=384）
+ * 3. OpenAI text-embedding-3-small（$0.02/M tokens，支持 dimensions=1024）
  *
  * ┌─────────────────────────────────────────────────────────────┐
  * │  推荐：SiliconFlow 免费 API                                  │
@@ -33,7 +33,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 // ── 常量 ──
 
-const TARGET_DIM = 384;
+const TARGET_DIM = 1024;
 const TIMEOUT_MS = 15_000;
 
 // ── Provider 配置 ──
@@ -47,7 +47,7 @@ interface ProviderConfig {
   supportsNativeDim: boolean; // 是否支持 dimensions 参数
 }
 
-const PROVIDER_DEFAULTS: Record<Exclude<EmbeddingProvider, "hash">, ProviderConfig> = {
+const PROVIDER_DEFAULTS: Record<EmbeddingProvider, ProviderConfig> = {
   siliconflow: {
     endpoint: "https://api.siliconflow.cn/v1/embeddings",
     model: "BAAI/bge-m3",
@@ -165,25 +165,33 @@ async function callEmbeddingApi(config: ResolvedEmbeddingConfig, text: string): 
     }
 
     // 截断到 TARGET_DIM（如果 API 不支持原生维度控制）
-    return truncateAndNormalize(rawEmbedding, TARGET_DIM);
+    return resizeAndNormalize(rawEmbedding, TARGET_DIM);
   } finally {
     clearTimeout(timer);
   }
 }
 
 /**
- * 截断高维向量到目标维度并重新 L2 归一化。
- * MRL（Matryoshka Representation Learning）训练的模型支持直接截断。
+ * 将向量调整到目标维度并 L2 归一化。
+ * - 高维 → 截断（MRL 训练的模型如 BGE-M3、OpenAI 支持直接截断）
+ * - 低维 → zero-pad 补齐（如 DeepSeek 768 维 → 1024 维）
  */
-function truncateAndNormalize(vec: number[], dim: number): number[] {
-  const truncated = vec.length > dim ? vec.slice(0, dim) : vec;
+function resizeAndNormalize(vec: number[], dim: number): number[] {
+  let resized: number[];
+  if (vec.length > dim) {
+    resized = vec.slice(0, dim);
+  } else if (vec.length < dim) {
+    resized = [...vec, ...Array(dim - vec.length).fill(0)];
+  } else {
+    resized = vec;
+  }
 
   // L2 归一化
   let norm = 0;
-  for (let i = 0; i < truncated.length; i++) norm += truncated[i] * truncated[i];
+  for (let i = 0; i < resized.length; i++) norm += resized[i] * resized[i];
   norm = Math.sqrt(norm) || 1;
 
-  return truncated.map(v => Math.round((v / norm) * 1e6) / 1e6);
+  return resized.map(v => Math.round((v / norm) * 1e6) / 1e6);
 }
 
 // ── 公共 API ──
