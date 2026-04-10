@@ -303,7 +303,7 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
   const thread = state.currentThread;
 
   if (!target || !thread) {
-    return {}; // 无目标，跳过
+    return { investigateResult: null }; // 无目标，清除 stale 结果
   }
 
   try {
@@ -469,15 +469,19 @@ async function reflectNode(state: CognitiveState): Promise<CognitiveUpdate> {
 
     let newMemCount = 0;
     if (data?.newMemory?.content) {
-      const emb = await generateEmbedding(data.newMemory.content);
-      // P2-10: 在 relevanceTags 中加入当前 threadId
-      await memoryStore.createMemory({
-        memoryType: (data.newMemory.type as "lesson" | "pattern" | "preference" | "fact") || "lesson",
-        content: data.newMemory.content,
-        relevanceTags: [thread.id, ...thread.tags],
-        embedding: emb,
-      });
-      newMemCount = 1;
+      try {
+        const emb = await generateEmbedding(data.newMemory.content);
+        // P2-10: 在 relevanceTags 中加入当前 threadId
+        await memoryStore.createMemory({
+          memoryType: (data.newMemory.type as "lesson" | "pattern" | "preference" | "fact") || "lesson",
+          content: data.newMemory.content,
+          relevanceTags: [thread.id, ...thread.tags],
+          embedding: emb,
+        });
+        newMemCount = 1;
+      } catch (e) {
+        logSwallowed("cognitiveGraph.reflect.embedding", e);
+      }
     }
 
     return {
@@ -710,6 +714,7 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
     }
 
     return {
+      briefing, // 将完整 briefing 传入状态
       totalTokens: tokensUsed,
       reasoningTraces: [{
         node: "surface",
@@ -798,9 +803,9 @@ export async function runCognitiveAgentCycle(trigger: "scheduled" | "manual" | "
     );
 
     const durationMs = Date.now() - t0;
-    // 构造 briefing 用于持久化
+    // 使用 surfaceNode 生成的完整 briefing（含 cognitionGaps + mindChangeConditions）
     const totalTkn = result.totalTokens ?? 0;
-    const briefing: DailyBriefing = {
+    const briefing: DailyBriefing = result.briefing ?? {
       surprises: result.surprises ?? [],
       cognitionGaps: [],
       mindChangeConditions: [],

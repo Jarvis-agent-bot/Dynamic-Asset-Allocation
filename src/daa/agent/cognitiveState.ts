@@ -87,6 +87,9 @@ export const CognitiveStateAnnotation = Annotation.Root({
   memoriesCreated: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
   totalTokens: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
 
+  // 最终输出
+  briefing: Annotation<DailyBriefing | null>({ reducer: (_, b) => b, default: () => null }),
+
   // 错误
   errors: Annotation<string[]>({
     reducer: (a, b) => [...a, ...b],
