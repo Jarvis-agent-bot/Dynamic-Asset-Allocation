@@ -11,6 +11,7 @@ import {
 import { addDaysIsoUtc } from "@/src/market/yfinance";
 import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, normalizeUpper, toFinite } from "@/src/daa/utils/normalize";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 
 export type MarketCachePriceStatus = "fresh" | "stale" | "missing";
 
@@ -185,7 +186,7 @@ async function fetchYfinanceLatestCloseWithRaw(symbol: string, timeoutMs: number
       signal: controller.signal,
       headers: {
         accept: "application/json",
-        "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
+        "user-agent": MARKET_DATA_USER_AGENT,
       },
     });
     const payloadText = await response.text();

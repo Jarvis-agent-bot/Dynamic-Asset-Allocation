@@ -10,6 +10,7 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 
 export const runtime = "nodejs";
 
@@ -164,7 +165,7 @@ async function fetchYfinanceFxRate(baseCcy: string, quoteCcy: string): Promise<F
     method: "GET",
     headers: {
       accept: "application/json",
-      "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
+      "user-agent": MARKET_DATA_USER_AGENT,
     },
     cache: "no-store",
   });

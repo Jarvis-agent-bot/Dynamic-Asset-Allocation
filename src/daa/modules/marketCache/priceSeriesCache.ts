@@ -15,6 +15,7 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 
 export type CachedPricePoint = { date: string; close: number };
 
@@ -171,7 +172,7 @@ async function fetchFromYahoo(normalizedSymbol: string, start: string, timeoutMs
   url.searchParams.set("period1", String(period1));
 
   const res = await fetch(url.toString(), {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; DAAConsole/1.0)" },
+    headers: { "User-Agent": MARKET_DATA_USER_AGENT },
     signal: AbortSignal.timeout(timeoutMs),
   });
 

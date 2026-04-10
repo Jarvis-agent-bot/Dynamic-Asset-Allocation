@@ -1,4 +1,5 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 export type YahooRssItem = {
   title: string;
   link?: string;
@@ -80,7 +81,7 @@ export async function fetchYahooRssFeedBySymbol(symbolRaw: string, limit = 20): 
       signal: AbortSignal.timeout(10_000),
       headers: {
         accept: "application/rss+xml, application/xml;q=0.9, */*;q=0.8",
-        "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
+        "user-agent": MARKET_DATA_USER_AGENT,
       },
     });
 

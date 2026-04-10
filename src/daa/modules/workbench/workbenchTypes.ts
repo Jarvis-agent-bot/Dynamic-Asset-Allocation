@@ -7,6 +7,7 @@ import type {
   DaaMarketIndicatorScope,
   DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
+import type { DaaStoreRebalanceCycleStatus } from "@/src/daa/store/storeTypes";
 
 export type WorkbenchPriceStatus = "fresh" | "stale" | "missing" | "unsupported";
 
@@ -73,7 +74,7 @@ export type AssetUniverseView = {
 
 export type RebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle";
 
-type RebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
+type RebalanceCycleStatus = DaaStoreRebalanceCycleStatus;
 
 /**
  * 每个 proposal 上的决策上下文（由 agentRebalanceAdapter 注入）。

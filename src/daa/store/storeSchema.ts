@@ -45,7 +45,7 @@ function getStoreState(): DaaStoreState {
 async function isStoreSchemaReady(): Promise<boolean> {
   try {
     const requiredColumns = {
-      daa_asset_universe: [
+      daa_asset_master: [
         "asset_key",
         "symbol",
         "market",
@@ -139,7 +139,7 @@ async function isStoreSchemaReady(): Promise<boolean> {
     });
     return true;
   } catch (error) {
-    if (isMissingRelationError(error, "daa_asset_universe")) return false;
+    if (isMissingRelationError(error, "daa_asset_master")) return false;
     if (isMissingRelationError(error, "daa_portfolio_ledger_events")) return false;
     if (error instanceof Error && /column\s+.+\s+does\s+not\s+exist/i.test(error.message)) return false;
     throw error;

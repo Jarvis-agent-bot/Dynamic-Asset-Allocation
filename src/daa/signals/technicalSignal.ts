@@ -1,6 +1,6 @@
 import { clamp, meanOrNaN } from "@/src/core/math";
-import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
-import { toFinite } from "@/src/daa/utils/normalize";
+import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
+import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export type DaaTechnicalSpecificMetric = {
@@ -115,37 +115,11 @@ async function fetchDailyCloses(symbolRaw: string, days = 180): Promise<number[]
   const symbol = normalizeYfinanceSymbol(symbolRaw);
   if (!symbol) return [];
 
-  const end = new Date().toISOString().slice(0, 10);
-  const start = addDaysIsoUtc(end, -Math.max(80, Math.trunc(days)));
-  const endExclusive = addDaysIsoUtc(end, 1);
-
-  const period1 = Math.floor(Date.parse(`${start}T00:00:00.000Z`) / 1000);
-  const period2 = Math.floor(Date.parse(`${endExclusive}T00:00:00.000Z`) / 1000);
-
-  const upstream = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
-  upstream.searchParams.set("interval", "1d");
-  upstream.searchParams.set("events", "div%7Csplit");
-  upstream.searchParams.set("period1", String(period1));
-  upstream.searchParams.set("period2", String(period2));
+  const start = new Date(Date.now() - Math.max(80, Math.trunc(days)) * 86_400_000).toISOString().slice(0, 10);
 
   try {
-    const response = await fetch(upstream, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-        "user-agent": "Mozilla/5.0 (compatible; DAA/0.1; +https://example.invalid)",
-      },
-    });
-    if (!response.ok) return [];
-    const payload = await response.json() as any;
-    const closesRaw = Array.isArray(payload?.chart?.result?.[0]?.indicators?.quote?.[0]?.close)
-      ? payload.chart.result[0].indicators.quote[0].close
-      : [];
-
-    return closesRaw
-      .map((item: unknown) => toFinite(item, NaN))
-      .filter((item: number) => Number.isFinite(item) && item > 0);
+    const result = await fetchPriceSeriesWithCache(symbol, start, { timeoutMs: 8000 });
+    return result.data.map((p) => p.close).filter((c) => Number.isFinite(c) && c > 0);
   } catch (err) {
     logSwallowed("technicalSignal.fetchDailyCloses", err);
     return [];
