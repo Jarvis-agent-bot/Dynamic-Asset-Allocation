@@ -21,6 +21,7 @@ services:
       - DAA_EMBEDDING_API_KEY=${DAA_EMBEDDING_API_KEY:-}
       - DAA_EMBEDDING_ENDPOINT=${DAA_EMBEDDING_ENDPOINT:-}
       - DAA_EMBEDDING_MODEL=${DAA_EMBEDDING_MODEL:-}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
@@ -47,6 +48,7 @@ services:
         echo '0 8 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/hf-ingest' >> /etc/crontabs/root &&
         echo '30 1 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/dividend-refresh' >> /etc/crontabs/root &&
         echo '*/30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/health-check' >> /etc/crontabs/root &&
+        echo '0 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/cognitive-agent' >> /etc/crontabs/root &&
         crond -f -L /dev/stdout
       "
 
