@@ -34,7 +34,7 @@ export type LlmRuntimeConfig = {
 // Provider defaults
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PROVIDER_DEFAULTS: Record<string, { endpoint: string; model: string; format: "chat" | "responses" }> = {
+const PROVIDER_DEFAULTS: Record<string, { endpoint: string; model: string; format: "chat" | "responses" | "anthropic" }> = {
   deepseek: {
     endpoint: "https://api.deepseek.com/v1/chat/completions",
     model: "deepseek-chat",
@@ -45,24 +45,36 @@ const PROVIDER_DEFAULTS: Record<string, { endpoint: string; model: string; forma
     model: "gpt-4o-mini",
     format: "chat",
   },
+  codex: {
+    endpoint: "https://api.openai.com/v1/chat/completions",
+    model: "o3-mini",
+    format: "chat",
+  },
+  claude: {
+    endpoint: "https://api.anthropic.com/v1/messages",
+    model: "claude-sonnet-4-20250514",
+    format: "anthropic",
+  },
 };
 
-const FALLBACK_DEFAULTS = {
+const FALLBACK_DEFAULTS: { endpoint: string; model: string; format: "chat" | "responses" | "anthropic" } = {
   endpoint: "https://api.deepseek.com/v1/chat/completions",
   model: "deepseek-chat",
-  format: "chat" as const,
+  format: "chat",
 };
 
 function getProviderDefaults(provider: string) {
   return PROVIDER_DEFAULTS[provider] || FALLBACK_DEFAULTS;
 }
 
-/** 判断该 provider 使用 Chat Completions 还是 Responses API */
-function resolveApiFormat(provider: string, endpoint: string): "chat" | "responses" {
+/** 判断该 provider 使用 Chat Completions / Responses / Anthropic Messages API */
+function resolveApiFormat(provider: string, endpoint: string): "chat" | "responses" | "anthropic" {
   // 如果 endpoint 包含 /chat/completions，强制用 chat 格式
   if (endpoint.includes("/chat/completions")) return "chat";
   // 如果 endpoint 包含 /responses，强制用 responses 格式
   if (endpoint.includes("/responses")) return "responses";
+  // 如果 endpoint 包含 anthropic.com 或 /messages，用 anthropic 格式
+  if (endpoint.includes("anthropic.com") || endpoint.endsWith("/messages")) return "anthropic";
   // 否则按 provider 默认
   return getProviderDefaults(provider).format;
 }
@@ -78,8 +90,17 @@ export async function resolveLlmConfig(): Promise<LlmRuntimeConfig> {
 
   const defaults = getProviderDefaults(provider);
 
-  // Resolve secrets: env > DB > config defaults
-  const apiKey = await resolveSecret("llm_api_key");
+  // Resolve secrets: per-provider key > generic key > env > DB > config defaults
+  const providerKeyMap: Record<string, string> = {
+    deepseek: "llm_api_key_deepseek",
+    openai: "llm_api_key_openai",
+    codex: "llm_api_key_openai", // codex 使用 OpenAI key
+    claude: "llm_api_key_anthropic",
+  };
+  const providerKeyName = providerKeyMap[provider];
+  const providerApiKey = providerKeyName ? await resolveSecret(providerKeyName as Parameters<typeof resolveSecret>[0]) : "";
+  const genericApiKey = await resolveSecret("llm_api_key");
+  const apiKey = providerApiKey || genericApiKey;
   const endpoint = await resolveSecret("llm_endpoint");
   const secretModel = await resolveSecret("llm_model");
   const resolvedModel = normalizeText(secretModel, normalizeText(config.model, defaults.model));
@@ -169,9 +190,26 @@ function extractResponsesApiText(payload: Record<string, unknown>): string {
 }
 
 /**
+ * 从 Anthropic Messages API 响应中提取文本。
+ */
+function extractAnthropicMessagesText(payload: Record<string, unknown>): string {
+  const content = Array.isArray(payload.content) ? payload.content : [];
+  const parts: string[] = [];
+  for (const block of content) {
+    if (typeof block === "object" && block !== null) {
+      const b = block as Record<string, unknown>;
+      if (b.type === "text" && typeof b.text === "string") {
+        parts.push(b.text.trim());
+      }
+    }
+  }
+  return parts.join("\n");
+}
+
+/**
  * 统一 LLM 调用入口。
  *
- * 自动根据 provider / endpoint 判断使用 Chat Completions 还是 Responses API。
+ * 自动根据 provider / endpoint 判断使用 Chat Completions / Responses / Anthropic Messages API。
  */
 export async function callLlm(
   config: LlmRuntimeConfig,
@@ -186,23 +224,46 @@ export async function callLlm(
   try {
     // deepseek-reasoner 系列不支持 temperature 参数
     const isReasoner = effectiveModel.includes("reasoner");
-    const body = format === "chat"
-      ? JSON.stringify({
-          model: effectiveModel,
-          messages: [{ role: "user", content: prompt }],
-          ...(isReasoner ? {} : { temperature: 0.3 }),
-        })
-      : JSON.stringify({
-          model: effectiveModel,
-          input: prompt,
-        });
-
+    let body: string;
     const headers: Record<string, string> = {
       "content-type": "application/json",
       accept: "application/json",
     };
-    if (config.apiKey) {
-      headers.authorization = `Bearer ${config.apiKey}`;
+
+    if (format === "anthropic") {
+      // Anthropic Messages API — 从 prompt 中分离 system 指令
+      // 约定：prompt 中第一个 "##" 之前的内容作为 system prompt
+      const systemSplit = prompt.indexOf("\n## ");
+      const systemText = systemSplit > 0 ? prompt.slice(0, systemSplit).trim() : "";
+      const userText = systemSplit > 0 ? prompt.slice(systemSplit).trim() : prompt;
+      body = JSON.stringify({
+        model: effectiveModel,
+        max_tokens: 4096,
+        ...(systemText ? { system: systemText } : {}),
+        messages: [{ role: "user", content: userText }],
+      });
+      if (config.apiKey) {
+        headers["x-api-key"] = config.apiKey;
+        headers["anthropic-version"] = "2023-06-01";
+      }
+    } else if (format === "chat") {
+      body = JSON.stringify({
+        model: effectiveModel,
+        messages: [{ role: "user", content: prompt }],
+        ...(isReasoner ? {} : { temperature: 0.3 }),
+      });
+      if (config.apiKey) {
+        headers.authorization = `Bearer ${config.apiKey}`;
+      }
+    } else {
+      // Responses API
+      body = JSON.stringify({
+        model: effectiveModel,
+        input: prompt,
+      });
+      if (config.apiKey) {
+        headers.authorization = `Bearer ${config.apiKey}`;
+      }
     }
 
     const response = await fetch(config.endpoint, {
@@ -224,7 +285,9 @@ export async function callLlm(
 
     const text = format === "chat"
       ? extractChatCompletionsText(payload)
-      : extractResponsesApiText(payload);
+      : format === "anthropic"
+        ? extractAnthropicMessagesText(payload)
+        : extractResponsesApiText(payload);
 
     return { text, raw: payload };
   } finally {

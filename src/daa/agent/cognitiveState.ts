@@ -67,6 +67,9 @@ export const CognitiveStateAnnotation = Annotation.Root({
   // 调查结果
   investigateResult: Annotation<InvestigateOutput | null>({ reducer: (_, b) => b, default: () => null }),
 
+  // ReAct 循环计数（每次 investigate 重置）
+  reactRounds: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
+
   // 记忆
   retrievedMemories: Annotation<AgentMemory[]>({ reducer: (_, b) => b, default: () => [] }),
 
@@ -98,6 +101,7 @@ export const CognitiveStateAnnotation = Annotation.Root({
     scheduleTimesUtc?: string[];
     memoryDecayRate?: number;
     memoryArchiveThreshold?: number;
+    maxReactRounds?: number;
   } | null>({ reducer: (_, b) => b, default: () => null }),
 
   // 最终输出

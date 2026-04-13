@@ -8,6 +8,7 @@
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import type { ResearchThread, AgentMemory, Surprise, DailyBriefing } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
+import type { AgentToolDefinition, AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
 
 // ── Prioritize 节点 Prompt ──
 
@@ -183,6 +184,123 @@ ${ctx.portfolio.holdings
 \`\`\`
 
 只输出 JSON，不要其他文字。`;
+}
+
+// ── Investigate ReAct Prompt（Phase 3：LLM 自主选择工具）──
+
+/**
+ * Phase A: ReAct 入口 — 告诉 LLM 可用工具列表，要求选择工具或给出最终结论。
+ */
+export function buildReactInvestigatePrompt(ctx: {
+  thread: ResearchThread;
+  tools: AgentToolDefinition[];
+  memories: AgentMemory[];
+  portfolio: PortfolioSnapshot;
+}): string {
+  const memoryText = ctx.memories.length > 0
+    ? ctx.memories.map(m => `- [${m.memoryType}] ${sanitizeForPrompt(m.content, 100)}`).join("\n")
+    : "无相关历史记忆";
+
+  const toolsText = ctx.tools.map(t => {
+    const params = Object.entries(t.parameters);
+    const paramStr = params.length > 0
+      ? `参数: { ${params.map(([k, v]) => `${k}: ${v.type}${v.required ? " (必填)" : ""} — ${v.description}`).join(", ")} }`
+      : "无参数";
+    return `### ${t.name}\n${t.description}\n${paramStr}`;
+  }).join("\n\n");
+
+  return `你是一个投资研究操作系统的「研究分析师」。你正在深入调查一个研究论点。
+
+## 当前论点
+标题: ${sanitizeForPrompt(ctx.thread.title, 80)}
+判断: ${sanitizeForPrompt(ctx.thread.thesisText, 200)}
+信念强度: ${ctx.thread.conviction}
+失效条件: ${ctx.thread.invalidationConditions ? sanitizeForPrompt(ctx.thread.invalidationConditions, 150) : "未定义"}
+关联资产: ${ctx.thread.assetKeys.join(", ")}
+
+## 组合背景
+${ctx.portfolio.holdings
+  .filter(h => ctx.thread.assetKeys.includes(h.assetKey))
+  .map(h => `${h.assetKey}: 权重${(h.weightPct * 100).toFixed(1)}% PnL=${h.unrealizedPnlPct != null ? (h.unrealizedPnlPct * 100).toFixed(1) + "%" : "N/A"}`)
+  .join("\n") || "无相关持仓"}
+
+## 历史记忆
+${memoryText}
+
+## 可用工具
+你可以调用以下工具来收集证据。每次可调用 1-3 个工具。
+
+${toolsText}
+
+## 操作规则
+1. 分析论点，决定需要哪些数据来验证/反驳它
+2. 选择合适的工具并指定参数
+3. 你有最多 5 轮工具调用机会，请合理规划
+4. 当你认为证据充分时，直接给出最终分析结论
+
+## 输出格式（严格 JSON，二选一）
+
+**选择工具（需要更多数据时）：**
+\`\`\`json
+{
+  "action": "tool_calls",
+  "tool_calls": [
+    { "name": "fetch_technical_signal", "params": { "symbol": "AAPL" } }
+  ],
+  "reasoning": "为什么选择这些工具的简要说明"
+}
+\`\`\`
+
+**最终结论（证据充分时）：**
+\`\`\`json
+{
+  "action": "result",
+  "result": {
+    "thesisChanged": true,
+    "updatedThesis": "更新后的判断或null",
+    "newConviction": "high/medium/low/uncertain 或 null",
+    "evidenceType": "supporting/contradicting/neutral",
+    "evidenceSummary": "关键证据摘要",
+    "surprises": [{"title": "标题", "description": "描述", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "建议"}],
+    "invalidationConditions": "失效条件",
+    "suggestedReviewDays": 14,
+    "nextActions": ["下一步方向"]
+  }
+}
+\`\`\`
+
+首先调用工具收集数据，然后给出结论。只输出 JSON，不要其他文字。`;
+}
+
+/**
+ * Phase B: 工具结果反馈 — 将工具返回的数据追加到上下文，让 LLM 继续推理。
+ */
+export function buildReactFollowUpPrompt(ctx: {
+  toolResults: AgentToolResult[];
+  roundNumber: number;
+  maxRounds: number;
+}): string {
+  const resultsText = ctx.toolResults.map(r => {
+    const status = r.success ? "✓ 成功" : "✗ 失败";
+    const dataStr = r.success
+      ? JSON.stringify(r.data, null, 0).slice(0, 600)
+      : (r.error ?? "未知错误");
+    return `### ${r.toolName} [${status}, ${r.latencyMs ?? 0}ms]\n${dataStr}`;
+  }).join("\n\n");
+
+  const remainingRounds = ctx.maxRounds - ctx.roundNumber;
+
+  return `## 工具执行结果（第 ${ctx.roundNumber} 轮，剩余 ${remainingRounds} 轮）
+
+${resultsText}
+
+基于以上数据，你可以：
+1. 调用更多工具获取额外数据（还剩 ${remainingRounds} 轮）
+2. 给出最终分析结论
+
+${remainingRounds <= 1 ? "⚠️ 这是最后一轮，请务必给出最终结论（action=result）。" : ""}
+
+输出格式与之前相同（action=tool_calls 或 action=result）。只输出 JSON，不要其他文字。`;
 }
 
 // ── Surface 节点 Prompt ──

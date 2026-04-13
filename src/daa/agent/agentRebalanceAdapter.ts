@@ -10,9 +10,7 @@
  */
 
 import type { RebalanceProposal, ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
-import { getActiveTheses, getThesisWithEvidence } from "@/src/daa/agent/store/thesisStore";
-import { recallMemory } from "@/src/daa/agent/store/memoryStore";
-import { generateEmbedding } from "@/src/daa/agent/embedding";
+import { getActiveTheses, getThesisAccuracyAvg } from "@/src/daa/agent/store/thesisStore";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -62,11 +60,24 @@ export async function enhanceProposalsWithAgent(input: {
       };
     }
 
-    // 为每个资产匹配 thesis
-    const thesisByAssetKey = new Map<string, typeof theses[0]>();
+    // 为每个资产匹配 thesis（支持多 thesis 关联同一资产）
+    const thesesByAssetKey = new Map<string, typeof theses>();
     for (const t of theses) {
       for (const ak of t.assetKeys) {
-        thesisByAssetKey.set(ak, t);
+        const existing = thesesByAssetKey.get(ak) ?? [];
+        existing.push(t);
+        thesesByAssetKey.set(ak, existing);
+      }
+    }
+
+    // 预加载 thesis 历史准确率（用于动态调整 multiplier）
+    const accuracyCache = new Map<string, number>();
+    for (const t of theses) {
+      try {
+        const avg = await getThesisAccuracyAvg(t.id);
+        if (avg !== null) accuracyCache.set(t.id, avg);
+      } catch (e) {
+        logSwallowed("agentRebalanceAdapter.accuracy", e);
       }
     }
 
@@ -75,9 +86,18 @@ export async function enhanceProposalsWithAgent(input: {
     const skippedByAgent: string[] = [];
 
     for (const proposal of draftProposals) {
-      const thesis = thesisByAssetKey.get(proposal.assetKey);
+      const relatedTheses = thesesByAssetKey.get(proposal.assetKey) ?? [];
+      const thesis = relatedTheses[0] ?? null; // 主 thesis（优先级最高的）
+      const thesisIds = relatedTheses.map((t) => t.id);
       const conviction = thesis?.conviction ?? "medium";
-      const multiplier = CONVICTION_MULTIPLIER[conviction] ?? 0.6;
+      let multiplier = CONVICTION_MULTIPLIER[conviction] ?? 0.6;
+
+      // 动态调整：基于历史准确率微调 multiplier
+      if (thesis && accuracyCache.has(thesis.id)) {
+        const accuracy = accuracyCache.get(thesis.id)!;
+        if (accuracy > 0.7) multiplier = Math.min(multiplier * 1.1, 1.0);
+        else if (accuracy < 0.3) multiplier *= 0.7;
+      }
 
       if (multiplier === 0) {
         // uncertain → 跳过此提案
@@ -119,6 +139,7 @@ export async function enhanceProposalsWithAgent(input: {
           ? `${proposal.reason} | Agent: ${sanitizeForPrompt(thesis.title, 40)} (${thesis.conviction})`
           : proposal.reason,
         decisionContext,
+        thesisIds: thesisIds.length > 0 ? thesisIds : undefined,
       });
     }
 

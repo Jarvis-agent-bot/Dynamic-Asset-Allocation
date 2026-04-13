@@ -18,9 +18,12 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SECRET_KEY_DEFS_ = [
-  { key: "llm_api_key", label: "LLM API Key", group: "llm", envVars: ["DAA_LLM_API_KEY", "OPENAI_API_KEY"], sensitive: true },
+  { key: "llm_api_key", label: "LLM API Key (通用)", group: "llm", envVars: ["DAA_LLM_API_KEY", "OPENAI_API_KEY"], sensitive: true },
   { key: "llm_endpoint", label: "LLM Endpoint", group: "llm", envVars: ["DAA_LLM_ENDPOINT"], sensitive: false },
   { key: "llm_model", label: "LLM Model", group: "llm", envVars: ["DAA_LLM_MODEL"], sensitive: false },
+  { key: "llm_api_key_deepseek", label: "DeepSeek API Key", group: "llm", envVars: ["DAA_DEEPSEEK_API_KEY"], sensitive: true },
+  { key: "llm_api_key_openai", label: "OpenAI API Key", group: "llm", envVars: ["DAA_OPENAI_API_KEY"], sensitive: true },
+  { key: "llm_api_key_anthropic", label: "Anthropic API Key", group: "llm", envVars: ["DAA_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"], sensitive: true },
   { key: "telegram_bot_token", label: "Telegram Bot Token", group: "telegram", envVars: ["TELEGRAM_BOT_TOKEN", "DAA_TELEGRAM_BOT_TOKEN"], sensitive: true },
   { key: "telegram_chat_id", label: "Telegram Chat ID", group: "telegram", envVars: ["TELEGRAM_CHAT_ID", "DAA_TELEGRAM_CHAT_ID"], sensitive: false },
   { key: "telegram_webhook_secret", label: "Telegram Webhook Secret", group: "telegram", envVars: ["TELEGRAM_WEBHOOK_SECRET", "DAA_TELEGRAM_WEBHOOK_SECRET"], sensitive: true },

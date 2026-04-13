@@ -221,6 +221,8 @@ export type DaaSystemConfig = {
       model: string;
       timeoutMs: number;
       enabledInDecision: boolean;
+      /** 自定义 endpoint（为空时使用 provider 默认值） */
+      endpoint?: string;
     };
     marketIndicators: DaaMarketIndicatorsConfig;
   };

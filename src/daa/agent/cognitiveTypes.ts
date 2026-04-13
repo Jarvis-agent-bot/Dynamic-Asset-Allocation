@@ -27,7 +27,7 @@ export interface ResearchThread {
 // ── 证据 ──
 
 export type EvidenceType = "supporting" | "contradicting" | "neutral";
-export type EvidenceSource = "market_data" | "news" | "technical" | "valuation" | "agent_reasoning" | "human";
+export type EvidenceSource = "market_data" | "news" | "technical" | "valuation" | "agent_reasoning" | "human" | "trade_outcome";
 
 export interface EvidenceItem {
   id: string;

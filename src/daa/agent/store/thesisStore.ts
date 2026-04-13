@@ -258,3 +258,21 @@ export async function countThreads(): Promise<number> {
     return Number(res.rows[0]?.cnt ?? 0);
   });
 }
+
+/**
+ * 获取指定 thesis 的历史复盘准确率加权平均。
+ * @returns 0~1 的准确率，null 表示无复盘记录
+ */
+export async function getThesisAccuracyAvg(threadId: string): Promise<number | null> {
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query(
+      `SELECT AVG(accuracy_score) as avg_score
+       FROM daa_thesis_reviews
+       WHERE thread_id = $1 AND accuracy_score IS NOT NULL`,
+      [threadId],
+    );
+    const val = res.rows[0]?.avg_score;
+    if (val === null || val === undefined) return null;
+    return Number(val);
+  });
+}

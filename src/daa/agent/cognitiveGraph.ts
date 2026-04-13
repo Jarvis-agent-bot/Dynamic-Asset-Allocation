@@ -7,7 +7,10 @@
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { CognitiveStateAnnotation, type CognitiveState, type CognitiveUpdate, type PortfolioSnapshot, type MarketSnapshot, type NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread, DailyBriefing, CognitionGap, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
-import { buildPrioritizePrompt, buildInvestigatePrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePrompt, buildReactFollowUpPrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import { AGENT_TOOL_DEFINITIONS } from "@/src/daa/agent/agentToolRegistry";
+import { buildExecutorRegistry, executeToolCall } from "@/src/daa/agent/agentToolExecutors";
+import type { AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
@@ -15,11 +18,8 @@ import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-// ── 工具导入（现有信号生成器 + 数据服务） ──
+// ── 数据服务导入 ──
 
-import { buildTechnicalSignalForSymbol } from "@/src/daa/signals/technicalSignal";
-import { buildValuationSignalForSymbol } from "@/src/daa/signals/valuationSignal";
-import { buildNewsSignalForSymbol } from "@/src/daa/signals/newsSignal";
 import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
 import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
@@ -326,7 +326,33 @@ async function prioritizeNode(state: CognitiveState): Promise<CognitiveUpdate> {
   }
 }
 
-// ── Investigate 节点（DeepSeek checkpoint）──
+// ── Investigate 节点（Phase 3: ReAct 循环 — LLM 自主选择工具）──
+
+/** ReAct 循环解析：从 LLM 输出中提取 action 类型 */
+type ReactAction =
+  | { action: "tool_calls"; tool_calls: Array<{ name: string; params: Record<string, unknown> }>; reasoning?: string }
+  | { action: "result"; result: InvestigateOutput };
+
+function parseReactResponse(data: unknown): ReactAction | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+  if (obj.action === "tool_calls" && Array.isArray(obj.tool_calls)) {
+    // 校验每个 tool_call 至少有 name 字段
+    const validCalls = (obj.tool_calls as Array<Record<string, unknown>>)
+      .filter(tc => tc && typeof tc === "object" && typeof tc.name === "string" && tc.name.length > 0)
+      .map(tc => ({ name: String(tc.name), params: (tc.params && typeof tc.params === "object" ? tc.params : {}) as Record<string, unknown> }));
+    if (validCalls.length === 0) return null; // 所有 tool_call 无效
+    return { action: "tool_calls", tool_calls: validCalls, reasoning: typeof obj.reasoning === "string" ? obj.reasoning : undefined };
+  }
+  if (obj.action === "result" && obj.result && typeof obj.result === "object") {
+    return { action: "result", result: obj.result as InvestigateOutput };
+  }
+  // 兼容：如果 LLM 直接返回 InvestigateOutput（无 action 包装）
+  if ("thesisChanged" in obj && "evidenceSummary" in obj) {
+    return { action: "result", result: obj as unknown as InvestigateOutput };
+  }
+  return null;
+}
 
 async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
@@ -343,70 +369,161 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       return { errors: ["investigate: 熔断 — 连续 LLM 失败次数过多，跳过"] };
     }
 
-    // 1. 收集证据（P2-11: 并行调用工具）
-    const evidence: Record<string, unknown> = {};
-    const newToolsCalled: ToolCallRecord[] = [];
-    const symbol = thread.assetKeys[0]?.split(":")[1] ?? thread.assetKeys[0] ?? "";
-    const market = thread.assetKeys[0]?.split(":")[0] ?? "US";
+    const maxRounds = state.agentConfig?.maxReactRounds ?? 5;
+    const allToolsCalled: ToolCallRecord[] = [];
+    const allEvidence: Record<string, unknown> = {};
+    let totalTokens = 0;
 
-    const toolPromises: Array<{ name: string; promise: Promise<unknown>; t0: number }> = [];
-    for (const toolName of target.dataNeeded) {
-      if (!thread.assetKeys[0]) continue;
-      const toolT0 = Date.now();
-      if (toolName === "technical") {
-        toolPromises.push({ name: toolName, t0: toolT0, promise: buildTechnicalSignalForSymbol(symbol).catch(e => { logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e); return null; }) });
-      } else if (toolName === "valuation") {
-        toolPromises.push({ name: toolName, t0: toolT0, promise: buildValuationSignalForSymbol(symbol).catch(e => { logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e); return null; }) });
-      } else if (toolName === "news") {
-        toolPromises.push({ name: toolName, t0: toolT0, promise: buildNewsSignalForSymbol(symbol, market).catch(e => { logSwallowed(`cognitiveGraph.investigate.tool.${toolName}`, e); return null; }) });
-      }
-    }
-
-    // 并行等待所有信号
-    const results = await Promise.allSettled(toolPromises.map(p => p.promise));
-    for (let i = 0; i < toolPromises.length; i++) {
-      const { name: toolName, t0: toolT0 } = toolPromises[i];
-      const result = results[i];
-      const signal = result.status === "fulfilled" ? result.value : null;
-
-      if (toolName === "technical" && signal && typeof signal === "object") {
-        const s = signal as Record<string, unknown>;
-        evidence.technical = { scorePct: s.scorePct, momentumRegime: s.momentumRegime, metrics: s.metrics, reasons: s.reasons };
-      } else if (toolName === "valuation" && signal && typeof signal === "object") {
-        const s = signal as Record<string, unknown>;
-        evidence.valuation = { scorePct: s.scorePct, temperature: s.temperature, metrics: s.metrics, reasons: s.reasons };
-      } else if (toolName === "news" && signal && typeof signal === "object") {
-        const s = signal as Record<string, unknown>;
-        evidence.news = { scorePct: s.scorePct, evidenceCount: s.evidenceCount, llmSummary: s.llmSummary, llmDrivers: s.llmDrivers, llmMajorEvent: s.llmMajorEvent, reasons: s.reasons, items: Array.isArray(s.items) ? (s.items as Array<Record<string, unknown>>).slice(0, 5).map(i => ({ title: i.title, ts: i.ts })) : [] };
-      } else if (!signal) {
-        evidence[toolName] = { error: result.status === "rejected" ? String(result.reason) : "null result" };
-      }
-
-      newToolsCalled.push({
-        tool: toolName,
-        input: { assetKeys: thread.assetKeys },
-        outputSummary: evidence[toolName] && !(evidence[toolName] as Record<string, unknown>).error ? "ok" : "failed",
-        durationMs: Date.now() - toolT0,
-      });
-    }
-
-    // 2. 检索相关记忆（P2-10: 带 thesis 关联）
+    // 检索相关记忆（在 ReAct 循环开始前）
     const queryEmb = await generateEmbedding(thread.title + " " + thread.thesisText);
-    const memories = await memoryStore.recallMemory({ queryEmbedding: queryEmb, tags: [thread.id, ...thread.tags], limit: state.agentConfig?.memoryRecallLimit ?? 5 });
+    const memories = await memoryStore.recallMemory({
+      queryEmbedding: queryEmb,
+      tags: [thread.id, ...thread.tags],
+      limit: state.agentConfig?.memoryRecallLimit ?? 5,
+    });
 
-    // 3. DeepSeek 推理
-    const prompt = buildInvestigatePrompt({
+    // 构建 executor 注册表（注入 state-dependent 数据）
+    const executorRegistry = buildExecutorRegistry({
+      market: state.market,
+      portfolio: state.portfolio,
+    });
+
+    // ── ReAct 循环 ──
+    // 第一轮：发送初始 prompt（含工具定义 + thesis + memories）
+    const initialPrompt = buildReactInvestigatePrompt({
       thread,
-      evidence,
+      tools: AGENT_TOOL_DEFINITIONS,
       memories,
       portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
     });
 
-    const { data: result, tokensUsed } = await callDeepSeekJson<InvestigateOutput>(
-      prompt, "cognitiveGraph.investigate",
-    );
+    // 维护多轮对话上下文（只保留初始 prompt + 最近两轮结果，避免无限增长）
+    const MAX_PROMPT_CHARS = 24000; // 约 12K tokens，留足 LLM 输出空间
+    let result: InvestigateOutput | null = null;
+    // 分离存储：初始 prompt 不变，toolRoundSummaries 按轮累积
+    const toolRoundSummaries: string[] = [];
 
-    // P0-2: 校验 investigate 输出
+    for (let round = 1; round <= maxRounds; round++) {
+      // 构建当前轮 prompt：初始 prompt + 压缩的历史轮次摘要
+      let currentPrompt = initialPrompt;
+      if (toolRoundSummaries.length > 0) {
+        // 只保留最近 2 轮的完整结果，更早的轮次压缩为单行摘要
+        const summaryParts: string[] = [];
+        for (let i = 0; i < toolRoundSummaries.length; i++) {
+          if (i >= toolRoundSummaries.length - 2) {
+            summaryParts.push(toolRoundSummaries[i]); // 最近 2 轮完整保留
+          } else {
+            // 更早轮次压缩为单行
+            summaryParts.push(`[第 ${i + 1} 轮工具调用结果已省略，证据已纳入下方最新轮次]`);
+          }
+        }
+        currentPrompt = initialPrompt + "\n\n" + summaryParts.join("\n\n");
+      }
+
+      // 安全截断：如果 prompt 过长，截断历史部分
+      if (currentPrompt.length > MAX_PROMPT_CHARS) {
+        currentPrompt = initialPrompt + "\n\n[历史轮次因长度限制已省略]\n\n" +
+          (toolRoundSummaries[toolRoundSummaries.length - 1] ?? "");
+      }
+
+      const { data: reactData, tokensUsed } = await callDeepSeekJson<ReactAction>(
+        currentPrompt,
+        `cognitiveGraph.investigate.react.r${round}`,
+      );
+      totalTokens += tokensUsed;
+
+      if (!reactData) {
+        logSwallowed("cognitiveGraph.investigate.react.noResponse", new Error(`ReAct 第 ${round} 轮无响应`));
+        break;
+      }
+
+      const action = parseReactResponse(reactData);
+      if (!action) {
+        logSwallowed("cognitiveGraph.investigate.react.parseError", new Error(`ReAct 第 ${round} 轮响应格式无效`));
+        break;
+      }
+
+      // ── LLM 给出最终结论 ──
+      if (action.action === "result") {
+        result = action.result;
+        break;
+      }
+
+      // ── LLM 请求调用工具 ──
+      const toolCalls = action.tool_calls.slice(0, 3); // 每轮最多 3 个工具
+      const toolResults: AgentToolResult[] = [];
+
+      // 并行执行所有请求的工具
+      const toolExecPromises = toolCalls.map(async (tc) => {
+        const toolResult = await executeToolCall(executorRegistry, tc.name, tc.params ?? {});
+        return { call: tc, result: toolResult };
+      });
+
+      const execResults = await Promise.allSettled(toolExecPromises);
+      for (const settled of execResults) {
+        if (settled.status === "fulfilled") {
+          const { call, result: toolResult } = settled.value;
+          toolResults.push(toolResult);
+
+          // 记录到 evidence 和 toolsCalled
+          if (toolResult.success) {
+            allEvidence[call.name] = toolResult.data;
+          } else {
+            allEvidence[call.name] = { error: toolResult.error };
+          }
+          allToolsCalled.push({
+            tool: call.name,
+            input: call.params ?? {},
+            outputSummary: toolResult.success ? "ok" : (toolResult.error ?? "failed"),
+            durationMs: toolResult.latencyMs ?? 0,
+          });
+        } else {
+          logSwallowed("cognitiveGraph.investigate.react.toolExec", settled.reason);
+        }
+      }
+
+      // 构建本轮工具结果摘要
+      const followUpPrompt = buildReactFollowUpPrompt({
+        toolResults,
+        roundNumber: round,
+        maxRounds,
+      });
+      toolRoundSummaries.push(followUpPrompt);
+    }
+
+    // P1-3 修复：ReAct 循环结束仍无结果 → 发一轮强制结论请求
+    if (!result && allToolsCalled.length > 0) {
+      const forcePrompt = initialPrompt + "\n\n" +
+        (toolRoundSummaries[toolRoundSummaries.length - 1] ?? "") +
+        "\n\n⚠️ 所有工具调用轮次已用完。请立即基于已收集的证据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。";
+
+      const { data: forceData, tokensUsed } = await callDeepSeekJson<ReactAction>(
+        forcePrompt, "cognitiveGraph.investigate.react.force",
+      );
+      totalTokens += tokensUsed;
+      const forceAction = forceData ? parseReactResponse(forceData) : null;
+      if (forceAction?.action === "result") {
+        result = forceAction.result;
+      }
+    }
+
+    // 如果 ReAct 循环未产出结果，降级用旧版 buildInvestigatePrompt
+    if (!result) {
+      logSwallowed("cognitiveGraph.investigate.react.fallback", new Error("ReAct 循环未产出结果，降级到直接分析"));
+      const fallbackPrompt = buildInvestigatePrompt({
+        thread,
+        evidence: allEvidence,
+        memories,
+        portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
+      });
+      const { data: fallbackResult, tokensUsed } = await callDeepSeekJson<InvestigateOutput>(
+        fallbackPrompt, "cognitiveGraph.investigate.fallback",
+      );
+      totalTokens += tokensUsed;
+      result = fallbackResult;
+    }
+
+    // 校验 investigate 输出
     if (result) {
       const valErrors = validateShape(result, { thesisChanged: "boolean", evidenceType: "string", evidenceSummary: "string" });
       if (valErrors.length > 0) {
@@ -414,7 +531,7 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       }
     }
 
-    // 4. 执行 thesis 更新
+    // 执行 thesis 更新
     if (result?.thesisChanged && result.updatedThesis) {
       await thesisStore.updateThesis(thread.id, {
         thesisText: result.updatedThesis,
@@ -426,14 +543,14 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       });
     }
 
-    // 5. 添加证据
+    // 添加证据
     if (result?.evidenceSummary) {
       await thesisStore.addEvidence({
         threadId: thread.id,
         evidenceType: result.evidenceType ?? "neutral",
         source: "agent_reasoning",
         content: result.evidenceSummary,
-        dataSnapshot: evidence,
+        dataSnapshot: allEvidence,
       });
     }
 
@@ -442,14 +559,14 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       retrievedMemories: memories,
       surprises: result?.surprises ?? [],
       thesesUpdated: result?.thesisChanged ? 1 : 0,
-      totalTokens: tokensUsed,
-      toolsCalled: newToolsCalled,
+      totalTokens,
+      toolsCalled: allToolsCalled,
       reasoningTraces: [{
         node: "investigate",
         threadId: thread.id,
-        input: `${thread.title} | ${Object.keys(evidence).join(",")}`,
-        output: result ? `changed=${result.thesisChanged} conviction=${result.newConviction}` : "no result",
-        tokensUsed,
+        input: `${thread.title} | tools=${allToolsCalled.map(t => t.tool).join(",")}`,
+        output: result ? `changed=${result.thesisChanged} conviction=${result.newConviction} react_tools=${allToolsCalled.length}` : "no result",
+        tokensUsed: totalTokens,
         durationMs: Date.now() - t0,
       }],
     };

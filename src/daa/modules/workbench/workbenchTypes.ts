@@ -136,6 +136,8 @@ export type RebalanceProposal = {
    * 由 agentRebalanceAdapter 注入，旧数据此字段为 null。
    */
   decisionContext?: ProposalDecisionContext | null;
+  /** 影响此提案的 thesis ID 列表（由 agentRebalanceAdapter 注入） */
+  thesisIds?: string[];
 };
 
 export type PreTradeRiskRule =
