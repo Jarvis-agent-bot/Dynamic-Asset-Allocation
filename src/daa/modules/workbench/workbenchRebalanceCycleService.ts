@@ -1,5 +1,7 @@
 import { normalizeDaaCurrencyCode, parseDaaAssetKey } from "@/src/daa/assetKey";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
+import { recordTradeOutcomeAsEvidence } from "@/src/daa/agent/tradeOutcomeFeedback";
+import { getActiveTheses } from "@/src/daa/agent/store/thesisStore";
 import { enhanceProposalsWithAgent } from "@/src/daa/agent/agentRebalanceAdapter";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { marketRegimeLabelZh } from "@/src/daa/modules/marketContext/marketIndicatorService";
@@ -739,6 +741,37 @@ export async function executeWorkbenchRebalanceCycle(input: {
 
   const logs = await listDaaTradeTickets({ limit: 300 });
   const cycleLogs = logs.filter((row) => createdTicketIds.includes(row.ticketId));
+
+  // P0: 交易结果反馈 → thesis evidence 闭环（按 assetKey 匹配活跃 thesis）
+  try {
+    const activeTheses = await getActiveTheses();
+    const thesisByAsset = new Map<string, string[]>();
+    for (const t of activeTheses) {
+      for (const ak of t.assetKeys) {
+        const existing = thesisByAsset.get(ak) ?? [];
+        existing.push(t.id);
+        thesisByAsset.set(ak, existing);
+      }
+    }
+    for (const log of cycleLogs.filter((r) => r.status === "executed")) {
+      const tids = thesisByAsset.get(log.assetKey);
+      if (tids) {
+        for (const tid of tids) {
+          recordTradeOutcomeAsEvidence({
+            thesisId: tid,
+            assetKey: log.assetKey,
+            side: log.side as "BUY" | "SELL",
+            entryPrice: log.price,
+            currentPrice: log.price,
+            realizedPnlPct: null,
+          }).catch((e) => logSwallowed("rebalanceCycle.feedbackLoop", e));
+        }
+      }
+    }
+  } catch (e) {
+    logSwallowed("rebalanceCycle.feedbackLoop.init", e);
+  }
+
   const executedCount = cycleLogs.filter((row) => row.status === "executed").length;
   const submittedCount = cycleLogs.filter((row) => row.status === "submitted" || row.status === "partially_filled").length;
   const failedCount = cycleLogs.filter((row) => row.status === "rejected" || row.status === "canceled").length;

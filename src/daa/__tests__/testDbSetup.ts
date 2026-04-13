@@ -44,8 +44,6 @@ export async function resetTestDb(): Promise<void> {
       TRUNCATE TABLE IF EXISTS daa_target_allocations CASCADE;
       TRUNCATE TABLE IF EXISTS daa_watchlist_entries CASCADE;
       TRUNCATE TABLE IF EXISTS daa_market_price_snapshots CASCADE;
-      TRUNCATE TABLE IF EXISTS daa_today_cache CASCADE;
-      TRUNCATE TABLE IF EXISTS daa_today_decision_log CASCADE;
       TRUNCATE TABLE IF EXISTS daa_assistant_sessions CASCADE;
       TRUNCATE TABLE IF EXISTS daa_assistant_messages CASCADE;
     EXCEPTION WHEN undefined_table THEN

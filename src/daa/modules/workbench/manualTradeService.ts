@@ -1,5 +1,6 @@
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { recordTradeOutcomeAsEvidence } from "@/src/daa/agent/tradeOutcomeFeedback";
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import { resolveExecutionRoute, syncBrokerOrders, type DaaBrokerBackedExecutionResult } from "./executionVenue";
 import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
@@ -444,6 +445,18 @@ export async function executeManualTrade(input: ExecuteManualTradeInput) {
       rejected: executed.results.filter((row) => row.status === "rejected").length,
       total: executed.results.length,
     };
+
+    // P0: 交易结果反馈 → thesis evidence 闭环
+    if (result.status === "executed" && item.decisionRefId) {
+      recordTradeOutcomeAsEvidence({
+        thesisId: item.decisionRefId,
+        assetKey,
+        side,
+        entryPrice: item.price,
+        currentPrice: item.price,
+        realizedPnlPct: null,
+      }).catch((e) => logSwallowed("manualTrade.feedbackLoop", e));
+    }
 
     return {
       item: responseItem,

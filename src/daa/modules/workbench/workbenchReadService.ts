@@ -12,14 +12,12 @@ import {
   getDaaMarketCacheHealthStats,
   listDaaAssetUniverse,
   listDaaCycleReports,
-  listDaaEquitySnapshots,
   listDaaFxRates,
   listDaaRebalanceCycles,
   listDaaTradeTickets,
   updateDaaAssetUniverseLastPrice,
   type DaaStoreAssetUniverseRow,
 } from "@/src/daa/store/daaStorePg";
-import type { DaaUnifiedRequest } from "@/src/daa/unifiedRebalanceTypes";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 
 import { buildAssetUniverseViewRows } from "./assetUniverseService";
@@ -221,113 +219,6 @@ async function syncWorkbenchPrices(opts: {
     attempted: targets.length,
     skipped: Math.max(0, rows.length - targets.length),
   };
-}
-
-export async function buildUnifiedRequestFromStore(): Promise<{
-  request: DaaUnifiedRequest;
-  baseCurrency: string;
-  assetRows: Awaited<ReturnType<typeof listDaaAssetUniverse>>;
-}> {
-  const [systemRow, runtimePortfolio, fxRates, snapshots] = await Promise.all([
-    getDaaSystemConfig(),
-    loadRuntimePortfolioSnapshot(),
-    listDaaFxRates(),
-    listDaaEquitySnapshots(365),
-  ]);
-
-  const strategy = systemRow.config.strategy;
-  const assetRows = runtimePortfolio.assetRows;
-  const baseCurrency = normalizeDaaCurrencyCode(runtimePortfolio.baseCurrency, "USD");
-  const cash = runtimePortfolio.account.cash;
-  const frozenCash = runtimePortfolio.account.frozenCash;
-  const investableCash = runtimePortfolio.account.investableCash;
-
-  const computedTotalEquity = computeTotalEquity({
-    rows: assetRows,
-    fxRates,
-    baseCurrency,
-    cash,
-  });
-  const totalEquity = runtimePortfolio.account.totalEquity == null
-    ? computedTotalEquity
-    : toPositive(runtimePortfolio.account.totalEquity, computedTotalEquity);
-  const equityPeakFromSnapshots = snapshots.reduce((max, row) => Math.max(max, toPositive(row.totalEquity, 0)), 0);
-  const equityPeak = Math.max(totalEquity, equityPeakFromSnapshots);
-
-  const targetWeights = buildTargetWeightsFromConfig({
-    targetWeightsRaw: (strategy.targetWeights || {}) as Record<string, unknown>,
-    assetRows: assetRows.map((row) => ({
-      assetKey: row.assetKey,
-      symbol: row.symbol,
-      watchEnabled: row.watchEnabled,
-      targetWeightHint: row.targetWeightHint,
-    })),
-  });
-
-  const request: DaaUnifiedRequest = {
-    account: {
-      baseCurrency,
-      cash,
-      investableCash,
-      frozenCash,
-      totalEquity,
-      equityPeak: equityPeak > 0 ? equityPeak : undefined,
-    },
-    constraints: {
-      maxPositionPct: toPositive(strategy.constraints?.maxPositionPct, 0),
-      minNotional: toPositive(strategy.constraints?.minNotional, 0),
-      maxOrderPctOfNav: toPositive(strategy.constraints?.maxOrderPctOfNav, 0),
-    },
-    policy: {
-      baseDriftTriggerPct: toPositive(strategy.policy?.baseDriftTriggerPct, 0),
-      strongTrendDriftTriggerPct: toPositive(strategy.policy?.strongTrendDriftTriggerPct, 0),
-      riskOffConsensusPct: toPositive(strategy.policy?.riskOffConsensusPct, 0),
-      riskOffScalePct: toPositive(strategy.policy?.riskOffScalePct, 0),
-      valueTrapThesisDriftPct: toPositive(strategy.policy?.valueTrapThesisDriftPct, 0),
-      sbIsolationScorePct: toPositive(strategy.policy?.sbIsolationScorePct, 0),
-    },
-    risk: {
-      maxDrawdownPct: toPositive(strategy.risk?.maxDrawdownPct, 0),
-      perAssetStopLossPct: toPositive(strategy.risk?.perAssetStopLossPct, 0),
-      maxConcentrationPct: toPositive(strategy.risk?.maxConcentrationPct, 0),
-      correlationCapPct: toPositive(strategy.risk?.correlationCapPct, 0),
-      maxTotalRiskExposurePct: toPositive(strategy.risk?.maxTotalRiskExposurePct, 0),
-    },
-    targetWeights,
-    positions: assetRows
-      .filter((row) => row.holdingQty > 0)
-      .map((row) => ({
-        symbol: row.symbol,
-        market: row.market,
-        currency: row.currency,
-        qty: row.holdingQty,
-        price: row.lastPrice > 0 ? row.lastPrice : row.holdingPrice,
-        costBasisPerUnit: calcHoldingCostPerUnit(row) ?? undefined,
-        tags: row.holdingTags,
-      })),
-    candidateAssets: assetRows
-      .filter((row) => row.watchEnabled)
-      .map((row) => ({
-        symbol: row.symbol,
-        market: row.market,
-        currency: row.currency,
-        enabled: row.watchEnabled,
-        targetWeightHint: row.targetWeightHint,
-        tags: row.watchTags,
-        notes: row.notes ?? undefined,
-      })),
-    fxRates: fxRates.map((row) => ({
-      baseCcy: row.baseCcy,
-      quoteCcy: row.quoteCcy,
-      rate: row.rate,
-      source: row.source,
-      asOfTs: row.asOfTs,
-    })),
-    analysts: [],
-    assetViews: [],
-  };
-
-  return { request, baseCurrency, assetRows };
 }
 
 export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOptions = {}): Promise<WorkbenchBootstrapBundle> {

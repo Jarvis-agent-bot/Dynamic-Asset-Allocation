@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, RefreshCw } from "lucide-react";
+import { Bot } from "lucide-react";
 
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
-import { useTodayDecision } from "@/app/daa/dashboard/_hooks/useTodayDecision";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
@@ -23,7 +22,6 @@ import { ExecutionPanel } from "./ExecutionPanel";
 
 export default function RebalancePageClient() {
   const wbModel = useDashboardPageModel();
-  const today = useTodayDecision();
   const searchParams = useSearchParams();
   const appliedCycleIdRef = useRef<string | null>(null);
 
@@ -49,25 +47,17 @@ export default function RebalancePageClient() {
 
   const aiSnapshot = useMemo(() => {
     const cycleSnapshot = rp?.currentCycle?.agentDecisionSnapshot;
-    const llm = today.model?.llmOutput;
-    if (cycleSnapshot) {
-      return {
-        summary: cycleSnapshot.summary ?? undefined,
-        reasoning: cycleSnapshot.reasoning ?? undefined,
-        keyRisks: cycleSnapshot.keyRisks ?? undefined,
-        keyOpportunities: cycleSnapshot.keyOpportunities ?? undefined,
-        cashAdvice: cycleSnapshot.cashAdvice ?? undefined,
-        cashRationale: cycleSnapshot.cashRationale ?? undefined,
-        overallConfidence: cycleSnapshot.overallConfidence ?? undefined,
-      };
-    }
-    if (!llm) return null;
+    if (!cycleSnapshot) return null;
     return {
-      summary: llm.reason || undefined,
-      keyRisks: llm.riskWarning ? [llm.riskWarning] : undefined,
-      keyOpportunities: llm.dissent ? [llm.dissent] : undefined,
+      summary: cycleSnapshot.summary ?? undefined,
+      reasoning: cycleSnapshot.reasoning ?? undefined,
+      keyRisks: cycleSnapshot.keyRisks ?? undefined,
+      keyOpportunities: cycleSnapshot.keyOpportunities ?? undefined,
+      cashAdvice: cycleSnapshot.cashAdvice ?? undefined,
+      cashRationale: cycleSnapshot.cashRationale ?? undefined,
+      overallConfidence: cycleSnapshot.overallConfidence ?? undefined,
     };
-  }, [today.model?.llmOutput, rp?.currentCycle?.agentDecisionSnapshot]);
+  }, [rp?.currentCycle?.agentDecisionSnapshot]);
 
   return (
     <div className="space-y-4">
@@ -86,24 +76,11 @@ export default function RebalancePageClient() {
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-[var(--primary)]" />
           <span className="text-sm text-[var(--muted)]">AI 决策</span>
-          {today.model && (
-            <DaaSurfaceStatusPill tone={today.model.isStale ? "amber" : "green"}>
-              {today.model.isStale ? "待刷新" : "已就绪"}
-            </DaaSurfaceStatusPill>
-          )}
           <DaaSurfaceStatusPill tone={wbModel.priceStreamConnected ? "green" : "slate"}>
             {wbModel.priceStreamConnected ? "实时" : "离线"}
           </DaaSurfaceStatusPill>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => void today.handleRefresh()}
-            disabled={today.refreshing}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:text-[var(--text)] disabled:opacity-50"
-            title="刷新 AI 分析"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${today.refreshing ? "animate-spin" : ""}`} />
-          </button>
           <QuickConfigPopover driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct} />
         </div>
       </div>
