@@ -24,14 +24,13 @@ import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
 import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
 import { findSimilarThesis } from "@/src/daa/agent/store/thesisStore";
+import { getDaaSystemConfig } from "@/src/daa/store/accountStore";
+import type { ThesisFailureImpact, ThesisConflict } from "@/src/daa/agent/cognitiveTypes";
 
 // ── 常量 ──
 
 /** DeepSeek 平均成本：input $0.14/M + output $0.28/M，取均值 $0.21/M */
 export const DEEPSEEK_AVG_COST_PER_TOKEN = 0.00000021;
-
-/** 连续 LLM 失败次数阈值，超过后跳过剩余 LLM 调用 */
-const CIRCUIT_BREAKER_THRESHOLD = 3;
 
 // ── 辅助：调用 DeepSeek（含重试 + 熔断）──
 
@@ -114,9 +113,9 @@ export function validateShape(
 }
 
 /** 检查当前 cycle 是否应该触发熔断（连续 LLM 失败过多） */
-function shouldCircuitBreak(errors: string[]): boolean {
+function shouldCircuitBreak(errors: string[], threshold = 3): boolean {
   const llmFailures = errors.filter(e => e.includes("DeepSeek") || e.includes("LLM") || e.includes("noJson")).length;
-  return llmFailures >= CIRCUIT_BREAKER_THRESHOLD;
+  return llmFailures >= threshold;
 }
 
 // ── Observe 节点（代码驱动，不调 LLM）──
@@ -124,6 +123,36 @@ function shouldCircuitBreak(errors: string[]): boolean {
 async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
   try {
+    // Feature A: 从 DB 加载 Agent 配置
+    let agentConfig: CognitiveState["agentConfig"] = null;
+    try {
+      const sysConfig = await getDaaSystemConfig();
+      const ca = sysConfig.config.cognitiveAgent;
+      if (ca) {
+        agentConfig = {
+          enabled: ca.enabled,
+          maxInvestigationTargets: ca.maxInvestigationTargets,
+          reviewIntervalDays: ca.reviewIntervalDays,
+          memoryRecallLimit: ca.memoryRecallLimit,
+          circuitBreakerThreshold: ca.circuitBreakerThreshold,
+          schedule: ca.schedule,
+          scheduleTimesUtc: ca.scheduleTimesUtc,
+          memoryDecayRate: ca.memoryDecayRate,
+          memoryArchiveThreshold: ca.memoryArchiveThreshold,
+        };
+      }
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.config", e);
+    }
+
+    // Feature E: 记忆衰减 — 在 cycle 开始时批量执行
+    try {
+      const decayRate = agentConfig?.memoryDecayRate ?? 0.97;
+      await memoryStore.applyMemoryDecay(decayRate);
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.memoryDecay", e);
+    }
+
     const activeTheses = await thesisStore.getActiveTheses();
 
     // 1. 组合数据
@@ -188,6 +217,7 @@ async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
     }
 
     return {
+      agentConfig,
       portfolio,
       market,
       news,
@@ -252,7 +282,7 @@ async function prioritizeNode(state: CognitiveState): Promise<CognitiveUpdate> {
           assetKeys: nt.assetKeys,
           tags: nt.tags,
           conviction: "uncertain",
-          reviewAt: new Date(Date.now() + 14 * 86400000), // 14 天后复盘
+          reviewAt: new Date(Date.now() + (state.agentConfig?.reviewIntervalDays ?? 14) * 86400000),
         });
         // 添加到调查队列
         data.targets.push({
@@ -266,7 +296,8 @@ async function prioritizeNode(state: CognitiveState): Promise<CognitiveUpdate> {
     }
 
     // 设置调查队列
-    const targets: InvestigationTarget[] = (data.targets ?? []).slice(0, 3);
+    const maxTargets = state.agentConfig?.maxInvestigationTargets ?? 3;
+    const targets: InvestigationTarget[] = (data.targets ?? []).slice(0, maxTargets);
     const first = targets[0] ?? null;
     let currentThread: ResearchThread | null = null;
     if (first?.threadId) {
@@ -307,8 +338,8 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
   }
 
   try {
-    // P1-5: 熔断检查
-    if (shouldCircuitBreak(state.errors ?? [])) {
+    // 熔断检查（读取配置阈值）
+    if (shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
       return { errors: ["investigate: 熔断 — 连续 LLM 失败次数过多，跳过"] };
     }
 
@@ -361,7 +392,7 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
 
     // 2. 检索相关记忆（P2-10: 带 thesis 关联）
     const queryEmb = await generateEmbedding(thread.title + " " + thread.thesisText);
-    const memories = await memoryStore.recallMemory({ queryEmbedding: queryEmb, tags: [thread.id, ...thread.tags], limit: 5 });
+    const memories = await memoryStore.recallMemory({ queryEmbedding: queryEmb, tags: [thread.id, ...thread.tags], limit: state.agentConfig?.memoryRecallLimit ?? 5 });
 
     // 3. DeepSeek 推理
     const prompt = buildInvestigatePrompt({
@@ -440,8 +471,7 @@ async function reflectNode(state: CognitiveState): Promise<CognitiveUpdate> {
     return {};
   }
 
-  // P1-5: 熔断检查
-  if (shouldCircuitBreak(state.errors ?? [])) {
+  if (shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
     return { errors: ["reflect: 熔断 — 跳过"] };
   }
 
@@ -527,8 +557,7 @@ async function loadNextTarget(state: CognitiveState): Promise<CognitiveUpdate> {
 async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
 
-  // P1-5: 熔断检查
-  if (shouldCircuitBreak(state.errors ?? [])) {
+  if (shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
     return { errors: ["review: 熔断 — 跳过"] };
   }
 
@@ -651,8 +680,8 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
     let data: { surprises: Surprise[]; cognitionGaps: CognitionGap[]; mindChangeConditions: MindChangeCondition[] } | null = null;
     let tokensUsed = 0;
 
-    // P1-5: 熔断检查 — surface 节点跳过 LLM 但仍生成基本 briefing
-    if (!shouldCircuitBreak(state.errors ?? [])) {
+    // 熔断检查 — surface 节点跳过 LLM 但仍生成基本 briefing
+    if (!shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
       const prompt = buildSurfacePrompt({
         portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
         market: state.market ?? { regime: "unknown", vix: null, indicators: {} },
@@ -683,12 +712,59 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
       }
     }
 
-    // P0-3: 使用实际 DeepSeek 定价
+    // Feature B: 组合级风险建模（纯计算，无 LLM）
+    const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
+    const thesisFailureImpacts: ThesisFailureImpact[] = [];
+    for (const t of theses) {
+      if (t.conviction !== "high" && t.conviction !== "medium") continue;
+      const affected = portfolio.holdings.filter(h => t.assetKeys.includes(h.assetKey));
+      if (affected.length === 0) continue;
+      const totalExposurePct = affected.reduce((sum, h) => sum + h.weightPct, 0);
+      const lossMultiplier = t.conviction === "high" ? 0.5 : 0.3;
+      const estimatedLossPct = totalExposurePct * lossMultiplier;
+      const riskLevel = estimatedLossPct > 0.15 ? "critical" : estimatedLossPct > 0.1 ? "high" : estimatedLossPct > 0.05 ? "medium" : "low";
+      thesisFailureImpacts.push({
+        threadId: t.id,
+        thesisTitle: t.title,
+        conviction: t.conviction,
+        affectedAssets: affected.map(h => ({ assetKey: h.assetKey, weightPct: h.weightPct })),
+        totalExposurePct,
+        estimatedLossPct,
+        riskLevel,
+      });
+    }
+
+    // Feature C: Thesis 冲突检测（代码层 — 资产重叠 + conviction 矛盾）
+    const thesisConflicts: ThesisConflict[] = [];
+    for (let i = 0; i < theses.length; i++) {
+      for (let j = i + 1; j < theses.length; j++) {
+        const a = theses[i];
+        const b = theses[j];
+        const overlap = a.assetKeys.filter(k => b.assetKeys.includes(k));
+        if (overlap.length === 0) continue;
+        // 方向矛盾：一个 high/medium，另一个 low/uncertain
+        const aPositive = a.conviction === "high" || a.conviction === "medium";
+        const bPositive = b.conviction === "high" || b.conviction === "medium";
+        if (aPositive === bPositive) continue; // 同方向不冲突
+        const severity = overlap.length >= 2 ? "high" : aPositive && a.conviction === "high" ? "high" : "medium";
+        thesisConflicts.push({
+          thesisA: { id: a.id, title: a.title, conviction: a.conviction },
+          thesisB: { id: b.id, title: b.title, conviction: b.conviction },
+          conflictType: "directional",
+          overlappingAssets: overlap,
+          severity,
+          llmAssessment: null,
+        });
+      }
+    }
+
     const totalTkn = (state.totalTokens ?? 0) + tokensUsed;
     const briefing: DailyBriefing = {
       surprises: data?.surprises ?? state.surprises ?? [],
       cognitionGaps: data?.cognitionGaps ?? [],
       mindChangeConditions: data?.mindChangeConditions ?? [],
+      thesisFailureImpacts,
+      thesisConflicts,
       thesesUpdated: state.thesesUpdated ?? 0,
       memoriesCreated: state.memoriesCreated ?? 0,
       totalTokens: totalTkn,

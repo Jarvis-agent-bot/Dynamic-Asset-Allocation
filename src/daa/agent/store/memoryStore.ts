@@ -64,7 +64,7 @@ export async function recallMemory(opts: {
         const res = await query(
           `SELECT *, 1 - (embedding <=> $1::vector) AS similarity
            FROM daa_agent_memory
-           WHERE embedding IS NOT NULL
+           WHERE embedding IS NOT NULL AND strength >= 0.05
            ORDER BY embedding <=> $1::vector
            LIMIT $2`,
           [embStr, limit],
@@ -87,7 +87,7 @@ export async function recallMemory(opts: {
     if (opts.tags && opts.tags.length > 0) {
       const res = await query(
         `SELECT * FROM daa_agent_memory
-         WHERE relevance_tags && $1
+         WHERE relevance_tags && $1 AND strength >= 0.05
          ORDER BY strength DESC, created_at DESC
          LIMIT $2`,
         [opts.tags, limit],
@@ -97,7 +97,7 @@ export async function recallMemory(opts: {
 
     // 最终退回：最近最强的记忆
     const res = await query(
-      `SELECT * FROM daa_agent_memory ORDER BY strength DESC, created_at DESC LIMIT $1`,
+      `SELECT * FROM daa_agent_memory WHERE strength >= 0.05 ORDER BY strength DESC, created_at DESC LIMIT $1`,
       [limit],
     );
     return res.rows.map(mapMemoryRow);
@@ -156,6 +156,25 @@ export async function listMemories(opts: {
 export async function deleteMemory(id: string): Promise<void> {
   await withDaaPgClient(async ({ query }) => {
     await query(`DELETE FROM daa_agent_memory WHERE id = $1`, [id]);
+  });
+}
+
+/**
+ * Feature E: 批量衰减记忆强度。
+ * 公式: new_strength = strength × decayRate^(days_since_last_access)
+ * 只处理 last_accessed > 1 天前且 strength > 0.01 的记忆。
+ */
+export async function applyMemoryDecay(decayRate: number = 0.97): Promise<number> {
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query(
+      `UPDATE daa_agent_memory
+       SET strength = strength * POWER($1, EXTRACT(EPOCH FROM (NOW() - last_accessed)) / 86400)
+       WHERE last_accessed < NOW() - INTERVAL '1 day'
+         AND strength > 0.01
+       RETURNING id`,
+      [decayRate],
+    );
+    return res.rows.length;
   });
 }
 

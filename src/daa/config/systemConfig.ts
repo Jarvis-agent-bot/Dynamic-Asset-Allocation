@@ -235,6 +235,14 @@ export type DaaSystemConfig = {
     memoryRecallLimit: number;
     /** 连续 LLM 失败触发熔断的阈值（默认 3） */
     circuitBreakerThreshold: number;
+    /** 运行频率 */
+    schedule: "2x_daily" | "daily" | "every_6h" | "manual_only";
+    /** 运行时间 UTC（如 ["13:00", "21:00"]） */
+    scheduleTimesUtc: string[];
+    /** 记忆衰减率 per day（默认 0.97，约 23 天半衰期） */
+    memoryDecayRate: number;
+    /** 记忆归档阈值（strength 低于此值不参与召回，默认 0.05） */
+    memoryArchiveThreshold: number;
   };
   notification: {
     dailyAnalysisHourUtc: number;
@@ -416,6 +424,10 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     reviewIntervalDays: 14,
     memoryRecallLimit: 5,
     circuitBreakerThreshold: 3,
+    schedule: "2x_daily",
+    scheduleTimesUtc: ["13:00", "21:00"],
+    memoryDecayRate: 0.97,
+    memoryArchiveThreshold: 0.05,
   },
   notification: {
     dailyAnalysisHourUtc: 1,
@@ -854,13 +866,19 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
     },
     cognitiveAgent: (() => {
       const ca = isRecord(source.cognitiveAgent) ? source.cognitiveAgent : {};
-      const fb = fallback.cognitiveAgent ?? { enabled: true, maxInvestigationTargets: 3, reviewIntervalDays: 14, memoryRecallLimit: 5, circuitBreakerThreshold: 3 };
+      const fb = fallback.cognitiveAgent ?? { enabled: true, maxInvestigationTargets: 3, reviewIntervalDays: 14, memoryRecallLimit: 5, circuitBreakerThreshold: 3, schedule: "2x_daily" as const, scheduleTimesUtc: ["13:00", "21:00"], memoryDecayRate: 0.97, memoryArchiveThreshold: 0.05 };
+      const validSchedules = new Set(["2x_daily", "daily", "every_6h", "manual_only"]);
+      const rawSchedule = String(ca.schedule ?? "");
       return {
         enabled: toBool(ca.enabled, fb.enabled),
         maxInvestigationTargets: clamp(Math.trunc(Number(ca.maxInvestigationTargets) || fb.maxInvestigationTargets), 1, 10),
         reviewIntervalDays: clamp(Math.trunc(Number(ca.reviewIntervalDays) || fb.reviewIntervalDays), 1, 90),
         memoryRecallLimit: clamp(Math.trunc(Number(ca.memoryRecallLimit) || fb.memoryRecallLimit), 1, 20),
         circuitBreakerThreshold: clamp(Math.trunc(Number(ca.circuitBreakerThreshold) || fb.circuitBreakerThreshold), 1, 10),
+        schedule: (validSchedules.has(rawSchedule) ? rawSchedule : fb.schedule) as "2x_daily" | "daily" | "every_6h" | "manual_only",
+        scheduleTimesUtc: Array.isArray(ca.scheduleTimesUtc) ? (ca.scheduleTimesUtc as string[]).filter(t => /^\d{1,2}:\d{2}$/.test(String(t))).slice(0, 4) : clone(fb.scheduleTimesUtc),
+        memoryDecayRate: clamp(Number(ca.memoryDecayRate) || fb.memoryDecayRate, 0.5, 1.0),
+        memoryArchiveThreshold: clamp(Number(ca.memoryArchiveThreshold) || fb.memoryArchiveThreshold, 0.01, 0.5),
       };
     })(),
     notification: {

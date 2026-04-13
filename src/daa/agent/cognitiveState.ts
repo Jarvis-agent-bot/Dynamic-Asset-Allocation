@@ -87,6 +87,19 @@ export const CognitiveStateAnnotation = Annotation.Root({
   memoriesCreated: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
   totalTokens: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
 
+  // Agent 配置（observe 节点从 DB 加载）
+  agentConfig: Annotation<{
+    enabled: boolean;
+    maxInvestigationTargets: number;
+    reviewIntervalDays: number;
+    memoryRecallLimit: number;
+    circuitBreakerThreshold: number;
+    schedule?: string;
+    scheduleTimesUtc?: string[];
+    memoryDecayRate?: number;
+    memoryArchiveThreshold?: number;
+  } | null>({ reducer: (_, b) => b, default: () => null }),
+
   // 最终输出
   briefing: Annotation<DailyBriefing | null>({ reducer: (_, b) => b, default: () => null }),
 

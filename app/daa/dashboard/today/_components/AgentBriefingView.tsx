@@ -41,10 +41,29 @@ interface Thesis {
   updatedAt: string;
 }
 
+interface ThesisFailureImpact {
+  threadId: string;
+  thesisTitle: string;
+  conviction: string;
+  totalExposurePct: number;
+  estimatedLossPct: number;
+  riskLevel: string;
+}
+
+interface ThesisConflict {
+  thesisA: { id: string; title: string; conviction: string };
+  thesisB: { id: string; title: string; conviction: string };
+  conflictType: string;
+  overlappingAssets: string[];
+  severity: string;
+}
+
 interface DailyBriefing {
   surprises: Surprise[];
   cognitionGaps: CognitionGap[];
   mindChangeConditions: MindChangeCondition[];
+  thesisFailureImpacts?: ThesisFailureImpact[];
+  thesisConflicts?: ThesisConflict[];
   thesesUpdated: number;
   memoriesCreated: number;
   totalTokens: number;
@@ -263,8 +282,10 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
   const hasSurprises = briefing.surprises.length > 0;
   const hasGaps = briefing.cognitionGaps.length > 0;
   const hasConditions = briefing.mindChangeConditions.length > 0;
+  const hasRisks = (briefing.thesisFailureImpacts ?? []).filter(r => r.riskLevel !== "low").length > 0;
+  const hasConflicts = (briefing.thesisConflicts ?? []).length > 0;
 
-  if (!hasSurprises && !hasGaps && !hasConditions) return null;
+  if (!hasSurprises && !hasGaps && !hasConditions && !hasRisks && !hasConflicts) return null;
 
   return (
     <div className="space-y-3">
@@ -346,6 +367,58 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
                       监控: {m.monitoringIndicators.join(", ")}
                     </div>
                   )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {/* 论点冲突 */}
+      {hasConflicts && (
+        <div className="rounded-xl border border-orange-500/15 bg-orange-500/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-orange-300">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            论点冲突 ({briefing.thesisConflicts!.length})
+          </h3>
+          <div className="space-y-2">
+            {briefing.thesisConflicts!.slice(0, 5).map((c, i) => (
+              <div key={i} className="text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--text)]">{c.thesisA.title}</span>
+                  <span className="text-orange-400">vs</span>
+                  <span className="text-[var(--text)]">{c.thesisB.title}</span>
+                </div>
+                <div className="mt-0.5 pl-2 text-[var(--faint)]">
+                  重叠资产: {c.overlappingAssets.join(", ")} · {c.thesisA.conviction} vs {c.thesisB.conviction}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 风险暴露 */}
+      {hasRisks && (
+        <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-red-300">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            风险暴露
+          </h3>
+          <div className="space-y-2">
+            {briefing.thesisFailureImpacts!.filter(r => r.riskLevel !== "low").map((r, i) => {
+              const riskColor = r.riskLevel === "critical" ? "text-red-400 bg-red-500/20" : r.riskLevel === "high" ? "text-orange-400 bg-orange-500/20" : "text-amber-400 bg-amber-500/20";
+              return (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/daa/dashboard/today/thesis/${r.threadId}`} className="font-medium text-[var(--text)] hover:text-indigo-400 transition-colors">{r.thesisTitle}</Link>
+                    <span className="ml-2 text-[var(--faint)]">({r.conviction})</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[var(--faint)]">暴露 {(r.totalExposurePct * 100).toFixed(1)}%</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${riskColor}`}>
+                      失效 -{(r.estimatedLossPct * 100).toFixed(1)}%
+                    </span>
+                  </div>
                 </div>
               );
             })}

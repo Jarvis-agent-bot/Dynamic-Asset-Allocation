@@ -136,10 +136,33 @@ export interface MindChangeCondition {
   monitoringIndicators: string[];
 }
 
+/** Feature B: 论点失效对组合的影响 */
+export interface ThesisFailureImpact {
+  threadId: string;
+  thesisTitle: string;
+  conviction: ThesisConviction;
+  affectedAssets: Array<{ assetKey: string; weightPct: number }>;
+  totalExposurePct: number;
+  estimatedLossPct: number;
+  riskLevel: "low" | "medium" | "high" | "critical";
+}
+
+/** Feature C: 论点间冲突 */
+export interface ThesisConflict {
+  thesisA: { id: string; title: string; conviction: ThesisConviction };
+  thesisB: { id: string; title: string; conviction: ThesisConviction };
+  conflictType: "directional" | "asset_overlap" | "macro_inconsistency";
+  overlappingAssets: string[];
+  severity: "low" | "medium" | "high";
+  llmAssessment: string | null;
+}
+
 export interface DailyBriefing {
   surprises: Surprise[];
   cognitionGaps: CognitionGap[];
   mindChangeConditions: MindChangeCondition[];
+  thesisFailureImpacts?: ThesisFailureImpact[];
+  thesisConflicts?: ThesisConflict[];
   thesesUpdated: number;
   memoriesCreated: number;
   totalTokens: number;
