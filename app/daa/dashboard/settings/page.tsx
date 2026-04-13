@@ -20,6 +20,7 @@ import { SettingsRiskSection } from "@/app/daa/dashboard/settings/_components/Se
 import { SettingsDataInitSection } from "@/app/daa/dashboard/settings/_components/SettingsDataInitSection";
 import { SettingsSecretsSection } from "@/app/daa/dashboard/settings/_components/SettingsSecretsSection";
 import { SettingsStrategySection } from "@/app/daa/dashboard/settings/_components/SettingsStrategySection";
+import { SettingsAgentSection } from "@/app/daa/dashboard/settings/_components/SettingsAgentSection";
 import { ApiClientError } from "@/src/daa/api/client";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
@@ -98,7 +99,7 @@ export default function SettingsPage() {
 
   /** Per-section dirty detection for nav indicator dots */
   const sectionDirtyMap = useMemo<Record<SettingsNavItemId, boolean>>(() => {
-    if (!config || !baselineConfig) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
+    if (!config || !baselineConfig) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false, agent: false };
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     return {
       strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy),
@@ -107,6 +108,7 @@ export default function SettingsPage() {
       "human-factor": changed(config.strategy?.targetWeights, baselineConfig.strategy?.targetWeights) || changed(config.dataSources?.newsFeed?.fusionWeights, baselineConfig.dataSources?.newsFeed?.fusionWeights),
       notification: changed(config.notification, baselineConfig.notification),
       secrets: false, // secrets managed separately
+      agent: changed(config.cognitiveAgent, baselineConfig.cognitiveAgent),
     };
   }, [baselineConfig, config]);
 
@@ -293,6 +295,11 @@ export default function SettingsPage() {
               </div>
             </div>
             <SettingsSecretsSection />
+          </section>
+
+          {/* 认知 Agent */}
+          <section className="space-y-5">
+            <SettingsAgentSection config={config} setConfig={setConfig} />
           </section>
         </div>
       </div>

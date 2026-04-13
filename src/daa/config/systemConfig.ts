@@ -224,6 +224,18 @@ export type DaaSystemConfig = {
     };
     marketIndicators: DaaMarketIndicatorsConfig;
   };
+  /** 认知 Agent 配置 */
+  cognitiveAgent?: {
+    enabled: boolean;
+    /** 每次调查最大论点数（默认 3） */
+    maxInvestigationTargets: number;
+    /** 新论点默认复盘间隔天数（默认 14） */
+    reviewIntervalDays: number;
+    /** 每次调查召回记忆数（默认 5） */
+    memoryRecallLimit: number;
+    /** 连续 LLM 失败触发熔断的阈值（默认 3） */
+    circuitBreakerThreshold: number;
+  };
   notification: {
     dailyAnalysisHourUtc: number;
     telegram: {
@@ -397,6 +409,13 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
         highRiskBuyScale: 0.55,
       },
     },
+  },
+  cognitiveAgent: {
+    enabled: true,
+    maxInvestigationTargets: 3,
+    reviewIntervalDays: 14,
+    memoryRecallLimit: 5,
+    circuitBreakerThreshold: 3,
   },
   notification: {
     dailyAnalysisHourUtc: 1,
@@ -833,6 +852,17 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       },
       marketIndicators: normalizeMarketIndicatorConfig(marketIndicators, fallback.dataSources.marketIndicators),
     },
+    cognitiveAgent: (() => {
+      const ca = isRecord(source.cognitiveAgent) ? source.cognitiveAgent : {};
+      const fb = fallback.cognitiveAgent ?? { enabled: true, maxInvestigationTargets: 3, reviewIntervalDays: 14, memoryRecallLimit: 5, circuitBreakerThreshold: 3 };
+      return {
+        enabled: toBool(ca.enabled, fb.enabled),
+        maxInvestigationTargets: clamp(Math.trunc(Number(ca.maxInvestigationTargets) || fb.maxInvestigationTargets), 1, 10),
+        reviewIntervalDays: clamp(Math.trunc(Number(ca.reviewIntervalDays) || fb.reviewIntervalDays), 1, 90),
+        memoryRecallLimit: clamp(Math.trunc(Number(ca.memoryRecallLimit) || fb.memoryRecallLimit), 1, 20),
+        circuitBreakerThreshold: clamp(Math.trunc(Number(ca.circuitBreakerThreshold) || fb.circuitBreakerThreshold), 1, 10),
+      };
+    })(),
     notification: {
       dailyAnalysisHourUtc: deriveDailyAnalysisHourUtc(
         normalizedAnalysisTimeUtc,

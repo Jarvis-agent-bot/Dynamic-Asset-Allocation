@@ -17,6 +17,7 @@ export const SETTINGS_NAV_ITEMS_ = [
   { id: "human-factor", label: "人因数据源", desc: "基金池范围与人工信号叠加。" },
   { id: "notification", label: "通知", desc: "Telegram 与飞书的触发策略和运行状态。" },
   { id: "secrets", label: "凭证", desc: "API Key、Token 与连通性管理。" },
+  { id: "agent", label: "认知 Agent", desc: "调查频率、复盘周期、记忆与熔断参数。" },
 ] as const;
 
 export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS_)[number]["id"];

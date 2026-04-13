@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Brain, Eye, RefreshCw, Loader2, Zap, Search, RotateCcw } from "lucide-react";
 
 interface Surprise {
@@ -141,7 +142,7 @@ export default function AgentBriefingView() {
           <Brain className="h-5 w-5 text-indigo-400" />
           <h2 className="text-lg font-semibold text-[var(--text)]">Agent 认知状态</h2>
           <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-xs text-[var(--muted)]">
-            {theses.length} 论点 · {status?.memoryCount ?? 0} 记忆
+            {theses.length} 论点 · <Link href="/daa/dashboard/today/memories" className="hover:text-indigo-400 transition-colors">{status?.memoryCount ?? 0} 记忆</Link>
           </span>
         </div>
         <div className="flex gap-2">
@@ -222,7 +223,7 @@ export default function AgentBriefingView() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-[var(--text)]">{t.title}</span>
+                        <Link href={`/daa/dashboard/today/thesis/${t.id}`} className="truncate text-sm font-medium text-[var(--text)] hover:text-indigo-400 transition-colors">{t.title}</Link>
                         <span className={`shrink-0 text-xs font-medium ${convictionColor}`}>
                           {t.conviction}
                         </span>

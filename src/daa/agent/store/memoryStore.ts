@@ -113,6 +113,52 @@ export async function updateMemoryStrength(id: string, delta: number = 0.1): Pro
   });
 }
 
+/**
+ * 分页列出所有记忆，支持按类型过滤。
+ */
+export async function listMemories(opts: {
+  type?: MemoryType;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: AgentMemory[]; total: number }> {
+  const limit = opts.limit ?? 20;
+  const offset = opts.offset ?? 0;
+
+  return withDaaPgClient(async ({ query }) => {
+    const conditions = opts.type ? "WHERE memory_type = $1" : "";
+    const params: unknown[] = opts.type ? [opts.type] : [];
+
+    const countRes = await query(
+      `SELECT COUNT(*) as cnt FROM daa_agent_memory ${conditions}`,
+      params,
+    );
+    const total = Number(countRes.rows[0]?.cnt ?? 0);
+
+    const dataParams = opts.type ? [opts.type, limit, offset] : [limit, offset];
+    const limitIdx = opts.type ? "$2" : "$1";
+    const offsetIdx = opts.type ? "$3" : "$2";
+
+    const dataRes = await query(
+      `SELECT * FROM daa_agent_memory ${conditions} ORDER BY strength DESC, created_at DESC LIMIT ${limitIdx} OFFSET ${offsetIdx}`,
+      dataParams,
+    );
+
+    return {
+      items: dataRes.rows.map(mapMemoryRow),
+      total,
+    };
+  });
+}
+
+/**
+ * 删除单条记忆。
+ */
+export async function deleteMemory(id: string): Promise<void> {
+  await withDaaPgClient(async ({ query }) => {
+    await query(`DELETE FROM daa_agent_memory WHERE id = $1`, [id]);
+  });
+}
+
 export async function countMemories(): Promise<number> {
   return withDaaPgClient(async ({ query }) => {
     const res = await query(`SELECT COUNT(*) as cnt FROM daa_agent_memory`);

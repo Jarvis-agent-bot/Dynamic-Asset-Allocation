@@ -117,5 +117,59 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
     pendingAction: input.currentPendingAction,
   }));
 
+  // ── Cognitive Agent 查询 ──
+
+  handlers.set("thesis_status", async () => {
+    try {
+      const { getActiveTheses } = await import("@/src/daa/agent/store/thesisStore");
+      const theses = await getActiveTheses();
+      if (theses.length === 0) {
+        return { text: "Agent 尚未初始化论点。请先在 Today 页面点击「初始化论点」。", intentKind: "thesis_status", pendingAction: input.currentPendingAction };
+      }
+      const convictionEmoji: Record<string, string> = { high: "🟢", medium: "🟡", low: "🔴", uncertain: "⚪" };
+      const lines = theses.slice(0, 10).map(t => {
+        const daysSince = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+        return `${convictionEmoji[t.conviction] ?? "⚪"} ${t.title} (${t.conviction}) — ${t.assetKeys.join(",")} — ${daysSince}天前更新`;
+      });
+      return {
+        text: `当前 ${theses.length} 个活跃论点：\n${lines.join("\n")}`,
+        intentKind: "thesis_status",
+        pendingAction: input.currentPendingAction,
+      };
+    } catch {
+      return { text: "查询论点状态失败，请稍后重试。", intentKind: "thesis_status", pendingAction: input.currentPendingAction };
+    }
+  });
+
+  handlers.set("agent_briefing", async () => {
+    try {
+      const { getLatestRun } = await import("@/src/daa/agent/store/agentRunStore");
+      const run = await getLatestRun();
+      if (!run?.briefing) {
+        return { text: "暂无 Agent 日报。请先运行一次 Agent 调查。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
+      }
+      const b = run.briefing;
+      const parts: string[] = [`Agent 日报 (${new Date(run.createdAt).toLocaleString("zh-CN")})\n`];
+      if (b.surprises.length > 0) {
+        parts.push("⚡ 今日意外:");
+        for (const s of b.surprises.slice(0, 3)) parts.push(`  [${s.severityScore}/10] ${s.title}: ${s.description}`);
+      } else {
+        parts.push("⚡ 市场与预期一致，无重大意外。");
+      }
+      if (b.cognitionGaps.length > 0) {
+        parts.push("\n🔍 认知缺口:");
+        for (const g of b.cognitionGaps.slice(0, 3)) parts.push(`  ${g.assetKey} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未调查`);
+      }
+      if (b.mindChangeConditions.length > 0) {
+        parts.push("\n🔄 改观条件:");
+        for (const m of b.mindChangeConditions.slice(0, 3)) parts.push(`  "${m.thesisTitle}" (${m.currentConviction}): ${m.conditions.slice(0, 2).join("; ")}`);
+      }
+      parts.push(`\n📊 论点更新: ${b.thesesUpdated} | 记忆: ${b.memoriesCreated} | Tokens: ${b.totalTokens}`);
+      return { text: parts.join("\n"), intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
+    } catch {
+      return { text: "查询 Agent 日报失败，请稍后重试。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
+    }
+  });
+
   return handlers;
 }

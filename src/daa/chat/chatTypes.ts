@@ -12,6 +12,8 @@ export type DaaChatIntentKind =
   | "confirm_action"
   | "cancel_action"
   | "trade"
+  | "thesis_status"
+  | "agent_briefing"
   | "llm_answer"
   | "unknown";
 

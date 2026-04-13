@@ -219,6 +219,39 @@ export async function findSimilarThesis(assetKeys: string[], title: string): Pro
   });
 }
 
+/**
+ * 查询某 thesis 的所有复盘记录（按时间倒序）。
+ */
+export async function getReviewsByThreadId(threadId: string): Promise<Array<{
+  id: string;
+  threadId: string;
+  reviewWindow: string;
+  thesisAtTime: string;
+  convictionAtTime: string;
+  actualOutcome: string | null;
+  accuracyScore: number | null;
+  lessonsLearned: string | null;
+  createdAt: string;
+}>> {
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query(
+      `SELECT * FROM daa_thesis_reviews WHERE thread_id = $1 ORDER BY created_at DESC LIMIT 20`,
+      [threadId],
+    );
+    return res.rows.map(r => ({
+      id: String(r.id),
+      threadId: String(r.thread_id),
+      reviewWindow: String(r.review_window),
+      thesisAtTime: String(r.thesis_at_time),
+      convictionAtTime: String(r.conviction_at_time),
+      actualOutcome: r.actual_outcome ? String(r.actual_outcome) : null,
+      accuracyScore: r.accuracy_score != null ? Number(r.accuracy_score) : null,
+      lessonsLearned: r.lessons_learned ? String(r.lessons_learned) : null,
+      createdAt: String(r.created_at),
+    }));
+  });
+}
+
 export async function countThreads(): Promise<number> {
   return withDaaPgClient(async ({ query }) => {
     const res = await query(`SELECT COUNT(*) as cnt FROM daa_research_threads`);

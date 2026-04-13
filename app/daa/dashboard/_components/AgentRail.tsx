@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { Brain, ChevronRight, Eye, Loader2, RotateCcw, Zap, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -130,9 +131,9 @@ export default function AgentRail() {
                 <span className={cn("shrink-0 rounded px-1 py-0.5 text-[10px] font-medium", CONVICTION_COLORS[t.conviction] ?? CONVICTION_COLORS.uncertain)}>
                   {t.conviction}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-xs text-[var(--text)]">
+                <Link href={`/daa/dashboard/today/thesis/${t.id}`} className="min-w-0 flex-1 truncate text-xs text-[var(--text)] hover:text-indigo-400 transition-colors">
                   {t.title}
-                </span>
+                </Link>
               </div>
               <p className="mt-0.5 line-clamp-1 pl-[calc(1rem+6px)] text-[10px] text-[var(--faint)]">
                 {t.assetKeys.slice(0, 3).join(", ")}

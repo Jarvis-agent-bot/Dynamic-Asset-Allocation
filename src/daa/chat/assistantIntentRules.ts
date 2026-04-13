@@ -55,6 +55,8 @@ export function parseAssistantIntent(raw: string, options?: {
   if (/^\/?(status|portfolio|持仓|仓位|组合|账户|状态)$/i.test(text) || /组合.*(状态|仓位|持仓)/.test(text)) {
     return { kind: "portfolio_status", rawText: text };
   }
+  if (/论点|thesis|研究线索|theses|conviction/i.test(text)) return { kind: "thesis_status", rawText: text };
+  if (/日报|briefing|认知缺口|意外|改观条件|agent.*报/i.test(text)) return { kind: "agent_briefing", rawText: text };
   if (/风险|风控|risk/i.test(text)) return { kind: "risk_status", rawText: text };
   if (/市场|行情|market/i.test(text) && !/买入|卖出|buy|sell/i.test(text)) return { kind: "market_status", rawText: text };
   if (/最近.*(调仓|周期|再平衡)|latest cycle|最近一次/.test(text)) return { kind: "latest_cycle", rawText: text };

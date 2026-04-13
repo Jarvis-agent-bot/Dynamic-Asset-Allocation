@@ -9,6 +9,8 @@ export type DaaAssistantIntent =
   | { kind: "confirm_action"; rawText: string }
   | { kind: "cancel_action"; rawText: string }
   | { kind: "trade"; rawText: string; side: "BUY" | "SELL"; symbol: string; qty: number | null; notional: number | null }
+  | { kind: "thesis_status"; rawText: string }
+  | { kind: "agent_briefing"; rawText: string }
   | { kind: "llm_answer"; rawText: string; answer: string | null }
   | { kind: "unknown"; rawText: string };
 
