@@ -17,6 +17,8 @@ export function buildPrioritizePrompt(ctx: {
   market: MarketSnapshot;
   news: NewsSnapshot;
   theses: ResearchThread[];
+  /** 2B: 每个 thesis 的历史准确率（0-1），用于指导优先级 */
+  thesisAccuracy?: Map<string, number>;
 }): string {
   const holdingSummary = ctx.portfolio.holdings
     .slice(0, 30)
@@ -25,7 +27,11 @@ export function buildPrioritizePrompt(ctx: {
 
   const thesisSummary = ctx.theses
     .slice(0, 15)
-    .map(t => `[${t.id.slice(0, 8)}] "${sanitizeForPrompt(t.title, 60)}" conviction=${t.conviction} 资产=${t.assetKeys.join(",")}`)
+    .map(t => {
+      const acc = ctx.thesisAccuracy?.get(t.id);
+      const accStr = acc != null ? ` 准确率=${(acc * 100).toFixed(0)}%` : "";
+      return `[${t.id.slice(0, 8)}] "${sanitizeForPrompt(t.title, 60)}" conviction=${t.conviction}${accStr} 资产=${t.assetKeys.join(",")}`;
+    })
     .join("\n");
 
   const newsSummary = ctx.news.items
@@ -55,6 +61,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
    - 相关资产权重高但 thesis 久未更新
    - 新闻与现有 thesis 矛盾
    - conviction 为 "uncertain" 需要明确
+   - 历史准确率低（<50%）的论点需要重新审视
 2. 如果发现任何不在现有论点中的重大变化，建议创建新研究线索。
 
 ## 输出格式（严格 JSON）
@@ -196,6 +203,8 @@ export function buildReactInvestigatePrompt(ctx: {
   tools: AgentToolDefinition[];
   memories: AgentMemory[];
   portfolio: PortfolioSnapshot;
+  /** 2C: 最近的交易反馈证据（trade_outcome），帮助 LLM 了解历史交易结果 */
+  tradeOutcomes?: Array<{ content: string; evidenceType: string; createdAt: string }>;
 }): string {
   const memoryText = ctx.memories.length > 0
     ? ctx.memories.map(m => `- [${m.memoryType}] ${sanitizeForPrompt(m.content, 100)}`).join("\n")
@@ -226,6 +235,7 @@ ${ctx.portfolio.holdings
 
 ## 历史记忆
 ${memoryText}
+${ctx.tradeOutcomes?.length ? `\n## 交易反馈\n${ctx.tradeOutcomes.slice(0, 5).map(t => `- [${t.evidenceType}] ${sanitizeForPrompt(t.content, 120)}`).join("\n")}` : ""}
 
 ## 可用工具
 你可以调用以下工具来收集证据。每次可调用 1-3 个工具。
@@ -377,6 +387,97 @@ ${thesisText}
 只输出 JSON，不要其他文字。`;
 }
 
+// ── 策略顾问 Prompt（surfaceNode 末尾，生成 Config Overlay） ──
+
+export function buildStrategyAdvisorPrompt(ctx: {
+  holdings: Array<{ assetKey: string; symbol: string; weightPct: number; price: number }>;
+  theses: ResearchThread[];
+  surprises: Array<{ title: string; severityScore: number; suggestedAction: string }>;
+  cognitionGaps: Array<{ assetKey: string; portfolioWeight: number; daysSinceLastInvestigation: number }>;
+  ruleRegime: string;
+  defaultDriftThresholdPct: number;
+  maxPositionPct: number;
+}): string {
+  const holdingLines = ctx.holdings.slice(0, 30).map(h => {
+    const thesis = ctx.theses.find(t => t.assetKeys.includes(h.assetKey));
+    return `${h.symbol} (${h.assetKey}) 权重${(h.weightPct * 100).toFixed(1)}% 现价$${h.price.toFixed(2)}${thesis ? ` 论点="${sanitizeForPrompt(thesis.title, 40)}" conviction=${thesis.conviction}` : " 无论点"}`;
+  }).join("\n");
+
+  const thesisLines = ctx.theses.slice(0, 15).map(t =>
+    `"${sanitizeForPrompt(t.title, 50)}" conviction=${t.conviction} 资产=${t.assetKeys.join(",")} 失效条件=${sanitizeForPrompt(t.invalidationConditions ?? "无", 60)}`
+  ).join("\n");
+
+  const surpriseLines = ctx.surprises.length > 0
+    ? ctx.surprises.map(s => `[${s.severityScore}/10] ${sanitizeForPrompt(s.title, 60)}`).join("\n")
+    : "无意外";
+
+  const gapLines = ctx.cognitionGaps.length > 0
+    ? ctx.cognitionGaps.map(g => `${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}% ${g.daysSinceLastInvestigation}天未调查`).join("\n")
+    : "无";
+
+  return `你是投资组合的「策略顾问」。基于当前组合状况和论点分析，输出你对规则引擎参数的建议。
+
+## 当前持仓
+${holdingLines}
+
+## 活跃论点
+${thesisLines}
+
+## 今日意外
+${surpriseLines}
+
+## 认知缺口
+${gapLines}
+
+## 当前规则引擎设置
+- 默认漂移阈值: ${(ctx.defaultDriftThresholdPct * 100).toFixed(1)}%
+- 市场 regime (规则判定): ${ctx.ruleRegime}
+- 最大单仓位: ${(ctx.maxPositionPct * 100).toFixed(0)}%
+
+## 任务
+根据你的分析输出 JSON 参数建议：
+
+1. **driftOverrides**: 哪些资产需要不同于默认的漂移阈值？高 conviction bearish 论点的资产应收紧阈值（更敏感），低 conviction 或无论点的放宽。只列出需要调整的。
+2. **regimeOverride**: 你是否同意规则引擎的 regime 判断？如果不同意且置信度 >= 80，给出你的判断。同意则设为 null。
+3. **riskAdjustments**: 哪些资产需要收紧仓位上限？只能收紧不能放宽。
+4. **rebalanceTrigger**: 你是否认为现在应该触发调仓？只在有明确理由时设为 recommended: true。
+
+## 输出格式（严格 JSON）
+\`\`\`json
+{
+  "driftOverrides": [
+    {"symbol": "AAPL", "assetKey": "US:AAPL", "recommendedThresholdPct": 0.03, "reasoning": "高conviction bearish论点，需收紧监控"}
+  ],
+  "regimeOverride": null,
+  "riskAdjustments": [
+    {"symbol": "NVDA", "assetKey": "US:NVDA", "maxPositionPctOverride": 0.20, "reasoning": "集中度过高且论点面临AI竞争风险"}
+  ],
+  "rebalanceTrigger": null
+}
+\`\`\`
+
+## 示例输出
+\`\`\`json
+{
+  "driftOverrides": [
+    {"symbol": "TSLA", "assetKey": "US:TSLA", "recommendedThresholdPct": 0.03, "reasoning": "conviction从high降至low，波动率高，需紧盯"},
+    {"symbol": "BND", "assetKey": "US:BND", "recommendedThresholdPct": 0.10, "reasoning": "债券配置稳定，无需频繁调整"}
+  ],
+  "regimeOverride": {"suggestedRegime": "risk_off", "confidence": 82, "reasoning": "信用利差HYG/LQD持续走阔但VIX尚未反应，规则引擎滞后", "ruleBasedRegime": "${ctx.ruleRegime}"},
+  "riskAdjustments": [],
+  "rebalanceTrigger": {"recommended": true, "urgency": "normal", "reasoning": "TSLA论点崩塌+仓位超配，建议减仓至目标权重", "affectedAssets": ["US:TSLA"]}
+}
+\`\`\`
+
+规则:
+- recommendedThresholdPct 范围: 0.02 ~ 0.15（低于2%或高于15%的建议无效）
+- maxPositionPctOverride 范围: 0.10 ~ 0.30（低于10%或高于30%的建议无效）
+- regimeOverride.confidence < 80 时不会被采纳
+- 保守为主，只在有充分理由时给出非默认建议
+
+只输出 JSON，不要其他文字。`;
+}
+
 // ── Reflect 节点 Prompt ──
 
 export function buildReflectPrompt(ctx: {
@@ -479,10 +580,39 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   durationMs: number;
   thesesCount: number;
   memoriesCount: number;
+  /** 可选: 持仓快照 — 传入后追加持仓明细和漂移监控 */
+  portfolio?: {
+    holdings: Array<{ assetKey: string; symbol: string; weightPct: number; lastPrice: number; unrealizedPnlPct: number | null; holdingQty: number; targetWeightHint?: number; gapPct?: number | null; valuationBase?: number | null }>;
+    totalEquity: number;
+    cashPct: number;
+    cash?: number;
+    marketRegime?: string;
+  };
 }): string {
   const lines: string[] = [];
   lines.push("<b>\u{1F9E0} Agent 日报</b>\n");
 
+  // ── 持仓概览（从 portfolio 合并） ──
+  if (meta.portfolio) {
+    const p = meta.portfolio;
+    const holdingsValue = p.holdings.reduce((s, h) => s + (h.valuationBase ?? h.lastPrice * h.holdingQty), 0);
+    lines.push("<b>\u{1F4B0} 组合概览</b>");
+    lines.push(`总权益 <code>$${fmtK(p.totalEquity)}</code> | 持仓 <code>$${fmtK(holdingsValue)}</code> (${p.holdings.length}个) | 现金 <code>${(p.cashPct * 100).toFixed(0)}%</code>`);
+    lines.push("");
+
+    // 持仓明细（top 8）
+    if (p.holdings.length > 0) {
+      const sorted = [...p.holdings].sort((a, b) => (b.valuationBase ?? 0) - (a.valuationBase ?? 0));
+      lines.push("<b>\u{1F4CB} 持仓</b>");
+      for (const h of sorted.slice(0, 8)) {
+        const pnl = h.unrealizedPnlPct != null ? `${h.unrealizedPnlPct >= 0 ? "+" : ""}${(h.unrealizedPnlPct * 100).toFixed(1)}%` : "";
+        lines.push(`• ${h.symbol} ${(h.weightPct * 100).toFixed(1)}% $${fmtK(h.valuationBase ?? h.lastPrice * h.holdingQty)} ${pnl}`);
+      }
+      lines.push("");
+    }
+  }
+
+  // ── Agent 分析 ──
   if (briefing.surprises.length > 0) {
     lines.push("<b>\u26A1 今日意外</b>");
     for (const s of briefing.surprises.slice(0, 3)) {
@@ -511,6 +641,26 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     lines.push("");
   }
 
+  // ── Overlay 策略建议（如有） ──
+  if (briefing.configOverlay) {
+    const ov = briefing.configOverlay;
+    const parts: string[] = [];
+    if (ov.driftOverrides.length > 0) parts.push(`漂移调整: ${ov.driftOverrides.map(o => `${o.symbol}→${(o.recommendedThresholdPct * 100).toFixed(0)}%`).join(", ")}`);
+    if (ov.regimeOverride) parts.push(`Regime: ${ov.regimeOverride.ruleBasedRegime}→${ov.regimeOverride.suggestedRegime} (${ov.regimeOverride.confidence}%)`);
+    if (ov.rebalanceTrigger?.recommended) parts.push(`\u{26A0}\u{FE0F} 建议调仓: ${ov.rebalanceTrigger.reasoning.slice(0, 60)}`);
+    if (parts.length > 0) {
+      lines.push("<b>\u{1F916} 策略建议</b>");
+      for (const part of parts) lines.push(`• ${part}`);
+      lines.push("");
+    }
+  }
+
   lines.push(`<i>\u{1F4CA} 论点: ${meta.thesesCount} | 记忆: ${meta.memoriesCount} | Tokens: ${meta.totalTokens} | ${(meta.durationMs / 1000).toFixed(1)}s</i>`);
   return lines.join("\n");
+}
+
+function fmtK(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(0);
 }

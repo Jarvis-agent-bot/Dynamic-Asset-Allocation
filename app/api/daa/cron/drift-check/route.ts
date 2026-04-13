@@ -8,6 +8,7 @@ import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getLatestAgentConfigOverlay } from "@/src/daa/agent/store/overlayStore";
 
 export const runtime = "nodejs";
 
@@ -55,12 +56,25 @@ async function runDriftCheck() {
     // Always run bootstrap to detect drift (independent of autoGenerateEnabled)
     const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false, autoRiskCycle: true });
 
-    // Detect drift: find assets exceeding threshold
+    // Agent Config Overlay — per-asset 漂移阈值调整
+    const overlay = system.config.cognitiveAgent?.agentOverlayEnabled
+      ? await getLatestAgentConfigOverlay().catch((e) => { logSwallowed("driftCheck.overlay", e); return null; })
+      : null;
+
+    // Detect drift: find assets exceeding threshold (支持 Agent per-asset 阈值)
     const driftThreshold = strategy.drift.thresholdPct;
-    const driftedAssets = bootstrap.assetUniverse.filter(
-      (a) => a.holdingQty > 0 && a.gapPct != null && Math.abs(a.gapPct) >= driftThreshold * 100,
-    );
+    const driftedAssets = bootstrap.assetUniverse.filter((a) => {
+      if (a.holdingQty <= 0 || a.gapPct == null) return false;
+      const agentThreshold = overlay?.driftOverrides?.find((o) => o.assetKey === a.assetKey)?.recommendedThresholdPct;
+      const effectiveThreshold = agentThreshold ?? driftThreshold;
+      return Math.abs(a.gapPct) >= effectiveThreshold * 100;
+    });
     const hasDrift = driftedAssets.length > 0;
+
+    // Agent 主动触发再平衡
+    const agentTrigger = system.config.cognitiveAgent?.agentTriggerEnabled && overlay?.rebalanceTrigger?.recommended
+      ? overlay.rebalanceTrigger
+      : null;
 
     // Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled)
     let generated: {
@@ -72,11 +86,17 @@ async function runDriftCheck() {
     } | null = null;
 
     if (strategy.autoGenerateEnabled) {
-      generated = await generateWorkbenchRebalanceCycle({
-        triggerSource: "drift",
-        triggerReason: "偏移量阈值触发",
-        manual: false,
-      });
+      const triggerSource = agentTrigger ? "agent_trigger" : "drift";
+      const triggerReason = agentTrigger
+        ? `Agent 建议调仓 (${agentTrigger.urgency}): ${agentTrigger.reasoning}`
+        : "偏移量阈值触发";
+      if (hasDrift || agentTrigger) {
+        generated = await generateWorkbenchRebalanceCycle({
+          triggerSource,
+          triggerReason,
+          manual: false,
+        });
+      }
     }
 
     const cycle = generated?.cycle ?? null;

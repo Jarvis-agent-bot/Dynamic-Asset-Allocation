@@ -163,10 +163,52 @@ export interface DailyBriefing {
   mindChangeConditions: MindChangeCondition[];
   thesisFailureImpacts?: ThesisFailureImpact[];
   thesisConflicts?: ThesisConflict[];
+  /** Agent 策略顾问的参数建议（由 LLM 生成，规则引擎消费） */
+  configOverlay?: AgentConfigOverlay;
   thesesUpdated: number;
   memoriesCreated: number;
   totalTokens: number;
   estimatedCost: number;
+}
+
+// ── Agent 策略 Overlay ──
+
+/** Agent LLM 输出的参数建议，驱动规则引擎漂移阈值/regime/风控/调仓触发 */
+export interface AgentConfigOverlay {
+  generatedAt: string;
+  agentRunId: string;
+
+  /** 每资产漂移阈值建议（只列需要调整的） */
+  driftOverrides: Array<{
+    assetKey: string;
+    symbol: string;
+    recommendedThresholdPct: number; // 0.02 ~ 0.15
+    reasoning: string;
+  }>;
+
+  /** 市场 regime 覆盖（null 表示同意规则引擎判断） */
+  regimeOverride: {
+    suggestedRegime: "risk_on" | "transitional" | "risk_off";
+    confidence: number; // 0-100
+    reasoning: string;
+    ruleBasedRegime: string;
+  } | null;
+
+  /** 风控参数收紧建议（只允许收紧，不可放宽） */
+  riskAdjustments: Array<{
+    assetKey: string;
+    symbol: string;
+    maxPositionPctOverride: number; // 0.10 ~ 0.30
+    reasoning: string;
+  }>;
+
+  /** 主动调仓触发建议 */
+  rebalanceTrigger: {
+    recommended: boolean;
+    urgency: "normal" | "urgent";
+    reasoning: string;
+    affectedAssets: string[];
+  } | null;
 }
 
 // ── LangGraph 状态 ──

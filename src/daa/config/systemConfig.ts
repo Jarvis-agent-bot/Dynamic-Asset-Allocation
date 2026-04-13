@@ -245,6 +245,10 @@ export type DaaSystemConfig = {
     memoryDecayRate: number;
     /** 记忆归档阈值（strength 低于此值不参与召回，默认 0.05） */
     memoryArchiveThreshold: number;
+    /** 启用 Agent Config Overlay（LLM 生成参数建议驱动规则引擎，默认 false） */
+    agentOverlayEnabled?: boolean;
+    /** 允许 Agent 主动触发再平衡（默认 false） */
+    agentTriggerEnabled?: boolean;
   };
   notification: {
     dailyAnalysisHourUtc: number;
@@ -430,6 +434,8 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     scheduleTimesUtc: ["13:00", "21:00"],
     memoryDecayRate: 0.97,
     memoryArchiveThreshold: 0.05,
+    agentOverlayEnabled: false,
+    agentTriggerEnabled: false,
   },
   notification: {
     dailyAnalysisHourUtc: 1,
@@ -881,6 +887,8 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         scheduleTimesUtc: Array.isArray(ca.scheduleTimesUtc) ? (ca.scheduleTimesUtc as string[]).filter(t => /^\d{1,2}:\d{2}$/.test(String(t))).slice(0, 4) : clone(fb.scheduleTimesUtc),
         memoryDecayRate: clamp(Number(ca.memoryDecayRate) || fb.memoryDecayRate, 0.5, 1.0),
         memoryArchiveThreshold: clamp(Number(ca.memoryArchiveThreshold) || fb.memoryArchiveThreshold, 0.01, 0.5),
+        agentOverlayEnabled: toBool(ca.agentOverlayEnabled, false),
+        agentTriggerEnabled: toBool(ca.agentTriggerEnabled, false),
       };
     })(),
     notification: {

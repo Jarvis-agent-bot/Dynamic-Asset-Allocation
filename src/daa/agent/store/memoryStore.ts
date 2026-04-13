@@ -61,11 +61,12 @@ export async function recallMemory(opts: {
     if (opts.queryEmbedding && opts.queryEmbedding.length > 0) {
       try {
         const embStr = `[${opts.queryEmbedding.join(",")}]`;
+        // 2D: 按 similarity × strength 加权排序（强记忆 + 高相关性优先）
         const res = await query(
           `SELECT *, 1 - (embedding <=> $1::vector) AS similarity
            FROM daa_agent_memory
            WHERE embedding IS NOT NULL AND strength >= 0.05
-           ORDER BY embedding <=> $1::vector
+           ORDER BY (1 - (embedding <=> $1::vector)) * strength DESC
            LIMIT $2`,
           [embStr, limit],
         );
@@ -166,6 +167,13 @@ export async function deleteMemory(id: string): Promise<void> {
  */
 export async function applyMemoryDecay(decayRate: number = 0.97): Promise<number> {
   return withDaaPgClient(async ({ query }) => {
+    // 2A: 先硬删除僵尸记忆（strength < 0.01 且 30 天未访问）
+    await query(
+      `DELETE FROM daa_agent_memory
+       WHERE strength < 0.01 AND last_accessed < NOW() - INTERVAL '30 days'`,
+    ).catch(e => logSwallowed("memoryStore.zombieCleanup", e));
+
+    // 衰减仍活跃的记忆
     const res = await query(
       `UPDATE daa_agent_memory
        SET strength = strength * POWER($1, EXTRACT(EPOCH FROM (NOW() - last_accessed)) / 86400)

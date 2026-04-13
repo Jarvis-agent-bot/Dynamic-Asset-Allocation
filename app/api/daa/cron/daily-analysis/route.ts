@@ -309,8 +309,12 @@ export async function POST(req: Request) {
         if (wantTgReport || wantFsReport) {
           try {
             // 当日去重：防止 cron 重试或手动触发导致重复发送
+            // Agent 日报已合并持仓信息，如果今天已推送 Agent 日报则跳过独立每日报告
+            const agentBriefingSentToday = await hasTodayNotification("agent_briefing").catch(() => false);
             const alreadySentToday = await hasTodayNotification("daily_report").catch(() => false);
-            if (alreadySentToday) {
+            if (agentBriefingSentToday) {
+              console.log("[dailyAnalysis] Agent 日报已推送（含持仓），跳过重复每日报告");
+            } else if (alreadySentToday) {
               console.log("[dailyAnalysis] 每日报告已于今日发送，跳过重复发送");
             } else {
               const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });

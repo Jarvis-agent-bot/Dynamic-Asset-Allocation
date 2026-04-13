@@ -102,6 +102,10 @@ export const CognitiveStateAnnotation = Annotation.Root({
     memoryDecayRate?: number;
     memoryArchiveThreshold?: number;
     maxReactRounds?: number;
+    agentOverlayEnabled?: boolean;
+    agentTriggerEnabled?: boolean;
+    defaultDriftThresholdPct?: number;
+    maxPositionPct?: number;
   } | null>({ reducer: (_, b) => b, default: () => null }),
 
   // 最终输出

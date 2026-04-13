@@ -136,6 +136,8 @@ export function buildMarketContextFromIndicators(input: {
   indicators: DaaMarketIndicatorSnapshot[];
   config: DaaMarketIndicatorsConfig;
   fredMacro?: FredMacroInput | null;
+  /** Agent Config Overlay 的 regime 覆盖（高置信度时替代规则引擎判断） */
+  agentRegimeOverride?: { suggestedRegime: "risk_on" | "transitional" | "risk_off"; confidence: number; reasoning: string } | null;
 }): DaaMarketContext | null {
   const scopes = MARKET_SCOPE_KEY_ORDER_
     .map((scope) => buildScopedContext({ scope, indicators: input.indicators, config: input.config }))
@@ -164,9 +166,17 @@ export function buildMarketContextFromIndicators(input: {
     .map((key) => input.indicators.find((item) => item.key === key) || null)
     .filter(Boolean) as DaaMarketIndicatorSnapshot[];
 
+  // Agent Config Overlay — regime 覆盖
+  let effectiveRegime = topScope.regime;
+  const agentOverride = input.agentRegimeOverride;
+  if (agentOverride && agentOverride.confidence >= 80) {
+    effectiveRegime = agentOverride.suggestedRegime;
+    reasons.unshift(`🤖 Agent 覆盖: ${agentOverride.reasoning}`);
+  }
+
   const result: DaaMarketContext = {
     generatedAt: Number.isFinite(generatedAt) ? new Date(generatedAt).toISOString() : new Date().toISOString(),
-    regime: topScope.regime,
+    regime: effectiveRegime,
     riskOffScorePct: topScope.riskOffScorePct,
     confidencePct: topScope.confidencePct,
     buyScale: topScope.buyScale,

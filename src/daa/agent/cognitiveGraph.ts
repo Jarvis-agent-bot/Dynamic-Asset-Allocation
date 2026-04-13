@@ -6,8 +6,8 @@
 
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { CognitiveStateAnnotation, type CognitiveState, type CognitiveUpdate, type PortfolioSnapshot, type MarketSnapshot, type NewsSnapshot } from "@/src/daa/agent/cognitiveState";
-import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread, DailyBriefing, CognitionGap, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
-import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePrompt, buildReactFollowUpPrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread, DailyBriefing, CognitionGap, MindChangeCondition, AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
+import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePrompt, buildReactFollowUpPrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, buildStrategyAdvisorPrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
 import { AGENT_TOOL_DEFINITIONS } from "@/src/daa/agent/agentToolRegistry";
 import { buildExecutorRegistry, executeToolCall } from "@/src/daa/agent/agentToolExecutors";
 import type { AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
@@ -139,6 +139,10 @@ async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
           scheduleTimesUtc: ca.scheduleTimesUtc,
           memoryDecayRate: ca.memoryDecayRate,
           memoryArchiveThreshold: ca.memoryArchiveThreshold,
+          agentOverlayEnabled: ca.agentOverlayEnabled ?? false,
+          agentTriggerEnabled: ca.agentTriggerEnabled ?? false,
+          defaultDriftThresholdPct: sysConfig.config.rebalanceStrategy?.drift?.thresholdPct ?? 0.05,
+          maxPositionPct: sysConfig.config.strategy?.constraints?.maxPositionPct ?? 0.30,
         };
       }
     } catch (e) {
@@ -239,11 +243,23 @@ async function prioritizeNode(state: CognitiveState): Promise<CognitiveUpdate> {
       return { errors: ["prioritize: no portfolio data"] };
     }
 
+    // 2B: 预加载 thesis 准确率，供 LLM 做优先级判断
+    const thesisAccuracy = new Map<string, number>();
+    for (const t of state.activeTheses.slice(0, 15)) {
+      try {
+        const avg = await thesisStore.getThesisAccuracyAvg(t.id);
+        if (avg !== null) thesisAccuracy.set(t.id, avg);
+      } catch (e) {
+        logSwallowed("cognitiveGraph.prioritize.accuracy", e);
+      }
+    }
+
     const prompt = buildPrioritizePrompt({
       portfolio: state.portfolio,
       market: state.market ?? { regime: "unknown", vix: null, indicators: {} },
       news: state.news ?? { items: [] },
       theses: state.activeTheses,
+      thesisAccuracy,
     });
 
     const { data, tokensUsed } = await callDeepSeekJson<{
@@ -390,11 +406,25 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
 
     // ── ReAct 循环 ──
     // 第一轮：发送初始 prompt（含工具定义 + thesis + memories）
+    // 2C: 加载该 thesis 的 trade_outcome 证据
+    let tradeOutcomes: Array<{ content: string; evidenceType: string; createdAt: string }> = [];
+    try {
+      const thesisWithEvidence = await thesisStore.getThesisWithEvidence(thread.id);
+      const evidence = thesisWithEvidence?.evidence ?? [];
+      tradeOutcomes = evidence
+        .filter(e => e.source === "trade_outcome")
+        .slice(0, 5)
+        .map(e => ({ content: e.content, evidenceType: e.evidenceType, createdAt: e.createdAt }));
+    } catch (e) {
+      logSwallowed("cognitiveGraph.investigate.tradeOutcomes", e);
+    }
+
     const initialPrompt = buildReactInvestigatePrompt({
       thread,
       tools: AGENT_TOOL_DEFINITIONS,
       memories,
       portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
+      tradeOutcomes,
     });
 
     // 维护多轮对话上下文（只保留初始 prompt + 最近两轮结果，避免无限增长）
@@ -888,14 +918,78 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
       estimatedCost: totalTkn * DEEPSEEK_AVG_COST_PER_TOKEN,
     };
 
+    // 策略顾问 LLM — 生成 Agent Config Overlay（仅在 agentOverlayEnabled 时）
+    if (state.agentConfig?.agentOverlayEnabled && !shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
+      try {
+        const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
+        const advisorPrompt = buildStrategyAdvisorPrompt({
+          holdings: portfolio.holdings.map(h => ({
+            assetKey: h.assetKey,
+            symbol: h.assetKey.split(":").pop() ?? h.assetKey,
+            weightPct: h.weightPct,
+            price: h.lastPrice ?? 0,
+          })),
+          theses,
+          surprises: briefing.surprises,
+          cognitionGaps: briefing.cognitionGaps,
+          ruleRegime: state.market?.regime ?? "unknown",
+          defaultDriftThresholdPct: state.agentConfig?.defaultDriftThresholdPct ?? 0.05,
+          maxPositionPct: state.agentConfig?.maxPositionPct ?? 0.30,
+        });
+
+        const overlayResult = await callDeepSeekJson<Omit<AgentConfigOverlay, "generatedAt" | "agentRunId">>(
+          advisorPrompt, "cognitiveGraph.surface.advisor",
+        );
+        tokensUsed += overlayResult.tokensUsed;
+
+        if (overlayResult.data) {
+          const raw = overlayResult.data;
+          // 安全校验：clamp 范围
+          const driftOverrides = (Array.isArray(raw.driftOverrides) ? raw.driftOverrides : [])
+            .filter(o => o.recommendedThresholdPct >= 0.02 && o.recommendedThresholdPct <= 0.15);
+          const riskAdjustments = (Array.isArray(raw.riskAdjustments) ? raw.riskAdjustments : [])
+            .filter(o => o.maxPositionPctOverride >= 0.10 && o.maxPositionPctOverride <= 0.30);
+
+          briefing.configOverlay = {
+            generatedAt: new Date().toISOString(),
+            agentRunId: `surface-${new Date().toISOString()}`,
+            driftOverrides,
+            regimeOverride: raw.regimeOverride && typeof raw.regimeOverride === "object"
+              ? { ...raw.regimeOverride, ruleBasedRegime: state.market?.regime ?? "unknown" }
+              : null,
+            riskAdjustments,
+            rebalanceTrigger: raw.rebalanceTrigger && typeof raw.rebalanceTrigger === "object"
+              ? raw.rebalanceTrigger
+              : null,
+          };
+
+          // 更新 briefing token 计数
+          briefing.totalTokens += overlayResult.tokensUsed;
+          briefing.estimatedCost = briefing.totalTokens * DEEPSEEK_AVG_COST_PER_TOKEN;
+        }
+      } catch (e) {
+        logSwallowed("cognitiveGraph.surface.advisor", e);
+      }
+    }
+
     // 尝试推送 Telegram（非阻塞）
     try {
       const { sendTelegramByEnv } = await import("@/src/daa/notify/telegram");
+      const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
       const tgText = formatBriefingForTelegram(briefing, {
         totalTokens: briefing.totalTokens,
         durationMs: Date.now() - t0,
         thesesCount: theses.length,
         memoriesCount: memCount,
+        portfolio: {
+          holdings: portfolio.holdings.map(h => ({
+            ...h,
+            valuationBase: h.lastPrice * h.holdingQty,
+          })),
+          totalEquity: portfolio.totalEquity,
+          cashPct: portfolio.cashPct,
+          marketRegime: state.market?.regime ?? undefined,
+        },
       });
       sendTelegramByEnv(tgText, {
         eventType: "agent_briefing",
