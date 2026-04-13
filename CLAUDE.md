@@ -125,7 +125,7 @@ See `src/daa/assetKey.ts` for parsing/normalization utilities.
 
 ### Cognitive Agent OS（AI-Native 架构，当前）
 
-基于 LangGraph.js 的 thesis-driven 认知 Agent，通过 `systemConfig.agentMode` 切换。
+基于 LangGraph.js 的 thesis-driven 认知 Agent。所有参数通过 Settings → 认知 Agent 配置。
 
 **工作流**（`src/daa/agent/cognitiveGraph.ts`）：
 ```
@@ -134,34 +134,68 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 | 节点 | 职责 | LLM 调用 |
 |------|------|---------|
-| `observe` | 读取持仓 + 市场指标 + 新闻 | 否 |
-| `prioritize` | 选择 1-3 个最需调查的 thesis | 是（投委会主席） |
-| `investigate` | 收集证据 + 推理 + 更新 thesis | 是（研究分析师） |
-| `reflect` | conviction 变化时反思 + 生成记忆 | 是（首席风控官） |
-| `review` | 到期 thesis 复盘 + 评分 | 是（复盘审计师） |
-| `surface` | 生成 DailyBriefing + TG 推送 | 是（日报编辑） |
+| `observe` | 读取持仓 + 市场指标 + 新闻 + **加载 DB 配置** + **记忆衰减** | 否 |
+| `prioritize` | 选择最需调查的 thesis（数量由 `maxInvestigationTargets` 配置） | 是（投委会主席） |
+| `investigate` | 并行收集证据（Promise.allSettled）+ 推理 + 更新 thesis | 是（研究分析师） |
+| `reflect` | conviction 变化时反思 + 生成记忆（含 thesis 关联） | 是（首席风控官） |
+| `review` | 到期 thesis 复盘 + 评分（含真实价格变动 ground truth） | 是（复盘审计师） |
+| `surface` | 生成 DailyBriefing + **风险建模** + **冲突检测** + TG 推送 | 是（日报编辑） |
+
+**健壮性机制**：
+- LLM 调用带指数退避重试（最多 3 次，仅网络/429 错误）
+- 连续 LLM 失败触发熔断（阈值可配置，跳过剩余 LLM 调用）
+- 所有 LLM 输出经 `validateShape()` 结构校验
+- 每个 prompt 包含 few-shot JSON 示例
+- 新 thesis 创建前去重检查（assetKeys + 标题子串匹配）
 
 **数据模型**（5 张表）：
 - `daa_research_threads` — 研究论点
 - `daa_evidence_items` — 证据链
-- `daa_agent_runs` — 运行记录
-- `daa_agent_memory` — 长期记忆（pgvector 384 维）
+- `daa_agent_runs` — 运行记录（含完整 briefing JSONB）
+- `daa_agent_memory` — 长期记忆（pgvector 1024 维，Hebbian 增强 + 指数衰减）
 - `daa_thesis_reviews` — 决策复盘
 
-**三类输出**（DailyBriefing）：
-1. **今日意外** — 最不符合现有认知的市场变化
+**五类输出**（DailyBriefing）：
+1. **今日意外** — 最不符合现有认知的市场变化（severity 1-10）
 2. **认知缺口** — 高权重但久未调查的持仓
 3. **改观条件** — 什么会让 Agent 改变当前判断
+4. **风险暴露** — 各 thesis 失效对组合的影响（暴露% + 预估损失%）
+5. **论点冲突** — 方向矛盾的 thesis 对（assetKeys 交集 + conviction 矛盾）
+
+**记忆管理**：
+- **增强**: 每次被 `recallMemory` 召回时 strength +0.1（Hebbian）
+- **衰减**: 每个 cycle 开始时 `strength *= decayRate^days_since_last_access`（默认 0.97/天，约 23 天半衰期）
+- **归档**: `strength < 0.05` 的记忆不参与召回，但仍可在 Memory Browser 中查看
+- **关联**: 创建时 `relevanceTags` 包含 threadId，召回时优先匹配关联 thesis
 
 **API**：
 - `POST /api/daa/agent/run` — 手动触发 Agent 循环
 - `POST /api/daa/agent/bootstrap` — 初始化 thesis（扫描持仓）
-- `GET /api/daa/agent/theses` — 获取活跃论点
-- `POST /api/daa/cron/cognitive-agent` — 定时 cron
+- `GET /api/daa/agent/theses` — 获取活跃论点 + 最新 briefing
+- `GET /api/daa/agent/thesis/[id]` — 论点详情（证据链 + 复盘历史）
+- `GET /api/daa/agent/memories` — 分页列出记忆（支持类型过滤）
+- `DELETE /api/daa/agent/memories?id=xxx` — 删除单条记忆
+- `POST /api/daa/cron/cognitive-agent` — 定时 cron（自门控：检查 schedule + scheduleTimesUtc）
 
 **UI**：
-- Today 页 → Agent Briefing 视图
-- Agent Rail → 全站右侧认知面板（xl 屏幕）
+- Today 页 → Agent Briefing 视图（5 个面板：意外/缺口/改观/冲突/风险）
+- Today 页 → Thesis 详情页（`/today/thesis/[id]`，证据时间线 + 复盘历史）
+- Today 页 → Memory Browser（`/today/memories`，分页列表 + 类型过滤 + 删除）
+- Agent Rail → 全站右侧认知面板（xl 屏幕，论点可点击进入详情）
+- Settings → 认知 Agent（调查数/复盘周期/运行频率/记忆衰减率/熔断阈值）
+
+**配置**（`systemConfig.cognitiveAgent`）：
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `enabled` | true | 是否启用 Agent |
+| `maxInvestigationTargets` | 3 | 每次调查最大论点数 |
+| `reviewIntervalDays` | 14 | 新论点默认复盘间隔 |
+| `memoryRecallLimit` | 5 | 每次调查召回记忆数 |
+| `circuitBreakerThreshold` | 3 | 连续 LLM 失败触发熔断 |
+| `schedule` | "2x_daily" | 运行频率（2x_daily/daily/every_6h/manual_only） |
+| `scheduleTimesUtc` | ["13:00","21:00"] | 运行时间窗口 UTC（±30 分钟匹配） |
+| `memoryDecayRate` | 0.97 | 每天衰减率 |
+| `memoryArchiveThreshold` | 0.05 | 低于此 strength 排除召回 |
 
 ### Market Indicators (7 dimensions)
 - `vix` — S&P 500 volatility
@@ -266,8 +300,8 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Memory Store (pgvector) | `src/daa/agent/store/memoryStore.ts` |
 | Agent Run Store | `src/daa/agent/store/agentRunStore.ts` |
 | Thesis Bootstrap | `src/daa/agent/bootstrap.ts` |
-| Embedding (384d) | `src/daa/agent/embedding.ts` |
-| Agent Tool 注册表 | `src/daa/agent/agentToolRegistry.ts` |
+| Embedding (1024d) | `src/daa/agent/embedding.ts` |
+| Agent Tool 注册表（Phase 3 规划） | `src/daa/agent/agentToolRegistry.ts` |
 | Agent 学习记忆 | `src/daa/agent/agentLearningRepo.ts` |
 | 信号概览（insights 展示用） | `src/daa/signals/fusion.ts` |
 | 决策后验服务 | `src/daa/modules/today/decisionOutcomeService.ts` |
@@ -326,6 +360,7 @@ const execution = await runLoggedJob({
 | Dividend refresh | 1:30am UTC | Dividend data |
 | Cache cleanup | 8:20pm UTC | Stale data removal |
 | Health check | Every 30 min | 检查 price-refresh/indicators 是否正常，失败时 TG 告警 |
+| Cognitive Agent | Hourly (自门控) | 研究论点调查循环（按 Settings 配置的 schedule + scheduleTimesUtc 自门控） |
 
 ## Chat/Agent 架构
 
@@ -338,15 +373,15 @@ const execution = await runLoggedJob({
 | 组件 | 文件 | 职责 |
 |------|------|------|
 | Orchestrator | `src/daa/chat/chatOrchestrator.ts` | 接收消息 → 加载上下文 → 规划意图 → 执行工具 → 返回结果 |
-| Intent Parser | `src/daa/chat/assistantIntentRules.ts` | 正则 + 关键词匹配 11 种意图 |
+| Intent Parser | `src/daa/chat/assistantIntentRules.ts` | 正则 + 关键词匹配 13 种意图 |
 | LLM Planner | `src/daa/chat/assistantIntentPlanning.ts` | 不确定意图时调 LLM 辅助规划 |
-| Tool Registry | `src/daa/chat/agentTools.ts` | 12 个工具（持仓查询/风险/市场/再平衡/交易/自由问答） |
+| Tool Registry | `src/daa/chat/agentTools.ts` | 14 个工具（持仓/风险/市场/再平衡/交易/论点查询/日报查询/自由问答） |
 | Context Builder | `src/daa/chat/agentContext.ts` | 构建上下文摘要（持仓+指标+信号+周期） |
 | Session Memory | `src/daa/chat/chatRepo.ts` | 会话+消息+摘要+待确认动作 |
 | Channel Adapters | `src/daa/chat/channelAdapters.ts` | Web/Telegram 双通道适配 |
 
 ### 意图类型
-`help` | `portfolio_status` | `risk_status` | `market_status` | `latest_cycle` | `rebalance_generate` | `rebalance_execute` | `confirm_action` | `cancel_action` | `trade` | `llm_answer`
+`help` | `portfolio_status` | `risk_status` | `market_status` | `latest_cycle` | `rebalance_generate` | `rebalance_execute` | `confirm_action` | `cancel_action` | `trade` | `thesis_status` | `agent_briefing` | `llm_answer`
 
 ### 待确认动作
 交易和再平衡执行需要用户确认（TTL 10 分钟），存储在 `daa_chat_session_memory.metaJson.pendingAction`。
@@ -386,3 +421,28 @@ Configured via Settings page or `daa_system_config_v2` in database.
 - Options / derivatives support
 - FX hedging strategies
 - Real-time streaming prices (currently batch)
+- Phase 3 ReAct Agent tool calling（LLM 自主选择工具，agentToolRegistry 已定义 6 个工具但未实现 executor）
+
+## Deployment（VPS Docker）
+
+```
+docker-compose.yml
+├── daa-web      Next.js app (port 3000, behind nginx reverse proxy)
+├── daa-cron     Alpine + crond (curl 调 daa-web API，用 DAA_CRON_TOKEN 认证)
+└── postgres     pgvector:pg16 (port 15432, volume: daa-postgres-data)
+```
+
+**关键环境变量**（`.env` 文件）：
+| 变量 | 用途 |
+|------|------|
+| `DAA_CRON_TOKEN` | Cron 容器调 API 的认证 token |
+| `DAA_SECRETS_ENCRYPTION_KEY` | DB 中 secrets 加密密钥 |
+| `FINNHUB_API_KEY` | Finnhub 新闻 API（US 市场主源，Yahoo RSS 为 fallback） |
+| `DAA_EMBEDDING_PROVIDER` | Embedding 提供商（siliconflow/deepseek/openai） |
+| `DAA_EMBEDDING_API_KEY` | Embedding API key |
+
+**新闻数据源**：
+| Provider | 覆盖市场 | 优先级 |
+|----------|---------|--------|
+| Finnhub API | US | 主源（需 API Key） |
+| Yahoo RSS | US/HK/CN/JP/EU | Fallback（无需 Key） |
