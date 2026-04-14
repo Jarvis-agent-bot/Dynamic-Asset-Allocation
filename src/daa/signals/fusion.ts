@@ -37,7 +37,7 @@ export type DaaFusedOpportunity = {
   valuation: DaaValuationSignal | null;
 };
 
-export type BuildFusedOpportunitiesInput = {
+type BuildFusedOpportunitiesInput = {
   symbols: string[];
   humanSignals: DaaHumanSignal[];
   newsSignals: DaaNewsSignal[];

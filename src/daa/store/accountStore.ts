@@ -48,7 +48,7 @@ function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState 
   };
 }
 
-export function mergeRuntimeAccountIntoSystemConfig(
+function mergeRuntimeAccountIntoSystemConfig(
   configRaw: DaaSystemConfig,
   account: Pick<DaaStoreAccountState, "baseCurrency" | "cash" | "investableCash" | "frozenCash" | "totalEquity">,
 ): DaaSystemConfig {
@@ -69,7 +69,7 @@ export function mergeRuntimeAccountIntoSystemConfig(
   };
 }
 
-export function mergeSystemConfigRowWithAccountState(
+function mergeSystemConfigRowWithAccountState(
   row: DaaStoreSystemConfigRow,
   account: DaaStoreAccountState,
 ): DaaStoreSystemConfigRow {
@@ -79,7 +79,7 @@ export function mergeSystemConfigRowWithAccountState(
   };
 }
 
-export function stripRuntimeAccountFromConfig(configRaw: unknown): {
+function stripRuntimeAccountFromConfig(configRaw: unknown): {
   sanitizedConfig: DaaSystemConfig;
   runtimeAccount: {
     baseCurrency: string;
@@ -121,7 +121,7 @@ export function stripRuntimeAccountFromConfig(configRaw: unknown): {
   };
 }
 
-export function mapSystemConfigRow(row: Record<string, unknown>): DaaStoreSystemConfigRow {
+function mapSystemConfigRow(row: Record<string, unknown>): DaaStoreSystemConfigRow {
   const versionRaw = Number(row.version);
   return {
     id: "default",

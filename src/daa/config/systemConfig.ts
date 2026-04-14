@@ -6,17 +6,17 @@ import {
 } from "@/src/daa/config/currency";
 import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
 
-export type DaaFundKind = "equity" | "qdii" | "balanced";
+type DaaFundKind = "equity" | "qdii" | "balanced";
 
-export type DaaStrategyExecutionTiming = "t_plus_1_close";
+type DaaStrategyExecutionTiming = "t_plus_1_close";
 
-export type DaaStrategyExecutionConfig = {
+type DaaStrategyExecutionConfig = {
   feeRateBps: number;
   slippageBps: number;
   timing: DaaStrategyExecutionTiming;
 };
 
-export type DaaHfFundTrack = {
+type DaaHfFundTrack = {
   fundCode: string;
   label: string;
   kind: DaaFundKind;
@@ -25,7 +25,7 @@ export type DaaHfFundTrack = {
 
 export type DaaMarketIndicatorConfigKey = "vix" | "qqqSpyRatio" | "fxiVolatility" | "kwebFxiRatio" | "btcEthRatio" | "btcVolatility" | "goldSilverRatio" | "yieldCurveSpread" | "usdStrength" | "creditSpread" | "inflationExpectation" | "marketBreadth";
 
-export type DaaMarketIndicatorConfigItem = {
+type DaaMarketIndicatorConfigItem = {
   enabled: boolean;
   weight: number;
 };
@@ -86,28 +86,7 @@ export const DEFAULT_STRATEGY_PARAMS: DaaStrategyParams = {
   },
 };
 
-/** 合并用户自定义参数与默认值（深合并，缺失字段用默认值填充） */
-export function resolveStrategyParams(
-  partial?: Partial<DaaStrategyParams> | null,
-): DaaStrategyParams {
-  if (!partial) return DEFAULT_STRATEGY_PARAMS;
-  const d = DEFAULT_STRATEGY_PARAMS;
-  const sf = partial.signalFusion;
-  return {
-    signalFusion: {
-      conflictPenalties: sf?.conflictPenalties ?? d.signalFusion.conflictPenalties,
-      maxConflictPenalty: sf?.maxConflictPenalty ?? d.signalFusion.maxConflictPenalty,
-      conflictConfidenceImpact: sf?.conflictConfidenceImpact ?? d.signalFusion.conflictConfidenceImpact,
-      actionThresholds: {
-        openOrAdd: { ...d.signalFusion.actionThresholds.openOrAdd, ...sf?.actionThresholds?.openOrAdd },
-        watch: { ...d.signalFusion.actionThresholds.watch, ...sf?.actionThresholds?.watch },
-      },
-      confidenceWeights: { ...d.signalFusion.confidenceWeights, ...sf?.confidenceWeights },
-      macroCycleAdjustments: sf?.macroCycleAdjustments ?? d.signalFusion.macroCycleAdjustments,
-    },
-    marketRegime: { ...d.marketRegime, ...partial.marketRegime },
-  };
-}
+
 
 export type DaaSystemConfig = {
   strategy: {
@@ -267,12 +246,6 @@ export type DaaSystemConfig = {
       dailyReport: boolean;
     };
   };
-};
-
-export type DaaSystemConfigEnvelope = {
-  version: number;
-  updatedAt: string;
-  config: DaaSystemConfig;
 };
 
 export type DaaSystemConfigPatch = {

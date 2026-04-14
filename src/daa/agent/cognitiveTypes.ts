@@ -96,7 +96,7 @@ export interface AgentMemory {
 
 // ── 决策复盘 ──
 
-export type ReviewWindow = "7d" | "30d" | "90d";
+type ReviewWindow = "7d" | "30d" | "90d";
 
 export interface ThesisReview {
   id: string;
@@ -224,11 +224,6 @@ export interface NewThreadSuggestion {
   initialThesis: string;
   assetKeys: string[];
   tags: string[];
-}
-
-export interface PrioritizeOutput {
-  targets: InvestigationTarget[];
-  newThreads: NewThreadSuggestion[];
 }
 
 export interface InvestigateOutput {
