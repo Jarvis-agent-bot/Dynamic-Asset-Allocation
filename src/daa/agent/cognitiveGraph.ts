@@ -13,6 +13,7 @@ import { buildExecutorRegistry, executeToolCall } from "@/src/daa/agent/agentToo
 import type { AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
+import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 
@@ -584,11 +585,31 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       });
     }
 
+    // P0-1: 创建观察记忆 — 无论 thesisChanged 与否，有效调查都留下记忆痕迹
+    // thesisChanged 时由 reflectNode 创建记忆，这里只处理未变化的情况
+    let observationMemCount = 0;
+    if (result?.evidenceSummary && result.evidenceSummary.length > 20 && !result?.thesisChanged) {
+      try {
+        const content = `[观察] ${thread.title}: ${result.evidenceSummary.slice(0, 300)}`;
+        const emb = await generateEmbedding(content);
+        await memoryStore.createMemory({
+          memoryType: "fact",
+          content,
+          relevanceTags: [thread.id, ...thread.tags],
+          embedding: emb,
+        });
+        observationMemCount = 1;
+      } catch (e) {
+        logSwallowed("cognitiveGraph.investigate.observationMemory", e);
+      }
+    }
+
     return {
       investigateResult: result,
       retrievedMemories: memories,
       surprises: result?.surprises ?? [],
       thesesUpdated: result?.thesisChanged ? 1 : 0,
+      memoriesCreated: observationMemCount,
       totalTokens,
       toolsCalled: allToolsCalled,
       reasoningTraces: [{
@@ -824,6 +845,20 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
     const theses = await thesisStore.getActiveTheses();
     const memCount = await memoryStore.countMemories();
 
+    // P0-3: 读取上次成功运行的 briefing 用于对比
+    let previousBriefing: { mindChangeConditions: MindChangeCondition[]; cognitionGaps: CognitionGap[] } | null = null;
+    try {
+      const lastRun = await getLatestRun();
+      if (lastRun?.briefing) {
+        previousBriefing = {
+          mindChangeConditions: lastRun.briefing.mindChangeConditions ?? [],
+          cognitionGaps: lastRun.briefing.cognitionGaps ?? [],
+        };
+      }
+    } catch (e) {
+      logSwallowed("cognitiveGraph.surface.previousBriefing", e);
+    }
+
     let data: { surprises: Surprise[]; cognitionGaps: CognitionGap[]; mindChangeConditions: MindChangeCondition[] } | null = null;
     let tokensUsed = 0;
 
@@ -836,6 +871,9 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
         surprises: state.surprises ?? [],
         thesesUpdated: state.thesesUpdated ?? 0,
         memoriesCreated: state.memoriesCreated ?? 0,
+        toolsCalled: state.toolsCalled ?? [],
+        reasoningTraces: state.reasoningTraces ?? [],
+        previousBriefing,
       });
 
       const llmResult = await callDeepSeekJson<{

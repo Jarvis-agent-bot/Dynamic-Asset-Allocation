@@ -6,7 +6,7 @@
  */
 
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
-import type { ResearchThread, AgentMemory, Surprise, DailyBriefing } from "@/src/daa/agent/cognitiveTypes";
+import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition, CognitionGap } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import type { AgentToolDefinition, AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
 
@@ -322,6 +322,9 @@ export function buildSurfacePrompt(ctx: {
   surprises: Surprise[];
   thesesUpdated: number;
   memoriesCreated: number;
+  toolsCalled?: ToolCallRecord[];
+  reasoningTraces?: ReasoningTrace[];
+  previousBriefing?: { mindChangeConditions: MindChangeCondition[]; cognitionGaps: CognitionGap[] } | null;
 }): string {
   const surpriseText = ctx.surprises.length > 0
     ? ctx.surprises.map(s => `- [${s.severityScore}/10] ${sanitizeForPrompt(s.title, 60)}: ${sanitizeForPrompt(s.description, 100)}`).join("\n")
@@ -335,6 +338,60 @@ export function buildSurfacePrompt(ctx: {
       const weight = relatedHolding ? (relatedHolding.weightPct * 100).toFixed(1) + "%" : "无持仓";
       return `- "${sanitizeForPrompt(t.title, 50)}" conviction=${t.conviction} 权重=${weight} ${daysSinceUpdate}天前更新`;
     }).join("\n");
+
+  // P0-2: 工具调用结果摘要 — 让 LLM 基于新鲜数据生成差异化内容
+  const toolsText = (ctx.toolsCalled ?? []).length > 0
+    ? (ctx.toolsCalled ?? []).slice(0, 15).map(t =>
+        `- ${t.tool}(${Object.values(t.input).join(",") || "无参数"}) → ${sanitizeForPrompt(t.outputSummary, 150)} [${t.durationMs}ms]`
+      ).join("\n")
+    : "本次无工具调用";
+
+  const tracesText = (ctx.reasoningTraces ?? []).length > 0
+    ? (ctx.reasoningTraces ?? [])
+        .filter(t => t.node === "investigate")
+        .slice(0, 5)
+        .map(t => `- [${t.node}] ${sanitizeForPrompt(t.input, 80)} → ${sanitizeForPrompt(t.output, 120)}`)
+        .join("\n")
+    : "";
+
+  // P0-3: 上次日报对比
+  const prevBriefingText = ctx.previousBriefing
+    ? (() => {
+        const prevConditions = (ctx.previousBriefing.mindChangeConditions ?? [])
+          .slice(0, 5)
+          .map(c => `- "${sanitizeForPrompt(c.thesisTitle, 40)}" (${c.currentConviction}): ${c.conditions.slice(0, 2).map(s => sanitizeForPrompt(s, 60)).join("; ")}`)
+          .join("\n");
+        const prevGaps = (ctx.previousBriefing.cognitionGaps ?? [])
+          .slice(0, 5)
+          .map(g => `- ${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}% ${g.daysSinceLastInvestigation}天未调查`)
+          .join("\n");
+        return `## 上次日报（对比参考）
+改观条件:
+${prevConditions || "无"}
+认知缺口:
+${prevGaps || "无"}
+
+⚠️ 重要：如果改观条件与上次完全相同，请明确写"条件未变，持续监控"。如果有新的观察或数据支持，请更新条件描述。避免逐字重复上次内容。`;
+      })()
+    : "";
+
+  // P1-2: 预计算认知缺口标注
+  const gapWarnings = ctx.theses
+    .filter(t => {
+      const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+      const relatedHolding = ctx.portfolio.holdings.find(h => t.assetKeys.includes(h.assetKey));
+      const weight = relatedHolding?.weightPct ?? 0;
+      return (days > 7 && weight > 0.05) || t.conviction === "uncertain";
+    })
+    .map(t => {
+      const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+      const relatedHolding = ctx.portfolio.holdings.find(h => t.assetKeys.includes(h.assetKey));
+      const weight = relatedHolding ? (relatedHolding.weightPct * 100).toFixed(1) + "%" : "?";
+      return `⚠️ ${t.assetKeys.join(",")} 权重${weight} 已${days}天未更新 conviction=${t.conviction}`;
+    });
+  const gapWarningText = gapWarnings.length > 0
+    ? `\n## 系统检测到的认知缺口（必须包含在输出中）\n${gapWarnings.join("\n")}`
+    : "";
 
   return `你是一个投资研究操作系统的「日报编辑」。请基于今日调查结果生成一份简报。
 
@@ -351,14 +408,21 @@ VIX: ${ctx.market?.vix ?? "N/A"}
 ## 意外发现
 ${surpriseText}
 
+## 今日调查详情
+### 工具调用
+${toolsText}
+${tracesText ? `### 调查结论\n${tracesText}` : ""}
+
 ## 当前活跃论点
 ${thesisText}
+${gapWarningText}
+${prevBriefingText}
 
 ## 任务
 生成三类输出：
-1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 中总结，如果没有则说明市场与预期一致）
-2. **认知缺口**：哪些持仓权重高（>5%）但论点久未更新（>14天）或 conviction 为 uncertain
-3. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法
+1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 和工具调用结果中总结，如果没有则说明市场与预期一致）
+2. **认知缺口**：哪些持仓权重高（>5%）但论点久未更新（>7天）或 conviction 为 uncertain。系统已预检测，请确保输出包含所有标注的缺口。
+3. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
 
 ## 输出格式（严格 JSON）
 \`\`\`json
