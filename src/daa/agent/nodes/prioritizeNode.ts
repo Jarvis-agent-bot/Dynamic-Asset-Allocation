@@ -40,7 +40,7 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
     const { data, tokensUsed } = await callDeepSeekJson<{
       targets: Array<{ threadId: string | null; reason: string; dataNeeded: string[] }>;
       newThreads: Array<{ title: string; initialThesis: string; assetKeys: string[]; tags: string[] }>;
-    }>(prompt, "cognitiveGraph.prioritize");
+    }>(prompt, "cognitiveGraph.prioritize", { tier: "fast" });
 
     if (!data) {
       return {

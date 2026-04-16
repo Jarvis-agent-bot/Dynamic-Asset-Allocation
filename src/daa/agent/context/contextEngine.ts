@@ -198,6 +198,105 @@ export class ContextManager {
     const kept = text.slice(0, charLimit - 40);
     return kept + "\n...[因 token 预算限制已截断]";
   }
+
+  // ── LLM 语义摘要（异步版本）──
+
+  /**
+   * 异步构建 prompt — 超预算时使用 LLM 语义摘要替代截断。
+   *
+   * 借鉴 Hermes Agent 的 ContextCompressor：
+   * - 低优先级层超预算时，调 fast tier LLM 做摘要
+   * - 摘要保留关键信息，比字符截断更智能
+   * - 摘要失败时 fallback 到字符截断
+   */
+  async buildAsync(totalBudgetTokens: number = 12000): Promise<ContextBuildResult> {
+    // 处理工具结果的滑动窗口
+    if (this.toolResultRounds.length > 0) {
+      this.addLayer("tool_results", this.buildToolResultsWindow());
+    }
+
+    // 按优先级排序
+    const sortedLayers = Array.from(this.layers.values())
+      .sort((a, b) => b.priority - a.priority);
+
+    // 计算总 token
+    let totalActualTokens = 0;
+    const layerTokens = sortedLayers.map(layer => {
+      const actual = estimateTokens(layer.content);
+      totalActualTokens += actual;
+      return { layer, actual };
+    });
+
+    // 不超预算 → 直接返回
+    if (totalActualTokens <= totalBudgetTokens) {
+      return this.build(totalBudgetTokens);
+    }
+
+    // 超预算 → 对低优先级层做 LLM 摘要
+    const budgets: TokenBudget[] = [];
+    const compressedLayers: ContextLayerName[] = [];
+    const outputParts: string[] = [];
+    let remainingBudget = totalBudgetTokens;
+
+    for (const item of layerTokens) {
+      const { layer, actual } = item;
+
+      if (actual === 0 || !layer.content.trim()) {
+        budgets.push({ layerName: layer.name, allocatedTokens: 0, actualTokens: 0, wasCompressed: false });
+        continue;
+      }
+
+      const allocated = Math.min(actual, Math.floor(remainingBudget * layer.maxTokenShare * 1.5));
+
+      if (actual <= allocated || layer.priority >= 9) {
+        // 不压缩 / 高优先级完整保留
+        const wrapped = this.wrapContent(layer);
+        if (wrapped) outputParts.push(wrapped);
+        remainingBudget -= actual;
+        budgets.push({ layerName: layer.name, allocatedTokens: allocated, actualTokens: actual, wasCompressed: false });
+      } else {
+        // 低优先级超预算 → LLM 语义摘要
+        const targetTokens = Math.max(allocated, 200);
+        const summarized = await this.summarizeWithLlm(layer.content, targetTokens, layer.name);
+        const summarizedLayer = { ...layer, content: summarized };
+        const wrapped = this.wrapContent(summarizedLayer);
+        if (wrapped) outputParts.push(wrapped);
+        const summarizedTokens = estimateTokens(summarized);
+        remainingBudget -= summarizedTokens;
+        compressedLayers.push(layer.name);
+        budgets.push({ layerName: layer.name, allocatedTokens: allocated, actualTokens: summarizedTokens, wasCompressed: true });
+      }
+    }
+
+    return {
+      prompt: outputParts.join("\n\n"),
+      totalTokens: budgets.reduce((sum, b) => sum + b.actualTokens, 0),
+      budgets,
+      compressedLayers,
+    };
+  }
+
+  /**
+   * 用 fast tier LLM 做语义摘要。失败时 fallback 到字符截断。
+   */
+  private async summarizeWithLlm(text: string, targetTokens: number, layerName: string): Promise<string> {
+    try {
+      const { callLlmText } = await import("@/src/daa/agent/helpers/llm");
+      const targetChars = targetTokens * 2;
+      const prompt = `请将以下内容压缩为约 ${targetChars} 字的摘要。保留关键数据点和结论，删除冗余描述。只输出摘要，不要其他文字。
+
+原文：
+${text.slice(0, 6000)}`;
+
+      const { text: summary } = await callLlmText(prompt, `contextEngine.summarize.${layerName}`, "fast");
+      if (summary && summary.length > 10) {
+        return summary;
+      }
+    } catch {
+      // fallback to truncation
+    }
+    return this.truncateToTokens(text, targetTokens);
+  }
 }
 
 // ── 工厂函数：为 investigateNode 构建 prompt ──

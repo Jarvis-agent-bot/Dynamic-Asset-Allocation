@@ -164,8 +164,8 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     const CONTEXT_BUDGET_TOKENS = 12000; // Context Engine 管理的 token 预算
 
     for (let round = 1; round <= maxRounds; round++) {
-      // V2: ContextManager 自动处理滑动窗口 + 分层预算（替代旧的手动截断）
-      const contextResult = contextManager.build(CONTEXT_BUDGET_TOKENS);
+      // V2: ContextManager + LLM 语义摘要（超预算时用 fast tier LLM 压缩而非截断）
+      const contextResult = await contextManager.buildAsync(CONTEXT_BUDGET_TOKENS);
       const currentPrompt = contextResult.prompt;
 
       const { data: reactData, tokensUsed } = await callDeepSeekJson<ReactAction>(
@@ -242,7 +242,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     if (!result && allToolsCalled.length > 0) {
       // V2: 使用 ContextManager 构建含所有工具结果的完整 prompt + 强制结论指令
       contextManager.addToolResultRound("⚠️ 所有工具调用轮次已用完。请立即基于已收集的证据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。");
-      const forceContextResult = contextManager.build(CONTEXT_BUDGET_TOKENS);
+      const forceContextResult = await contextManager.buildAsync(CONTEXT_BUDGET_TOKENS);
       const forcePrompt = forceContextResult.prompt;
 
       const { data: forceData, tokensUsed } = await callDeepSeekJson<ReactAction>(

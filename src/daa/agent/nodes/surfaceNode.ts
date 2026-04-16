@@ -163,7 +163,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         });
 
         const overlayResult = await callDeepSeekJson<Omit<AgentConfigOverlay, "generatedAt" | "agentRunId">>(
-          advisorPrompt, "cognitiveGraph.surface.advisor",
+          advisorPrompt, "cognitiveGraph.surface.advisor", { tier: "fast" },
         );
         tokensUsed += overlayResult.tokensUsed;
 
