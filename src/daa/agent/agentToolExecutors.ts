@@ -1,8 +1,9 @@
 /**
  * Agent Tool Executors — Phase 3 ReAct Agent 工具执行器
  *
- * 每个 executor 接收 params、返回 AgentToolResult。
- * 执行器内部捕获所有异常，保证不会抛出。
+ * @deprecated V1 执行器 — 已被 `src/daa/agent/tools/observe/` 各文件替代。
+ * V2 工具使用 ToolExecutionContext 注入 state 数据，不再需要闭包构建。
+ * 此文件保留用于过渡期 fallback，将在后续版本移除。
  *
  * 工具列表（6 个）：
  * 1. fetch_technical_signal — 技术信号

@@ -11,6 +11,16 @@ import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePro
 import { AGENT_TOOL_DEFINITIONS } from "@/src/daa/agent/agentToolRegistry";
 import { buildExecutorRegistry, executeToolCall } from "@/src/daa/agent/agentToolExecutors";
 import type { AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
+
+// ── Tool System V2（Hermes 模式：import 触发自注册）──
+import "@/src/daa/agent/tools/index";
+import {
+  getToolDefinitions,
+  executeToolCallV2,
+  resolveToolResultVariables,
+  formatToolDefinitionsV2ForPrompt,
+} from "@/src/daa/agent/tools/registry";
+import type { ToolResultV2, ToolExecutionContext } from "@/src/daa/agent/tools/types";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
@@ -399,11 +409,18 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       limit: state.agentConfig?.memoryRecallLimit ?? 5,
     });
 
-    // 构建 executor 注册表（注入 state-dependent 数据）
+    // 构建 executor 注册表（V1 兼容 + V2 上下文）
     const executorRegistry = buildExecutorRegistry({
       market: state.market,
       portfolio: state.portfolio,
     });
+    // V2: 工具执行上下文（注入 state-dependent 数据，所有 V2 工具共享）
+    const toolExecCtx: ToolExecutionContext = {
+      market: state.market,
+      portfolio: state.portfolio,
+    };
+    // V2: 累积工具结果（支持链式引用 $tool_results.xxx.field）
+    const allToolResultsV2 = new Map<string, ToolResultV2>();
 
     // ── ReAct 循环 ──
     // 第一轮：发送初始 prompt（含工具定义 + thesis + memories）
@@ -420,9 +437,12 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       logSwallowed("cognitiveGraph.investigate.tradeOutcomes", e);
     }
 
+    // V2: 使用分类工具定义（含 outputSchema 提示链式引用）
+    const toolDefsForPrompt = formatToolDefinitionsV2ForPrompt(getToolDefinitions());
     const initialPrompt = buildReactInvestigatePrompt({
       thread,
-      tools: AGENT_TOOL_DEFINITIONS,
+      tools: AGENT_TOOL_DEFINITIONS, // V1 兼容（prompt 内部会判断是否有 V2 格式）
+      toolDefinitionsV2Text: toolDefsForPrompt, // V2: 分类工具文本
       memories,
       portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
       tradeOutcomes,
@@ -480,21 +500,34 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
         break;
       }
 
-      // ── LLM 请求调用工具 ──
+      // ── LLM 请求调用工具（V2：优先使用新注册表，支持链式引用）──
       const toolCalls = action.tool_calls.slice(0, 3); // 每轮最多 3 个工具
       const toolResults: AgentToolResult[] = [];
 
-      // 并行执行所有请求的工具
+      // 并行执行所有请求的工具（V2 优先，V1 fallback）
       const toolExecPromises = toolCalls.map(async (tc) => {
-        const toolResult = await executeToolCall(executorRegistry, tc.name, tc.params ?? {});
-        return { call: tc, result: toolResult };
+        // V2: 尝试用新注册表执行（支持变量替换 + 分类）
+        const v2Result = await executeToolCallV2(
+          tc.name, tc.params ?? {}, toolExecCtx, allToolResultsV2,
+        );
+        // 如果 V2 返回"未知工具"，fallback 到 V1（过渡期兼容）
+        if (!v2Result.success && v2Result.error?.includes("未知工具")) {
+          const v1Result = await executeToolCall(executorRegistry, tc.name, tc.params ?? {});
+          return { call: tc, result: v1Result, v2Result: null };
+        }
+        return { call: tc, result: { toolName: v2Result.toolName, success: v2Result.success, data: v2Result.data, error: v2Result.error, latencyMs: v2Result.latencyMs } as AgentToolResult, v2Result };
       });
 
       const execResults = await Promise.allSettled(toolExecPromises);
       for (const settled of execResults) {
         if (settled.status === "fulfilled") {
-          const { call, result: toolResult } = settled.value;
+          const { call, result: toolResult, v2Result } = settled.value;
           toolResults.push(toolResult);
+
+          // V2: 累积结果供链式引用
+          if (v2Result) {
+            allToolResultsV2.set(call.name, v2Result);
+          }
 
           // 记录到 evidence 和 toolsCalled
           if (toolResult.success) {

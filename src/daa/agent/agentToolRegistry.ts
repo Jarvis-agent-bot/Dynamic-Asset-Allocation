@@ -1,7 +1,9 @@
 /**
  * Agent Tool Registry — 通用 Tool 抽象接口。
  *
- * 供 Cognitive Agent 的 prompt 参考，定义可请求的信号类型。
+ * @deprecated V1 注册表 — 已被 `src/daa/agent/tools/` V2 注册表替代。
+ * V2 支持分类（observe/analyze/act/meta）、链式引用、动态注册。
+ * 此文件保留用于过渡期兼容，将在后续版本移除。
  *
  * ## Phase 3 已实现（LLM-driven Tool Calling）
  *

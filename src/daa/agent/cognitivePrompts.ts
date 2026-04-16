@@ -201,6 +201,8 @@ ${ctx.portfolio.holdings
 export function buildReactInvestigatePrompt(ctx: {
   thread: ResearchThread;
   tools: AgentToolDefinition[];
+  /** V2: 预格式化的分类工具文本（含 outputSchema 和链式引用提示） */
+  toolDefinitionsV2Text?: string;
   memories: AgentMemory[];
   portfolio: PortfolioSnapshot;
   /** 2C: 最近的交易反馈证据（trade_outcome），帮助 LLM 了解历史交易结果 */
@@ -210,7 +212,8 @@ export function buildReactInvestigatePrompt(ctx: {
     ? ctx.memories.map(m => `- [${m.memoryType}] ${sanitizeForPrompt(m.content, 100)}`).join("\n")
     : "无相关历史记忆";
 
-  const toolsText = ctx.tools.map(t => {
+  // V2: 优先使用分类格式，fallback 到 V1
+  const toolsText = ctx.toolDefinitionsV2Text ?? ctx.tools.map(t => {
     const params = Object.entries(t.parameters);
     const paramStr = params.length > 0
       ? `参数: { ${params.map(([k, v]) => `${k}: ${v.type}${v.required ? " (必填)" : ""} — ${v.description}`).join(", ")} }`
@@ -247,6 +250,8 @@ ${toolsText}
 2. 选择合适的工具并指定参数
 3. 你有最多 5 轮工具调用机会，请合理规划
 4. 当你认为证据充分时，直接给出最终分析结论
+5. 工具分为四类：观察类（只读查询）、分析类（计算推导）、自省类（历史反思）、行动类（需确认）
+6. 链式引用：在后续轮次中，可以用 $tool_results.{工具名}.{字段名} 引用前序工具的输出字段
 
 ## 输出格式（严格 JSON，二选一）
 
