@@ -34,6 +34,8 @@ export {
   executeToolCallV2,
   resolveToolResultVariables,
   formatToolDefinitionsV2ForPrompt,
+  clearToolResultCache,
+  setCurrentRunId,
   _clearRegistryForTest,
 } from "@/src/daa/agent/tools/registry";
 

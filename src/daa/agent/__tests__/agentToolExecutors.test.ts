@@ -3,13 +3,18 @@
  *
  * 测试 V2 注册表的工具调用路由、state-dependent 工具、参数校验。
  */
-import { describe, it, expect } from "vitest";
-import { executeToolCallV2 } from "@/src/daa/agent/tools/registry";
+import { describe, it, expect, beforeEach } from "vitest";
+import { executeToolCallV2, clearToolResultCache } from "@/src/daa/agent/tools/registry";
 import type { ToolExecutionContext } from "@/src/daa/agent/tools/types";
 import type { PortfolioSnapshot, MarketSnapshot } from "@/src/daa/agent/cognitiveState";
 
 // 触发所有工具自注册
 import "@/src/daa/agent/tools/index";
+
+// 每个测试前清空缓存，避免跨测试缓存命中
+beforeEach(() => {
+  clearToolResultCache();
+});
 
 // ── 测试数据 ──
 

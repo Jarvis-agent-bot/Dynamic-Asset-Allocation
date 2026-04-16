@@ -124,14 +124,62 @@ function getNestedField(obj: Record<string, unknown>, path: string): unknown {
   return current;
 }
 
+// ── 工具结果缓存（同 cycle 内同参数去重）──
+
+const _resultCache = new Map<string, ToolResultV2>();
+
+function buildCacheKey(toolName: string, params: Record<string, unknown>, ctx: ToolExecutionContext): string {
+  // 包含 context 身份标识：context-dependent 工具（如 market regime）同参数不同 context 不命中缓存
+  const ctxHash = `m=${ctx.market?.regime ?? "null"}_p=${ctx.portfolio?.holdings?.length ?? "null"}`;
+  return `${toolName}::${JSON.stringify(params, Object.keys(params).sort())}::${ctxHash}`;
+}
+
+/** 清空结果缓存（每个 cycle 开始时调用） */
+export function clearToolResultCache(): void {
+  _resultCache.clear();
+}
+
+// ── 工具执行日志（写入 daa_agent_tool_executions）──
+
+/** 当前 cycle 的 runId（由 cognitiveGraph 在 cycle 开始时设置） */
+let _currentRunId: string | null = null;
+
+/** 设置当前运行 ID（供工具执行日志关联） */
+export function setCurrentRunId(runId: string | null): void {
+  _currentRunId = runId;
+}
+
+async function logToolExecution(result: ToolResultV2, inputParams: Record<string, unknown>): Promise<void> {
+  if (!_currentRunId) return; // 无 runId 时静默跳过
+  try {
+    const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
+    await withDaaPgClient(async (client) => {
+      await client.query(
+        `INSERT INTO daa_agent_tool_executions (run_id, tool_name, category, input_params, output_fields, success, latency_ms)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          _currentRunId,
+          result.toolName,
+          result.category,
+          JSON.stringify(inputParams),
+          JSON.stringify(result.outputFields),
+          result.success,
+          result.latencyMs,
+        ],
+      );
+    });
+  } catch (e) {
+    logSwallowed("toolRegistry.logExecution", e);
+  }
+}
+
 // ── 工具执行 ──
 
 /**
  * 执行单个工具调用（V2 版本）。
  *
- * - 自动超时保护（30s）
- * - 自动变量替换
- * - 永不抛出异常
+ * 功能链：审批检查 → 缓存命中 → 变量替换 → 超时执行 → DB 日志
+ * 永不抛出异常。
  */
 export async function executeToolCallV2(
   toolName: string,
@@ -154,21 +202,42 @@ export async function executeToolCallV2(
     };
   }
 
-  // 变量替换
+  // 1. 审批门禁：act 类工具标记 requiresApproval 时拒绝自动执行
+  if (entry.definition.requiresApproval) {
+    return {
+      toolName,
+      category: entry.definition.category,
+      success: false,
+      data: null,
+      outputFields: {},
+      error: `工具 ${toolName} 需要用户确认才能执行（requiresApproval=true）`,
+      latencyMs: Date.now() - t0,
+    };
+  }
+
+  // 2. 变量替换
   const resolvedParams = allResults
     ? resolveToolResultVariables(params, allResults)
     : params;
 
+  // 3. 缓存命中检查（同 cycle 内同参数去重）
+  const cacheKey = buildCacheKey(toolName, resolvedParams, ctx);
+  const cached = _resultCache.get(cacheKey);
+  if (cached) {
+    return { ...cached, latencyMs: 0 }; // 缓存命中，0ms 延迟
+  }
+
+  // 4. 执行
+  let result: ToolResultV2;
   try {
-    const result = await withTimeout(
+    result = await withTimeout(
       entry.executor(resolvedParams, ctx),
       TOOL_TIMEOUT_MS,
       toolName,
     );
-    return result;
   } catch (e) {
     logSwallowed(`toolRegistry.execute.${toolName}`, e);
-    return {
+    result = {
       toolName,
       category: entry.definition.category,
       success: false,
@@ -178,6 +247,16 @@ export async function executeToolCallV2(
       latencyMs: Date.now() - t0,
     };
   }
+
+  // 5. 写入缓存
+  if (result.success) {
+    _resultCache.set(cacheKey, result);
+  }
+
+  // 6. 异步写入 DB 日志（不阻塞返回）
+  logToolExecution(result, resolvedParams).catch(() => {});
+
+  return result;
 }
 
 // ── Prompt 格式化 ──

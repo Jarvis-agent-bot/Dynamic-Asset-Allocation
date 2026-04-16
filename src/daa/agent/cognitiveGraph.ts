@@ -16,8 +16,10 @@ import {
   getToolDefinitions,
   executeToolCallV2,
   formatToolDefinitionsV2ForPrompt,
+  clearToolResultCache,
+  setCurrentRunId,
 } from "@/src/daa/agent/tools/registry";
-import type { ToolResultV2, ToolExecutionContext, AgentToolResult } from "@/src/daa/agent/tools/types";
+import type { ToolResultV2, ToolExecutionContext } from "@/src/daa/agent/tools/types";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
@@ -568,11 +570,11 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
         break;
       }
 
-      // ── LLM 请求调用工具（V2：优先使用新注册表，支持链式引用）──
+      // ── LLM 请求调用工具 ──
       const toolCalls = action.tool_calls.slice(0, 3); // 每轮最多 3 个工具
-      const toolResults: AgentToolResult[] = [];
+      const toolResults: ToolResultV2[] = [];
 
-      // V2: 并行执行所有请求的工具（支持变量替换 + 链式引用）
+      // 并行执行（支持变量替换 + 缓存 + 审批门禁 + DB 日志）
       const toolExecPromises = toolCalls.map(async (tc) => {
         const v2Result = await executeToolCallV2(
           tc.name, tc.params ?? {}, toolExecCtx, allToolResultsV2,
@@ -584,23 +586,22 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       for (const settled of execResults) {
         if (settled.status === "fulfilled") {
           const { call, v2Result } = settled.value;
-          const toolResult = { toolName: v2Result.toolName, success: v2Result.success, data: v2Result.data, error: v2Result.error, latencyMs: v2Result.latencyMs };
-          toolResults.push(toolResult);
+          toolResults.push(v2Result);
 
           // 累积结果供链式引用
           allToolResultsV2.set(call.name, v2Result);
 
           // 记录到 evidence 和 toolsCalled
-          if (toolResult.success) {
-            allEvidence[call.name] = toolResult.data;
+          if (v2Result.success) {
+            allEvidence[call.name] = v2Result.data;
           } else {
-            allEvidence[call.name] = { error: toolResult.error };
+            allEvidence[call.name] = { error: v2Result.error };
           }
           allToolsCalled.push({
             tool: call.name,
             input: call.params ?? {},
-            outputSummary: toolResult.success ? "ok" : (toolResult.error ?? "failed"),
-            durationMs: toolResult.latencyMs ?? 0,
+            outputSummary: v2Result.success ? "ok" : (v2Result.error ?? "failed"),
+            durationMs: v2Result.latencyMs ?? 0,
           });
         } else {
           logSwallowed("cognitiveGraph.investigate.react.toolExec", settled.reason);
@@ -1281,6 +1282,10 @@ export async function runCognitiveAgentCycle(trigger: "scheduled" | "manual" | "
   const t0 = Date.now();
   const run = await createAgentRun({ trigger });
   const threadId = `cognitive-run-${run.id}`;
+
+  // V2: 初始化 cycle 级状态
+  clearToolResultCache();     // 清空工具结果缓存
+  setCurrentRunId(run.id);    // 设置 runId 供工具执行日志关联
 
   try {
     const graph = getCognitiveGraph();
