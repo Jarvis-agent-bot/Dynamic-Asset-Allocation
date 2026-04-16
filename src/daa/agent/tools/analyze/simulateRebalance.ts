@@ -59,17 +59,17 @@ registerTool(
         account: { cash: ctx.portfolio.totalEquity * ctx.portfolio.cashPct },
         holdings,
         prices,
-        targets: targetWeights,
+        targetWeights,
         constraints: { maxPositionPct: 0.30 },
         policy: { thresholdPct: driftThresholdPct / 100 },
       });
 
       const orderCount = result.orders?.length ?? 0;
-      const totalTurnover = (result.orders ?? []).reduce((sum, o) => sum + Math.abs(o.notional ?? 0), 0);
+      const totalTurnover = (result.orders ?? []).reduce((sum: number, o) => sum + Math.abs(o.notional ?? 0), 0);
 
       const data = {
         shouldRebalance: result.trigger?.shouldRebalance ?? false,
-        triggerReason: result.trigger?.reason ?? "N/A",
+        triggerReason: result.trigger?.reasons?.join("; ") ?? "N/A",
         orderCount,
         orders: (result.orders ?? []).slice(0, 10).map(o => ({
           symbol: o.symbol,

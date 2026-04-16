@@ -28,27 +28,30 @@ registerTool(
     const limit = Math.min(Number(params.limit) || 5, 20);
 
     try {
-      const { query } = await import("@/src/daa/pg/pool");
+      const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
 
-      const rows = await query<{
-        id: string;
-        trigger: string;
-        status: string;
-        target_thread_ids: string[];
-        tools_called: unknown;
-        briefing: unknown;
-        total_tokens: number;
-        total_cost_usd: number;
-        duration_ms: number;
-        created_at: string;
-      }>(
-        `SELECT id, trigger, status, target_thread_ids, tools_called, briefing,
-                total_tokens, total_cost_usd, duration_ms, created_at
-         FROM daa_agent_runs
-         ORDER BY created_at DESC
-         LIMIT $1`,
-        [limit],
-      );
+      const rows = await withDaaPgClient(async (client) => {
+        const res = await client.query(
+          `SELECT id, trigger, status, target_thread_ids, tools_called, briefing,
+                  total_tokens, total_cost_usd, duration_ms, created_at
+           FROM daa_agent_runs
+           ORDER BY created_at DESC
+           LIMIT $1`,
+          [limit],
+        );
+        return res.rows as Array<{
+          id: string;
+          trigger: string;
+          status: string;
+          target_thread_ids: string[];
+          tools_called: unknown;
+          briefing: unknown;
+          total_tokens: number;
+          total_cost_usd: number;
+          duration_ms: number;
+          created_at: string;
+        }>;
+      });
 
       if (!rows.length) {
         return { toolName: "query_past_decisions", category: "meta", success: true, data: { message: "无历史运行记录", runs: [] }, outputFields: { runCount: 0 }, latencyMs: Date.now() - t0 };

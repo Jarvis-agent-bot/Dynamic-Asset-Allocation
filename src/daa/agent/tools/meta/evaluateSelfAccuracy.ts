@@ -28,23 +28,26 @@ registerTool(
     const lookbackDays = Number(params.lookbackDays) || 90;
 
     try {
-      const { query } = await import("@/src/daa/pg/pool");
+      const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
 
       // 查询有复盘评分的论点
       const since = new Date(Date.now() - lookbackDays * 86400000).toISOString();
-      const rows = await query<{
-        thread_id: string;
-        conviction_at_time: string;
-        accuracy_score: number;
-        review_window: string;
-        created_at: string;
-      }>(
-        `SELECT r.thread_id, r.conviction_at_time, r.accuracy_score, r.review_window, r.created_at
-         FROM daa_thesis_reviews r
-         WHERE r.accuracy_score IS NOT NULL AND r.created_at >= $1
-         ORDER BY r.created_at DESC`,
-        [since],
-      );
+      const rows = await withDaaPgClient(async (client) => {
+        const res = await client.query(
+          `SELECT r.thread_id, r.conviction_at_time, r.accuracy_score, r.review_window, r.created_at
+           FROM daa_thesis_reviews r
+           WHERE r.accuracy_score IS NOT NULL AND r.created_at >= $1
+           ORDER BY r.created_at DESC`,
+          [since],
+        );
+        return res.rows as Array<{
+          thread_id: string;
+          conviction_at_time: string;
+          accuracy_score: number;
+          review_window: string;
+          created_at: string;
+        }>;
+      });
 
       if (!rows.length) {
         return {
@@ -56,8 +59,8 @@ registerTool(
       }
 
       // 总体准确率
-      const scores = rows.map(r => r.accuracy_score);
-      const overallAccuracy = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const scores = rows.map((r: { accuracy_score: number }) => r.accuracy_score);
+      const overallAccuracy = scores.reduce((a: number, b: number) => a + b, 0) / scores.length;
 
       // 按 conviction 分组统计
       const byConviction: Record<string, { count: number; sum: number }> = {};

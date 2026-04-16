@@ -43,17 +43,17 @@ registerTool(
 
       // 并行获取价格序列
       const seriesResults = await Promise.allSettled(
-        symbols.map(symbol => fetchPriceSeriesWithCache({ symbol, startDate })),
+        symbols.map(symbol => fetchPriceSeriesWithCache(symbol, startDate)),
       );
 
       // 提取日收益率
       const returnsBySymbol: Record<string, number[]> = {};
       for (let i = 0; i < symbols.length; i++) {
         const r = seriesResults[i];
-        if (r.status !== "fulfilled" || !r.value?.series?.length) continue;
-        const closes = r.value.series.map(p => p.close);
+        if (r.status !== "fulfilled" || !r.value?.data?.length) continue;
+        const closes: number[] = r.value.data.map((p: { close: number }) => p.close);
         if (closes.length < 10) continue;
-        returnsBySymbol[symbols[i]] = closes.slice(1).map((c, j) => (c - closes[j]) / closes[j]);
+        returnsBySymbol[symbols[i]] = closes.slice(1).map((c: number, j: number) => (c - closes[j]) / closes[j]);
       }
 
       const validSymbols = Object.keys(returnsBySymbol);

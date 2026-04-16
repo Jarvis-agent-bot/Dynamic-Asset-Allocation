@@ -108,6 +108,19 @@ export const CognitiveStateAnnotation = Annotation.Root({
     maxPositionPct?: number;
   } | null>({ reducer: (_, b) => b, default: () => null }),
 
+  // Phase 4: 子 agent 调查结果（append reducer — 并行子 agent 各自追加）
+  subAgentResults: Annotation<Array<{
+    threadId: string;
+    threadTitle: string;
+    summary: string;
+    thesisChanged: boolean;
+    toolsUsed: string[];
+    tokensUsed: number;
+  }>>({
+    reducer: (a, b) => [...a, ...b],
+    default: () => [],
+  }),
+
   // 最终输出
   briefing: Annotation<DailyBriefing | null>({ reducer: (_, b) => b, default: () => null }),
 

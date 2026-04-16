@@ -288,6 +288,100 @@ ${toolsText}
 }
 
 /**
+ * V2: 返回结构化段落（供 ContextManager 分层管理）。
+ *
+ * 与 buildReactInvestigatePrompt 共用相同输入，但返回各段独立文本。
+ */
+export function buildReactInvestigatePromptSections(ctx: {
+  thread: ResearchThread;
+  toolDefinitionsV2Text?: string;
+  memories: AgentMemory[];
+  portfolio: PortfolioSnapshot;
+  tradeOutcomes?: Array<{ content: string; evidenceType: string; createdAt: string }>;
+}): {
+  system: string;
+  thesis: string;
+  portfolio: string;
+  memory: string;
+  tradeFeedback: string;
+  tools: string;
+  rules: string;
+} {
+  const memoryText = ctx.memories.length > 0
+    ? ctx.memories.map(m => `- [${m.memoryType}] ${sanitizeForPrompt(m.content, 100)}`).join("\n")
+    : "无相关历史记忆";
+
+  const portfolioText = ctx.portfolio.holdings
+    .filter(h => ctx.thread.assetKeys.includes(h.assetKey))
+    .map(h => `${h.assetKey}: 权重${(h.weightPct * 100).toFixed(1)}% PnL=${h.unrealizedPnlPct != null ? (h.unrealizedPnlPct * 100).toFixed(1) + "%" : "N/A"}`)
+    .join("\n") || "无相关持仓";
+
+  const tradeFeedbackText = ctx.tradeOutcomes?.length
+    ? ctx.tradeOutcomes.slice(0, 5).map(t => `- [${t.evidenceType}] ${sanitizeForPrompt(t.content, 120)}`).join("\n")
+    : "";
+
+  return {
+    system: `你是一个投资研究操作系统的「研究分析师」。你正在深入调查一个研究论点。`,
+
+    thesis: `## 当前论点
+标题: ${sanitizeForPrompt(ctx.thread.title, 80)}
+判断: ${sanitizeForPrompt(ctx.thread.thesisText, 200)}
+信念强度: ${ctx.thread.conviction}
+失效条件: ${ctx.thread.invalidationConditions ? sanitizeForPrompt(ctx.thread.invalidationConditions, 150) : "未定义"}
+关联资产: ${ctx.thread.assetKeys.join(", ")}`,
+
+    portfolio: `## 组合背景\n${portfolioText}`,
+
+    memory: `## 历史记忆\n${memoryText}`,
+
+    tradeFeedback: tradeFeedbackText ? `## 交易反馈\n${tradeFeedbackText}` : "",
+
+    tools: `## 可用工具\n你可以调用以下工具来收集证据。每次可调用 1-3 个工具。\n\n${ctx.toolDefinitionsV2Text ?? ""}`,
+
+    rules: `## 操作规则
+1. 分析论点，决定需要哪些数据来验证/反驳它
+2. 选择合适的工具并指定参数
+3. 你有最多 5 轮工具调用机会，请合理规划
+4. 当你认为证据充分时，直接给出最终分析结论
+5. 工具分为四类：观察类（只读查询）、分析类（计算推导）、自省类（历史反思）、行动类（需确认）
+6. 链式引用：在后续轮次中，可以用 $tool_results.{工具名}.{字段名} 引用前序工具的输出字段
+
+## 输出格式（严格 JSON，二选一）
+
+**选择工具（需要更多数据时）：**
+\`\`\`json
+{
+  "action": "tool_calls",
+  "tool_calls": [
+    { "name": "fetch_technical_signal", "params": { "symbol": "AAPL" } }
+  ],
+  "reasoning": "为什么选择这些工具的简要说明"
+}
+\`\`\`
+
+**最终结论（证据充分时）：**
+\`\`\`json
+{
+  "action": "result",
+  "result": {
+    "thesisChanged": true,
+    "updatedThesis": "更新后的判断或null",
+    "newConviction": "high/medium/low/uncertain 或 null",
+    "evidenceType": "supporting/contradicting/neutral",
+    "evidenceSummary": "关键证据摘要",
+    "surprises": [],
+    "invalidationConditions": "失效条件",
+    "suggestedReviewDays": 14,
+    "nextActions": ["下一步方向"]
+  }
+}
+\`\`\`
+
+首先调用工具收集数据，然后给出结论。只输出 JSON，不要其他文字。`,
+  };
+}
+
+/**
  * Phase B: 工具结果反馈 — 将工具返回的数据追加到上下文，让 LLM 继续推理。
  */
 export function buildReactFollowUpPrompt(ctx: {

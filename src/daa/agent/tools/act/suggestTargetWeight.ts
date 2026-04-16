@@ -49,9 +49,9 @@ registerTool(
 
         for (const sym of symbols) {
           try {
-            const result = await fetchPriceSeriesWithCache({ symbol: sym, startDate });
-            if (result?.series?.length && result.series.length >= 2) {
-              const closes = result.series.map(p => p.close);
+            const result = await fetchPriceSeriesWithCache(sym, startDate);
+            if (result?.data?.length && result.data.length >= 2) {
+              const closes = result.data.map((p: { close: number }) => p.close);
               returnsBySymbol[sym] = (closes[closes.length - 1] - closes[0]) / closes[0];
             }
           } catch (e) {
@@ -67,12 +67,12 @@ registerTool(
 
         for (const sym of symbols) {
           try {
-            const result = await fetchPriceSeriesWithCache({ symbol: sym, startDate });
-            if (result?.series?.length && result.series.length >= 10) {
-              const closes = result.series.map(p => p.close);
-              const rets = closes.slice(1).map((c, i) => (c - closes[i]) / closes[i]);
-              const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
-              const variance = rets.reduce((sum, r) => sum + (r - mean) ** 2, 0) / rets.length;
+            const result = await fetchPriceSeriesWithCache(sym, startDate);
+            if (result?.data?.length && result.data.length >= 10) {
+              const closes = result.data.map((p: { close: number }) => p.close);
+              const rets: number[] = closes.slice(1).map((c: number, i: number) => (c - closes[i]) / closes[i]);
+              const mean = rets.reduce((a: number, b: number) => a + b, 0) / rets.length;
+              const variance = rets.reduce((sum: number, r: number) => sum + (r - mean) ** 2, 0) / rets.length;
               volBySymbol[sym] = Math.sqrt(variance) * Math.sqrt(252);
             }
           } catch (e) {

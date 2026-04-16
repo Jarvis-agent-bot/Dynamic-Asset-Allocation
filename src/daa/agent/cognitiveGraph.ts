@@ -7,7 +7,8 @@
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { CognitiveStateAnnotation, type CognitiveState, type CognitiveUpdate, type PortfolioSnapshot, type MarketSnapshot, type NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread, DailyBriefing, CognitionGap, MindChangeCondition, AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
-import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePrompt, buildReactFollowUpPrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, buildStrategyAdvisorPrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePrompt, buildReactInvestigatePromptSections, buildReactFollowUpPrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, buildStrategyAdvisorPrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import { createInvestigateContextManager } from "@/src/daa/agent/context/contextEngine";
 import { AGENT_TOOL_DEFINITIONS } from "@/src/daa/agent/agentToolRegistry";
 import { buildExecutorRegistry, executeToolCall } from "@/src/daa/agent/agentToolExecutors";
 import type { AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
@@ -396,6 +397,68 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       return { errors: ["investigate: 熔断 — 连续 LLM 失败次数过多，跳过"] };
     }
 
+    // Phase 4: 子 agent 并行调查（父处理 item[0]，子 agent 并行处理 item[1..N]）
+    const subAgentResultsForState: CognitiveUpdate["subAgentResults"] = [];
+    if (state.investigationQueue.length > 1) {
+      try {
+        const { runSubAgentInvestigation } = await import("@/src/daa/agent/subAgent");
+        const remainingTargets = state.investigationQueue.slice(1);
+
+        // 为每个剩余 target 加载 thread 并派生子 agent
+        const subAgentPromises = remainingTargets.map(async (t) => {
+          if (!t.threadId) return null;
+          const subThread = await thesisStore.getThesisById(t.threadId);
+          if (!subThread) return null;
+
+          // 子 agent 共享父 agent 的记忆和快照，但工具受限
+          return runSubAgentInvestigation({
+            parentRunId: `parent_${Date.now()}`,
+            thread: subThread,
+            allowedCategories: ["observe", "analyze", "meta"], // 不允许 act
+            maxRounds: 3,
+            tokenBudget: 8000,
+            depth: 1,
+            memories: [], // 子 agent 不继承父 agent 的记忆检索（各自独立）
+            market: state.market,
+            portfolio: state.portfolio,
+          });
+        });
+
+        const settled = await Promise.allSettled(subAgentPromises);
+        for (const s of settled) {
+          if (s.status === "fulfilled" && s.value) {
+            const r = s.value;
+            subAgentResultsForState.push({
+              threadId: r.threadId,
+              threadTitle: r.threadTitle,
+              summary: r.investigateOutput?.evidenceSummary ?? "无结论",
+              thesisChanged: r.investigateOutput?.thesisChanged ?? false,
+              toolsUsed: r.toolsCalled.map(tc => tc.tool),
+              tokensUsed: r.tokensUsed,
+            });
+
+            // 子 agent 的 thesis 更新和证据写入
+            if (r.investigateOutput?.thesisChanged && r.investigateOutput.updatedThesis) {
+              await thesisStore.updateThesis(r.threadId, {
+                thesisText: r.investigateOutput.updatedThesis,
+                conviction: r.investigateOutput.newConviction ?? undefined,
+              });
+            }
+            if (r.investigateOutput?.evidenceSummary) {
+              await thesisStore.addEvidence({
+                threadId: r.threadId,
+                evidenceType: r.investigateOutput.evidenceType ?? "neutral",
+                source: "agent_reasoning",
+                content: `[子agent] ${r.investigateOutput.evidenceSummary}`,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        logSwallowed("cognitiveGraph.investigate.subAgents", e);
+      }
+    }
+
     const maxRounds = state.agentConfig?.maxReactRounds ?? 5;
     const allToolsCalled: ToolCallRecord[] = [];
     const allEvidence: Record<string, unknown> = {};
@@ -439,43 +502,34 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
 
     // V2: 使用分类工具定义（含 outputSchema 提示链式引用）
     const toolDefsForPrompt = formatToolDefinitionsV2ForPrompt(getToolDefinitions());
+
+    // V2 Context Engine: 构建结构化段落 + ContextManager（替代旧的 MAX_PROMPT_CHARS 手动拼接）
+    const promptSections = buildReactInvestigatePromptSections({
+      thread,
+      toolDefinitionsV2Text: toolDefsForPrompt,
+      memories,
+      portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
+      tradeOutcomes,
+    });
+    const contextManager = createInvestigateContextManager(promptSections);
+
+    // V1 兼容：保留 initialPrompt 供 fallback 路径使用
     const initialPrompt = buildReactInvestigatePrompt({
       thread,
-      tools: AGENT_TOOL_DEFINITIONS, // V1 兼容（prompt 内部会判断是否有 V2 格式）
-      toolDefinitionsV2Text: toolDefsForPrompt, // V2: 分类工具文本
+      tools: AGENT_TOOL_DEFINITIONS,
+      toolDefinitionsV2Text: toolDefsForPrompt,
       memories,
       portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
       tradeOutcomes,
     });
 
-    // 维护多轮对话上下文（只保留初始 prompt + 最近两轮结果，避免无限增长）
-    const MAX_PROMPT_CHARS = 24000; // 约 12K tokens，留足 LLM 输出空间
     let result: InvestigateOutput | null = null;
-    // 分离存储：初始 prompt 不变，toolRoundSummaries 按轮累积
-    const toolRoundSummaries: string[] = [];
+    const CONTEXT_BUDGET_TOKENS = 12000; // Context Engine 管理的 token 预算
 
     for (let round = 1; round <= maxRounds; round++) {
-      // 构建当前轮 prompt：初始 prompt + 压缩的历史轮次摘要
-      let currentPrompt = initialPrompt;
-      if (toolRoundSummaries.length > 0) {
-        // 只保留最近 2 轮的完整结果，更早的轮次压缩为单行摘要
-        const summaryParts: string[] = [];
-        for (let i = 0; i < toolRoundSummaries.length; i++) {
-          if (i >= toolRoundSummaries.length - 2) {
-            summaryParts.push(toolRoundSummaries[i]); // 最近 2 轮完整保留
-          } else {
-            // 更早轮次压缩为单行
-            summaryParts.push(`[第 ${i + 1} 轮工具调用结果已省略，证据已纳入下方最新轮次]`);
-          }
-        }
-        currentPrompt = initialPrompt + "\n\n" + summaryParts.join("\n\n");
-      }
-
-      // 安全截断：如果 prompt 过长，截断历史部分
-      if (currentPrompt.length > MAX_PROMPT_CHARS) {
-        currentPrompt = initialPrompt + "\n\n[历史轮次因长度限制已省略]\n\n" +
-          (toolRoundSummaries[toolRoundSummaries.length - 1] ?? "");
-      }
+      // V2: ContextManager 自动处理滑动窗口 + 分层预算（替代旧的手动截断）
+      const contextResult = contextManager.build(CONTEXT_BUDGET_TOKENS);
+      const currentPrompt = contextResult.prompt;
 
       const { data: reactData, tokensUsed } = await callDeepSeekJson<ReactAction>(
         currentPrompt,
@@ -546,20 +600,21 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
         }
       }
 
-      // 构建本轮工具结果摘要
+      // 构建本轮工具结果摘要 → 交给 ContextManager 管理滑动窗口
       const followUpPrompt = buildReactFollowUpPrompt({
         toolResults,
         roundNumber: round,
         maxRounds,
       });
-      toolRoundSummaries.push(followUpPrompt);
+      contextManager.addToolResultRound(followUpPrompt);
     }
 
     // P1-3 修复：ReAct 循环结束仍无结果 → 发一轮强制结论请求
     if (!result && allToolsCalled.length > 0) {
-      const forcePrompt = initialPrompt + "\n\n" +
-        (toolRoundSummaries[toolRoundSummaries.length - 1] ?? "") +
-        "\n\n⚠️ 所有工具调用轮次已用完。请立即基于已收集的证据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。";
+      // V2: 使用 ContextManager 构建含所有工具结果的完整 prompt + 强制结论指令
+      contextManager.addToolResultRound("⚠️ 所有工具调用轮次已用完。请立即基于已收集的证据给出最终分析结论（action=result）。只输出 JSON，不要其他文字。");
+      const forceContextResult = contextManager.build(CONTEXT_BUDGET_TOKENS);
+      const forcePrompt = forceContextResult.prompt;
 
       const { data: forceData, tokensUsed } = await callDeepSeekJson<ReactAction>(
         forcePrompt, "cognitiveGraph.investigate.react.force",
@@ -637,20 +692,24 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       }
     }
 
+    // 合并子 agent 的 token 消耗
+    const subAgentTokens = subAgentResultsForState.reduce((sum, r) => sum + r.tokensUsed, 0);
+
     return {
       investigateResult: result,
       retrievedMemories: memories,
       surprises: result?.surprises ?? [],
-      thesesUpdated: result?.thesisChanged ? 1 : 0,
+      thesesUpdated: (result?.thesisChanged ? 1 : 0) + subAgentResultsForState.filter(r => r.thesisChanged).length,
       memoriesCreated: observationMemCount,
-      totalTokens,
+      totalTokens: totalTokens + subAgentTokens,
       toolsCalled: allToolsCalled,
+      subAgentResults: subAgentResultsForState,
       reasoningTraces: [{
         node: "investigate",
         threadId: thread.id,
-        input: `${thread.title} | tools=${allToolsCalled.map(t => t.tool).join(",")}`,
+        input: `${thread.title} | tools=${allToolsCalled.map(t => t.tool).join(",")} | subAgents=${subAgentResultsForState.length}`,
         output: result ? `changed=${result.thesisChanged} conviction=${result.newConviction} react_tools=${allToolsCalled.length}` : "no result",
-        tokensUsed: totalTokens,
+        tokensUsed: totalTokens + subAgentTokens,
         durationMs: Date.now() - t0,
       }],
     };
@@ -977,12 +1036,25 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
     }
 
     const totalTkn = (state.totalTokens ?? 0) + tokensUsed;
+
+    // Phase 4: 汇总子 agent 结果
+    const subAgentSummaries = (state.subAgentResults ?? []).length > 0
+      ? (state.subAgentResults ?? []).map(r => ({
+          threadId: r.threadId,
+          threadTitle: r.threadTitle,
+          summary: r.summary,
+          thesisChanged: r.thesisChanged,
+          toolsUsed: r.toolsUsed,
+        }))
+      : undefined;
+
     const briefing: DailyBriefing = {
       surprises: data?.surprises ?? state.surprises ?? [],
       cognitionGaps: data?.cognitionGaps ?? [],
       mindChangeConditions: data?.mindChangeConditions ?? [],
       thesisFailureImpacts,
       thesisConflicts,
+      subAgentSummaries,
       thesesUpdated: state.thesesUpdated ?? 0,
       memoriesCreated: state.memoriesCreated ?? 0,
       totalTokens: totalTkn,
@@ -1089,6 +1161,53 @@ async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
   }
 }
 
+// ── Learn 节点（Phase 2: 策略学习 — review 后提炼调查策略模板）──
+
+async function learnNode(state: CognitiveState): Promise<CognitiveUpdate> {
+  const t0 = Date.now();
+  try {
+    // 前置条件：本次 cycle 有实际调查产出
+    if ((state.thesesUpdated ?? 0) === 0 && (state.memoriesCreated ?? 0) === 0) {
+      return {}; // 无有效产出，跳过学习
+    }
+
+    const { extractStrategyFromRun } = await import("@/src/daa/agent/learning/strategyExtractor");
+
+    // 从当前 cycle 的工具调用记录中提炼策略
+    const toolsCalled = state.toolsCalled ?? [];
+    const result = await extractStrategyFromRun({
+      runId: `cycle_${Date.now()}`, // 临时 ID，后续由 agentRunStore 补全
+      toolsCalled: toolsCalled.map(tc => ({
+        tool: tc.tool,
+        input: tc.input,
+        outputSummary: tc.outputSummary,
+      })),
+      thesesUpdated: state.thesesUpdated ?? 0,
+      surprises: (state.surprises ?? []).length,
+      regime: state.market?.regime ?? "unknown",
+      targetConvictions: state.activeTheses
+        .filter(t => (state.investigationQueue ?? []).some(q => q.threadId === t.id))
+        .map(t => t.conviction),
+    });
+
+    if (result.created) {
+      logSwallowed("cognitiveGraph.learn.created", new Error(`策略已提炼: ${result.strategyName}`));
+    }
+
+    return {
+      toolsCalled: [{
+        tool: "learn",
+        input: {},
+        outputSummary: result.created ? `策略提炼: ${result.strategyName}` : "无新策略",
+        durationMs: Date.now() - t0,
+      }],
+    };
+  } catch (e) {
+    logSwallowed("cognitiveGraph.learn", e);
+    return {};
+  }
+}
+
 // ── Graph 组装 ──
 
 function buildCognitiveGraph() {
@@ -1099,6 +1218,7 @@ function buildCognitiveGraph() {
     .addNode("reflect", reflectNode)
     .addNode("next_target", loadNextTarget)
     .addNode("review", reviewNode)
+    .addNode("learn", learnNode)   // Phase 2: 策略学习节点
     .addNode("surface", surfaceNode)
     .addEdge(START, "observe")
     .addEdge("observe", "prioritize")
@@ -1119,7 +1239,9 @@ function buildCognitiveGraph() {
       if (state.currentTarget) return "investigate";
       return "review";
     })
-    .addEdge("review", "surface")
+    // Phase 2: review → learn → surface（learn 节点提炼策略模板）
+    .addEdge("review", "learn")
+    .addEdge("learn", "surface")
     .addEdge("surface", END);
 
   const checkpointer = new MemorySaver();

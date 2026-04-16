@@ -37,21 +37,21 @@ registerTool(
     try {
       const { fetchPriceSeriesWithCache } = await import("@/src/daa/modules/marketCache/priceSeriesCache");
       const startDate = new Date(Date.now() - lookbackDays * 86400000).toISOString().slice(0, 10);
-      const result = await fetchPriceSeriesWithCache({ symbol, startDate });
+      const result = await fetchPriceSeriesWithCache(symbol, startDate);
 
-      if (!result?.series?.length || result.series.length < 5) {
+      if (!result?.data?.length || result.data.length < 5) {
         return { toolName: "backtest_thesis", category: "analyze", success: false, data: null, outputFields: {}, error: `${symbol} 价格数据不足（需至少 5 个数据点）`, latencyMs: Date.now() - t0 };
       }
 
-      const closes = result.series.map(p => p.close);
-      const returns = closes.slice(1).map((c, i) => (c - closes[i]) / closes[i]);
+      const closes: number[] = result.data.map((p: { close: number }) => p.close);
+      const returns: number[] = closes.slice(1).map((c: number, i: number) => (c - closes[i]) / closes[i]);
 
       // 总收益
       const totalReturn = (closes[closes.length - 1] - closes[0]) / closes[0];
 
       // 年化波动率
-      const meanReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
-      const variance = returns.reduce((sum, r) => sum + (r - meanReturn) ** 2, 0) / returns.length;
+      const meanReturn = returns.reduce((a: number, b: number) => a + b, 0) / returns.length;
+      const variance = returns.reduce((sum: number, r: number) => sum + (r - meanReturn) ** 2, 0) / returns.length;
       const dailyVol = Math.sqrt(variance);
       const annualizedVol = dailyVol * Math.sqrt(252);
 
