@@ -8,6 +8,29 @@
  * - meta: 自省反思（历史决策、准确率、论点轨迹）
  */
 
+// ── V1 向后兼容类型别名（原 agentToolRegistry.ts 中的类型） ──
+
+/** @deprecated 使用 ToolDefinitionV2 替代 */
+export type AgentToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, ToolParamDef>;
+};
+
+/** @deprecated 使用 ToolResultV2 替代 */
+export type AgentToolResult = {
+  toolName: string;
+  success: boolean;
+  data: unknown;
+  error?: string;
+  latencyMs?: number;
+};
+
+// ── V1 信号类型常量（原 agentToolRegistry.ts 中的常量） ──
+
+export const SIGNAL_TYPES = ["technical", "valuation", "news", "human"] as const;
+export type SignalType = typeof SIGNAL_TYPES[number];
+
 // ── 工具分类 ──
 
 export type ToolCategory = "observe" | "analyze" | "act" | "meta";

@@ -73,6 +73,16 @@ export const CognitiveStateAnnotation = Annotation.Root({
   // 记忆
   retrievedMemories: Annotation<AgentMemory[]>({ reducer: (_, b) => b, default: () => [] }),
 
+  // Phase 2: 匹配到的调查策略（prioritizeNode 填充，investigateNode 消费）
+  matchedStrategies: Annotation<Array<{
+    id: string;
+    name: string;
+    triggerConditions: string;
+    toolSequence: string[];
+    promptTemplate: string;
+    successRate: number;
+  }>>({ reducer: (_, b) => b, default: () => [] }),
+
   // 累积输出
   surprises: Annotation<Surprise[]>({
     reducer: (a, b) => [...a, ...b],

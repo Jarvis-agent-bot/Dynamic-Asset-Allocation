@@ -7,21 +7,17 @@
 import { StateGraph, END, START, MemorySaver } from "@langchain/langgraph";
 import { CognitiveStateAnnotation, type CognitiveState, type CognitiveUpdate, type PortfolioSnapshot, type MarketSnapshot, type NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import type { InvestigationTarget, InvestigateOutput, Surprise, ReasoningTrace, ToolCallRecord, ResearchThread, DailyBriefing, CognitionGap, MindChangeCondition, AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
-import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePrompt, buildReactInvestigatePromptSections, buildReactFollowUpPrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, buildStrategyAdvisorPrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
+import { buildPrioritizePrompt, buildInvestigatePrompt, buildReactInvestigatePromptSections, buildReactFollowUpPrompt, buildReflectPrompt, buildReviewPrompt, buildSurfacePrompt, buildStrategyAdvisorPrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
 import { createInvestigateContextManager } from "@/src/daa/agent/context/contextEngine";
-import { AGENT_TOOL_DEFINITIONS } from "@/src/daa/agent/agentToolRegistry";
-import { buildExecutorRegistry, executeToolCall } from "@/src/daa/agent/agentToolExecutors";
-import type { AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
 
 // ── Tool System V2（Hermes 模式：import 触发自注册）──
 import "@/src/daa/agent/tools/index";
 import {
   getToolDefinitions,
   executeToolCallV2,
-  resolveToolResultVariables,
   formatToolDefinitionsV2ForPrompt,
 } from "@/src/daa/agent/tools/registry";
-import type { ToolResultV2, ToolExecutionContext } from "@/src/daa/agent/tools/types";
+import type { ToolResultV2, ToolExecutionContext, AgentToolResult } from "@/src/daa/agent/tools/types";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
@@ -332,21 +328,44 @@ async function prioritizeNode(state: CognitiveState): Promise<CognitiveUpdate> {
       currentThread = await thesisStore.getThesisById(first.threadId);
     }
 
+    // Phase 2: 加载匹配的调查策略（基于当前 regime + conviction + tags）
+    let matchedStrategies: CognitiveUpdate["matchedStrategies"] = [];
+    try {
+      const { findMatchingStrategies } = await import("@/src/daa/agent/learning/strategyStore");
+      const strategies = await findMatchingStrategies({
+        regime: state.market?.regime ?? "unknown",
+        conviction: first?.threadId ? (currentThread?.conviction ?? "uncertain") : "uncertain",
+        tags: currentThread?.tags ?? [],
+        assetKeys: currentThread?.assetKeys ?? [],
+      });
+      matchedStrategies = strategies.map(s => ({
+        id: s.id,
+        name: s.name,
+        triggerConditions: s.triggerConditions,
+        toolSequence: s.toolSequence,
+        promptTemplate: s.promptTemplate,
+        successRate: s.successRate,
+      }));
+    } catch (e) {
+      logSwallowed("cognitiveGraph.prioritize.matchStrategies", e);
+    }
+
     return {
       investigationQueue: targets,
       newThreadSuggestions: data.newThreads ?? [],
       currentTarget: first,
       currentThread,
+      matchedStrategies,
       totalTokens: tokensUsed,
       reasoningTraces: [{
         node: "prioritize",
         threadId: null,
         input: `${state.activeTheses.length} theses, ${state.portfolio.holdings.length} holdings`,
-        output: `${targets.length} targets selected`,
+        output: `${targets.length} targets, ${matchedStrategies.length} strategies matched`,
         tokensUsed,
         durationMs: Date.now() - t0,
       }],
-      toolsCalled: [{ tool: "prioritize", input: {}, outputSummary: `${targets.length} targets`, durationMs: Date.now() - t0 }],
+      toolsCalled: [{ tool: "prioritize", input: {}, outputSummary: `${targets.length} targets, ${matchedStrategies.length} strategies`, durationMs: Date.now() - t0 }],
     };
   } catch (e) {
     logSwallowed("cognitiveGraph.prioritize", e);
@@ -472,11 +491,6 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       limit: state.agentConfig?.memoryRecallLimit ?? 5,
     });
 
-    // 构建 executor 注册表（V1 兼容 + V2 上下文）
-    const executorRegistry = buildExecutorRegistry({
-      market: state.market,
-      portfolio: state.portfolio,
-    });
     // V2: 工具执行上下文（注入 state-dependent 数据，所有 V2 工具共享）
     const toolExecCtx: ToolExecutionContext = {
       market: state.market,
@@ -504,6 +518,13 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
     const toolDefsForPrompt = formatToolDefinitionsV2ForPrompt(getToolDefinitions());
 
     // V2 Context Engine: 构建结构化段落 + ContextManager（替代旧的 MAX_PROMPT_CHARS 手动拼接）
+    // Phase 2: 构建策略提示文本（如果有匹配策略）
+    const strategyHintText = (state.matchedStrategies ?? []).length > 0
+      ? (state.matchedStrategies ?? []).map(s =>
+          `策略「${s.name}」(成功率 ${(s.successRate * 100).toFixed(0)}%): ${s.promptTemplate}\n推荐工具: ${s.toolSequence.join(" → ")}`,
+        ).join("\n\n")
+      : "";
+
     const promptSections = buildReactInvestigatePromptSections({
       thread,
       toolDefinitionsV2Text: toolDefsForPrompt,
@@ -511,16 +532,9 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
       tradeOutcomes,
     });
-    const contextManager = createInvestigateContextManager(promptSections);
-
-    // V1 兼容：保留 initialPrompt 供 fallback 路径使用
-    const initialPrompt = buildReactInvestigatePrompt({
-      thread,
-      tools: AGENT_TOOL_DEFINITIONS,
-      toolDefinitionsV2Text: toolDefsForPrompt,
-      memories,
-      portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
-      tradeOutcomes,
+    const contextManager = createInvestigateContextManager({
+      ...promptSections,
+      strategy: strategyHintText,
     });
 
     let result: InvestigateOutput | null = null;
@@ -558,30 +572,23 @@ async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> 
       const toolCalls = action.tool_calls.slice(0, 3); // 每轮最多 3 个工具
       const toolResults: AgentToolResult[] = [];
 
-      // 并行执行所有请求的工具（V2 优先，V1 fallback）
+      // V2: 并行执行所有请求的工具（支持变量替换 + 链式引用）
       const toolExecPromises = toolCalls.map(async (tc) => {
-        // V2: 尝试用新注册表执行（支持变量替换 + 分类）
         const v2Result = await executeToolCallV2(
           tc.name, tc.params ?? {}, toolExecCtx, allToolResultsV2,
         );
-        // 如果 V2 返回"未知工具"，fallback 到 V1（过渡期兼容）
-        if (!v2Result.success && v2Result.error?.includes("未知工具")) {
-          const v1Result = await executeToolCall(executorRegistry, tc.name, tc.params ?? {});
-          return { call: tc, result: v1Result, v2Result: null };
-        }
-        return { call: tc, result: { toolName: v2Result.toolName, success: v2Result.success, data: v2Result.data, error: v2Result.error, latencyMs: v2Result.latencyMs } as AgentToolResult, v2Result };
+        return { call: tc, v2Result };
       });
 
       const execResults = await Promise.allSettled(toolExecPromises);
       for (const settled of execResults) {
         if (settled.status === "fulfilled") {
-          const { call, result: toolResult, v2Result } = settled.value;
+          const { call, v2Result } = settled.value;
+          const toolResult = { toolName: v2Result.toolName, success: v2Result.success, data: v2Result.data, error: v2Result.error, latencyMs: v2Result.latencyMs };
           toolResults.push(toolResult);
 
-          // V2: 累积结果供链式引用
-          if (v2Result) {
-            allToolResultsV2.set(call.name, v2Result);
-          }
+          // 累积结果供链式引用
+          allToolResultsV2.set(call.name, v2Result);
 
           // 记录到 evidence 和 toolsCalled
           if (toolResult.success) {

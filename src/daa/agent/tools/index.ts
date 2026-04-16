@@ -14,7 +14,14 @@ export type {
   ToolEntryV2,
   ToolExecutionContext,
   ToolParamDef,
+  // V1 向后兼容
+  AgentToolDefinition,
+  AgentToolResult,
+  SignalType,
 } from "@/src/daa/agent/tools/types";
+
+// ── V1 向后兼容值导出 ──
+export { SIGNAL_TYPES } from "@/src/daa/agent/tools/types";
 
 // ── 注册表 API ──
 export {

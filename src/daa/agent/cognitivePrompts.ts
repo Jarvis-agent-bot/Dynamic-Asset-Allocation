@@ -8,7 +8,7 @@
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition, CognitionGap } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
-import type { AgentToolDefinition, AgentToolResult } from "@/src/daa/agent/agentToolRegistry";
+import type { AgentToolDefinition, AgentToolResult } from "@/src/daa/agent/tools/types";
 
 // ── Prioritize 节点 Prompt ──
 
