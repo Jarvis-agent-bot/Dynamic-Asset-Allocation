@@ -345,6 +345,197 @@ export function SettingsStrategySection(props: {
           </div>
         </div>
       </SectionCard>
+
+      <SectionCard title="观察列表自动建仓" description="技术 + 估值信号同时达标时，为观察列表中的资产自动生成 BUY 提案。需要在单个资产页面开启规则。">
+        <div style={settingsGridCols2Style}>
+          <CheckboxRow
+            checked={config.watchlistEntry?.enabled ?? false}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      watchlistEntry: {
+                        ...(prev.watchlistEntry ?? {
+                          enabled: false,
+                          maxPerCycle: 2,
+                          defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+                          notionalCashCapPct: 0.3,
+                        }),
+                        enabled: value,
+                      },
+                    }
+                  : prev,
+              )
+            }
+          >
+            启用观察列表自动建仓
+          </CheckboxRow>
+
+          <div>
+            <FieldLabel>单次 cron 最多触发 (个)</FieldLabel>
+            <NumberInput
+              value={config.watchlistEntry?.maxPerCycle ?? 2}
+              min={1}
+              max={10}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        watchlistEntry: {
+                          ...(prev.watchlistEntry ?? {
+                            enabled: false,
+                            maxPerCycle: 2,
+                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+                            notionalCashCapPct: 0.3,
+                          }),
+                          maxPerCycle: Math.max(1, Math.min(10, value || 2)),
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>单次建仓占可用现金上限 (%)</FieldLabel>
+            <NumberInput
+              value={Math.round(((config.watchlistEntry?.notionalCashCapPct ?? 0.3) * 100))}
+              min={5}
+              max={100}
+              step={5}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        watchlistEntry: {
+                          ...(prev.watchlistEntry ?? {
+                            enabled: false,
+                            maxPerCycle: 2,
+                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+                            notionalCashCapPct: 0.3,
+                          }),
+                          notionalCashCapPct: Math.max(0.05, Math.min(1, (value || 30) / 100)),
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>默认技术阈值</FieldLabel>
+            <NumberInput
+              value={config.watchlistEntry?.defaultRules.minTechnicalScore ?? 65}
+              min={0}
+              max={100}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        watchlistEntry: {
+                          ...(prev.watchlistEntry ?? {
+                            enabled: false,
+                            maxPerCycle: 2,
+                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+                            notionalCashCapPct: 0.3,
+                          }),
+                          defaultRules: {
+                            ...(prev.watchlistEntry?.defaultRules ?? { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false }),
+                            minTechnicalScore: Math.max(0, Math.min(100, value || 65)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>默认估值阈值</FieldLabel>
+            <NumberInput
+              value={config.watchlistEntry?.defaultRules.minValuationScore ?? 60}
+              min={0}
+              max={100}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        watchlistEntry: {
+                          ...(prev.watchlistEntry ?? {
+                            enabled: false,
+                            maxPerCycle: 2,
+                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+                            notionalCashCapPct: 0.3,
+                          }),
+                          defaultRules: {
+                            ...(prev.watchlistEntry?.defaultRules ?? { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false }),
+                            minValuationScore: Math.max(0, Math.min(100, value || 60)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div>
+            <FieldLabel>默认融合阈值</FieldLabel>
+            <NumberInput
+              value={config.watchlistEntry?.defaultRules.minFusionScore ?? 62}
+              min={0}
+              max={100}
+              step={1}
+              onChange={(value) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        watchlistEntry: {
+                          ...(prev.watchlistEntry ?? {
+                            enabled: false,
+                            maxPerCycle: 2,
+                            defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+                            notionalCashCapPct: 0.3,
+                          }),
+                          defaultRules: {
+                            ...(prev.watchlistEntry?.defaultRules ?? { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false }),
+                            minFusionScore: Math.max(0, Math.min(100, value || 62)),
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+
+          <div style={{
+            gridColumn: "1 / -1",
+            marginTop: 4,
+            padding: "8px 12px",
+            background: "rgba(56, 189, 248, 0.06)",
+            border: "1px solid rgba(56, 189, 248, 0.18)",
+            borderRadius: 8,
+            fontSize: 12,
+            lineHeight: 1.6,
+            color: "var(--muted)",
+          }}>
+            仅对观察列表中「未持仓」、「过冷静期」且「设置了目标权重」的资产生效。到 Portfolio 详情页可为每个资产单独调节阈值与冷静期。
+          </div>
+        </div>
+      </SectionCard>
     </section>
   );
 }

@@ -4,7 +4,6 @@
 import { describe, it, expect } from "vitest";
 import {
   buildPrioritizePrompt,
-  buildInvestigatePrompt,
   buildReflectPrompt,
   buildReviewPrompt,
   buildSurfacePrompt,
@@ -88,33 +87,6 @@ describe("buildPrioritizePrompt", () => {
       theses: [],
     });
     expect(prompt.length).toBeGreaterThan(100);
-  });
-});
-
-// ── buildInvestigatePrompt ──
-
-describe("buildInvestigatePrompt", () => {
-  it("包含关键角色指令和 few-shot", () => {
-    const prompt = buildInvestigatePrompt({
-      thread: mockThread,
-      evidence: { technical: { scorePct: 65 } },
-      memories: [],
-      portfolio: mockPortfolio,
-    });
-    expect(prompt).toContain("研究分析师");
-    expect(prompt).toContain("示例输出");
-    expect(prompt).toContain("thesisChanged");
-  });
-
-  it("包含论点信息", () => {
-    const prompt = buildInvestigatePrompt({
-      thread: mockThread,
-      evidence: {},
-      memories: [],
-      portfolio: mockPortfolio,
-    });
-    expect(prompt).toContain("NVDA AI");
-    expect(prompt).toContain("high");
   });
 });
 

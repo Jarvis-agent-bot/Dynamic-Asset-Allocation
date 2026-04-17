@@ -72,7 +72,7 @@ export type AssetUniverseView = {
   hfSignal: HfSignalSummary | null;
 };
 
-export type RebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger";
+export type RebalanceTriggerSource = "calendar" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger" | "watchlist_entry";
 
 type RebalanceCycleStatus = DaaStoreRebalanceCycleStatus;
 
@@ -119,6 +119,9 @@ export type ProposalDecisionContext = {
   llmSuggestedWeights?: { human: number; technical: number; news: number; valuation: number } | null;
 };
 
+/** 提案来源类型：区分漂移纠偏、观察列表建仓、税务收割等 */
+export type ProposalType = "drift" | "watchlist_entry" | "tax_loss_harvest";
+
 export type RebalanceProposal = {
   assetKey: string;
   symbol: string;
@@ -131,6 +134,8 @@ export type RebalanceProposal = {
   reason: string;
   selected: boolean;
   hfContribution: string | null;
+  /** 提案来源类型（默认 "drift"，观察列表信号建仓为 "watchlist_entry"） */
+  proposalType?: ProposalType;
   /**
    * 三层决策上下文（drift × signal × LLM）。
    * 由 agentRebalanceAdapter 注入，旧数据此字段为 null。

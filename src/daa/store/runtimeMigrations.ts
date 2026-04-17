@@ -781,6 +781,20 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260417_watchlist_auto_entry",
+    async apply(query) {
+      // 观察列表自动建仓字段
+      await query(`
+        ALTER TABLE daa_watchlist_entries
+          ADD COLUMN IF NOT EXISTS auto_entry_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS entry_target_weight_pct NUMERIC,
+          ADD COLUMN IF NOT EXISTS entry_rules_json JSONB,
+          ADD COLUMN IF NOT EXISTS entry_cooldown_days INTEGER NOT NULL DEFAULT 14,
+          ADD COLUMN IF NOT EXISTS last_entry_triggered_at TIMESTAMPTZ
+      `);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

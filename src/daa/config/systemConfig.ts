@@ -229,6 +229,23 @@ export type DaaSystemConfig = {
     /** 允许 Agent 主动触发再平衡（默认 false） */
     agentTriggerEnabled?: boolean;
   };
+  /** 观察列表自动建仓 — 信号达标时为 watchlist 资产生成 BUY 提案 */
+  watchlistEntry?: {
+    /** 全局开关（默认 false，单资产还要 auto_entry_enabled 才会触发） */
+    enabled: boolean;
+    /** 单次 cron 最多触发的建仓数，防止现金一次耗尽 */
+    maxPerCycle: number;
+    /** 全局默认阈值，单资产 entry_rules_json 未覆盖时使用 */
+    defaultRules: {
+      minTechnicalScore: number;
+      minValuationScore: number;
+      minFusionScore: number;
+      /** 是否要求技术面 momentumRegime=strong */
+      requireStrongMomentum: boolean;
+    };
+    /** 单次建仓金额上限（以可用现金的百分比为上限，0-1） */
+    notionalCashCapPct: number;
+  };
   notification: {
     dailyAnalysisHourUtc: number;
     telegram: {
@@ -409,6 +426,17 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     memoryArchiveThreshold: 0.05,
     agentOverlayEnabled: false,
     agentTriggerEnabled: false,
+  },
+  watchlistEntry: {
+    enabled: false,
+    maxPerCycle: 2,
+    defaultRules: {
+      minTechnicalScore: 65,
+      minValuationScore: 60,
+      minFusionScore: 62,
+      requireStrongMomentum: false,
+    },
+    notionalCashCapPct: 0.3,
   },
   notification: {
     dailyAnalysisHourUtc: 1,
@@ -862,6 +890,27 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         memoryArchiveThreshold: clamp(Number(ca.memoryArchiveThreshold) || fb.memoryArchiveThreshold, 0.01, 0.5),
         agentOverlayEnabled: toBool(ca.agentOverlayEnabled, false),
         agentTriggerEnabled: toBool(ca.agentTriggerEnabled, false),
+      };
+    })(),
+    watchlistEntry: (() => {
+      const we = isRecord(source.watchlistEntry) ? source.watchlistEntry : {};
+      const fb = fallback.watchlistEntry ?? {
+        enabled: false,
+        maxPerCycle: 2,
+        defaultRules: { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false },
+        notionalCashCapPct: 0.3,
+      };
+      const rules = isRecord(we.defaultRules) ? we.defaultRules : {};
+      return {
+        enabled: toBool(we.enabled, fb.enabled),
+        maxPerCycle: clamp(Math.trunc(Number(we.maxPerCycle) || fb.maxPerCycle), 1, 10),
+        defaultRules: {
+          minTechnicalScore: clamp(Number(rules.minTechnicalScore) || fb.defaultRules.minTechnicalScore, 0, 100),
+          minValuationScore: clamp(Number(rules.minValuationScore) || fb.defaultRules.minValuationScore, 0, 100),
+          minFusionScore: clamp(Number(rules.minFusionScore) || fb.defaultRules.minFusionScore, 0, 100),
+          requireStrongMomentum: toBool(rules.requireStrongMomentum, fb.defaultRules.requireStrongMomentum),
+        },
+        notionalCashCapPct: clamp(Number(we.notionalCashCapPct) || fb.notionalCashCapPct, 0.05, 1.0),
       };
     })(),
     notification: {

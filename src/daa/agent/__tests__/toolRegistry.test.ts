@@ -1,7 +1,7 @@
 /**
- * Agent Tool System V2 — 单元测试（迁移自 V1 agentToolExecutors 测试）
+ * Agent Tool Registry — 单元测试
  *
- * 测试 V2 注册表的工具调用路由、state-dependent 工具、参数校验。
+ * 测试动态注册表的工具调用路由、state-dependent 工具、参数校验。
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeToolCallV2, clearToolResultCache } from "@/src/daa/agent/tools/registry";

@@ -14,13 +14,9 @@ export type {
   ToolEntryV2,
   ToolExecutionContext,
   ToolParamDef,
-  // V1 向后兼容
-  AgentToolDefinition,
-  AgentToolResult,
   SignalType,
 } from "@/src/daa/agent/tools/types";
 
-// ── V1 向后兼容值导出 ──
 export { SIGNAL_TYPES } from "@/src/daa/agent/tools/types";
 
 // ── 注册表 API ──
@@ -41,7 +37,7 @@ export {
 
 // ── 自注册触发（import 顺序无关） ──
 
-// observe 类（6 个，迁移自 agentToolExecutors.ts）
+// observe 类（6 个）
 import "@/src/daa/agent/tools/observe/fetchTechnicalSignal";
 import "@/src/daa/agent/tools/observe/fetchValuationSignal";
 import "@/src/daa/agent/tools/observe/fetchNewsSignal";

@@ -319,7 +319,8 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Agent Run Store | `src/daa/agent/store/agentRunStore.ts` |
 | Thesis Bootstrap | `src/daa/agent/bootstrap.ts` |
 | Embedding (1024d) | `src/daa/agent/embedding.ts` |
-| Agent Tool 注册表（Phase 3 规划） | `src/daa/agent/agentToolRegistry.ts` |
+| Agent Tool 注册表（V2 动态自注册） | `src/daa/agent/tools/registry.ts` |
+| Agent Tool 定义（14 工具） | `src/daa/agent/tools/index.ts` |
 | Agent 学习记忆 | `src/daa/agent/agentLearningRepo.ts` |
 | 信号概览（insights 展示用） | `src/daa/signals/fusion.ts` |
 | 交易反馈闭环 | `src/daa/agent/tradeOutcomeFeedback.ts` |
@@ -439,7 +440,6 @@ Configured via Settings page or `daa_system_config_v2` in database.
 - Options / derivatives support
 - FX hedging strategies
 - Real-time streaming prices (currently batch)
-- Phase 3 ReAct Agent tool calling（LLM 自主选择工具，agentToolRegistry 已定义 6 个工具但未实现 executor）
 
 ## Deployment（VPS Docker）
 

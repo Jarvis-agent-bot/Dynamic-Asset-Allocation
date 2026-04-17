@@ -11,6 +11,7 @@ import { AssetKlineChart, type KlineTradeMarker } from "@/app/daa/dashboard/work
 import { AssetInfoBar } from "./AssetInfoBar";
 import { SignalDashboard } from "./SignalDashboard";
 import { InlineTradePanel } from "./InlineTradePanel";
+import { WatchlistAutoEntryPanel } from "./WatchlistAutoEntryPanel";
 
 /** 从交易记录 API 加载该标的的历史交易，用于 K 线标记 */
 function useTradeMarkers(symbol: string): KlineTradeMarker[] {
@@ -134,6 +135,12 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
               onOrderCompleted={() => void wbModel.loadBootstrap(true)}
             />
           </SectionErrorBoundary>
+
+          {row.watchEnabled && row.holdingQty === 0 ? (
+            <SectionErrorBoundary sectionName="自动建仓规则">
+              <WatchlistAutoEntryPanel assetKey={row.assetKey} />
+            </SectionErrorBoundary>
+          ) : null}
         </div>
       </div>
     </div>

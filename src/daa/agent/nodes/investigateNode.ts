@@ -4,7 +4,7 @@
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
 import type { InvestigateOutput, ToolCallRecord } from "@/src/daa/agent/cognitiveTypes";
-import { buildReactInvestigatePromptSections, buildReactFollowUpPrompt, buildInvestigatePrompt } from "@/src/daa/agent/cognitivePrompts";
+import { buildReactInvestigatePromptSections, buildReactFollowUpPrompt } from "@/src/daa/agent/cognitivePrompts";
 import { createInvestigateContextManager } from "@/src/daa/agent/context/contextEngine";
 import { callDeepSeekJson } from "@/src/daa/agent/helpers/llm";
 import { validateShape, shouldCircuitBreak } from "@/src/daa/agent/helpers/validation";
@@ -253,22 +253,6 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       if (forceAction?.action === "result") {
         result = forceAction.result;
       }
-    }
-
-    // 如果 ReAct 循环未产出结果，降级用旧版 buildInvestigatePrompt
-    if (!result) {
-      logSwallowed("cognitiveGraph.investigate.react.fallback", new Error("ReAct 循环未产出结果，降级到直接分析"));
-      const fallbackPrompt = buildInvestigatePrompt({
-        thread,
-        evidence: allEvidence,
-        memories,
-        portfolio: state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 },
-      });
-      const { data: fallbackResult, tokensUsed } = await callDeepSeekJson<InvestigateOutput>(
-        fallbackPrompt, "cognitiveGraph.investigate.fallback",
-      );
-      totalTokens += tokensUsed;
-      result = fallbackResult;
     }
 
     // 校验 investigate 输出

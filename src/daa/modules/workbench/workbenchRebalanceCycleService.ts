@@ -23,6 +23,8 @@ import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCa
 import { resolveExecutionRoute, syncBrokerOrders } from "./executionVenue";
 
 import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
+import { generateWatchlistEntryProposals } from "./watchlistEntryService";
+import { markWatchlistEntryTriggered } from "@/src/daa/store/watchlistAutoEntryStore";
 import type {
   ExecuteRebalanceCycleResult,
   GenerateRebalanceCycleInput,
@@ -209,7 +211,43 @@ export async function generateWorkbenchRebalanceCycle(
   // ── drift 触发的阈值守卫（仅自动触发需要）────────────────────────
   if (!manual && triggerSource === "drift") {
     const thresholdPct = Math.max(0, strategy.drift.thresholdPct * 100);
-    if (draft.maxAbsDriftPct < thresholdPct) {
+    const hasWatchlistCandidates = systemRow.config.watchlistEntry?.enabled === true;
+    // Watchlist 自动建仓需要在 drift 未超阈值时也能触发，所以仅当两路都不满足才跳过
+    if (draft.maxAbsDriftPct < thresholdPct && !hasWatchlistCandidates) {
+      return skipWithLatest(
+        `最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}% 未超过阈值 ${thresholdPct.toFixed(2)}%`,
+      );
+    }
+  }
+
+  // ── Step A.5: Watchlist 自动建仓（信号达标则为 watchlist 资产生成 BUY 提案） ──
+  let watchlistEntryProposals: RebalanceProposal[] = [];
+  try {
+    const watchlistResult = await generateWatchlistEntryProposals({
+      bootstrap,
+      systemConfig: systemRow.config,
+    });
+    watchlistEntryProposals = watchlistResult.proposals;
+    if (watchlistEntryProposals.length > 0) {
+      // 去重：若该 assetKey 已在 drift 提案中（极少见，holding==0 不会），以 drift 为准
+      const existingKeys = new Set(draft.proposals.map((p) => p.assetKey.toUpperCase()));
+      watchlistEntryProposals = watchlistEntryProposals.filter(
+        (p) => !existingKeys.has(p.assetKey.toUpperCase()),
+      );
+      draft.proposals.push(...watchlistEntryProposals);
+      if (watchlistEntryProposals.length > 0 && !draft.triggerReason.includes("自动建仓")) {
+        const extra = `；观察列表自动建仓 ${watchlistEntryProposals.length} 条`;
+        draft.triggerReason = (draft.triggerReason || "组合检查") + extra;
+      }
+    }
+  } catch (err) {
+    logSwallowed("workbenchRebalanceCycleService.watchlistEntry", err);
+  }
+
+  // drift 阈值未达但 watchlist 有提案 → 允许通过，继续生成 cycle
+  if (!manual && triggerSource === "drift") {
+    const thresholdPct = Math.max(0, strategy.drift.thresholdPct * 100);
+    if (draft.maxAbsDriftPct < thresholdPct && watchlistEntryProposals.length === 0) {
       return skipWithLatest(
         `最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}% 未超过阈值 ${thresholdPct.toFixed(2)}%`,
       );
@@ -389,6 +427,17 @@ export async function generateWorkbenchRebalanceCycle(
     marketContext,
     agentDecisionSnapshot,
   });
+
+  // Watchlist 自动建仓：标记冷静期起点（即便最终未执行，也避免每个 cycle 反复建仓）
+  if (watchlistEntryProposals.length > 0) {
+    await Promise.all(
+      watchlistEntryProposals.map((p) =>
+        markWatchlistEntryTriggered(p.assetKey).catch((err) =>
+          logSwallowed("workbenchRebalanceCycleService.markWatchlistTriggered", err),
+        ),
+      ),
+    );
+  }
 
   await appendTriggerEventSafe({
     triggerSource,

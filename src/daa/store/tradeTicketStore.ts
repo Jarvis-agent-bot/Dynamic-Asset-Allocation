@@ -489,6 +489,7 @@ function normalizeRebalanceTriggerSource(value: unknown): DaaStoreRebalanceTrigg
   if (text === "risk") return "risk";
   if (text === "cash_idle") return "cash_idle";
   if (text === "agent_trigger") return "agent_trigger";
+  if (text === "watchlist_entry") return "watchlist_entry";
   return "manual";
 }
 
