@@ -4,7 +4,7 @@ import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSign
 import { buildTechnicalSignals, type DaaTechnicalSignal } from "@/src/daa/signals/technicalSignal";
 import { buildValuationSignals, type DaaValuationSignal } from "@/src/daa/signals/valuationSignal";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
-import type { SignalType } from "@/src/daa/agent/agentToolRegistry";
+import type { SignalType } from "@/src/daa/agent/tools/types";
 
 export type DaaOpportunityPanel = {
   generatedAt: string;

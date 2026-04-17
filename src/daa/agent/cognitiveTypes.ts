@@ -165,6 +165,14 @@ export interface DailyBriefing {
   thesisConflicts?: ThesisConflict[];
   /** Agent 策略顾问的参数建议（由 LLM 生成，规则引擎消费） */
   configOverlay?: AgentConfigOverlay;
+  /** Phase 4: 子 agent 并行调查的摘要（可选，向后兼容） */
+  subAgentSummaries?: Array<{
+    threadId: string;
+    threadTitle: string;
+    summary: string;
+    thesisChanged: boolean;
+    toolsUsed: string[];
+  }>;
   thesesUpdated: number;
   memoriesCreated: number;
   totalTokens: number;

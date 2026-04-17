@@ -738,6 +738,49 @@ const MIGRATIONS_: Migration[] = [
       await query(`ALTER TABLE daa_agent_memory ALTER COLUMN embedding TYPE vector(1024)`);
     },
   },
+  // ── Cognitive Agent V2: Tool System + Strategy Learning ──
+  {
+    id: "20260415_agent_tool_executions",
+    async apply(query) {
+      // V2 工具执行日志 — 记录每次工具调用的输入输出，支持策略学习分析
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_agent_tool_executions (
+          id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          run_id     TEXT NOT NULL,
+          tool_name  TEXT NOT NULL,
+          category   TEXT NOT NULL DEFAULT 'observe',
+          input_params  JSONB,
+          output_fields JSONB,
+          success    BOOLEAN NOT NULL DEFAULT true,
+          latency_ms INTEGER,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_tool_exec_run ON daa_agent_tool_executions (run_id)`);
+      await query(`CREATE INDEX IF NOT EXISTS idx_tool_exec_name ON daa_agent_tool_executions (tool_name)`);
+    },
+  },
+  {
+    id: "20260415_agent_strategies",
+    async apply(query) {
+      // V2 策略学习表 — 存储从历史 run 中提炼的调查策略模板
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_agent_strategies (
+          id                 TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          name               TEXT NOT NULL,
+          description        TEXT,
+          trigger_conditions TEXT NOT NULL,
+          tool_sequence      TEXT[] NOT NULL DEFAULT '{}',
+          prompt_template    TEXT,
+          source_run_ids     TEXT[] NOT NULL DEFAULT '{}',
+          success_rate       REAL NOT NULL DEFAULT 0,
+          usage_count        INTEGER NOT NULL DEFAULT 0,
+          created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

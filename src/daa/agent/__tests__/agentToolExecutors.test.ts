@@ -1,15 +1,23 @@
 /**
- * Agent Tool Executors — 单元测试
+ * Agent Tool System V2 — 单元测试（迁移自 V1 agentToolExecutors 测试）
  *
- * 测试 executor 注册表构建、工具调用路由、超时处理、state-dependent 工具。
+ * 测试 V2 注册表的工具调用路由、state-dependent 工具、参数校验。
  */
-import { describe, it, expect } from "vitest";
-import { buildExecutorRegistry, executeToolCall } from "@/src/daa/agent/agentToolExecutors";
+import { describe, it, expect, beforeEach } from "vitest";
+import { executeToolCallV2, clearToolResultCache } from "@/src/daa/agent/tools/registry";
+import type { ToolExecutionContext } from "@/src/daa/agent/tools/types";
 import type { PortfolioSnapshot, MarketSnapshot } from "@/src/daa/agent/cognitiveState";
+
+// 触发所有工具自注册
+import "@/src/daa/agent/tools/index";
+
+// 每个测试前清空缓存，避免跨测试缓存命中
+beforeEach(() => {
+  clearToolResultCache();
+});
 
 // ── 测试数据 ──
 
-// weightPct 使用小数形式（0.0-1.0），与 observeNode 一致
 const mockPortfolio: PortfolioSnapshot = {
   holdings: [
     { assetKey: "US:AAPL", symbol: "AAPL", holdingQty: 100, lastPrice: 180, weightPct: 0.30, unrealizedPnlPct: 0.15 },
@@ -27,32 +35,13 @@ const mockMarket: MarketSnapshot = {
   indicators: { qqqSpyRatio: 1.12, goldSilverRatio: 78 },
 };
 
-// ── buildExecutorRegistry ──
+const mockCtx: ToolExecutionContext = { market: mockMarket, portfolio: mockPortfolio };
 
-describe("buildExecutorRegistry", () => {
-  it("返回 6 个 executor", () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    expect(Object.keys(registry)).toHaveLength(6);
-    expect(registry.fetch_technical_signal).toBeDefined();
-    expect(registry.fetch_valuation_signal).toBeDefined();
-    expect(registry.fetch_news_signal).toBeDefined();
-    expect(registry.fetch_human_signal).toBeDefined();
-    expect(registry.query_market_regime).toBeDefined();
-    expect(registry.query_portfolio_concentration).toBeDefined();
-  });
+// ── executeToolCallV2 ──
 
-  it("null state 也能构建", () => {
-    const registry = buildExecutorRegistry({ market: null, portfolio: null });
-    expect(Object.keys(registry)).toHaveLength(6);
-  });
-});
-
-// ── executeToolCall ──
-
-describe("executeToolCall", () => {
+describe("executeToolCallV2", () => {
   it("未知工具返回 error", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "unknown_tool", {});
+    const result = await executeToolCallV2("unknown_tool", {}, mockCtx);
     expect(result.success).toBe(false);
     expect(result.error).toContain("未知工具");
   });
@@ -60,20 +49,22 @@ describe("executeToolCall", () => {
 
 // ── query_market_regime ──
 
-describe("query_market_regime executor", () => {
+describe("query_market_regime V2", () => {
   it("正常返回市场环境", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "query_market_regime", {});
+    const result = await executeToolCallV2("query_market_regime", {}, mockCtx);
     expect(result.success).toBe(true);
     expect(result.toolName).toBe("query_market_regime");
+    expect(result.category).toBe("observe");
     const data = result.data as Record<string, unknown>;
     expect(data.regime).toBe("risk_on");
     expect(data.vix).toBe(18.5);
+    // V2: outputFields 供链式引用
+    expect(result.outputFields.regime).toBe("risk_on");
+    expect(result.outputFields.vix).toBe(18.5);
   });
 
   it("市场数据为 null 时返回 error", async () => {
-    const registry = buildExecutorRegistry({ market: null, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "query_market_regime", {});
+    const result = await executeToolCallV2("query_market_regime", {}, { market: null, portfolio: mockPortfolio });
     expect(result.success).toBe(false);
     expect(result.error).toContain("未加载");
   });
@@ -81,65 +72,60 @@ describe("query_market_regime executor", () => {
 
 // ── query_portfolio_concentration ──
 
-describe("query_portfolio_concentration executor", () => {
+describe("query_portfolio_concentration V2", () => {
   it("正常计算 HHI 和集中度", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "query_portfolio_concentration", {});
+    const result = await executeToolCallV2("query_portfolio_concentration", {}, mockCtx);
     expect(result.success).toBe(true);
+    expect(result.category).toBe("observe");
     const data = result.data as Record<string, unknown>;
     expect(data.holdingsCount).toBe(4);
     expect(data.maxPositionWeightPct).toBeCloseTo(0.40, 2);
     expect(data.cashPct).toBeCloseTo(0.10, 2);
     expect(typeof data.hhi).toBe("number");
     expect(typeof data.hhiLabel).toBe("string");
-    // HHI = (0.30² + 0.40² + 0.20² + 0.10²) = 0.09 + 0.16 + 0.04 + 0.01 = 0.30
     expect(data.hhi).toBeCloseTo(0.30, 2);
     expect(data.hhiLabel).toBe("高度集中");
-    expect(Array.isArray(data.topHoldings)).toBe(true);
+    // V2: outputFields
+    expect(result.outputFields.hhi).toBeCloseTo(0.30, 2);
+    expect(result.outputFields.holdingsCount).toBe(4);
   });
 
   it("组合为 null 时返回 error", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: null });
-    const result = await executeToolCall(registry, "query_portfolio_concentration", {});
+    const result = await executeToolCallV2("query_portfolio_concentration", {}, { market: mockMarket, portfolio: null });
     expect(result.success).toBe(false);
     expect(result.error).toContain("未加载");
   });
 
   it("空持仓返回 error", async () => {
     const emptyPortfolio: PortfolioSnapshot = { holdings: [], totalEquity: 0, cashPct: 100 };
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: emptyPortfolio });
-    const result = await executeToolCall(registry, "query_portfolio_concentration", {});
+    const result = await executeToolCallV2("query_portfolio_concentration", {}, { market: mockMarket, portfolio: emptyPortfolio });
     expect(result.success).toBe(false);
   });
 });
 
 // ── 静态 executor 参数校验 ──
 
-describe("静态 executor 参数校验", () => {
+describe("V2 参数校验", () => {
   it("fetch_technical_signal 缺少 symbol 返回 error", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "fetch_technical_signal", {});
+    const result = await executeToolCallV2("fetch_technical_signal", {}, mockCtx);
     expect(result.success).toBe(false);
     expect(result.error).toContain("symbol");
   });
 
   it("fetch_valuation_signal 缺少 symbol 返回 error", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "fetch_valuation_signal", {});
+    const result = await executeToolCallV2("fetch_valuation_signal", {}, mockCtx);
     expect(result.success).toBe(false);
     expect(result.error).toContain("symbol");
   });
 
   it("fetch_news_signal 缺少 symbol 返回 error", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "fetch_news_signal", {});
+    const result = await executeToolCallV2("fetch_news_signal", {}, mockCtx);
     expect(result.success).toBe(false);
     expect(result.error).toContain("symbol");
   });
 
   it("fetch_human_signal 缺少 symbol 返回 error", async () => {
-    const registry = buildExecutorRegistry({ market: mockMarket, portfolio: mockPortfolio });
-    const result = await executeToolCall(registry, "fetch_human_signal", {});
+    const result = await executeToolCallV2("fetch_human_signal", {}, mockCtx);
     expect(result.success).toBe(false);
     expect(result.error).toContain("symbol");
   });
