@@ -120,7 +120,7 @@ src/
 ## Key Architecture Concepts
 
 ### Asset Key Format
-`{MARKET}:{SYMBOL}` — e.g., `US:AAPL`, `HK:0700.HK`, `CRYPTO:BTC-USD`
+`{MARKET}::{SYMBOL}` (双冒号) — e.g., `US::AAPL`, `HK::0700.HK`, `CRYPTO::BTC-USD`
 See `src/daa/assetKey.ts` for parsing/normalization utilities.
 
 ### Cognitive Agent OS（AI-Native 架构，当前）

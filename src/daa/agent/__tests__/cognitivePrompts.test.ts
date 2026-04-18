@@ -205,4 +205,69 @@ describe("formatBriefingForTelegram", () => {
     const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 0, memoriesCount: 0 });
     expect(html).toContain("市场与预期一致");
   });
+
+  it("渲染风险暴露板块（thesisFailureImpacts 存在且达 medium 及以上）", () => {
+    const briefing: DailyBriefing = {
+      surprises: [],
+      cognitionGaps: [],
+      mindChangeConditions: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+      thesisFailureImpacts: [
+        {
+          threadId: "t1",
+          thesisTitle: "超高集中度论点",
+          conviction: "high",
+          affectedAssets: [{ assetKey: "HK::0388.HK", weightPct: 0.875 }],
+          totalExposurePct: 0.875,
+          estimatedLossPct: 0.437,
+          riskLevel: "critical",
+        },
+        // low 级别不应被展示
+        {
+          threadId: "t2",
+          thesisTitle: "小仓位论点",
+          conviction: "medium",
+          affectedAssets: [{ assetKey: "US::SPY", weightPct: 0.03 }],
+          totalExposurePct: 0.03,
+          estimatedLossPct: 0.009,
+          riskLevel: "low",
+        },
+      ],
+    };
+    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 0, thesesCount: 1, memoriesCount: 0 });
+    expect(html).toContain("风险暴露");
+    expect(html).toContain("严重");
+    expect(html).toContain("超高集中度论点");
+    expect(html).toContain("HK::0388.HK");
+    // low 级别不展示
+    expect(html).not.toContain("小仓位论点");
+  });
+
+  it("渲染论点冲突板块（thesisConflicts 存在）", () => {
+    const briefing: DailyBriefing = {
+      surprises: [],
+      cognitionGaps: [],
+      mindChangeConditions: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+      thesisConflicts: [{
+        thesisA: { id: "a", title: "看多A", conviction: "high" },
+        thesisB: { id: "b", title: "看空A", conviction: "low" },
+        conflictType: "directional",
+        overlappingAssets: ["US::NVDA"],
+        severity: "high",
+        llmAssessment: null,
+      }],
+    };
+    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 0, thesesCount: 2, memoriesCount: 0 });
+    expect(html).toContain("论点冲突");
+    expect(html).toContain("看多A");
+    expect(html).toContain("看空A");
+    expect(html).toContain("US::NVDA");
+  });
 });

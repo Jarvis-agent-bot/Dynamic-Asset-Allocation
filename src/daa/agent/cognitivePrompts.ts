@@ -290,22 +290,24 @@ ${prevGaps || "无"}
       })()
     : "";
 
-  // P1-2: 预计算认知缺口标注
-  const gapWarnings = ctx.theses
-    .filter(t => {
-      const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
-      const relatedHolding = ctx.portfolio.holdings.find(h => t.assetKeys.includes(h.assetKey));
-      const weight = relatedHolding?.weightPct ?? 0;
-      return (days > 7 && weight > 0.05) || t.conviction === "uncertain";
-    })
-    .map(t => {
-      const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
-      const relatedHolding = ctx.portfolio.holdings.find(h => t.assetKeys.includes(h.assetKey));
-      const weight = relatedHolding ? (relatedHolding.weightPct * 100).toFixed(1) + "%" : "?";
-      return `⚠️ ${t.assetKeys.join(",")} 权重${weight} 已${days}天未更新 conviction=${t.conviction}`;
-    });
+  // P1-2: 预计算认知缺口标注 — 按 (thesis × asset) 展开成每条单一 assetKey，防止 LLM 回填多资产联合字符串
+  const gapWarnings: string[] = [];
+  for (const t of ctx.theses) {
+    const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+    for (const assetKey of t.assetKeys) {
+      const holding = ctx.portfolio.holdings.find(h => h.assetKey === assetKey);
+      const weight = holding?.weightPct ?? 0;
+      // 硬门槛：权重 > 5% 且 超过 7 天未更新，或 conviction=uncertain 且有持仓
+      const staleMatch = days > 7 && weight > 0.05;
+      const uncertainMatch = t.conviction === "uncertain" && weight > 0;
+      if (!staleMatch && !uncertainMatch) continue;
+      gapWarnings.push(
+        `⚠️ assetKey=${assetKey} 权重${(weight * 100).toFixed(1)}% 已${days}天未更新 conviction=${t.conviction} thesis="${sanitizeForPrompt(t.title, 40)}"`,
+      );
+    }
+  }
   const gapWarningText = gapWarnings.length > 0
-    ? `\n## 系统检测到的认知缺口（必须包含在输出中）\n${gapWarnings.join("\n")}`
+    ? `\n## 系统检测到的认知缺口（必须包含在输出中，每行对应一个 assetKey）\n${gapWarnings.join("\n")}`
     : "";
 
   return `你是一个投资研究操作系统的「日报编辑」。请基于今日调查结果生成一份简报。
@@ -336,7 +338,7 @@ ${prevBriefingText}
 ## 任务
 生成三类输出：
 1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 和工具调用结果中总结，如果没有则说明市场与预期一致）
-2. **认知缺口**：哪些持仓权重高（>5%）但论点久未更新（>7天）或 conviction 为 uncertain。系统已预检测，请确保输出包含所有标注的缺口。
+2. **认知缺口**：必须严格对应上面"系统检测到的认知缺口"清单中的每个 assetKey；如果清单为空就输出空数组 []，不要凭空生成。每条的 assetKey 必须是单个资产（格式 \`MARKET::SYMBOL\`，禁止用逗号拼接多资产）。
 3. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
 
 ## 输出格式（严格 JSON）
@@ -346,7 +348,7 @@ ${prevBriefingText}
     { "title": "意外标题", "description": "描述", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "建议" }
   ],
   "cognitionGaps": [
-    { "assetKey": "US:NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 30, "uncertaintyReason": "原因", "suggestedInvestigation": "建议" }
+    { "assetKey": "US::NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 30, "uncertaintyReason": "原因", "suggestedInvestigation": "建议" }
   ],
   "mindChangeConditions": [
     { "thesisTitle": "论点标题", "currentConviction": "high", "conditions": ["条件1"], "monitoringIndicators": ["VIX"] }
@@ -358,7 +360,7 @@ ${prevBriefingText}
 \`\`\`json
 {
   "surprises": [{"title": "黄金突破历史新高", "description": "GLD单日涨幅3.2%，突破$2100，与美元走强矛盾", "relatedThesisId": null, "severityScore": 8, "suggestedAction": "检查避险资产配置是否充足"}],
-  "cognitionGaps": [{"assetKey": "US:NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 22, "uncertaintyReason": "AI芯片竞争格局快速变化", "suggestedInvestigation": "对比AMD MI300X最新benchmark数据"}],
+  "cognitionGaps": [{"assetKey": "US::NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 22, "uncertaintyReason": "AI芯片竞争格局快速变化", "suggestedInvestigation": "对比AMD MI300X最新benchmark数据"}],
   "mindChangeConditions": [{"thesisTitle": "美股科技股长期看多", "currentConviction": "high", "conditions": ["VIX持续30+超过10个交易日", "10Y国债收益率突破5.5%"], "monitoringIndicators": ["VIX", "TNX"]}]
 }
 \`\`\`
@@ -616,6 +618,45 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     for (const m of briefing.mindChangeConditions.slice(0, 3)) {
       lines.push(`• "${m.thesisTitle}" (${m.currentConviction})`);
       lines.push(`  改变条件: ${m.conditions.slice(0, 2).join("; ")}`);
+    }
+    lines.push("");
+  }
+
+  // ── 风险暴露（论点失效的组合影响） ──
+  const failureImpacts = briefing.thesisFailureImpacts ?? [];
+  if (failureImpacts.length > 0) {
+    // 只展示 medium 及以上 riskLevel，按估损从高到低
+    const ranked = [...failureImpacts]
+      .filter(i => i.riskLevel === "medium" || i.riskLevel === "high" || i.riskLevel === "critical")
+      .sort((a, b) => b.estimatedLossPct - a.estimatedLossPct)
+      .slice(0, 3);
+    if (ranked.length > 0) {
+      lines.push("<b>\u{26A0}\u{FE0F} 风险暴露</b>");
+      for (const i of ranked) {
+        const levelLabel = i.riskLevel === "critical" ? "严重" : i.riskLevel === "high" ? "高" : "中";
+        const assets = i.affectedAssets.slice(0, 3).map(a => a.assetKey).join(", ");
+        lines.push(`• [${levelLabel}] "${i.thesisTitle}" (${i.conviction})`);
+        lines.push(`  暴露 ${(i.totalExposurePct * 100).toFixed(1)}% · 预估损失 ${(i.estimatedLossPct * 100).toFixed(1)}% · ${assets}`);
+      }
+      lines.push("");
+    }
+  }
+
+  // ── 论点冲突 ──
+  const conflicts = briefing.thesisConflicts ?? [];
+  if (conflicts.length > 0) {
+    const ranked = [...conflicts]
+      .sort((a, b) => {
+        const rank = (s: string) => s === "high" ? 2 : s === "medium" ? 1 : 0;
+        return rank(b.severity) - rank(a.severity);
+      })
+      .slice(0, 3);
+    lines.push("<b>\u{26A1} 论点冲突</b>");
+    for (const c of ranked) {
+      const sevLabel = c.severity === "high" ? "高" : c.severity === "medium" ? "中" : "低";
+      const assets = c.overlappingAssets.slice(0, 3).join(", ");
+      lines.push(`• [${sevLabel}] "${c.thesisA.title}" (${c.thesisA.conviction}) × "${c.thesisB.title}" (${c.thesisB.conviction})`);
+      lines.push(`  冲突资产: ${assets}`);
     }
     lines.push("");
   }

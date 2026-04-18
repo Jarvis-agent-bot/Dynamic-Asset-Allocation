@@ -12,6 +12,29 @@ import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
+
+/** 筛除 LLM 胡编的 cognitionGap：assetKey 必须是单个规范 key，权重和天数必须达阈值。 */
+function sanitizeCognitionGaps(
+  raw: CognitionGap[],
+  portfolio: { holdings: Array<{ assetKey: string; weightPct: number }> },
+): CognitionGap[] {
+  return raw.filter(g => {
+    if (!g || typeof g.assetKey !== "string") return false;
+    // 拒绝逗号拼接的多资产 key
+    if (g.assetKey.includes(",")) return false;
+    // 必须能解析为 MARKET::SYMBOL
+    if (!parseDaaAssetKey(g.assetKey)) return false;
+    // 硬门槛：权重 > 5% 或 缺口天数 ≥ 7 天；两者都不满足就视为 LLM 凑数
+    const weight = g.portfolioWeight ?? 0;
+    const days = g.daysSinceLastInvestigation ?? 0;
+    if (weight < 0.05 && days < 7) return false;
+    // 如果有持仓，权重要和 portfolio 一致（容忍 2% 误差），防止 LLM 把 87.5% 写成 87.5 之类
+    const holding = portfolio.holdings.find(h => h.assetKey === g.assetKey);
+    if (holding && Math.abs(holding.weightPct - weight) > 0.02) return false;
+    return true;
+  });
+}
 
 export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
@@ -68,6 +91,11 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
           if (!Array.isArray(data.cognitionGaps)) data.cognitionGaps = [];
           if (!Array.isArray(data.mindChangeConditions)) data.mindChangeConditions = [];
         }
+        // 筛除 LLM 胡编的 cognitionGap（单 key 校验 + 阈值校验 + 权重一致性）
+        data.cognitionGaps = sanitizeCognitionGaps(
+          data.cognitionGaps,
+          state.portfolio ?? { holdings: [] },
+        );
       }
     }
 
@@ -150,7 +178,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         const advisorPrompt = buildStrategyAdvisorPrompt({
           holdings: portfolio.holdings.map(h => ({
             assetKey: h.assetKey,
-            symbol: h.assetKey.split(":").pop() ?? h.assetKey,
+            symbol: parseDaaAssetKey(h.assetKey)?.symbol ?? h.assetKey,
             weightPct: h.weightPct,
             price: h.lastPrice ?? 0,
           })),
