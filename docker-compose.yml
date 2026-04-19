@@ -26,7 +26,34 @@ services:
       - "127.0.0.1:3000:3000"
     depends_on:
       - postgres
+      - ollama
     restart: unless-stopped
+
+  ollama:
+    # 本地 embedding 模型（BGE-M3, 1024 维，与 pgvector schema 对齐）
+    # 首次启动后需要 `docker exec daa-ollama ollama pull bge-m3`
+    # 或使用下方 ollama-init 服务自动拉取。
+    image: ollama/ollama:latest
+    container_name: daa-ollama
+    restart: unless-stopped
+    volumes:
+      - daa-ollama-data:/root/.ollama
+    # 内部通信用，不暴露到宿主外
+    expose:
+      - "11434"
+
+  ollama-init:
+    # 一次性服务：等待 ollama ready 后 pull bge-m3 模型
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "until OLLAMA_HOST=http://ollama:11434 ollama list >/dev/null 2>&1; do
+         echo 'waiting for ollama...' && sleep 2;
+       done;
+       OLLAMA_HOST=http://ollama:11434 ollama pull bge-m3 && echo 'bge-m3 ready'"
+    restart: "no"
 
   daa-cron:
     image: alpine:3.19
@@ -49,6 +76,7 @@ services:
         echo '30 1 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/dividend-refresh' >> /etc/crontabs/root &&
         echo '*/30 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/health-check' >> /etc/crontabs/root &&
         echo '0 * * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/cognitive-agent' >> /etc/crontabs/root &&
+        echo '40 3 * * * curl -sf -X POST -H \"x-daa-cron-token: $$DAA_CRON_TOKEN\" http://daa-web:3000/api/daa/cron/entity-backfill' >> /etc/crontabs/root &&
         crond -f -L /dev/stdout
       "
 
@@ -66,3 +94,4 @@ services:
 
 volumes:
   daa-postgres-data:
+  daa-ollama-data:

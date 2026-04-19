@@ -6,7 +6,7 @@ import {
   DaaSurfaceDialogShell,
   DaaSurfaceStatusPill,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { AssetKlineChart } from "@/app/daa/dashboard/workbench/_components/AssetKlineChart";
+import { AssetKlineChart } from "@/app/daa/dashboard/_shared/AssetKlineChart";
 
 export type AssetDetailDraft = {
   symbol: string;

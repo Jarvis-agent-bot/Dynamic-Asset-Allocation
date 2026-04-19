@@ -337,7 +337,7 @@ ${prevBriefingText}
 
 ## 任务
 生成三类输出：
-1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 和工具调用结果中总结，如果没有则说明市场与预期一致）
+1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 和工具调用结果中总结）。如果没有实质性意外，**必须**返回空数组 \`[]\`，**不要**生成"市场与预期一致"等占位条目；系统会在输出为空时自动展示 fallback 文案。仅当 severityScore >= 3 的真实矛盾信息才值得输出。
 2. **认知缺口**：必须严格对应上面"系统检测到的认知缺口"清单中的每个 assetKey；如果清单为空就输出空数组 []，不要凭空生成。每条的 assetKey 必须是单个资产（格式 \`MARKET::SYMBOL\`，禁止用逗号拼接多资产）。
 3. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
 
@@ -631,12 +631,14 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
       .sort((a, b) => b.estimatedLossPct - a.estimatedLossPct)
       .slice(0, 3);
     if (ranked.length > 0) {
-      lines.push("<b>\u{26A0}\u{FE0F} 风险暴露</b>");
+      lines.push("<b>\u{26A0}\u{FE0F} 风险暴露</b> <i>(论点失效的假设情景)</i>");
       for (const i of ranked) {
         const levelLabel = i.riskLevel === "critical" ? "严重" : i.riskLevel === "high" ? "高" : "中";
         const assets = i.affectedAssets.slice(0, 3).map(a => a.assetKey).join(", ");
+        // lossMultiplier: high=0.5, medium=0.3 (代码约定的经验系数, 非 VaR)
+        const lossMult = i.conviction === "high" ? "50%" : "30%";
         lines.push(`• [${levelLabel}] "${i.thesisTitle}" (${i.conviction})`);
-        lines.push(`  暴露 ${(i.totalExposurePct * 100).toFixed(1)}% · 预估损失 ${(i.estimatedLossPct * 100).toFixed(1)}% · ${assets}`);
+        lines.push(`  暴露 ${(i.totalExposurePct * 100).toFixed(1)}% · 若失效估损 ${(i.estimatedLossPct * 100).toFixed(1)}% (暴露×${lossMult}) · ${assets}`);
       }
       lines.push("");
     }

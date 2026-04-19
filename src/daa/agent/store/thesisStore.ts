@@ -59,7 +59,7 @@ export async function createResearchThread(data: {
   assetKeys?: string[];
   tags?: string[];
 }): Promise<ResearchThread> {
-  return withDaaPgClient(async ({ query }) => {
+  const created = await withDaaPgClient(async ({ query }) => {
     const id = randomUUID();
     const res = await query(
       `INSERT INTO daa_research_threads (id, title, thesis_text, conviction, invalidation_conditions, review_at, asset_keys, tags)
@@ -78,6 +78,18 @@ export async function createResearchThread(data: {
     );
     return mapThreadRow(res.rows[0]);
   });
+
+  // 实体图：为新 thesis 自动抽取并链接实体（失败不影响主流程）
+  try {
+    const { extractEntitiesFromThesis } = await import("@/src/daa/agent/entities/entityExtractor");
+    const { upsertAndLinkForThesis } = await import("@/src/daa/agent/entities/entityStore");
+    const entities = extractEntitiesFromThesis(created);
+    await upsertAndLinkForThesis(created.id, entities);
+  } catch (e) {
+    logSwallowed("thesisStore.createResearchThread.entityLink", e);
+  }
+
+  return created;
 }
 
 export async function getActiveTheses(): Promise<ResearchThread[]> {
@@ -86,6 +98,27 @@ export async function getActiveTheses(): Promise<ResearchThread[]> {
       `SELECT * FROM daa_research_threads WHERE status = 'active' ORDER BY priority_score DESC, updated_at DESC`,
     );
     return res.rows.map(mapThreadRow);
+  });
+}
+
+/**
+ * 归档超过 staleDays 天未更新的 uncertain thesis。
+ * prioritizeNode 会为驱动调查创建 conviction=uncertain 的临时 thesis，如果长时间没被 investigate 节点转正，
+ * 它们会在冲突检测、认知缺口等下游产生噪声。此函数在每次 observe 时清扫一次。
+ * 返回归档的 thesis id 列表，便于日志观察。
+ */
+export async function archiveStaleUncertainTheses(staleDays = 7): Promise<string[]> {
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query<{ id: string }>(
+      `UPDATE daa_research_threads
+       SET status = 'archived', updated_at = now()
+       WHERE status = 'active'
+         AND conviction = 'uncertain'
+         AND updated_at < now() - (interval '1 day' * $1)
+       RETURNING id`,
+      [staleDays],
+    );
+    return res.rows.map(r => r.id);
   });
 }
 
@@ -249,6 +282,56 @@ export async function getReviewsByThreadId(threadId: string): Promise<Array<{
       lessonsLearned: r.lessons_learned ? String(r.lessons_learned) : null,
       createdAt: String(r.created_at),
     }));
+  });
+}
+
+/**
+ * 关键字搜索证据链条（跨论点）。
+ * 用于 Agent 自查"我之前在哪里推理过 XX"，pg_trgm 子串匹配。
+ */
+export async function searchEvidenceByKeyword(
+  keyword: string,
+  opts: { limit?: number; minSimilarity?: number } = {},
+): Promise<Array<EvidenceItem & { threadId: string; threadTitle: string }>> {
+  const limit = opts.limit ?? 10;
+  const minSim = opts.minSimilarity ?? 0.1;
+  const kw = keyword.trim();
+  if (!kw) return [];
+  return withDaaPgClient(async ({ query }) => {
+    try {
+      const res = await query(
+        `SELECT e.*, t.title AS thread_title, similarity(e.content, $1) AS sim
+         FROM daa_evidence_items e
+         JOIN daa_research_threads t ON t.id = e.thread_id
+         WHERE e.content % $1
+         ORDER BY sim DESC, e.created_at DESC
+         LIMIT $2`,
+        [kw, limit],
+      );
+      return res.rows
+        .filter(r => Number(r.sim ?? 0) >= minSim)
+        .map(r => ({
+          ...mapEvidenceRow(r),
+          threadId: String(r.thread_id),
+          threadTitle: String(r.thread_title ?? ""),
+        }));
+    } catch (e) {
+      logSwallowed("thesisStore.searchEvidenceTrgm", e);
+      const res = await query(
+        `SELECT e.*, t.title AS thread_title
+         FROM daa_evidence_items e
+         JOIN daa_research_threads t ON t.id = e.thread_id
+         WHERE e.content ILIKE $1
+         ORDER BY e.created_at DESC
+         LIMIT $2`,
+        [`%${kw}%`, limit],
+      );
+      return res.rows.map(r => ({
+        ...mapEvidenceRow(r),
+        threadId: String(r.thread_id),
+        threadTitle: String(r.thread_title ?? ""),
+      }));
+    }
   });
 }
 

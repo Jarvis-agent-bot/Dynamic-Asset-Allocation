@@ -59,7 +59,7 @@ app/
 │   ├── trades/                 # 交易记录 — 周期、订单、复盘
 │   ├── strategy-lab/           # 策略实验室 — 回测
 │   ├── settings/               # 设置 — 策略、风控、数据源、通知
-│   └── workbench/_components/  # 共享组件与 hooks（历史目录名，组件已重命名）
+│   └── _shared/                # 跨页面复用的业务 UI 组件（PortfolioStatus / AssetKlineChart / rebalance/ 等）
 
 src/
 ├── core/                       # Pure algorithm layer (no side effects, fully testable)
@@ -148,12 +148,15 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 - 每个 prompt 包含 few-shot JSON 示例
 - 新 thesis 创建前去重检查（assetKeys + 标题子串匹配）
 
-**数据模型**（5 张表）：
+**数据模型**（8 张表）：
 - `daa_research_threads` — 研究论点
-- `daa_evidence_items` — 证据链
+- `daa_evidence_items` — 证据链（pg_trgm 子串索引，供 `search_past_reasoning` 工具）
 - `daa_agent_runs` — 运行记录（含完整 briefing JSONB）
-- `daa_agent_memory` — 长期记忆（pgvector 1024 维，Hebbian 增强 + 指数衰减）
+- `daa_agent_memory` — 长期记忆（pgvector 1024 维 + pg_trgm 子串索引，Hebbian 增强 + 指数衰减）
 - `daa_thesis_reviews` — 决策复盘
+- `daa_agent_entity` — 实体主表（asset / thesis_id / regime / ticker / news_source / strategy_tag）
+- `daa_memory_entity_link` — 记忆 ↔ 实体（many-to-many，weight 越高越紧密）
+- `daa_thesis_entity_link` — 论点 ↔ 实体
 
 **五类输出**（DailyBriefing）：
 1. **今日意外** — 最不符合现有认知的市场变化（severity 1-10）
@@ -167,6 +170,17 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 - **衰减**: 每个 cycle 开始时 `strength *= decayRate^days_since_last_access`（默认 0.97/天，约 23 天半衰期）
 - **归档**: `strength < 0.05` 的记忆不参与召回，但仍可在 Memory Browser 中查看
 - **关联**: 创建时 `relevanceTags` 包含 threadId，召回时优先匹配关联 thesis
+
+**三路召回**（investigateNode ReAct 前一次性并行）：
+1. **pgvector 语义**：BGE-M3 1024d 余弦相似度，按 `similarity × strength` 排序
+2. **pg_trgm 关键字**（`recallMemoryHybrid`）：从 `thread.assetKeys` 抽 ticker 子串匹配，命中精确 ticker / 数字 / 术语
+3. **实体图**：`thread.assetKeys` → `daa_memory_entity_link` JOIN，补位同资产历史记忆
+
+**实体图**：6 种 kind 自动抽取
+- `asset`（US::NVDA）、`ticker`（NVDA）、`thesis_id`（UUID）、`regime`（risk_off/on/transitional）
+- `news_source`（reuters/bloomberg/wsj/ft/cnbc/xueqiu/finnhub/yahoo/sec_filing）、`strategy_tag`（thesis.tags）
+- 抽取内嵌于 `createMemory` / `createResearchThread`，所有调用方自动获得链接
+- Agent tool `query_entity_history(kind, value)` 回答"关于 NVDA 学到过什么"类查询
 
 **API**：
 - `POST /api/daa/agent/run` — 手动触发 Agent 循环
@@ -320,8 +334,11 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Thesis Bootstrap | `src/daa/agent/bootstrap.ts` |
 | Embedding (1024d) | `src/daa/agent/embedding.ts` |
 | Agent Tool 注册表（V2 动态自注册） | `src/daa/agent/tools/registry.ts` |
-| Agent Tool 定义（14 工具） | `src/daa/agent/tools/index.ts` |
+| Agent Tool 定义（16 工具） | `src/daa/agent/tools/index.ts` |
 | Agent 学习记忆 | `src/daa/agent/agentLearningRepo.ts` |
+| **Episodic 关键字搜索** (pg_trgm) | `searchMemoriesByKeyword` in `memoryStore.ts`、`searchEvidenceByKeyword` in `thesisStore.ts` |
+| **实体图抽取** | `src/daa/agent/entities/entityExtractor.ts` |
+| **实体图存储** | `src/daa/agent/entities/entityStore.ts` |
 | 信号概览（insights 展示用） | `src/daa/signals/fusion.ts` |
 | 交易反馈闭环 | `src/daa/agent/tradeOutcomeFeedback.ts` |
 
@@ -380,6 +397,7 @@ const execution = await runLoggedJob({
 | Cache cleanup | 8:20pm UTC | Stale data removal |
 | Health check | Every 30 min | 检查 price-refresh/indicators 是否正常，失败时 TG 告警 |
 | Cognitive Agent | Hourly (自门控) | 研究论点调查循环（按 Settings 配置的 schedule + scheduleTimesUtc 自门控） |
+| Entity backfill | Daily 3:40am UTC | 为存量记忆/论点补齐实体图（幂等，每次最多 200+200 条） |
 
 ## Chat/Agent 架构
 
@@ -445,9 +463,18 @@ Configured via Settings page or `daa_system_config_v2` in database.
 
 ```
 docker-compose.yml
-├── daa-web      Next.js app (port 3000, behind nginx reverse proxy)
-├── daa-cron     Alpine + crond (curl 调 daa-web API，用 DAA_CRON_TOKEN 认证)
-└── postgres     pgvector:pg16 (port 15432, volume: daa-postgres-data)
+├── daa-web       Next.js app (port 3000, behind nginx reverse proxy)
+├── daa-cron      Alpine + crond (curl 调 daa-web API，用 DAA_CRON_TOKEN 认证)
+├── postgres      pgvector:pg16 + pg_trgm (port 15432, volume: daa-postgres-data)
+├── ollama        本地 embedding（BGE-M3 1024d, 内部 11434, volume: daa-ollama-data）
+└── ollama-init   一次性：拉取 bge-m3 模型（首启后自动退出）
+```
+
+**启用本地 embedding**：
+```
+DAA_EMBEDDING_PROVIDER=ollama
+# 无需 API Key；docker compose up 后 ollama-init 会自动 pull bge-m3
+# 手动触发：docker exec daa-ollama ollama pull bge-m3
 ```
 
 **关键环境变量**（`.env` 文件）：

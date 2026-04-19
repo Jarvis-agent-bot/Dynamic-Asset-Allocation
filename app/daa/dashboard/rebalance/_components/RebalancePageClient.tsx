@@ -8,13 +8,13 @@ import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPa
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
-import { DashboardNotificationBar } from "@/app/daa/dashboard/workbench/_components/DashboardNotificationBar";
-import { DashboardDialogs } from "@/app/daa/dashboard/workbench/_components/DashboardDialogs";
-import { RebalanceProposalList } from "@/app/daa/dashboard/workbench/_components/rebalance/RebalanceProposalList";
-import { WhatIfPreview } from "@/app/daa/dashboard/workbench/_components/rebalance/WhatIfPreview";
-import { DriftBarChart } from "@/app/daa/dashboard/workbench/_components/rebalance/DriftBarChart";
+import { DashboardNotificationBar } from "@/app/daa/dashboard/_shared/DashboardNotificationBar";
+import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
+import { RebalanceProposalList } from "@/app/daa/dashboard/_shared/rebalance/RebalanceProposalList";
+import { WhatIfPreview } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
+import { DriftBarChart } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
 // 历史周期已移至交易记录页
-import { MarketIndicatorDashboard } from "@/app/daa/dashboard/workbench/_components/MarketIndicatorDashboard";
+import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndicatorDashboard";
 
 import { QuickConfigPopover } from "./QuickConfigPopover";
 import { MarketContextCard } from "./MarketContextCard";

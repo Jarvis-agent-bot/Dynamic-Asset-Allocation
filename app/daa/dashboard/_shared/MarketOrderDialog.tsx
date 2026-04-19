@@ -17,7 +17,7 @@ import {
   daaSurfaceFieldClassName,
   daaSurfaceMonoPanelClassName,
   daaSurfaceSubtlePanelClassName,
-} from "../../_components/DaaSurfaceUI";
+} from "../_components/DaaSurfaceUI";
 
 function formatMaybeAmount(currency: string, value: number | null | undefined, digits = 4): string {
   if (value == null || !Number.isFinite(value)) return `${currency} --`;

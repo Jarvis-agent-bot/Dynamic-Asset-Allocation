@@ -9,7 +9,7 @@ import { useAssistantChat } from "@/app/daa/dashboard/_hooks/useAssistantChat";
 import { useDashboardModel } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
-import type { AssetDetailDraft } from "@/app/daa/dashboard/workbench/_components/AssetDetailDialog";
+import type { AssetDetailDraft } from "@/app/daa/dashboard/_shared/AssetDetailDialog";
 
 export type PendingConfirm =
   | { type: "cancelCycle" }

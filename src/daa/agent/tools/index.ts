@@ -50,10 +50,12 @@ import "@/src/daa/agent/tools/analyze/backtestThesis";
 import "@/src/daa/agent/tools/analyze/computeCorrelation";
 import "@/src/daa/agent/tools/analyze/simulateRebalance";
 
-// meta 类（3 个，新增）
+// meta 类（5 个）
 import "@/src/daa/agent/tools/meta/queryThesisHistory";
 import "@/src/daa/agent/tools/meta/queryPastDecisions";
 import "@/src/daa/agent/tools/meta/evaluateSelfAccuracy";
+import "@/src/daa/agent/tools/meta/searchPastReasoning";
+import "@/src/daa/agent/tools/meta/queryEntityHistory";
 
 // act 类（2 个，新增，需审批）
 import "@/src/daa/agent/tools/act/suggestTargetWeight";

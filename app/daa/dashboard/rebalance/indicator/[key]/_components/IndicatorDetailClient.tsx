@@ -7,7 +7,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { marketRegimeTone } from "@/app/daa/dashboard/workbench/_components/rebalance/rebalanceLabels";
+import { marketRegimeTone } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 import type { DaaMarketIndicatorSnapshot } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 import { IndicatorChart } from "./IndicatorChart";

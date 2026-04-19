@@ -403,10 +403,12 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-red-300">
             <AlertTriangle className="h-3.5 w-3.5" />
             风险暴露
+            <span className="ml-1 text-[10px] font-normal text-[var(--faint)]">(若论点失效的假设情景)</span>
           </h3>
           <div className="space-y-2">
             {briefing.thesisFailureImpacts!.filter(r => r.riskLevel !== "low").map((r, i) => {
               const riskColor = r.riskLevel === "critical" ? "text-red-400 bg-red-500/20" : r.riskLevel === "high" ? "text-orange-400 bg-orange-500/20" : "text-amber-400 bg-amber-500/20";
+              const lossMult = r.conviction === "high" ? "50%" : "30%";
               return (
                 <div key={i} className="flex items-center justify-between text-xs">
                   <div className="min-w-0 flex-1">
@@ -415,8 +417,11 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[var(--faint)]">暴露 {(r.totalExposurePct * 100).toFixed(1)}%</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${riskColor}`}>
-                      失效 -{(r.estimatedLossPct * 100).toFixed(1)}%
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${riskColor}`}
+                      title={`估损 = 暴露 × ${lossMult} (${r.conviction} conviction 经验系数, 非 VaR)`}
+                    >
+                      估损 -{(r.estimatedLossPct * 100).toFixed(1)}%
                     </span>
                   </div>
                 </div>

@@ -2,7 +2,7 @@
 
 import { Dialog } from "@/components/ui/dialog";
 import { DaaSurfaceDialogShell, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { signalActionLabel } from "@/app/daa/dashboard/workbench/_components/rebalance/rebalanceLabels";
+import { signalActionLabel } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 
 // ---------------------------------------------------------------------------
 // Types

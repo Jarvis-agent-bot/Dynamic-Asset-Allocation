@@ -13,7 +13,7 @@ import {
   DaaSurfaceStatusPill,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { PerformanceChart } from "@/app/daa/dashboard/workbench/_components/PerformanceChart";
+import { PerformanceChart } from "@/app/daa/dashboard/_shared/PerformanceChart";
 import { cn } from "@/lib/utils";
 
 const PIE_COLORS = ["#38BDF8", "#818CF8", "#34D399", "#F6AD55", "#F87171", "#A78BFA"];

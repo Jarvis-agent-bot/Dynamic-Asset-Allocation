@@ -173,15 +173,15 @@ describe("全量工具注册", () => {
     _clearRegistryForTest();
   });
 
-  it("导入 index.ts 后注册 14 个工具", async () => {
+  it("导入 index.ts 后注册 16 个工具", async () => {
     // 动态导入触发自注册
     await import("@/src/daa/agent/tools/index");
-    expect(getRegisteredToolCount()).toBe(14);
+    expect(getRegisteredToolCount()).toBe(16);
 
     // 验证各 category 数量
     expect(getToolsByCategory("observe")).toHaveLength(6);
     expect(getToolsByCategory("analyze")).toHaveLength(3);
-    expect(getToolsByCategory("meta")).toHaveLength(3);
+    expect(getToolsByCategory("meta")).toHaveLength(5);
     expect(getToolsByCategory("act")).toHaveLength(2);
   });
 

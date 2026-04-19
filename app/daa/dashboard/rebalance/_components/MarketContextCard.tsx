@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { marketRegimeLabel, marketRegimeTone } from "@/app/daa/dashboard/workbench/_components/rebalance/rebalanceLabels";
+import { marketRegimeLabel, marketRegimeTone } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 function regimeEmoji(regime: string): string {

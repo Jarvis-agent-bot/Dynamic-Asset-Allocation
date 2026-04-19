@@ -95,6 +95,7 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
               content: data.lesson,
               relevanceTags: thread.tags,
               embedding: emb,
+              thread: { id: thread.id, assetKeys: thread.assetKeys, tags: thread.tags },
             });
           }
 

@@ -27,8 +27,10 @@ export async function createMemory(data: {
   sourceRunIds?: string[];
   relevanceTags?: string[];
   embedding?: number[];
+  /** 可选：关联的 thesis（用于实体图的 asset/ticker 抽取） */
+  thread?: { id: string; assetKeys?: string[]; tags?: string[] };
 }): Promise<AgentMemory> {
-  return withDaaPgClient(async ({ query }) => {
+  const created = await withDaaPgClient(async ({ query }) => {
     const id = randomUUID();
     const embeddingStr = data.embedding ? `[${data.embedding.join(",")}]` : null;
     const res = await query(
@@ -39,6 +41,22 @@ export async function createMemory(data: {
     );
     return mapMemoryRow(res.rows[0]);
   });
+
+  // 实体图：抽取并链接（失败不影响主流程）
+  try {
+    const { extractEntitiesFromMemory } = await import("@/src/daa/agent/entities/entityExtractor");
+    const { upsertAndLinkForMemory } = await import("@/src/daa/agent/entities/entityStore");
+    const entities = extractEntitiesFromMemory({
+      content: data.content,
+      relevanceTags: data.relevanceTags,
+      thread: data.thread,
+    });
+    await upsertAndLinkForMemory(created.id, entities);
+  } catch (e) {
+    logSwallowed("memoryStore.createMemory.entityLink", e);
+  }
+
+  return created;
 }
 
 /**
@@ -103,6 +121,83 @@ export async function recallMemory(opts: {
     );
     return res.rows.map(mapMemoryRow);
   });
+}
+
+/**
+ * 关键字搜索：通过 pg_trgm 子串相似度搜索记忆内容。
+ * 与 recallMemory 互补：向量召回靠语义，trigram 召回靠精确 ticker/数字/术语。
+ * 结果按 similarity × strength 排序。
+ */
+export async function searchMemoriesByKeyword(
+  keyword: string,
+  opts: { limit?: number; minSimilarity?: number } = {},
+): Promise<AgentMemory[]> {
+  const limit = opts.limit ?? 10;
+  const minSim = opts.minSimilarity ?? 0.1;
+  const kw = keyword.trim();
+  if (!kw) return [];
+  return withDaaPgClient(async ({ query }) => {
+    try {
+      const res = await query(
+        `SELECT *, similarity(content, $1) AS sim
+         FROM daa_agent_memory
+         WHERE content % $1 AND strength >= 0.05
+         ORDER BY sim * strength DESC
+         LIMIT $2`,
+        [kw, limit],
+      );
+      return res.rows
+        .filter(r => Number(r.sim ?? 0) >= minSim)
+        .map(mapMemoryRow);
+    } catch (e) {
+      // pg_trgm 未安装时降级到 ILIKE
+      logSwallowed("memoryStore.trgmSearch", e);
+      const res = await query(
+        `SELECT * FROM daa_agent_memory
+         WHERE content ILIKE $1 AND strength >= 0.05
+         ORDER BY strength DESC
+         LIMIT $2`,
+        [`%${kw}%`, limit],
+      );
+      return res.rows.map(mapMemoryRow);
+    }
+  });
+}
+
+/**
+ * 混合召回：向量 + 关键字并行，合并去重后返回。
+ * 向量优先（保留 top vectorLimit），关键字补位直到 totalLimit。
+ */
+export async function recallMemoryHybrid(opts: {
+  queryEmbedding?: number[];
+  keywords?: string[];
+  tags?: string[];
+  vectorLimit?: number;
+  totalLimit?: number;
+}): Promise<AgentMemory[]> {
+  const totalLimit = opts.totalLimit ?? 5;
+  const vectorLimit = opts.vectorLimit ?? totalLimit;
+
+  const [vectorHits, keywordHits] = await Promise.all([
+    recallMemory({
+      queryEmbedding: opts.queryEmbedding,
+      tags: opts.tags,
+      limit: vectorLimit,
+    }),
+    (opts.keywords && opts.keywords.length > 0)
+      ? Promise.all(opts.keywords.map(k => searchMemoriesByKeyword(k, { limit: totalLimit })))
+          .then(arr => arr.flat())
+      : Promise.resolve<AgentMemory[]>([]),
+  ]);
+
+  // 合并去重（向量优先）
+  const merged = new Map<string, AgentMemory>();
+  for (const m of vectorHits) merged.set(m.id, m);
+  for (const m of keywordHits) {
+    if (merged.size >= totalLimit) break;
+    if (!merged.has(m.id)) merged.set(m.id, m);
+  }
+  return Array.from(merged.values()).slice(0, totalLimit);
 }
 
 export async function updateMemoryStrength(id: string, delta: number = 0.1): Promise<void> {

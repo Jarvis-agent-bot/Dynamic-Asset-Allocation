@@ -33,7 +33,7 @@ import {
   daaSurfaceSearchShellClassName,
   daaSurfaceTableHeadClassName,
   daaSurfaceTableShellClassName,
-} from "../../_components/DaaSurfaceUI";
+} from "../_components/DaaSurfaceUI";
 import { FusionScoreBreakdown } from "./FusionScoreBreakdown";
 import { marketRegimeLabel, marketRegimeTone } from "./rebalance";
 

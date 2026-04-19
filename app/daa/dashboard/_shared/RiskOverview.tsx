@@ -1,8 +1,8 @@
 "use client";
 
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { PortfolioRiskPanel } from "@/app/daa/dashboard/workbench/_components/PortfolioRiskPanel";
-import { RebalanceRiskAlerts } from "@/app/daa/dashboard/workbench/_components/rebalance";
+import { PortfolioRiskPanel } from "@/app/daa/dashboard/_shared/PortfolioRiskPanel";
+import { RebalanceRiskAlerts } from "@/app/daa/dashboard/_shared/rebalance";
 import type { DaaStoreEquitySnapshot } from "@/src/daa/store/storeTypes";
 import type {
   PreTradeRiskCheck,

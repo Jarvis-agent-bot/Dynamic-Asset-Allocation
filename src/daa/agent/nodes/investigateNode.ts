@@ -106,13 +106,48 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     const allEvidence: Record<string, unknown> = {};
     let totalTokens = 0;
 
-    // 检索相关记忆（在 ReAct 循环开始前）
+    // 检索相关记忆（在 ReAct 循环开始前）— 三路召回：向量 + 关键字 + 实体图
     const queryEmb = await generateEmbedding(thread.title + " " + thread.thesisText);
-    const memories = await memoryStore.recallMemory({
-      queryEmbedding: queryEmb,
-      tags: [thread.id, ...thread.tags],
-      limit: state.agentConfig?.memoryRecallLimit ?? 5,
-    });
+    // 从 assetKeys 抽 ticker 作为关键字（精确匹配优先）
+    const tickerKeywords = thread.assetKeys
+      .map(k => k.split("::")[1]?.split(".")[0])
+      .filter((v): v is string => !!v);
+    const recallLimit = state.agentConfig?.memoryRecallLimit ?? 5;
+
+    // 实体图召回：优先拉取关联到当前 thesis 的 asset 实体上的历史记忆
+    const entityMemPromise = (async () => {
+      try {
+        const { getMemoriesByEntity } = await import("@/src/daa/agent/entities/entityStore");
+        const results = await Promise.all(
+          thread.assetKeys.slice(0, 3).map(key =>
+            getMemoriesByEntity("asset", key, 3),
+          ),
+        );
+        return results.flat();
+      } catch (e) {
+        logSwallowed("cognitiveGraph.investigate.entityRecall", e);
+        return [];
+      }
+    })();
+
+    const [baseMemories, entityMems] = await Promise.all([
+      memoryStore.recallMemoryHybrid({
+        queryEmbedding: queryEmb,
+        keywords: tickerKeywords,
+        tags: [thread.id, ...thread.tags],
+        vectorLimit: recallLimit,
+        totalLimit: recallLimit,
+      }),
+      entityMemPromise,
+    ]);
+
+    // 合并去重（base 优先）
+    const memMap = new Map(baseMemories.map(m => [m.id, m]));
+    for (const m of entityMems) {
+      if (memMap.size >= recallLimit + 2) break; // 实体召回最多补 2 条
+      if (!memMap.has(m.id)) memMap.set(m.id, m);
+    }
+    const memories = Array.from(memMap.values()).slice(0, recallLimit + 2);
 
     // V2: 工具执行上下文（注入 state-dependent 数据，所有 V2 工具共享）
     const toolExecCtx: ToolExecutionContext = {
@@ -298,6 +333,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
           content,
           relevanceTags: [thread.id, ...thread.tags],
           embedding: emb,
+          thread: { id: thread.id, assetKeys: thread.assetKeys, tags: thread.tags },
         });
         observationMemCount = 1;
       } catch (e) {

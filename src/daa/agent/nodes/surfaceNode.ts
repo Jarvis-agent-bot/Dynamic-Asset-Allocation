@@ -14,12 +14,12 @@ import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 
-/** 筛除 LLM 胡编的 cognitionGap：assetKey 必须是单个规范 key，权重和天数必须达阈值。 */
+/** 筛除 LLM 胡编的 cognitionGap：assetKey 必须是单个规范 key，权重和天数必须达阈值；同 assetKey 去重。 */
 function sanitizeCognitionGaps(
   raw: CognitionGap[],
   portfolio: { holdings: Array<{ assetKey: string; weightPct: number }> },
 ): CognitionGap[] {
-  return raw.filter(g => {
+  const filtered = raw.filter(g => {
     if (!g || typeof g.assetKey !== "string") return false;
     // 拒绝逗号拼接的多资产 key
     if (g.assetKey.includes(",")) return false;
@@ -34,6 +34,15 @@ function sanitizeCognitionGaps(
     if (holding && Math.abs(holding.weightPct - weight) > 0.02) return false;
     return true;
   });
+  // 同 assetKey 只保留 daysSinceLastInvestigation 最大的一条（同一资产可能被多个 thesis 关联，避免日报重复）
+  const bestByAsset = new Map<string, CognitionGap>();
+  for (const g of filtered) {
+    const prev = bestByAsset.get(g.assetKey);
+    if (!prev || (g.daysSinceLastInvestigation ?? 0) > (prev.daysSinceLastInvestigation ?? 0)) {
+      bestByAsset.set(g.assetKey, g);
+    }
+  }
+  return Array.from(bestByAsset.values());
 }
 
 export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
@@ -91,11 +100,13 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
           if (!Array.isArray(data.cognitionGaps)) data.cognitionGaps = [];
           if (!Array.isArray(data.mindChangeConditions)) data.mindChangeConditions = [];
         }
-        // 筛除 LLM 胡编的 cognitionGap（单 key 校验 + 阈值校验 + 权重一致性）
+        // 筛除 LLM 胡编的 cognitionGap（单 key 校验 + 阈值校验 + 权重一致性 + 同 assetKey 去重）
         data.cognitionGaps = sanitizeCognitionGaps(
           data.cognitionGaps,
           state.portfolio ?? { holdings: [] },
         );
+        // P0-3: 过滤"市场与预期一致"等低 severity 占位符，避免日报展示噪声
+        data.surprises = (data.surprises ?? []).filter(s => (s?.severityScore ?? 0) >= 3);
       }
     }
 
@@ -121,19 +132,21 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
       });
     }
 
-    // Feature C: Thesis 冲突检测（代码层 — 资产重叠 + conviction 矛盾）
+    // Feature C: Thesis 冲突检测（代码层 — 资产重叠 + 方向矛盾）
+    // P0-2: uncertain 多为 prioritizeNode 创建的调查型 thesis（如"评估XX"），不是真正的反方观点，需排除
+    const directionalTheses = theses.filter(t => t.conviction !== "uncertain");
     const thesisConflicts: ThesisConflict[] = [];
-    for (let i = 0; i < theses.length; i++) {
-      for (let j = i + 1; j < theses.length; j++) {
-        const a = theses[i];
-        const b = theses[j];
+    for (let i = 0; i < directionalTheses.length; i++) {
+      for (let j = i + 1; j < directionalTheses.length; j++) {
+        const a = directionalTheses[i];
+        const b = directionalTheses[j];
         const overlap = a.assetKeys.filter(k => b.assetKeys.includes(k));
         if (overlap.length === 0) continue;
-        // 方向矛盾：一个 high/medium，另一个 low/uncertain
-        const aPositive = a.conviction === "high" || a.conviction === "medium";
-        const bPositive = b.conviction === "high" || b.conviction === "medium";
-        if (aPositive === bPositive) continue; // 同方向不冲突
-        const severity = overlap.length >= 2 ? "high" : aPositive && a.conviction === "high" ? "high" : "medium";
+        // 方向矛盾：必须是 high/medium 和 low 的真正对立（两边都是看多或都是看空则不冲突）
+        const aBullish = a.conviction === "high" || a.conviction === "medium";
+        const bBullish = b.conviction === "high" || b.conviction === "medium";
+        if (aBullish === bBullish) continue; // 同方向不冲突
+        const severity = overlap.length >= 2 ? "high" : (a.conviction === "high" || b.conviction === "high") ? "high" : "medium";
         thesisConflicts.push({
           thesisA: { id: a.id, title: a.title, conviction: a.conviction },
           thesisB: { id: b.id, title: b.title, conviction: b.conviction },

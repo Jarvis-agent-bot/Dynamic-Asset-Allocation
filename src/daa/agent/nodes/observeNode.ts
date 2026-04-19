@@ -47,6 +47,16 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       logSwallowed("cognitiveGraph.observe.memoryDecay", e);
     }
 
+    // P0-4: 归档超过 7 天未转正的调查型（uncertain）thesis，避免冲突/缺口噪声
+    try {
+      const archivedIds = await thesisStore.archiveStaleUncertainTheses(7);
+      if (archivedIds.length > 0) {
+        logSwallowed("cognitiveGraph.observe.archiveStale", new Error(`archived ${archivedIds.length} stale uncertain theses`));
+      }
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.archiveStale", e);
+    }
+
     const activeTheses = await thesisStore.getActiveTheses();
 
     // 1. 组合数据

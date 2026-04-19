@@ -16,10 +16,10 @@ import {
 import { appendCashLedgerEntry } from "@/src/daa/modules/store/storeApi";
 import { cn } from "@/lib/utils";
 
-import { PortfolioStatus } from "@/app/daa/dashboard/workbench/_components/PortfolioStatus";
-import { ActiveTabPanel } from "@/app/daa/dashboard/workbench/_components/ActiveTabPanel";
-import { DashboardDialogs } from "@/app/daa/dashboard/workbench/_components/DashboardDialogs";
-import { resolveTabFromLocation } from "@/app/daa/dashboard/workbench/_components/dashboardNavigation";
+import { PortfolioStatus } from "@/app/daa/dashboard/_shared/PortfolioStatus";
+import { ActiveTabPanel } from "@/app/daa/dashboard/_shared/ActiveTabPanel";
+import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
+import { resolveTabFromLocation } from "@/app/daa/dashboard/_shared/dashboardNavigation";
 
 export default function PortfolioPageClient(props: { initialTab?: string }) {
   const wbModel = useDashboardPageModel({ initialTab: props.initialTab });

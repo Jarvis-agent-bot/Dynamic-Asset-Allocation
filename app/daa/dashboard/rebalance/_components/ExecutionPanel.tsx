@@ -13,7 +13,7 @@ import {
   riskStatusLabel,
   cycleStatusLabel,
   cycleStatusTone,
-} from "@/app/daa/dashboard/workbench/_components/rebalance/rebalanceLabels";
+} from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 import type { RebalanceCycle, PreTradeRiskCheck } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export function ExecutionPanel(props: {

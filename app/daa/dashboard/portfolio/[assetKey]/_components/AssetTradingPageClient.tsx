@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
-import { AssetKlineChart, type KlineTradeMarker } from "@/app/daa/dashboard/workbench/_components/AssetKlineChart";
+import { AssetKlineChart, type KlineTradeMarker } from "@/app/daa/dashboard/_shared/AssetKlineChart";
 
 import { AssetInfoBar } from "./AssetInfoBar";
 import { SignalDashboard } from "./SignalDashboard";

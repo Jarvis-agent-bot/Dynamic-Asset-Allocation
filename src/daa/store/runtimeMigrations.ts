@@ -795,6 +795,72 @@ const MIGRATIONS_: Migration[] = [
       `);
     },
   },
+  {
+    id: "20260419_pg_trgm_episodic",
+    async apply(query) {
+      // pg_trgm 全文子串索引 — 为 Agent 记忆和证据内容提供关键字搜索能力
+      // 与 pgvector 语义搜索互补：向量召回靠语义，trigram 召回靠精确 ticker/数字/术语
+      await query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_agent_memory_content_trgm
+           ON daa_agent_memory USING gin (content gin_trgm_ops)`,
+      );
+      if (await tableExists(query, "daa_evidence_items")) {
+        await query(
+          `CREATE INDEX IF NOT EXISTS idx_evidence_content_trgm
+             ON daa_evidence_items USING gin (content gin_trgm_ops)`,
+        );
+      }
+    },
+  },
+  {
+    id: "20260419_entity_graph",
+    async apply(query) {
+      // 实体图：assetKey / thesis_id / regime / ticker / news_source / strategy_tag
+      // 每个 entity 可被多条 memory / thesis 引用，用于"关于 X 学到了什么"查询
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_agent_entity (
+          id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          kind          TEXT NOT NULL,
+          value         TEXT NOT NULL,
+          display_name  TEXT,
+          first_seen    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_seen     TIMESTAMPTZ NOT NULL DEFAULT now(),
+          mention_count INT NOT NULL DEFAULT 1,
+          UNIQUE (kind, value)
+        )
+      `);
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_entity_kind_value ON daa_agent_entity (kind, value)`,
+      );
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_memory_entity_link (
+          memory_id  TEXT NOT NULL REFERENCES daa_agent_memory(id) ON DELETE CASCADE,
+          entity_id  TEXT NOT NULL REFERENCES daa_agent_entity(id) ON DELETE CASCADE,
+          weight     REAL NOT NULL DEFAULT 1.0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (memory_id, entity_id)
+        )
+      `);
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_mem_entity_entity ON daa_memory_entity_link (entity_id)`,
+      );
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS daa_thesis_entity_link (
+          thesis_id  TEXT NOT NULL REFERENCES daa_research_threads(id) ON DELETE CASCADE,
+          entity_id  TEXT NOT NULL REFERENCES daa_agent_entity(id) ON DELETE CASCADE,
+          weight     REAL NOT NULL DEFAULT 1.0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (thesis_id, entity_id)
+        )
+      `);
+      await query(
+        `CREATE INDEX IF NOT EXISTS idx_thes_entity_entity ON daa_thesis_entity_link (entity_id)`,
+      );
+    },
+  },
 ];
 
 export async function runDaaStoreRuntimeMigrations(query: QueryFn): Promise<void> {

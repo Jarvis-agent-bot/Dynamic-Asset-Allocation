@@ -38,13 +38,15 @@ const TIMEOUT_MS = 15_000;
 
 // ── Provider 配置 ──
 
-type EmbeddingProvider = "siliconflow" | "deepseek" | "openai";
+type EmbeddingProvider = "siliconflow" | "deepseek" | "openai" | "ollama";
 
 interface ProviderConfig {
   endpoint: string;
   model: string;
   outputDim: number; // 原始输出维度
   supportsNativeDim: boolean; // 是否支持 dimensions 参数
+  /** 是否需要 API Key（ollama 本地部署不需要） */
+  requiresApiKey: boolean;
 }
 
 const PROVIDER_DEFAULTS: Record<EmbeddingProvider, ProviderConfig> = {
@@ -53,18 +55,29 @@ const PROVIDER_DEFAULTS: Record<EmbeddingProvider, ProviderConfig> = {
     model: "BAAI/bge-m3",
     outputDim: 1024,
     supportsNativeDim: false,
+    requiresApiKey: true,
   },
   deepseek: {
     endpoint: "https://api.deepseek.com/v1/embeddings",
     model: "deepseek-embedding-v2",
     outputDim: 768,
     supportsNativeDim: false,
+    requiresApiKey: true,
   },
   openai: {
     endpoint: "https://api.openai.com/v1/embeddings",
     model: "text-embedding-3-small",
     outputDim: 1536,
     supportsNativeDim: true, // 支持 dimensions 参数
+    requiresApiKey: true,
+  },
+  ollama: {
+    // 本地 sidecar（OpenAI 兼容路径），默认 docker-compose 内部主机名 ollama:11434
+    endpoint: "http://ollama:11434/v1/embeddings",
+    model: "bge-m3",
+    outputDim: 1024,
+    supportsNativeDim: false,
+    requiresApiKey: false,
   },
 };
 
@@ -84,30 +97,33 @@ async function resolveEmbeddingConfig(): Promise<ResolvedEmbeddingConfig | null>
   const provider: EmbeddingProvider =
     providerEnv === "deepseek" ? "deepseek"
     : providerEnv === "openai" ? "openai"
+    : providerEnv === "ollama" ? "ollama"
     : "siliconflow"; // 默认
 
   const defaults = PROVIDER_DEFAULTS[provider];
 
   // 2. 读取 API Key：DB secrets（embedding_api_key）> 复用 LLM key
+  // ollama 本地部署不需要 key
   let apiKey = "";
-  try {
-    apiKey = await resolveSecret("embedding_api_key");
-  } catch {
-    // ignore
-  }
-  if (!apiKey) {
-    // SiliconFlow provider 不能复用 DeepSeek 的 key，只有同 provider 时才复用
-    const llmProvider = process.env.DAA_LLM_PROVIDER?.toLowerCase().trim() || "deepseek";
-    if (provider === llmProvider || provider === "deepseek") {
-      try {
-        apiKey = await resolveSecret("llm_api_key");
-      } catch {
-        apiKey = "";
+  if (defaults.requiresApiKey) {
+    try {
+      apiKey = await resolveSecret("embedding_api_key");
+    } catch {
+      // ignore
+    }
+    if (!apiKey) {
+      // SiliconFlow provider 不能复用 DeepSeek 的 key，只有同 provider 时才复用
+      const llmProvider = process.env.DAA_LLM_PROVIDER?.toLowerCase().trim() || "deepseek";
+      if (provider === llmProvider || provider === "deepseek") {
+        try {
+          apiKey = await resolveSecret("llm_api_key");
+        } catch {
+          apiKey = "";
+        }
       }
     }
+    if (!apiKey) return null; // 需要 key 但没有
   }
-
-  if (!apiKey) return null; // 无 key
 
   // 3. endpoint / model 可自定义（env > DB secrets > 默认值）
   let endpoint = "";
@@ -140,13 +156,13 @@ async function callEmbeddingApi(config: ResolvedEmbeddingConfig, text: string): 
       body.dimensions = TARGET_DIM;
     }
 
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (config.apiKey) headers.authorization = `Bearer ${config.apiKey}`;
+
     const response = await fetch(config.endpoint, {
       method: "POST",
       signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${config.apiKey}`,
-      },
+      headers,
       body: JSON.stringify(body),
     });
 
@@ -227,11 +243,12 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         _warnedNoConfig = true;
         console.warn(
           "[embedding] ⚠️ Embedding API 未配置，记忆语义检索不可用。\n" +
-          "  推荐使用 SiliconFlow 免费 API:\n" +
-          "  1. 注册 https://cloud.siliconflow.cn/\n" +
-          "  2. 在 .env.local 添加:\n" +
+          "  选项 1 — 本地 Ollama（docker-compose 自带）：\n" +
+          "     DAA_EMBEDDING_PROVIDER=ollama\n" +
+          "     （无需 key；首次运行执行 `docker exec daa-ollama ollama pull bge-m3`）\n" +
+          "  选项 2 — SiliconFlow 免费 API:\n" +
           "     DAA_EMBEDDING_PROVIDER=siliconflow\n" +
-          "     DAA_EMBEDDING_API_KEY=sk-xxx\n",
+          "     DAA_EMBEDDING_API_KEY=sk-xxx（注册于 https://cloud.siliconflow.cn/）\n",
         );
       }
       return Array(TARGET_DIM).fill(0);

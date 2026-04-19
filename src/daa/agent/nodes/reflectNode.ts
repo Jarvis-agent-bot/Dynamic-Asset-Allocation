@@ -50,12 +50,13 @@ export async function reflectNode(state: CognitiveState): Promise<CognitiveUpdat
     if (data?.newMemory?.content) {
       try {
         const emb = await generateEmbedding(data.newMemory.content);
-        // P2-10: 在 relevanceTags 中加入当前 threadId
+        // P2-10: 在 relevanceTags 中加入当前 threadId；thread 参数驱动实体图抽取
         await memoryStore.createMemory({
           memoryType: (data.newMemory.type as "lesson" | "pattern" | "preference" | "fact") || "lesson",
           content: data.newMemory.content,
           relevanceTags: [thread.id, ...thread.tags],
           embedding: emb,
+          thread: { id: thread.id, assetKeys: thread.assetKeys, tags: thread.tags },
         });
         newMemCount = 1;
       } catch (e) {
