@@ -1,0 +1,5 @@
+services:
+  daa-web:
+    environment:
+      - DAA_ENGINE_BASE_URL=https://exwxyzi.cn
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
