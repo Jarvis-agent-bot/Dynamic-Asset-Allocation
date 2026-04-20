@@ -35,5 +35,8 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/next.config.js ./next.config.js
 COPY --from=build /app/public ./public
+# Standalone scripts (e.g. alpacaWsNewsDaemon.mjs) — reuse this image with a different CMD
+# in the daa-ws-news service.
+COPY --from=build /app/scripts ./scripts
 
 CMD ["node", "node_modules/next/dist/bin/next", "start", "-p", "3000"]

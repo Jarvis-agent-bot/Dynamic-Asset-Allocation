@@ -36,6 +36,8 @@ export const SECRET_KEY_DEFS_ = [
   { key: "fred_api_key", label: "FRED API Key", group: "fred", envVars: ["FRED_API_KEY", "DAA_FRED_API_KEY"], sensitive: true },
   { key: "twitterdata_token", label: "Twitter Data Token", group: "twitter_data", envVars: ["TWITTERDATA_TOKEN", "DAA_TWITTERDATA_TOKEN"], sensitive: true },
   { key: "finnhub_api_key", label: "Finnhub API Key", group: "finnhub", envVars: ["FINNHUB_API_KEY", "DAA_FINNHUB_API_KEY"], sensitive: true },
+  { key: "alpaca_api_key_id", label: "Alpaca API Key ID", group: "alpaca", envVars: ["ALPACA_API_KEY_ID", "DAA_ALPACA_API_KEY_ID"], sensitive: true },
+  { key: "alpaca_api_secret_key", label: "Alpaca API Secret", group: "alpaca", envVars: ["ALPACA_API_SECRET_KEY", "DAA_ALPACA_API_SECRET_KEY"], sensitive: true },
   { key: "embedding_api_key", label: "Embedding API Key", group: "embedding", envVars: ["DAA_EMBEDDING_API_KEY"], sensitive: true },
   { key: "embedding_endpoint", label: "Embedding Endpoint", group: "embedding", envVars: ["DAA_EMBEDDING_ENDPOINT"], sensitive: false },
   { key: "embedding_model", label: "Embedding Model", group: "embedding", envVars: ["DAA_EMBEDDING_MODEL"], sensitive: false },

@@ -22,11 +22,30 @@ services:
       - DAA_EMBEDDING_ENDPOINT=${DAA_EMBEDDING_ENDPOINT:-}
       - DAA_EMBEDDING_MODEL=${DAA_EMBEDDING_MODEL:-}
       - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+      # Alpaca (US news 主源 — REST 降级 + WS 实时推送共用同一账号密钥)
+      - ALPACA_API_KEY_ID=${ALPACA_API_KEY_ID:-}
+      - ALPACA_API_SECRET_KEY=${ALPACA_API_SECRET_KEY:-}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
       - postgres
       - ollama
+    restart: unless-stopped
+
+  daa-ws-news:
+    # Alpaca News WebSocket 常驻守护，实时接收 news → POST 到 daa-web
+    # 复用 daa-web 镜像（已含 ws 依赖），仅换 entrypoint。
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - daa-web
+    environment:
+      - ALPACA_API_KEY_ID=${ALPACA_API_KEY_ID:-}
+      - ALPACA_API_SECRET_KEY=${ALPACA_API_SECRET_KEY:-}
+      - DAA_CRON_TOKEN=${DAA_CRON_TOKEN}
+      - DAA_WEB_BASE_URL=http://daa-web:3000
+    command: ["node", "scripts/alpacaWsNewsDaemon.mjs"]
     restart: unless-stopped
 
   ollama:

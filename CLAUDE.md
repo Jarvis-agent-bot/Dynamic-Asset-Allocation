@@ -482,12 +482,23 @@ DAA_EMBEDDING_PROVIDER=ollama
 |------|------|
 | `DAA_CRON_TOKEN` | Cron 容器调 API 的认证 token |
 | `DAA_SECRETS_ENCRYPTION_KEY` | DB 中 secrets 加密密钥 |
-| `FINNHUB_API_KEY` | Finnhub 新闻 API（US 市场主源，Yahoo RSS 为 fallback） |
+| `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` | Alpaca 免费 News API（REST + WebSocket 实时，Benzinga 源，US 主源） |
+| `FINNHUB_API_KEY` | Finnhub 新闻 API（备选 REST） |
 | `DAA_EMBEDDING_PROVIDER` | Embedding 提供商（siliconflow/deepseek/openai） |
 | `DAA_EMBEDDING_API_KEY` | Embedding API key |
 
 **新闻数据源**：
-| Provider | 覆盖市场 | 优先级 |
-|----------|---------|--------|
-| Finnhub API | US | 主源（需 API Key） |
-| Yahoo RSS | US/HK/CN/JP/EU | Fallback（无需 Key） |
+| Provider | 模式 | 覆盖市场 | 优先级 | 备注 |
+|----------|------|---------|--------|------|
+| Alpaca (Benzinga) | REST + **WebSocket 推送** | US | 主源 | 免费无实名，WS 秒级延迟 |
+| Finnhub API | REST | US | 备选 | 需 API Key |
+| Yahoo RSS | REST | US/HK/CN/JP/EU | Fallback | 无需 Key |
+
+**实时推送链路**（`daa-ws-news` 容器）：
+```
+wss://stream.data.alpaca.markets/v1beta1/news
+  ├─ 每 5min GET /api/daa/news/subscribed-symbols (持仓+watchlist 的 US symbol)
+  └─ 收到 news 事件 → POST /api/daa/news/realtime-event
+       ├─ 写 daa_news_item_snapshot_v1
+       └─ 若命中持仓 → LLM 分析 → majorEvent=high 时即时 TG push (24h 去重)
+```
