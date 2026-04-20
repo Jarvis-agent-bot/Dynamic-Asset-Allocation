@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import type {
   RebalanceCycle,
   WorkbenchBootstrap,
-  WorkbenchLlmFeedbackScore,
 } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { cycleStatusTone, llmAdjustmentLabel, marketRegimeLabel, riskOverallTone, riskStatusLabel, signalActionLabel } from "./rebalanceLabels";
@@ -34,11 +33,8 @@ export function RebalanceProposalList(props: {
   selectedProposalNotional: number;
   expandedProposalDecisionKeys: Record<string, boolean>;
   setExpandedProposalDecisionKeys: Dispatch<SetStateAction<Record<string, boolean>>>;
-  llmFeedbackSubmittingByContext: Record<string, boolean>;
-  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
   onSelectAllProposals: (selected: boolean) => Promise<void>;
   onToggleProposal: (assetKey: string, side: "BUY" | "SELL", selected: boolean) => Promise<void>;
-  onSubmitLlmFeedback: (input: { contextId: string; type: "decision"; score: WorkbenchLlmFeedbackScore; comment?: string }) => Promise<void>;
   /** 空状态生成按钮回调 */
   onGenerateCycle?: () => Promise<void>;
 }) {
@@ -126,7 +122,6 @@ export function RebalanceProposalList(props: {
               <div className="space-y-2">
                 {props.currentCycle.proposals.map((row) => {
                   const proposalKey = `${row.assetKey}-${row.side}`;
-                  const contextId = `decision:${props.currentCycle?.cycleId}:${row.assetKey}:${row.side}`;
                   const decisionExpanded = Boolean(props.expandedProposalDecisionKeys[proposalKey]);
                   return (
                     <div
@@ -207,22 +202,6 @@ export function RebalanceProposalList(props: {
                                   ) : null}
                                 </div>
                               ) : null}
-                              <div className="flex flex-wrap gap-2 border-t border-[rgba(255,255,255,0.06)] pt-3">
-                                {(["up", "down"] as const).map((score) => {
-                                  const isSelected = props.llmFeedbackScoreByContext[contextId] === score;
-                                  const isSubmitting = Boolean(props.llmFeedbackSubmittingByContext[contextId]);
-                                  return (
-                                    <DaaSurfaceActionButton
-                                      key={score}
-                                      tone={isSelected ? (score === "up" ? "primary" : "danger") : "slate"}
-                                      disabled={isSubmitting}
-                                      onClick={() => void props.onSubmitLlmFeedback({ contextId, type: "decision", score })}
-                                    >
-                                      {score === "up" ? "👍 有用" : "👎 无用"}
-                                    </DaaSurfaceActionButton>
-                                  );
-                                })}
-                              </div>
                             </div>
                           ) : null}
                         </div>

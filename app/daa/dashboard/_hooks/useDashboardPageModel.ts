@@ -131,8 +131,6 @@ export function useDashboardPageModel(input: {
     busy,
     expandedProposalDecisionKeys: rebalanceFlow.expandedProposalDecisionKeys,
     setExpandedProposalDecisionKeys: rebalanceFlow.setExpandedProposalDecisionKeys,
-    llmFeedbackSubmittingByContext: assetActions.llmFeedbackSubmittingByContext,
-    llmFeedbackScoreByContext: assetActions.llmFeedbackScoreByContext,
     canEditCurrentCycle: rebalanceFlow.canEditCurrentCycle,
     canExecuteAll: rebalanceFlow.canExecuteAll,
     canExecuteSelected: rebalanceFlow.canExecuteSelected,
@@ -151,7 +149,6 @@ export function useDashboardPageModel(input: {
     onCancelCycle: () => setPendingConfirm({ type: "cancelCycle" }),
     onSelectAllProposals: rebalanceFlow.handleSelectAllProposals,
     onToggleProposal: rebalanceFlow.handleToggleProposal,
-    onSubmitLlmFeedback: assetActions.handleSubmitLlmFeedback,
     onSelectCycle: rebalanceFlow.handleSelectCycle,
   } : null;
 

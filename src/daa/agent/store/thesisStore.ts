@@ -264,6 +264,77 @@ export async function findSimilarThesis(assetKeys: string[], title: string): Pro
 }
 
 /**
+ * 获取某资产相关的所有活跃 thesis（按 updated_at 倒序）。
+ * 用于 /portfolio/[assetKey] 页展示该资产的 Agent 观点。
+ */
+export async function getThesesByAssetKey(assetKey: string): Promise<ResearchThread[]> {
+  const key = String(assetKey || "").trim();
+  if (!key) return [];
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query(
+      `SELECT * FROM daa_research_threads
+       WHERE status = 'active' AND asset_keys && $1
+       ORDER BY updated_at DESC
+       LIMIT 20`,
+      [[key]],
+    );
+    return res.rows.map(mapThreadRow);
+  });
+}
+
+/**
+ * 获取一组 thesis 各自的最新 N 条证据（按 thesis id 分组返回）。
+ * 用于资产详情页一次性加载多个 thesis 的最近证据。
+ */
+export async function getLatestEvidenceByThreadIds(
+  threadIds: string[],
+  perThreadLimit = 3,
+): Promise<Map<string, EvidenceItem[]>> {
+  if (threadIds.length === 0) return new Map();
+  const limit = Math.max(1, Math.min(10, perThreadLimit));
+  return withDaaPgClient(async ({ query }) => {
+    const res = await query<{
+      id: string;
+      thread_id: string;
+      evidence_type: string;
+      source: string;
+      content: string;
+      data_snapshot: Record<string, unknown> | null;
+      confidence: number | string | null;
+      created_at: string;
+      row_num: string | number;
+    }>(
+      `SELECT id, thread_id, evidence_type, source, content, data_snapshot, confidence, created_at, row_num
+       FROM (
+         SELECT id, thread_id, evidence_type, source, content, data_snapshot, confidence, created_at,
+                ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC) AS row_num
+         FROM daa_evidence_items
+         WHERE thread_id = ANY($1::text[])
+       ) t
+       WHERE row_num <= $2
+       ORDER BY thread_id, created_at DESC`,
+      [threadIds, limit],
+    );
+    const grouped = new Map<string, EvidenceItem[]>();
+    for (const row of res.rows) {
+      const list = grouped.get(row.thread_id) ?? [];
+      list.push({
+        id: row.id,
+        threadId: row.thread_id,
+        evidenceType: row.evidence_type as EvidenceItem["evidenceType"],
+        source: row.source as EvidenceItem["source"],
+        content: row.content,
+        dataSnapshot: row.data_snapshot,
+        confidence: Number(row.confidence ?? 0) || 0,
+        createdAt: String(row.created_at),
+      });
+      grouped.set(row.thread_id, list);
+    }
+    return grouped;
+  });
+}
+
+/**
  * 查询某 thesis 的所有复盘记录（按时间倒序）。
  */
 export async function getReviewsByThreadId(threadId: string): Promise<Array<{

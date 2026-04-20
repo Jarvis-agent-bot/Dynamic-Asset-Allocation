@@ -9,9 +9,11 @@ import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErr
 import { AssetKlineChart, type KlineTradeMarker } from "@/app/daa/dashboard/_shared/AssetKlineChart";
 
 import { AssetInfoBar } from "./AssetInfoBar";
-import { SignalDashboard } from "./SignalDashboard";
 import { InlineTradePanel } from "./InlineTradePanel";
 import { WatchlistAutoEntryPanel } from "./WatchlistAutoEntryPanel";
+import { AgentViewPanel } from "./AgentViewPanel";
+import { AssetPositionPanel } from "./AssetPositionPanel";
+import { AssetNewsList } from "./AssetNewsList";
 
 /** 从交易记录 API 加载该标的的历史交易，用于 K 线标记 */
 function useTradeMarkers(symbol: string): KlineTradeMarker[] {
@@ -119,10 +121,16 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
           </div>
         </SectionErrorBoundary>
 
-        {/* 右侧：信号仪表盘 + 交易面板 */}
+        {/* 右侧：Agent 视角 + 持仓 + 交易面板 */}
         <div className="space-y-4">
-          <SectionErrorBoundary sectionName="信号仪表盘">
-            <SignalDashboard assetKey={props.assetKey} />
+          {row.holdingQty > 0 || row.targetWeightHint > 0 ? (
+            <SectionErrorBoundary sectionName="持仓状态">
+              <AssetPositionPanel row={row} />
+            </SectionErrorBoundary>
+          ) : null}
+
+          <SectionErrorBoundary sectionName="Agent 观点">
+            <AgentViewPanel assetKey={props.assetKey} />
           </SectionErrorBoundary>
 
           <SectionErrorBoundary sectionName="交易面板">
@@ -143,6 +151,11 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
           ) : null}
         </div>
       </div>
+
+      {/* 底部：该资产新闻流 */}
+      <SectionErrorBoundary sectionName="资产新闻">
+        <AssetNewsList symbol={row.symbol} />
+      </SectionErrorBoundary>
     </div>
   );
 }

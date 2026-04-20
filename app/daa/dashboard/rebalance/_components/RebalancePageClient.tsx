@@ -126,11 +126,8 @@ export default function RebalancePageClient() {
                   selectedProposalNotional={rp.selectedProposalNotional}
                   expandedProposalDecisionKeys={rp.expandedProposalDecisionKeys}
                   setExpandedProposalDecisionKeys={rp.setExpandedProposalDecisionKeys}
-                  llmFeedbackSubmittingByContext={rp.llmFeedbackSubmittingByContext}
-                  llmFeedbackScoreByContext={rp.llmFeedbackScoreByContext}
                   onSelectAllProposals={rp.onSelectAllProposals}
                   onToggleProposal={rp.onToggleProposal}
-                  onSubmitLlmFeedback={rp.onSubmitLlmFeedback}
                   onGenerateCycle={rp.onGenerateCycle}
                 />
               </SectionErrorBoundary>

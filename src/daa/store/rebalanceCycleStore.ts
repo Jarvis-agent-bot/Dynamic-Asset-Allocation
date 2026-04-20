@@ -17,7 +17,7 @@ import {
 import type {
   DaaStoreRebalanceCycle, DaaStoreRebalanceCycleStatus, DaaStoreRebalanceTriggerSource,
   DaaStoreCreateRebalanceCycleInput, DaaStorePatchRebalanceCycleInput,
-  DaaStoreCycleReport, DaaStoreTriggerEvent, DaaStoreLlmFeedback,
+  DaaStoreCycleReport, DaaStoreTriggerEvent,
   DaaStorePreTradeRiskCheck, DaaStorePreTradeRiskCheckItem, DaaStoreRiskRule,
   DaaStoreRebalanceDecision, DaaStoreExecutionOrder,
 } from "./storeTypes";
@@ -429,19 +429,6 @@ function mapTriggerEventRow(row: Record<string, unknown>): DaaStoreTriggerEvent 
     cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
     status: status as "accepted" | "skipped" | "conflict",
     detailsJson: parseJsonb<Record<string, unknown>>(row.details_json, {}),
-    createdAt: toIsoString(row.created_at),
-  };
-}
-
-function mapLlmFeedbackRow(row: Record<string, unknown>): DaaStoreLlmFeedback {
-  const typeRaw = normalizeText(row.type, "insight").toLowerCase();
-  const scoreRaw = normalizeText(row.score, "up").toLowerCase();
-  return {
-    id: normalizeText(row.id),
-    contextId: normalizeText(row.context_id),
-    type: typeRaw === "decision" ? "decision" : "insight",
-    score: scoreRaw === "down" ? "down" : "up",
-    comment: row.comment == null ? null : normalizeText(row.comment) || null,
     createdAt: toIsoString(row.created_at),
   };
 }

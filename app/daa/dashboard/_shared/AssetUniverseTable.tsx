@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useMemo, useState, useCallback } from "react";
-import { Info, Loader2, MoreHorizontal, Search, Settings2 } from "lucide-react";
+import Link from "next/link";
+import { Loader2, MoreHorizontal, Search, Settings2 } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -11,17 +12,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatCurrency, formatDateTime, formatPercent } from "@/app/daa/dashboard/_components/daaFormatters";
-import { DashboardEmptyState, DashboardErrorNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { cn } from "@/lib/utils";
 import type { TradeTicketSide } from "@/src/daa/modules/trade/tradeTypes";
-import type {
-  AssetUniverseView,
-  WorkbenchAssetInsightResponse,
-  WorkbenchLlmFeedbackScore,
-} from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import {
   DaaSurfaceActionButton,
@@ -34,7 +29,6 @@ import {
   daaSurfaceTableHeadClassName,
   daaSurfaceTableShellClassName,
 } from "../_components/DaaSurfaceUI";
-import { FusionScoreBreakdown } from "./FusionScoreBreakdown";
 import { marketRegimeLabel, marketRegimeTone } from "./rebalance";
 
 type AssetUniverseViewFilter = "all" | "holdings" | "watchlist" | "basket";
@@ -346,13 +340,6 @@ function gapLabel(gapPct: number | null): { text: string; className: string; bar
   return { text: "接近目标", className: "text-[var(--muted)]", barClassName: "bg-[var(--primary)]" };
 }
 
-function valuationTemperatureMeta(score: number | null): { text: string; className: string } {
-  if (score == null || !Number.isFinite(score)) return { text: "待分析", className: "text-[var(--muted)]" };
-  if (score >= 62) return { text: "偏便宜", className: "text-emerald-300" };
-  if (score <= 38) return { text: "偏贵", className: "text-rose-300" };
-  return { text: "中性", className: "text-[var(--muted)]" };
-}
-
 function holdingGroupKey(row: AssetUniverseView): HoldingGroupKey {
   const assetClass = String(row.assetClass || "").toUpperCase();
   const instrumentType = String(row.instrumentType || "").toUpperCase();
@@ -396,471 +383,6 @@ function ActionButton(props: {
   );
 }
 
-function InsightMetricCard(props: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] px-3 py-2.5 text-xs">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{props.label}</div>
-      <div className="mt-1.5 font-[var(--font-mono)] text-sm text-[var(--text)]">{props.value}</div>
-      {props.hint ? <div className="mt-1 text-[11px] leading-5 text-[var(--muted)]">{props.hint}</div> : null}
-    </div>
-  );
-}
-
-function InlineInsights(props: {
-  loading: boolean;
-  error: string;
-  data: WorkbenchAssetInsightResponse | null;
-  feedbackContextId: string | null;
-  feedbackSubmitting: boolean;
-  feedbackScore: WorkbenchLlmFeedbackScore | null;
-  onSubmitFeedback: (input: {
-    contextId: string;
-    type: "insight";
-    score: WorkbenchLlmFeedbackScore;
-  }) => void;
-  onOpenFusionBreakdown?: () => void;
-}) {
-  if (props.loading) {
-    return (
-      <div className="flex items-center gap-2 rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.62)] px-4 py-4 text-sm text-[var(--muted)]">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        正在加载洞察...
-      </div>
-    );
-  }
-  if (props.error) {
-    return <DashboardErrorNotice title="洞察加载失败" description={props.error} className="rounded-[16px]" />;
-  }
-  if (!props.data) {
-    return (
-      <DashboardEmptyState
-        title="暂无洞察"
-        description="当前资产还没有生成洞察，可先刷新数据或切换其他标的。"
-        className="px-4 py-5 text-left"
-      />
-    );
-  }
-
-  const opportunity = props.data.opportunity;
-  const technical = props.data.technical;
-  const news = props.data.news;
-  const valuation = props.data.valuation;
-  const llm = props.data.llmAnalysis;
-  const priceSnapshot = props.data.priceSnapshot;
-  const marketContext = props.data.marketContext;
-  const marketAttribution = props.data.marketAttribution;
-  const marketScopeContext = marketAttribution?.scope
-    ? (marketContext?.scopes || []).find((item) => item.scope === marketAttribution.scope) || null
-    : null;
-  const displayMarketContext = marketScopeContext || marketContext;
-  const displayMarketLabel = marketScopeContext?.label || marketAttribution?.scopeLabel || "组合摘要";
-  const marketIndicatorMap = new Map(((displayMarketContext?.indicators || marketContext?.indicators) || []).map((item) => [item.key, item]));
-  const marketIndicators = marketAttribution?.relevantKeys?.length
-    ? marketAttribution.relevantKeys.flatMap((key) => {
-        const indicator = marketIndicatorMap.get(key);
-        return indicator ? [indicator] : [];
-      })
-    : (marketContext?.indicators || []);
-  const aiMarketFacts = (
-    llm?.marketFacts && llm.marketFacts.length > 0
-      ? llm.marketFacts
-      : (marketAttribution?.explanation?.length ? marketAttribution.explanation : (displayMarketContext?.reasons || marketContext?.reasons || []))
-  ).slice(0, 3);
-  const aiMarketRegime = llm?.marketRegime || displayMarketContext?.regime || marketContext?.regime || null;
-  const valuationMetrics = (() => {
-    if (!valuation) return [] as Array<{ key: string; label: string; value: string | number; unit?: string; description?: string }>;
-    const seen = new Set<string>();
-    const merged = [...valuation.common, ...valuation.specific];
-    const out: typeof merged = [];
-    for (const item of merged) {
-      const dedupKey = `${String(item.key || "").trim().toLowerCase()}::${String(item.label || "").trim().toLowerCase()}`;
-      if (seen.has(dedupKey)) continue;
-      seen.add(dedupKey);
-      out.push(item);
-    }
-    return out.slice(0, 8);
-  })();
-
-  return (
-    <div className="space-y-4 rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(11,16,27,0.96),rgba(7,10,18,0.98))] p-4 sm:p-5">
-      {priceSnapshot ? (
-        <div className="grid gap-3 rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.72)] p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">行情快照</div>
-            <div className="mt-2 font-[var(--font-display)] text-[24px] leading-none tracking-[-0.03em] text-[var(--text)]">
-              {currencySymbol(priceSnapshot.currency)} {priceSnapshot.price > 0 ? priceSnapshot.price.toFixed(4) : "-"}
-            </div>
-            <div className={cn("mt-2 text-sm", priceStatusClass(priceSnapshot.priceStatus))}>
-              {priceStatusText(priceSnapshot.priceStatus)} · {priceStatusNote(priceSnapshot.priceStatus)}
-            </div>
-            <div className="mt-1 text-xs text-[var(--muted)]">行情更新时间：{formatDateTime(priceSnapshot.priceUpdatedAt)}</div>
-            <div className="mt-1 text-xs text-[var(--muted)]">来源：{priceSnapshot.priceSource || "-"}</div>
-          </div>
-          <DaaSurfaceStatusPill tone={priceStatusTone(priceSnapshot.priceStatus)}>
-            {priceStatusText(priceSnapshot.priceStatus)}
-          </DaaSurfaceStatusPill>
-        </div>
-      ) : null}
-
-      <Tabs defaultValue="opportunity" className="w-full">
-        <TabsList className="flex h-auto w-full flex-wrap gap-1 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.72)] p-1">
-          {[
-            ["opportunity", "机会"],
-            ["technical", "技术"],
-            ["valuation", "估值"],
-            ["market", "市场"],
-            ["news", "新闻"],
-            ["llm", "AI 解读"],
-          ].map(([value, label]) => (
-            <TabsTrigger
-              key={value}
-              value={value}
-              className="flex-1 min-w-0 rounded-[10px] px-2 py-2 text-xs text-[var(--muted)] data-[state=active]:bg-[rgba(56,189,248,0.12)] data-[state=active]:text-[var(--text)]"
-            >
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent value="opportunity" className="mt-4">
-          <div className="space-y-3 text-sm text-[var(--muted)]">
-            {opportunity ? (
-              <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <DaaSurfaceStatusPill tone="cyan">{opportunity.actionLabelZh}</DaaSurfaceStatusPill>
-                  <DaaSurfaceStatusPill tone="indigo">强度 {opportunity.finalScorePct.toFixed(1)}%</DaaSurfaceStatusPill>
-                  <DaaSurfaceStatusPill tone="slate">一致性 {opportunity.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
-                  {props.onOpenFusionBreakdown && opportunity.scores ? (
-                    <button
-                      type="button"
-                      onClick={props.onOpenFusionBreakdown}
-                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[11px] text-[var(--muted)] transition-colors hover:border-[var(--primary)]/30 hover:text-[var(--primary)]"
-                      title="查看融合分解"
-                    >
-                      <Info className="h-3 w-3" />
-                      分解
-                    </button>
-                  ) : null}
-                </div>
-                {opportunity.scores ? (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <InsightMetricCard label="人因" value={opportunity.scores.human.toFixed(1)} />
-                    <InsightMetricCard label="新闻" value={opportunity.scores.news.toFixed(1)} />
-                    <InsightMetricCard label="技术" value={opportunity.scores.technical.toFixed(1)} />
-                    <InsightMetricCard label="估值" value={opportunity.scores.valuation.toFixed(1)} />
-                  </div>
-                ) : null}
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">{opportunity.reasonZh}</div>
-                <div className="rounded-[14px] border border-amber-400/18 bg-amber-500/8 px-4 py-3 text-amber-100">{opportunity.riskZh}</div>
-                {props.data.riskHints.length ? (
-                  <div className="space-y-2 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">风险提示</div>
-                    <ul className="space-y-1.5 text-sm">
-                      {props.data.riskHints.map((hint, idx) => (
-                        <li key={`risk-hint-${idx}`} className="flex gap-2">
-                          <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-[var(--amber)]" />
-                          <span>{hint}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <DaaSurfaceEmptyState
-                title="暂无机会评分"
-                description="当前资产尚未形成完整的机会判断，建议等待数据刷新或展开其他洞察页签查看上下文。"
-                className="border-0 bg-transparent px-0 py-2 text-left"
-              />
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="technical" className="mt-4">
-          {technical ? (
-            <div className="space-y-3 text-sm text-[var(--muted)]">
-              <div className="flex flex-wrap items-center gap-2">
-                <DaaSurfaceStatusPill tone="cyan">动量 {technical.momentumRegime}</DaaSurfaceStatusPill>
-                <DaaSurfaceStatusPill tone="indigo">评分 {technical.scorePct.toFixed(1)}%</DaaSurfaceStatusPill>
-                <DaaSurfaceStatusPill tone="slate">置信 {technical.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {[...technical.common, ...technical.specific].slice(0, 8).map((item) => (
-                  <InsightMetricCard key={`${item.key}-${item.label}`} label={item.label} value={`${item.value}${item.unit || ""}`} hint={item.description} />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <DaaSurfaceEmptyState
-              title="暂无技术面数据"
-              description="技术指标尚未生成，通常是行情缓存刷新未完成或该资产暂无可计算信号。"
-              className="border-0 bg-transparent px-0 py-2 text-left"
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="valuation" className="mt-4">
-          {valuation ? (
-            <div className="space-y-3 text-sm text-[var(--muted)]">
-              <div className="flex flex-wrap items-center gap-2">
-                <DaaSurfaceStatusPill tone="amber">估值 {valuation.temperature === "cheap" ? "偏便宜" : valuation.temperature === "expensive" ? "偏贵" : "中性"}</DaaSurfaceStatusPill>
-                <DaaSurfaceStatusPill tone="indigo">评分 {valuation.scorePct.toFixed(1)}%</DaaSurfaceStatusPill>
-                <DaaSurfaceStatusPill tone="slate">置信 {valuation.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
-              </div>
-              {valuation.reasons.length ? (
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">{valuation.reasons.slice(0, 3).join("；")}</div>
-              ) : null}
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {valuationMetrics.map((item) => (
-                  <InsightMetricCard key={`${item.key}-${item.label}`} label={item.label} value={`${item.value}${item.unit || ""}`} hint={item.description} />
-                ))}
-              </div>
-              {valuation.relative ? (
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 text-sm">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{valuation.relative.label}</div>
-                  <div className="mt-2 font-[var(--font-mono)] text-base text-[var(--text)]">
-                    {valuation.relative.value == null ? "-" : valuation.relative.value.toFixed(4)}
-                  </div>
-                  <div className="mt-1 text-xs text-[var(--muted)]">
-                    {valuation.relative.percentile == null ? "-" : `相对位置 ${valuation.relative.percentile.toFixed(1)}%`}
-                    {valuation.relative.trendPct == null ? "" : ` · 变化 ${valuation.relative.trendPct.toFixed(2)}%`}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <DaaSurfaceEmptyState
-              title="暂无估值信号"
-              description="估值数据暂不可用，建议结合技术面、新闻面以及实际持仓权重综合判断。"
-              className="border-0 bg-transparent px-0 py-2 text-left"
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="market" className="mt-4">
-          {displayMarketContext ? (
-            <div className="space-y-4 text-sm text-[var(--muted)]">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{displayMarketLabel === "组合摘要" ? "组合摘要环境" : `${displayMarketLabel}环境`}</div>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className="font-[var(--font-mono)] text-base text-[var(--text)]">{marketRegimeLabel(displayMarketContext.regime)}</div>
-                    <DaaSurfaceStatusPill tone={marketRegimeTone(displayMarketContext.regime)}>{marketRegimeLabel(displayMarketContext.regime)}</DaaSurfaceStatusPill>
-                  </div>
-                </div>
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">市场风险分</div>
-                  <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">{displayMarketContext.riskOffScorePct.toFixed(1)}%</div>
-                  <div className="mt-1 text-xs text-[var(--muted)]">置信度 {displayMarketContext.confidencePct.toFixed(1)}%</div>
-                </div>
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">建议仓位比例</div>
-                  <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">常规标的 {Math.round(displayMarketContext.buyScale * 100)}%</div>
-                  <div className="mt-1 text-xs text-[var(--muted)]">高波动标的 {Math.round(displayMarketContext.highRiskBuyScale * 100)}%</div>
-                </div>
-              </div>
-
-              <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">相关指标</div>
-                  {marketAttribution?.relevantKeys?.length ? <DaaSurfaceStatusPill tone="indigo">{displayMarketLabel}</DaaSurfaceStatusPill> : null}
-                </div>
-                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {(marketIndicators.length > 0 ? marketIndicators : displayMarketContext.indicators).map((indicator) => {
-                    const trend30d = formatSignedPercent(indicator.trend30dPct);
-                    return (
-                      <div key={indicator.key} className="rounded-[14px] border border-[rgba(129,140,248,0.18)] bg-[rgba(8,12,20,0.46)] px-4 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-[var(--text)]">{indicator.label}</div>
-                          <DaaSurfaceStatusPill tone={marketRegimeTone(indicator.stance === "neutral" ? null : indicator.stance)}>
-                            {indicator.stance === "neutral" ? "中性" : marketRegimeLabel(indicator.stance)}
-                          </DaaSurfaceStatusPill>
-                        </div>
-                        <div className="mt-3 font-[var(--font-mono)] text-base text-[var(--text)]">{formatMarketIndicatorValue(indicator.rawValue, indicator.unit)}</div>
-                        <div className="mt-1 text-xs text-[var(--muted)]">
-                          {marketPercentileText(indicator.percentile252)}
-                          {trend30d ? ` · 30日 ${trend30d}` : ""}
-                        </div>
-                        <div className="mt-3 text-xs leading-6 text-[var(--muted)]">{indicator.reason}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">相关键位</div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(marketAttribution?.relevantKeys?.length
-                      ? marketAttribution.relevantKeys
-                      : (marketIndicators.length > 0 ? marketIndicators.map((item) => item.key) : displayMarketContext.indicators.map((item) => item.key))
-                    ).map((key) => (
-                      <DaaSurfaceStatusPill key={key} tone="slate">{marketIndicatorKeyLabel(key)}</DaaSurfaceStatusPill>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">影响说明</div>
-                  <ul className="mt-3 space-y-1.5 text-sm text-[var(--text)]">
-                    {(marketAttribution?.explanation?.length ? marketAttribution.explanation : displayMarketContext.reasons).slice(0, 4).map((item, idx) => (
-                      <li key={`market-exp-${idx}`} className="flex gap-2">
-                        <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-[var(--indigo)]" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <DaaSurfaceEmptyState
-              title="暂无市场上下文"
-              description="市场状态层还没有可用快照，稍后刷新后可查看该资产受哪些市场指标影响。"
-              className="border-0 bg-transparent px-0 py-2 text-left"
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="news" className="mt-4">
-          {news ? (
-            <div className="space-y-3 text-sm text-[var(--muted)]">
-              <div className="flex flex-wrap items-center gap-2">
-                <DaaSurfaceStatusPill tone="cyan">新闻评分 {news.scorePct.toFixed(1)}%</DaaSurfaceStatusPill>
-                <DaaSurfaceStatusPill tone="slate">置信 {news.confidencePct.toFixed(1)}%</DaaSurfaceStatusPill>
-                <DaaSurfaceStatusPill tone="indigo">证据 {news.evidenceCount}</DaaSurfaceStatusPill>
-              </div>
-              {news.aiSummary?.summary ? (
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3">{news.aiSummary.summary}</div>
-              ) : null}
-              <div className="space-y-2">
-                {(news.items || []).slice(0, 3).map((item) => (
-                  <a
-                    key={item.link || item.title}
-                    href={item.link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.54)] px-4 py-3 text-sm text-[var(--text)] transition-colors hover:border-[var(--primary)]/35 hover:text-[var(--primary)]"
-                  >
-                    <div className="font-medium">{item.title}</div>
-                    <div className="mt-1 text-xs text-[var(--muted)]">{formatDateTime(item.ts)}</div>
-                  </a>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <DaaSurfaceEmptyState
-              title="暂无新闻洞察"
-              description="可以稍后重试，或者先关注其他页签中已经就绪的结构化信号。"
-              className="border-0 bg-transparent px-0 py-2 text-left"
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="llm" className="mt-4">
-          <div className="space-y-4 text-sm text-[var(--muted)]">
-            {(marketContext || aiMarketFacts.length > 0) ? (
-              <div className="rounded-[14px] border border-[rgba(129,140,248,0.18)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">AI 依据</div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <DaaSurfaceStatusPill tone={marketRegimeTone(marketContext?.regime || null)}>
-                    规则环境 {marketRegimeLabel(marketContext?.regime || null)}
-                  </DaaSurfaceStatusPill>
-                  <DaaSurfaceStatusPill tone={marketRegimeTone(aiMarketRegime)}>
-                    AI 分析环境 {marketRegimeLabel(aiMarketRegime)}
-                  </DaaSurfaceStatusPill>
-                </div>
-                {aiMarketFacts.length > 0 ? (
-                  <ul className="mt-3 space-y-1.5 text-sm text-[var(--text)]">
-                    {aiMarketFacts.map((item, idx) => (
-                      <li key={`ai-market-${idx}`} className="flex gap-2">
-                        <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-[var(--indigo)]" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="mt-3 text-xs text-[var(--muted)]">当前暂无可用市场依据。</div>
-                )}
-              </div>
-            ) : null}
-
-            {llm && llm.status === "ok" ? (
-              <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <DaaSurfaceStatusPill tone="indigo">分析模型 {llm.provider}/{llm.model}</DaaSurfaceStatusPill>
-                  <DaaSurfaceStatusPill tone="slate">生成于 {formatDateTime(llm.generatedAt)}</DaaSurfaceStatusPill>
-                </div>
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 text-[var(--text)]">{llm.summary}</div>
-                {props.feedbackContextId ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <DaaSurfaceActionButton
-                      tone={props.feedbackScore === "up" ? "success" : "slate"}
-                      className="h-8 rounded-full px-3 text-xs"
-                      disabled={props.feedbackSubmitting}
-                      onClick={() => props.onSubmitFeedback({
-                        contextId: props.feedbackContextId as string,
-                        type: "insight",
-                        score: "up",
-                      })}
-                    >
-                      有用
-                    </DaaSurfaceActionButton>
-                    <DaaSurfaceActionButton
-                      tone={props.feedbackScore === "down" ? "danger" : "slate"}
-                      className="h-8 rounded-full px-3 text-xs"
-                      disabled={props.feedbackSubmitting}
-                      onClick={() => props.onSubmitFeedback({
-                        contextId: props.feedbackContextId as string,
-                        type: "insight",
-                        score: "down",
-                      })}
-                    >
-                      无用
-                    </DaaSurfaceActionButton>
-                    <span className="text-xs text-[var(--muted)]">
-                      {props.feedbackSubmitting ? "提交中..." : props.feedbackScore ? "已记录反馈" : "请反馈本次 AI 解读质量"}
-                    </span>
-                  </div>
-                ) : null}
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">机会</div>
-                    <ul className="mt-2 space-y-1.5 text-sm text-[var(--text)]">
-                      {llm.opportunityNotes.slice(0, 4).map((note, idx) => (
-                        <li key={`op-${idx}`} className="flex gap-2">
-                          <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
-                          <span>{note}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.56)] px-4 py-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">风险</div>
-                    <ul className="mt-2 space-y-1.5 text-sm text-[var(--text)]">
-                      {llm.riskNotes.slice(0, 4).map((note, idx) => (
-                        <li key={`risk-${idx}`} className="flex gap-2">
-                          <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-[var(--amber)]" />
-                          <span>{note}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <DaaSurfaceEmptyState
-                title="暂无 AI 解读"
-                description="如果其他页签已有结构化信号，可以先据此判断；AI 解读生成后会同步展示在这里。"
-                className="border-0 bg-transparent px-0 py-2 text-left"
-              />
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * WeightGapCell — inline-edit target weight + gap bar (merged column 5)
@@ -934,20 +456,11 @@ function MobileAssetCard(props: {
   baseCurrency: string;
   disabled?: boolean;
   actioningAssetKey?: string | null;
-  insightData: WorkbenchAssetInsightResponse | null;
-  expanded: boolean;
-  insightLoading: boolean;
-  insightError: string;
-  llmFeedbackSubmittingByContext: Record<string, boolean>;
-  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
   onAddToExecution: (row: AssetUniverseView, side: TradeTicketSide) => void;
   onToggleBasket: (row: AssetUniverseView, nextInBasket: boolean) => Promise<void>;
   onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
   onOpenCalibration: (row: AssetUniverseView) => void;
-  onToggleInlineInsights: (row: AssetUniverseView) => void;
   onViewChart: (row: AssetUniverseView) => void;
-  onSubmitLlmFeedback: (input: { contextId: string; type: "insight"; score: WorkbenchLlmFeedbackScore }) => void;
-  onOpenFusionBreakdown: (assetKey: string) => void;
 }) {
   const { row } = props;
   const price = row.lastPrice > 0 ? row.lastPrice : row.holdingPrice;
@@ -961,10 +474,6 @@ function MobileAssetCard(props: {
 
   const buyReason = disabledReason({ disabled: buyDisabled, disabledGlobal: Boolean(props.disabled), price, requireHolding: false, holdingQty: row.holdingQty });
   const sellReason = disabledReason({ disabled: sellDisabled, disabledGlobal: Boolean(props.disabled), price, requireHolding: true, holdingQty: row.holdingQty });
-
-  const feedbackContextId = props.insightData?.llmAnalysis?.status === "ok"
-    ? `insight:${row.assetKey}:${props.insightData?.llmAnalysis?.generatedAt || props.insightData?.generatedAt || ""}`
-    : null;
 
   return (
     <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.82)]">
@@ -1013,8 +522,8 @@ function MobileAssetCard(props: {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
             <DropdownMenuLabel className="text-xs text-[var(--faint)]">低频操作</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => props.onToggleInlineInsights(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
-              {props.expanded ? "收起详情" : "展开详情"}
+            <DropdownMenuItem asChild className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
+              <Link href={`/daa/dashboard/portfolio/${encodeURIComponent(row.assetKey)}`}>查看详情（Agent 观点 + 新闻）</Link>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => props.onViewChart(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
               K 线图表
@@ -1044,21 +553,6 @@ function MobileAssetCard(props: {
         </DropdownMenu>
       </div>
 
-      {/* ── Inline insights (expanded) ── */}
-      {props.expanded ? (
-        <div className="border-t border-[var(--border)] px-4 py-4">
-          <InlineInsights
-            loading={props.insightLoading}
-            error={props.insightError}
-            data={props.insightData}
-            feedbackContextId={feedbackContextId}
-            feedbackSubmitting={Boolean(props.llmFeedbackSubmittingByContext[feedbackContextId || ""])}
-            feedbackScore={feedbackContextId ? props.llmFeedbackScoreByContext[feedbackContextId] || null : null}
-            onSubmitFeedback={props.onSubmitLlmFeedback}
-            onOpenFusionBreakdown={() => props.onOpenFusionBreakdown(row.assetKey)}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1080,20 +574,11 @@ function MobileAssetCardList(props: {
   disabled?: boolean;
   updatingTarget?: boolean;
   actioningAssetKey?: string | null;
-  insightDataByAssetKey: Record<string, WorkbenchAssetInsightResponse>;
-  expandedInsightKeys: Record<string, boolean>;
-  insightLoadingByAssetKey: Record<string, boolean>;
-  insightErrorByAssetKey: Record<string, string>;
-  llmFeedbackSubmittingByContext: Record<string, boolean>;
-  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
   onAddToExecution: (row: AssetUniverseView, side: TradeTicketSide) => void;
   onToggleBasket: (row: AssetUniverseView, nextInBasket: boolean) => Promise<void>;
   onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
   onOpenCalibration: (row: AssetUniverseView) => void;
-  onToggleInlineInsights: (row: AssetUniverseView) => void;
   onViewChart: (row: AssetUniverseView) => void;
-  onSubmitLlmFeedback: (input: { contextId: string; type: "insight"; score: WorkbenchLlmFeedbackScore }) => void;
-  onOpenFusionBreakdown: (assetKey: string) => void;
   hasKeyword: boolean;
   onClearKeyword: () => void;
 }) {
@@ -1136,20 +621,11 @@ function MobileAssetCardList(props: {
               baseCurrency={props.baseCurrency}
               disabled={props.disabled}
               actioningAssetKey={props.actioningAssetKey}
-              insightData={props.insightDataByAssetKey[row.assetKey] || null}
-              expanded={Boolean(props.expandedInsightKeys[row.assetKey])}
-              insightLoading={Boolean(props.insightLoadingByAssetKey[row.assetKey])}
-              insightError={props.insightErrorByAssetKey[row.assetKey] || ""}
-              llmFeedbackSubmittingByContext={props.llmFeedbackSubmittingByContext}
-              llmFeedbackScoreByContext={props.llmFeedbackScoreByContext}
               onAddToExecution={props.onAddToExecution}
               onToggleBasket={props.onToggleBasket}
               onRemoveFromWatchlist={props.onRemoveFromWatchlist}
               onOpenCalibration={props.onOpenCalibration}
-              onToggleInlineInsights={props.onToggleInlineInsights}
               onViewChart={props.onViewChart}
-              onSubmitLlmFeedback={props.onSubmitLlmFeedback}
-              onOpenFusionBreakdown={props.onOpenFusionBreakdown}
             />
           );
         })}
@@ -1175,18 +651,6 @@ export default function AssetUniverseTable(props: {
   onRemoveFromWatchlist: (row: AssetUniverseView) => Promise<void>;
   onOpenCalibration: (row: AssetUniverseView) => void;
   onViewChart?: (row: AssetUniverseView) => void;
-  expandedInsightKeys: Record<string, boolean>;
-  insightLoadingByAssetKey: Record<string, boolean>;
-  insightErrorByAssetKey: Record<string, string>;
-  insightDataByAssetKey: Record<string, WorkbenchAssetInsightResponse>;
-  onToggleInlineInsights: (row: AssetUniverseView) => void;
-  onSubmitLlmFeedback: (input: {
-    contextId: string;
-    type: "insight";
-    score: WorkbenchLlmFeedbackScore;
-  }) => void;
-  llmFeedbackSubmittingByContext: Record<string, boolean>;
-  llmFeedbackScoreByContext: Record<string, WorkbenchLlmFeedbackScore>;
   actioningAssetKey?: string | null;
   disabled?: boolean;
   updatingTarget?: boolean;
@@ -1194,7 +658,6 @@ export default function AssetUniverseTable(props: {
   const [keyword, setKeyword] = useState("");
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const [editingTargetKey, setEditingTargetKey] = useState<string | null>(null);
-  const [fusionBreakdownKey, setFusionBreakdownKey] = useState<string | null>(null);
   const hasKeyword = keyword.trim().length > 0;
 
   // --- Item 20: Watchlist tag filter ---
@@ -1256,27 +719,6 @@ export default function AssetUniverseTable(props: {
   }, []);
 
   const isColumnVisible = useCallback((id: string) => visibleColumns.has(id), [visibleColumns]);
-
-  const fusionBreakdownData = useMemo(() => {
-    if (!fusionBreakdownKey) return null;
-    const insight = props.insightDataByAssetKey[fusionBreakdownKey];
-    if (!insight?.opportunity) return null;
-    return {
-      symbol: insight.symbol,
-      scores: insight.opportunity.scores ?? null,
-      finalScore: insight.opportunity.finalScorePct,
-      confidence: insight.opportunity.confidencePct,
-      action: insight.opportunity.action,
-    };
-  }, [fusionBreakdownKey, props.insightDataByAssetKey]);
-
-  const handleOpenFusionBreakdown = useCallback((assetKey: string) => {
-    setFusionBreakdownKey(assetKey);
-  }, []);
-
-  const handleCloseFusionBreakdown = useCallback((open: boolean) => {
-    if (!open) setFusionBreakdownKey(null);
-  }, []);
 
   const filteredRows = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -1493,20 +935,11 @@ export default function AssetUniverseTable(props: {
           disabled={props.disabled}
           updatingTarget={props.updatingTarget}
           actioningAssetKey={props.actioningAssetKey}
-          insightDataByAssetKey={props.insightDataByAssetKey}
-          expandedInsightKeys={props.expandedInsightKeys}
-          insightLoadingByAssetKey={props.insightLoadingByAssetKey}
-          insightErrorByAssetKey={props.insightErrorByAssetKey}
-          llmFeedbackSubmittingByContext={props.llmFeedbackSubmittingByContext}
-          llmFeedbackScoreByContext={props.llmFeedbackScoreByContext}
           onAddToExecution={props.onAddToExecution}
           onToggleBasket={props.onToggleBasket}
           onRemoveFromWatchlist={props.onRemoveFromWatchlist}
           onOpenCalibration={props.onOpenCalibration}
-          onToggleInlineInsights={props.onToggleInlineInsights}
           onViewChart={props.onViewChart ?? (() => {})}
-          onSubmitLlmFeedback={props.onSubmitLlmFeedback}
-          onOpenFusionBreakdown={handleOpenFusionBreakdown}
           hasKeyword={hasKeyword}
           onClearKeyword={() => setKeyword("")}
         />
@@ -1563,11 +996,8 @@ export default function AssetUniverseTable(props: {
                 const sellDisabled = props.disabled || !(price > 0) || !(row.holdingQty > 0);
                 const actionBusy = props.actioningAssetKey === row.assetKey;
                 const inBasket = isInBasket(row);
-                const expanded = Boolean(props.expandedInsightKeys[row.assetKey]);
                 const rowValuation = localValuation(row);
                 const rowPnlPct = unrealizedPnlPct(row);
-                const valuationScore = props.insightDataByAssetKey[row.assetKey]?.valuation?.scorePct ?? null;
-                const valuationTemp = valuationTemperatureMeta(valuationScore);
                 const tagSummary = rowTagSummary(row);
 
                 const buyReason = disabledReason({
@@ -1584,10 +1014,6 @@ export default function AssetUniverseTable(props: {
                   requireHolding: true,
                   holdingQty: row.holdingQty,
                 });
-
-                const feedbackContextId = props.insightDataByAssetKey[row.assetKey]?.llmAnalysis?.status === "ok"
-                  ? `insight:${row.assetKey}:${props.insightDataByAssetKey[row.assetKey]?.llmAnalysis?.generatedAt || props.insightDataByAssetKey[row.assetKey]?.generatedAt || ""}`
-                  : null;
 
                 const isEditingTarget = editingTargetKey === row.assetKey;
 
@@ -1695,7 +1121,6 @@ export default function AssetUniverseTable(props: {
                         ) : (
                           <div className="text-xs text-[var(--faint)]">-</div>
                         )}
-                        <div className={cn("mt-1 text-[10px]", valuationTemp.className)}>{valuationTemp.text}</div>
                       </td>
                       )}
                       {/* Column 7: 操作 (sticky) — trade dropdown + more menu */}
@@ -1738,8 +1163,8 @@ export default function AssetUniverseTable(props: {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48 border-[var(--border)] bg-[rgba(8,12,20,0.98)] text-[var(--text)]">
                               <DropdownMenuLabel className="text-xs text-[var(--faint)]">低频操作</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => props.onToggleInlineInsights(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
-                                {expanded ? "收起详情" : "展开详情"}
+                              <DropdownMenuItem asChild className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
+                                <Link href={`/daa/dashboard/portfolio/${encodeURIComponent(row.assetKey)}`}>查看详情（Agent 观点 + 新闻）</Link>
                               </DropdownMenuItem>
                               {props.onViewChart && (
                                 <DropdownMenuItem onClick={() => props.onViewChart?.(row)} className="text-xs focus:bg-[rgba(56,189,248,0.12)] focus:text-[var(--text)]">
@@ -1772,30 +1197,6 @@ export default function AssetUniverseTable(props: {
                         </div>
                       </td>
                     </tr>
-
-                    {expanded ? (
-                      <tr className="border-b border-[var(--border)]/70 bg-[rgba(8,12,20,0.86)]">
-                        <td colSpan={visibleColCount} className="px-4 py-4">
-                          {/* 快速信息条 */}
-                          <div className="flex flex-wrap gap-4 border-b border-[var(--border)] px-4 py-2.5 text-xs mb-4 -mx-4 -mt-4 rounded-t-[4px]">
-                            <span className="text-[var(--faint)]">类型: {rowTypeSummary(row)} · {rowTypeDetail(row)}</span>
-                            <span className={cn("", row.fxMissing ? "text-rose-200" : "text-[var(--faint)]")}>汇率: {fxLabel(row)}</span>
-                            <span className={cn("", valuationTemp.className)}>估值温度: {valuationTemp.text}</span>
-                            <span className="text-[var(--faint)]">{hfSignalButtonLabel(row.hfSignal)}</span>
-                          </div>
-                          <InlineInsights
-                            loading={Boolean(props.insightLoadingByAssetKey[row.assetKey])}
-                            error={props.insightErrorByAssetKey[row.assetKey] || ""}
-                            data={props.insightDataByAssetKey[row.assetKey] || null}
-                            feedbackContextId={feedbackContextId}
-                            feedbackSubmitting={Boolean(props.llmFeedbackSubmittingByContext[feedbackContextId || ""])}
-                            feedbackScore={feedbackContextId ? props.llmFeedbackScoreByContext[feedbackContextId] || null : null}
-                            onSubmitFeedback={props.onSubmitLlmFeedback}
-                            onOpenFusionBreakdown={() => handleOpenFusionBreakdown(row.assetKey)}
-                          />
-                        </td>
-                      </tr>
-                    ) : null}
                   </Fragment>
                 );
               })}
@@ -1826,17 +1227,6 @@ export default function AssetUniverseTable(props: {
           </table>
         </TooltipProvider>
       </div>
-
-      {/* Fusion score breakdown dialog */}
-      <FusionScoreBreakdown
-        symbol={fusionBreakdownData?.symbol ?? ""}
-        scores={fusionBreakdownData?.scores ?? null}
-        finalScore={fusionBreakdownData?.finalScore ?? 0}
-        confidence={fusionBreakdownData?.confidence ?? 0}
-        action={fusionBreakdownData?.action ?? ""}
-        open={fusionBreakdownKey !== null && fusionBreakdownData !== null}
-        onOpenChange={handleCloseFusionBreakdown}
-      />
     </DaaSurfacePanel>
   );
 }

@@ -582,15 +582,6 @@ export type DaaStoreTriggerEvent = {
   createdAt: string;
 };
 
-export type DaaStoreLlmFeedback = {
-  id: string;
-  contextId: string;
-  type: "insight" | "decision";
-  score: "up" | "down";
-  comment: string | null;
-  createdAt: string;
-};
-
 export type DaaStoreCreateRebalanceCycleInput = {
   cycleId?: string;
   status?: DaaStoreRebalanceCycleStatus;

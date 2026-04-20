@@ -33,17 +33,23 @@ export async function GET(req: Request) {
     if (denied) return denied;
 
     const url = new URL(req.url);
-    const hours = Math.max(1, Math.min(72, parseInt(url.searchParams.get("hours") || "24", 10) || 24));
+    const hours = Math.max(1, Math.min(168, parseInt(url.searchParams.get("hours") || "24", 10) || 24));
     const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get("limit") || "30", 10) || 30));
+    const singleSymbol = url.searchParams.get("symbol")?.trim().toUpperCase();
 
-    // 关注的 symbol 集合：持仓 + watchlist
-    const assets = await listDaaAssetUniverse();
-    const watchedSymbols = [...new Set(
-      assets
-        .filter((a) => a.holdingQty > 0 || a.watchEnabled !== false)
-        .map((a) => a.symbol.trim().toUpperCase())
-        .filter(Boolean),
-    )];
+    // 单 symbol 模式：资产详情页使用
+    let watchedSymbols: string[];
+    if (singleSymbol) {
+      watchedSymbols = [singleSymbol];
+    } else {
+      const assets = await listDaaAssetUniverse();
+      watchedSymbols = [...new Set(
+        assets
+          .filter((a) => a.holdingQty > 0 || a.watchEnabled !== false)
+          .map((a) => a.symbol.trim().toUpperCase())
+          .filter(Boolean),
+      )];
+    }
 
     if (watchedSymbols.length === 0) {
       return ok({ items: [], watchedSymbols: [], hours, limit });

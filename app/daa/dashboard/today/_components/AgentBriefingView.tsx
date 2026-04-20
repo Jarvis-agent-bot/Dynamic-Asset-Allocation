@@ -227,10 +227,11 @@ export default function AgentBriefingView() {
           <button
             onClick={triggerRun}
             disabled={running || !hasTheses}
-            className="flex items-center gap-1.5 rounded-lg bg-[rgba(255,255,255,0.06)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[rgba(255,255,255,0.1)] hover:text-[var(--text)] disabled:opacity-50"
+            title="通常无需手动触发，系统会按 Schedule 自动运行。这里用于立即刷新一次。"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--faint)] transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--muted)] disabled:opacity-40"
+            aria-label="立即手动触发一次 Agent 调查"
           >
             {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            运行调查
           </button>
         </div>
       </div>

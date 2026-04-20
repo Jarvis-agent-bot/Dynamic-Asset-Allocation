@@ -10,12 +10,8 @@ import type {
   PreTradeRiskCheck,
   RebalanceCycle,
   UpdateRebalanceCycleInput,
-  WorkbenchAssetInsightResponse,
   WorkbenchExecutionExecuteInput,
   WorkbenchFeaturedAssetsResult,
-  WorkbenchLlmFeedbackRow,
-  WorkbenchLlmFeedbackScore,
-  WorkbenchLlmFeedbackType,
   WorkbenchExecutionExecuteResult,
   WorkbenchMarketOrderPreviewResult,
   WorkbenchSearchAssetResult,
@@ -132,19 +128,6 @@ export async function patchWorkbenchAsset(assetKey: string, input: {
   return data.row;
 }
 
-export async function getWorkbenchAssetInsights(assetKey: string, opts: {
-  analysisFocus?: string;
-  includeLlm?: boolean;
-} = {}): Promise<WorkbenchAssetInsightResponse> {
-  const qs = new URLSearchParams();
-  if (opts.analysisFocus) qs.set("analysisFocus", opts.analysisFocus);
-  if (opts.includeLlm != null) qs.set("includeLlm", opts.includeLlm ? "1" : "0");
-  return requestData<WorkbenchAssetInsightResponse>(`/api/daa/workbench/assets/${encodeURIComponent(assetKey)}/insights${qs.toString() ? `?${qs.toString()}` : ""}`, {
-    method: "GET",
-    cache: "no-store",
-  });
-}
-
 export async function generateWorkbenchRebalanceCycle(
   input: GenerateRebalanceCycleInput = {},
 ): Promise<GenerateRebalanceCycleResult> {
@@ -184,20 +167,6 @@ export async function summarizeWorkbenchRebalanceExecution(
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-}
-
-export async function submitWorkbenchLlmFeedback(input: {
-  contextId: string;
-  type: WorkbenchLlmFeedbackType;
-  score: WorkbenchLlmFeedbackScore;
-  comment?: string;
-}): Promise<WorkbenchLlmFeedbackRow> {
-  const payload = await requestData<{ row: WorkbenchLlmFeedbackRow }>("/api/daa/workbench/llm-feedback", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  return payload.row;
 }
 
 export async function runWorkbenchRiskCheck(input: {

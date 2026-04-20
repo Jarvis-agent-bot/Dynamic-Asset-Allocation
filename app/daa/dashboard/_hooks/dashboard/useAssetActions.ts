@@ -1,28 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "sonner";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import type { CalibrationDraft, OrderDraft } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import {
   executeWorkbenchOrder,
-  getWorkbenchAssetInsights,
   listWorkbenchFeaturedAssets,
   patchWorkbenchAsset,
   previewWorkbenchExecution,
   searchWorkbenchAssets,
-  submitWorkbenchLlmFeedback,
   upsertWorkbenchAsset,
 } from "@/src/daa/modules/workbench/workbenchApi";
 import type {
   AssetUniverseView,
-  WorkbenchAssetInsightResponse,
   WorkbenchBootstrap,
   WorkbenchFeaturedAssetItem,
   WorkbenchFeaturedAssetsResult,
-  WorkbenchLlmFeedbackScore,
   WorkbenchMarketOrderPreviewResult,
   WorkbenchSearchAssetResult,
 } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -40,45 +35,11 @@ export function useAssetActions(input: {
   const [assetActioningKey, setAssetActioningKey] = useState<string | null>(null);
   const [orderDraft, setOrderDraft] = useState<OrderDraft>(null);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
-  const [expandedInsightKeys, setExpandedInsightKeys] = useState<Record<string, boolean>>({});
-  const [insightLoadingByAssetKey, setInsightLoadingByAssetKey] = useState<Record<string, boolean>>({});
-  const [insightErrorByAssetKey, setInsightErrorByAssetKey] = useState<Record<string, string>>({});
-  const [insightDataByAssetKey, setInsightDataByAssetKey] = useState<Record<string, WorkbenchAssetInsightResponse>>({});
-  const [llmFeedbackSubmittingByContext, setLlmFeedbackSubmittingByContext] = useState<Record<string, boolean>>({});
-  const [llmFeedbackScoreByContext, setLlmFeedbackScoreByContext] = useState<Record<string, WorkbenchLlmFeedbackScore>>({});
   const [calibrationDraft, setCalibrationDraft] = useState<CalibrationDraft>(null);
   const [calibrating, setCalibrating] = useState(false);
-  const insightPrefetchedRef = useRef<Record<string, true>>({});
   // 使用 ref 稳定 input 引用，避免 useCallback 依赖整个 input 对象导致回调不稳定
   const inputRef = useRef(input);
   inputRef.current = input;
-
-  const analysisFocus = input.bootstrap?.rebalanceStrategy.analysisFocus;
-  useEffect(() => {
-    if (!input.bootstrap) return;
-    let alive = true;
-    const seeds = input.assetRows
-      .filter((row) => row.holdingQty > 0 || row.watchEnabled)
-      .slice(0, 8);
-    for (const row of seeds) {
-      if (insightPrefetchedRef.current[row.assetKey]) continue;
-      insightPrefetchedRef.current[row.assetKey] = true;
-      setInsightLoadingByAssetKey((prev) => ({ ...prev, [row.assetKey]: true }));
-      void getWorkbenchAssetInsights(row.assetKey, {
-        analysisFocus,
-        includeLlm: false,
-      }).then((data) => {
-        if (!alive) return;
-        setInsightDataByAssetKey((prev) => ({ ...prev, [row.assetKey]: data }));
-      }).catch((err) => {
-        logSwallowed("useAssetActions.prefetchInsight", err);
-      }).finally(() => {
-        if (!alive) return;
-        setInsightLoadingByAssetKey((prev) => ({ ...prev, [row.assetKey]: false }));
-      });
-    }
-    return () => { alive = false; };
-  }, [input.assetRows, input.bootstrap, analysisFocus]);
 
   const joinedAssetKeys = useMemo(() => {
     const out: Record<string, true> = {};
@@ -190,39 +151,11 @@ export function useAssetActions(input: {
     await inputRef.current.loadBootstrap(true);
   }, []);
 
-  const handleToggleInlineInsights = useCallback(async (row: AssetUniverseView) => {
-    const assetKey = row.assetKey;
-    const opened = Boolean(expandedInsightKeys[assetKey]);
-    setExpandedInsightKeys((prev) => ({ ...prev, [assetKey]: !opened }));
-    if (opened) return;
-    // 如果已有 LLM 数据或正在加载则跳过；但如果只有非 LLM prefetch 数据则重新获取含 LLM 的完整数据
-    const existing = insightDataByAssetKey[assetKey];
-    if (insightLoadingByAssetKey[assetKey]) return;
-    if (existing?.llmAnalysis?.status === "ok") return;
-
-    setInsightLoadingByAssetKey((prev) => ({ ...prev, [assetKey]: true }));
-    setInsightErrorByAssetKey((prev) => ({ ...prev, [assetKey]: "" }));
-    try {
-      const data = await getWorkbenchAssetInsights(assetKey, {
-        analysisFocus: input.bootstrap?.rebalanceStrategy.analysisFocus,
-        includeLlm: true,
-      });
-      setInsightDataByAssetKey((prev) => ({ ...prev, [assetKey]: data }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "加载资产洞察失败";
-      setInsightErrorByAssetKey((prev) => ({ ...prev, [assetKey]: message }));
-      toast.error(message);
-    } finally {
-      setInsightLoadingByAssetKey((prev) => ({ ...prev, [assetKey]: false }));
-    }
-  }, [expandedInsightKeys, insightDataByAssetKey, insightLoadingByAssetKey, input.bootstrap?.rebalanceStrategy.analysisFocus]);
-
   const handleRemoveFromWatchlist = useCallback(async (row: AssetUniverseView) => {
     if (assetActioningKey) return;
     setAssetActioningKey(row.assetKey);
     try {
       await patchWorkbenchAsset(row.assetKey, { watchEnabled: false, targetWeightHint: 0 });
-      setExpandedInsightKeys((prev) => ({ ...prev, [row.assetKey]: false }));
       toast.success(`${row.symbol} 已移出观察列表`, {
         action: {
           label: "撤销",
@@ -244,30 +177,6 @@ export function useAssetActions(input: {
       setAssetActioningKey(null);
     }
   }, [assetActioningKey]);
-
-  const handleSubmitLlmFeedback = useCallback(async (payload: {
-    contextId: string;
-    type: "insight" | "decision";
-    score: WorkbenchLlmFeedbackScore;
-    comment?: string;
-  }) => {
-    if (!payload.contextId) return;
-    if (llmFeedbackSubmittingByContext[payload.contextId]) return;
-    setLlmFeedbackSubmittingByContext((prev) => ({ ...prev, [payload.contextId]: true }));
-    try {
-      await submitWorkbenchLlmFeedback({
-        contextId: payload.contextId,
-        type: payload.type,
-        score: payload.score,
-      });
-      setLlmFeedbackScoreByContext((prev) => ({ ...prev, [payload.contextId]: payload.score }));
-      toast.success("已记录反馈");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "反馈提交失败");
-    } finally {
-      setLlmFeedbackSubmittingByContext((prev) => ({ ...prev, [payload.contextId]: false }));
-    }
-  }, [llmFeedbackSubmittingByContext]);
 
   const handleToggleBasket = useCallback(async (row: AssetUniverseView, nextInBasket: boolean) => {
     if (assetActioningKey) return;
@@ -396,14 +305,6 @@ export function useAssetActions(input: {
     onToggleBasket: handleToggleBasket,
     onRemoveFromWatchlist: handleRemoveFromWatchlist,
     onOpenCalibration: handleOpenCalibration,
-    expandedInsightKeys,
-    insightLoadingByAssetKey,
-    insightErrorByAssetKey,
-    insightDataByAssetKey,
-    onToggleInlineInsights: handleToggleInlineInsights,
-    onSubmitLlmFeedback: handleSubmitLlmFeedback,
-    llmFeedbackSubmittingByContext,
-    llmFeedbackScoreByContext,
     actioningAssetKey: assetActioningKey,
     disabled: input.loading || input.busy || Boolean(assetActioningKey),
     updatingTarget: targetUpdating,
@@ -426,9 +327,6 @@ export function useAssetActions(input: {
     calibrationDraft,
     setCalibrationDraft,
     calibrating,
-    llmFeedbackSubmittingByContext,
-    llmFeedbackScoreByContext,
-    handleSubmitLlmFeedback,
     handlePreviewOrder,
     handleSubmitManualOrder,
     handleSubmitCalibration,

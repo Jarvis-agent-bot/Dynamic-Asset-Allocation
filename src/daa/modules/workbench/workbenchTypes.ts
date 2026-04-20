@@ -586,114 +586,6 @@ export type WorkbenchFeaturedAssetsResult = {
   generatedAt: string;
 };
 
-type WorkbenchAssetInsightMetricItem = {
-  key: string;
-  label: string;
-  value: number | string;
-  unit?: string;
-  status?: "bullish" | "bearish" | "neutral" | "unavailable";
-  description?: string;
-};
-
-type WorkbenchAssetPriceSnapshot = {
-  price: number;
-  currency: string;
-  priceStatus: WorkbenchPriceStatus;
-  priceSource: string;
-  priceUpdatedAt: string | null;
-  priceAgeSec: number | null;
-};
-
-type WorkbenchLlmAnalysisView = {
-  status: "skipped" | "ok" | "error";
-  provider: string;
-  model: string;
-  generatedAt: string;
-  summary: string;
-  opportunityNotes: string[];
-  riskNotes: string[];
-  latencyMs: number;
-  reasonCode?: string;
-  reasonMessage?: string;
-  failedAt?: string;
-  marketRegime?: DaaMarketRegime | null;
-  marketFacts?: string[];
-};
-
-export type WorkbenchAssetInsightResponse = {
-  assetKey: string;
-  symbol: string;
-  generatedAt: string;
-  priceSnapshot: WorkbenchAssetPriceSnapshot | null;
-  opportunity: {
-    action: string;
-    actionLabelZh: string;
-    finalScorePct: number;
-    confidencePct: number;
-    riskScorePct: number;
-    reasons: string[];
-    reasonZh: string;
-    riskZh: string;
-    scores?: {
-      human: number;
-      news: number;
-      technical: number;
-      valuation: number;
-      penalty: number;
-    };
-  } | null;
-  technical: {
-    scorePct: number;
-    confidencePct: number;
-    momentumRegime: string;
-    reasons: string[];
-    common: WorkbenchAssetInsightMetricItem[];
-    specific: WorkbenchAssetInsightMetricItem[];
-  } | null;
-  news: {
-    scorePct: number;
-    confidencePct: number;
-    evidenceCount: number;
-    reasons: string[];
-    items: Array<{
-      title: string;
-      link: string;
-      ts: string;
-      sourceCredibility: number;
-      sentimentScore: number;
-    }>;
-    aiSummary: {
-      summary: string;
-      drivers: string[];
-      bullish: string[];
-      bearish: string[];
-      uncertainties: string[];
-      actions: string[];
-    } | null;
-  } | null;
-  valuation: {
-    scorePct: number;
-    confidencePct: number;
-    temperature: "cheap" | "neutral" | "expensive";
-    reasons: string[];
-    common: WorkbenchAssetInsightMetricItem[];
-    specific: WorkbenchAssetInsightMetricItem[];
-    relative: {
-      key: string;
-      label: string;
-      value: number | null;
-      percentile: number | null;
-      trendPct: number | null;
-      status: "bullish" | "bearish" | "neutral" | "unavailable";
-      description?: string;
-    } | null;
-  } | null;
-  marketContext: DaaMarketContext | null;
-  marketAttribution: DaaMarketContextAttribution | null;
-  llmAnalysis: WorkbenchLlmAnalysisView | null;
-  riskHints: string[];
-};
-
 export type WorkbenchMarketOrderPreviewResult = {
   assetKey: string;
   symbol: string;
@@ -716,19 +608,6 @@ export type WorkbenchMarketOrderPreviewResult = {
   priceSource: string;
   priceSnapshotAt: string | null;
   warnings: string[];
-};
-
-export type WorkbenchLlmFeedbackType = "insight" | "decision";
-
-export type WorkbenchLlmFeedbackScore = "up" | "down";
-
-export type WorkbenchLlmFeedbackRow = {
-  id: string;
-  contextId: string;
-  type: WorkbenchLlmFeedbackType;
-  score: WorkbenchLlmFeedbackScore;
-  comment: string | null;
-  createdAt: string;
 };
 
 // ── Tax-Loss Harvesting Types ──────────────────────────────────────────

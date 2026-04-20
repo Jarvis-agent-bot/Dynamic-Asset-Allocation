@@ -24,7 +24,7 @@ import type {
   DaaStoreCashLedgerApplyInput, DaaCurrentLedgerMeta,
   DaaStoreRebalanceCycle, DaaStoreCreateRebalanceCycleInput,
   DaaStorePatchRebalanceCycleInput, DaaStoreCycleReport,
-  DaaStoreTriggerEvent, DaaStoreLlmFeedback,
+  DaaStoreTriggerEvent,
   DaaStoreRebalanceTriggerSource,
   DaaStorePreTradeRiskCheck, DaaStorePreTradeRiskCheckItem,
 } from "./storeTypes";
@@ -850,19 +850,6 @@ function mapTriggerEventRow(row: Record<string, unknown>): DaaStoreTriggerEvent 
     cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
     status: status as "accepted" | "skipped" | "conflict",
     detailsJson: parseJsonb<Record<string, unknown>>(row.details_json, {}),
-    createdAt: toIsoString(row.created_at),
-  };
-}
-
-function mapLlmFeedbackRow(row: Record<string, unknown>): DaaStoreLlmFeedback {
-  const typeRaw = normalizeText(row.type, "insight").toLowerCase();
-  const scoreRaw = normalizeText(row.score, "up").toLowerCase();
-  return {
-    id: normalizeText(row.id),
-    contextId: normalizeText(row.context_id),
-    type: typeRaw === "decision" ? "decision" : "insight",
-    score: scoreRaw === "down" ? "down" : "up",
-    comment: row.comment == null ? null : normalizeText(row.comment) || null,
     createdAt: toIsoString(row.created_at),
   };
 }
@@ -1734,57 +1721,6 @@ export async function appendDaaTriggerEvent(input: {
       [eventId, idempotencyKey, triggerSource, triggerReason, cycleId, status, JSON.stringify(detailsJson)],
     );
     return mapTriggerEventRow(result.rows[0] as Record<string, unknown>);
-  });
-}
-
-export async function appendDaaLlmFeedback(input: {
-  contextId: string;
-  type: "insight" | "decision";
-  score: "up" | "down";
-  comment?: string;
-}): Promise<DaaStoreLlmFeedback> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const contextId = normalizeText(input.contextId);
-    if (!contextId) throw new Error("contextId is required");
-    const type = input.type === "decision" ? "decision" : "insight";
-    const score = input.score === "down" ? "down" : "up";
-    const comment = normalizeText(input.comment, "") || null;
-    const id = randomUUID();
-    const inserted = await query(
-      `
-      INSERT INTO daa_llm_feedback (id, context_id, type, score, comment, created_at)
-      VALUES ($1, $2, $3, $4, $5, NOW())
-      RETURNING id, context_id, type, score, comment, created_at
-      `,
-      [id, contextId, type, score, comment],
-    );
-    return mapLlmFeedbackRow(inserted.rows[0] as Record<string, unknown>);
-  });
-}
-
-export async function listDaaLlmFeedback(input: {
-  type?: "insight" | "decision";
-  limit?: number;
-} = {}): Promise<DaaStoreLlmFeedback[]> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(input.limit, 100))));
-    const params: unknown[] = [];
-    const where: string[] = [];
-    if (input.type) {
-      params.push(input.type === "decision" ? "decision" : "insight");
-      where.push(`type = $${params.length}`);
-    }
-    params.push(limit);
-    const sql = [
-      "SELECT id, context_id, type, score, comment, created_at",
-      "FROM daa_llm_feedback",
-      where.length ? `WHERE ${where.join(" AND ")}` : "",
-      `ORDER BY created_at DESC LIMIT $${params.length}`,
-    ].filter(Boolean).join(" ");
-    const result = await query(sql, params);
-    return result.rows.map((row) => mapLlmFeedbackRow(row as Record<string, unknown>));
   });
 }
 

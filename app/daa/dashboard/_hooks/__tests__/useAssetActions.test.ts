@@ -156,25 +156,6 @@ describe("useAssetActions", () => {
     expect(toast.error).toHaveBeenCalled();
   });
 
-  it("handleSubmitLlmFeedback calls API and tracks state", async () => {
-    const { submitWorkbenchLlmFeedback } = await import("@/src/daa/modules/workbench/workbenchApi");
-    const { result } = renderHook(() => useAssetActions(makeInput()));
-
-    await act(async () => {
-      await result.current.handleSubmitLlmFeedback({
-        contextId: "ctx-1",
-        type: "insight",
-        score: "up",
-      });
-    });
-
-    expect(submitWorkbenchLlmFeedback).toHaveBeenCalledWith({
-      contextId: "ctx-1",
-      type: "insight",
-      score: "up",
-    });
-  });
-
   it("tableProps.disabled reflects busy state", () => {
     const { result: r1 } = renderHook(() =>
       useAssetActions(makeInput({ busy: false, loading: false })),
