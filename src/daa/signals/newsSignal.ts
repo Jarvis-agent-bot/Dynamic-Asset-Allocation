@@ -75,11 +75,16 @@ export async function buildNewsSignalForSymbol(
   }
 
   // Step 3: 存储新闻 item（sentimentScore=0 标记为 reserved，P0-1 修复）
-  const newsItems = rawItems.map((item) => toNewsSignalItem(normalizedSymbol, item));
+  // 使用 rawItem.provider 保留真实来源（alpaca / yahoo_rss 等），方便排查数据
+  // 分布；未知来源时回退到 "multi"。
+  const newsItems = rawItems.map((item, idx) => ({
+    ...toNewsSignalItem(normalizedSymbol, item),
+    _rawProvider: rawItems[idx].provider,
+  }));
   if (newsItems.length > 0) {
     try {
       await upsertDaaNewsItemSnapshots(newsItems.map((item) => ({
-        provider: "multi",
+        provider: item._rawProvider || "multi",
         symbol: normalizedSymbol,
         itemHash: hashNewsItem(item.title, item.link, item.ts),
         title: item.title,

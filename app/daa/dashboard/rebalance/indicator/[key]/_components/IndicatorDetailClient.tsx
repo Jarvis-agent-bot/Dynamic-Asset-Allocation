@@ -98,11 +98,17 @@ export default function IndicatorDetailClient(props: { indicatorKey: string }) {
           <ArrowLeft className="h-4 w-4" />调仓
         </button>
         <span className="text-lg font-bold text-[var(--text)]">{data.label}</span>
-        {data.currentValue != null ? (
-          <span className="font-[var(--font-mono)] text-xl font-bold text-[var(--text)]">
-            {data.currentValue.toFixed(data.unit === "x" ? 4 : 2)}{data.unit === "%" ? "%" : data.unit === "x" ? "" : ` ${data.unit}`}
-          </span>
-        ) : null}
+        {/* 优先用 snapshot.rawValue 保持与"指标概览"一致；series.currentValue 是
+            时间序列最后一点，与 snapshot 不同步时会让两个视图显示不同数字。 */}
+        {(() => {
+          const displayValue = snapshot?.rawValue ?? data.currentValue;
+          if (displayValue == null) return null;
+          return (
+            <span className="font-[var(--font-mono)] text-xl font-bold text-[var(--text)]">
+              {displayValue.toFixed(data.unit === "x" ? 4 : 2)}{data.unit === "%" ? "%" : data.unit === "x" ? "" : ` ${data.unit}`}
+            </span>
+          );
+        })()}
         {snapshot ? (
           <>
             <span className="text-xs text-[var(--faint)]">百分位 {snapshot.percentile252?.toFixed(0) ?? "—"}%</span>

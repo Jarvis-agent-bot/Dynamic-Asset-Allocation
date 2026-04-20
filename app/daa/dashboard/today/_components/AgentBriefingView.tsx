@@ -80,6 +80,39 @@ interface AgentStatus {
     briefing: DailyBriefing | null;
   } | null;
   memoryCount: number;
+  schedule: { mode: string; timesUtc: string[] } | null;
+}
+
+/** 计算下次 cron 运行时间（UTC timesUtc，返回最近未来的一次） */
+function computeNextRun(timesUtc: string[]): Date | null {
+  if (!timesUtc || timesUtc.length === 0) return null;
+  const now = new Date();
+  const candidates: Date[] = [];
+  for (const t of timesUtc) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+    if (!m) continue;
+    const h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    for (const dayOffset of [0, 1]) {
+      const d = new Date(Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + dayOffset,
+        h, mm, 0, 0,
+      ));
+      if (d.getTime() > now.getTime()) candidates.push(d);
+    }
+  }
+  candidates.sort((a, b) => a.getTime() - b.getTime());
+  return candidates[0] ?? null;
+}
+
+function formatCountdown(target: Date): string {
+  const ms = target.getTime() - Date.now();
+  if (ms <= 0) return "即将运行";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const restMin = mins % 60;
+  return `${hrs}h${restMin.toString().padStart(2, "0")}m`;
 }
 
 export default function AgentBriefingView() {
@@ -163,6 +196,22 @@ export default function AgentBriefingView() {
           <span className="rounded-full bg-[rgba(255,255,255,0.06)] px-2 py-0.5 text-xs text-[var(--muted)]">
             {theses.length} 论点 · <Link href="/daa/dashboard/today/memories" className="hover:text-indigo-400 transition-colors">{status?.memoryCount ?? 0} 记忆</Link>
           </span>
+          {status?.schedule && (() => {
+            const nextRun = computeNextRun(status.schedule.timesUtc);
+            const schedLabel = status.schedule.mode === "2x_daily" ? "每日 2 次"
+              : status.schedule.mode === "daily" ? "每日 1 次"
+              : status.schedule.mode === "every_6h" ? "每 6 小时"
+              : "手动";
+            return (
+              <span
+                className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-300"
+                title={`自动运行时段（UTC）: ${status.schedule.timesUtc.join(" / ")}`}
+              >
+                自动 · {schedLabel}
+                {nextRun && ` · 下次 ${nextRun.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} (${formatCountdown(nextRun)})`}
+              </span>
+            );
+          })()}
         </div>
         <div className="flex gap-2">
           {!hasTheses && (
@@ -416,12 +465,17 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
                     <span className="ml-2 text-[var(--faint)]">({r.conviction})</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[var(--faint)]">暴露 {(r.totalExposurePct * 100).toFixed(1)}%</span>
+                    <span
+                      className="text-[var(--faint)]"
+                      title="敞口 = 该论点涉及资产在组合中的权重合计"
+                    >
+                      敞口 {(r.totalExposurePct * 100).toFixed(1)}%
+                    </span>
                     <span
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${riskColor}`}
-                      title={`估损 = 暴露 × ${lossMult} (${r.conviction} conviction 经验系数, 非 VaR)`}
+                      title={`情景分析，非 VaR：假设该论点完全失效，按 ${r.conviction} conviction 经验系数 ${lossMult} 估算潜在下行。敞口 × ${lossMult} = ${(r.estimatedLossPct * 100).toFixed(1)}%`}
                     >
-                      估损 -{(r.estimatedLossPct * 100).toFixed(1)}%
+                      若失效 -{(r.estimatedLossPct * 100).toFixed(1)}%
                     </span>
                   </div>
                 </div>
