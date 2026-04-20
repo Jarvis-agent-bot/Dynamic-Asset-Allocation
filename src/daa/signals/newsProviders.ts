@@ -1,6 +1,6 @@
 /**
  * 新闻数据源统一接口。
- * 所有新闻 provider（Finnhub、Yahoo RSS 等）都实现此接口。
+ * 所有新闻 provider（Alpaca、Yahoo RSS 等）都实现此接口。
  */
 
 export type RawNewsItem = {
@@ -25,7 +25,7 @@ export function sourceCredibility(source: string | undefined): number {
   const s = String(source || "").toLowerCase();
   if (/sec\.gov|hkex|sse\.com|szse\.com/.test(s)) return 1.0;
   if (/reuters|bloomberg|wsj|ft\.com|cnbc/.test(s)) return 0.9;
-  if (/yahoo|marketwatch|investing\.com|benzinga|finnhub/.test(s)) return 0.78;
+  if (/yahoo|marketwatch|investing\.com|benzinga/.test(s)) return 0.78;
   if (/seekingalpha|motleyfool|barrons/.test(s)) return 0.72;
   return 0.65;
 }

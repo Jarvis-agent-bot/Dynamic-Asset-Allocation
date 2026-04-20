@@ -33,6 +33,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
           agentTriggerEnabled: ca.agentTriggerEnabled ?? false,
           defaultDriftThresholdPct: sysConfig.config.rebalanceStrategy?.drift?.thresholdPct ?? 0.05,
           maxPositionPct: sysConfig.config.strategy?.constraints?.maxPositionPct ?? 0.30,
+          thesisStalenessDays: ca.thesisStalenessDays ?? 7,
         };
       }
     } catch (e) {

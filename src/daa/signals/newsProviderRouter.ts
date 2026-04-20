@@ -5,17 +5,16 @@
 
 import { createHash } from "node:crypto";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import type { RawNewsItem } from "./newsProviders";
+import type { NewsProvider, RawNewsItem } from "./newsProviders";
 import { alpacaNewsProvider } from "./providers/alpacaNews";
-import { finnhubNewsProvider } from "./providers/finnhubNews";
 import { yahooRssNewsProvider } from "./providers/yahooRssNews";
 
 /** 按 market 排序的 provider 优先级
- * US: Alpaca (Benzinga 源，实时 WS + REST) → Finnhub (备选) → Yahoo RSS (最后降级)
- * 其他: 只有 Yahoo RSS
+ * US: Alpaca (Benzinga 源，WS 实时推送 + REST) → Yahoo RSS (降级)
+ * 其他: 只有 Yahoo RSS（HK/CN 等待富途 OpenD 接入）
  */
-const PROVIDER_PRIORITY: Record<string, typeof finnhubNewsProvider[]> = {
-  US: [alpacaNewsProvider, finnhubNewsProvider, yahooRssNewsProvider],
+const PROVIDER_PRIORITY: Record<string, NewsProvider[]> = {
+  US: [alpacaNewsProvider, yahooRssNewsProvider],
   DEFAULT: [yahooRssNewsProvider],
 };
 

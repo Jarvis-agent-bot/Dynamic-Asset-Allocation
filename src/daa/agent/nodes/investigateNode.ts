@@ -321,6 +321,17 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       });
     }
 
+    // 调查完成无论 thesis 是否变化都 bump updated_at，防止认知缺口天数
+    // 永久增长的 bug：否则 LLM 说"无变化"时 target thesis 虽然被调查过但
+    // updated_at 纹丝不动，日报里 medium thesis 永远是 "N 天未调查"。
+    if (result?.evidenceSummary || result?.thesisChanged === false) {
+      try {
+        await thesisStore.touchThesis(thread.id);
+      } catch (e) {
+        logSwallowed("cognitiveGraph.investigate.touch", e);
+      }
+    }
+
     // P0-1: 创建观察记忆 — 无论 thesisChanged 与否，有效调查都留下记忆痕迹
     // thesisChanged 时由 reflectNode 创建记忆，这里只处理未变化的情况
     let observationMemCount = 0;

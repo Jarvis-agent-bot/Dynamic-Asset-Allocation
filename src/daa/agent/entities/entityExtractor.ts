@@ -59,7 +59,9 @@ const NEWS_SOURCES: Array<{ value: string; rx: RegExp }> = [
   { value: "ft", rx: /金融时报|financial times\b/i },
   { value: "cnbc", rx: /\bcnbc\b/i },
   { value: "xueqiu", rx: /雪球|xueqiu/i },
-  { value: "finnhub", rx: /\bfinnhub\b/i },
+  { value: "alpaca", rx: /\balpaca\b/i },
+  { value: "benzinga", rx: /\bbenzinga\b/i },
+  { value: "finnhub", rx: /\bfinnhub\b/i }, // 历史兼容：过去 provider
   { value: "yahoo", rx: /yahoo[\s-]?(finance|news)?/i },
   { value: "sec_filing", rx: /sec\s*(filing|文件)|10[-\s]?[KQ]|8[-\s]?K/i },
 ];

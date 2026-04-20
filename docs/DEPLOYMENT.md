@@ -35,7 +35,7 @@
 External:
   Supabase Auth → 用户登录
   DeepSeek API  → LLM 调用
-  Yahoo / Finnhub / 雪球 / 蛋卷 → 行情与新闻
+  Alpaca (WS) / Yahoo / 雪球 / 蛋卷 → 行情与新闻
   Telegram Bot / Feishu / Resend → 通知
 ```
 
@@ -82,7 +82,7 @@ External:
 |------|------|
 | `DAA_LLM_ENDPOINT` | 默认 `https://api.deepseek.com/v1/chat/completions` |
 | `DAA_LLM_MODEL` | 默认 `deepseek-chat` |
-| `FINNHUB_API_KEY` | US 市场新闻主源（无则 fallback 到 Yahoo RSS） |
+| `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` | US 市场新闻主源（免费 REST + WS 实时推送，Benzinga 源；无则降级到 Yahoo RSS） |
 | `TELEGRAM_BOT_TOKEN` | 出站通知 |
 | `TELEGRAM_CHAT_ID` | 默认接收人 |
 | `TELEGRAM_WEBHOOK_SECRET` | 入站 webhook 验签 |
@@ -149,7 +149,6 @@ services:
   daa-web:
     environment:
       - DAA_ENGINE_BASE_URL=https://your-domain.com
-      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
 ```
 
 ---
@@ -205,7 +204,7 @@ docker compose up -d daa-web
 |----------------|-----|------|
 | `*/15 * * * *` | `price-refresh` | 每 15 分钟刷新持仓 + watchlist 价格 |
 | `5 0 * * *` | `fx-refresh` | 每日 00:05 刷新汇率 |
-| `*/30 * * * *` | `news-refresh` | 每 30 分钟拉取新闻（Finnhub + Yahoo RSS） |
+| `*/30 * * * *` | `news-refresh` | 每 30 分钟批量刷新新闻（Alpaca REST + Yahoo RSS；WS 实时推送另走 daa-ws-news） |
 | `*/30 * * * *` | `market-indicators-refresh` | 每 30 分钟刷新 VIX / 比率类指标 |
 | `0 * * * *` | `daily-analysis` | 每小时生成宏观 LLM 分析 |
 | `0 1,9 * * *` | `drift-check` | 01:00 和 09:00 做漂移检测与调仓建议生成 |

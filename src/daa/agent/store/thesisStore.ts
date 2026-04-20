@@ -175,6 +175,17 @@ export async function updateThesis(
   });
 }
 
+/**
+ * 只刷新 updated_at，不改其他字段。
+ * 供 investigateNode 在"调查完成但 thesis 未变化"时使用，避免
+ * 认知缺口天数永远增长的 bug（medium thesis 被调查后仍显示 N 天未调查）。
+ */
+export async function touchThesis(id: string): Promise<void> {
+  await withDaaPgClient(async ({ query }) => {
+    await query(`UPDATE daa_research_threads SET updated_at = now() WHERE id = $1`, [id]);
+  });
+}
+
 export async function addEvidence(data: {
   threadId: string;
   evidenceType: EvidenceType;

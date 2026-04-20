@@ -116,6 +116,7 @@ export const CognitiveStateAnnotation = Annotation.Root({
     agentTriggerEnabled?: boolean;
     defaultDriftThresholdPct?: number;
     maxPositionPct?: number;
+    thesisStalenessDays?: number;
   } | null>({ reducer: (_, b) => b, default: () => null }),
 
   // Phase 4: 子 agent 调查结果（append reducer — 并行子 agent 各自追加）

@@ -178,7 +178,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 
 **实体图**：6 种 kind 自动抽取
 - `asset`（US::NVDA）、`ticker`（NVDA）、`thesis_id`（UUID）、`regime`（risk_off/on/transitional）
-- `news_source`（reuters/bloomberg/wsj/ft/cnbc/xueqiu/finnhub/yahoo/sec_filing）、`strategy_tag`（thesis.tags）
+- `news_source`（reuters/bloomberg/wsj/ft/cnbc/xueqiu/alpaca/benzinga/finnhub/yahoo/sec_filing）、`strategy_tag`（thesis.tags）
 - 抽取内嵌于 `createMemory` / `createResearchThread`，所有调用方自动获得链接
 - Agent tool `query_entity_history(kind, value)` 回答"关于 NVDA 学到过什么"类查询
 
@@ -483,7 +483,6 @@ DAA_EMBEDDING_PROVIDER=ollama
 | `DAA_CRON_TOKEN` | Cron 容器调 API 的认证 token |
 | `DAA_SECRETS_ENCRYPTION_KEY` | DB 中 secrets 加密密钥 |
 | `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` | Alpaca 免费 News API（REST + WebSocket 实时，Benzinga 源，US 主源） |
-| `FINNHUB_API_KEY` | Finnhub 新闻 API（备选 REST） |
 | `DAA_EMBEDDING_PROVIDER` | Embedding 提供商（siliconflow/deepseek/openai） |
 | `DAA_EMBEDDING_API_KEY` | Embedding API key |
 
@@ -491,8 +490,7 @@ DAA_EMBEDDING_PROVIDER=ollama
 | Provider | 模式 | 覆盖市场 | 优先级 | 备注 |
 |----------|------|---------|--------|------|
 | Alpaca (Benzinga) | REST + **WebSocket 推送** | US | 主源 | 免费无实名，WS 秒级延迟 |
-| Finnhub API | REST | US | 备选 | 需 API Key |
-| Yahoo RSS | REST | US/HK/CN/JP/EU | Fallback | 无需 Key |
+| Yahoo RSS | REST | US/HK/CN/JP/EU | Fallback | 无需 Key；HK/CN 等富途 OpenD |
 
 **实时推送链路**（`daa-ws-news` 容器）：
 ```

@@ -228,6 +228,8 @@ export type DaaSystemConfig = {
     agentOverlayEnabled?: boolean;
     /** 允许 Agent 主动触发再平衡（默认 false） */
     agentTriggerEnabled?: boolean;
+    /** medium+ conviction thesis 超过此天数未被调查时，强制占用 1 个调查槽位（默认 7 天，防止 LLM 永远只调查 uncertain） */
+    thesisStalenessDays?: number;
   };
   /** 观察列表自动建仓 — 信号达标时为 watchlist 资产生成 BUY 提案 */
   watchlistEntry?: {
@@ -426,6 +428,7 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     memoryArchiveThreshold: 0.05,
     agentOverlayEnabled: false,
     agentTriggerEnabled: false,
+    thesisStalenessDays: 7,
   },
   watchlistEntry: {
     enabled: false,
@@ -890,6 +893,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         memoryArchiveThreshold: clamp(Number(ca.memoryArchiveThreshold) || fb.memoryArchiveThreshold, 0.01, 0.5),
         agentOverlayEnabled: toBool(ca.agentOverlayEnabled, false),
         agentTriggerEnabled: toBool(ca.agentTriggerEnabled, false),
+        thesisStalenessDays: clamp(Math.trunc(Number(ca.thesisStalenessDays) || 7), 1, 60),
       };
     })(),
     watchlistEntry: (() => {

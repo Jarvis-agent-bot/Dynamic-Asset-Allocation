@@ -89,6 +89,44 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
     // 设置调查队列
     const maxTargets = state.agentConfig?.maxInvestigationTargets ?? 3;
     const targets: InvestigationTarget[] = (data.targets ?? []).slice(0, maxTargets);
+
+    // Starvation prevention: 保证 medium+ conviction thesis 在 staleness 窗口内被调查。
+    // 修复之前的 bug：prioritize 偏向 uncertain 调查型 thesis，导致真正有 conviction
+    // 的 medium thesis 永远不进调查队列，日报里"X天未调查"天数只涨不降。
+    // 规则：至少预留 1 个槽位给超过阈值的 medium+ thesis（按 stale 天数倒序选最久的）。
+    const stalenessDays = state.agentConfig?.thesisStalenessDays ?? 7;
+    const stalenessCutoff = Date.now() - stalenessDays * 86400000;
+    const targetIds = new Set(targets.map(t => t.threadId).filter(Boolean) as string[]);
+    const staleDirectional = state.activeTheses
+      .filter(t =>
+        (t.conviction === "medium" || t.conviction === "high")
+        && !targetIds.has(t.id)
+        && Date.parse(t.updatedAt) < stalenessCutoff,
+      )
+      .sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt)); // 最旧优先
+
+    if (staleDirectional.length > 0) {
+      const inject: InvestigationTarget = {
+        threadId: staleDirectional[0].id,
+        reason: `starvation prevention: ${staleDirectional[0].conviction} conviction thesis 已 ${Math.floor((Date.now() - Date.parse(staleDirectional[0].updatedAt)) / 86400000)} 天未调查`,
+        dataNeeded: ["technical", "news"],
+      };
+      // 挤掉 LLM 选中的最后一个 uncertain 槽位（若 maxTargets 已满），否则直接追加
+      if (targets.length >= maxTargets) {
+        const lastUncertainIdx = targets.findIndex(t => {
+          const th = state.activeTheses.find(a => a.id === t.threadId);
+          return th?.conviction === "uncertain";
+        });
+        if (lastUncertainIdx >= 0) {
+          targets[lastUncertainIdx] = inject;
+        } else {
+          targets[targets.length - 1] = inject;
+        }
+      } else {
+        targets.push(inject);
+      }
+    }
+
     const first = targets[0] ?? null;
     let currentThread: ResearchThread | null = null;
     if (first?.threadId) {
