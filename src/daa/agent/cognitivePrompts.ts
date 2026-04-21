@@ -185,13 +185,20 @@ export function buildReactInvestigatePromptSections(ctx: {
     "newConviction": "high/medium/low/uncertain 或 null",
     "evidenceType": "supporting/contradicting/neutral",
     "evidenceSummary": "关键证据摘要",
-    "surprises": [],
+    "surprises": [
+      { "title": "意外简述", "description": "一句话客观描述矛盾/突发", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "建议动作" }
+    ],
     "invalidationConditions": "失效条件",
     "suggestedReviewDays": 14,
     "nextActions": ["下一步方向"]
   }
 }
 \`\`\`
+
+**surprises 字段规则（必须遵守）：**
+- 每一项必须是上面示例的对象结构，**不能是字符串**，也不能缺 title / severityScore 字段
+- severityScore 为 1-10 的整数；日常观察不算意外（severityScore < 3 的系统会自动丢弃）
+- 没有真实意外时返回空数组 \`[]\`，不要塞占位条目
 
 首先调用工具收集数据，然后给出结论。只输出 JSON，不要其他文字。`,
   };

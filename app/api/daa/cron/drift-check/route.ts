@@ -166,7 +166,31 @@ async function runDriftCheck() {
       cycle
     ) {
       autoExecute.attempted = true;
-      try {
+      // 自动驾驶模式的"单笔订单占 NAV 百分比"硬上限 — 比 maxOrderPctOfNav 更严格，
+      // 让用户可以为手动交易保留较高上限，同时给自动执行留出安全垫。
+      const totalEquity = Math.max(0, bootstrap.account.totalEquity ?? 0);
+      const maxSinglePct = Math.max(0, strategy.autoExecuteMaxSinglePct ?? 10) / 100;
+      const breachingProposal = totalEquity > 0 && maxSinglePct > 0
+        ? (cycle.proposals as Array<{ symbol?: string; suggestedNotional?: number }>).find(
+            (p) => (p.suggestedNotional ?? 0) / totalEquity > maxSinglePct,
+          )
+        : undefined;
+      if (breachingProposal) {
+        autoExecute.error = `[autoExecuteMaxSinglePct 守门] ${breachingProposal.symbol ?? "?"} 单笔 $${(breachingProposal.suggestedNotional ?? 0).toFixed(0)} 超过 NAV 的 ${(maxSinglePct * 100).toFixed(1)}% 上限，已阻止自动执行`;
+        logSwallowed("driftCheckRoute.autoExecuteGate", new Error(autoExecute.error));
+        try {
+          if (notif.telegram.enabled && notif.telegram.onTradeExecuted) {
+            await sendTelegramByEnv(`[自动执行已阻止]\n周期 ${cycle.cycleId}\n${autoExecute.error}`, {
+              eventType: "auto_execute_blocked",
+              triggerSource: "cron_drift_check",
+              cycleId: cycle.cycleId,
+              requestJson: { reason: "autoExecuteMaxSinglePct" },
+            });
+          }
+        } catch (notifyErr) {
+          logSwallowed("driftCheckRoute.autoExecuteGateNotify", notifyErr);
+        }
+      } else try {
         const execResult = await executeRebalanceViaGateway({
           cycleId: cycle.cycleId,
           executeMode: "all",

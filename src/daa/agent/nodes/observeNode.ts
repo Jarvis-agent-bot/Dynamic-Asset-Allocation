@@ -3,11 +3,14 @@
  */
 
 import type { CognitiveState, CognitiveUpdate, PortfolioSnapshot, MarketSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
-import { getDaaSystemConfig } from "@/src/daa/store/accountStore";
+import { getDaaSystemConfig, getDaaAccountState } from "@/src/daa/store/accountStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
+import { listDaaFxRates } from "@/src/daa/store/fxStore";
+import { buildAssetUniverseViewRows } from "@/src/daa/modules/workbench/assetUniverseService";
 import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
+import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export async function observeNode(state: CognitiveState): Promise<CognitiveUpdate> {
@@ -60,23 +63,38 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
 
     const activeTheses = await thesisStore.getActiveTheses();
 
-    // 1. 组合数据
+    // 1. 组合数据 — 使用 buildAssetUniverseViewRows 以获得基准货币（USD）下的正确估值和权重。
+    //    直接用 r.holdingQty * r.lastPrice 会把 HKD / CNY 等原币种金额当作 USD 相加，
+    //    导致 HK 持仓被严重放大（例如 0388.HK 按 HKD 计算被当成 87.5% 的仓位）。
     const portfolio: PortfolioSnapshot = { holdings: [], totalEquity: 0, cashPct: 0 };
     try {
-      const rows = await listDaaAssetUniverse();
-      const holdingRows = rows.filter(r => r.holdingQty > 0);
-      const totalValue = holdingRows.reduce((sum, r) => sum + r.holdingQty * r.lastPrice, 0);
+      const [accountState, rawRows, fxRates] = await Promise.all([
+        getDaaAccountState(),
+        listDaaAssetUniverse(),
+        listDaaFxRates(),
+      ]);
+      const baseCurrency = normalizeDaaCurrencyCode(accountState.baseCurrency, "USD");
+      const cash = Math.max(0, accountState.cash ?? 0);
+      const viewRows = buildAssetUniverseViewRows({
+        rows: rawRows,
+        fxRates,
+        baseCurrency,
+        cash,
+        targetWeights: {},
+      });
+      const holdingRows = viewRows.filter(r => r.holdingQty > 0);
+      const holdingsValueBase = holdingRows.reduce((sum, r) => sum + Math.max(0, r.valuationBase ?? 0), 0);
+      const totalEquity = holdingsValueBase + cash;
       portfolio.holdings = holdingRows.map(r => ({
         assetKey: r.assetKey,
         symbol: r.symbol,
         holdingQty: r.holdingQty,
         lastPrice: r.lastPrice,
-        weightPct: totalValue > 0 ? (r.holdingQty * r.lastPrice) / totalValue : 0,
-        unrealizedPnlPct: r.costBasisInBase != null && r.costBasisInBase > 0
-          ? (r.lastPrice * r.holdingQty - r.costBasisInBase) / r.costBasisInBase
-          : null,
+        weightPct: totalEquity > 0 ? (r.valuationBase ?? 0) / totalEquity : 0,
+        unrealizedPnlPct: r.unrealizedPnlPct != null ? r.unrealizedPnlPct / 100 : null,
       }));
-      portfolio.totalEquity = totalValue;
+      portfolio.totalEquity = totalEquity;
+      portfolio.cashPct = totalEquity > 0 ? cash / totalEquity : 0;
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.portfolio", e);
     }

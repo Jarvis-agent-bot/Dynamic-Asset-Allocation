@@ -105,8 +105,25 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
           data.cognitionGaps,
           state.portfolio ?? { holdings: [] },
         );
-        // P0-3: 过滤"市场与预期一致"等低 severity 占位符，避免日报展示噪声
-        data.surprises = (data.surprises ?? []).filter(s => (s?.severityScore ?? 0) >= 3);
+        // LLM 偶尔会把 surprises 写成字符串数组或字段缺失的对象 —
+        // 把它们原样塞进 briefing 会让 UI 渲染出无标题的 severity badge。
+        // 统一规范字段并强制 severity >= 3 + 非空 title。
+        const rawSurprises: unknown[] = Array.isArray(data.surprises) ? data.surprises : [];
+        data.surprises = rawSurprises
+          .filter((s): s is Record<string, unknown> => s != null && typeof s === "object")
+          .map((s) => {
+            const title = typeof s.title === "string" ? s.title.trim() : "";
+            const description = typeof s.description === "string" ? s.description.trim() : "";
+            const severity = Number(s.severityScore);
+            return {
+              title,
+              description,
+              relatedThesisId: typeof s.relatedThesisId === "string" ? s.relatedThesisId : null,
+              severityScore: Number.isFinite(severity) ? Math.max(1, Math.min(10, Math.round(severity))) : 0,
+              suggestedAction: typeof s.suggestedAction === "string" ? s.suggestedAction : "",
+            };
+          })
+          .filter((s) => s.title.length > 0 && s.severityScore >= 3);
       }
     }
 

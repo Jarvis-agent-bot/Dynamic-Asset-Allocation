@@ -296,6 +296,25 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       if (valErrors.length > 0) {
         logSwallowed("cognitiveGraph.investigate.validation", new Error(valErrors.join("; ")));
       }
+      // 规范 surprises 结构：LLM 偶尔会把 surprises 写成字符串数组或字段缺失的对象。
+      // 缺失的 title/description/severityScore 会导致 surfaceNode 直接把占位符传给 UI，
+      // 渲染成没有标题的空 SeverityBadge。直接在源头丢弃不合法的条目。
+      const rawSurprises: unknown[] = Array.isArray(result.surprises) ? result.surprises : [];
+      result.surprises = rawSurprises
+        .filter((s): s is Record<string, unknown> => s != null && typeof s === "object")
+        .map((s) => {
+          const title = typeof s.title === "string" ? s.title.trim() : "";
+          const description = typeof s.description === "string" ? s.description.trim() : "";
+          const severity = Number(s.severityScore);
+          return {
+            title,
+            description,
+            relatedThesisId: typeof s.relatedThesisId === "string" ? s.relatedThesisId : null,
+            severityScore: Number.isFinite(severity) ? Math.max(1, Math.min(10, Math.round(severity))) : 0,
+            suggestedAction: typeof s.suggestedAction === "string" ? s.suggestedAction : "",
+          };
+        })
+        .filter((s) => s.title.length > 0 && s.severityScore >= 3);
     }
 
     // 执行 thesis 更新
