@@ -17,6 +17,7 @@ import { clamp } from "@/src/core/math";
 import { analyzeNewsWithLlm, majorEventTypeLabelZh } from "@/src/daa/signals/newsLlmAnalyzer";
 import { sourceCredibility } from "@/src/daa/signals/newsProviders";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
+import { formatAssetLabel } from "@/src/daa/assetRegistry";
 import { listDaaAssetUniverse, upsertDaaNewsItemSnapshots } from "@/src/daa/store/daaStorePg";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -91,7 +92,7 @@ async function pushMajorEvent(
 
   try {
     const message = [
-      `⚡ ${symbol} 重大新闻 (实时)`,
+      `⚡ ${formatAssetLabel({ symbol })} 重大新闻 (实时)`,
       ``,
       analysis.description,
       ``,

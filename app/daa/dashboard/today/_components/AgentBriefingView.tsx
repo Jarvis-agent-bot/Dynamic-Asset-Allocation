@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Brain, Eye, RefreshCw, Loader2, Zap, Search, RotateCcw } from "lucide-react";
+import { formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 
 interface Surprise {
   title: string;
@@ -304,7 +305,7 @@ export default function AgentBriefingView() {
                         {daysSince}天前
                       </div>
                       <div className="mt-0.5 text-[10px] text-[var(--faint)]">
-                        {t.assetKeys.slice(0, 2).join(", ")}
+                        {t.assetKeys.slice(0, 2).map(k => formatAssetLabelByKey(k)).join(", ")}
                       </div>
                     </div>
                   </div>
@@ -374,7 +375,7 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
             {briefing.cognitionGaps.slice(0, 5).map((g, i) => (
               <div key={i} className="flex items-start justify-between text-xs">
                 <div className="min-w-0 flex-1">
-                  <span className="font-medium text-[var(--text)]">{g.assetKey}</span>
+                  <span className="font-medium text-[var(--text)]">{formatAssetLabelByKey(g.assetKey)}</span>
                   <span className="ml-2 text-[var(--faint)]">权重 {(g.portfolioWeight * 100).toFixed(1)}%</span>
                   <p className="mt-0.5 text-[var(--muted)]">{g.uncertaintyReason}</p>
                   {g.suggestedInvestigation && (
@@ -439,7 +440,7 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
                   <span className="text-[var(--text)]">{c.thesisB.title}</span>
                 </div>
                 <div className="mt-0.5 pl-2 text-[var(--faint)]">
-                  重叠资产: {c.overlappingAssets.join(", ")} · {c.thesisA.conviction} vs {c.thesisB.conviction}
+                  重叠资产: {c.overlappingAssets.map(k => formatAssetLabelByKey(k)).join(", ")} · {c.thesisA.conviction} vs {c.thesisB.conviction}
                 </div>
               </div>
             ))}

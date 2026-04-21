@@ -8,6 +8,7 @@ import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
+import { formatAssetLabel } from "@/src/daa/assetRegistry";
 
 export const runtime = "nodejs";
 
@@ -90,7 +91,7 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
 
       try {
         const message = [
-          `⚡ ${signal.symbol} 重大新闻`,
+          `⚡ ${formatAssetLabel({ symbol: signal.symbol })} 重大新闻`,
           ``,
           signal.llmMajorEvent.description,
           ``,

@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Newspaper, AlertCircle, Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { getAssetDisplayName } from "@/src/daa/assetRegistry";
 
 interface NewsItem {
   symbol: string;
@@ -143,7 +144,12 @@ export default function RealtimeNewsStream() {
               <li key={`${it.symbol}-${idx}-${it.publishedAt}`} className="py-2.5">
                 <div className="flex items-start gap-2">
                   <div className="flex shrink-0 flex-col items-end gap-1 text-[10px] text-[var(--faint)]">
-                    <span className="font-mono text-[11px] font-medium text-[var(--text)]">{it.symbol}</span>
+                    <span
+                      className="font-mono text-[11px] font-medium text-[var(--text)]"
+                      title={getAssetDisplayName(it.symbol) ?? it.symbol}
+                    >
+                      {getAssetDisplayName(it.symbol) ?? it.symbol}
+                    </span>
                     <span>{formatAgo(it.publishedAt)}</span>
                   </div>
                   <div className="min-w-0 flex-1">

@@ -8,6 +8,7 @@
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition, CognitionGap } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
+import { formatAssetLabel, formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 // V1 compat types removed — buildReactFollowUpPrompt now uses inline type
 
 // ── Prioritize 节点 Prompt ──
@@ -594,7 +595,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
       lines.push("<b>\u{1F4CB} 持仓</b>");
       for (const h of sorted.slice(0, 8)) {
         const pnl = h.unrealizedPnlPct != null ? `${h.unrealizedPnlPct >= 0 ? "+" : ""}${(h.unrealizedPnlPct * 100).toFixed(1)}%` : "";
-        lines.push(`• ${h.symbol} ${(h.weightPct * 100).toFixed(1)}% $${fmtK(h.valuationBase ?? h.lastPrice * h.holdingQty)} ${pnl}`);
+        lines.push(`• ${formatAssetLabel({ symbol: h.symbol, assetKey: h.assetKey })} ${(h.weightPct * 100).toFixed(1)}% $${fmtK(h.valuationBase ?? h.lastPrice * h.holdingQty)} ${pnl}`);
       }
       lines.push("");
     }
@@ -615,7 +616,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   if (briefing.cognitionGaps.length > 0) {
     lines.push("<b>\u{1F50D} 认知缺口</b>");
     for (const g of briefing.cognitionGaps.slice(0, 3)) {
-      lines.push(`• ${g.assetKey} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未调查`);
+      lines.push(`• ${formatAssetLabelByKey(g.assetKey)} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未调查`);
     }
     lines.push("");
   }
@@ -641,7 +642,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
       lines.push("<b>\u{26A0}\u{FE0F} 风险暴露</b> <i>(论点失效的假设情景)</i>");
       for (const i of ranked) {
         const levelLabel = i.riskLevel === "critical" ? "严重" : i.riskLevel === "high" ? "高" : "中";
-        const assets = i.affectedAssets.slice(0, 3).map(a => a.assetKey).join(", ");
+        const assets = i.affectedAssets.slice(0, 3).map(a => formatAssetLabelByKey(a.assetKey)).join(", ");
         // lossMultiplier: high=0.5, medium=0.3 (代码约定的经验系数, 非 VaR)
         const lossMult = i.conviction === "high" ? "50%" : "30%";
         lines.push(`• [${levelLabel}] "${i.thesisTitle}" (${i.conviction})`);
@@ -663,7 +664,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     lines.push("<b>\u{26A1} 论点冲突</b>");
     for (const c of ranked) {
       const sevLabel = c.severity === "high" ? "高" : c.severity === "medium" ? "中" : "低";
-      const assets = c.overlappingAssets.slice(0, 3).join(", ");
+      const assets = c.overlappingAssets.slice(0, 3).map(k => formatAssetLabelByKey(k)).join(", ");
       lines.push(`• [${sevLabel}] "${c.thesisA.title}" (${c.thesisA.conviction}) × "${c.thesisB.title}" (${c.thesisB.conviction})`);
       lines.push(`  冲突资产: ${assets}`);
     }

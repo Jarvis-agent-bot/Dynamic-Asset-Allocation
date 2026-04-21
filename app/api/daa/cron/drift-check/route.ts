@@ -9,6 +9,7 @@ import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchRe
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { getLatestAgentConfigOverlay } from "@/src/daa/agent/store/overlayStore";
+import { formatAssetLabel } from "@/src/daa/assetRegistry";
 
 export const runtime = "nodejs";
 
@@ -108,7 +109,7 @@ async function runDriftCheck() {
       if (hasDrift || (cycle && generated?.created)) {
         const topDrift = driftedAssets.slice(0, 5);
         const driftLines = topDrift.map(
-          (a) => `${a.symbol}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
+          (a) => `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
         );
 
         const msgParts = [
@@ -171,12 +172,13 @@ async function runDriftCheck() {
       const totalEquity = Math.max(0, bootstrap.account.totalEquity ?? 0);
       const maxSinglePct = Math.max(0, strategy.autoExecuteMaxSinglePct ?? 10) / 100;
       const breachingProposal = totalEquity > 0 && maxSinglePct > 0
-        ? (cycle.proposals as Array<{ symbol?: string; suggestedNotional?: number }>).find(
+        ? (cycle.proposals as Array<{ symbol?: string; assetKey?: string; suggestedNotional?: number }>).find(
             (p) => (p.suggestedNotional ?? 0) / totalEquity > maxSinglePct,
           )
         : undefined;
       if (breachingProposal) {
-        autoExecute.error = `[autoExecuteMaxSinglePct 守门] ${breachingProposal.symbol ?? "?"} 单笔 $${(breachingProposal.suggestedNotional ?? 0).toFixed(0)} 超过 NAV 的 ${(maxSinglePct * 100).toFixed(1)}% 上限，已阻止自动执行`;
+        const label = formatAssetLabel({ symbol: breachingProposal.symbol, assetKey: breachingProposal.assetKey });
+        autoExecute.error = `[autoExecuteMaxSinglePct 守门] ${label} 单笔 $${(breachingProposal.suggestedNotional ?? 0).toFixed(0)} 超过 NAV 的 ${(maxSinglePct * 100).toFixed(1)}% 上限，已阻止自动执行`;
         logSwallowed("driftCheckRoute.autoExecuteGate", new Error(autoExecute.error));
         try {
           if (notif.telegram.enabled && notif.telegram.onTradeExecuted) {
@@ -280,7 +282,7 @@ async function runDriftCheck() {
 
       const riskLines = riskTriggeredAssets.slice(0, 8).map(
         (a) =>
-          `${a.symbol}: ${a.triggerType === "stop_loss" ? "止损" : "止盈"} ${a.pnlPct.toFixed(1)}%`,
+          `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: ${a.triggerType === "stop_loss" ? "止损" : "止盈"} ${a.pnlPct.toFixed(1)}%`,
       );
       const riskMsg = [
         "DAA 风控触发通知",

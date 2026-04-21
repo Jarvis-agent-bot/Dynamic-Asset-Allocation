@@ -241,7 +241,8 @@ describe("formatBriefingForTelegram", () => {
     expect(html).toContain("风险暴露");
     expect(html).toContain("严重");
     expect(html).toContain("超高集中度论点");
-    expect(html).toContain("HK::0388.HK");
+    // 资产标签走 assetRegistry：HK::0388.HK → "香港交易所 0388.HK"
+    expect(html).toContain("香港交易所 0388.HK");
     // low 级别不展示
     expect(html).not.toContain("小仓位论点");
   });
@@ -268,6 +269,7 @@ describe("formatBriefingForTelegram", () => {
     expect(html).toContain("论点冲突");
     expect(html).toContain("看多A");
     expect(html).toContain("看空A");
-    expect(html).toContain("US::NVDA");
+    // 资产标签走 assetRegistry：US::NVDA → "英伟达 NVDA"
+    expect(html).toContain("英伟达 NVDA");
   });
 });
