@@ -46,6 +46,14 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       return {
         errors: ["prioritize: DeepSeek 未返回有效 JSON"],
         totalTokens: tokensUsed,
+        reasoningTraces: [{
+          node: "prioritize",
+          threadId: null,
+          input: `${state.activeTheses.length} theses`,
+          output: "LLM 未返回有效 JSON →review",
+          tokensUsed,
+          durationMs: Date.now() - t0,
+        }],
       };
     }
 
@@ -55,6 +63,14 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       return {
         errors: valErrors.map(e => `prioritize.validation: ${e}`),
         totalTokens: tokensUsed,
+        reasoningTraces: [{
+          node: "prioritize",
+          threadId: null,
+          input: `${state.activeTheses.length} theses`,
+          output: `validation failed (${valErrors.length} errors) →review`,
+          tokensUsed,
+          durationMs: Date.now() - t0,
+        }],
       };
     }
 
@@ -86,9 +102,15 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       }
     }
 
-    // 设置调查队列
+    // 设置调查队列 — 先过滤掉 threadId 为 null/空的 target（LLM 偶尔会返回
+    // "请求创建新 thesis"的占位 target，这些不能作为调查对象），防止下游条件
+    // 分支因 currentThread=null 而跳过 investigate。
     const maxTargets = state.agentConfig?.maxInvestigationTargets ?? 3;
-    const targets: InvestigationTarget[] = (data.targets ?? []).slice(0, maxTargets);
+    const validTargets = (data.targets ?? []).filter(t => {
+      const id = typeof t?.threadId === "string" ? t.threadId.trim() : "";
+      return id.length > 0;
+    });
+    const targets: InvestigationTarget[] = validTargets.slice(0, maxTargets);
 
     // Starvation prevention: 保证 medium+ conviction thesis 在 staleness 窗口内被调查。
     // 修复之前的 bug：prioritize 偏向 uncertain 调查型 thesis，导致真正有 conviction
@@ -127,10 +149,28 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       }
     }
 
-    const first = targets[0] ?? null;
+    // 选定第一个能加载到 thread 的 target —— 即使 threadId 合法，也可能
+    // 因 DB 同步差异/归档等原因无法加载；此时自动降级到队列中下一个可用的 target，
+    // 避免 currentThread=null 导致条件边跳过 investigate。
+    let first: InvestigationTarget | null = null;
     let currentThread: ResearchThread | null = null;
-    if (first?.threadId) {
-      currentThread = await thesisStore.getThesisById(first.threadId);
+    const skippedTargets: Array<{ threadId: string; reason: string }> = [];
+    for (const candidate of targets) {
+      if (!candidate?.threadId) continue;
+      const loaded = await thesisStore.getThesisById(candidate.threadId);
+      if (loaded) {
+        first = candidate;
+        currentThread = loaded;
+        break;
+      }
+      skippedTargets.push({ threadId: candidate.threadId, reason: "getThesisById returned null" });
+    }
+    // 如果没有一个 target 能加载到 thread，降级到 review
+    if (!first) {
+      logSwallowed(
+        "cognitiveGraph.prioritize.noLoadableTarget",
+        new Error(`no loadable thread from ${targets.length} targets; skipped=${JSON.stringify(skippedTargets)}`),
+      );
     }
 
     // Phase 2: 加载匹配的调查策略（基于当前 regime + conviction + tags）
@@ -155,6 +195,10 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       logSwallowed("cognitiveGraph.prioritize.matchStrategies", e);
     }
 
+    const llmRawTargetCount = (data.targets ?? []).length;
+    const filteredOut = llmRawTargetCount - validTargets.length;
+    const routingSignal = first && currentThread ? "→investigate" : "→review(no loadable target)";
+
     return {
       investigationQueue: targets,
       newThreadSuggestions: data.newThreads ?? [],
@@ -164,13 +208,13 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       totalTokens: tokensUsed,
       reasoningTraces: [{
         node: "prioritize",
-        threadId: null,
+        threadId: first?.threadId ?? null,
         input: `${state.activeTheses.length} theses, ${state.portfolio.holdings.length} holdings`,
-        output: `${targets.length} targets, ${matchedStrategies.length} strategies matched`,
+        output: `${targets.length} targets (LLM ${llmRawTargetCount}, filtered ${filteredOut}, skipped ${skippedTargets.length}), first=${first?.threadId ?? "none"}, thread=${currentThread ? "loaded" : "null"} ${routingSignal}`,
         tokensUsed,
         durationMs: Date.now() - t0,
       }],
-      toolsCalled: [{ tool: "prioritize", input: {}, outputSummary: `${targets.length} targets, ${matchedStrategies.length} strategies`, durationMs: Date.now() - t0 }],
+      toolsCalled: [{ tool: "prioritize", input: {}, outputSummary: `${targets.length} targets, ${matchedStrategies.length} strategies, ${routingSignal}`, durationMs: Date.now() - t0 }],
     };
   } catch (e) {
     logSwallowed("cognitiveGraph.prioritize", e);

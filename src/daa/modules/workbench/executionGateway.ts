@@ -122,6 +122,9 @@ async function fanoutRebalanceExecutionNotification(
     const executedCount = cycleLogs.filter((row) => row.status === "executed").length;
     const submittedCount = cycleLogs.filter((row) => row.status === "submitted" || row.status === "partially_filled").length;
     const failedCount = cycleLogs.filter((row) => row.status === "rejected" || row.status === "canceled").length;
+
+    // 抑制 0 单推送：无任何订单时不发"成交 0/0/0"的噪声通知
+    if (executedCount + submittedCount + failedCount === 0) return;
     const message = buildTradeExecutionNotifyText({
       source: "rebalance_cycle_execution",
       baseCurrency: systemRow.config.strategy.account.baseCurrency || "USD",

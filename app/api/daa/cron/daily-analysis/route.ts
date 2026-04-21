@@ -170,9 +170,10 @@ export async function POST(req: Request) {
           const cycle = generated.cycle;
 
           // Send notifications for onSuggestionGenerated
+          // 抑制 0 提案推送：Agent 判断"今日无须调仓"时不发 TG/飞书（噪声消息）
           let telegramSent = false;
           let feishuSent = false;
-          if (cycle && generated.created) {
+          if (cycle && generated.created && cycle.proposals.length > 0) {
             const text = buildNotifyText({
               cycleId: cycle.cycleId,
               triggerReason: cycle.triggerReason,
@@ -300,21 +301,21 @@ export async function POST(req: Request) {
         // ── Phase D: daily report (independent of autoGenerateEnabled) ──
         const wantTgReport = notif.telegram.enabled && notif.telegram.dailyReport;
         const wantFsReport = notif.feishu.enabled && notif.feishu.dailyReport;
+        // 若 Cognitive Agent 启用，则 agent_briefing 已覆盖每日报告的所有信息
+        // （持仓、意外、认知缺口、风险暴露等），无条件跳过 daily_report 避免重复推送。
+        // 仅当用户主动关闭 Cognitive Agent 时，daily_report 才作为 fallback 发送。
+        const agentEnabled = system.config.cognitiveAgent?.enabled !== false;
         let dailyReport: { sent: boolean; telegram: boolean; feishu: boolean } = {
           sent: false,
           telegram: false,
           feishu: false,
         };
 
-        if (wantTgReport || wantFsReport) {
+        if ((wantTgReport || wantFsReport) && !agentEnabled) {
           try {
             // 当日去重：防止 cron 重试或手动触发导致重复发送
-            // Agent 日报已合并持仓信息，如果今天已推送 Agent 日报则跳过独立每日报告
-            const agentBriefingSentToday = await hasTodayNotification("agent_briefing").catch(() => false);
             const alreadySentToday = await hasTodayNotification("daily_report").catch(() => false);
-            if (agentBriefingSentToday) {
-              console.log("[dailyAnalysis] Agent 日报已推送（含持仓），跳过重复每日报告");
-            } else if (alreadySentToday) {
+            if (alreadySentToday) {
               console.log("[dailyAnalysis] 每日报告已于今日发送，跳过重复发送");
             } else {
               const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });

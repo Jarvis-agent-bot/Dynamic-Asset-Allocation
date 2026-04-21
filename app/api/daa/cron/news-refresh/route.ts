@@ -2,6 +2,7 @@ import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSignal";
+import { majorEventTypeLabelZh } from "@/src/daa/signals/newsLlmAnalyzer";
 import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
@@ -93,7 +94,7 @@ async function checkMajorEvents(signals: DaaNewsSignal[]): Promise<number> {
           ``,
           signal.llmMajorEvent.description,
           ``,
-          `类型: ${signal.llmMajorEvent.type}`,
+          `类型: ${majorEventTypeLabelZh(signal.llmMajorEvent.type)}`,
           `行动建议: ${signal.llmActionHint || "关注"}`,
           signal.llmSummary ? `\n📰 ${signal.llmSummary}` : "",
         ].filter(Boolean).join("\n");

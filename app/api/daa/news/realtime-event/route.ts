@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { clamp } from "@/src/core/math";
-import { analyzeNewsWithLlm } from "@/src/daa/signals/newsLlmAnalyzer";
+import { analyzeNewsWithLlm, majorEventTypeLabelZh } from "@/src/daa/signals/newsLlmAnalyzer";
 import { sourceCredibility } from "@/src/daa/signals/newsProviders";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { listDaaAssetUniverse, upsertDaaNewsItemSnapshots } from "@/src/daa/store/daaStorePg";
@@ -95,7 +95,7 @@ async function pushMajorEvent(
       ``,
       analysis.description,
       ``,
-      `类型: ${analysis.type}`,
+      `类型: ${majorEventTypeLabelZh(analysis.type)}`,
       `行动建议: ${actionHint || "关注"}`,
       summary ? `\n📰 ${summary}` : "",
     ].filter(Boolean).join("\n");

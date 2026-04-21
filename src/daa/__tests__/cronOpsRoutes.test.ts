@@ -114,10 +114,15 @@ function buildSystemConfig(input?: {
   feishuOnSuggestion?: boolean;
   telegramDailyReport?: boolean;
   feishuDailyReport?: boolean;
+  cognitiveAgentEnabled?: boolean;
 }) {
   const baseCurrency: CurrencyCode = input?.baseCurrency || "USD";
   const analysisTimeUtc = `${String(new Date().getUTCHours()).padStart(2, "0")}:00`;
   return buildSystemConfigRow({
+    cognitiveAgent: {
+      // 默认关闭，以便 daily_report 作为 fallback 能被测试验证
+      enabled: input?.cognitiveAgentEnabled ?? false,
+    },
     dataSources: {
       newsFeed: {
         enabled: input?.newsFeed?.enabled ?? true,
