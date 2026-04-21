@@ -154,12 +154,6 @@ export type DaaSystemConfig = {
       query: string;
       symbols: string[];
       valuationEnabled: boolean;
-      fusionWeights: {
-        human: number;
-        news: number;
-        technical: number;
-        valuation: number;
-      };
     };
     fxFeed: {
       id: string;
@@ -168,6 +162,7 @@ export type DaaSystemConfig = {
       baseCurrency: CurrencyCode;
       pairs: string[];
     };
+    /** 单个 LLM 模型配置（保留向后兼容） */
     llmAnalysis: {
       id: string;
       enabled: boolean;
@@ -178,6 +173,21 @@ export type DaaSystemConfig = {
       /** 自定义 endpoint（为空时使用 provider 默认值） */
       endpoint?: string;
     };
+    /** 多模型配置（支持按任务类型选择不同模型） */
+    llmModels?: {
+      /** 模型唯一标识 */
+      id: string;
+      /** 模型名称（用于显示） */
+      label: string;
+      /** 任务类型：analysis=分析解读, decision=决策执行, research=深度研究 */
+      taskType: "analysis" | "decision" | "research";
+      enabled: boolean;
+      provider: string;
+      model: string;
+      timeoutMs: number;
+      /** 自定义 endpoint */
+      endpoint?: string;
+    }[];
     marketIndicators: DaaMarketIndicatorsConfig;
   };
   /** 认知 Agent 配置 */
@@ -344,12 +354,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       query: "SPY OR QQQ OR TSLA",
       symbols: [],
       valuationEnabled: true,
-      fusionWeights: {
-        human: 0.35,
-        news: 0.2,
-        technical: 0.25,
-        valuation: 0.2,
-      },
     },
     fxFeed: {
       id: "fx_feed.default",
@@ -366,6 +370,26 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       timeoutMs: 15000,
       enabledInDecision: true,
     },
+    llmModels: [
+      {
+        id: "llm_model_default",
+        label: "默认分析模型",
+        taskType: "analysis",
+        enabled: true,
+        provider: "deepseek",
+        model: "deepseek-chat",
+        timeoutMs: 15000,
+      },
+      {
+        id: "llm_model_reasoner",
+        label: "深度推理模型",
+        taskType: "research",
+        enabled: true,
+        provider: "deepseek",
+        model: "deepseek-reasoner",
+        timeoutMs: 90000,
+      },
+    ],
     marketIndicators: {
       id: "market_indicators.default",
       enabled: true,
@@ -489,37 +513,6 @@ function normalizeFundRows(input: unknown): DaaHfFundTrack[] {
     });
   }
   return [...out.values()];
-}
-
-function normalizeFusionWeights(input: unknown): DaaSystemConfig["dataSources"]["newsFeed"]["fusionWeights"] {
-  const source = isRecord(input) ? input : {};
-  const defaultWeights = { human: 0.35, news: 0.2, technical: 0.25, valuation: 0.2 };
-  const human = Math.max(0, Number(source.human ?? defaultWeights.human) || 0);
-  const news = Math.max(0, Number(source.news ?? defaultWeights.news) || 0);
-  const technical = Math.max(0, Number(source.technical ?? defaultWeights.technical) || 0);
-  const valuationRaw = Number(source.valuation);
-  const hasValuation = Number.isFinite(valuationRaw);
-  const valuation = hasValuation ? Math.max(0, valuationRaw) : Number.NaN;
-
-  if (hasValuation) {
-    const sum = human + news + technical + valuation;
-    if (!(sum > 0)) return defaultWeights;
-    return {
-      human: human / sum,
-      news: news / sum,
-      technical: technical / sum,
-      valuation: valuation / sum,
-    };
-  }
-
-  const baseSignalSum = human + news + technical;
-  if (!(baseSignalSum > 0)) return defaultWeights;
-  return {
-    human: (human / baseSignalSum) * 0.85,
-    news: (news / baseSignalSum) * 0.85,
-    technical: (technical / baseSignalSum) * 0.85,
-    valuation: 0.15,
-  };
 }
 
 const MARKET_INDICATOR_CONFIG_KEYS_: DaaMarketIndicatorConfigKey[] = [
@@ -708,6 +701,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const newsFeed = isRecord(dataSources.newsFeed) ? dataSources.newsFeed : {};
   const fxFeed = isRecord(dataSources.fxFeed) ? dataSources.fxFeed : {};
   const llmAnalysis = isRecord(dataSources.llmAnalysis) ? dataSources.llmAnalysis : {};
+  const llmModels = isRecord(dataSources.llmModels) ? dataSources.llmModels : (Array.isArray(dataSources.llmModels) ? dataSources.llmModels : []);
   const marketIndicators = isRecord(dataSources.marketIndicators) ? dataSources.marketIndicators : {};
 
   const notification = isRecord(source.notification) ? source.notification : {};
@@ -832,7 +826,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         query: String(newsFeed.query || fallback.dataSources.newsFeed.query).trim(),
         symbols: normalizeSymbols(newsFeed.symbols),
         valuationEnabled: toBool(newsFeed.valuationEnabled, fallback.dataSources.newsFeed.valuationEnabled),
-        fusionWeights: normalizeFusionWeights(newsFeed.fusionWeights),
       },
       fxFeed: {
         id: String(fxFeed.id || fallback.dataSources.fxFeed.id).trim() || fallback.dataSources.fxFeed.id,
@@ -849,6 +842,21 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         timeoutMs: Math.max(2000, Math.trunc(Number(llmAnalysis.timeoutMs) || fallback.dataSources.llmAnalysis.timeoutMs)),
         enabledInDecision: toBool(llmAnalysis.enabledInDecision, fallback.dataSources.llmAnalysis.enabledInDecision),
       },
+      llmModels: (() => {
+        const rawModels = Array.isArray(llmModels) ? llmModels : [];
+        const fbModels = fallback.dataSources.llmModels || [];
+        if (rawModels.length === 0) return fbModels;
+        return rawModels.map((m: Record<string, unknown>) => ({
+          id: String(m.id || "").trim() || "llm_model_default",
+          label: String(m.label || m.id || "模型").trim(),
+          taskType: (["analysis", "decision", "research"].includes(String(m.taskType)) ? m.taskType : "analysis") as "analysis" | "decision" | "research",
+          enabled: toBool(m.enabled, true),
+          provider: String(m.provider || "deepseek").trim(),
+          model: String(m.model || "deepseek-chat").trim(),
+          timeoutMs: Math.max(2000, Math.trunc(Number(m.timeoutMs) || 15000)),
+          endpoint: m.endpoint ? String(m.endpoint).trim() : undefined,
+        }));
+      })(),
       marketIndicators: normalizeMarketIndicatorConfig(marketIndicators, fallback.dataSources.marketIndicators),
     },
     cognitiveAgent: (() => {

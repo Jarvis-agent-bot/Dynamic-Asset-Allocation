@@ -105,7 +105,7 @@ export default function SettingsPage() {
       strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy),
       risk: changed(config.strategy?.risk, baselineConfig.strategy?.risk) || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints),
       data: changed(config.dataSources, baselineConfig.dataSources),
-      "human-factor": changed(config.strategy?.targetWeights, baselineConfig.strategy?.targetWeights) || changed(config.dataSources?.newsFeed?.fusionWeights, baselineConfig.dataSources?.newsFeed?.fusionWeights),
+      "human-factor": changed(config.strategy?.targetWeights, baselineConfig.strategy?.targetWeights) ,
       notification: changed(config.notification, baselineConfig.notification),
       secrets: false, // secrets managed separately
       agent: changed(config.cognitiveAgent, baselineConfig.cognitiveAgent),
