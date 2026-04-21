@@ -112,10 +112,3 @@ export function classifyMacroCycleWithFred(
   };
 }
 
-/**
- * 纯代理指标分类（向后兼容）
- * 内部调用 classifyMacroCycleWithFred，传入 null FRED 数据
- */
-export function classifyMacroCycle(indicators: DaaMarketIndicatorSnapshot[]): MacroCycleResult | null {
-  return classifyMacroCycleWithFred(null, indicators);
-}

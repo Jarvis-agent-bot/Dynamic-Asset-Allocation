@@ -21,15 +21,9 @@ export type HeartbeatEvent = {
   ts: string;
 };
 
-export type StreamEvent = PriceUpdateEvent | HeartbeatEvent;
-
 // --- 全局连接限制 ---
 const MAX_GLOBAL_STREAMS = 10;
 let activeStreamCount = 0;
-
-export function getActiveStreamCount(): number {
-  return activeStreamCount;
-}
 
 /**
  * 比较两次价格快照，返回有变化的资产 diff。

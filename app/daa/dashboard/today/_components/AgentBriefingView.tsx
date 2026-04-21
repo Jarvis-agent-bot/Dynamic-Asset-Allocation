@@ -364,26 +364,26 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
         </div>
       )}
 
-      {/* 认知缺口 */}
+      {/* 待复盘（原"认知缺口"，改由代码直出而非 LLM 生成） */}
       {hasGaps && (
         <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-300">
             <Search className="h-3.5 w-3.5" />
-            认知缺口
+            待复盘
+            <span className="ml-1 text-[10px] font-normal text-[var(--faint)]">(高权重 / 判断未收敛的持仓)</span>
           </h3>
           <div className="space-y-2">
             {briefing.cognitionGaps.slice(0, 5).map((g, i) => (
               <div key={i} className="flex items-start justify-between text-xs">
                 <div className="min-w-0 flex-1">
                   <span className="font-medium text-[var(--text)]">{formatAssetLabelByKey(g.assetKey)}</span>
-                  <span className="ml-2 text-[var(--faint)]">权重 {(g.portfolioWeight * 100).toFixed(1)}%</span>
                   <p className="mt-0.5 text-[var(--muted)]">{g.uncertaintyReason}</p>
                   {g.suggestedInvestigation && (
                     <p className="mt-0.5 text-blue-400/80">→ {g.suggestedInvestigation}</p>
                   )}
                 </div>
-                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400">
-                  {g.daysSinceLastInvestigation}天未查
+                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400" title="上次复盘距今的天数">
+                  {g.daysSinceLastInvestigation}天未复盘
                 </span>
               </div>
             ))}

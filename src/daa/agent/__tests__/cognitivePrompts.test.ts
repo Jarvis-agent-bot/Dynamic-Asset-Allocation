@@ -167,7 +167,8 @@ describe("buildSurfacePrompt", () => {
     });
     expect(prompt).toContain("日报编辑");
     expect(prompt).toContain("示例输出");
-    expect(prompt).toContain("cognitionGaps");
+    // cognitionGaps 已改为代码直出，不再出现在 prompt schema 中
+    expect(prompt).not.toContain("cognitionGaps");
     expect(prompt).toContain("mindChangeConditions");
   });
 });

@@ -247,7 +247,7 @@ export function buildSurfacePrompt(ctx: {
   memoriesCreated: number;
   toolsCalled?: ToolCallRecord[];
   reasoningTraces?: ReasoningTrace[];
-  previousBriefing?: { mindChangeConditions: MindChangeCondition[]; cognitionGaps: CognitionGap[] } | null;
+  previousBriefing?: { mindChangeConditions: MindChangeCondition[] } | null;
 }): string {
   const surpriseText = ctx.surprises.length > 0
     ? ctx.surprises.map(s => `- [${s.severityScore}/10] ${sanitizeForPrompt(s.title, 60)}: ${sanitizeForPrompt(s.description, 100)}`).join("\n")
@@ -277,45 +277,19 @@ export function buildSurfacePrompt(ctx: {
         .join("\n")
     : "";
 
-  // P0-3: 上次日报对比
+  // P0-3: 上次日报对比（"待复盘清单"已改由代码直出，无需作为上次对比项）
   const prevBriefingText = ctx.previousBriefing
     ? (() => {
         const prevConditions = (ctx.previousBriefing.mindChangeConditions ?? [])
           .slice(0, 5)
           .map(c => `- "${sanitizeForPrompt(c.thesisTitle, 40)}" (${c.currentConviction}): ${c.conditions.slice(0, 2).map(s => sanitizeForPrompt(s, 60)).join("; ")}`)
           .join("\n");
-        const prevGaps = (ctx.previousBriefing.cognitionGaps ?? [])
-          .slice(0, 5)
-          .map(g => `- ${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}% ${g.daysSinceLastInvestigation}天未调查`)
-          .join("\n");
         return `## 上次日报（对比参考）
 改观条件:
 ${prevConditions || "无"}
-认知缺口:
-${prevGaps || "无"}
 
 ⚠️ 重要：如果改观条件与上次完全相同，请明确写"条件未变，持续监控"。如果有新的观察或数据支持，请更新条件描述。避免逐字重复上次内容。`;
       })()
-    : "";
-
-  // P1-2: 预计算认知缺口标注 — 按 (thesis × asset) 展开成每条单一 assetKey，防止 LLM 回填多资产联合字符串
-  const gapWarnings: string[] = [];
-  for (const t of ctx.theses) {
-    const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
-    for (const assetKey of t.assetKeys) {
-      const holding = ctx.portfolio.holdings.find(h => h.assetKey === assetKey);
-      const weight = holding?.weightPct ?? 0;
-      // 硬门槛：权重 > 5% 且 超过 7 天未更新，或 conviction=uncertain 且有持仓
-      const staleMatch = days > 7 && weight > 0.05;
-      const uncertainMatch = t.conviction === "uncertain" && weight > 0;
-      if (!staleMatch && !uncertainMatch) continue;
-      gapWarnings.push(
-        `⚠️ assetKey=${assetKey} 权重${(weight * 100).toFixed(1)}% 已${days}天未更新 conviction=${t.conviction} thesis="${sanitizeForPrompt(t.title, 40)}"`,
-      );
-    }
-  }
-  const gapWarningText = gapWarnings.length > 0
-    ? `\n## 系统检测到的认知缺口（必须包含在输出中，每行对应一个 assetKey）\n${gapWarnings.join("\n")}`
     : "";
 
   return `你是一个投资研究操作系统的「日报编辑」。请基于今日调查结果生成一份简报。
@@ -340,23 +314,18 @@ ${tracesText ? `### 调查结论\n${tracesText}` : ""}
 
 ## 当前活跃论点
 ${thesisText}
-${gapWarningText}
 ${prevBriefingText}
 
 ## 任务
-生成三类输出：
+生成两类输出（"待复盘清单"由系统代码直出，无需你生成）：
 1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 和工具调用结果中总结）。如果没有实质性意外，**必须**返回空数组 \`[]\`，**不要**生成"市场与预期一致"等占位条目；系统会在输出为空时自动展示 fallback 文案。仅当 severityScore >= 3 的真实矛盾信息才值得输出。
-2. **认知缺口**：必须严格对应上面"系统检测到的认知缺口"清单中的每个 assetKey；如果清单为空就输出空数组 []，不要凭空生成。每条的 assetKey 必须是单个资产（格式 \`MARKET::SYMBOL\`，禁止用逗号拼接多资产）。
-3. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
+2. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
 
 ## 输出格式（严格 JSON）
 \`\`\`json
 {
   "surprises": [
     { "title": "意外标题", "description": "描述", "relatedThesisId": null, "severityScore": 7, "suggestedAction": "建议" }
-  ],
-  "cognitionGaps": [
-    { "assetKey": "US::NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 30, "uncertaintyReason": "原因", "suggestedInvestigation": "建议" }
   ],
   "mindChangeConditions": [
     { "thesisTitle": "论点标题", "currentConviction": "high", "conditions": ["条件1"], "monitoringIndicators": ["VIX"] }
@@ -368,7 +337,6 @@ ${prevBriefingText}
 \`\`\`json
 {
   "surprises": [{"title": "黄金突破历史新高", "description": "GLD单日涨幅3.2%，突破$2100，与美元走强矛盾", "relatedThesisId": null, "severityScore": 8, "suggestedAction": "检查避险资产配置是否充足"}],
-  "cognitionGaps": [{"assetKey": "US::NVDA", "portfolioWeight": 0.15, "daysSinceLastInvestigation": 22, "uncertaintyReason": "AI芯片竞争格局快速变化", "suggestedInvestigation": "对比AMD MI300X最新benchmark数据"}],
   "mindChangeConditions": [{"thesisTitle": "美股科技股长期看多", "currentConviction": "high", "conditions": ["VIX持续30+超过10个交易日", "10Y国债收益率突破5.5%"], "monitoringIndicators": ["VIX", "TNX"]}]
 }
 \`\`\`
@@ -614,9 +582,12 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   }
 
   if (briefing.cognitionGaps.length > 0) {
-    lines.push("<b>\u{1F50D} 认知缺口</b>");
+    lines.push("<b>\u{1F50D} 待复盘</b>");
     for (const g of briefing.cognitionGaps.slice(0, 3)) {
-      lines.push(`• ${formatAssetLabelByKey(g.assetKey)} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未调查`);
+      lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
+      if (g.suggestedInvestigation) {
+        lines.push(`  ↳ ${g.suggestedInvestigation}`);
+      }
     }
     lines.push("");
   }

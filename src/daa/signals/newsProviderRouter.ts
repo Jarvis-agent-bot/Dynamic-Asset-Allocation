@@ -42,32 +42,6 @@ export async function fetchNewsForSymbol(
   return [];
 }
 
-/**
- * 批量获取多个 symbol 的新闻（并发限制）。
- */
-export async function fetchNewsBatch(
-  symbols: Array<{ symbol: string; market: string }>,
-  daysBack = 7,
-  concurrency = 4,
-): Promise<Map<string, RawNewsItem[]>> {
-  const results = new Map<string, RawNewsItem[]>();
-
-  for (let i = 0; i < symbols.length; i += concurrency) {
-    const batch = symbols.slice(i, i + concurrency);
-    const batchResults = await Promise.all(
-      batch.map(async ({ symbol, market }) => {
-        const items = await fetchNewsForSymbol(symbol, market, daysBack);
-        return { symbol, items };
-      }),
-    );
-    for (const { symbol, items } of batchResults) {
-      results.set(symbol, items);
-    }
-  }
-
-  return results;
-}
-
 /** 按标题 hash 去重 */
 function deduplicateNews(items: RawNewsItem[]): RawNewsItem[] {
   const seen = new Set<string>();

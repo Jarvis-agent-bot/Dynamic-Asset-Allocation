@@ -14,12 +14,13 @@ import { createHash } from "node:crypto";
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { clamp } from "@/src/core/math";
-import { analyzeNewsWithLlm, majorEventTypeLabelZh } from "@/src/daa/signals/newsLlmAnalyzer";
+import { analyzeNewsWithLlm, majorEventTypeLabelZh, type LlmNewsAnalysis } from "@/src/daa/signals/newsLlmAnalyzer";
 import { sourceCredibility } from "@/src/daa/signals/newsProviders";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
 import { listDaaAssetUniverse, upsertDaaNewsItemSnapshots } from "@/src/daa/store/daaStorePg";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
+import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -68,6 +69,66 @@ function computeFreshness(publishedAt: string): number {
 
 function hashNewsItem(title: string, link: string | null, ts: string): string {
   return createHash("sha1").update(`${title}::${link || ""}::${ts}`).digest("hex").slice(0, 20);
+}
+
+/** 与 newsProviderRouter.computeItemHashSet 保持一致：title.toLowerCase().trim() 的 sha1 前 8 位。 */
+function titleHash8(title: string): string {
+  return createHash("sha1").update((title || "").toLowerCase().trim()).digest("hex").slice(0, 8);
+}
+
+/**
+ * 把实时分析结果写进 daa_news_signal_snapshot_v1，并把当前 item 的 title hash 并入 item_hash_set。
+ *
+ * 这是修复前端"Today 新闻流"延迟的关键：UI 只给 item_hash_set 里的 item 挂 majorEvent 标签，
+ * 以前 realtime 只推送不写 signal，要等 30 分钟 news-refresh cron 才补齐 hash_set。
+ */
+async function upsertRealtimeNewsSignal(
+  symbol: string,
+  analysis: LlmNewsAnalysis,
+  titleHash: string,
+): Promise<void> {
+  await withDaaPgClient(async ({ query }) => {
+    await query(
+      `INSERT INTO daa_news_signal_snapshot_v1
+        (provider, symbol, score_pct, confidence_pct, evidence_count, reasons_json, generated_at, updated_at,
+         llm_summary, llm_drivers_json, llm_major_event_json, llm_action_hint, item_hash_set)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW(), $7, $8::jsonb, $9::jsonb, $10, $11)
+       ON CONFLICT (provider, symbol) DO UPDATE SET
+         score_pct = EXCLUDED.score_pct,
+         confidence_pct = EXCLUDED.confidence_pct,
+         evidence_count = daa_news_signal_snapshot_v1.evidence_count + 1,
+         reasons_json = EXCLUDED.reasons_json,
+         generated_at = EXCLUDED.generated_at,
+         updated_at = EXCLUDED.updated_at,
+         llm_summary = EXCLUDED.llm_summary,
+         llm_drivers_json = EXCLUDED.llm_drivers_json,
+         llm_major_event_json = EXCLUDED.llm_major_event_json,
+         llm_action_hint = EXCLUDED.llm_action_hint,
+         item_hash_set = (
+           SELECT string_agg(h, ',' ORDER BY h)
+           FROM (
+             SELECT DISTINCT UNNEST(
+               string_to_array(COALESCE(daa_news_signal_snapshot_v1.item_hash_set, ''), ',')
+               || string_to_array(EXCLUDED.item_hash_set, ',')
+             ) AS h
+           ) t WHERE h <> ''
+         )`,
+      [
+        "alpaca",
+        symbol,
+        // 中性分数：score_pct 50 代表"有数据但未评估方向"，避免覆盖批量 cron 的真实分数
+        50 + Math.round(analysis.sentimentScore / 4),
+        analysis.majorEvent?.impact === "high" ? 80 : analysis.majorEvent?.impact === "medium" ? 60 : 40,
+        1,
+        JSON.stringify([]),
+        analysis.summary,
+        JSON.stringify(analysis.drivers),
+        analysis.majorEvent ? JSON.stringify(analysis.majorEvent) : null,
+        analysis.actionHint,
+        titleHash,
+      ],
+    );
+  });
 }
 
 async function pushMajorEvent(
@@ -198,10 +259,19 @@ export async function POST(req: Request) {
         provider: "alpaca",
       };
 
+      const titleHash = titleHash8(event.headline);
       for (const symbol of focusSymbols) {
         try {
           const analysis = await analyzeNewsWithLlm({ symbol, items: [rawItem] });
           analyzed++;
+
+          // 立即把分析结果写回 signal 表，让 Today 新闻流能即时标出 majorEvent
+          try {
+            await upsertRealtimeNewsSignal(symbol, analysis, titleHash);
+          } catch (e) {
+            logSwallowed(`newsRealtime.signal.${symbol}`, e);
+          }
+
           const wasPushed = await pushMajorEvent(
             symbol,
             analysis.majorEvent,

@@ -41,6 +41,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
 
     // Phase 4: 子 agent 并行调查（父处理 item[0]，子 agent 并行处理 item[1..N]）
     const subAgentResultsForState: CognitiveUpdate["subAgentResults"] = [];
+    let subAgentMemCount = 0;
     if (state.investigationQueue.length > 1) {
       try {
         const { runSubAgentInvestigation } = await import("@/src/daa/agent/subAgent");
@@ -67,32 +68,79 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
         });
 
         const settled = await Promise.allSettled(subAgentPromises);
+        // 持久化子 agent 的调查产出 — 和父 agent 对称：
+        // updateThesis → addEvidence → touchThesis（无论是否变更）→ createMemory（未变更时）
+        // 这样 sub-agent 调查过的 thesis 下一个 cycle 不会再被误判为"N 天未复盘"。
         for (const s of settled) {
-          if (s.status === "fulfilled" && s.value) {
-            const r = s.value;
-            subAgentResultsForState.push({
-              threadId: r.threadId,
-              threadTitle: r.threadTitle,
-              summary: r.investigateOutput?.evidenceSummary ?? "无结论",
-              thesisChanged: r.investigateOutput?.thesisChanged ?? false,
-              toolsUsed: r.toolsCalled.map(tc => tc.tool),
-              tokensUsed: r.tokensUsed,
-            });
+          if (s.status !== "fulfilled" || !s.value) continue;
+          const r = s.value;
+          const out = r.investigateOutput;
+          const subThread = await thesisStore.getThesisById(r.threadId).catch(() => null);
+          subAgentResultsForState.push({
+            threadId: r.threadId,
+            threadTitle: r.threadTitle,
+            summary: out?.evidenceSummary ?? "无结论",
+            thesisChanged: out?.thesisChanged ?? false,
+            toolsUsed: r.toolsCalled.map(tc => tc.tool),
+            tokensUsed: r.tokensUsed,
+          });
 
-            // 子 agent 的 thesis 更新和证据写入
-            if (r.investigateOutput?.thesisChanged && r.investigateOutput.updatedThesis) {
+          if (!out || !subThread) continue;
+
+          // 1) thesis 文本 / conviction / 失效条件 / 复盘时间 更新（与父 agent 同一套字段）
+          if (out.thesisChanged && out.updatedThesis) {
+            try {
               await thesisStore.updateThesis(r.threadId, {
-                thesisText: r.investigateOutput.updatedThesis,
-                conviction: r.investigateOutput.newConviction ?? undefined,
+                thesisText: out.updatedThesis,
+                conviction: out.newConviction ?? undefined,
+                invalidationConditions: out.invalidationConditions ?? undefined,
+                reviewAt: out.suggestedReviewDays
+                  ? new Date(Date.now() + out.suggestedReviewDays * 86400000)
+                  : undefined,
               });
+            } catch (e) {
+              logSwallowed("cognitiveGraph.investigate.subAgent.updateThesis", e);
             }
-            if (r.investigateOutput?.evidenceSummary) {
+          }
+
+          // 2) 证据链：无论是否变更，有摘要就存档
+          if (out.evidenceSummary) {
+            try {
               await thesisStore.addEvidence({
                 threadId: r.threadId,
-                evidenceType: r.investigateOutput.evidenceType ?? "neutral",
+                evidenceType: out.evidenceType ?? "neutral",
                 source: "agent_reasoning",
-                content: `[子agent] ${r.investigateOutput.evidenceSummary}`,
+                content: `[子 agent] ${out.evidenceSummary}`,
               });
+            } catch (e) {
+              logSwallowed("cognitiveGraph.investigate.subAgent.evidence", e);
+            }
+          }
+
+          // 3) bump updated_at — 核心修复：否则 cognitionGap 永远显示"N 天未复盘"
+          if (out.evidenceSummary || out.thesisChanged === false) {
+            try {
+              await thesisStore.touchThesis(r.threadId);
+            } catch (e) {
+              logSwallowed("cognitiveGraph.investigate.subAgent.touch", e);
+            }
+          }
+
+          // 4) 未变更时创建观察记忆（变更时由 reflect 节点创建反思记忆，这里避免重复）
+          if (out.evidenceSummary && out.evidenceSummary.length > 20 && !out.thesisChanged) {
+            try {
+              const content = `[子 agent 观察] ${subThread.title}: ${out.evidenceSummary.slice(0, 300)}`;
+              const emb = await generateEmbedding(content);
+              await memoryStore.createMemory({
+                memoryType: "fact",
+                content,
+                relevanceTags: [r.threadId, ...subThread.tags],
+                embedding: emb,
+                thread: { id: r.threadId, assetKeys: subThread.assetKeys, tags: subThread.tags },
+              });
+              subAgentMemCount++;
+            } catch (e) {
+              logSwallowed("cognitiveGraph.investigate.subAgent.memory", e);
             }
           }
         }
@@ -379,7 +427,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       retrievedMemories: memories,
       surprises: result?.surprises ?? [],
       thesesUpdated: (result?.thesisChanged ? 1 : 0) + subAgentResultsForState.filter(r => r.thesisChanged).length,
-      memoriesCreated: observationMemCount,
+      memoriesCreated: observationMemCount + subAgentMemCount,
       totalTokens: totalTokens + subAgentTokens,
       toolsCalled: allToolsCalled,
       subAgentResults: subAgentResultsForState,

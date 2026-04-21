@@ -100,7 +100,9 @@ export const CognitiveStateAnnotation = Annotation.Root({
   memoriesCreated: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
   totalTokens: Annotation<number>({ reducer: (a, b) => a + b, default: () => 0 }),
 
-  // Agent 配置（observe 节点从 DB 加载）
+  // Agent 配置（observe 节点从 DB 加载）—— 只放 cognitiveAgent.* 自己独有的字段，
+  // rebalanceStrategy / strategy.constraints 等外部配置在需要时从 systemConfig 实时读取，
+  // 不再复制到这里（之前的副本容易与 systemConfig 失同步）。
   agentConfig: Annotation<{
     enabled: boolean;
     maxInvestigationTargets: number;
@@ -114,8 +116,6 @@ export const CognitiveStateAnnotation = Annotation.Root({
     maxReactRounds?: number;
     agentOverlayEnabled?: boolean;
     agentTriggerEnabled?: boolean;
-    defaultDriftThresholdPct?: number;
-    maxPositionPct?: number;
     thesisStalenessDays?: number;
   } | null>({ reducer: (_, b) => b, default: () => null }),
 

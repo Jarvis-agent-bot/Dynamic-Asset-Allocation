@@ -210,30 +210,6 @@ export function mergeMarketRegimeConservatively(
     : llmRegime;
 }
 
-export function isHighRiskAsset(input: {
-  symbol: string;
-  holdingTags?: string[];
-  watchTags?: string[];
-  marketScope?: DaaMarketIndicatorScope | null;
-}): boolean {
-  const symbol = String(input.symbol || "").trim().toUpperCase();
-  const riskSymbols = new Set(["ARKK", "TQQQ", "SOXL", "LABU", "BTC-USD", "ETH-USD", "SOL-USD"]);
-  if (riskSymbols.has(symbol)) return true;
-  if (input.marketScope === "crypto") return true;
-  const tags = [
-    ...(input.holdingTags || []),
-    ...(input.watchTags || []),
-  ].map((item) => String(item || "").trim().toLowerCase());
-  return tags.some((tag) => ["high", "high-risk", "growth", "crypto", "leveraged", "theme"].includes(tag));
-}
-
-export function getIndicatorByKey(
-  marketContext: DaaMarketContext | null | undefined,
-  key: DaaMarketIndicatorKey,
-): DaaMarketIndicatorSnapshot | null {
-  return marketContext?.indicators.find((item) => item.key === key) || null;
-}
-
 export function getMarketScopeContext(
   marketContext: DaaMarketContext | null | undefined,
   scope: DaaMarketIndicatorScope | null | undefined,

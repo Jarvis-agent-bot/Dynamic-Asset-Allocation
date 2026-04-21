@@ -63,31 +63,6 @@ export type DaaStrategyParams = {
   };
 };
 
-export const DEFAULT_STRATEGY_PARAMS: DaaStrategyParams = {
-  signalFusion: {
-    conflictPenalties: [9, 7, 5, 4, 3],
-    maxConflictPenalty: 25,
-    conflictConfidenceImpact: 0.45,
-    actionThresholds: {
-      openOrAdd: { score: 72, confidence: 58 },
-      watch: { score: 56, confidence: 42 },
-    },
-    confidenceWeights: { human: 0.42, news: 0.2, technical: 0.23, valuation: 0.15 },
-    macroCycleAdjustments: {
-      "stagflation:EQUITY": -5, "stagflation:ETF": -5, "stagflation:COMMODITY": 5,
-      "deflation:BOND": 5, "deflation:COMMODITY": -3,
-      "overheating:COMMODITY": 3,
-      "recovery:EQUITY": 3, "recovery:ETF": 3,
-    },
-  },
-  marketRegime: {
-    riskOffThreshold: 65,
-    riskOnThreshold: 40,
-  },
-};
-
-
-
 export type DaaSystemConfig = {
   strategy: {
     account: {

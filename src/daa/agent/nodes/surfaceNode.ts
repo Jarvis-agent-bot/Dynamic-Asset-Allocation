@@ -13,36 +13,60 @@ import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
+import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 
-/** 筛除 LLM 胡编的 cognitionGap：assetKey 必须是单个规范 key，权重和天数必须达阈值；同 assetKey 去重。 */
-function sanitizeCognitionGaps(
-  raw: CognitionGap[],
+/**
+ * 代码直出"待复盘清单"（原 cognitionGaps）。
+ *
+ * 原来这里交给 LLM 做 "结构化清单 → JSON → 改写成自然语言 → JSON" 的来回翻译，
+ * 既浪费 token 又容易产生幻觉（LLM 会胡编权重值、调查天数）。本函数是确定性的：
+ *
+ * - 触发条件（二选一）：
+ *   (1) thesis conviction=uncertain 且仍有持仓（必须尽快给出明确判断）
+ *   (2) 持仓权重 > 5% 且 thesis 超过 7 天未复盘（高权重陈旧观点）
+ * - 同 assetKey 多 thesis 去重，取最陈旧的一条
+ * - triggerReason / focusHint 字段直接用 thesis 数据拼接，不再让 LLM 改写
+ */
+function computeDueForReview(
+  theses: ResearchThread[],
   portfolio: { holdings: Array<{ assetKey: string; weightPct: number }> },
 ): CognitionGap[] {
-  const filtered = raw.filter(g => {
-    if (!g || typeof g.assetKey !== "string") return false;
-    // 拒绝逗号拼接的多资产 key
-    if (g.assetKey.includes(",")) return false;
-    // 必须能解析为 MARKET::SYMBOL
-    if (!parseDaaAssetKey(g.assetKey)) return false;
-    // 硬门槛：权重 > 5% 或 缺口天数 ≥ 7 天；两者都不满足就视为 LLM 凑数
-    const weight = g.portfolioWeight ?? 0;
-    const days = g.daysSinceLastInvestigation ?? 0;
-    if (weight < 0.05 && days < 7) return false;
-    // 如果有持仓，权重要和 portfolio 一致（容忍 2% 误差），防止 LLM 把 87.5% 写成 87.5 之类
-    const holding = portfolio.holdings.find(h => h.assetKey === g.assetKey);
-    if (holding && Math.abs(holding.weightPct - weight) > 0.02) return false;
-    return true;
-  });
-  // 同 assetKey 只保留 daysSinceLastInvestigation 最大的一条（同一资产可能被多个 thesis 关联，避免日报重复）
+  const candidates: CognitionGap[] = [];
+  for (const t of theses) {
+    const days = Math.floor((Date.now() - new Date(t.updatedAt).getTime()) / 86400000);
+    for (const assetKey of t.assetKeys) {
+      const holding = portfolio.holdings.find(h => h.assetKey === assetKey);
+      const weight = holding?.weightPct ?? 0;
+      const uncertainMatch = t.conviction === "uncertain" && weight > 0;
+      const staleMatch = weight > 0.05 && days > 7;
+      if (!uncertainMatch && !staleMatch) continue;
+
+      const triggerReason = uncertainMatch
+        ? `论点判断仍未收敛（conviction=uncertain，权重 ${(weight * 100).toFixed(1)}%）`
+        : `持仓权重 ${(weight * 100).toFixed(1)}%，已 ${days} 天未复盘`;
+      const focusHint = t.invalidationConditions
+        ? `核对失效条件：${t.invalidationConditions.slice(0, 80)}`
+        : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视论点：${t.title}`);
+
+      candidates.push({
+        assetKey,
+        portfolioWeight: weight,
+        daysSinceLastInvestigation: days,
+        uncertaintyReason: triggerReason,
+        suggestedInvestigation: focusHint,
+      });
+    }
+  }
+  // 同 assetKey 去重：保留 days 最大 / 最陈旧的一条
   const bestByAsset = new Map<string, CognitionGap>();
-  for (const g of filtered) {
+  for (const g of candidates) {
     const prev = bestByAsset.get(g.assetKey);
-    if (!prev || (g.daysSinceLastInvestigation ?? 0) > (prev.daysSinceLastInvestigation ?? 0)) {
+    if (!prev || g.daysSinceLastInvestigation > prev.daysSinceLastInvestigation) {
       bestByAsset.set(g.assetKey, g);
     }
   }
-  return Array.from(bestByAsset.values());
+  return Array.from(bestByAsset.values())
+    .sort((a, b) => b.daysSinceLastInvestigation - a.daysSinceLastInvestigation);
 }
 
 export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdate> {
@@ -52,20 +76,19 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
     const memCount = await memoryStore.countMemories();
 
     // P0-3: 读取上次成功运行的 briefing 用于对比
-    let previousBriefing: { mindChangeConditions: MindChangeCondition[]; cognitionGaps: CognitionGap[] } | null = null;
+    let previousBriefing: { mindChangeConditions: MindChangeCondition[] } | null = null;
     try {
       const lastRun = await getLatestRun();
       if (lastRun?.briefing) {
         previousBriefing = {
           mindChangeConditions: lastRun.briefing.mindChangeConditions ?? [],
-          cognitionGaps: lastRun.briefing.cognitionGaps ?? [],
         };
       }
     } catch (e) {
       logSwallowed("cognitiveGraph.surface.previousBriefing", e);
     }
 
-    let data: { surprises: Surprise[]; cognitionGaps: CognitionGap[]; mindChangeConditions: MindChangeCondition[] } | null = null;
+    let data: { surprises: Surprise[]; mindChangeConditions: MindChangeCondition[] } | null = null;
     let tokensUsed = 0;
 
     // 熔断检查 — surface 节点跳过 LLM 但仍生成基本 briefing
@@ -84,27 +107,19 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
 
       const llmResult = await callDeepSeekJson<{
         surprises: Surprise[];
-        cognitionGaps: CognitionGap[];
         mindChangeConditions: MindChangeCondition[];
       }>(prompt, "cognitiveGraph.surface");
       data = llmResult.data;
       tokensUsed = llmResult.tokensUsed;
 
-      // P0-2: 校验 surface 输出
+      // P0-2: 校验 surface 输出（cognitionGaps 已改由代码直出，不再由 LLM 生成）
       if (data) {
-        const valErrors = validateShape(data, { surprises: "array", cognitionGaps: "array", mindChangeConditions: "array" });
+        const valErrors = validateShape(data, { surprises: "array", mindChangeConditions: "array" });
         if (valErrors.length > 0) {
           logSwallowed("cognitiveGraph.surface.validation", new Error(valErrors.join("; ")));
-          // 保留有效部分
           if (!Array.isArray(data.surprises)) data.surprises = [];
-          if (!Array.isArray(data.cognitionGaps)) data.cognitionGaps = [];
           if (!Array.isArray(data.mindChangeConditions)) data.mindChangeConditions = [];
         }
-        // 筛除 LLM 胡编的 cognitionGap（单 key 校验 + 阈值校验 + 权重一致性 + 同 assetKey 去重）
-        data.cognitionGaps = sanitizeCognitionGaps(
-          data.cognitionGaps,
-          state.portfolio ?? { holdings: [] },
-        );
         // LLM 偶尔会把 surprises 写成字符串数组或字段缺失的对象 —
         // 把它们原样塞进 briefing 会让 UI 渲染出无标题的 severity badge。
         // 统一规范字段并强制 severity >= 3 + 非空 title。
@@ -188,9 +203,12 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         }))
       : undefined;
 
+    // 代码直出"待复盘清单"（取代原 LLM 生成的 cognitionGaps）
+    const dueForReview = computeDueForReview(theses, portfolio);
+
     const briefing: DailyBriefing = {
       surprises: data?.surprises ?? state.surprises ?? [],
-      cognitionGaps: data?.cognitionGaps ?? [],
+      cognitionGaps: dueForReview,
       mindChangeConditions: data?.mindChangeConditions ?? [],
       thesisFailureImpacts,
       thesisConflicts,
@@ -204,6 +222,12 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
     // 策略顾问 LLM — 生成 Agent Config Overlay（仅在 agentOverlayEnabled 时）
     if (state.agentConfig?.agentOverlayEnabled && !shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
       try {
+        // 策略参数实时从 systemConfig 读取，避免 agentConfig 副本陈旧
+        const { getDaaSystemConfig } = await import("@/src/daa/store/accountStore");
+        const sysCfg = await getDaaSystemConfig().catch(() => null);
+        const defaultDriftThresholdPct = sysCfg?.config.rebalanceStrategy?.drift?.thresholdPct ?? 0.05;
+        const maxPositionPct = sysCfg?.config.strategy?.constraints?.maxPositionPct ?? 0.30;
+
         const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
         const advisorPrompt = buildStrategyAdvisorPrompt({
           holdings: portfolio.holdings.map(h => ({
@@ -216,8 +240,8 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
           surprises: briefing.surprises,
           cognitionGaps: briefing.cognitionGaps,
           ruleRegime: state.market?.regime ?? "unknown",
-          defaultDriftThresholdPct: state.agentConfig?.defaultDriftThresholdPct ?? 0.05,
-          maxPositionPct: state.agentConfig?.maxPositionPct ?? 0.30,
+          defaultDriftThresholdPct,
+          maxPositionPct,
         });
 
         const overlayResult = await callDeepSeekJson<Omit<AgentConfigOverlay, "generatedAt" | "agentRunId">>(

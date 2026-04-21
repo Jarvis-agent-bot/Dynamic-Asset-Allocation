@@ -323,35 +323,3 @@ export async function getDividendSummary(): Promise<DividendSummary> {
   };
 }
 
-/**
- * Check if accumulated credited (non-reinvested) dividends exceed a threshold,
- * suggesting they should be reinvested via a rebalance cycle.
- */
-export async function checkDividendReinvestmentDue(input: {
-  thresholdBase: number;   // minimum amount in base currency to trigger reinvestment
-  totalEquity: number;     // current portfolio equity
-  minPctOfEquity?: number; // alternative: minimum as % of equity (default 1%)
-}): Promise<{
-  isDue: boolean;
-  accumulatedBase: number;
-  reason: string;
-}> {
-  const summary = await getDividendSummary();
-  const accumulated = summary.creditedDividendsBase;
-  const minPct = input.minPctOfEquity ?? 0.01;
-  const dynamicThreshold = Math.max(input.thresholdBase, input.totalEquity * minPct);
-
-  if (accumulated >= dynamicThreshold) {
-    return {
-      isDue: true,
-      accumulatedBase: accumulated,
-      reason: `累计股息 ${accumulated.toFixed(2)} 已达再投资阈值 ${dynamicThreshold.toFixed(2)}（组合权益的 ${((accumulated / Math.max(1, input.totalEquity)) * 100).toFixed(2)}%）`,
-    };
-  }
-
-  return {
-    isDue: false,
-    accumulatedBase: accumulated,
-    reason: `累计股息 ${accumulated.toFixed(2)} 尚未达到再投资阈值 ${dynamicThreshold.toFixed(2)}`,
-  };
-}

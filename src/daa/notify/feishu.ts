@@ -85,41 +85,6 @@ export async function sendFeishuMessage(opts: {
   }
 }
 
-export async function sendFeishuRichMessage(opts: {
-  webhookUrl: string;
-  title: string;
-  content: Array<Array<{ tag: "text"; text: string } | { tag: "a"; text: string; href: string }>>;
-}): Promise<boolean> {
-  const webhookUrl = String(opts.webhookUrl || "").trim();
-  if (!webhookUrl || !opts.title) return false;
-
-  try {
-    const response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        msg_type: "post",
-        content: {
-          post: {
-            zh_cn: {
-              title: opts.title,
-              content: opts.content,
-            },
-          },
-        },
-      }),
-      cache: "no-store",
-    });
-
-    if (!response.ok) return false;
-    const data = (await response.json().catch(() => ({}))) as { code?: number };
-    return data.code === 0;
-  } catch (err) {
-    logSwallowed("feishu.sendFeishuRichMessage", err);
-    return false;
-  }
-}
-
 export async function sendFeishuByEnv(message: string, meta?: {
   eventType?: string;
   triggerSource?: string;

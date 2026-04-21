@@ -200,15 +200,6 @@ export async function recallMemoryHybrid(opts: {
   return Array.from(merged.values()).slice(0, totalLimit);
 }
 
-export async function updateMemoryStrength(id: string, delta: number = 0.1): Promise<void> {
-  await withDaaPgClient(async ({ query }) => {
-    await query(
-      `UPDATE daa_agent_memory SET strength = strength + $1, last_accessed = now() WHERE id = $2`,
-      [delta, id],
-    );
-  });
-}
-
 /**
  * 分页列出所有记忆，支持按类型过滤。
  */

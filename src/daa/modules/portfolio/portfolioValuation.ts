@@ -174,12 +174,3 @@ export function buildActualWeightMap(
   return map;
 }
 
-export function buildHoldingQtyMap(positions: DaaPositionLike[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const row of positions) {
-    const key = buildDaaAssetKey(row.symbol, row.market);
-    if (!key) continue;
-    map.set(key, (map.get(key) ?? 0) + Number(row.qty || 0));
-  }
-  return map;
-}

@@ -32,30 +32,6 @@ function pickArray(value: unknown): string[] {
     return value.map((item) => String(item ?? "").trim()).filter(Boolean);
 }
 
-function actionLabelZh(action: string): string {
-    if (action === "open_or_add")
-        return "开仓/加仓";
-    if (action === "reduce_or_avoid")
-        return "减仓/回避";
-    return "观察";
-}
-
-function reasonZh(reasons: string[]): string {
-    const rows = (Array.isArray(reasons) ? reasons : []).map((item) => normalizeText(item)).filter(Boolean).slice(0, 4);
-    return rows.length ? rows.join("；") : "暂无显著驱动因子";
-}
-
-function riskZh(riskScorePct: number, reasons: string[]): string {
-    const riskReasons = (Array.isArray(reasons) ? reasons : []).filter((item) => /risk|风险|回撤|波动|drawdown|reduce|avoid/i.test(item));
-    if (riskScorePct >= 75) {
-        return riskReasons.length ? `风险偏高：${riskReasons.slice(0, 2).join("；")}` : "风险评分偏高，建议控制仓位";
-    }
-    if (riskScorePct >= 60) {
-        return riskReasons.length ? `风险中等：${riskReasons.slice(0, 2).join("；")}` : "风险中等，建议分批执行";
-    }
-    return "风险可控，注意仓位管理";
-}
-
 function toPct(value: unknown): number {
     const num = Number(value);
     if (!Number.isFinite(num))
@@ -1118,18 +1094,6 @@ export function normalizeTradeSide(value: unknown): "BUY" | "SELL" | null {
 
 export function normalizeReasonTags(value: unknown): string[] {
     return pickArray(value).map((item) => item.toLowerCase());
-}
-
-export function mapOpportunityActionLabelZh(action: string): string {
-    return actionLabelZh(action);
-}
-
-export function summarizeOpportunityReasonZh(reasons: string[]): string {
-    return reasonZh(reasons);
-}
-
-export function summarizeOpportunityRiskZh(riskScorePct: number, reasons: string[]): string {
-    return riskZh(riskScorePct, reasons);
 }
 
 async function enrichRiskCheckWithCorrelation(
