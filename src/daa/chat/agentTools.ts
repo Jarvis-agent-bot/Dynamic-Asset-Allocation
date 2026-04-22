@@ -4,10 +4,13 @@ import { buildAssistantFallbackReply } from "./agentToolViewHandlers";
 
 const ASSISTANT_TOOL_CATALOG: DaaAgentToolMeta[] = [
   { intent: "help", name: "show_help", description: "返回当前助手可支持的查询和模拟执行入口。" },
+  { intent: "brain_status", name: "get_brain_status", description: "返回当前大脑可见能力、模型路由、认知链路与动作边界。" },
   { intent: "portfolio_status", name: "get_workbench_snapshot", description: "读取当前工作台的组合总览与核心持仓。" },
   { intent: "risk_status", name: "get_risk_status", description: "读取最近一次调仓或组合风控摘要。" },
   { intent: "market_status", name: "get_market_status", description: "读取市场环境与行情健康状态。" },
   { intent: "latest_cycle", name: "get_latest_cycle", description: "读取最近一轮调仓周期。" },
+  { intent: "agent_run", name: "run_cognitive_cycle", description: "手动触发一轮 Cognitive Agent 调查循环。" },
+  { intent: "agent_bootstrap", name: "bootstrap_theses", description: "基于当前持仓初始化研究论点。" },
   { intent: "rebalance_generate", name: "generate_rebalance_cycle", description: "生成一轮新的本地模拟调仓建议。" },
   { intent: "rebalance_execute", name: "execute_rebalance_sim", description: "执行最新一轮本地模拟调仓。" },
   { intent: "confirm_action", name: "confirm_pending_action", description: "确认并执行待确认动作。" },

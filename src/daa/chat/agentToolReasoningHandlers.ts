@@ -20,7 +20,7 @@ function buildUnknownReply(input: {
     };
   }
   return {
-    text: `我已经接入了组合查询、模拟执行与 Agent 摘要能力，但这条话暂时还没有稳定映射到结构化动作。\n\n${buildAssistantHelpText()}`,
+    text: `我已经接入了组合查询、认知循环控制、模拟执行与 Agent 摘要能力，但这条话暂时还没有稳定映射到结构化动作。\n\n${buildAssistantHelpText()}`,
     intentKind: "unknown",
     pendingAction: input.pendingAction,
   };

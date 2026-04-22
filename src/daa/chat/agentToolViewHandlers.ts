@@ -1,3 +1,4 @@
+import { buildAssistantBrainStatusText } from "./assistantBrain";
 import { formatMoney, formatPct } from "./agentContext";
 import type { DaaAgentToolContext, DaaAgentToolExecutor, DaaAgentToolResult } from "./agentToolTypes";
 import type { DaaChatPendingAction } from "./chatTypes";
@@ -5,12 +6,12 @@ import type { DaaChatPendingAction } from "./chatTypes";
 export function buildAssistantHelpText(): string {
   return [
     "你可以直接这样问我：",
-    "1. 组合状态 / 当前持仓",
-    "2. 风险状态 / 市场状态 / 最近一次调仓",
-    "3. 生成调仓建议 / 执行调仓",
-    "4. 买入 QQQ 10股 / 卖出 AAPL 5股（本地模拟）",
-    "5. 活跃论点 / Agent 日报 / 认知缺口",
-    "6. 当前接入什么模型 / 你现在能做什么",
+    "1. 大脑状态 / 你现在能做什么 / 当前接入什么模型",
+    "2. 组合状态 / 风险状态 / 市场状态 / 最近一次调仓",
+    "3. 运行一轮 Agent 调查 / 初始化论点 / 查看 Agent 日报",
+    "4. 生成调仓建议 / 执行调仓",
+    "5. 买入 QQQ 10股 / 卖出 AAPL 5股（本地模拟）",
+    "6. 活跃论点 / Agent 日报 / 认知缺口",
     "7. 执行类命令会先进入待确认，回复“确认”才真正执行",
     "8. 如果要放弃待确认动作，直接回复“取消”",
   ].join("\n");
@@ -90,6 +91,12 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
   handlers.set("help", async () => ({
     text: buildAssistantHelpText(),
     intentKind: "help",
+    pendingAction: input.currentPendingAction,
+  }));
+
+  handlers.set("brain_status", async () => ({
+    text: await buildAssistantBrainStatusText(input),
+    intentKind: "brain_status",
     pendingAction: input.currentPendingAction,
   }));
 

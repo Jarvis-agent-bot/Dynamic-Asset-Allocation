@@ -130,4 +130,47 @@ describe("assistant-planner", () => {
       kind: "thesis_status",
     });
   });
+
+  it("LLM 可以规划 brain_status 和 agent_run 这类大脑控制意图", async () => {
+    vi.mocked(resolveLlmConfig).mockResolvedValue({
+      enabled: true,
+      enabledInDecision: true,
+      provider: "openai",
+      model: "gpt-5.4",
+      endpoint: "https://llm-api.onekeytest.com/v1/responses",
+      apiKey: "test-key",
+      timeoutMs: 5000,
+    });
+    vi.mocked(callLlm).mockResolvedValue({
+      text: JSON.stringify({
+        intent: "agent_run",
+        reason: "用户要求启动认知循环",
+        answer: "",
+        trade: {
+          side: "BUY",
+          symbol: "",
+          qty: null,
+          notional: null,
+        },
+        executeMode: "all",
+      }),
+      raw: {},
+    });
+
+    const result = await planAssistantIntent({
+      userText: "帮我跑一轮 agent 调查",
+      allowExecution: true,
+      contextDigest: "",
+      systemDigest: "当前 LLM 路由：分析解读：启用 / openai / gpt-5.4 / llm-api.onekeytest.com",
+      sessionSummary: "",
+      recentConversation: "",
+      pendingActionDescription: "无",
+      learningDigest: "",
+    });
+
+    expect(result.source).toBe("llm");
+    expect(result.intent).toMatchObject({
+      kind: "agent_run",
+    });
+  });
 });

@@ -3,10 +3,13 @@ export type DaaChatRole = "user" | "assistant" | "system";
 
 export type DaaChatIntentKind =
   | "help"
+  | "brain_status"
   | "portfolio_status"
   | "risk_status"
   | "market_status"
   | "latest_cycle"
+  | "agent_run"
+  | "agent_bootstrap"
   | "rebalance_generate"
   | "rebalance_execute"
   | "confirm_action"

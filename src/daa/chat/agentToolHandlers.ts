@@ -1,3 +1,4 @@
+import { createAssistantBrainExecutionHandlers } from "./agentBrainExecutionHandlers";
 import type { DaaAgentToolContext, DaaAgentToolExecutor } from "./agentToolTypes";
 import { createAssistantExecutionHandlers } from "./agentToolExecutionHandlers";
 import { createAssistantQueryHandlers } from "./agentToolViewHandlers";
@@ -18,6 +19,7 @@ function mergeHandlerMaps(
 export function createAssistantToolHandlers(input: DaaAgentToolContext): Map<DaaAgentToolContext["intent"]["kind"], DaaAgentToolExecutor> {
   return mergeHandlerMaps(
     createAssistantQueryHandlers(input),
+    createAssistantBrainExecutionHandlers(input),
     createAssistantExecutionHandlers(input),
     createAssistantReasoningHandlers(input),
   );

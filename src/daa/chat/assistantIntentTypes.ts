@@ -1,9 +1,12 @@
 export type DaaAssistantIntent =
   | { kind: "help"; rawText: string }
+  | { kind: "brain_status"; rawText: string }
   | { kind: "portfolio_status"; rawText: string }
   | { kind: "risk_status"; rawText: string }
   | { kind: "market_status"; rawText: string }
   | { kind: "latest_cycle"; rawText: string }
+  | { kind: "agent_run"; rawText: string }
+  | { kind: "agent_bootstrap"; rawText: string }
   | { kind: "rebalance_generate"; rawText: string }
   | { kind: "rebalance_execute"; rawText: string; executeMode: "all" }
   | { kind: "confirm_action"; rawText: string }

@@ -30,7 +30,12 @@ function parseTrade(text: string): DaaAssistantIntent | null {
 
 function downgradeExecutionIntent(intent: DaaAssistantIntent, allowExecution: boolean): DaaAssistantIntent {
   if (allowExecution) return intent;
-  if (intent.kind === "trade" || intent.kind === "rebalance_execute" || intent.kind === "confirm_action") {
+  if (
+    intent.kind === "trade"
+    || intent.kind === "rebalance_execute"
+    || intent.kind === "confirm_action"
+    || intent.kind === "agent_bootstrap"
+  ) {
     return {
       kind: "llm_answer",
       rawText: intent.rawText,
@@ -48,12 +53,21 @@ export function parseAssistantIntent(raw: string, options?: {
   if (!text) return { kind: "help", rawText: raw };
 
   if (/^\/?(help|start|帮助|说明)$/i.test(text)) return { kind: "help", rawText: text };
+  if (/(全权大脑|大脑状态|系统能力|权限边界|认知链路|模型路由|接入.*模型|现在能做什么|brain status|capability)/i.test(text)) {
+    return { kind: "brain_status", rawText: text };
+  }
   if (/^\/?(confirm|确认|确认执行|继续执行|yes|ok)$/i.test(text)) {
     return downgradeExecutionIntent({ kind: "confirm_action", rawText: text }, allowExecution);
   }
   if (/^\/?(cancel|取消|停止|放弃|no)$/i.test(text)) return { kind: "cancel_action", rawText: text };
   if (/^\/?(status|portfolio|持仓|仓位|组合|账户|状态)$/i.test(text) || /组合.*(状态|仓位|持仓)/.test(text)) {
     return { kind: "portfolio_status", rawText: text };
+  }
+  if (/(初始化|创建初始).*?(论点|thesis)|bootstrap/i.test(text)) {
+    return downgradeExecutionIntent({ kind: "agent_bootstrap", rawText: text }, allowExecution);
+  }
+  if (/(运行|启动|执行|刷新).*(agent|认知|调查|日报)|跑一轮.*(agent|认知|调查)/i.test(text)) {
+    return { kind: "agent_run", rawText: text };
   }
   if (/论点|thesis|研究线索|theses|conviction/i.test(text)) return { kind: "thesis_status", rawText: text };
   if (/日报|briefing|认知缺口|意外|改观条件|agent.*报/i.test(text)) return { kind: "agent_briefing", rawText: text };
