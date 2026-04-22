@@ -13,34 +13,13 @@ import type { DaaMarketIndicatorConfigKey, DaaSystemConfig } from "@/src/daa/con
 export const SETTINGS_NAV_ITEMS_ = [
   { id: "strategy", label: "再平衡策略", desc: "调仓节奏、触发条件与自动分析。" },
   { id: "risk", label: "风控参数", desc: "集中度、仓位和止盈止损阈值。" },
-  { id: "data", label: "数据源", desc: "行情、资讯、汇率、AI 解读与市场状态层。" },
-  { id: "human-factor", label: "人因数据源", desc: "基金池范围与人工信号叠加。" },
+  { id: "data", label: "数据与模型", desc: "行情、资讯、汇率、AI 解读与市场状态层。" },
+  { id: "human-factor", label: "人因输入", desc: "基金池范围与人工信号叠加。" },
   { id: "notification", label: "通知", desc: "Telegram 与飞书的触发策略和运行状态。" },
   { id: "secrets", label: "凭证", desc: "API Key、Token 与连通性管理。" },
-  { id: "agent", label: "认知 Agent", desc: "调查频率、复盘周期、记忆与熔断参数。" },
 ] as const;
 
 export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS_)[number]["id"];
-
-export const SETTINGS_NAV_GROUPS_: Array<{
-  id: string;
-  label: string;
-  desc: string;
-  items: SettingsNavItemId[];
-}> = [
-  {
-    id: "controls",
-    label: "策略控制",
-    desc: "决定系统如何看市场、做判断、下动作。",
-    items: ["strategy", "risk", "data", "human-factor"],
-  },
-  {
-    id: "operations",
-    label: "运行协同",
-    desc: "连接通知、凭证与 Agent 运行方式。",
-    items: ["notification", "secrets", "agent"],
-  },
-] as const;
 
 export const MARKET_INDICATOR_ITEMS_: Array<{
   key: DaaMarketIndicatorConfigKey;

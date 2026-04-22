@@ -1,8 +1,8 @@
 "use client";
 
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, BellRing, Bot, KeyRound, RefreshCcw, Save, ShieldCheck } from "lucide-react";
+import { BellRing, RefreshCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
@@ -12,7 +12,6 @@ import { DaaSurfaceActionButton, DaaSurfacePageHeader, DaaSurfaceSectionAnchor, 
 import { DataHealthPanel } from "@/app/daa/dashboard/settings/_components/DataHealthPanel";
 import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_components/SettingsDataSourcesSection";
 import {
-  SETTINGS_NAV_GROUPS_,
   SETTINGS_NAV_ITEMS_,
   type SettingsNavItemId,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
@@ -22,13 +21,12 @@ import { SettingsRiskSection } from "@/app/daa/dashboard/settings/_components/Se
 import { SettingsDataInitSection } from "@/app/daa/dashboard/settings/_components/SettingsDataInitSection";
 import { SettingsSecretsSection } from "@/app/daa/dashboard/settings/_components/SettingsSecretsSection";
 import { SettingsStrategySection } from "@/app/daa/dashboard/settings/_components/SettingsStrategySection";
-import { SettingsAgentSection } from "@/app/daa/dashboard/settings/_components/SettingsAgentSection";
 import { ApiClientError } from "@/src/daa/api/client";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/src/daa/modules/store/storeApi";
 
-const SETTINGS_PAGE_DESCRIPTION_ = "按职责配置再平衡策略、风控参数、数据源、人因与通知，并通过固定保存条统一提交。";
+const SETTINGS_PAGE_DESCRIPTION_ = "集中管理策略、数据、通知与凭证，建议按分区逐步修改并统一保存。";
 
 /** 深度排序后序列化，消除嵌套字段顺序差异导致的误判 */
 function stableStringify(obj: unknown): string {
@@ -44,53 +42,17 @@ function stableStringify(obj: unknown): string {
   });
 }
 
-function SettingsOverviewCard(props: {
-  eyebrow: string;
-  title: string;
-  detail: string;
-  accent: "cyan" | "amber" | "green" | "violet";
-  icon: ComponentType<{ className?: string }>;
-}) {
-  const { eyebrow, title, detail, accent, icon: Icon } = props;
-  const accentMap = {
-    cyan: "rgba(56,189,248,0.18)",
-    amber: "rgba(251,191,36,0.18)",
-    green: "rgba(74,222,128,0.18)",
-    violet: "rgba(167,139,250,0.18)",
-  } as const;
-
-  return (
-    <div
-      className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(18,25,40,0.9),rgba(9,13,24,0.98))] p-4 shadow-[0_18px_45px_rgba(0,0,0,0.18)]"
-      style={{ boxShadow: `inset 0 1px 0 ${accentMap[accent]}, 0 18px 45px rgba(0,0,0,0.18)` }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">{eyebrow}</div>
-          <div className="mt-2 text-lg font-semibold text-[var(--text)]">{title}</div>
-        </div>
-        <div className="rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.04)] p-2.5">
-          <Icon className="h-4 w-4 text-[var(--text)]" />
-        </div>
-      </div>
-      <div className="mt-3 text-sm leading-6 text-[var(--muted)]">{detail}</div>
-    </div>
-  );
-}
-
 function SettingsSectionGroup(props: {
-  eyebrow: string;
   title: string;
   description: string;
   children: ReactNode;
 }) {
-  const { eyebrow, title, description, children } = props;
+  const { title, description, children } = props;
 
   return (
     <section className="space-y-4">
-      <div className="rounded-[22px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,23,38,0.94),rgba(9,13,24,0.98))] px-5 py-5 shadow-[0_18px_48px_rgba(0,0,0,0.18)]">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">{eyebrow}</div>
-        <div className="mt-2 text-xl font-semibold text-[var(--text)]">{title}</div>
+      <div className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,23,38,0.92),rgba(9,13,24,0.98))] px-5 py-5 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+        <div className="text-lg font-semibold text-[var(--text)]">{title}</div>
         <div className="mt-2 max-w-3xl text-sm leading-6 text-[var(--muted)]">{description}</div>
       </div>
       <div className="space-y-5">{children}</div>
@@ -155,16 +117,15 @@ export default function SettingsPage() {
 
   /** Per-section dirty detection for nav indicator dots */
   const sectionDirtyMap = useMemo<Record<SettingsNavItemId, boolean>>(() => {
-    if (!config || !baselineConfig) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false, agent: false };
+    if (!config || !baselineConfig) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     return {
       strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy),
       risk: changed(config.strategy?.risk, baselineConfig.strategy?.risk) || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints),
       data: changed(config.dataSources, baselineConfig.dataSources),
-      "human-factor": changed(config.strategy?.targetWeights, baselineConfig.strategy?.targetWeights) ,
+      "human-factor": changed(config.strategy?.targetWeights, baselineConfig.strategy?.targetWeights),
       notification: changed(config.notification, baselineConfig.notification),
       secrets: false, // secrets managed separately
-      agent: changed(config.cognitiveAgent, baselineConfig.cognitiveAgent),
     };
   }, [baselineConfig, config]);
 
@@ -306,152 +267,70 @@ export default function SettingsPage() {
       <DashboardErrorNotice title="设置操作失败" description={error} />
       <DashboardSuccessNotice title="设置已更新" description={hint} />
 
-      <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-        <SettingsOverviewCard
-          eyebrow="保存状态"
-          title={isDirty ? `待保存 ${dirtySectionCount} 个模块` : "配置已同步"}
-          detail={isDirty ? "当前页面存在改动，建议统一保存后再离开。" : "当前表单与服务器版本保持一致。"}
-          accent={isDirty ? "amber" : "green"}
-          icon={ShieldCheck}
-        />
-        <SettingsOverviewCard
-          eyebrow="运行版本"
-          title={`配置版本 ${version ?? "-"}`}
-          detail="所有表单都会合并进同一份系统配置，版本号能帮助排查并发改动。"
-          accent="cyan"
-          icon={Activity}
-        />
-        <SettingsOverviewCard
-          eyebrow="行情健康"
-          title={dataHealthAssets.length > 0 ? `${dataHealthSummary.healthyCount}/${dataHealthAssets.length} 正常` : "等待健康检查"}
-          detail={dataHealthSummary.label}
-          accent={dataHealthSummary.attentionCount > 0 ? "amber" : "green"}
-          icon={BellRing}
-        />
-        <SettingsOverviewCard
-          eyebrow="认知链路"
-          title={config.cognitiveAgent?.enabled ? "Agent 已启用" : "Agent 关闭"}
-          detail={config.dataSources.llmAnalysis.enabled ? "AI 解读链路已打开，可进一步配置多模型。" : "AI 解读当前关闭，部分解释链路会降级。"}
-          accent="violet"
-          icon={Bot}
-        />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[290px_minmax(0,1fr)]">
-        <aside className="xl:sticky xl:top-[104px] xl:self-start">
-          <div className="space-y-4">
-            <div className="overflow-hidden rounded-[22px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(24,34,54,0.96),rgba(13,19,32,0.98))] shadow-[0_24px_60px_rgba(0,0,0,0.24)]">
-              <div className="border-b border-[var(--border)] px-5 py-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">导航与状态</div>
-                <div className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                  左侧看整体，右侧改细节。优先按模块分批保存，能减少一次改太多带来的误判。
-                </div>
-              </div>
-              <div className="grid gap-2 border-b border-[var(--border)] px-4 py-4">
-                <div className="flex items-center justify-between rounded-[16px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-3">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">未保存模块</div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--text)]">{dirtySectionCount} 个</div>
-                  </div>
-                  <ShieldCheck className="h-4 w-4 text-[var(--text)]" />
-                </div>
-                <div className="flex items-center justify-between rounded-[16px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-3">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--faint)]">行情健康</div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--text)]">{dataHealthSummary.label}</div>
-                  </div>
-                  <BellRing className="h-4 w-4 text-[var(--text)]" />
-                </div>
-              </div>
-              <div className="space-y-3 px-3 py-3">
-                {SETTINGS_NAV_GROUPS_.map((group) => (
-                  <div key={group.id} className="rounded-[18px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] p-2.5">
-                    <div className="px-3 py-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--faint)]">{group.label}</div>
-                      <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{group.desc}</div>
-                    </div>
-                    <div className="space-y-1">
-                      {group.items.map((itemId) => {
-                        const item = SETTINGS_NAV_ITEMS_.find((entry) => entry.id === itemId);
-                        if (!item) return null;
-
-                        return (
-                          <div key={item.id} className="rounded-[14px] border border-transparent bg-[rgba(255,255,255,0.015)] p-1.5">
-                            <DaaSurfaceSectionAnchor
-                              href={`#settings-${item.id}`}
-                              active={activeSection === item.id}
-                              label={
-                                <>
-                                  {item.label}
-                                  {sectionDirtyMap[item.id] ? (
-                                    <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--amber)]" title="存在未保存修改" />
-                                  ) : null}
-                                </>
-                              }
-                              onClick={() => setActiveSection(item.id)}
-                            />
-                            <div className="px-3 pb-2 pt-1 text-xs leading-5 text-[var(--faint)]">{item.desc}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[22px] border border-[var(--border)] bg-[rgba(8,12,20,0.68)] px-5 py-4 shadow-[0_14px_40px_rgba(0,0,0,0.16)]">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]">
-                <KeyRound className="h-3.5 w-3.5" />
-                排版建议
-              </div>
-              <div className="mt-3 space-y-2 text-sm leading-6 text-[var(--muted)]">
-                <div>先改“策略控制”，再处理通知与凭证，最后再调 Agent，路径会更清楚。</div>
-                <div>高频修改项放前面，低频但高风险配置放后面，减少滚动疲劳。</div>
-                <div>像“刷新市场状态层”这种运行动作，和“保存表单”分开看会更稳。</div>
-              </div>
+      <div className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,23,38,0.92),rgba(9,13,24,0.98))] px-5 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-[var(--text)]">页面导航</div>
+            <div className="mt-1 text-sm leading-6 text-[var(--muted)]">
+              设置页按顺序组织为策略、数据、通知和凭证。建议沿着页面从上到下修改，最后统一保存。
             </div>
           </div>
-        </aside>
-
-        <div className="space-y-6">
-          <SettingsSectionGroup
-            eyebrow="策略控制"
-            title="核心行为与输入"
-            description="这一组决定系统怎么判断市场、何时触发动作，以及解释层依赖哪些外部输入。建议先改这里，再看通知和凭证。"
-          >
-            <SettingsStrategySection config={config} setConfig={setConfig} />
-            <SettingsRiskSection config={config} setConfig={setConfig} />
-            <SettingsDataSourcesSection config={config} setConfig={setConfig} />
-            {dataHealthAssets.length > 0 ? <DataHealthPanel assets={dataHealthAssets} /> : null}
-            <SettingsDataInitSection />
-            <SettingsHumanFactorSection config={config} setConfig={setConfig} />
-          </SettingsSectionGroup>
-
-          <SettingsSectionGroup
-            eyebrow="运行协同"
-            title="通知与运行状态"
-            description="这里关注的是链路是否真正生效。通知、触发和最近一次运行结果放在一起，能帮助更快判断问题出在配置还是执行。"
-          >
-            <SettingsNotificationSection config={config} setConfig={setConfig} />
-          </SettingsSectionGroup>
-
-          <SettingsSectionGroup
-            eyebrow="安全访问"
-            title="凭证与来源优先级"
-            description="密钥、Webhook 与外部来源优先级统一放在这里。调完后回到上面的运行协同区验证，而不是只看是否保存成功。"
-          >
-            <SettingsSecretsSection />
-          </SettingsSectionGroup>
-
-          <SettingsSectionGroup
-            eyebrow="认知系统"
-            title="Agent 运行配置"
-            description="如果前面的输入和通知都稳定了，再来细调 Agent 的调查频率、复盘节奏和熔断逻辑，维护成本会低很多。"
-          >
-            <SettingsAgentSection config={config} setConfig={setConfig} />
-          </SettingsSectionGroup>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-sm text-[var(--muted)]">
+            <BellRing className="h-4 w-4 text-[var(--faint)]" />
+            {dataHealthSummary.label}
+          </div>
         </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {SETTINGS_NAV_ITEMS_.map((item) => (
+            <a
+              key={item.id}
+              href={`#settings-${item.id}`}
+              onClick={() => setActiveSection(item.id)}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors ${
+                activeSection === item.id
+                  ? "border-[var(--primary)] bg-[rgba(56,189,248,0.12)] text-[var(--text)]"
+                  : "border-[var(--border)] bg-[rgba(255,255,255,0.03)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              }`}
+            >
+              <span>{item.label}</span>
+              {sectionDirtyMap[item.id] ? <span className="h-1.5 w-1.5 rounded-full bg-[var(--amber)]" /> : null}
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <SettingsSectionGroup
+          title="基础策略"
+          description="先定义系统何时行动、怎样控制风险。这部分是整套配置里最常改、也最影响结果的一组。"
+        >
+          <SettingsStrategySection config={config} setConfig={setConfig} />
+          <SettingsRiskSection config={config} setConfig={setConfig} />
+        </SettingsSectionGroup>
+
+        <SettingsSectionGroup
+          title="数据与模型"
+          description="这里管理行情、资讯、汇率和 AI 模型输入。先确认源是否启用，再处理健康检查和初始化。"
+        >
+          <SettingsDataSourcesSection config={config} setConfig={setConfig} />
+          {dataHealthAssets.length > 0 ? <DataHealthPanel assets={dataHealthAssets} /> : null}
+          <SettingsHumanFactorSection config={config} setConfig={setConfig} />
+          <SettingsDataInitSection />
+        </SettingsSectionGroup>
+
+        <SettingsSectionGroup
+          title="通知"
+          description="通知单独成组，便于把运行提醒与策略参数区分开，减少把执行状态和表单配置混在一起的误判。"
+        >
+          <SettingsNotificationSection config={config} setConfig={setConfig} />
+        </SettingsSectionGroup>
+
+        <SettingsSectionGroup
+          title="凭证与连接"
+          description="最后处理密钥、Webhook 与外部服务连接。保存后建议回到通知或数据区验证是否真正生效。"
+        >
+          <SettingsSecretsSection />
+        </SettingsSectionGroup>
       </div>
 
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-[var(--border)] bg-[rgba(8,12,20,0.95)] px-4 py-3 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:-mx-7 lg:px-7">
