@@ -34,9 +34,9 @@ function parseApiError(json: any, fallback: string): string {
 
 function mapLoginError(message: string): string {
   const code = String(message || "").trim();
-  if (code === "invalid_credentials") return "用户名/邮箱或密码错误。";
+  if (code === "invalid_credentials") return "邮箱或密码错误。";
   if (code === "auth_backend_unavailable") return "认证服务不可用，请稍后重试。";
-  if (code === "Invalid login credentials") return "用户名/邮箱或密码错误。";
+  if (code === "Invalid login credentials") return "邮箱或密码错误。";
   return code || "登录失败，请重试。";
 }
 
@@ -345,17 +345,17 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
                 className="block text-[11px] font-semibold uppercase tracking-widest"
                 style={{ color: "var(--faint)" }}
               >
-                用户名或邮箱
+                登录邮箱
               </label>
               <input
                 id="daa-login-email"
                 ref={emailRef}
-                type="text"
+                type="email"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                autoComplete="username"
-                placeholder="admin 或 you@example.com"
+                autoComplete="email"
+                placeholder="you@example.com"
                 value={email}
                 disabled={busy || session.kind === "checking"}
                 onChange={(e) => { setEmail(e.target.value); setAuthError(null); }}
@@ -443,7 +443,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
               认证说明
             </div>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              使用 DAA 本地认证登录。测试环境支持用户名或邮箱；账号需要先在当前数据环境中存在，系统不会自动补默认账号。
+              使用内部邮箱账号登录。账号需要由管理员提前创建并授予角色；当前环境不再提供默认本地账号。
             </p>
           </div>
 
