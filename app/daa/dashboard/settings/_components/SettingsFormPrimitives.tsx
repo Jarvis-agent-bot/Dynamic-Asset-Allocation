@@ -22,6 +22,26 @@ export const SETTINGS_NAV_ITEMS_ = [
 
 export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS_)[number]["id"];
 
+export const SETTINGS_NAV_GROUPS_: Array<{
+  id: string;
+  label: string;
+  desc: string;
+  items: SettingsNavItemId[];
+}> = [
+  {
+    id: "controls",
+    label: "策略控制",
+    desc: "决定系统如何看市场、做判断、下动作。",
+    items: ["strategy", "risk", "data", "human-factor"],
+  },
+  {
+    id: "operations",
+    label: "运行协同",
+    desc: "连接通知、凭证与 Agent 运行方式。",
+    items: ["notification", "secrets", "agent"],
+  },
+] as const;
+
 export const MARKET_INDICATOR_ITEMS_: Array<{
   key: DaaMarketIndicatorConfigKey;
   label: string;
@@ -41,20 +61,20 @@ export type SettingsConfigSetter = Dispatch<SetStateAction<DaaSystemConfig | nul
 
 export const settingsGridCols2Style: CSSProperties = {
   display: "grid",
-  gap: 16,
-  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+  gap: 18,
+  gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
 };
 
 export const settingsGridCols3Style: CSSProperties = {
   display: "grid",
   gap: 16,
-  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  padding: "7px 10px",
-  borderRadius: 6,
+  padding: "9px 12px",
+  borderRadius: 10,
   border: "1px solid var(--border-strong)",
   background: "var(--elevated)",
   color: "var(--text)",
@@ -62,7 +82,7 @@ const inputStyle: CSSProperties = {
   fontFamily: "var(--font-body)",
   outline: "none",
   boxSizing: "border-box",
-  transition: "border-color 0.15s, box-shadow 0.15s",
+  transition: "border-color 0.15s, box-shadow 0.15s, background 0.15s",
 };
 
 const selectStyle: CSSProperties = {
@@ -150,11 +170,12 @@ export function FieldLabel({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
-        fontSize: 12,
-        fontWeight: 500,
-        color: "var(--muted)",
-        marginBottom: 6,
-        letterSpacing: "0.02em",
+        fontSize: 11,
+        fontWeight: 600,
+        color: "var(--faint)",
+        marginBottom: 8,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
       }}
     >
       {children}
@@ -211,22 +232,28 @@ export function SectionCard({
   return (
     <div
       style={{
-        borderRadius: 10,
+        borderRadius: 18,
         border: "1px solid var(--border)",
-        background: "var(--card)",
+        background: "linear-gradient(180deg, rgba(17,23,38,0.94), rgba(9,13,24,0.98))",
         overflow: "hidden",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.22)",
       }}
     >
       <div
         style={{
-          padding: "14px 16px",
+          padding: "16px 18px",
           borderBottom: "1px solid var(--border)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0))",
         }}
       >
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{title}</div>
-        {description ? <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{description}</div> : null}
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", letterSpacing: "0.01em" }}>{title}</div>
+        {description ? (
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 5, lineHeight: 1.7 }}>
+            {description}
+          </div>
+        ) : null}
       </div>
-      <div style={{ padding: "16px" }}>{children}</div>
+      <div style={{ padding: "18px" }}>{children}</div>
     </div>
   );
 }
@@ -244,27 +271,32 @@ export function SubsectionCard({
   return (
     <div
       style={{
-        borderRadius: 10,
+        borderRadius: 16,
         border: "1px solid var(--border)",
-        background: "rgba(255,255,255,0.02)",
-        padding: 14,
+        background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015))",
+        padding: 16,
       }}
     >
-      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{title}</div>
-      {description ? <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>{description}</div> : null}
+      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", letterSpacing: "0.01em" }}>{title}</div>
+      {description ? (
+        <div style={{ marginTop: 5, fontSize: 12, color: "var(--muted)", lineHeight: 1.75 }}>
+          {description}
+        </div>
+      ) : null}
       <div style={{ marginTop: 14 }}>{children}</div>
     </div>
   );
 }
 
 export const settingsPresetButtonStyle: CSSProperties = {
-  padding: "4px 12px",
-  borderRadius: 6,
+  padding: "7px 12px",
+  borderRadius: 999,
   fontSize: 12,
   cursor: "pointer",
   border: "1px solid var(--border-strong)",
-  background: "var(--elevated)",
+  background: "rgba(255,255,255,0.03)",
   color: "var(--muted)",
   fontFamily: "var(--font-body)",
   transition: "all 0.15s",
+  fontWeight: 600,
 };
