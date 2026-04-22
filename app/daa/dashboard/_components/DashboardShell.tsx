@@ -67,6 +67,7 @@ export default function DashboardShell({ children }: Props) {
   }, []);
 
   const currentSection = useMemo(() => SECTION_META[resolveSection(pathname)] ?? DEFAULT_SECTION_META, [pathname]);
+  const showAgentRail = !pathname.startsWith("/daa/dashboard/today") && !pathname.startsWith("/daa/dashboard/settings");
 
   function toggleSidebar() {
     setSidebarCollapsed((prev) => {
@@ -177,12 +178,12 @@ export default function DashboardShell({ children }: Props) {
             id="daa-dashboard-main-content"
             className="min-w-0 w-full max-w-full overflow-x-clip px-4 py-5 sm:px-5 lg:px-7 lg:py-6"
           >
-            <div className="mx-auto max-w-[1440px] xl:mr-[280px]">{children}</div>
+            <div className={cn("mx-auto max-w-[1440px]", showAgentRail ? "xl:mr-[280px]" : "")}>{children}</div>
           </section>
         </main>
 
         {/* Agent Rail — 全站常驻认知面板 */}
-        <AgentRail />
+        {showAgentRail ? <AgentRail /> : null}
       </div>
     </>
   );
