@@ -381,6 +381,15 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
         timeoutMs: 15000,
       },
       {
+        id: "llm_model_decision",
+        label: "默认决策模型",
+        taskType: "decision",
+        enabled: true,
+        provider: "deepseek",
+        model: "deepseek-chat",
+        timeoutMs: 20000,
+      },
+      {
         id: "llm_model_reasoner",
         label: "深度推理模型",
         taskType: "research",
@@ -458,6 +467,37 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     },
   },
 };
+
+function deriveLegacyLlmModels(
+  llmAnalysis: DaaSystemConfig["dataSources"]["llmAnalysis"],
+): NonNullable<DaaSystemConfig["dataSources"]["llmModels"]> {
+  const provider = String(llmAnalysis.provider || "deepseek").trim() || "deepseek";
+  const model = String(llmAnalysis.model || "deepseek-chat").trim() || "deepseek-chat";
+  const timeoutMs = Math.max(2000, Math.trunc(Number(llmAnalysis.timeoutMs) || 15000));
+  const endpoint = llmAnalysis.endpoint ? String(llmAnalysis.endpoint).trim() || undefined : undefined;
+
+  const buildModel = (
+    taskType: "analysis" | "decision" | "research",
+    label: string,
+    enabled = true,
+    timeoutOffsetMs = 0,
+  ) => ({
+    id: `llm_model_${taskType}`,
+    label,
+    taskType,
+    enabled,
+    provider,
+    model,
+    timeoutMs: timeoutMs + timeoutOffsetMs,
+    ...(endpoint ? { endpoint } : {}),
+  });
+
+  return [
+    buildModel("analysis", "分析解读"),
+    buildModel("decision", "决策执行", llmAnalysis.enabledInDecision !== false),
+    buildModel("research", "深度研究", true, model.includes("reasoner") ? 30000 : 15000),
+  ];
+}
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -703,6 +743,15 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const llmAnalysis = isRecord(dataSources.llmAnalysis) ? dataSources.llmAnalysis : {};
   const llmModels = isRecord(dataSources.llmModels) ? dataSources.llmModels : (Array.isArray(dataSources.llmModels) ? dataSources.llmModels : []);
   const marketIndicators = isRecord(dataSources.marketIndicators) ? dataSources.marketIndicators : {};
+  const normalizedLlmAnalysis: DaaSystemConfig["dataSources"]["llmAnalysis"] = {
+    id: String(llmAnalysis.id || fallback.dataSources.llmAnalysis.id).trim() || fallback.dataSources.llmAnalysis.id,
+    enabled: toBool(llmAnalysis.enabled, fallback.dataSources.llmAnalysis.enabled),
+    provider: String(llmAnalysis.provider || fallback.dataSources.llmAnalysis.provider).trim() || fallback.dataSources.llmAnalysis.provider,
+    model: String(llmAnalysis.model || fallback.dataSources.llmAnalysis.model).trim() || fallback.dataSources.llmAnalysis.model,
+    timeoutMs: Math.max(2000, Math.trunc(Number(llmAnalysis.timeoutMs) || fallback.dataSources.llmAnalysis.timeoutMs)),
+    enabledInDecision: toBool(llmAnalysis.enabledInDecision, fallback.dataSources.llmAnalysis.enabledInDecision),
+    endpoint: llmAnalysis.endpoint ? String(llmAnalysis.endpoint).trim() || undefined : fallback.dataSources.llmAnalysis.endpoint,
+  };
 
   const notification = isRecord(source.notification) ? source.notification : {};
   const notificationTelegram = isRecord(notification.telegram) ? notification.telegram : {};
@@ -834,18 +883,10 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         baseCurrency: normalizeBaseCurrencyCode(fxFeed.baseCurrency, fallback.dataSources.fxFeed.baseCurrency),
         pairs: normalizePairs(fxFeed.pairs).length ? normalizePairs(fxFeed.pairs) : clone(fallback.dataSources.fxFeed.pairs),
       },
-      llmAnalysis: {
-        id: String(llmAnalysis.id || fallback.dataSources.llmAnalysis.id).trim() || fallback.dataSources.llmAnalysis.id,
-        enabled: toBool(llmAnalysis.enabled, fallback.dataSources.llmAnalysis.enabled),
-        provider: String(llmAnalysis.provider || fallback.dataSources.llmAnalysis.provider).trim() || fallback.dataSources.llmAnalysis.provider,
-        model: String(llmAnalysis.model || fallback.dataSources.llmAnalysis.model).trim() || fallback.dataSources.llmAnalysis.model,
-        timeoutMs: Math.max(2000, Math.trunc(Number(llmAnalysis.timeoutMs) || fallback.dataSources.llmAnalysis.timeoutMs)),
-        enabledInDecision: toBool(llmAnalysis.enabledInDecision, fallback.dataSources.llmAnalysis.enabledInDecision),
-      },
+      llmAnalysis: normalizedLlmAnalysis,
       llmModels: (() => {
         const rawModels = Array.isArray(llmModels) ? llmModels : [];
-        const fbModels = fallback.dataSources.llmModels || [];
-        if (rawModels.length === 0) return fbModels;
+        if (rawModels.length === 0) return deriveLegacyLlmModels(normalizedLlmAnalysis);
         return rawModels.map((m: Record<string, unknown>) => ({
           id: String(m.id || "").trim() || "llm_model_default",
           label: String(m.label || m.id || "模型").trim(),

@@ -1,6 +1,7 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 import { SectionCard, type SettingsConfigSetter } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
+import { SettingsHumanFactorSection } from "@/app/daa/dashboard/settings/_components/SettingsHumanFactorSection";
 import { SettingsAiAnalysisBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsAiAnalysisBlock";
 import { SettingsFxFeedBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsFxFeedBlock";
 import { SettingsMarketContextBlock } from "@/app/daa/dashboard/settings/_components/data-sources/SettingsMarketContextBlock";
@@ -30,6 +31,7 @@ export function SettingsDataSourcesSection(props: {
             <SettingsFxFeedBlock config={config} setConfig={setConfig} />
             <SettingsAiAnalysisBlock config={config} setConfig={setConfig} />
           </div>
+          <SettingsHumanFactorSection config={config} setConfig={setConfig} />
           <SettingsMarketContextBlock config={config} setConfig={setConfig} />
         </div>
       </SectionCard>

@@ -17,7 +17,7 @@ export function SettingsHumanFactorSection(props: {
 
   return (
     <section id="settings-human-factor" className="scroll-mt-28">
-      <SectionCard title="人因数据源" description="信号叠加层配置与基金池范围。">
+      <SectionCard title="人因输入与基金池" description="把人工观察范围与辅助信号放到数据输入层统一管理。">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
             checked={config.dataSources.hfFund.enabled}

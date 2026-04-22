@@ -17,8 +17,8 @@ import {
 /** 预设 provider 选项 */
 const LLM_PROVIDERS = [
   { value: "deepseek", label: "DeepSeek", defaultModel: "deepseek-chat" },
-  { value: "openai", label: "OpenAI", defaultModel: "gpt-4o-mini" },
-  { value: "codex", label: "Codex (OpenAI)", defaultModel: "o3-mini" },
+  { value: "openai", label: "OpenAI / 代理", defaultModel: "gpt-5.4" },
+  { value: "codex", label: "Codex (OpenAI)", defaultModel: "gpt-5.4" },
   { value: "claude", label: "Claude (Anthropic)", defaultModel: "claude-sonnet-4-20250514" },
   { value: "custom", label: "自定义" },
 ] as const;
@@ -35,9 +35,9 @@ const DEFAULT_MODEL = {
   label: "新模型",
   taskType: "analysis" as const,
   enabled: true,
-  provider: "deepseek",
-  model: "deepseek-chat",
-  timeoutMs: 15000,
+  provider: "openai",
+  model: "gpt-5.4",
+  timeoutMs: 30000,
 };
 
 type LlmModelConfig = {
@@ -50,6 +50,11 @@ type LlmModelConfig = {
   timeoutMs: number;
   endpoint?: string;
 };
+
+function getProviderDefaultModel(provider: string): string {
+  const match = LLM_PROVIDERS.find((item) => item.value === provider);
+  return match && "defaultModel" in match ? match.defaultModel : "gpt-5.4";
+}
 
 function setLlmField(
   setConfig: SettingsConfigSetter,
@@ -158,8 +163,8 @@ function ModelEditor({ model, onChange, onDelete, idx }: ModelEditorProps) {
           <FieldLabel>模型名称</FieldLabel>
           <FormInput
             value={model.model}
-            placeholder="例: deepseek-chat, gpt-4o"
-            onChange={(e) => onChange({ ...model, model: e.target.value.trim() || "deepseek-chat" }, idx)}
+            placeholder="例: gpt-5.4, deepseek-chat, claude-sonnet-4-20250514"
+            onChange={(e) => onChange({ ...model, model: e.target.value.trim() || getProviderDefaultModel(model.provider) }, idx)}
           />
         </div>
         <div>
@@ -175,16 +180,17 @@ function ModelEditor({ model, onChange, onDelete, idx }: ModelEditorProps) {
         </div>
       </div>
 
-      {effectiveProvider === "custom" && (
-        <div>
-          <FieldLabel>自定义 Endpoint</FieldLabel>
-          <FormInput
-            value={model.endpoint ?? ""}
-            placeholder="https://your-api.example.com/v1/chat/completions"
-            onChange={(e) => onChange({ ...model, endpoint: e.target.value.trim() || undefined }, idx)}
-          />
+      <div>
+        <FieldLabel>专用 Endpoint（可选）</FieldLabel>
+        <FormInput
+          value={model.endpoint ?? ""}
+          placeholder={effectiveProvider === "custom" ? "https://your-api.example.com/v1" : "例: https://your-proxy.example.com/v1"}
+          onChange={(e) => onChange({ ...model, endpoint: e.target.value.trim() || undefined }, idx)}
+        />
+        <div className="mt-2 text-xs leading-5 text-[var(--faint)]">
+          留空则沿用「凭证与连接」中的全局配置；如果填写 base_url，系统会按 Responses / Chat 自动补全请求路径。
         </div>
-      )}
+      </div>
 
       <CheckboxRow
         checked={model.enabled}
@@ -202,8 +208,7 @@ export function SettingsAiAnalysisBlock(props: {
 }) {
   const { config, setConfig } = props;
   const llm = config.dataSources.llmAnalysis;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const models: LlmModelConfig[] = (config as any).llmModels ?? [];
+  const models: LlmModelConfig[] = config.dataSources.llmModels ?? [];
   const [showLegacy, setShowLegacy] = useState(false);
 
   const isCustom = !LLM_PROVIDERS.some((p) => p.value === llm.provider && p.value !== "custom");
@@ -288,26 +293,26 @@ export function SettingsAiAnalysisBlock(props: {
                   onClick={() => {
                     const newModels = [
                       ...models,
-                      { ...DEFAULT_MODEL, id: `llm_model_${Date.now()}_fast`, label: "快速模型", taskType: "analysis" as const, provider: "deepseek", model: "deepseek-chat", timeoutMs: 15000 },
+                      { ...DEFAULT_MODEL, id: `llm_model_${Date.now()}_fast`, label: "快速模型", taskType: "analysis" as const, provider: "openai", model: "gpt-5.4", timeoutMs: 20000 },
                     ];
                     setLlmModels(setConfig, newModels);
                   }}
                   style={settingsPresetButtonStyle}
                 >
-                  + 快速分析模型
+                  + GPT-5.4 分析模型
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     const newModels = [
                       ...models,
-                      { ...DEFAULT_MODEL, id: `llm_model_${Date.now()}_reasoner`, label: "推理模型", taskType: "research" as const, provider: "deepseek", model: "deepseek-reasoner", timeoutMs: 90000 },
+                      { ...DEFAULT_MODEL, id: `llm_model_${Date.now()}_reasoner`, label: "研究模型", taskType: "research" as const, provider: "openai", model: "gpt-5.4", timeoutMs: 60000 },
                     ];
                     setLlmModels(setConfig, newModels);
                   }}
                   style={settingsPresetButtonStyle}
                 >
-                  + 深度推理模型
+                  + GPT-5.4 研究模型
                 </button>
               </div>
             </div>
@@ -351,21 +356,19 @@ export function SettingsAiAnalysisBlock(props: {
             <FieldLabel>模型名称</FieldLabel>
             <FormInput
               value={llm.model}
-              placeholder="例: deepseek-chat, gpt-4o, o3-mini"
-              onChange={(e) => setLlmField(setConfig, { model: e.target.value.trim() || "deepseek-chat" })}
+              placeholder="例: gpt-5.4, deepseek-chat, claude-sonnet-4-20250514"
+              onChange={(e) => setLlmField(setConfig, { model: e.target.value.trim() || getProviderDefaultModel(llm.provider) })}
             />
           </div>
 
-          {effectiveProvider === "custom" && (
-            <div style={{ marginTop: 14 }}>
-              <FieldLabel>自定义 Endpoint</FieldLabel>
-              <FormInput
-                value={llm.endpoint ?? ""}
-                placeholder="https://your-api.example.com/v1/chat/completions"
-                onChange={(e) => setLlmField(setConfig, { endpoint: e.target.value.trim() || undefined })}
-              />
-            </div>
-          )}
+          <div style={{ marginTop: 14 }}>
+            <FieldLabel>专用 Endpoint（可选）</FieldLabel>
+            <FormInput
+              value={llm.endpoint ?? ""}
+              placeholder={effectiveProvider === "custom" ? "https://your-api.example.com/v1" : "例: https://your-proxy.example.com/v1"}
+              onChange={(e) => setLlmField(setConfig, { endpoint: e.target.value.trim() || undefined })}
+            />
+          </div>
 
           <div
             style={{
@@ -377,7 +380,7 @@ export function SettingsAiAnalysisBlock(props: {
               color: "var(--color-text-secondary, #666)",
             }}
           >
-            💡 API Key 在「凭证」页管理。支持 per-provider 独立 Key（如 DAA_DEEPSEEK_API_KEY、DAA_OPENAI_API_KEY、DAA_ANTHROPIC_API_KEY），也支持通用 DAA_LLM_API_KEY。
+            💡 API Key 在「凭证」页管理。支持 per-provider 独立 Key（如 DAA_DEEPSEEK_API_KEY、DAA_OPENAI_API_KEY、DAA_ANTHROPIC_API_KEY），也支持通用 DAA_LLM_API_KEY。Endpoint 可直接填写 base_url，系统会自动按 Responses / Chat 补全请求路径。
           </div>
         </div>
       )}

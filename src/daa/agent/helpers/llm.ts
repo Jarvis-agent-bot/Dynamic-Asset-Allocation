@@ -40,7 +40,7 @@ const FAST_TIER_DEFAULTS = {
  * - fast: 优先使用 DeepSeek Chat（便宜），fallback 到主 LLM
  */
 export async function resolveLlmConfigForTier(tier: LlmTaskTier): Promise<LlmRuntimeConfig | null> {
-  const primaryConfig = await resolveLlmConfig();
+  const primaryConfig = await resolveLlmConfig(tier === "strong" ? "research" : "analysis");
   if (!primaryConfig) return null;
 
   if (tier === "strong") {

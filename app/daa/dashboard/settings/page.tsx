@@ -8,14 +8,13 @@ import { toast } from "sonner";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { emitDashboardDataUpdated, emitDashboardRefresh } from "@/app/daa/dashboard/dashboardEvents";
 import { DashboardEmptyState, DashboardErrorNotice, DashboardSuccessNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
-import { DaaSurfaceActionButton, DaaSurfacePageHeader, DaaSurfaceSectionAnchor, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { DaaSurfaceActionButton, DaaSurfacePageHeader, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { DataHealthPanel } from "@/app/daa/dashboard/settings/_components/DataHealthPanel";
 import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_components/SettingsDataSourcesSection";
 import {
   SETTINGS_NAV_ITEMS_,
   type SettingsNavItemId,
 } from "@/app/daa/dashboard/settings/_components/SettingsFormPrimitives";
-import { SettingsHumanFactorSection } from "@/app/daa/dashboard/settings/_components/SettingsHumanFactorSection";
 import { SettingsNotificationSection } from "@/app/daa/dashboard/settings/_components/SettingsNotificationSection";
 import { SettingsRiskSection } from "@/app/daa/dashboard/settings/_components/SettingsRiskSection";
 import { SettingsDataInitSection } from "@/app/daa/dashboard/settings/_components/SettingsDataInitSection";
@@ -117,13 +116,14 @@ export default function SettingsPage() {
 
   /** Per-section dirty detection for nav indicator dots */
   const sectionDirtyMap = useMemo<Record<SettingsNavItemId, boolean>>(() => {
-    if (!config || !baselineConfig) return { strategy: false, risk: false, data: false, "human-factor": false, notification: false, secrets: false };
+    if (!config || !baselineConfig) return { strategy: false, data: false, notification: false, secrets: false };
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     return {
-      strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy),
-      risk: changed(config.strategy?.risk, baselineConfig.strategy?.risk) || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints),
+      strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy)
+        || changed(config.strategy?.risk, baselineConfig.strategy?.risk)
+        || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints)
+        || changed(config.strategy?.execution, baselineConfig.strategy?.execution),
       data: changed(config.dataSources, baselineConfig.dataSources),
-      "human-factor": changed(config.strategy?.targetWeights, baselineConfig.strategy?.targetWeights),
       notification: changed(config.notification, baselineConfig.notification),
       secrets: false, // secrets managed separately
     };
@@ -267,12 +267,12 @@ export default function SettingsPage() {
       <DashboardErrorNotice title="设置操作失败" description={error} />
       <DashboardSuccessNotice title="设置已更新" description={hint} />
 
-      <div className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,23,38,0.92),rgba(9,13,24,0.98))] px-5 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="rounded-[18px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(17,23,38,0.92),rgba(9,13,24,0.98))] px-5 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.16)]">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-sm font-semibold text-[var(--text)]">页面导航</div>
-            <div className="mt-1 text-sm leading-6 text-[var(--muted)]">
-              设置页按顺序组织为策略、数据、通知和凭证。建议沿着页面从上到下修改，最后统一保存。
+            <div className="text-sm font-semibold text-[var(--text)]">设置分组</div>
+            <div className="mt-1 text-sm text-[var(--muted)]">
+              先改策略，再核对数据模型，最后检查通知和凭证。
             </div>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-sm text-[var(--muted)]">
@@ -314,7 +314,6 @@ export default function SettingsPage() {
         >
           <SettingsDataSourcesSection config={config} setConfig={setConfig} />
           {dataHealthAssets.length > 0 ? <DataHealthPanel assets={dataHealthAssets} /> : null}
-          <SettingsHumanFactorSection config={config} setConfig={setConfig} />
           <SettingsDataInitSection />
         </SettingsSectionGroup>
 

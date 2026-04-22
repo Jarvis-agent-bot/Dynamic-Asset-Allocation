@@ -2,6 +2,7 @@ import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 import { resolveSecret, SECRET_KEY_DEFS_, type DaaSecretKey } from "@/src/daa/config/secretsManager";
+import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 import { sendFeishuMessage } from "@/src/daa/notify/feishu";
 import { sendTelegramMessage } from "@/src/daa/notify/telegram";
 import { appendNotificationDeliveryLog } from "@/src/daa/store/notificationDeliveryLogRepo";
@@ -27,39 +28,20 @@ function normalizeMode(value: unknown): TestMode {
 
 async function testLlm(): Promise<TestResult> {
   const start = Date.now();
-  const apiKey = await resolveSecret("llm_api_key");
-  const endpoint = (await resolveSecret("llm_endpoint")) || "https://api.deepseek.com/v1/chat/completions";
-  const model = (await resolveSecret("llm_model")) || "deepseek-chat";
+  const config = await resolveLlmConfig("analysis");
 
-  if (!apiKey) {
-    return { key: "llm_api_key", success: false, message: "API Key 未配置", latencyMs: Date.now() - start };
+  if (!config.apiKey) {
+    return { key: "llm_api_key", success: false, message: "LLM 凭证未配置", latencyMs: Date.now() - start };
   }
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: "回复 ok 即可。" }],
-        max_tokens: 10,
-        temperature: 0,
-      }),
-    });
-    clearTimeout(timer);
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      return { key: "llm_api_key", success: false, message: `HTTP ${response.status}: ${body.slice(0, 100)}`, latencyMs: Date.now() - start };
-    }
-
-    return { key: "llm_api_key", success: true, message: `连通正常 (${model}@${new URL(endpoint).hostname})`, latencyMs: Date.now() - start };
+    await callLlm({ ...config, timeoutMs: Math.min(config.timeoutMs, 10000) }, "回复 ok 即可。");
+    return {
+      key: "llm_api_key",
+      success: true,
+      message: `连通正常 (${config.model}@${new URL(config.endpoint).hostname})`,
+      latencyMs: Date.now() - start,
+    };
   } catch (e) {
     return { key: "llm_api_key", success: false, message: e instanceof Error ? e.message : String(e), latencyMs: Date.now() - start };
   }

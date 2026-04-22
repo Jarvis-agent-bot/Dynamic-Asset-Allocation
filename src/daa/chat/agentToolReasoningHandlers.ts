@@ -31,7 +31,7 @@ async function answerWithAssistantLlm(input: {
   runtimeContext: DaaAgentToolContext;
 }): Promise<string | null> {
   try {
-    const config = await resolveLlmConfig();
+    const config = await resolveLlmConfig("research");
     if (!config.enabled || !config.apiKey || !config.endpoint || !config.model) return null;
     const pendingAction = input.runtimeContext.storedPendingAction;
     const prompt = [

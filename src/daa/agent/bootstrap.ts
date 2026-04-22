@@ -27,7 +27,7 @@ export async function bootstrapTheses(holdings: BootstrapAsset[]): Promise<{
     return { created: 0, errors: ["已存在 thesis，跳过 bootstrap"] };
   }
 
-  const config = await resolveLlmConfig();
+  const config = await resolveLlmConfig("research");
   if (!config) {
     return { created: 0, errors: ["LLM 未配置，无法 bootstrap"] };
   }

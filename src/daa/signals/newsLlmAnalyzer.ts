@@ -99,7 +99,7 @@ export async function analyzeNewsWithLlm(input: {
 
   try {
     await acquireSlot();
-    const config = await resolveLlmConfig();
+    const config = await resolveLlmConfig("analysis");
     if (!config.enabled || !config.apiKey) return DEFAULT_ANALYSIS;
 
     const newsLines = input.items.slice(0, 10).map((item, i) => {

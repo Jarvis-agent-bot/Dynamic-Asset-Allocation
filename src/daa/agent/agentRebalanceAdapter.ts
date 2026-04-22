@@ -147,7 +147,7 @@ export async function enhanceProposalsWithAgent(input: {
     let llmSummary: string | null = null;
     let tokensUsed = 0;
     try {
-      const config = await resolveLlmConfig();
+      const config = await resolveLlmConfig("decision");
       if (config && enhancedProposals.length > 0) {
         const prompt = `你是投资研究操作系统的调仓顾问。基于以下信息，用2-3句话总结本次调仓建议的核心逻辑。
 

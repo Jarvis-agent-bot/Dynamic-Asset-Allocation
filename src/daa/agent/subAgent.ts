@@ -129,7 +129,7 @@ export async function runSubAgentInvestigation(
 
       // 调 LLM
       const { callLlm, resolveLlmConfig } = await import("@/src/daa/llm/llmClient");
-      const llmConfig = await resolveLlmConfig();
+      const llmConfig = await resolveLlmConfig("research");
       if (!llmConfig) {
         errors.push("子 agent: LLM 配置不可用");
         break;

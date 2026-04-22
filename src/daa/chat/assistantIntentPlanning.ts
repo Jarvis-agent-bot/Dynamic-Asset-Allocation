@@ -160,7 +160,7 @@ export async function planAssistantIntent(input: AssistantPlanningInput): Promis
     allowExecution: input.allowExecution,
   });
   try {
-    const config = await resolveLlmConfig();
+    const config = await resolveLlmConfig("decision");
     if (!config.enabled || !config.apiKey || !config.endpoint || !config.model) {
       return { intent: fallback, source: "fallback", plannerRawText: null };
     }

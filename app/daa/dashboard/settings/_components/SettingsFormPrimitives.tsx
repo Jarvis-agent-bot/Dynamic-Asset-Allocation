@@ -11,12 +11,10 @@ import { useId } from "react";
 import type { DaaMarketIndicatorConfigKey, DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 export const SETTINGS_NAV_ITEMS_ = [
-  { id: "strategy", label: "再平衡策略", desc: "调仓节奏、触发条件与自动分析。" },
-  { id: "risk", label: "风控参数", desc: "集中度、仓位和止盈止损阈值。" },
-  { id: "data", label: "数据与模型", desc: "行情、资讯、汇率、AI 解读与市场状态层。" },
-  { id: "human-factor", label: "人因输入", desc: "基金池范围与人工信号叠加。" },
+  { id: "strategy", label: "基础策略", desc: "调仓节奏、执行规则与风控参数。" },
+  { id: "data", label: "数据与模型", desc: "行情、资讯、汇率、AI 解读与人因输入。" },
   { id: "notification", label: "通知", desc: "Telegram 与飞书的触发策略和运行状态。" },
-  { id: "secrets", label: "凭证", desc: "API Key、Token 与连通性管理。" },
+  { id: "secrets", label: "凭证与连接", desc: "API Key、Token、Webhook 与连通性管理。" },
 ] as const;
 
 export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS_)[number]["id"];
