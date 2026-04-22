@@ -96,7 +96,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
     if (busy || session.kind === "checking") return;
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password.trim()) {
-      setAuthError("请填写有效的用户名/邮箱和密码。");
+      setAuthError("请填写有效的登录邮箱和密码。");
       if (!trimmedEmail) emailRef.current?.focus();
       else passRef.current?.focus();
       return;
