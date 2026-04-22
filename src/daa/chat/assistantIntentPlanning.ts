@@ -22,9 +22,10 @@ function extractJsonText(rawText: string): string | null {
 
 function buildPlannerPrompt(input: AssistantPlanningInput): string {
   return [
-    "你是 DAA 本地模拟再平衡助手的动作规划器。",
-    "你的任务不是直接下结论，而是判断当前用户输入最适合映射到哪一个动作。",
+    "你是 DAA 本地模拟投资助手的意图路由器与答疑助手。",
+    "你的第一任务是判断当前用户输入最适合映射到哪一个动作；当用户在问系统能力、模型路由、权限边界、认知链路时，可直接基于给定上下文回答。",
     "系统只支持本地模拟执行，不支持真实券商交易。",
+    "如果系统能力与配置摘要里已经给出答案，不要说自己无法查看；只有在上下文确实缺失时，才明确说明信息不足。",
     input.allowExecution
       ? "当前会话允许执行类动作，但执行类动作后续仍需要系统二次确认。"
       : "当前会话只允许查询和分析，禁止执行类动作。",
@@ -40,6 +41,8 @@ function buildPlannerPrompt(input: AssistantPlanningInput): string {
     "confirm_action",
     "cancel_action",
     "trade",
+    "thesis_status",
+    "agent_briefing",
     "llm_answer",
     "unknown",
     "",
@@ -53,9 +56,11 @@ function buildPlannerPrompt(input: AssistantPlanningInput): string {
     "7. 用户说确认/继续/ok，且当前有待确认动作，用 confirm_action。",
     "8. 用户说取消/停止/放弃，且当前有待确认动作，用 cancel_action。",
     "9. 用户明确要买入/卖出某个资产，用 trade；如果数量未给出，qty 和 notional 可都为 null。",
-    "10. 用户是在追问、解释、分析、复盘、问建议，而不是要触发结构化动作时，用 llm_answer。",
-    "11. 如果无法理解，再用 unknown。",
-    "12. 当会话不允许执行时，trade / rebalance_execute / confirm_action 都不要选，优先 llm_answer。",
+    "10. 用户要求看活跃论点、研究线索、conviction，用 thesis_status。",
+    "11. 用户要求看 Agent 日报、认知缺口、意外、改观条件，用 agent_briefing。",
+    "12. 用户是在追问、解释、分析、复盘、问建议，或是在问系统能力/模型/链路，而不是要触发结构化动作时，用 llm_answer。",
+    "13. 如果无法理解，再用 unknown。",
+    "14. 当会话不允许执行时，trade / rebalance_execute / confirm_action 都不要选，优先 llm_answer。",
     "",
     "请严格输出 JSON，不要输出其他文字：",
     `{
@@ -75,6 +80,9 @@ function buildPlannerPrompt(input: AssistantPlanningInput): string {
     "",
     "当前系统上下文：",
     input.contextDigest || "暂无",
+    "",
+    "系统能力与配置摘要：",
+    input.systemDigest || "暂无",
     "",
     "最近复盘经验：",
     normalizeUnknown(input.learningDigest) || "暂无",
@@ -142,6 +150,10 @@ function parsePlannedIntent(rawUserText: string, rawPlannerText: string): DaaAss
         notional: Number.isFinite(notional) ? notional : null,
       };
     }
+    case "thesis_status":
+      return { kind: "thesis_status", rawText: rawUserText };
+    case "agent_briefing":
+      return { kind: "agent_briefing", rawText: rawUserText };
     case "llm_answer":
       return {
         kind: "llm_answer",

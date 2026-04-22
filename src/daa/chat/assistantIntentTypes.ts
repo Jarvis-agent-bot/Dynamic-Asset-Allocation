@@ -18,6 +18,7 @@ export type AssistantPlanningInput = {
   userText: string;
   allowExecution: boolean;
   contextDigest: string;
+  systemDigest: string;
   sessionSummary: string;
   recentConversation: string;
   pendingActionDescription: string;

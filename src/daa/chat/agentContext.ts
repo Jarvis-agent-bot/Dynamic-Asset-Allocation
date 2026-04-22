@@ -1,3 +1,6 @@
+import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { resolveLlmConfig, type LlmRuntimeConfig, type LlmTaskType } from "@/src/daa/llm/llmClient";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
 import { normalizeText } from "@/src/daa/utils/normalize";
@@ -15,7 +18,12 @@ export type DaaAssistantRuntimeContext = {
   recentMessages: Awaited<ReturnType<typeof listChatMessages>>;
   sessionMemory: DaaChatSessionMemory | null;
   learningDigest: string;
+  systemDigest: string;
   storedPendingAction: DaaChatPendingAction | null;
+};
+
+type AssistantLlmRouteSummary = Pick<LlmRuntimeConfig, "enabled" | "provider" | "model" | "endpoint"> & {
+  taskType: LlmTaskType;
 };
 
 export function formatMoney(value: number | null | undefined, currency: string): string {
@@ -149,18 +157,81 @@ export function buildContextDigest(readModel: Awaited<ReturnType<typeof buildWor
   ].join("\n");
 }
 
+function taskTypeLabel(taskType: LlmTaskType): string {
+  if (taskType === "decision") return "决策执行";
+  if (taskType === "research") return "深度研究";
+  return "分析解读";
+}
+
+function simplifyEndpointHost(endpoint: string): string {
+  const normalized = normalizeText(endpoint);
+  if (!normalized) return "未配置";
+  try {
+    return new URL(normalized).host || normalized;
+  } catch {
+    return normalized
+      .replace(/^https?:\/\//i, "")
+      .split("/")[0]
+      || normalized;
+  }
+}
+
+export function buildAssistantSystemDigest(input: {
+  llmRoutes: AssistantLlmRouteSummary[];
+  cognitiveAgent?: DaaSystemConfig["cognitiveAgent"];
+}): string {
+  const llmSummary = input.llmRoutes
+    .map((route) => {
+      const state = route.enabled ? "启用" : "关闭";
+      return `${taskTypeLabel(route.taskType)}：${state} / ${route.provider} / ${route.model} / ${simplifyEndpointHost(route.endpoint)}`;
+    })
+    .join("；");
+
+  const cognitiveSummary = input.cognitiveAgent?.enabled
+    ? `已启用（频率 ${input.cognitiveAgent.schedule}，最多调查 ${input.cognitiveAgent.maxInvestigationTargets} 个论点，参数覆盖 ${input.cognitiveAgent.agentOverlayEnabled ? "开启" : "关闭"}，主动触发再平衡 ${input.cognitiveAgent.agentTriggerEnabled ? "开启" : "关闭"}）`
+    : "未启用";
+
+  return [
+    "执行边界：仅支持本地模拟，可生成建议、进入待确认并执行模拟调仓或模拟买卖；不支持真实券商下单。",
+    "可读上下文：组合快照、市场状态、最近周期、会话记忆、复盘学习摘要、活跃论点、Agent 日报。",
+    "权限边界：不返回敏感密钥明文、不直接改系统设置、不跳过确认直接成交。",
+    `当前 LLM 路由：${llmSummary || "暂无"}`,
+    `认知 Agent：${cognitiveSummary}`,
+  ].join("\n");
+}
+
+async function loadAssistantSystemDigest(): Promise<string> {
+  const [system, analysisRoute, decisionRoute, researchRoute] = await Promise.all([
+    getDaaSystemConfig(),
+    resolveLlmConfig("analysis"),
+    resolveLlmConfig("decision"),
+    resolveLlmConfig("research"),
+  ]);
+
+  return buildAssistantSystemDigest({
+    llmRoutes: [
+      { taskType: "analysis", ...analysisRoute },
+      { taskType: "decision", ...decisionRoute },
+      { taskType: "research", ...researchRoute },
+    ],
+    cognitiveAgent: system.config.cognitiveAgent,
+  });
+}
+
 export async function loadAssistantRuntimeContext(sessionId: string): Promise<DaaAssistantRuntimeContext> {
-  const [readModel, recentMessages, sessionMemory, learningDigest] = await Promise.all([
+  const [readModel, recentMessages, sessionMemory, learningDigest, systemDigest] = await Promise.all([
     buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false }),
     listChatMessages(sessionId, 12),
     getChatSessionMemory(sessionId),
     buildAgentLearningDigest(8),
+    loadAssistantSystemDigest().catch(() => ""),
   ]);
   return {
     readModel,
     recentMessages,
     sessionMemory,
     learningDigest,
+    systemDigest,
     storedPendingAction: parsePendingAction(sessionMemory?.metaJson?.pendingAction),
   };
 }

@@ -28,6 +28,7 @@ describe("assistant-planning-fallback", () => {
       userText: "执行调仓",
       allowExecution: false,
       contextDigest: "",
+      systemDigest: "",
       sessionSummary: "",
       recentConversation: "",
       pendingActionDescription: "无",

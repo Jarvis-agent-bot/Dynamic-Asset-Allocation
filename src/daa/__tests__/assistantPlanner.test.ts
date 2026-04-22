@@ -43,6 +43,7 @@ describe("assistant-planner", () => {
       userText: "帮我买入 QQQ 3股",
       allowExecution: true,
       contextDigest: "总权益 10000 USD",
+      systemDigest: "当前 LLM 路由：分析解读：启用 / openai / gpt-5.4 / llm-api.onekeytest.com",
       sessionSummary: "",
       recentConversation: "",
       pendingActionDescription: "无",
@@ -74,6 +75,7 @@ describe("assistant-planner", () => {
       userText: "生成调仓建议",
       allowExecution: true,
       contextDigest: "",
+      systemDigest: "",
       sessionSummary: "",
       recentConversation: "",
       pendingActionDescription: "无",
@@ -83,6 +85,49 @@ describe("assistant-planner", () => {
     expect(result.source).toBe("fallback");
     expect(result.intent).toMatchObject({
       kind: "rebalance_generate",
+    });
+  });
+
+  it("LLM 可以规划 thesis_status 和 agent_briefing 这类 Agent 查询", async () => {
+    vi.mocked(resolveLlmConfig).mockResolvedValue({
+      enabled: true,
+      enabledInDecision: true,
+      provider: "openai",
+      model: "gpt-5.4",
+      endpoint: "https://llm-api.onekeytest.com/v1/responses",
+      apiKey: "test-key",
+      timeoutMs: 5000,
+    });
+    vi.mocked(callLlm).mockResolvedValue({
+      text: JSON.stringify({
+        intent: "thesis_status",
+        reason: "用户在问活跃论点",
+        answer: "",
+        trade: {
+          side: "BUY",
+          symbol: "",
+          qty: null,
+          notional: null,
+        },
+        executeMode: "all",
+      }),
+      raw: {},
+    });
+
+    const result = await planAssistantIntent({
+      userText: "现在有哪些活跃论点？",
+      allowExecution: true,
+      contextDigest: "",
+      systemDigest: "",
+      sessionSummary: "",
+      recentConversation: "",
+      pendingActionDescription: "无",
+      learningDigest: "",
+    });
+
+    expect(result.source).toBe("llm");
+    expect(result.intent).toMatchObject({
+      kind: "thesis_status",
     });
   });
 });

@@ -20,7 +20,7 @@ function buildUnknownReply(input: {
     };
   }
   return {
-    text: `我已经接入了交易助手模式，但这条话我还没有稳定映射到结构化动作。\n\n${buildAssistantHelpText()}`,
+    text: `我已经接入了组合查询、模拟执行与 Agent 摘要能力，但这条话暂时还没有稳定映射到结构化动作。\n\n${buildAssistantHelpText()}`,
     intentKind: "unknown",
     pendingAction: input.pendingAction,
   };
@@ -35,8 +35,11 @@ async function answerWithAssistantLlm(input: {
     if (!config.enabled || !config.apiKey || !config.endpoint || !config.model) return null;
     const pendingAction = input.runtimeContext.storedPendingAction;
     const prompt = [
-      "你是 DAA 的私有交易助手，只能基于给定上下文回答，不要虚构订单或不存在的数据。",
-      "回答要求：中文、直接、可操作；如果上下文不足，要明确说不足。",
+      "你是 DAA 的私有投资助手，只能基于给定上下文回答，不要虚构订单或不存在的数据。",
+      "回答要求：中文、直接、可操作；如果问题涉及系统能力、模型路由、权限边界、认知链路，请优先根据「系统能力与配置摘要」回答；如果上下文不足，再明确说不足。",
+      "",
+      "系统能力与配置摘要：",
+      normalizeText(input.runtimeContext.systemDigest) || "暂无",
       "",
       "系统上下文：",
       buildContextDigest(input.runtimeContext.readModel),

@@ -29,6 +29,8 @@ const TASK_TYPES = [
   { value: "research", label: "深度研究" },
 ] as const;
 
+const TASK_TYPE_LABELS = Object.fromEntries(TASK_TYPES.map((item) => [item.value, item.label])) as Record<LlmModelConfig["taskType"], string>;
+
 /** 单个模型配置的默认值 */
 const DEFAULT_MODEL = {
   id: `llm_model_${Date.now()}`,
@@ -100,26 +102,46 @@ interface ModelEditorProps {
 function ModelEditor({ model, onChange, onDelete, idx }: ModelEditorProps) {
   const isCustom = !LLM_PROVIDERS.some((p) => p.value === model.provider && p.value !== "custom");
   const effectiveProvider = isCustom ? "custom" : model.provider;
+  const providerLabel = LLM_PROVIDERS.find((item) => item.value === effectiveProvider)?.label || model.provider;
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[rgba(8,12,20,0.3)] p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <FormInput
-          value={model.label}
-          placeholder="模型名称"
-          className="w-40 font-semibold"
-          onChange={(e) => onChange({ ...model, label: e.target.value }, idx)}
-        />
+    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[rgba(8,12,20,0.3)] p-4 md:p-5">
+      <div className="flex flex-col gap-3 border-b border-[rgba(255,255,255,0.06)] pb-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full border border-[rgba(125,211,252,0.28)] bg-[rgba(56,189,248,0.12)] px-2.5 py-1 text-[var(--primary)]">
+              {TASK_TYPE_LABELS[model.taskType]}
+            </span>
+            <span className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-2.5 py-1 text-[var(--muted)]">
+              {providerLabel}
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 ${model.enabled ? "border-[rgba(74,222,128,0.28)] bg-[rgba(74,222,128,0.12)] text-[var(--success)]" : "border-[rgba(148,163,184,0.18)] bg-[rgba(148,163,184,0.08)] text-[var(--faint)]"}`}>
+              {model.enabled ? "已启用" : "已停用"}
+            </span>
+          </div>
+          <div className="text-xs leading-6 text-[var(--muted)]">
+            模型名称和 Endpoint 较长时会自动独占一行，便于检查路由是否正确。
+          </div>
+        </div>
         <button
           type="button"
           onClick={() => onDelete(idx)}
-          className="p-1.5 rounded-md hover:bg-[var(--danger-bg)] text-[var(--faint)] hover:text-[var(--danger)]"
+          className="self-start rounded-md p-1.5 text-[var(--faint)] hover:bg-[var(--danger-bg)] hover:text-[var(--danger)]"
         >
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_200px_220px]">
+        <div>
+          <FieldLabel>显示名称</FieldLabel>
+          <FormInput
+            value={model.label}
+            placeholder="例：分析模型 / 决策模型 / 研究模型"
+            onChange={(e) => onChange({ ...model, label: e.target.value }, idx)}
+          />
+        </div>
+
         <div>
           <FieldLabel>任务类型</FieldLabel>
           <FormSelect
@@ -158,15 +180,16 @@ function ModelEditor({ model, onChange, onDelete, idx }: ModelEditorProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
         <div>
           <FieldLabel>模型名称</FieldLabel>
           <FormInput
             value={model.model}
-            placeholder="例: gpt-5.4, deepseek-chat, claude-sonnet-4-20250514"
+            placeholder="例: gpt-5.4, claude-sonnet-4-20250514, deepseek-chat"
             onChange={(e) => onChange({ ...model, model: e.target.value.trim() || getProviderDefaultModel(model.provider) }, idx)}
           />
         </div>
+
         <div>
           <FieldLabel>超时 (ms)</FieldLabel>
           <FormInput
@@ -180,24 +203,26 @@ function ModelEditor({ model, onChange, onDelete, idx }: ModelEditorProps) {
         </div>
       </div>
 
-      <div>
-        <FieldLabel>专用 Endpoint（可选）</FieldLabel>
+      <div className="space-y-2">
+        <FieldLabel>专用 Endpoint（可选，单独占行）</FieldLabel>
         <FormInput
           value={model.endpoint ?? ""}
           placeholder={effectiveProvider === "custom" ? "https://your-api.example.com/v1" : "例: https://your-proxy.example.com/v1"}
           onChange={(e) => onChange({ ...model, endpoint: e.target.value.trim() || undefined }, idx)}
         />
-        <div className="mt-2 text-xs leading-5 text-[var(--faint)]">
-          留空则沿用「凭证与连接」中的全局配置；如果填写 base_url，系统会按 Responses / Chat 自动补全请求路径。
-        </div>
       </div>
 
-      <CheckboxRow
-        checked={model.enabled}
-        onChange={(value) => onChange({ ...model, enabled: value }, idx)}
-      >
-        启用此模型
-      </CheckboxRow>
+      <div className="flex flex-col gap-3 border-t border-[rgba(255,255,255,0.06)] pt-3 lg:flex-row lg:items-center lg:justify-between">
+        <CheckboxRow
+          checked={model.enabled}
+          onChange={(value) => onChange({ ...model, enabled: value }, idx)}
+        >
+          启用此模型
+        </CheckboxRow>
+        <div className="max-w-2xl text-xs leading-6 text-[var(--faint)]">
+          留空则沿用「凭证与连接」中的全局配置；如果填写的是 base_url，系统会按 Responses / Chat 自动补全请求路径。
+        </div>
+      </div>
     </div>
   );
 }
@@ -230,8 +255,29 @@ export function SettingsAiAnalysisBlock(props: {
       title="AI 解读"
       description="配置多模型支持：分析解读、决策执行、深度研究可使用不同模型。"
     >
+      <div className="mb-4 rounded-xl border border-[rgba(125,211,252,0.18)] bg-[rgba(56,189,248,0.08)] p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-[var(--text)]">多模型路由</div>
+            <div className="mt-1 max-w-3xl text-xs leading-6 text-[var(--muted)]">
+              这里更适合做“按任务分工”的配置：分析解读、决策执行、深度研究可以分别指定模型；内容较长的模型名与 Endpoint 已改成独立行展示，检查起来更直观。
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {TASK_TYPES.map((item) => (
+              <span
+                key={item.value}
+                className="rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] px-2.5 py-1 text-[var(--muted)]"
+              >
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* 兼容模式切换 */}
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => setShowLegacy(false)}
@@ -256,7 +302,7 @@ export function SettingsAiAnalysisBlock(props: {
         /* 多模型配置模式 */
         <div className="space-y-4">
           {models.length === 0 ? (
-            <div className="text-sm text-[var(--muted)] py-4">
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-5 text-sm text-[var(--muted)]">
               暂未配置模型，请添加。
             </div>
           ) : (
