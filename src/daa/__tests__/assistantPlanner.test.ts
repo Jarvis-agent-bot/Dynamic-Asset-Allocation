@@ -173,4 +173,49 @@ describe("assistant-planner", () => {
       kind: "agent_run",
     });
   });
+
+  it("LLM 可以规划 brain_set_mode 这类大脑配置意图", async () => {
+    vi.mocked(resolveLlmConfig).mockResolvedValue({
+      enabled: true,
+      enabledInDecision: true,
+      provider: "openai",
+      model: "gpt-5.4",
+      endpoint: "https://llm-api.onekeytest.com/v1/responses",
+      apiKey: "test-key",
+      timeoutMs: 5000,
+    });
+    vi.mocked(callLlm).mockResolvedValue({
+      text: JSON.stringify({
+        intent: "brain_set_mode",
+        reason: "用户要求切换到自动驾驶",
+        answer: "",
+        brainMode: "autopilot",
+        trade: {
+          side: "BUY",
+          symbol: "",
+          qty: null,
+          notional: null,
+        },
+        executeMode: "all",
+      }),
+      raw: {},
+    });
+
+    const result = await planAssistantIntent({
+      userText: "切到自动驾驶模式",
+      allowExecution: true,
+      contextDigest: "",
+      systemDigest: "大脑模式：操作员模式；仅生成 patch 建议；白名单 6 项",
+      sessionSummary: "",
+      recentConversation: "",
+      pendingActionDescription: "无",
+      learningDigest: "",
+    });
+
+    expect(result.source).toBe("llm");
+    expect(result.intent).toMatchObject({
+      kind: "brain_set_mode",
+      mode: "autopilot",
+    });
+  });
 });

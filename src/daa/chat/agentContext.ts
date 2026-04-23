@@ -16,6 +16,7 @@ const SUMMARY_LINE_LIMIT = 8;
 
 export type DaaAssistantRuntimeContext = {
   systemConfig: DaaSystemConfig;
+  systemConfigVersion: number;
   readModel: Awaited<ReturnType<typeof buildWorkbenchReadModel>>;
   recentMessages: Awaited<ReturnType<typeof listChatMessages>>;
   sessionMemory: DaaChatSessionMemory | null;
@@ -244,6 +245,7 @@ export async function loadAssistantRuntimeContext(sessionId: string): Promise<Da
   });
   return {
     systemConfig: system.config,
+    systemConfigVersion: system.version,
     readModel,
     recentMessages,
     sessionMemory,

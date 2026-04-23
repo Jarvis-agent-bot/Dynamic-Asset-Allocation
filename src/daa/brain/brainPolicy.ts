@@ -44,6 +44,19 @@ export function resolveBrainConfig(config?: DaaSystemConfig["brain"]): DaaResolv
   };
 }
 
+export function buildBrainConfigForMode(
+  mode: DaaBrainMode,
+  current?: DaaSystemConfig["brain"],
+): DaaResolvedBrainConfig {
+  const resolved = resolveBrainConfig(current);
+  return {
+    ...resolved,
+    mode,
+    allowConfigPatch: mode === "advisor" ? false : true,
+    autoApplyLowRiskPatch: mode === "autopilot",
+  };
+}
+
 export function getBrainModeLabel(mode: DaaBrainMode): string {
   return MODE_LABELS[mode] || "操作员";
 }

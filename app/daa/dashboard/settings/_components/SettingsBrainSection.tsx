@@ -1,4 +1,4 @@
-import { getBrainModeLabel } from "@/src/daa/brain/brainPolicy";
+import { buildBrainConfigForMode, getBrainModeLabel } from "@/src/daa/brain/brainPolicy";
 import {
   DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_,
   type DaaBrainMode,
@@ -110,11 +110,7 @@ export function SettingsBrainSection(props: {
                 <button
                   key={item.value}
                   type="button"
-                  onClick={() => updateBrain({
-                    mode: item.value,
-                    autoApplyLowRiskPatch: item.value === "autopilot" ? brain.autoApplyLowRiskPatch : false,
-                    allowConfigPatch: item.value === "advisor" ? false : brain.allowConfigPatch,
-                  })}
+                  onClick={() => updateBrain(buildBrainConfigForMode(item.value, brain))}
                   className={`rounded-2xl border p-4 text-left transition-colors ${
                     active
                       ? "border-[rgba(56,189,248,0.45)] bg-[rgba(56,189,248,0.10)]"

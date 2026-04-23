@@ -39,6 +39,14 @@ describe("assistant-intent-parser", () => {
     });
   });
 
+  it("识别切换大脑模式", () => {
+    const intent = parseAssistantIntent("切到自动驾驶模式");
+    expect(intent).toMatchObject({
+      kind: "brain_set_mode",
+      mode: "autopilot",
+    });
+  });
+
   it("识别手动运行认知 Agent", () => {
     const intent = parseAssistantIntent("帮我运行一轮 Agent 调查");
     expect(intent).toMatchObject({
@@ -65,6 +73,16 @@ describe("assistant-intent-parser", () => {
 
   it("只读会话下会阻止初始化论点写入动作", () => {
     const intent = parseAssistantIntent("初始化当前持仓论点", {
+      allowExecution: false,
+    });
+    expect(intent).toMatchObject({
+      kind: "llm_answer",
+      answer: null,
+    });
+  });
+
+  it("只读会话下会阻止切换大脑模式", () => {
+    const intent = parseAssistantIntent("切到顾问模式", {
       allowExecution: false,
     });
     expect(intent).toMatchObject({

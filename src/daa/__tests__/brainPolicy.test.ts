@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canBrainRunAction, isBrainConfigPatchAllowed } from "@/src/daa/brain/brainPolicy";
+import { buildBrainConfigForMode, canBrainRunAction, isBrainConfigPatchAllowed } from "@/src/daa/brain/brainPolicy";
 import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 
 describe("brain-policy", () => {
@@ -48,5 +48,11 @@ describe("brain-policy", () => {
     expect(canBrainRunAction(config, "apply_config_patch").allowed).toBe(true);
     expect(isBrainConfigPatchAllowed(config, "/dataSources/llmModels")).toBe(true);
     expect(isBrainConfigPatchAllowed(config, "/notification/telegram/enabled")).toBe(false);
+  });
+
+  it("模式预设会给出一致的布尔权限", () => {
+    expect(buildBrainConfigForMode("advisor").allowConfigPatch).toBe(false);
+    expect(buildBrainConfigForMode("operator").allowConfigPatch).toBe(true);
+    expect(buildBrainConfigForMode("autopilot").autoApplyLowRiskPatch).toBe(true);
   });
 });

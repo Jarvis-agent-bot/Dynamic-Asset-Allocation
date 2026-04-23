@@ -4,6 +4,7 @@ export type DaaChatRole = "user" | "assistant" | "system";
 export type DaaChatIntentKind =
   | "help"
   | "brain_status"
+  | "brain_set_mode"
   | "portfolio_status"
   | "risk_status"
   | "market_status"

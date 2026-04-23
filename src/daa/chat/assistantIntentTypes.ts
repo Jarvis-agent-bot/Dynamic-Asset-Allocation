@@ -1,6 +1,9 @@
+import type { DaaBrainMode } from "@/src/daa/config/systemConfig";
+
 export type DaaAssistantIntent =
   | { kind: "help"; rawText: string }
   | { kind: "brain_status"; rawText: string }
+  | { kind: "brain_set_mode"; rawText: string; mode: DaaBrainMode }
   | { kind: "portfolio_status"; rawText: string }
   | { kind: "risk_status"; rawText: string }
   | { kind: "market_status"; rawText: string }

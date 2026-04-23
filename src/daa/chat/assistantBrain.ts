@@ -5,7 +5,9 @@ import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { getActiveTheses } from "@/src/daa/agent/store/thesisStore";
 import { getRegisteredToolCount, getToolsByCategory } from "@/src/daa/agent/tools/registry";
-import { buildBrainBoundaryText, describeBrainModeSummary } from "@/src/daa/brain/brainPolicy";
+import { buildBrainBoundaryText, buildBrainConfigForMode, describeBrainModeSummary, getBrainModeLabel } from "@/src/daa/brain/brainPolicy";
+import type { DaaBrainMode } from "@/src/daa/config/systemConfig";
+import { getDaaSystemConfig, patchDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 import type { DaaAssistantRuntimeContext } from "./agentContext";
 
@@ -81,4 +83,53 @@ export async function runAssistantCognitiveCycle(): Promise<string> {
     `耗时：${result.durationMs}ms`,
     result.errors.length > 0 ? `错误：${result.errors.slice(0, 3).join("；")}` : "状态：执行完成。",
   ].join("\n");
+}
+
+export async function switchAssistantBrainMode(input: {
+  runtimeContext: DaaAssistantRuntimeContext;
+  mode: DaaBrainMode;
+}): Promise<string> {
+  const current = input.runtimeContext.systemConfig.brain;
+  const next = buildBrainConfigForMode(input.mode, current);
+  if (
+    current?.mode === next.mode
+    && current?.allowConfigPatch === next.allowConfigPatch
+    && current?.autoApplyLowRiskPatch === next.autoApplyLowRiskPatch
+  ) {
+    return `当前已经是${getBrainModeLabel(next.mode)}模式，无需切换。`;
+  }
+
+  const patches = [
+    { path: "/brain/mode", value: next.mode },
+    { path: "/brain/allowConfigPatch", value: next.allowConfigPatch },
+    { path: "/brain/autoApplyLowRiskPatch", value: next.autoApplyLowRiskPatch },
+  ];
+
+  try {
+    const saved = await patchDaaSystemConfig({
+      patches,
+      baseVersion: input.runtimeContext.systemConfigVersion,
+    });
+    return [
+      `已切换到${getBrainModeLabel(saved.config.brain?.mode ?? next.mode)}模式。`,
+      `当前摘要：${describeBrainModeSummary(saved.config)}`,
+      `动作边界：${buildBrainBoundaryText(saved.config)}`,
+      "如需微调，可继续说：关闭自动驾驶 / 切到操作员模式 / 查看大脑状态。",
+    ].join("\n");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (message.startsWith("system_config_version_conflict:")) {
+      const latest = await getDaaSystemConfig();
+      const saved = await patchDaaSystemConfig({
+        patches,
+        baseVersion: latest.version,
+      });
+      return [
+        `配置有并发变更，已基于最新版本重新切换到${getBrainModeLabel(saved.config.brain?.mode ?? next.mode)}模式。`,
+        `当前摘要：${describeBrainModeSummary(saved.config)}`,
+        `动作边界：${buildBrainBoundaryText(saved.config)}`,
+      ].join("\n");
+    }
+    throw error;
+  }
 }

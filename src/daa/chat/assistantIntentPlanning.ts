@@ -33,6 +33,7 @@ function buildPlannerPrompt(input: AssistantPlanningInput): string {
     "允许的 intent 只有这些：",
     "help",
     "brain_status",
+    "brain_set_mode",
     "portfolio_status",
     "risk_status",
     "market_status",
@@ -55,24 +56,26 @@ function buildPlannerPrompt(input: AssistantPlanningInput): string {
     "3. 用户要求看市场状态、行情健康、市场环境，用 market_status。",
     "4. 用户要求看最近一次调仓/周期，用 latest_cycle。",
     "5. 用户在问当前大脑能力、模型路由、系统权限、认知链路，用 brain_status。",
-    "6. 用户要求运行 / 启动 / 刷新一轮 Agent 调查，用 agent_run。",
-    "7. 用户要求初始化论点 / bootstrap thesis，用 agent_bootstrap。",
-    "8. 用户要求生成建议、生成调仓、刷新再平衡方案，用 rebalance_generate。",
-    "9. 用户要求执行调仓，用 rebalance_execute。",
-    "10. 用户说确认/继续/ok，且当前有待确认动作，用 confirm_action。",
-    "11. 用户说取消/停止/放弃，且当前有待确认动作，用 cancel_action。",
-    "12. 用户明确要买入/卖出某个资产，用 trade；如果数量未给出，qty 和 notional 可都为 null。",
-    "13. 用户要求看活跃论点、研究线索、conviction，用 thesis_status。",
-    "14. 用户要求看 Agent 日报、认知缺口、意外、改观条件，用 agent_briefing。",
-    "15. 用户是在追问、解释、分析、复盘、问建议，而不是要触发结构化动作时，用 llm_answer。",
-    "16. 如果无法理解，再用 unknown。",
-    "17. 当会话不允许执行时，trade / rebalance_execute / confirm_action / agent_bootstrap 都不要选，优先 llm_answer。",
+    "6. 用户要求切到顾问 / 操作员 / 自动驾驶模式，用 brain_set_mode。",
+    "7. 用户要求运行 / 启动 / 刷新一轮 Agent 调查，用 agent_run。",
+    "8. 用户要求初始化论点 / bootstrap thesis，用 agent_bootstrap。",
+    "9. 用户要求生成建议、生成调仓、刷新再平衡方案，用 rebalance_generate。",
+    "10. 用户要求执行调仓，用 rebalance_execute。",
+    "11. 用户说确认/继续/ok，且当前有待确认动作，用 confirm_action。",
+    "12. 用户说取消/停止/放弃，且当前有待确认动作，用 cancel_action。",
+    "13. 用户明确要买入/卖出某个资产，用 trade；如果数量未给出，qty 和 notional 可都为 null。",
+    "14. 用户要求看活跃论点、研究线索、conviction，用 thesis_status。",
+    "15. 用户要求看 Agent 日报、认知缺口、意外、改观条件，用 agent_briefing。",
+    "16. 用户是在追问、解释、分析、复盘、问建议，而不是要触发结构化动作时，用 llm_answer。",
+    "17. 如果无法理解，再用 unknown。",
+    "18. 当会话不允许执行时，trade / rebalance_execute / confirm_action / agent_bootstrap / brain_set_mode 都不要选，优先 llm_answer。",
     "",
     "请严格输出 JSON，不要输出其他文字：",
     `{
   "intent": "上述 intent 之一",
   "reason": "一句中文解释，40字以内",
   "answer": "仅当 intent=llm_answer 时填写，其余留空字符串",
+  "brainMode": "仅当 intent=brain_set_mode 时填写 advisor/operator/autopilot，其余留空字符串",
   "trade": {
     "side": "BUY 或 SELL",
     "symbol": "例如 AAPL",
@@ -127,6 +130,11 @@ function parsePlannedIntent(rawUserText: string, rawPlannerText: string): DaaAss
       return { kind: "help", rawText: rawUserText };
     case "brain_status":
       return { kind: "brain_status", rawText: rawUserText };
+    case "brain_set_mode": {
+      const mode = normalizeUnknown(parsed.brainMode).toLowerCase();
+      if (mode !== "advisor" && mode !== "operator" && mode !== "autopilot") return null;
+      return { kind: "brain_set_mode", rawText: rawUserText, mode };
+    }
     case "portfolio_status":
       return { kind: "portfolio_status", rawText: rawUserText };
     case "risk_status":

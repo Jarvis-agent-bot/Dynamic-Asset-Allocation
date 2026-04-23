@@ -5,6 +5,7 @@ import { buildAssistantFallbackReply } from "./agentToolViewHandlers";
 const ASSISTANT_TOOL_CATALOG: DaaAgentToolMeta[] = [
   { intent: "help", name: "show_help", description: "返回当前助手可支持的查询和模拟执行入口。" },
   { intent: "brain_status", name: "get_brain_status", description: "返回当前大脑可见能力、模型路由、认知链路与动作边界。" },
+  { intent: "brain_set_mode", name: "set_brain_mode", description: "切换当前大脑模式到顾问、操作员或自动驾驶。" },
   { intent: "portfolio_status", name: "get_workbench_snapshot", description: "读取当前工作台的组合总览与核心持仓。" },
   { intent: "risk_status", name: "get_risk_status", description: "读取最近一次调仓或组合风控摘要。" },
   { intent: "market_status", name: "get_market_status", description: "读取市场环境与行情健康状态。" },

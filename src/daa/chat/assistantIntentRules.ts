@@ -1,3 +1,4 @@
+import type { DaaBrainMode } from "@/src/daa/config/systemConfig";
 import { normalizeCollapse } from "@/src/daa/utils/normalize";
 
 import type { DaaChatIntentKind } from "./chatTypes";
@@ -7,6 +8,26 @@ const BUY_WORDS = /(^|[\s，,。.!?？；;])(买入|买|buy)\s+/i;
 const SELL_WORDS = /(^|[\s，,。.!?？；;])(卖出|卖|sell)\s+/i;
 const TRADE_PATTERN = /(买入|买|buy|卖出|卖|sell)\s+([A-Za-z][A-Za-z0-9.\-]{0,20})(?:\s+([\d.]+)\s*(股|份|usd|usdt|美元|刀|元)?)?/i;
 const ANALYSIS_WORDS = /(建议|分析|解释|怎么看|为什么|如何看|判断|复盘|总结|优化|合理吗|应该|帮我想|给我方案)/i;
+
+function parseBrainModeSwitch(text: string): DaaAssistantIntent | null {
+  const advisorPattern = /(切(换)?到|改成|切成|设为|设置为|变成|进入).*(顾问模式|顾问|advisor)/i;
+  const operatorPattern = /(切(换)?到|改成|切成|设为|设置为|变成|进入).*(操作员模式|操作员|operator)/i;
+  const autopilotPattern = /(切(换)?到|改成|切成|设为|设置为|变成|进入).*(自动驾驶模式|自动驾驶|autopilot)/i;
+
+  const buildIntent = (mode: DaaBrainMode): DaaAssistantIntent => ({
+    kind: "brain_set_mode",
+    rawText: text,
+    mode,
+  });
+
+  if (advisorPattern.test(text)) return buildIntent("advisor");
+  if (operatorPattern.test(text)) return buildIntent("operator");
+  if (autopilotPattern.test(text)) return buildIntent("autopilot");
+
+  if (/(开启|打开).*(自动驾驶|autopilot)/i.test(text)) return buildIntent("autopilot");
+  if (/(关闭|退出).*(自动驾驶|autopilot)/i.test(text)) return buildIntent("operator");
+  return null;
+}
 
 function parseTrade(text: string): DaaAssistantIntent | null {
   const match = text.match(TRADE_PATTERN);
@@ -35,6 +56,7 @@ function downgradeExecutionIntent(intent: DaaAssistantIntent, allowExecution: bo
     || intent.kind === "rebalance_execute"
     || intent.kind === "confirm_action"
     || intent.kind === "agent_bootstrap"
+    || intent.kind === "brain_set_mode"
   ) {
     return {
       kind: "llm_answer",
@@ -53,7 +75,11 @@ export function parseAssistantIntent(raw: string, options?: {
   if (!text) return { kind: "help", rawText: raw };
 
   if (/^\/?(help|start|帮助|说明)$/i.test(text)) return { kind: "help", rawText: text };
-  if (/(全权大脑|大脑状态|系统能力|权限边界|认知链路|模型路由|接入.*模型|现在能做什么|brain status|capability)/i.test(text)) {
+  const brainModeSwitch = parseBrainModeSwitch(text);
+  if (brainModeSwitch) {
+    return downgradeExecutionIntent(brainModeSwitch, allowExecution);
+  }
+  if (/(全权大脑|大脑状态|系统能力|权限边界|认知链路|模型路由|接入.*模型|现在能做什么|brain status|capability|分级授权|授权等级|顾问模式|操作员模式|自动驾驶模式)/i.test(text)) {
     return { kind: "brain_status", rawText: text };
   }
   if (/^\/?(confirm|确认|确认执行|继续执行|yes|ok)$/i.test(text)) {
