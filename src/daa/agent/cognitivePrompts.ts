@@ -277,7 +277,7 @@ export function buildSurfacePrompt(ctx: {
         .join("\n")
     : "";
 
-  // P0-3: 上次日报对比（"待复盘清单"已改由代码直出，无需作为上次对比项）
+  // P0-3: 上次日报对比（“自动跟踪清单”已改由代码直出，无需作为上次对比项）
   const prevBriefingText = ctx.previousBriefing
     ? (() => {
         const prevConditions = (ctx.previousBriefing.mindChangeConditions ?? [])
@@ -317,7 +317,7 @@ ${thesisText}
 ${prevBriefingText}
 
 ## 任务
-生成两类输出（"待复盘清单"由系统代码直出，无需你生成）：
+生成两类输出（“自动跟踪清单”由系统代码直出，无需你生成）：
 1. **今日意外**：最不符合现有认知的变化（从上面的 surprises 和工具调用结果中总结）。如果没有实质性意外，**必须**返回空数组 \`[]\`，**不要**生成"市场与预期一致"等占位条目；系统会在输出为空时自动展示 fallback 文案。仅当 severityScore >= 3 的真实矛盾信息才值得输出。
 2. **改观条件**：当前高 conviction 论点需要什么条件才会改变看法。基于本次调查的具体数据给出条件，不要泛泛而谈。
 
@@ -369,7 +369,7 @@ export function buildStrategyAdvisorPrompt(ctx: {
     : "无意外";
 
   const gapLines = ctx.cognitionGaps.length > 0
-    ? ctx.cognitionGaps.map(g => `${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}% ${g.daysSinceLastInvestigation}天未调查`).join("\n")
+    ? ctx.cognitionGaps.map(g => `${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}% ${g.daysSinceLastInvestigation}天未更新`).join("\n")
     : "无";
 
   return `你是投资组合的「策略顾问」。基于当前组合状况和论点分析，输出你对规则引擎参数的建议。
@@ -383,7 +383,7 @@ ${thesisLines}
 ## 今日意外
 ${surpriseLines}
 
-## 认知缺口
+## 自动跟踪项
 ${gapLines}
 
 ## 当前规则引擎设置
@@ -582,7 +582,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   }
 
   if (briefing.cognitionGaps.length > 0) {
-    lines.push("<b>\u{1F50D} 待复盘</b>");
+    lines.push("<b>\u{1F50D} 自动跟踪中</b>");
     for (const g of briefing.cognitionGaps.slice(0, 3)) {
       lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
       if (g.suggestedInvestigation) {

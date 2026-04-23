@@ -3,7 +3,7 @@
 /**
  * Agent Briefing 视图 — 显示 Cognitive Agent 的每日三类输出
  *
- * 今日意外 / 认知缺口 / 改观条件
+ * 今日意外 / 自动跟踪 / 改观条件
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -364,13 +364,15 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
         </div>
       )}
 
-      {/* 待复盘（原"认知缺口"，改由代码直出而非 LLM 生成） */}
+      {/* 自动跟踪中（原 cognitionGaps，改由代码直出而非 LLM 生成） */}
       {hasGaps && (
         <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-300">
             <Search className="h-3.5 w-3.5" />
-            待复盘
-            <span className="ml-1 text-[10px] font-normal text-[var(--faint)]">(高权重 / 判断未收敛的持仓)</span>
+            自动跟踪中
+            <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
+              （系统会持续跟踪高权重或判断未收敛的持仓，无需人工补点）
+            </span>
           </h3>
           <div className="space-y-2">
             {briefing.cognitionGaps.slice(0, 5).map((g, i) => (
@@ -382,8 +384,8 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
                     <p className="mt-0.5 text-blue-400/80">→ {g.suggestedInvestigation}</p>
                   )}
                 </div>
-                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400" title="上次复盘距今的天数">
-                  {g.daysSinceLastInvestigation}天未复盘
+                <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400" title="距上次有效调查更新的天数">
+                  {g.daysSinceLastInvestigation}天未更新
                 </span>
               </div>
             ))}

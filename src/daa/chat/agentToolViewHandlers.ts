@@ -12,7 +12,7 @@ export function buildAssistantHelpText(): string {
     "4. 运行一轮 Agent 调查 / 初始化论点 / 查看 Agent 日报",
     "5. 生成调仓建议 / 执行调仓",
     "6. 买入 QQQ 10股 / 卖出 AAPL 5股（本地模拟）",
-    "7. 活跃论点 / Agent 日报 / 认知缺口",
+    "7. 活跃论点 / Agent 日报 / 自动跟踪中",
     "8. 执行类命令会先进入待确认，回复“确认”才真正执行",
     "9. 如果要放弃待确认动作，直接回复“取消”",
   ].join("\n");
@@ -165,8 +165,8 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         parts.push("⚡ 市场与预期一致，无重大意外。");
       }
       if (b.cognitionGaps.length > 0) {
-        parts.push("\n🔍 认知缺口:");
-        for (const g of b.cognitionGaps.slice(0, 3)) parts.push(`  ${g.assetKey} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未调查`);
+        parts.push("\n🔍 自动跟踪中:");
+        for (const g of b.cognitionGaps.slice(0, 3)) parts.push(`  ${g.assetKey} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未更新`);
       }
       if (b.mindChangeConditions.length > 0) {
         parts.push("\n🔄 改观条件:");

@@ -18,7 +18,7 @@ const ASSISTANT_TOOL_CATALOG: DaaAgentToolMeta[] = [
   { intent: "cancel_action", name: "cancel_pending_action", description: "取消当前待确认动作。" },
   { intent: "trade", name: "execute_trade_sim", description: "预览或执行一笔本地模拟买卖。" },
   { intent: "thesis_status", name: "get_thesis_status", description: "查询 Cognitive Agent 的活跃研究论点状态。" },
-  { intent: "agent_briefing", name: "get_agent_briefing", description: "查询最新 Agent 日报（意外发现、认知缺口、改观条件）。" },
+  { intent: "agent_briefing", name: "get_agent_briefing", description: "查询最新 Agent 日报（意外发现、自动跟踪项、改观条件）。" },
   { intent: "llm_answer", name: "answer_with_llm", description: "用上下文、记忆和学习摘要生成自由问答回复。" },
   { intent: "unknown", name: "fallback_reply", description: "当无法稳定映射动作时，回退到问答或帮助信息。" },
 ];

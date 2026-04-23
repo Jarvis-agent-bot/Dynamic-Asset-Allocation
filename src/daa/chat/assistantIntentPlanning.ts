@@ -65,7 +65,7 @@ function buildPlannerPrompt(input: AssistantPlanningInput): string {
     "12. 用户说取消/停止/放弃，且当前有待确认动作，用 cancel_action。",
     "13. 用户明确要买入/卖出某个资产，用 trade；如果数量未给出，qty 和 notional 可都为 null。",
     "14. 用户要求看活跃论点、研究线索、conviction，用 thesis_status。",
-    "15. 用户要求看 Agent 日报、认知缺口、意外、改观条件，用 agent_briefing。",
+    "15. 用户要求看 Agent 日报、自动跟踪项、认知缺口、意外、改观条件，用 agent_briefing。",
     "16. 用户是在追问、解释、分析、复盘、问建议，而不是要触发结构化动作时，用 llm_answer。",
     "17. 如果无法理解，再用 unknown。",
     "18. 当会话不允许执行时，trade / rebalance_execute / confirm_action / agent_bootstrap / brain_set_mode 都不要选，优先 llm_answer。",

@@ -16,14 +16,14 @@ import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 
 /**
- * 代码直出"待复盘清单"（原 cognitionGaps）。
+ * 代码直出“自动跟踪清单”（原 cognitionGaps）。
  *
  * 原来这里交给 LLM 做 "结构化清单 → JSON → 改写成自然语言 → JSON" 的来回翻译，
  * 既浪费 token 又容易产生幻觉（LLM 会胡编权重值、调查天数）。本函数是确定性的：
  *
  * - 触发条件（二选一）：
  *   (1) thesis conviction=uncertain 且仍有持仓（必须尽快给出明确判断）
- *   (2) 持仓权重 > 5% 且 thesis 超过 7 天未复盘（高权重陈旧观点）
+ *   (2) 持仓权重 > 5% 且 thesis 超过 7 天未更新（高权重陈旧观点）
  * - 同 assetKey 多 thesis 去重，取最陈旧的一条
  * - triggerReason / focusHint 字段直接用 thesis 数据拼接，不再让 LLM 改写
  */
@@ -43,7 +43,7 @@ function computeDueForReview(
 
       const triggerReason = uncertainMatch
         ? `论点判断仍未收敛（conviction=uncertain，权重 ${(weight * 100).toFixed(1)}%）`
-        : `持仓权重 ${(weight * 100).toFixed(1)}%，已 ${days} 天未复盘`;
+        : `持仓权重 ${(weight * 100).toFixed(1)}%，已 ${days} 天未得到新调查`;
       const focusHint = t.invalidationConditions
         ? `核对失效条件：${t.invalidationConditions.slice(0, 80)}`
         : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视论点：${t.title}`);
@@ -203,7 +203,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         }))
       : undefined;
 
-    // 代码直出"待复盘清单"（取代原 LLM 生成的 cognitionGaps）
+    // 代码直出“自动跟踪清单”（取代原 LLM 生成的 cognitionGaps）
     const dueForReview = computeDueForReview(theses, portfolio);
 
     const briefing: DailyBriefing = {
