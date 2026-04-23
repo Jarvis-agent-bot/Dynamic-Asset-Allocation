@@ -1,4 +1,5 @@
 import { appendAgentLearningEvent } from "@/src/daa/agent/agentLearningRepo";
+import { canBrainRunAction } from "@/src/daa/brain/brainPolicy";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
@@ -165,6 +166,14 @@ export function createAssistantRebalanceHandlers(input: DaaAgentToolContext): Ma
   });
 
   handlers.set("rebalance_execute", async () => {
+    const permission = canBrainRunAction(input.systemConfig, "simulate_rebalance");
+    if (!permission.allowed) {
+      return {
+        text: `${permission.reason}\n你仍然可以先生成调仓建议，但不能继续进入模拟执行。`,
+        intentKind: "rebalance_execute",
+        pendingAction: null,
+      };
+    }
     const latestCycle = input.readModel.bootstrap.latestCycle;
     if (!latestCycle) {
       return {

@@ -5,6 +5,7 @@ import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { getActiveTheses } from "@/src/daa/agent/store/thesisStore";
 import { getRegisteredToolCount, getToolsByCategory } from "@/src/daa/agent/tools/registry";
+import { buildBrainBoundaryText, describeBrainModeSummary } from "@/src/daa/brain/brainPolicy";
 
 import type { DaaAssistantRuntimeContext } from "./agentContext";
 
@@ -34,10 +35,10 @@ export async function buildAssistantBrainStatusText(runtimeContext: DaaAssistant
   const baseCurrency = runtimeContext.readModel.bootstrap.baseCurrency;
 
   return [
-    "当前模式：全权大脑（受策略门禁，不是无条件裸执行）。",
+    `当前模式：全权大脑 / ${describeBrainModeSummary(runtimeContext.systemConfig)}。`,
     `可见范围：组合 ${holdings} 个持仓，总权益 ${Number(totalEquity || 0).toFixed(2)} ${baseCurrency}；同时可读系统配置、LLM 路由、认知 Agent 状态、会话记忆与日报摘要。`,
     `工具底座：共 ${totalTools} 个 Agent 工具，其中 observe ${observeTools} / analyze ${analyzeTools} / meta ${metaTools} / act ${actTools}。`,
-    "动作边界：可直接启动认知循环、初始化论点、生成调仓建议；模拟交易与模拟调仓执行仍保留确认门禁；真实交易、密钥明文、系统配置直改仍未放开。",
+    `动作边界：${buildBrainBoundaryText(runtimeContext.systemConfig)}`,
     `认知状态：当前活跃论点 ${theses.length} 个。${formatLatestRunSummary(latestRun)}`,
     "当前模型与权限摘要：",
     runtimeContext.systemDigest,

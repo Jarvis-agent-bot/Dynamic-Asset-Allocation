@@ -10,6 +10,7 @@ import { emitDashboardDataUpdated, emitDashboardRefresh } from "@/app/daa/dashbo
 import { DashboardEmptyState, DashboardErrorNotice, DashboardSuccessNotice } from "@/app/daa/dashboard/_components/DashboardFeedback";
 import { DaaSurfaceActionButton, DaaSurfacePageHeader, DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { DataHealthPanel } from "@/app/daa/dashboard/settings/_components/DataHealthPanel";
+import { SettingsBrainSection } from "@/app/daa/dashboard/settings/_components/SettingsBrainSection";
 import { SettingsDataSourcesSection } from "@/app/daa/dashboard/settings/_components/SettingsDataSourcesSection";
 import {
   SETTINGS_NAV_ITEMS_,
@@ -25,7 +26,7 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import { getSystemConfig, refreshMarketIndicators, saveSystemConfig } from "@/src/daa/modules/store/storeApi";
 
-const SETTINGS_PAGE_DESCRIPTION_ = "集中管理策略、数据、通知与凭证，建议按分区逐步修改并统一保存。";
+const SETTINGS_PAGE_DESCRIPTION_ = "集中管理大脑授权、策略、数据、通知与凭证，建议按分区逐步修改并统一保存。";
 
 /** 深度排序后序列化，消除嵌套字段顺序差异导致的误判 */
 function stableStringify(obj: unknown): string {
@@ -116,13 +117,15 @@ export default function SettingsPage() {
 
   /** Per-section dirty detection for nav indicator dots */
   const sectionDirtyMap = useMemo<Record<SettingsNavItemId, boolean>>(() => {
-    if (!config || !baselineConfig) return { strategy: false, data: false, notification: false, secrets: false };
+    if (!config || !baselineConfig) return { strategy: false, brain: false, data: false, notification: false, secrets: false };
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     return {
       strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy)
         || changed(config.strategy?.risk, baselineConfig.strategy?.risk)
         || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints)
         || changed(config.strategy?.execution, baselineConfig.strategy?.execution),
+      brain: changed(config.brain, baselineConfig.brain)
+        || changed(config.cognitiveAgent, baselineConfig.cognitiveAgent),
       data: changed(config.dataSources, baselineConfig.dataSources),
       notification: changed(config.notification, baselineConfig.notification),
       secrets: false, // secrets managed separately
@@ -306,6 +309,13 @@ export default function SettingsPage() {
         >
           <SettingsStrategySection config={config} setConfig={setConfig} />
           <SettingsRiskSection config={config} setConfig={setConfig} />
+        </SettingsSectionGroup>
+
+        <SettingsSectionGroup
+          title="大脑与自动化"
+          description="这里定义 AI 是顾问、操作员还是自动驾驶。我们把认知循环、授权边界和配置落地策略放在一起，避免“大脑”和“手”继续割裂。"
+        >
+          <SettingsBrainSection config={config} setConfig={setConfig} />
         </SettingsSectionGroup>
 
         <SettingsSectionGroup

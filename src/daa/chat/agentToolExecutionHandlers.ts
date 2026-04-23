@@ -1,3 +1,5 @@
+import { canBrainRunAction } from "@/src/daa/brain/brainPolicy";
+
 import { describePendingAction, isPendingActionExpired } from "./agentContext";
 import { executePendingRebalanceAction, createAssistantRebalanceHandlers } from "./agentRebalanceExecutionHandlers";
 import { executePendingTradeAction, executeTradeIntent } from "./agentTradeExecutionHandlers";
@@ -41,6 +43,16 @@ export function createAssistantExecutionHandlers(input: DaaAgentToolContext): Ma
         text: "当前会话只允许查询，不允许确认执行动作。",
         intentKind: "confirm_action",
         pendingAction,
+      };
+    }
+    const permission = pendingAction.kind === "trade"
+      ? canBrainRunAction(input.systemConfig, "simulate_trade")
+      : canBrainRunAction(input.systemConfig, "simulate_rebalance");
+    if (!permission.allowed) {
+      return {
+        text: `${permission.reason}\n如需继续，请到设置页调整大脑授权等级。`,
+        intentKind: "confirm_action",
+        pendingAction: null,
       };
     }
     if (pendingAction.kind === "trade") {

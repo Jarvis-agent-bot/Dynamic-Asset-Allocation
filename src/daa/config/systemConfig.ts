@@ -63,6 +63,8 @@ export type DaaStrategyParams = {
   };
 };
 
+export type DaaBrainMode = "advisor" | "operator" | "autopilot";
+
 export type DaaSystemConfig = {
   strategy: {
     account: {
@@ -190,6 +192,16 @@ export type DaaSystemConfig = {
     }[];
     marketIndicators: DaaMarketIndicatorsConfig;
   };
+  /** 大脑控制面：定义 AI 的授权等级与可自动落地的配置范围 */
+  brain?: {
+    mode: DaaBrainMode;
+    /** 允许大脑生成配置 patch 建议 */
+    allowConfigPatch: boolean;
+    /** 仅在自动驾驶模式下生效：允许对白名单低风险 patch 自动落地 */
+    autoApplyLowRiskPatch: boolean;
+    /** 允许自动配置的白名单路径 */
+    configPatchWhitelist: string[];
+  };
   /** 认知 Agent 配置 */
   cognitiveAgent?: {
     enabled: boolean;
@@ -256,6 +268,15 @@ export type DaaSystemConfigPatch = {
   path: string;
   value: unknown;
 };
+
+export const DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_ = [
+  "/cognitiveAgent/schedule",
+  "/cognitiveAgent/maxInvestigationTargets",
+  "/cognitiveAgent/reviewIntervalDays",
+  "/cognitiveAgent/agentTriggerEnabled",
+  "/rebalanceStrategy/analysisFocus",
+  "/dataSources/llmModels",
+] as const;
 
 const DEFAULT_HF_FUNDS_: DaaHfFundTrack[] = [
   { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
@@ -423,6 +444,12 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
         highRiskBuyScale: 0.55,
       },
     },
+  },
+  brain: {
+    mode: "operator",
+    allowConfigPatch: true,
+    autoApplyLowRiskPatch: false,
+    configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
   },
   cognitiveAgent: {
     enabled: true,
@@ -900,6 +927,36 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       })(),
       marketIndicators: normalizeMarketIndicatorConfig(marketIndicators, fallback.dataSources.marketIndicators),
     },
+    brain: (() => {
+      const brain = isRecord(source.brain) ? source.brain : {};
+      const fb = fallback.brain ?? {
+        mode: "operator" as DaaBrainMode,
+        allowConfigPatch: true,
+        autoApplyLowRiskPatch: false,
+        configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
+      };
+      const rawMode = String(brain.mode ?? "");
+      const validModes = new Set(["advisor", "operator", "autopilot"]);
+      const mode = (validModes.has(rawMode) ? rawMode : fb.mode) as DaaBrainMode;
+      const allowConfigPatch = mode === "advisor"
+        ? false
+        : toBool(brain.allowConfigPatch, fb.allowConfigPatch);
+      const rawWhitelist = Array.isArray(brain.configPatchWhitelist)
+        ? brain.configPatchWhitelist
+            .map((item) => String(item || "").trim())
+            .filter(Boolean)
+            .slice(0, 20)
+        : clone(fb.configPatchWhitelist);
+
+      return {
+        mode,
+        allowConfigPatch,
+        autoApplyLowRiskPatch: mode === "autopilot"
+          ? toBool(brain.autoApplyLowRiskPatch, fb.autoApplyLowRiskPatch)
+          : false,
+        configPatchWhitelist: rawWhitelist.length ? rawWhitelist : clone(fb.configPatchWhitelist),
+      };
+    })(),
     cognitiveAgent: (() => {
       const ca = isRecord(source.cognitiveAgent) ? source.cognitiveAgent : {};
       const fb = fallback.cognitiveAgent ?? { enabled: true, maxInvestigationTargets: 3, reviewIntervalDays: 14, memoryRecallLimit: 5, circuitBreakerThreshold: 3, schedule: "2x_daily" as const, scheduleTimesUtc: ["13:00", "21:00"], memoryDecayRate: 0.97, memoryArchiveThreshold: 0.05 };

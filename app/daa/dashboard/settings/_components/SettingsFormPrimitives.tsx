@@ -12,6 +12,7 @@ import type { DaaMarketIndicatorConfigKey, DaaSystemConfig } from "@/src/daa/con
 
 export const SETTINGS_NAV_ITEMS_ = [
   { id: "strategy", label: "基础策略", desc: "调仓节奏、执行规则与风控参数。" },
+  { id: "brain", label: "大脑与自动化", desc: "AI 授权等级、认知循环与配置落地策略。" },
   { id: "data", label: "数据与模型", desc: "行情、资讯、汇率、AI 解读与人因输入。" },
   { id: "notification", label: "通知", desc: "Telegram 与飞书的触发策略和运行状态。" },
   { id: "secrets", label: "凭证与连接", desc: "API Key、Token、Webhook 与连通性管理。" },
@@ -164,10 +165,12 @@ export function CheckboxRow({
   checked,
   onChange,
   children,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   const generatedId = useId();
 
@@ -177,9 +180,9 @@ export function CheckboxRow({
         display: "flex",
         alignItems: "center",
         gap: 8,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         fontSize: 13,
-        color: "var(--muted)",
+        color: disabled ? "var(--faint)" : "var(--muted)",
         userSelect: "none",
       }}
     >
@@ -189,6 +192,7 @@ export function CheckboxRow({
         name={generatedId}
         className="daa-checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         style={{ accentColor: "var(--primary)" }}
       />

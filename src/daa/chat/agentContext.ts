@@ -1,4 +1,5 @@
-import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { buildBrainBoundaryText, describeBrainModeSummary } from "@/src/daa/brain/brainPolicy";
+import { normalizeSystemConfig, type DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { resolveLlmConfig, type LlmRuntimeConfig, type LlmTaskType } from "@/src/daa/llm/llmClient";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
@@ -14,6 +15,7 @@ const SUMMARY_TEXT_LIMIT = 1200;
 const SUMMARY_LINE_LIMIT = 8;
 
 export type DaaAssistantRuntimeContext = {
+  systemConfig: DaaSystemConfig;
   readModel: Awaited<ReturnType<typeof buildWorkbenchReadModel>>;
   recentMessages: Awaited<ReturnType<typeof listChatMessages>>;
   sessionMemory: DaaChatSessionMemory | null;
@@ -178,8 +180,13 @@ function simplifyEndpointHost(endpoint: string): string {
 
 export function buildAssistantSystemDigest(input: {
   llmRoutes: AssistantLlmRouteSummary[];
+  brain?: DaaSystemConfig["brain"];
   cognitiveAgent?: DaaSystemConfig["cognitiveAgent"];
 }): string {
+  const summarizedConfig = normalizeSystemConfig({
+    brain: input.brain,
+    cognitiveAgent: input.cognitiveAgent,
+  });
   const llmSummary = input.llmRoutes
     .map((route) => {
       const state = route.enabled ? "启用" : "关闭";
@@ -195,38 +202,48 @@ export function buildAssistantSystemDigest(input: {
     "执行边界：仅支持本地模拟，可生成建议、进入待确认并执行模拟调仓或模拟买卖；不支持真实券商下单。",
     "可读上下文：组合快照、市场状态、最近周期、会话记忆、复盘学习摘要、活跃论点、Agent 日报。",
     "权限边界：不返回敏感密钥明文、不直接改系统设置、不跳过确认直接成交。",
+    `大脑模式：${describeBrainModeSummary(summarizedConfig)}`,
+    `大脑动作边界：${buildBrainBoundaryText(summarizedConfig)}`,
     `当前 LLM 路由：${llmSummary || "暂无"}`,
     `认知 Agent：${cognitiveSummary}`,
   ].join("\n");
 }
 
-async function loadAssistantSystemDigest(): Promise<string> {
-  const [system, analysisRoute, decisionRoute, researchRoute] = await Promise.all([
-    getDaaSystemConfig(),
-    resolveLlmConfig("analysis"),
-    resolveLlmConfig("decision"),
-    resolveLlmConfig("research"),
+export async function loadAssistantRuntimeContext(sessionId: string): Promise<DaaAssistantRuntimeContext> {
+  const emptyRoute: LlmRuntimeConfig = {
+    enabled: false,
+    enabledInDecision: false,
+    provider: "unavailable",
+    model: "未配置",
+    endpoint: "",
+    apiKey: "",
+    timeoutMs: 15000,
+  };
+  const [readModel, recentMessages, sessionMemory, learningDigest, system, analysisRoute, decisionRoute, researchRoute] = await Promise.all([
+    buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false }),
+    listChatMessages(sessionId, 12),
+    getChatSessionMemory(sessionId),
+    buildAgentLearningDigest(8),
+    getDaaSystemConfig().catch(() => ({
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      config: normalizeSystemConfig({}),
+    })),
+    resolveLlmConfig("analysis").catch(() => emptyRoute),
+    resolveLlmConfig("decision").catch(() => emptyRoute),
+    resolveLlmConfig("research").catch(() => emptyRoute),
   ]);
-
-  return buildAssistantSystemDigest({
+  const systemDigest = buildAssistantSystemDigest({
     llmRoutes: [
       { taskType: "analysis", ...analysisRoute },
       { taskType: "decision", ...decisionRoute },
       { taskType: "research", ...researchRoute },
     ],
+    brain: system.config.brain,
     cognitiveAgent: system.config.cognitiveAgent,
   });
-}
-
-export async function loadAssistantRuntimeContext(sessionId: string): Promise<DaaAssistantRuntimeContext> {
-  const [readModel, recentMessages, sessionMemory, learningDigest, systemDigest] = await Promise.all([
-    buildWorkbenchReadModel({ syncPrices: false, autoRiskCycle: false }),
-    listChatMessages(sessionId, 12),
-    getChatSessionMemory(sessionId),
-    buildAgentLearningDigest(8),
-    loadAssistantSystemDigest().catch(() => ""),
-  ]);
   return {
+    systemConfig: system.config,
     readModel,
     recentMessages,
     sessionMemory,

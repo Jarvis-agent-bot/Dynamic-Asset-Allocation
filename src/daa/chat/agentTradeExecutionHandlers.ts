@@ -1,4 +1,5 @@
 import { appendAgentLearningEvent } from "@/src/daa/agent/agentLearningRepo";
+import { canBrainRunAction } from "@/src/daa/brain/brainPolicy";
 import { executeTradeViaGateway, previewTradeViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { ExecuteManualTradeResult, PreviewManualTradeResult } from "@/src/daa/modules/workbench/manualTradeService";
 
@@ -82,6 +83,14 @@ export async function executeTradeIntent(input: {
   }
 
   const intent = input.toolContext.intent;
+  const permission = canBrainRunAction(input.toolContext.systemConfig, "simulate_trade");
+  if (!permission.allowed) {
+    return {
+      text: `${permission.reason}\n你仍然可以先查询持仓、信号和调仓建议。`,
+      intentKind: "trade",
+      pendingAction: input.toolContext.currentPendingAction,
+    };
+  }
   if (!input.toolContext.allowExecution) {
     return {
       text: "当前会话只允许查询，不允许直接执行交易。",
@@ -179,6 +188,14 @@ export async function executePendingTradeAction(input: {
   toolContext: DaaAgentToolContext;
   pendingAction: Extract<DaaChatPendingAction, { kind: "trade" }>;
 }): Promise<DaaAgentToolResult> {
+  const permission = canBrainRunAction(input.toolContext.systemConfig, "simulate_trade");
+  if (!permission.allowed) {
+    return {
+      text: `${permission.reason}\n当前待确认动作已取消。`,
+      intentKind: "trade",
+      pendingAction: null,
+    };
+  }
   const row = input.toolContext.readModel.bootstrap.assetUniverse.find((item) => item.symbol.toUpperCase() === input.pendingAction.symbol.toUpperCase());
   if (!row) {
     return {
