@@ -307,9 +307,9 @@ Agent cycle 的最终产出，经 `formatBriefingForTelegram` 推送到 TG + 前
 - Risk level：`> 15%` critical / `> 10%` high / `> 5%` medium / else low
 - **显示时明确标注**"假设情景·暴露×30%/50% 经验系数"，避免被误读为 VaR
 
-### 5.6 策略顾问（Config Overlay，可选）
+### 5.6 策略顾问（Config Overlay，Autopilot 默认启用）
 
-仅在 `agentOverlayEnabled` 启用时生成。
+Autopilot 模式会自动确保 `agentOverlayEnabled` / `agentTriggerEnabled` / 自动生成与自动模拟执行开关开启；非自动驾驶模式下仍可手动关闭。
 
 LLM 基于持仓 + 论点 + 意外 + 缺口输出：
 
@@ -318,9 +318,9 @@ LLM 基于持仓 + 论点 + 意外 + 缺口输出：
 | 逐资产漂移阈值 | clamp 到 `[0.02, 0.15]` |
 | Market regime 覆盖 | 仅当 Agent confidence ≥ 80% |
 | 风控参数收紧 | `maxPositionPct` 取 min(agent, config)，只收紧不放宽 |
-| 主动调仓触发 | 需 `agentTriggerEnabled` 同时启用 |
+| 主动调仓触发 | 需 `agentTriggerEnabled` 同时启用；Autopilot 下可由重大事件主动触发 |
 
-Overlay 24 小时过期，自动回退默认规则。
+Overlay 24 小时过期，自动回退默认规则。Autopilot 只消费本轮 Agent run 产出的 overlay，避免误用历史建议主动调仓。
 
 ---
 
@@ -339,8 +339,8 @@ Overlay 24 小时过期，自动回退默认规则。
 | `circuitBreakerThreshold` | `3` | 连续 LLM 失败次数触发熔断 |
 | `schedule` | `"2x_daily"` | `2x_daily` / `daily` / `every_6h` / `manual_only` |
 | `scheduleTimesUtc` | `["13:00","21:00"]` | 允许运行时间窗口（UTC, ±30min） |
-| `agentOverlayEnabled` | `false` | 是否生成 Config Overlay |
-| `agentTriggerEnabled` | `false` | 是否允许 Agent 触发主动调仓 |
+| `agentOverlayEnabled` | `true` | 是否生成 Config Overlay |
+| `agentTriggerEnabled` | `true` | 是否允许 Agent 触发主动调仓 |
 
 ---
 

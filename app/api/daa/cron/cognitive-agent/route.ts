@@ -13,7 +13,7 @@ export const maxDuration = 300; // 5 分钟
 import { withApiHandler, ok, fail } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
-import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
+import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 import { countThreads } from "@/src/daa/agent/store/thesisStore";
 import { countMemories } from "@/src/daa/agent/store/memoryStore";
 import { getDaaSystemConfig } from "@/src/daa/store/accountStore";
@@ -57,32 +57,31 @@ export async function POST(req: Request) {
       // 配置加载失败不阻止执行
     }
 
-    // 检查是否有活跃 thesis
-    const threadCount = await countThreads();
-    if (threadCount === 0) {
-      return ok({
-        skipped: true,
-        reason: "无活跃研究论点。请先调用 POST /api/daa/agent/bootstrap 初始化。",
-      });
-    }
-
     const execution = await runLoggedJob({
       req,
       jobType: "cron_cognitive_agent",
       triggerSource: "cron_cognitive_agent",
       idempotencyKey: req.headers.get("x-daa-idempotency-key"),
       summarize: (result) => ({
-        runId: result.runId,
-        thesesUpdated: result.thesesUpdated,
-        surprisesCount: result.surprises.length,
-        totalTokens: result.totalTokens,
-        errorsCount: result.errors.length,
+        skipped: result.skipped,
+        runId: result.cognitiveRun.runId,
+        thesesUpdated: result.cognitiveRun.thesesUpdated,
+        surprisesCount: result.cognitiveRun.surprisesCount,
+        totalTokens: result.cognitiveRun.totalTokens,
+        configPatchCount: result.configPatch.paths.length,
+        rebalanceCycleId: result.rebalance.cycleId,
+        autoExecutedOrders: result.rebalance.autoExecute.ordersCount,
+        errorsCount: result.cognitiveRun.errors.length,
       }),
       handler: async () => {
-        return await runCognitiveAgentCycle("scheduled");
+        return await runAutopilotLoop({
+          source: "cron_cognitive_agent",
+          reason: "scheduled cognitive tick",
+        });
       },
     });
 
+    const threadCount = await countThreads();
     const memoryCount = await countMemories();
 
     return ok({

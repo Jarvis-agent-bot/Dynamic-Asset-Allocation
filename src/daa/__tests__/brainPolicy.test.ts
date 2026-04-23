@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBrainConfigForMode, canBrainRunAction, isBrainConfigPatchAllowed } from "@/src/daa/brain/brainPolicy";
-import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
+import { buildBrainConfigForMode, canBrainRunAction, isBrainConfigPatchAllowed, resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
+import { DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_, normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 
 describe("brain-policy", () => {
   it("advisor 模式会强制关闭配置写入与自动落地", () => {
@@ -48,6 +48,25 @@ describe("brain-policy", () => {
     expect(canBrainRunAction(config, "apply_config_patch").allowed).toBe(true);
     expect(isBrainConfigPatchAllowed(config, "/dataSources/llmModels")).toBe(true);
     expect(isBrainConfigPatchAllowed(config, "/notification/telegram/enabled")).toBe(false);
+  });
+
+  it("默认大脑配置是自动驾驶，并包含事件驱动闭环白名单", () => {
+    const config = normalizeSystemConfig({});
+    expect(config.brain?.mode).toBe("autopilot");
+    expect(config.brain?.autoApplyLowRiskPatch).toBe(true);
+    expect(config.rebalanceStrategy.autoGenerateEnabled).toBe(true);
+    expect(config.rebalanceStrategy.autoExecuteEnabled).toBe(true);
+    expect(config.cognitiveAgent?.agentOverlayEnabled).toBe(true);
+    expect(config.cognitiveAgent?.agentTriggerEnabled).toBe(true);
+    expect(DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_).toContain("/cognitiveAgent/agentOverlayEnabled");
+    expect(DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_).toContain("/rebalanceStrategy/autoExecuteEnabled");
+  });
+
+  it("缺省解析会回退到全权大脑安全白名单", () => {
+    const brain = resolveBrainConfig(undefined);
+    expect(brain.mode).toBe("autopilot");
+    expect(brain.autoApplyLowRiskPatch).toBe(true);
+    expect(brain.configPatchWhitelist).toContain("/rebalanceStrategy/drift/thresholdPct");
   });
 
   it("模式预设会给出一致的布尔权限", () => {

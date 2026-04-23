@@ -1,11 +1,12 @@
 import "@/src/daa/agent/tools/index";
 
 import { bootstrapTheses } from "@/src/daa/agent/bootstrap";
+import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { getActiveTheses } from "@/src/daa/agent/store/thesisStore";
 import { getRegisteredToolCount, getToolsByCategory } from "@/src/daa/agent/tools/registry";
-import { buildBrainBoundaryText, buildBrainConfigForMode, describeBrainModeSummary, getBrainModeLabel } from "@/src/daa/brain/brainPolicy";
+import { buildBrainBoundaryText, buildBrainConfigForMode, describeBrainModeSummary, getBrainModeLabel, resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
 import type { DaaBrainMode } from "@/src/daa/config/systemConfig";
 import { getDaaSystemConfig, patchDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
@@ -72,7 +73,25 @@ export async function runAssistantBootstrap(runtimeContext: DaaAssistantRuntimeC
     : `初始化未产生新论点。${result.errors.length > 0 ? `\n原因：${result.errors.slice(0, 3).join("；")}` : ""}`;
 }
 
-export async function runAssistantCognitiveCycle(): Promise<string> {
+export async function runAssistantCognitiveCycle(runtimeContext?: DaaAssistantRuntimeContext): Promise<string> {
+  if (runtimeContext && resolveBrainConfig(runtimeContext.systemConfig.brain).mode === "autopilot") {
+    const result = await runAutopilotLoop({
+      source: "manual",
+      reason: "assistant_chat_manual_autopilot",
+      forceAgentRun: true,
+    });
+    return [
+      "已手动触发一轮 Autopilot 大脑闭环。",
+      result.skipped ? `状态：已跳过，原因：${result.reason || "未知"}` : `runId: ${result.cognitiveRun.runId || "-"}`,
+      `配置落地：${result.configPatch.applied ? result.configPatch.paths.join(", ") : "无新增 patch"}`,
+      `主动调仓：${result.rebalance.created ? `已生成周期 ${result.rebalance.cycleId}` : result.rebalance.reason || "未触发"}`,
+      `模拟执行：${result.rebalance.autoExecute.executed ? `已执行 ${result.rebalance.autoExecute.ordersCount} 笔` : result.rebalance.autoExecute.blockedReason || result.rebalance.autoExecute.error || "未执行"}`,
+      `Tokens：${result.cognitiveRun.totalTokens}`,
+      `耗时：${result.cognitiveRun.durationMs}ms`,
+      result.cognitiveRun.errors.length > 0 ? `错误：${result.cognitiveRun.errors.slice(0, 3).join("；")}` : "状态：执行完成。",
+    ].join("\n");
+  }
+
   const result = await runCognitiveAgentCycle("manual");
   return [
     "已手动触发一轮 Cognitive Agent 调查。",
@@ -91,19 +110,28 @@ export async function switchAssistantBrainMode(input: {
 }): Promise<string> {
   const current = input.runtimeContext.systemConfig.brain;
   const next = buildBrainConfigForMode(input.mode, current);
-  if (
-    current?.mode === next.mode
-    && current?.allowConfigPatch === next.allowConfigPatch
-    && current?.autoApplyLowRiskPatch === next.autoApplyLowRiskPatch
-  ) {
-    return `当前已经是${getBrainModeLabel(next.mode)}模式，无需切换。`;
-  }
-
   const patches = [
     { path: "/brain/mode", value: next.mode },
     { path: "/brain/allowConfigPatch", value: next.allowConfigPatch },
     { path: "/brain/autoApplyLowRiskPatch", value: next.autoApplyLowRiskPatch },
+    { path: "/brain/configPatchWhitelist", value: next.configPatchWhitelist },
   ];
+  if (next.mode === "autopilot") {
+    patches.push(
+      { path: "/cognitiveAgent/enabled", value: true },
+      { path: "/cognitiveAgent/agentOverlayEnabled", value: true },
+      { path: "/cognitiveAgent/agentTriggerEnabled", value: true },
+      { path: "/rebalanceStrategy/autoGenerateEnabled", value: true },
+      { path: "/rebalanceStrategy/autoExecuteEnabled", value: true },
+    );
+  } else if (
+    current?.mode === next.mode
+    && current?.allowConfigPatch === next.allowConfigPatch
+    && current?.autoApplyLowRiskPatch === next.autoApplyLowRiskPatch
+    && JSON.stringify(current?.configPatchWhitelist ?? []) === JSON.stringify(next.configPatchWhitelist)
+  ) {
+    return `当前已经是${getBrainModeLabel(next.mode)}模式，无需切换。`;
+  }
 
   try {
     const saved = await patchDaaSystemConfig({

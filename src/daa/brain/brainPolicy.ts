@@ -1,4 +1,8 @@
-import type { DaaBrainMode, DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import {
+  DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_,
+  type DaaBrainMode,
+  type DaaSystemConfig,
+} from "@/src/daa/config/systemConfig";
 
 export type DaaBrainAction =
   | "view_context"
@@ -37,10 +41,12 @@ export type DaaResolvedBrainConfig = NonNullable<DaaSystemConfig["brain"]>;
 
 export function resolveBrainConfig(config?: DaaSystemConfig["brain"]): DaaResolvedBrainConfig {
   return {
-    mode: config?.mode ?? "operator",
+    mode: config?.mode ?? "autopilot",
     allowConfigPatch: config?.allowConfigPatch ?? true,
-    autoApplyLowRiskPatch: config?.autoApplyLowRiskPatch ?? false,
-    configPatchWhitelist: Array.isArray(config?.configPatchWhitelist) ? config.configPatchWhitelist : [],
+    autoApplyLowRiskPatch: config?.autoApplyLowRiskPatch ?? true,
+    configPatchWhitelist: Array.isArray(config?.configPatchWhitelist) && config.configPatchWhitelist.length > 0
+      ? config.configPatchWhitelist
+      : [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
   };
 }
 

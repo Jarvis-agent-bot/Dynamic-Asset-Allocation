@@ -109,7 +109,7 @@ Thesis-driven 的认知 Agent，基于 LangGraph.js 实现的 6 节点循环：
 ```
 observe → prioritize → investigate ⇄ reflect → review → surface → END
    ↑                                                         ↓
- cron/手动                                            TG 日报推送
+ cron / 手动 / 重大新闻事件                          TG 日报 + Config Overlay
 ```
 
 每次 cycle 会：加载持仓+市场+新闻 → 选最需调查的 thesis → 并行证据收集 + ReAct → 反思 + 生成记忆 → 到期 thesis 复盘 → 生成 DailyBriefing（5 面板：意外 / 缺口 / 改观 / 冲突 / 风险）并推 Telegram。
@@ -122,12 +122,12 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 |------|------|
 | 漂移检测 | 按资产目标权重对比当前权重，阈值可配置（`rebalanceStrategy.drift.thresholdPct`，默认 5%） |
 | 日历触发 | monthly / quarterly / semi-annual / annual 周期触发 |
-| Agent 触发 | Agent LLM 建议主动调仓（需启用 `agentTriggerEnabled`） |
+| Agent 触发 | Agent LLM 建议主动调仓；Autopilot 下由定时循环、新闻刷新或实时重大事件主动触发 |
 | 信号融合 | 四维信号加权合成 conviction → buy/sell/hold 建议 |
 | 订单生成 | `src/core/rebalanceCore.ts` 纯算法：最小化交易次数，满足权重约束 |
 | 风控预检 | 市场 regime、单仓上限、流动性、手续费阈值 |
 | 模拟执行 | 无券商对接，直接写 `daa_portfolio_positions` + `daa_decision_log` |
-| 人工确认 | 所有执行前必须人工勾选（Chat 有 10 分钟 TTL 的 pendingAction） |
+| 执行边界 | Autopilot 只允许本地模拟账本自动执行；真实券商链路未接入 |
 
 **信号融合**（`src/daa/signals/fusion.ts`）：
 - `technicalSignal.ts` — SMA / 动量 / 趋势

@@ -52,7 +52,7 @@ export function createAssistantBrainExecutionHandlers(input: DaaAgentToolContext
         pendingAction: input.currentPendingAction,
       };
     }
-    const text = await runAssistantCognitiveCycle();
+    const text = await runAssistantCognitiveCycle(input);
     await appendChatToolCall({
       sessionId: input.sessionId,
       messageId: input.userMessageId,

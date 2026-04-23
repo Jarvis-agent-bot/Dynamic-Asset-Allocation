@@ -22,8 +22,10 @@ import { listDaaAssetUniverse, upsertDaaNewsItemSnapshots } from "@/src/daa/stor
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const FRESHNESS_HALF_LIFE_HOURS = 72;
 
@@ -248,6 +250,7 @@ export async function POST(req: Request) {
 
     let analyzed = 0;
     let pushed = 0;
+    const majorEventSymbols = new Set<string>();
     if (focusSymbols.length > 0) {
       const rawItem = {
         title: event.headline,
@@ -264,6 +267,9 @@ export async function POST(req: Request) {
         try {
           const analysis = await analyzeNewsWithLlm({ symbol, items: [rawItem] });
           analyzed++;
+          if (analysis.majorEvent?.impact === "high") {
+            majorEventSymbols.add(symbol);
+          }
 
           // 立即把分析结果写回 signal 表，让 Today 新闻流能即时标出 majorEvent
           try {
@@ -285,11 +291,28 @@ export async function POST(req: Request) {
       }
     }
 
+    const autopilot = majorEventSymbols.size > 0
+      ? await runAutopilotLoop({
+          source: "alpaca_ws_realtime",
+          reason: `realtime high-impact news: ${event.headline}`,
+          affectedSymbols: [...majorEventSymbols],
+          forceAgentRun: true,
+        }).catch((error) => {
+          logSwallowed("newsRealtime.autopilot", error);
+          return {
+            attempted: true,
+            error: error instanceof Error ? error.message : String(error || ""),
+          };
+        })
+      : { attempted: false, reason: "no high-impact focused event" };
+
     return ok({
       stored: mentionedSymbols.length,
       analyzed,
       pushed,
       focusSymbols,
+      majorEventSymbols: [...majorEventSymbols],
+      autopilot,
       newsId: event.id,
     });
   });

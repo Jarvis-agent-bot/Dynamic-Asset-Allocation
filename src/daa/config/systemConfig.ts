@@ -273,8 +273,14 @@ export const DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_ = [
   "/cognitiveAgent/schedule",
   "/cognitiveAgent/maxInvestigationTargets",
   "/cognitiveAgent/reviewIntervalDays",
+  "/cognitiveAgent/agentOverlayEnabled",
   "/cognitiveAgent/agentTriggerEnabled",
+  "/rebalanceStrategy/autoGenerateEnabled",
+  "/rebalanceStrategy/autoExecuteEnabled",
+  "/rebalanceStrategy/autoExecuteMaxSinglePct",
+  "/rebalanceStrategy/drift/thresholdPct",
   "/rebalanceStrategy/analysisFocus",
+  "/strategy/constraints/maxPositionPct",
   "/dataSources/llmModels",
 ] as const;
 
@@ -345,8 +351,8 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     analysisTimeUtc: "00:20",
     timezone: "Asia/Shanghai",
     analysisFocus: DEFAULT_ANALYSIS_FOCUS_,
-    autoGenerateEnabled: false,
-    autoExecuteEnabled: false,
+    autoGenerateEnabled: true,
+    autoExecuteEnabled: true,
     autoExecuteMaxSinglePct: 10,
   },
   dataSources: {
@@ -446,9 +452,9 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     },
   },
   brain: {
-    mode: "operator",
+    mode: "autopilot",
     allowConfigPatch: true,
-    autoApplyLowRiskPatch: false,
+    autoApplyLowRiskPatch: true,
     configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
   },
   cognitiveAgent: {
@@ -461,8 +467,8 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     scheduleTimesUtc: ["13:00", "21:00"],
     memoryDecayRate: 0.97,
     memoryArchiveThreshold: 0.05,
-    agentOverlayEnabled: false,
-    agentTriggerEnabled: false,
+    agentOverlayEnabled: true,
+    agentTriggerEnabled: true,
     thesisStalenessDays: 7,
   },
   watchlistEntry: {
@@ -930,9 +936,9 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
     brain: (() => {
       const brain = isRecord(source.brain) ? source.brain : {};
       const fb = fallback.brain ?? {
-        mode: "operator" as DaaBrainMode,
+        mode: "autopilot" as DaaBrainMode,
         allowConfigPatch: true,
-        autoApplyLowRiskPatch: false,
+        autoApplyLowRiskPatch: true,
         configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
       };
       const rawMode = String(brain.mode ?? "");
@@ -959,7 +965,20 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
     })(),
     cognitiveAgent: (() => {
       const ca = isRecord(source.cognitiveAgent) ? source.cognitiveAgent : {};
-      const fb = fallback.cognitiveAgent ?? { enabled: true, maxInvestigationTargets: 3, reviewIntervalDays: 14, memoryRecallLimit: 5, circuitBreakerThreshold: 3, schedule: "2x_daily" as const, scheduleTimesUtc: ["13:00", "21:00"], memoryDecayRate: 0.97, memoryArchiveThreshold: 0.05 };
+      const fb = fallback.cognitiveAgent ?? {
+        enabled: true,
+        maxInvestigationTargets: 3,
+        reviewIntervalDays: 14,
+        memoryRecallLimit: 5,
+        circuitBreakerThreshold: 3,
+        schedule: "2x_daily" as const,
+        scheduleTimesUtc: ["13:00", "21:00"],
+        memoryDecayRate: 0.97,
+        memoryArchiveThreshold: 0.05,
+        agentOverlayEnabled: true,
+        agentTriggerEnabled: true,
+        thesisStalenessDays: 7,
+      };
       const validSchedules = new Set(["2x_daily", "daily", "every_6h", "manual_only"]);
       const rawSchedule = String(ca.schedule ?? "");
       return {
@@ -972,9 +991,9 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         scheduleTimesUtc: Array.isArray(ca.scheduleTimesUtc) ? (ca.scheduleTimesUtc as string[]).filter(t => /^\d{1,2}:\d{2}$/.test(String(t))).slice(0, 4) : clone(fb.scheduleTimesUtc),
         memoryDecayRate: clamp(Number(ca.memoryDecayRate) || fb.memoryDecayRate, 0.5, 1.0),
         memoryArchiveThreshold: clamp(Number(ca.memoryArchiveThreshold) || fb.memoryArchiveThreshold, 0.01, 0.5),
-        agentOverlayEnabled: toBool(ca.agentOverlayEnabled, false),
-        agentTriggerEnabled: toBool(ca.agentTriggerEnabled, false),
-        thesisStalenessDays: clamp(Math.trunc(Number(ca.thesisStalenessDays) || 7), 1, 60),
+        agentOverlayEnabled: toBool(ca.agentOverlayEnabled, fb.agentOverlayEnabled ?? true),
+        agentTriggerEnabled: toBool(ca.agentTriggerEnabled, fb.agentTriggerEnabled ?? true),
+        thesisStalenessDays: clamp(Math.trunc(Number(ca.thesisStalenessDays) || fb.thesisStalenessDays || 7), 1, 60),
       };
     })(),
     watchlistEntry: (() => {

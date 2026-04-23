@@ -32,7 +32,7 @@ const MODE_OPTIONS: Array<{
   {
     value: "autopilot",
     title: "自动驾驶",
-    description: "在保留高风险确认门禁的前提下，允许大脑对白名单低风险 patch 自动落地。",
+    description: "作为系统大脑运行：事件驱动分析、主动触发本地模拟调仓，并对白名单参数自动落地。",
   },
 ] as const;
 
@@ -40,8 +40,14 @@ const CONFIG_PATCH_OPTIONS: Array<{ path: string; label: string; hint: string }>
   { path: "/cognitiveAgent/schedule", label: "认知循环频率", hint: "允许 AI 调整日更 / 双更 / 仅手动节奏。" },
   { path: "/cognitiveAgent/maxInvestigationTargets", label: "单次调查论点数", hint: "允许 AI 调整每轮调查深度。" },
   { path: "/cognitiveAgent/reviewIntervalDays", label: "论点复盘间隔", hint: "允许 AI 调整 thesis 复盘节奏。" },
+  { path: "/cognitiveAgent/agentOverlayEnabled", label: "规则参数建议", hint: "允许 AI 生成漂移阈值、风控上限与主动调仓建议。" },
   { path: "/cognitiveAgent/agentTriggerEnabled", label: "主动触发再平衡", hint: "允许 AI 打开或关闭事件驱动再平衡触发。" },
+  { path: "/rebalanceStrategy/autoGenerateEnabled", label: "自动生成调仓周期", hint: "允许 AI 确保事件触发后能生成本地模拟调仓周期。" },
+  { path: "/rebalanceStrategy/autoExecuteEnabled", label: "自动执行模拟调仓", hint: "允许 AI 确保低风险周期能自动执行到本地模拟账本。" },
+  { path: "/rebalanceStrategy/autoExecuteMaxSinglePct", label: "自动执行单笔上限", hint: "允许 AI 在急迫风险下收紧单笔自动执行上限。" },
+  { path: "/rebalanceStrategy/drift/thresholdPct", label: "漂移触发阈值", hint: "允许 AI 按最近研究结果调整组合漂移触发敏感度。" },
   { path: "/rebalanceStrategy/analysisFocus", label: "分析重点", hint: "允许 AI 修改当前分析主线和关注语境。" },
+  { path: "/strategy/constraints/maxPositionPct", label: "最大单仓上限", hint: "允许 AI 在风险升高时收紧最大单仓位。" },
   { path: "/dataSources/llmModels", label: "多模型路由", hint: "允许 AI 在白名单内调整分析 / 决策 / 研究模型路由。" },
 ] as const;
 
@@ -51,9 +57,9 @@ export function SettingsBrainSection(props: {
 }) {
   const { config, setConfig } = props;
   const brain = config.brain ?? {
-    mode: "operator" as const,
+    mode: "autopilot" as const,
     allowConfigPatch: true,
-    autoApplyLowRiskPatch: false,
+    autoApplyLowRiskPatch: true,
     configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
   };
   const agent = config.cognitiveAgent ?? {
@@ -99,7 +105,7 @@ export function SettingsBrainSection(props: {
           <div>
             <div className="text-sm font-semibold text-[var(--text)]">授权等级</div>
             <div className="mt-1 text-xs leading-6 text-[var(--muted)]">
-              当前模式：{getBrainModeLabel(brain.mode)}。建议默认使用「操作员」，等白名单和复盘链路更稳定后再切到「自动驾驶」。
+              当前模式：{getBrainModeLabel(brain.mode)}。自动驾驶会把 AI 作为系统大脑：自动分析、自动调参，并在风控内执行本地模拟调仓。
             </div>
           </div>
 
@@ -125,7 +131,7 @@ export function SettingsBrainSection(props: {
           </div>
 
           <div className="rounded-xl border border-[rgba(125,211,252,0.18)] bg-[rgba(56,189,248,0.08)] p-4 text-xs leading-6 text-[var(--muted)]">
-            真正的“全权大脑”不是去掉所有门禁，而是让 AI 统一看见上下文、统一做规划，再按照授权等级执行动作并回写复盘。
+            当前执行边界仍然是本地模拟账本，不会触达真实券商；但在这个边界内，自动驾驶会作为事件驱动的大脑主动运行。
           </div>
         </div>
 

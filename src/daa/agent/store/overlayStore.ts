@@ -14,6 +14,21 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 const OVERLAY_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
+function normalizeOverlayFromBriefing(briefingRaw: unknown): AgentConfigOverlay | null {
+  const briefing = typeof briefingRaw === "string"
+    ? JSON.parse(briefingRaw)
+    : briefingRaw;
+
+  const overlay = briefing?.configOverlay;
+  if (!overlay || typeof overlay !== "object") return null;
+
+  // 基础结构校验
+  if (!Array.isArray(overlay.driftOverrides)) overlay.driftOverrides = [];
+  if (!Array.isArray(overlay.riskAdjustments)) overlay.riskAdjustments = [];
+
+  return overlay as AgentConfigOverlay;
+}
+
 /**
  * 读取最近 24 小时内完成的 Agent run 的 configOverlay。
  * 超过 24 小时或无 overlay 时返回 null。
@@ -35,20 +50,34 @@ export async function getLatestAgentConfigOverlay(): Promise<AgentConfigOverlay 
 
     if (!row) return null;
 
-    const briefing = typeof row.briefing === "string"
-      ? JSON.parse(row.briefing)
-      : row.briefing;
-
-    const overlay = briefing?.configOverlay;
-    if (!overlay || typeof overlay !== "object") return null;
-
-    // 基础结构校验
-    if (!Array.isArray(overlay.driftOverrides)) overlay.driftOverrides = [];
-    if (!Array.isArray(overlay.riskAdjustments)) overlay.riskAdjustments = [];
-
-    return overlay as AgentConfigOverlay;
+    return normalizeOverlayFromBriefing(row.briefing);
   } catch (e) {
     logSwallowed("overlayStore.getLatest", e);
+    return null;
+  }
+}
+
+/**
+ * 读取指定 Agent run 产出的 overlay，供 Autopilot 避免误用历史 overlay。
+ */
+export async function getAgentConfigOverlayForRun(runId: string): Promise<AgentConfigOverlay | null> {
+  try {
+    const id = String(runId || "").trim();
+    if (!id) return null;
+    const row = await withDaaPgClient(async (client) => {
+      const result = await client.query(
+        `SELECT briefing FROM daa_agent_runs
+         WHERE id = $1
+           AND status IN ('completed', 'completed_with_errors')
+           AND briefing IS NOT NULL
+         LIMIT 1`,
+        [id],
+      );
+      return result.rows[0] ?? null;
+    });
+    return row ? normalizeOverlayFromBriefing(row.briefing) : null;
+  } catch (e) {
+    logSwallowed("overlayStore.getForRun", e);
     return null;
   }
 }

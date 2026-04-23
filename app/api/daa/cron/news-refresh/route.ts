@@ -9,8 +9,10 @@ import { parseSymbolsFromNewsQuery } from "@/src/market/yahooRssFetch";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { hasRecentMajorEventNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
+import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 function normalizeUpper(value: unknown): string {
   return String(value || "").trim().toUpperCase();
@@ -149,12 +151,28 @@ export async function POST(req: Request) {
 
         // 检测重大事件 → TG 即时推送
         const majorEventsPushed = await checkMajorEvents(signals);
+        const autopilot = majorEventsPushed > 0
+          ? await runAutopilotLoop({
+              source: "cron_news_refresh",
+              reason: `news refresh detected ${majorEventsPushed} high-impact events`,
+              affectedSymbols: signals
+                .filter((signal) => signal.llmMajorEvent?.impact === "high")
+                .map((signal) => signal.symbol),
+            }).catch((error) => {
+              logSwallowed("newsRefresh.autopilot", error);
+              return {
+                attempted: true,
+                error: error instanceof Error ? error.message : String(error || ""),
+              };
+            })
+          : { attempted: false, reason: "no high-impact major event" };
 
         return {
           refreshedSymbols: symbolsWithMarket.length,
           signals: signalRows,
           items: itemRows,
           majorEventsPushed,
+          autopilot,
           at: new Date().toISOString(),
         };
       },

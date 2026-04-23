@@ -260,7 +260,7 @@ import { fetchPriceSeriesWithCache, fetchMultiplePriceSeriesWithCache } from "@/
 ### Rebalancing Strategies
 - Calendar-based (monthly / quarterly / semi-annual / annual)
 - Drift-based (threshold-triggered, configurable, Agent overlay 可覆盖 per-asset 阈值)
-- Agent-triggered (Agent LLM 建议主动调仓，需启用 `agentTriggerEnabled`)
+- Agent-triggered (Agent LLM 建议主动调仓；Autopilot 下定时循环、新闻刷新和实时重大事件可主动触发)
 - Risk-aware order generation with pre-trade checks
 
 ### Agent Config Overlay（AI 驱动规则引擎）
@@ -272,11 +272,12 @@ Agent 每个 cycle 在 surfaceNode 末尾调用 LLM"策略顾问"，输出参数
 | per-asset 漂移阈值 | Agent 建议每个资产的漂移检测灵敏度（2%-15%） | `agentOverlayEnabled` |
 | 市场 regime 覆盖 | Agent 不同意规则引擎时可覆盖（confidence >= 80%） | `agentOverlayEnabled` |
 | 风控参数收紧 | Agent 建议收紧特定资产的仓位上限（只收紧不放宽） | `agentOverlayEnabled` |
-| 主动调仓触发 | Agent 认为应该调仓时通知 drift-check cron | `agentTriggerEnabled` |
+| 主动调仓触发 | Agent 认为应该调仓时可直接生成并执行本地模拟调仓周期 | `agentTriggerEnabled` |
 
 **安全约束**：
 - 所有建议经 `validateShape()` + 范围 clamp 校验
 - Overlay 24 小时过期，自动回退默认规则
+- Autopilot 只消费本轮 Agent run 产出的 overlay，避免误用历史建议主动执行
 - 风控 `maxPositionPctOverride` 取 `min(agent, config)`，只收紧
 - LLM 失败不影响正常 Agent cycle（熔断兼容）
 
