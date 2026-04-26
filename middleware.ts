@@ -12,7 +12,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // 品牌图标是登录页也需要加载的公开静态资源，不能走认证重定向。
-  if (pathname.startsWith("/daa/brand/") || pathname === "/daa/apple-touch-icon.png") {
+  if (pathname.startsWith("/daa/brand/") || pathname === "/daa/icon.png" || pathname === "/daa/apple-touch-icon.png") {
     return NextResponse.next();
   }
 
