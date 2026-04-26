@@ -12,8 +12,9 @@ export default function PortfolioPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <DaaSurfacePageHeader
-        title="持仓"
-        description="资产配置与观察列表管理"
+        eyebrow="资产首页"
+        title="资产中枢"
+        description="现金、持仓、观察列表与调仓建议在这里汇合。"
       />
       <Suspense fallback={<div className="py-12 text-center text-sm text-muted-foreground">正在加载…</div>}>
         <PortfolioPageClient initialTab={searchParams?.tab} />

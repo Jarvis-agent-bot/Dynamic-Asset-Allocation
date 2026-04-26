@@ -15,7 +15,6 @@ type Body = {
   status?: unknown;
   notes?: unknown;
   cancel?: unknown;
-  selectedSymbols?: unknown;
   selectedAssetSideKeys?: unknown;
 };
 
@@ -32,9 +31,6 @@ export async function PATCH(req: Request, { params }: Params) {
 
     const body = await readJsonBody<Body>(req);
     const payload = (body || {}) as Body;
-    const selectedSymbols = Array.isArray(payload.selectedSymbols)
-      ? payload.selectedSymbols.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
-      : undefined;
     const selectedAssetSideKeys = Array.isArray(payload.selectedAssetSideKeys)
       ? payload.selectedAssetSideKeys.map((item) => String(item || "").trim()).filter(Boolean)
       : undefined;
@@ -45,7 +41,6 @@ export async function PATCH(req: Request, { params }: Params) {
         status: payload.status === "reviewing" ? "reviewing" : undefined,
         notes: payload.notes == null ? undefined : String(payload.notes || ""),
         cancel: payload.cancel ? { reason: readCancelReason(payload.cancel) } : undefined,
-        selectedSymbols,
         selectedAssetSideKeys,
       });
     } catch (error) {

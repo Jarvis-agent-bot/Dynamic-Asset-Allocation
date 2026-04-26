@@ -97,8 +97,6 @@ export type ProposalDecisionContext = {
   llmConfidence: number | null;
   /** LLM 调整原因 */
   llmRationale: string | null;
-  /** 兼容历史快照的市场环境字段，等同于最终生效环境 */
-  marketRegime?: DaaMarketRegime | null;
   /** 规则层市场环境 */
   ruleBasedMarketRegime?: DaaMarketRegime | null;
   /** AI 市场环境 */
@@ -138,7 +136,7 @@ export type RebalanceProposal = {
   proposalType?: ProposalType;
   /**
    * 三层决策上下文（drift × signal × LLM）。
-   * 由 agentRebalanceAdapter 注入，旧数据此字段为 null。
+   * 由 agentRebalanceAdapter 注入，用于审计每条建议的生成路径。
    */
   decisionContext?: ProposalDecisionContext | null;
   /** 影响此提案的 thesis ID 列表（由 agentRebalanceAdapter 注入） */
@@ -401,8 +399,7 @@ export type UpdateRebalanceCycleInput = {
   cancel?: {
     reason?: string;
   };
-  selectedSymbols?: string[];
-  /** 精确匹配格式：`${assetKey}::${side}`，优先于 selectedSymbols */
+  /** 精确匹配格式：`${assetKey}::${side}`，BUY/SELL 互不干扰 */
   selectedAssetSideKeys?: string[];
 };
 

@@ -6,6 +6,18 @@ import { toast } from "sonner";
 import type { DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 import type { CalibrationDraft, OrderDraft } from "@/app/daa/dashboard/_hooks/dashboard/dashboardPageTypes";
 import {
+  addWatchlistAsset,
+  buildCalibrationDraft,
+  buildManualExecutionInput,
+  createManualOrderDraft,
+  parseCalibrationDraft,
+  removeFromWatchlist,
+  restoreWatchlistAsset,
+  submitNormalizedTargetWeights,
+  submitTargetWeightUpdate,
+  toggleBasketMembership,
+} from "@/app/daa/dashboard/_hooks/dashboard/assetActionCommands";
+import {
   executeWorkbenchOrder,
   listWorkbenchFeaturedAssets,
   patchWorkbenchAsset,
@@ -51,12 +63,17 @@ export function useAssetActions(input: {
   }, [input.assetRows]);
 
   const handleAddManualOrder = useCallback(async (row: AssetUniverseView, side: "BUY" | "SELL") => {
-    if (!input.bootstrap || input.busy) return;
-    if (side === "SELL" && row.holdingQty <= 0) {
-      toast.error(`${row.symbol} 无可卖持仓`);
+    const result = createManualOrderDraft({
+      bootstrapReady: Boolean(input.bootstrap),
+      busy: input.busy,
+      row,
+      side,
+    });
+    if (!result.ok) {
+      if (result.message) toast.error(result.message);
       return;
     }
-    setOrderDraft({ row, side });
+    setOrderDraft(result.draft);
   }, [input.bootstrap, input.busy]);
 
   const handlePreviewOrder = useCallback(async (payload: {
@@ -71,23 +88,7 @@ export function useAssetActions(input: {
     setOrderSubmitting(true);
     inputRef.current.setBusy(true);
     try {
-      const result = await executeWorkbenchOrder({
-        source: "manual",
-        origin: "manual",
-        side: preview.side,
-        assetKey: preview.assetKey,
-        symbol: preview.symbol,
-        market: preview.market,
-        currency: preview.currency,
-        qty: preview.qty,
-        price: preview.price,
-        notionalInBase: preview.notionalInBase,
-        fee: preview.fee,
-        pricingMode: "market",
-        priceSource: preview.priceSource,
-        priceSnapshotAt: preview.priceSnapshotAt ?? undefined,
-        reasonText: "来自市价预览",
-      });
+      const result = await executeWorkbenchOrder(buildManualExecutionInput(preview));
       if (result.result.status === "executed" || result.result.status === "submitted" || result.result.status === "partially_filled") {
         const successText = result.result.status === "executed"
           ? `${preview.symbol} 执行成功`
@@ -130,19 +131,8 @@ export function useAssetActions(input: {
   }), []);
 
   const handleAddWatchlistAsset = useCallback(async (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => {
-    await upsertWorkbenchAsset({
-      symbol: item.symbol,
-      market: item.market,
-      currency: item.currency,
-      assetClass: item.assetClass,
-      region: item.region,
-      exchange: item.exchange,
-      instrumentType: item.instrumentType,
-      marketGroup: item.marketGroup,
-      watchEnabled: true,
-      lastPrice: item.price,
-    });
-    toast.success(`${item.name || item.symbol} 已加入观察列表`, {
+    const result = await addWatchlistAsset({ item, upsertWorkbenchAsset });
+    toast.success(result.message, {
       action: {
         label: "查看观察列表",
         onClick: () => inputRef.current.setActiveTab("watchlist"),
@@ -155,14 +145,14 @@ export function useAssetActions(input: {
     if (assetActioningKey) return;
     setAssetActioningKey(row.assetKey);
     try {
-      await patchWorkbenchAsset(row.assetKey, { watchEnabled: false, targetWeightHint: 0 });
-      toast.success(`${row.symbol} 已移出观察列表`, {
+      const result = await removeFromWatchlist({ row, patchWorkbenchAsset });
+      toast.success(result.message, {
         action: {
           label: "撤销",
           onClick: async () => {
             try {
-              await patchWorkbenchAsset(row.assetKey, { watchEnabled: true });
-              toast.success(`${row.symbol} 已恢复到观察列表`);
+              const restored = await restoreWatchlistAsset({ row, patchWorkbenchAsset });
+              toast.success(restored.message);
               await inputRef.current.loadBootstrap(true);
             } catch {
               toast.error("撤销失败，请手动重新添加");
@@ -182,11 +172,8 @@ export function useAssetActions(input: {
     if (assetActioningKey) return;
     setAssetActioningKey(row.assetKey);
     try {
-      await patchWorkbenchAsset(row.assetKey, {
-        watchEnabled: true,
-        targetWeightHint: nextInBasket ? (row.targetWeightHint > 0 ? row.targetWeightHint : 0.05) : 0,
-      });
-      toast.success(nextInBasket ? `${row.symbol} 已加入再平衡列表` : `${row.symbol} 已移出再平衡列表`);
+      const result = await toggleBasketMembership({ row, nextInBasket, patchWorkbenchAsset });
+      toast.success(result.message);
       await input.loadBootstrap(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "更新再平衡列表失败");
@@ -196,44 +183,20 @@ export function useAssetActions(input: {
   }, [assetActioningKey]);
 
   const handleOpenCalibration = useCallback((row: AssetUniverseView) => {
-    const defaultPrice = row.holdingPrice > 0 ? row.holdingPrice : (row.lastPrice > 0 ? row.lastPrice : 0);
-    const defaultCostBasis = row.costBasis ?? (row.holdingQty > 0 && defaultPrice > 0 ? row.holdingQty * defaultPrice : 0);
-    setCalibrationDraft({
-      row,
-      qty: row.holdingQty > 0 ? row.holdingQty.toFixed(6) : "0",
-      holdingPrice: defaultPrice > 0 ? defaultPrice.toFixed(4) : "0",
-      costBasis: defaultCostBasis > 0 ? defaultCostBasis.toFixed(2) : "",
-    });
+    setCalibrationDraft(buildCalibrationDraft(row));
   }, []);
 
   const handleSubmitCalibration = useCallback(async () => {
     if (!calibrationDraft || calibrating || inputRef.current.busy) return;
-    const qty = Number(calibrationDraft.qty);
-    const holdingPrice = Number(calibrationDraft.holdingPrice);
-    const costBasisText = calibrationDraft.costBasis.trim();
-    const costBasis = costBasisText ? Number(costBasisText) : (qty > 0 && holdingPrice > 0 ? qty * holdingPrice : null);
-
-    if (!Number.isFinite(qty) || qty < 0) {
-      toast.error("持仓数量必须是大于等于 0 的数字");
-      return;
-    }
-    if (!Number.isFinite(holdingPrice) || holdingPrice < 0) {
-      toast.error("持仓均价必须是大于等于 0 的数字");
-      return;
-    }
-    if (costBasis != null && (!Number.isFinite(costBasis) || costBasis < 0)) {
-      toast.error("总成本必须是大于等于 0 的数字");
+    const parsed = parseCalibrationDraft(calibrationDraft);
+    if (!parsed.ok) {
+      toast.error(parsed.message);
       return;
     }
 
     setCalibrating(true);
     try {
-      await patchWorkbenchAsset(calibrationDraft.row.assetKey, {
-        holdingQty: qty,
-        holdingPrice,
-        costBasis,
-        lastPrice: holdingPrice > 0 ? holdingPrice : undefined,
-      });
+      await patchWorkbenchAsset(calibrationDraft.row.assetKey, parsed.patch);
       toast.success(`${calibrationDraft.row.symbol} 持仓已校准`);
       setCalibrationDraft(null);
       await inputRef.current.loadBootstrap(true);
@@ -245,17 +208,14 @@ export function useAssetActions(input: {
   }, [calibrating, calibrationDraft]);
 
   const handleUpdateTargetWeight = useCallback(async (row: AssetUniverseView, targetWeightPct: number) => {
-    if (!Number.isFinite(targetWeightPct) || targetWeightPct < 0) {
-      toast.error("目标权重必须是大于等于 0 的数字");
-      return;
-    }
     setTargetUpdating(true);
     try {
-      await patchWorkbenchAsset(row.assetKey, {
-        targetWeightHint: targetWeightPct / 100,
-        watchEnabled: true,
-      });
-      toast.success(`${row.symbol} 目标权重已更新为 ${targetWeightPct.toFixed(2)}%`);
+      const result = await submitTargetWeightUpdate({ row, targetWeightPct, patchWorkbenchAsset });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(result.message);
       await inputRef.current.loadBootstrap(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "目标权重更新失败");
@@ -265,23 +225,17 @@ export function useAssetActions(input: {
   }, []);
 
   const handleNormalizeTargetWeights = useCallback(async () => {
-    const watchRows = inputRef.current.assetRows.filter((row) => row.watchEnabled);
-    if (!watchRows.length) {
-      toast.error("观察列表为空，无法归一化目标权重");
-      return;
-    }
     setTargetUpdating(true);
     try {
-      const positive = watchRows.map((row) => Math.max(0, Number(row.targetWeightHint || 0)));
-      const sum = positive.reduce((acc, value) => acc + value, 0);
-      const normalized = sum > 0
-        ? positive.map((value) => value / sum)
-        : watchRows.map(() => 1 / watchRows.length);
-      await Promise.all(watchRows.map((row, index) => patchWorkbenchAsset(row.assetKey, {
-        watchEnabled: true,
-        targetWeightHint: normalized[index],
-      })));
-      toast.success(`已归一化 ${watchRows.length} 个观察资产`);
+      const result = await submitNormalizedTargetWeights({
+        rows: inputRef.current.assetRows,
+        patchWorkbenchAsset,
+      });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(result.message);
       await inputRef.current.loadBootstrap(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "归一化失败");

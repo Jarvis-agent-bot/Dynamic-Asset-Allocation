@@ -8,7 +8,7 @@ import { runDaaStoreRuntimeMigrations } from "@/src/daa/store/runtimeMigrations"
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
-  archiveTableToLegacy,
+  archiveTable,
   ensureTableColumn,
   isMissingRelationError,
   type SchemaQueryFn,
@@ -185,10 +185,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
       await query("BEGIN");
       try {
         const archivedLedgerV1 = ([
-          await archiveTableToLegacy(query as any, "daa_account_state"),
-          await archiveTableToLegacy(query as any, "daa_cash_ledger"),
-          await archiveTableToLegacy(query as any, "daa_equity_snapshots"),
-          await archiveTableToLegacy(query as any, "daa_positions"),
+          await archiveTable(query as any, "daa_account_state"),
+          await archiveTable(query as any, "daa_cash_ledger"),
+          await archiveTable(query as any, "daa_equity_snapshots"),
+          await archiveTable(query as any, "daa_positions"),
         ]).some(Boolean);
 
         await query(`
@@ -833,6 +833,11 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
           confidence_pct NUMERIC NOT NULL DEFAULT 0,
           evidence_count INTEGER NOT NULL DEFAULT 0,
           reasons_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+          llm_summary TEXT,
+          llm_drivers_json JSONB,
+          llm_major_event_json JSONB,
+          llm_action_hint TEXT,
+          item_hash_set TEXT,
           generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           PRIMARY KEY (provider, symbol)
@@ -943,4 +948,3 @@ export async function closeDaaStorePool(): Promise<void> {
   const pool = daaPgPool();
   await pool.end();
 }
-

@@ -15,33 +15,9 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     resetTestDb();
   });
 
-  it("旧 cash ledger 会归档为 archived_v1 并切换到 V2 账本", async () => {
+  it("cash ledger 会归档为 archived_v1 并切换到 V2 账本", async () => {
     await withDaaPgClient(async ({ query }) => {
       await query(`
-        CREATE TABLE daa_asset_universe (
-          asset_key TEXT PRIMARY KEY,
-          symbol TEXT NOT NULL,
-          market TEXT NOT NULL DEFAULT 'US',
-          currency TEXT NOT NULL DEFAULT 'USD',
-          asset_class TEXT NOT NULL DEFAULT 'EQUITY',
-          region TEXT NOT NULL DEFAULT 'GLOBAL',
-          exchange TEXT NOT NULL DEFAULT '',
-          instrument_type TEXT NOT NULL DEFAULT 'STOCK',
-          market_group TEXT NOT NULL DEFAULT 'GLOBAL_EQUITY',
-          holding_qty NUMERIC NOT NULL DEFAULT 0,
-          holding_price NUMERIC NOT NULL DEFAULT 0,
-          cost_basis NUMERIC,
-          holding_tags TEXT[] NOT NULL DEFAULT '{}',
-          watch_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-          target_weight_hint NUMERIC NOT NULL DEFAULT 0,
-          watch_tags TEXT[] NOT NULL DEFAULT '{}',
-          notes TEXT,
-          last_price NUMERIC NOT NULL DEFAULT 0,
-          price_updated_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
         CREATE TABLE daa_trade_tickets (
           ticket_id TEXT PRIMARY KEY,
           basket_id TEXT NOT NULL,

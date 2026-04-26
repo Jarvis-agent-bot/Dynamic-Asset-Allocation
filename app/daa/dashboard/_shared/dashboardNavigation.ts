@@ -15,9 +15,6 @@ export function resolveTabFromLocation(input: {
       input.searchTab || (input.fallbackTab === "watchlist" ? "watchlist" : "positions"),
     );
   }
-  if (section === "cockpit") {
-    return normalizeDashboardTab(input.searchTab || "positions");
-  }
   if (input.searchTab) {
     return normalizeDashboardTab(input.searchTab);
   }

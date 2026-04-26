@@ -21,7 +21,7 @@ import {
 
 export async function runWorkbenchRiskCheck(input?: {
   cycleId?: string;
-  selectedSymbols?: string[];
+  selectedAssetSideKeys?: string[];
 }): Promise<PreTradeRiskCheck> {
   const [bootstrap, systemRow, cycle] = await Promise.all([
     buildWorkbenchBootstrap({ syncPrices: false }),
@@ -29,11 +29,11 @@ export async function runWorkbenchRiskCheck(input?: {
     input?.cycleId ? getDaaRebalanceCycle(input.cycleId) : Promise.resolve(null),
   ]);
 
-  const selectedSet = new Set((input?.selectedSymbols || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean));
+  const selectedSet = new Set((input?.selectedAssetSideKeys || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean));
   const proposals = cycle
     ? cycle.proposals.filter((row) => {
       if (!selectedSet.size) return true;
-      return selectedSet.has(row.symbol.toUpperCase());
+      return selectedSet.has(`${row.assetKey.toUpperCase()}::${row.side.toUpperCase()}`);
     })
     : buildCycleDraftFromBootstrap({ bootstrap }).proposals;
 
@@ -46,7 +46,7 @@ export async function runWorkbenchRiskCheck(input?: {
 
 export async function validateExecutionRisk(input: {
   cycleId?: string;
-  selectedSymbols?: string[];
+  selectedAssetSideKeys?: string[];
   manualProposal?: {
     assetKey: string;
     symbol: string;
@@ -61,7 +61,7 @@ export async function validateExecutionRisk(input: {
   if (input.cycleId) {
     return runWorkbenchRiskCheck({
       cycleId: input.cycleId,
-      selectedSymbols: input.selectedSymbols,
+      selectedAssetSideKeys: input.selectedAssetSideKeys,
     });
   }
   const manualProposal = input.manualProposal;
@@ -146,7 +146,7 @@ export async function buildWorkbenchExecuteSummary(input: {
 
   const riskCheck = await validateExecutionRisk({
     cycleId: cycle.cycleId,
-    selectedSymbols: rows.map((row) => row.symbol),
+    selectedAssetSideKeys: rows.map((row) => `${row.assetKey}::${row.side}`),
   });
   const riskWarnings = riskCheck.items
     .filter((item) => item.status !== "pass")

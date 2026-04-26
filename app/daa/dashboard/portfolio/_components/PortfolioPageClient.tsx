@@ -20,6 +20,7 @@ import { PortfolioStatus } from "@/app/daa/dashboard/_shared/PortfolioStatus";
 import { ActiveTabPanel } from "@/app/daa/dashboard/_shared/ActiveTabPanel";
 import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
 import { resolveTabFromLocation } from "@/app/daa/dashboard/_shared/dashboardNavigation";
+import { PortfolioHomeOverview } from "./PortfolioHomeOverview";
 
 export default function PortfolioPageClient(props: { initialTab?: string }) {
   const wbModel = useDashboardPageModel({ initialTab: props.initialTab });
@@ -47,6 +48,10 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function navigateToRebalance() {
+    router.push("/daa/dashboard/rebalance");
   }
 
   const baseCurrency = wbModel.bootstrap?.baseCurrency || "USD";
@@ -80,6 +85,27 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
 
   return (
     <div className="space-y-4">
+      {wbModel.bootstrap ? (
+        <PortfolioHomeOverview
+          baseCurrency={baseCurrency}
+          totalEquity={wbModel.totalEquity}
+          holdingsValue={wbModel.holdingsValue}
+          availableCashValue={wbModel.availableCashValue}
+          frozenCashValue={wbModel.frozenCashValue}
+          holdingCount={wbModel.summary.holdingAssets}
+          watchlistCount={wbModel.summary.watchlistAssets}
+          rows={wbModel.tableProps.rows}
+          latestCycle={wbModel.bootstrap.latestCycle}
+          refreshing={wbModel.refreshing}
+          priceStreamConnected={wbModel.priceStreamConnected}
+          onRefresh={() => void wbModel.loadBootstrap(true)}
+          onDeposit={() => setCashDialogSide("deposit")}
+          onWithdraw={() => setCashDialogSide("withdraw")}
+          onNavigateTab={navigateToTab}
+          onOpenRebalance={navigateToRebalance}
+        />
+      ) : null}
+
       {/* 组合快照（摘要+图表，现金摘要在摘要行内） */}
       {wbModel.bootstrap ? (
         <SectionErrorBoundary sectionName="组合状态">
@@ -97,8 +123,6 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
             refreshing={wbModel.refreshing}
             priceStreamConnected={wbModel.priceStreamConnected}
             onRefresh={() => void wbModel.loadBootstrap(true)}
-            onDeposit={() => setCashDialogSide("deposit")}
-            onWithdraw={() => setCashDialogSide("withdraw")}
           />
         </SectionErrorBoundary>
       ) : null}

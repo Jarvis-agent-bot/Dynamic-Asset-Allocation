@@ -98,11 +98,10 @@ function isRetryableError(e: unknown): boolean {
 export async function callDeepSeekJson<T>(
   prompt: string,
   scope: string,
-  opts?: { tier?: LlmTaskTier; maxRetries?: number } | number,
+  opts?: { tier?: LlmTaskTier; maxRetries?: number },
 ): Promise<{ data: T | null; tokensUsed: number }> {
-  // 兼容旧调用签名 callDeepSeekJson(prompt, scope, 2)
-  const maxRetries = typeof opts === "number" ? opts : (opts?.maxRetries ?? 2);
-  const tier: LlmTaskTier = typeof opts === "object" && opts?.tier ? opts.tier : "strong";
+  const maxRetries = opts?.maxRetries ?? 2;
+  const tier: LlmTaskTier = opts?.tier ?? "strong";
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {

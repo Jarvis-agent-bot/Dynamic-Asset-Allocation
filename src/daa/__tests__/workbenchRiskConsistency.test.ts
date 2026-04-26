@@ -150,7 +150,7 @@ describe.skipIf(!isTestDbAvailable())("workbench-risk-consistency-v1", () => {
     });
 
     const updated = await updateWorkbenchRebalanceCycle(cycle.cycleId, {
-      selectedSymbols: ["AAPL"],
+      selectedAssetSideKeys: ["US::AAPL::BUY"],
     });
 
     const maxOrderItem = updated.riskCheck.items.find((item) => item.rule === "max_order_pct");
@@ -258,7 +258,7 @@ describe.skipIf(!isTestDbAvailable())("workbench-risk-consistency-v1", () => {
     });
 
     const updated = await updateWorkbenchRebalanceCycle(cycle.cycleId, {
-      selectedSymbols: ["AAPL", "BND"],
+      selectedAssetSideKeys: ["US::AAPL::BUY", "US::BND::BUY"],
     });
 
     expect(updated.riskCheck.overallStatus).not.toBe("block");

@@ -171,7 +171,7 @@ export async function summarizeWorkbenchRebalanceExecution(
 
 export async function runWorkbenchRiskCheck(input: {
   cycleId?: string;
-  selectedSymbols?: string[];
+  selectedAssetSideKeys?: string[];
 } = {}): Promise<PreTradeRiskCheck> {
   return requestData<PreTradeRiskCheck>("/api/daa/workbench/risk-check", {
     method: "POST",

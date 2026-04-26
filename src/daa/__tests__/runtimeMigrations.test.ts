@@ -38,7 +38,7 @@ describe("runtime-migrations-v1", () => {
       if (sql.includes("SELECT base_currency, cash, frozen_cash, investable_cash FROM daa_account_state_v2")) {
         return { rows: [{ base_currency: "USD", cash: 1200, frozen_cash: 0, investable_cash: 1200 }], rowCount: 1 };
       }
-      if (sql.includes("SELECT COUNT(*) AS count FROM daa_asset_universe")) {
+      if (sql.includes("SELECT COUNT(*) AS count FROM daa_portfolio_positions")) {
         return { rows: [{ count: 0 }], rowCount: 1 };
       }
       if (sql.includes("UPDATE daa_account_state_v2")) {

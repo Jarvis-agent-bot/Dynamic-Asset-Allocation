@@ -6,7 +6,7 @@
  * 逻辑：
  * 1. 从 daa_research_threads 读取每个漂移资产的 thesis + conviction
  * 2. thesis conviction → 调整提案量：high=100%, medium=60%, low=20%, uncertain=skip
- * 3. 填充 decisionContext，让前端保持兼容
+ * 3. 填充 decisionContext，供前端展示和审计追踪
  */
 
 import type { RebalanceProposal, ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -114,7 +114,6 @@ export async function enhanceProposalsWithAgent(input: {
         continue;
       }
 
-      // 填充 decisionContext（保持前端兼容）
       const decisionContext: ProposalDecisionContext = {
         driftReason: proposal.reason,
         signalAction: thesis ? (conviction === "high" ? "open_or_add" : conviction === "medium" ? "watch" : "reduce_or_avoid") : null,
@@ -128,7 +127,7 @@ export async function enhanceProposalsWithAgent(input: {
           : null,
         finalQtyMultiplier: multiplier,
         conflictFlags: [],
-        marketRegime: marketRegime ?? null,
+        effectiveMarketRegime: marketRegime ?? null,
       };
 
       enhancedProposals.push({

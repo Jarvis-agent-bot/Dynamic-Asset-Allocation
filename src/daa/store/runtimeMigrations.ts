@@ -118,7 +118,7 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260309_asset_domain_foundation",
     async apply(query) {
-      // 创建规范化表（CREATE TABLE IF NOT EXISTS 保证幂等）
+      // 创建规范化资产域表（CREATE TABLE IF NOT EXISTS 保证幂等）
       await query(`
         CREATE TABLE IF NOT EXISTS daa_asset_master (
           asset_key TEXT PRIMARY KEY,
@@ -164,29 +164,6 @@ const MIGRATIONS_: Migration[] = [
           price_updated_at TIMESTAMPTZ,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
-      `);
-      // 历史数据种子（从旧 daa_asset_universe 同步，仅在该表存在时执行）
-      if (!(await tableExists(query, "daa_asset_universe"))) return;
-
-      await query(`
-        INSERT INTO daa_asset_master (asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at)
-        SELECT asset_key, symbol, market, currency, asset_class, region, exchange, instrument_type, market_group, created_at, updated_at
-        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
-      `);
-      await query(`
-        INSERT INTO daa_watchlist_entries (asset_key, watch_enabled, watch_tags, notes, created_at, updated_at)
-        SELECT asset_key, watch_enabled, watch_tags, notes, created_at, updated_at
-        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
-      `);
-      await query(`
-        INSERT INTO daa_target_allocations (asset_key, target_weight_hint, updated_at)
-        SELECT asset_key, target_weight_hint, updated_at
-        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
-      `);
-      await query(`
-        INSERT INTO daa_market_price_snapshots (asset_key, last_price, price_updated_at, updated_at)
-        SELECT asset_key, last_price, price_updated_at, updated_at
-        FROM daa_asset_universe ON CONFLICT (asset_key) DO NOTHING
       `);
     },
   },
@@ -286,7 +263,7 @@ const MIGRATIONS_: Migration[] = [
           [ledgerStartTs],
         ),
         query(
-          "SELECT COUNT(*) AS count FROM daa_asset_universe WHERE holding_qty > 0 OR holding_price > 0 OR cost_basis IS NOT NULL",
+          "SELECT COUNT(*) AS count FROM daa_portfolio_positions WHERE holding_qty > 0 OR holding_price > 0 OR cost_basis IS NOT NULL",
         ),
       ]);
 
@@ -486,8 +463,8 @@ const MIGRATIONS_: Migration[] = [
   {
     id: "20260331_watchlist_price_alerts",
     async apply(query) {
-      await query("ALTER TABLE daa_asset_universe ADD COLUMN IF NOT EXISTS price_alert_above NUMERIC");
-      await query("ALTER TABLE daa_asset_universe ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
+      await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_above NUMERIC");
+      await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
     },
   },
   {
@@ -495,7 +472,6 @@ const MIGRATIONS_: Migration[] = [
     async apply(query) {
       // 新增基准货币的成本列
       await query("ALTER TABLE daa_positions_v2 ADD COLUMN IF NOT EXISTS cost_basis_in_base NUMERIC");
-      await query("ALTER TABLE daa_asset_universe ADD COLUMN IF NOT EXISTS cost_basis_in_base NUMERIC");
 
       // 回填：用当前 FX 汇率 × costBasis（最佳近似值）
       // USD 标的直接 1:1，非 USD 标的查 FX 表
@@ -515,22 +491,13 @@ const MIGRATIONS_: Migration[] = [
         WHERE p.cost_basis IS NOT NULL AND p.cost_basis > 0
           AND (p.cost_basis_in_base IS NULL OR p.cost_basis_in_base = 0)
       `);
-
-      // 同步到 asset_universe
-      await query(`
-        UPDATE daa_asset_universe u
-        SET cost_basis_in_base = p.cost_basis_in_base
-        FROM daa_positions_v2 p
-        WHERE p.asset_key = u.asset_key
-          AND p.cost_basis_in_base IS NOT NULL
-          AND (u.cost_basis_in_base IS NULL OR u.cost_basis_in_base = 0)
-      `);
     },
   },
   {
     id: "20260408_news_llm_analysis",
     async apply(query) {
       // 新闻信号表新增 LLM 分析字段
+      if (!(await tableExists(query, "daa_news_signal_snapshot_v1"))) return;
       await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_summary TEXT");
       await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_drivers_json JSONB");
       await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_major_event_json JSONB");
@@ -624,7 +591,7 @@ const MIGRATIONS_: Migration[] = [
           content TEXT NOT NULL,
           source_run_ids TEXT[] DEFAULT '{}',
           relevance_tags TEXT[] DEFAULT '{}',
-          embedding vector(384),
+          embedding vector(1024),
           strength NUMERIC DEFAULT 1.0,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           last_accessed TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -651,90 +618,25 @@ const MIGRATIONS_: Migration[] = [
   },
   {
     id: "20260409_migrate_learning_to_memory",
-    async apply(query) {
-      // 将旧 agent_learning_events 中的 outcome_verdict 数据迁移到 agent_memory
-      // 仅在旧表存在且新表为空时执行
-      const oldTableExists = await query(`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.tables
-          WHERE table_name = 'daa_agent_learning_events'
-        ) AS exists
-      `);
-      if (!oldTableExists.rows[0]?.exists) return;
-
-      const newCount = await query(`SELECT COUNT(*) AS cnt FROM daa_agent_memory`);
-      if (Number(newCount.rows[0]?.cnt ?? 0) > 0) return; // 已有数据，跳过
-
-      // 迁移学习事件为 "lesson" 类型的记忆
-      await query(`
-        INSERT INTO daa_agent_memory (id, memory_type, content, source_run_ids, relevance_tags, strength, created_at, last_accessed)
-        SELECT
-          gen_random_uuid()::text,
-          'lesson',
-          COALESCE(title, '') || ': ' || COALESCE(summary, ''),
-          ARRAY[]::text[],
-          CASE
-            WHEN symbol IS NOT NULL THEN ARRAY[symbol]
-            ELSE ARRAY[]::text[]
-          END,
-          1.0,
-          created_at,
-          created_at
-        FROM daa_agent_learning_events
-        WHERE event_type = 'outcome_verdict'
-        ORDER BY created_at DESC
-        LIMIT 50
-      `);
-    },
+    async apply() {},
   },
-
-  // ── 规范化表迁移：停止双写 daa_asset_universe ──
 
   {
     id: "20260409_normalize_watchlist_price_alerts",
     async apply(query) {
       await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_above NUMERIC");
       await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
-      // 历史回填：仅在旧表存在时从 daa_asset_universe 同步
-      if (!(await tableExists(query, "daa_asset_universe"))) return;
-      await query(`
-        UPDATE daa_watchlist_entries we
-        SET price_alert_above = u.price_alert_above, price_alert_below = u.price_alert_below
-        FROM daa_asset_universe u
-        WHERE u.asset_key = we.asset_key AND (u.price_alert_above IS NOT NULL OR u.price_alert_below IS NOT NULL)
-      `);
     },
   },
   {
     id: "20260410_rename_llm_decision_snapshot_key",
-    async apply(query) {
-      // 重命名 JSONB 中嵌入的 __llmDecisionSnapshot → __agentDecisionSnapshot
-      // rebalance_cycles 表的 market_context_json 字段
-      const hasCycles = await tableExists(query, "daa_rebalance_cycles");
-      if (!hasCycles) return;
-
-      await query(`
-        UPDATE daa_rebalance_cycles
-        SET market_context_json = (
-          market_context_json - '__llmDecisionSnapshot'
-          || jsonb_build_object('__agentDecisionSnapshot', market_context_json->'__llmDecisionSnapshot')
-        )
-        WHERE market_context_json ? '__llmDecisionSnapshot'
-      `);
-    },
+    async apply() {},
   },
   {
     id: "20260410_upgrade_embedding_vector_1024",
     async apply(query) {
-      // 升级 embedding 列从 vector(384) → vector(1024)（BGE-M3 原始维度）
-      // 同时清空旧的哈希伪向量（语义无意义）
       const hasTable = await tableExists(query, "daa_agent_memory");
       if (!hasTable) return;
-
-      // 清空旧的 hash 伪向量（384 维，语义无用）
-      await query(`UPDATE daa_agent_memory SET embedding = NULL WHERE embedding IS NOT NULL`);
-
-      // ALTER COLUMN TYPE 修改 vector 维度
       await query(`ALTER TABLE daa_agent_memory ALTER COLUMN embedding TYPE vector(1024)`);
     },
   },
@@ -859,6 +761,44 @@ const MIGRATIONS_: Migration[] = [
       await query(
         `CREATE INDEX IF NOT EXISTS idx_thes_entity_entity ON daa_thesis_entity_link (entity_id)`,
       );
+    },
+  },
+  {
+    id: "20260426_v020_schema_baseline",
+    async apply(query) {
+      await query(`CREATE EXTENSION IF NOT EXISTS vector`);
+      await query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+
+      if (await tableExists(query, "daa_watchlist_entries")) {
+        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_above NUMERIC");
+        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS price_alert_below NUMERIC");
+        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS auto_entry_enabled BOOLEAN NOT NULL DEFAULT FALSE");
+        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS entry_target_weight_pct NUMERIC");
+        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS entry_rules_json JSONB");
+        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS entry_cooldown_days INTEGER NOT NULL DEFAULT 14");
+        await query("ALTER TABLE daa_watchlist_entries ADD COLUMN IF NOT EXISTS last_entry_triggered_at TIMESTAMPTZ");
+      }
+
+      if (await tableExists(query, "daa_positions_v2")) {
+        await query("ALTER TABLE daa_positions_v2 ADD COLUMN IF NOT EXISTS cost_basis_in_base NUMERIC");
+      }
+
+      if (await tableExists(query, "daa_news_signal_snapshot_v1")) {
+        await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_summary TEXT");
+        await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_drivers_json JSONB");
+        await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_major_event_json JSONB");
+        await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS llm_action_hint TEXT");
+        await query("ALTER TABLE daa_news_signal_snapshot_v1 ADD COLUMN IF NOT EXISTS item_hash_set TEXT");
+      }
+
+      if (await tableExists(query, "daa_agent_memory")) {
+        await query("UPDATE daa_agent_memory SET embedding = NULL WHERE embedding IS NOT NULL");
+        await query("ALTER TABLE daa_agent_memory ALTER COLUMN embedding TYPE vector(1024)");
+        await query(
+          `CREATE INDEX IF NOT EXISTS idx_agent_memory_content_trgm
+             ON daa_agent_memory USING gin (content gin_trgm_ops)`,
+        );
+      }
     },
   },
 ];

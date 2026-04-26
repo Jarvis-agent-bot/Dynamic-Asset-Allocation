@@ -490,27 +490,14 @@ export async function updateWorkbenchRebalanceCycle(
   let proposals = current.proposals;
   let nextRiskCheck = current.riskCheck;
   const hasAssetSideKeys = Array.isArray(input.selectedAssetSideKeys);
-  const hasSymbols = Array.isArray(input.selectedSymbols);
-  if (hasAssetSideKeys || hasSymbols) {
-    if (hasAssetSideKeys) {
-      // 精确匹配：format "${assetKey}::${side}"，BUY/SELL 互不干扰
-      const selectedSet = new Set(
-        (input.selectedAssetSideKeys ?? []).map((k) => k.trim().toUpperCase()).filter(Boolean),
-      );
-      proposals = proposals.map((row) => ({
-        ...row,
-        selected: selectedSet.has(`${row.assetKey.toUpperCase()}::${row.side.toUpperCase()}`),
-      }));
-    } else {
-      // 兼容旧路径：按 symbol 匹配
-      const selectedSet = new Set(
-        (input.selectedSymbols ?? []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean),
-      );
-      proposals = proposals.map((row) => ({
-        ...row,
-        selected: selectedSet.has(row.symbol.toUpperCase()),
-      }));
-    }
+  if (hasAssetSideKeys) {
+    const selectedSet = new Set(
+      (input.selectedAssetSideKeys ?? []).map((k) => k.trim().toUpperCase()).filter(Boolean),
+    );
+    proposals = proposals.map((row) => ({
+      ...row,
+      selected: selectedSet.has(`${row.assetKey.toUpperCase()}::${row.side.toUpperCase()}`),
+    }));
 
     const [bootstrap, systemRow] = await Promise.all([
       buildWorkbenchBootstrap({ syncPrices: false }),
@@ -713,7 +700,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
   const [preTradeRiskCheck, systemRow, beforeBootstrap] = await Promise.all([
     validateExecutionRisk({
       cycleId: input.cycleId,
-      selectedSymbols: toExecute.map((row) => row.symbol),
+      selectedAssetSideKeys: toExecute.map((row) => `${row.assetKey}::${row.side}`),
     }),
     getDaaSystemConfig(),
     buildWorkbenchBootstrap({ syncPrices: false }),

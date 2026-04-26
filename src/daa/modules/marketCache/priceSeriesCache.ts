@@ -204,7 +204,7 @@ async function fetchFromYahoo(normalizedSymbol: string, start: string, timeoutMs
 function mergeByDate(dbData: CachedPricePoint[], freshData: CachedPricePoint[]): CachedPricePoint[] {
   const map = new Map<string, number>();
   for (const p of dbData) map.set(p.date, p.close);
-  for (const p of freshData) map.set(p.date, p.close); // fresh 覆盖旧数据
+  for (const p of freshData) map.set(p.date, p.close); // 最新行情覆盖已有缓存
   return [...map.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, close]) => ({ date, close }));

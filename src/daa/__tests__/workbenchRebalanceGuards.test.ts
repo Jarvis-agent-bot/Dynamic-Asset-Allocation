@@ -98,7 +98,7 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
       new Request(`http://localhost/api/daa/workbench/rebalance/cycles/${cycle.cycleId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ selectedSymbols: [] }),
+        body: JSON.stringify({ selectedAssetSideKeys: [] }),
       }),
       { params: { id: cycle.cycleId } },
     );

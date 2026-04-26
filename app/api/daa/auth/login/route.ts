@@ -15,12 +15,10 @@ export async function POST(req: Request) {
   }
 
   const email = typeof body?.email === "string" ? body.email.trim() : "";
-  // 兼容旧请求里仍然传来的 username 字段
-  const emailOrUsername = email || (typeof body?.username === "string" ? body.username.trim() : "");
   const password = typeof body?.password === "string" ? body.password : "";
   const returnTo = normalizeDaaReturnTo(body?.returnTo);
 
-  if (!emailOrUsername || !password) {
+  if (!email || !password) {
     return fail("UNAUTHORIZED", "invalid_credentials", { status: 401 });
   }
 
@@ -28,7 +26,7 @@ export async function POST(req: Request) {
     const supabase = createSupabaseServerClient();
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailOrUsername,
+      email,
       password,
     });
 

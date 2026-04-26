@@ -109,19 +109,19 @@ function quoteIdent(name: string): string {
   return `"${sanitized}"`;
 }
 
-function buildLegacyTableName(tableName: string): string {
+function buildArchivedTableName(tableName: string): string {
   return `${normalizeText(tableName).toLowerCase()}_archived_v1`;
 }
 
-export async function archiveTableToLegacy(query: SchemaQueryFn, tableName: string): Promise<boolean> {
+export async function archiveTable(query: SchemaQueryFn, tableName: string): Promise<boolean> {
   const normalized = normalizeText(tableName).toLowerCase();
   if (!normalized) return false;
   if (!(await hasTable(query, normalized))) return false;
-  const legacyTableName = buildLegacyTableName(normalized);
-  if (await hasTable(query, legacyTableName)) {
-    throw new Error(`legacy table already exists: ${legacyTableName}`);
+  const archivedTableName = buildArchivedTableName(normalized);
+  if (await hasTable(query, archivedTableName)) {
+    throw new Error(`archived table already exists: ${archivedTableName}`);
   }
-  await query(`ALTER TABLE ${quoteIdent(normalized)} RENAME TO ${quoteIdent(legacyTableName)}`);
+  await query(`ALTER TABLE ${quoteIdent(normalized)} RENAME TO ${quoteIdent(archivedTableName)}`);
   return true;
 }
 

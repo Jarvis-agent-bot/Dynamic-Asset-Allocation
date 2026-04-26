@@ -129,9 +129,6 @@ function normalizeProposalDecisionContext(value: unknown): ProposalDecisionConte
       : null,
     llmConfidence: value.llmConfidence == null ? null : clampNumber(toFiniteNumber(value.llmConfidence, 0), 0, 100),
     llmRationale: value.llmRationale == null ? null : normalizeText(value.llmRationale) || null,
-    marketRegime: normalizeMarketRegimeStore(value.marketRegime || value.effectiveMarketRegime) === "neutral"
-      ? null
-      : (normalizeMarketRegimeStore(value.marketRegime || value.effectiveMarketRegime) as DaaMarketRegime),
     ruleBasedMarketRegime: normalizeMarketRegimeStore(value.ruleBasedMarketRegime) === "neutral"
       ? null
       : (normalizeMarketRegimeStore(value.ruleBasedMarketRegime) as DaaMarketRegime),
@@ -538,4 +535,3 @@ export async function listDaaRebalanceDecisions(opts?: {
     }));
   });
 }
-

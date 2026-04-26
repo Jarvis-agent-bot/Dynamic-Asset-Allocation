@@ -1,7 +1,7 @@
 /**
  * 规范化表 CRUD — daa_asset_master / daa_watchlist_entries / daa_target_allocations / daa_market_price_snapshots
  *
- * 替代旧的 daa_asset_universe 大宽表写入。
+ * 资产、观察、目标权重、价格快照分别落到独立表，避免宽表职责混杂。
  */
 
 import { withDaaPgClient, toFinite, type DaaTxQueryFn } from "./storeShared";

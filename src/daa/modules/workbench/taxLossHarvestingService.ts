@@ -2,9 +2,6 @@ import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { WorkbenchBootstrap, RebalanceProposal, TlhCandidate, TlhScanResult } from "./workbenchTypes";
 
-// Re-export for backward compatibility
-export type { TlhCandidate, TlhScanResult };
-
 type TlhConfig = {
   enabled: boolean;
   minLossPct: number;          // minimum unrealized loss % to consider (default 5%)
@@ -157,7 +154,7 @@ export async function scanTaxLossHarvestingCandidates(input: {
       llmAdjustment: null,
       llmConfidence: null,
       llmRationale: null,
-      marketRegime: null,
+      effectiveMarketRegime: null,
       marketScope: null,
       marketScopeLabel: null,
       marketIndicatorFlags: [],

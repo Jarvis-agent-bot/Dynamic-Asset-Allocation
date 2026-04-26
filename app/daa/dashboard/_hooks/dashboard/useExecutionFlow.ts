@@ -35,10 +35,10 @@ export function useExecutionFlow(input: {
     if (!input.currentCycle || input.busy) return;
     input.setBusy(true);
     try {
-      const selectedSymbols = input.currentCycle.proposals
+      const selectedAssetSideKeys = input.currentCycle.proposals
         .filter((row) => mode === "all" || row.selected)
-        .map((row) => row.symbol);
-      const latestRisk = await runWorkbenchRiskCheck({ cycleId: input.currentCycle.cycleId, selectedSymbols });
+        .map((row) => `${row.assetKey}::${row.side}`);
+      const latestRisk = await runWorkbenchRiskCheck({ cycleId: input.currentCycle.cycleId, selectedAssetSideKeys });
       input.setRiskCheck(latestRisk);
       if (latestRisk.overallStatus === "block") {
         setExecutionReceipt({
