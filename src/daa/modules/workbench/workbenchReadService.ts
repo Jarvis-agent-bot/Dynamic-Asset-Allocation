@@ -81,6 +81,23 @@ type WorkbenchBootstrapBundle = {
   cycles: RebalanceCycle[];
 };
 
+function buildScopedMarketCacheStats(input: {
+  globalStats: Awaited<ReturnType<typeof getDaaMarketCacheHealthStats>>;
+  assetUniverse: ReturnType<typeof buildAssetUniverseViewRows>;
+}): Awaited<ReturnType<typeof getDaaMarketCacheHealthStats>> {
+  const freshCount = input.assetUniverse.filter((row) => row.priceStatus === "fresh").length;
+  const staleCount = input.assetUniverse.filter((row) => row.priceStatus === "stale").length;
+  const missingCount = input.assetUniverse.filter((row) => row.priceStatus === "missing" || row.priceStatus === "unsupported").length;
+
+  return {
+    ...input.globalStats,
+    totalSnapshots: input.assetUniverse.length,
+    freshCount,
+    staleCount,
+    missingCount,
+  };
+}
+
 function isWithinCurrentLedger(ts: string | null | undefined, ledgerStartTs: string | null): boolean {
   if (!ledgerStartTs) return true;
   if (!ts) return false;
@@ -338,9 +355,15 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     .slice(0, 200);
 
   const warnings: string[] = [...runtimePortfolio.warnings, ...dataQualityWarnings];
+  const scopedMarketCacheStats = marketCacheReadFailed
+    ? marketCacheStats
+    : buildScopedMarketCacheStats({
+      globalStats: marketCacheStats,
+      assetUniverse,
+    });
   const marketDataHealth = buildWorkbenchMarketDataHealth({
     cacheReadFailed: marketCacheReadFailed,
-    stats: marketCacheStats,
+    stats: scopedMarketCacheStats,
   });
   if (marketCacheReadFailed) {
     warnings.push("市场缓存读取失败，工作台已回退到库内快照，当前价格可能偏旧。");

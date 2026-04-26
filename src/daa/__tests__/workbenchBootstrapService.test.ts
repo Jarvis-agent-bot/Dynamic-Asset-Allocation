@@ -170,6 +170,43 @@ describe("workbench-bootstrap-service-v1", () => {
     expect(result.warnings).not.toContain("存在 1 个资产行情抓取时间超过 6 小时。");
   });
 
+  it("marketDataHealth 只按当前工作台资产集合判断降级", async () => {
+    vi.mocked(getDaaMarketCacheHealthStats).mockResolvedValue({
+      provider: "yfinance",
+      totalSnapshots: 70,
+      freshCount: 69,
+      staleCount: 0,
+      missingCount: 1,
+      errorCount: 0,
+      unsupportedCount: 0,
+      recentJobSuccessRatePct: 100,
+      recentJobFailureRatePct: 0,
+    });
+    vi.mocked(getMarketPricesWithCache).mockResolvedValue({
+      "US::AAPL": buildMarketPriceResolved({
+        symbol: "AAPL",
+        market: "US",
+        currency: "USD",
+        price: 191.2,
+        priceStatus: "fresh",
+        priceUpdatedAt: "2026-03-06T14:00:00.000Z",
+        priceAgeSec: 12,
+        priceSource: "workbench_bootstrap_context:yfinance:AAPL",
+      }),
+    });
+
+    const result = await buildWorkbenchBootstrap({ syncPrices: false });
+
+    expect(result.marketDataHealth).toMatchObject({
+      status: "ok",
+      freshCount: 1,
+      staleCount: 0,
+      missingCount: 0,
+      recentJobFailureRatePct: 0,
+    });
+    expect(result.marketDataHealth?.message).toBe("市场数据缓存正常。");
+  });
+
 
   it("market cache 读取失败时返回降级 health 与 warning", async () => {
     vi.mocked(getMarketPricesWithCache).mockRejectedValue(new Error("cache unavailable"));
