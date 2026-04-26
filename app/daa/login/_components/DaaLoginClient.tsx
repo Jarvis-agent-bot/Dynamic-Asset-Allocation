@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { appendNoticeParam, normalizeDaaReturnTo } from "@/src/daa/url";
 import { fetchDaaAuthSession, type DaaAuthMePayload } from "@/app/daa/_components/daaAuthSessionClient";
-import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { DAA_BRAND_ICON_PATH, DAA_BRAND_NAME } from "@/src/daa/brand";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import packageJson from "@/package.json";
 
@@ -213,15 +213,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
         {/* Brand */}
         <div className="relative z-10 flex items-center gap-3">
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold text-white"
-            style={{
-              background: "linear-gradient(135deg, #38BDF8, #818CF8)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            D
-          </div>
+          <img
+            src={DAA_BRAND_ICON_PATH}
+            alt=""
+            aria-hidden="true"
+            className="h-8 w-8 rounded-lg object-cover shadow-[0_0_18px_rgba(56,189,248,0.18)]"
+          />
           <span
             className="text-lg font-semibold tracking-tight"
             style={{ fontFamily: "var(--font-display)" }}
@@ -298,12 +295,12 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
 
           {/* Mobile brand */}
           <div className="flex items-center gap-2.5 lg:hidden">
-            <div
-              className="flex h-7 w-7 items-center justify-center rounded text-xs font-bold text-white"
-              style={{ background: "linear-gradient(135deg, #38BDF8, #818CF8)", fontFamily: "var(--font-mono)" }}
-            >
-              D
-            </div>
+            <img
+              src={DAA_BRAND_ICON_PATH}
+              alt=""
+              aria-hidden="true"
+              className="h-7 w-7 rounded-lg object-cover shadow-[0_0_18px_rgba(56,189,248,0.18)]"
+            />
             <span className="text-base font-semibold" style={{ fontFamily: "var(--font-display)" }}>
               {DAA_BRAND_NAME}
             </span>
@@ -452,7 +449,7 @@ export default function DaaLoginClient({ returnTo, error, notice }: Props) {
             className="flex items-center justify-between pt-2 text-[11px]"
             style={{ color: "var(--faint)", borderTop: "1px solid var(--border)" }}
           >
-            <span>DAA 控制台 v{packageJson.version}</span>
+            <span>{DAA_BRAND_NAME} v{packageJson.version}</span>
             <Link href="/support" className="hover:underline">
               需要帮助？
             </Link>

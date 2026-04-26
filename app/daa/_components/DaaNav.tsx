@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { DAA_BRAND_ICON_PATH, DAA_BRAND_NAME } from "@/src/daa/brand";
 
 type NavKey = "today" | "portfolio" | "rebalance" | "trades" | "strategy-lab" | "settings";
 type IconType = ComponentType<{ className?: string }>;
@@ -46,6 +46,17 @@ type SidebarNavProps = {
   collapsed?: boolean;
   onNavigate?: () => void;
 };
+
+export function DaaBrandMark(props: { className?: string }) {
+  return (
+    <img
+      src={DAA_BRAND_ICON_PATH}
+      alt=""
+      aria-hidden="true"
+      className={cn("rounded-lg object-cover shadow-[0_0_18px_rgba(56,189,248,0.18)]", props.className)}
+    />
+  );
+}
 
 function SidebarLink(props: {
   item: NavItem;
@@ -144,7 +155,7 @@ export function DaaMobileNav() {
       >
         <SheetHeader className="px-4 pb-4 pt-5">
           <SheetTitle className="flex items-center gap-2.5 text-left text-[15px] font-semibold tracking-[-0.02em] text-[var(--text)]">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[linear-gradient(135deg,#38BDF8,#818CF8)] text-[11px] font-bold text-white" style={{ fontFamily: "var(--font-mono)" }}>D</span>
+            <DaaBrandMark className="h-7 w-7" />
             {DAA_BRAND_NAME}
           </SheetTitle>
         </SheetHeader>

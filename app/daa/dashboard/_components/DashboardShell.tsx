@@ -6,7 +6,7 @@ import type React from "react";
 import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
-import { DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
+import { DaaBrandMark, DaaMobileNav, DaaSidebarNav } from "../../_components/DaaNav";
 import DaaUserMenuDialog from "../../_components/DaaUserMenuDialog";
 import { cn } from "@/lib/utils";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
@@ -99,11 +99,9 @@ export default function DashboardShell({ children }: Props) {
               <Link
                 href="/daa/dashboard/portfolio"
                 aria-label="DAA dashboard"
-                className="group relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xs font-bold text-white transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                style={{ fontFamily: "var(--font-mono)" }}
+                className="group relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-xl transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span className="absolute inset-0 bg-[linear-gradient(135deg,#38BDF8,#818CF8)]" />
-                <span className="relative">D</span>
+                <DaaBrandMark className="h-8 w-8" />
               </Link>
 
               {!sidebarCollapsed ? (

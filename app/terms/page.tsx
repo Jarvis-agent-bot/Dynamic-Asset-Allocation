@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 export default function TermsPage() {
   return (
@@ -9,13 +10,13 @@ export default function TermsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">Terms</CardTitle>
-          <CardDescription>Basic usage terms for the DAA console.</CardDescription>
+          <CardDescription>Basic usage terms for {DAA_BRAND_NAME}.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 text-sm">
           <div className="grid gap-2">
             <div className="font-medium">Internal tool</div>
             <div className="text-muted-foreground">
-              This console is intended for internal/admin use. Access may be revoked at any time.
+              This portfolio rebalancing system is intended for internal/admin use. Access may be revoked at any time.
             </div>
           </div>
 

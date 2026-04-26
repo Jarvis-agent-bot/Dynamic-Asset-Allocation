@@ -3,13 +3,20 @@ import type { ReactNode } from "react";
 import Script from "next/script";
 
 import { Toaster } from "@/components/ui/sonner";
-import { DAA_BRAND_NAME } from "@/src/daa/brand";
+import { DAA_BRAND_DESCRIPTION, DAA_BRAND_NAME } from "@/src/daa/brand";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: DAA_BRAND_NAME,
-  description: "DAA 资产配置与交易记录系统",
+  description: DAA_BRAND_DESCRIPTION,
+  icons: {
+    icon: [
+      { url: "/brand/dynamic-rebalance-icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/dynamic-rebalance-icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

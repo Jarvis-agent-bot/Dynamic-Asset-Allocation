@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Supabase middleware helper: refreshes the auth session on every request
- * and gates DAA console pages behind authentication.
+ * and gates DAA Rebalance pages behind authentication.
  */
 export async function updateSupabaseSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

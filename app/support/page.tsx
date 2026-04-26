@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 
 const ISSUES_URL = "https://github.com/Jarvis-agent-bot/Dynamic-Asset-Allocation/issues";
 
@@ -11,7 +12,7 @@ export default function SupportPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">Support</CardTitle>
-          <CardDescription>Ways to get help signing in or using the DAA console.</CardDescription>
+          <CardDescription>Ways to get help signing in or using {DAA_BRAND_NAME}.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 text-sm">
           <div className="grid gap-2">

@@ -1,6 +1,7 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
+import { DAA_BRAND_NAME } from "@/src/daa/brand";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
@@ -62,7 +63,7 @@ function buildMonthlyReportText(input: {
   }
 
   lines.push("---");
-  lines.push("注：月报自动生成，详细数据请登录 DAA Console 查看。");
+  lines.push(`注：月报自动生成，详细数据请登录 ${DAA_BRAND_NAME} 查看。`);
   return lines.join("\n");
 }
 
