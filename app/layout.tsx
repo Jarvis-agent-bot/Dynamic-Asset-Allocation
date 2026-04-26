@@ -12,10 +12,10 @@ export const metadata: Metadata = {
   description: DAA_BRAND_DESCRIPTION,
   icons: {
     icon: [
-      { url: "/brand/dynamic-rebalance-icon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/brand/dynamic-rebalance-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/daa/brand/dynamic-rebalance-icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/daa/brand/dynamic-rebalance-icon-192.png", sizes: "192x192", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [{ url: "/daa/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

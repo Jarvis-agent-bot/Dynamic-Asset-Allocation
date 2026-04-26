@@ -1,8 +1,8 @@
-# DAA Console — Dynamic Asset Allocation
+# DAA Rebalance — Dynamic Asset Allocation
 
 ## Project Overview
 
-DAA Console 是面向个人投资者的单组合动态资产配置系统，品牌名 **DeepLedger**。
+DAA Rebalance 是面向个人投资者的单组合动态资产配置与再平衡金融系统。
 
 ### 架构模式：Cognitive Agent OS（AI-Native）
 
