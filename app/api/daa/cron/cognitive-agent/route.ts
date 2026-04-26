@@ -68,7 +68,6 @@ export async function POST(req: Request) {
         thesesUpdated: result.cognitiveRun.thesesUpdated,
         surprisesCount: result.cognitiveRun.surprisesCount,
         totalTokens: result.cognitiveRun.totalTokens,
-        configPatchCount: result.configPatch.paths.length,
         rebalanceCycleId: result.rebalance.cycleId,
         autoExecutedOrders: result.rebalance.autoExecute.ordersCount,
         errorsCount: result.cognitiveRun.errors.length,

@@ -71,7 +71,7 @@ Agent 的每次 cycle 输出的不是"买入 NVDA"的指令，而是：
 | `investigate` | [investigateNode.ts](../src/daa/agent/nodes/investigateNode.ts) | ✅ ReAct 循环 | 并行证据收集（Promise.allSettled）+ 多轮工具调用 + Context Engine 压缩 + 更新 thesis |
 | `reflect` | [reflectNode.ts](../src/daa/agent/nodes/reflectNode.ts) | ✅ | conviction 变化时反思 + 生成记忆（含 thesis 关联 + 实体图自动抽取） |
 | `review` | [reviewNode.ts](../src/daa/agent/nodes/reviewNode.ts) | ✅ | 到期 thesis 复盘（含真实价格变动 ground truth）+ 评分 |
-| `surface` | [surfaceNode.ts](../src/daa/agent/nodes/surfaceNode.ts) | ✅ + 策略顾问 | 生成 DailyBriefing（5 面板）+ 风险建模（纯计算）+ 冲突检测 + Config Overlay + TG 推送 |
+| `surface` | [surfaceNode.ts](../src/daa/agent/nodes/surfaceNode.ts) | ✅ + 策略顾问 | 生成 DailyBriefing（5 面板）+ 风险建模（纯计算）+ 冲突检测 + 目标权重计划 + TG 推送 |
 
 ### 2.2 健壮性机制
 
@@ -307,20 +307,20 @@ Agent cycle 的最终产出，经 `formatBriefingForTelegram` 推送到 TG + 前
 - Risk level：`> 15%` critical / `> 10%` high / `> 5%` medium / else low
 - **显示时明确标注**"假设情景·暴露×30%/50% 经验系数"，避免被误读为 VaR
 
-### 5.6 策略顾问（Config Overlay，Autopilot 默认启用）
+### 5.6 策略顾问（目标权重计划，Autopilot 默认启用）
 
-Autopilot 模式会自动确保 `agentOverlayEnabled` / `agentTriggerEnabled` / 自动生成与自动模拟执行开关开启；非自动驾驶模式下仍可手动关闭。
+Autopilot 模式不再自动修改系统配置或风险护栏。Agent 的唯一主动调仓输出是本轮 `targetAllocationPlan`，系统只把它转换成本次周期的临时目标权重覆盖。
 
 LLM 基于持仓 + 论点 + 意外 + 缺口输出：
 
 | 建议类型 | 安全约束 |
 |---------|---------|
-| 逐资产漂移阈值 | clamp 到 `[0.02, 0.15]` |
-| Market regime 覆盖 | 仅当 Agent confidence ≥ 80% |
-| 风控参数收紧 | `maxPositionPct` 取 min(agent, config)，只收紧不放宽 |
-| 主动调仓触发 | 需 `agentTriggerEnabled` 同时启用；Autopilot 下可由重大事件主动触发 |
+| 目标权重计划 | 仅接受已知 `assetKey`，置信度需达到执行阈值 |
+| 单仓目标权重 | 按 `strategy.constraints.maxPositionPct` 截断 |
+| 周期生成 | 0 条可执行提案时跳过创建 cycle |
+| 自动执行 | 统一经过 `autoExecuteMaxSinglePct`、执行前风控和本地执行网关 |
 
-Overlay 24 小时过期，自动回退默认规则。Autopilot 只消费本轮 Agent run 产出的 overlay，避免误用历史建议主动调仓。
+目标权重计划只作用于本次 cycle，不写入 `systemConfig.strategy.targetWeights`，避免把一次性事件判断永久固化为配置。
 
 ---
 
@@ -339,8 +339,6 @@ Overlay 24 小时过期，自动回退默认规则。Autopilot 只消费本轮 A
 | `circuitBreakerThreshold` | `3` | 连续 LLM 失败次数触发熔断 |
 | `schedule` | `"2x_daily"` | `2x_daily` / `daily` / `every_6h` / `manual_only` |
 | `scheduleTimesUtc` | `["13:00","21:00"]` | 允许运行时间窗口（UTC, ±30min） |
-| `agentOverlayEnabled` | `true` | 是否生成 Config Overlay |
-| `agentTriggerEnabled` | `true` | 是否允许 Agent 触发主动调仓 |
 
 ---
 

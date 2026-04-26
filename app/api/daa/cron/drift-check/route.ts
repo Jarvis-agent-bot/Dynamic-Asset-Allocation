@@ -1,14 +1,14 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
-import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { getLatestAgentConfigOverlay } from "@/src/daa/agent/store/overlayStore";
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
 
 export const runtime = "nodejs";
@@ -57,25 +57,13 @@ async function runDriftCheck() {
     // Always run bootstrap to detect drift (independent of autoGenerateEnabled)
     const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false, autoRiskCycle: true });
 
-    // Agent Config Overlay — per-asset 漂移阈值调整
-    const overlay = system.config.cognitiveAgent?.agentOverlayEnabled
-      ? await getLatestAgentConfigOverlay().catch((e) => { logSwallowed("driftCheck.overlay", e); return null; })
-      : null;
-
-    // Detect drift: find assets exceeding threshold (支持 Agent per-asset 阈值)
+    // Detect drift: find assets exceeding the configured threshold.
     const driftThreshold = strategy.drift.thresholdPct;
     const driftedAssets = bootstrap.assetUniverse.filter((a) => {
       if (a.holdingQty <= 0 || a.gapPct == null) return false;
-      const agentThreshold = overlay?.driftOverrides?.find((o) => o.assetKey === a.assetKey)?.recommendedThresholdPct;
-      const effectiveThreshold = agentThreshold ?? driftThreshold;
-      return Math.abs(a.gapPct) >= effectiveThreshold * 100;
+      return Math.abs(a.gapPct) >= driftThreshold * 100;
     });
     const hasDrift = driftedAssets.length > 0;
-
-    // Agent 主动触发再平衡
-    const agentTrigger = system.config.cognitiveAgent?.agentTriggerEnabled && overlay?.rebalanceTrigger?.recommended
-      ? overlay.rebalanceTrigger
-      : null;
 
     // Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled)
     let generated: {
@@ -83,18 +71,14 @@ async function runDriftCheck() {
       skippedByCooldown: boolean;
       cooldownUntil: string | null;
       message: string;
-      cycle: { cycleId: string; triggerReason: string; proposals: unknown[]; riskCheck: { overallStatus: string } } | null;
+      cycle: RebalanceCycle | null;
     } | null = null;
 
     if (strategy.autoGenerateEnabled) {
-      const triggerSource = agentTrigger ? "agent_trigger" : "drift";
-      const triggerReason = agentTrigger
-        ? `Agent 建议调仓 (${agentTrigger.urgency}): ${agentTrigger.reasoning}`
-        : "偏移量阈值触发";
-      if (hasDrift || agentTrigger) {
+      if (hasDrift) {
         generated = await generateWorkbenchRebalanceCycle({
-          triggerSource,
-          triggerReason,
+          triggerSource: "drift",
+          triggerReason: "偏移量阈值触发",
           manual: false,
         });
       }
@@ -154,7 +138,7 @@ async function runDriftCheck() {
     }
 
     // ── Phase C: auto-execute (gated by autoExecuteEnabled) ──
-    let autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string } = {
+    let autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string; blockedReason?: string | null } = {
       attempted: false,
       executed: false,
       ordersCount: 0,
@@ -166,68 +150,19 @@ async function runDriftCheck() {
       generated?.created &&
       cycle
     ) {
-      autoExecute.attempted = true;
-      // 自动驾驶模式的"单笔订单占 NAV 百分比"硬上限 — 比 maxOrderPctOfNav 更严格，
-      // 让用户可以为手动交易保留较高上限，同时给自动执行留出安全垫。
-      const totalEquity = Math.max(0, bootstrap.account.totalEquity ?? 0);
-      const maxSinglePct = Math.max(0, strategy.autoExecuteMaxSinglePct ?? 10) / 100;
-      const breachingProposal = totalEquity > 0 && maxSinglePct > 0
-        ? (cycle.proposals as Array<{ symbol?: string; assetKey?: string; suggestedNotional?: number }>).find(
-            (p) => (p.suggestedNotional ?? 0) / totalEquity > maxSinglePct,
-          )
-        : undefined;
-      if (breachingProposal) {
-        const label = formatAssetLabel({ symbol: breachingProposal.symbol, assetKey: breachingProposal.assetKey });
-        autoExecute.error = `[autoExecuteMaxSinglePct 守门] ${label} 单笔 $${(breachingProposal.suggestedNotional ?? 0).toFixed(0)} 超过 NAV 的 ${(maxSinglePct * 100).toFixed(1)}% 上限，已阻止自动执行`;
-        logSwallowed("driftCheckRoute.autoExecuteGate", new Error(autoExecute.error));
-        try {
-          if (notif.telegram.enabled && notif.telegram.onTradeExecuted) {
-            await sendTelegramByEnv(`[自动执行已阻止]\n周期 ${cycle.cycleId}\n${autoExecute.error}`, {
-              eventType: "auto_execute_blocked",
-              triggerSource: "cron_drift_check",
-              cycleId: cycle.cycleId,
-              requestJson: { reason: "autoExecuteMaxSinglePct" },
-            });
-          }
-        } catch (notifyErr) {
-          logSwallowed("driftCheckRoute.autoExecuteGateNotify", notifyErr);
-        }
-      } else try {
-        const execResult = await executeRebalanceViaGateway({
-          cycleId: cycle.cycleId,
-          executeMode: "all",
-          notifyMode: "fanout",
-        });
-        const executedCount = execResult.logs.filter((l) => l.status === "executed").length;
-        autoExecute.executed = executedCount > 0;
-        autoExecute.ordersCount = executedCount;
-      } catch (err) {
-        autoExecute.error = err instanceof Error ? err.message : String(err);
-        logSwallowed("driftCheckRoute.autoExecute", err);
-        const failMsg = `[自动执行失败] 漂移触发周期 ${cycle.cycleId}\n原因: ${autoExecute.error}`;
-        try {
-          const sends: Promise<boolean>[] = [];
-          if (notif.telegram.enabled && notif.telegram.onTradeExecuted) {
-            sends.push(sendTelegramByEnv(failMsg, {
-              eventType: "auto_execute_failed",
-              triggerSource: "cron_drift_check",
-              cycleId: cycle.cycleId,
-              requestJson: { error: autoExecute.error },
-            }));
-          }
-          if (notif.feishu.enabled && notif.feishu.onTradeExecuted) {
-            sends.push(sendFeishuByEnv(failMsg, {
-              eventType: "auto_execute_failed",
-              triggerSource: "cron_drift_check",
-              cycleId: cycle.cycleId,
-              requestJson: { error: autoExecute.error },
-            }));
-          }
-          await Promise.allSettled(sends);
-        } catch (notifyErr) {
-          logSwallowed("driftCheckRoute.autoExecuteNotify", notifyErr);
-        }
-      }
+      const result = await executeAutoRebalanceCycle({
+        cycle,
+        systemConfig: system.config,
+        triggerSource: "cron_drift_check",
+        totalEquity: bootstrap.account.totalEquity,
+      });
+      autoExecute = {
+        attempted: result.attempted,
+        executed: result.executed,
+        ordersCount: result.ordersCount,
+        error: result.error || result.blockedReason || undefined,
+        blockedReason: result.blockedReason,
+      };
     }
 
     // ── Phase D: 止损/止盈自动检测 ──
@@ -344,4 +279,3 @@ async function runDriftCheck() {
       at: new Date().toISOString(),
     };
 }
-

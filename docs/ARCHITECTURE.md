@@ -109,10 +109,10 @@ Thesis-driven 的认知 Agent，基于 LangGraph.js 实现的 6 节点循环：
 ```
 observe → prioritize → investigate ⇄ reflect → review → surface → END
    ↑                                                         ↓
- cron / 手动 / 重大新闻事件                          TG 日报 + Config Overlay
+ cron / 手动 / 重大新闻事件                          TG 日报 + 目标权重计划
 ```
 
-每次 cycle 会：加载持仓+市场+新闻 → 选最需调查的 thesis → 并行证据收集 + ReAct → 反思 + 生成记忆 → 到期 thesis 复盘 → 生成 DailyBriefing（5 面板：意外 / 缺口 / 改观 / 冲突 / 风险）并推 Telegram。
+每次 cycle 会：加载持仓+市场+新闻 → 选最需调查的 thesis → 并行证据收集 + ReAct → 反思 + 生成记忆 → 到期 thesis 复盘 → 生成 DailyBriefing（5 面板：意外 / 缺口 / 改观 / 冲突 / 风险），必要时输出本轮目标权重计划并推 Telegram。
 
 **详细见 [COGNITIVE_AGENT.md](./COGNITIVE_AGENT.md)**。
 

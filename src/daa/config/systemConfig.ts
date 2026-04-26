@@ -164,19 +164,8 @@ export type DaaSystemConfig = {
       baseCurrency: CurrencyCode;
       pairs: string[];
     };
-    /** 单个 LLM 模型配置（保留向后兼容） */
-    llmAnalysis: {
-      id: string;
-      enabled: boolean;
-      provider: string;
-      model: string;
-      timeoutMs: number;
-      enabledInDecision: boolean;
-      /** 自定义 endpoint（为空时使用 provider 默认值） */
-      endpoint?: string;
-    };
     /** 多模型配置（支持按任务类型选择不同模型） */
-    llmModels?: {
+    llmModels: {
       /** 模型唯一标识 */
       id: string;
       /** 模型名称（用于显示） */
@@ -192,15 +181,9 @@ export type DaaSystemConfig = {
     }[];
     marketIndicators: DaaMarketIndicatorsConfig;
   };
-  /** 大脑控制面：定义 AI 的授权等级与可自动落地的配置范围 */
+  /** 大脑控制面：定义 AI 的授权等级；配置写入不属于自动驾驶权限 */
   brain?: {
     mode: DaaBrainMode;
-    /** 允许大脑生成配置 patch 建议 */
-    allowConfigPatch: boolean;
-    /** 仅在自动驾驶模式下生效：允许对白名单低风险 patch 自动落地 */
-    autoApplyLowRiskPatch: boolean;
-    /** 允许自动配置的白名单路径 */
-    configPatchWhitelist: string[];
   };
   /** 认知 Agent 配置 */
   cognitiveAgent?: {
@@ -221,10 +204,6 @@ export type DaaSystemConfig = {
     memoryDecayRate: number;
     /** 记忆归档阈值（strength 低于此值不参与召回，默认 0.05） */
     memoryArchiveThreshold: number;
-    /** 启用 Agent Config Overlay（LLM 生成参数建议驱动规则引擎，默认 false） */
-    agentOverlayEnabled?: boolean;
-    /** 允许 Agent 主动触发再平衡（默认 false） */
-    agentTriggerEnabled?: boolean;
     /** medium+ conviction thesis 超过此天数未被调查时，强制占用 1 个调查槽位（默认 7 天，防止 LLM 永远只调查 uncertain） */
     thesisStalenessDays?: number;
   };
@@ -268,21 +247,6 @@ export type DaaSystemConfigPatch = {
   path: string;
   value: unknown;
 };
-
-export const DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_ = [
-  "/cognitiveAgent/schedule",
-  "/cognitiveAgent/maxInvestigationTargets",
-  "/cognitiveAgent/reviewIntervalDays",
-  "/cognitiveAgent/agentOverlayEnabled",
-  "/cognitiveAgent/agentTriggerEnabled",
-  "/rebalanceStrategy/autoGenerateEnabled",
-  "/rebalanceStrategy/autoExecuteEnabled",
-  "/rebalanceStrategy/autoExecuteMaxSinglePct",
-  "/rebalanceStrategy/drift/thresholdPct",
-  "/rebalanceStrategy/analysisFocus",
-  "/strategy/constraints/maxPositionPct",
-  "/dataSources/llmModels",
-] as const;
 
 const DEFAULT_HF_FUNDS_: DaaHfFundTrack[] = [
   { fundCode: "006533", label: "易方达科融混合", kind: "equity", enabled: true },
@@ -389,14 +353,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       baseCurrency: "USD",
       pairs: ["USD/CNY", "USD/HKD", "USD/USDT"],
     },
-    llmAnalysis: {
-      id: "llm_analysis.default",
-      enabled: true,
-      provider: "deepseek",
-      model: "deepseek-chat",
-      timeoutMs: 15000,
-      enabledInDecision: true,
-    },
     llmModels: [
       {
         id: "llm_model_default",
@@ -453,9 +409,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
   },
   brain: {
     mode: "autopilot",
-    allowConfigPatch: true,
-    autoApplyLowRiskPatch: true,
-    configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
   },
   cognitiveAgent: {
     enabled: true,
@@ -467,8 +420,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     scheduleTimesUtc: ["13:00", "21:00"],
     memoryDecayRate: 0.97,
     memoryArchiveThreshold: 0.05,
-    agentOverlayEnabled: true,
-    agentTriggerEnabled: true,
     thesisStalenessDays: 7,
   },
   watchlistEntry: {
@@ -500,37 +451,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     },
   },
 };
-
-function deriveLegacyLlmModels(
-  llmAnalysis: DaaSystemConfig["dataSources"]["llmAnalysis"],
-): NonNullable<DaaSystemConfig["dataSources"]["llmModels"]> {
-  const provider = String(llmAnalysis.provider || "deepseek").trim() || "deepseek";
-  const model = String(llmAnalysis.model || "deepseek-chat").trim() || "deepseek-chat";
-  const timeoutMs = Math.max(2000, Math.trunc(Number(llmAnalysis.timeoutMs) || 15000));
-  const endpoint = llmAnalysis.endpoint ? String(llmAnalysis.endpoint).trim() || undefined : undefined;
-
-  const buildModel = (
-    taskType: "analysis" | "decision" | "research",
-    label: string,
-    enabled = true,
-    timeoutOffsetMs = 0,
-  ) => ({
-    id: `llm_model_${taskType}`,
-    label,
-    taskType,
-    enabled,
-    provider,
-    model,
-    timeoutMs: timeoutMs + timeoutOffsetMs,
-    ...(endpoint ? { endpoint } : {}),
-  });
-
-  return [
-    buildModel("analysis", "分析解读"),
-    buildModel("decision", "决策执行", llmAnalysis.enabledInDecision !== false),
-    buildModel("research", "深度研究", true, model.includes("reasoner") ? 30000 : 15000),
-  ];
-}
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -773,18 +693,8 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const priceFeedMarketCache = isRecord(priceFeed.marketCache) ? priceFeed.marketCache : {};
   const newsFeed = isRecord(dataSources.newsFeed) ? dataSources.newsFeed : {};
   const fxFeed = isRecord(dataSources.fxFeed) ? dataSources.fxFeed : {};
-  const llmAnalysis = isRecord(dataSources.llmAnalysis) ? dataSources.llmAnalysis : {};
-  const llmModels = isRecord(dataSources.llmModels) ? dataSources.llmModels : (Array.isArray(dataSources.llmModels) ? dataSources.llmModels : []);
+  const llmModels = Array.isArray(dataSources.llmModels) ? dataSources.llmModels : [];
   const marketIndicators = isRecord(dataSources.marketIndicators) ? dataSources.marketIndicators : {};
-  const normalizedLlmAnalysis: DaaSystemConfig["dataSources"]["llmAnalysis"] = {
-    id: String(llmAnalysis.id || fallback.dataSources.llmAnalysis.id).trim() || fallback.dataSources.llmAnalysis.id,
-    enabled: toBool(llmAnalysis.enabled, fallback.dataSources.llmAnalysis.enabled),
-    provider: String(llmAnalysis.provider || fallback.dataSources.llmAnalysis.provider).trim() || fallback.dataSources.llmAnalysis.provider,
-    model: String(llmAnalysis.model || fallback.dataSources.llmAnalysis.model).trim() || fallback.dataSources.llmAnalysis.model,
-    timeoutMs: Math.max(2000, Math.trunc(Number(llmAnalysis.timeoutMs) || fallback.dataSources.llmAnalysis.timeoutMs)),
-    enabledInDecision: toBool(llmAnalysis.enabledInDecision, fallback.dataSources.llmAnalysis.enabledInDecision),
-    endpoint: llmAnalysis.endpoint ? String(llmAnalysis.endpoint).trim() || undefined : fallback.dataSources.llmAnalysis.endpoint,
-  };
 
   const notification = isRecord(source.notification) ? source.notification : {};
   const notificationTelegram = isRecord(notification.telegram) ? notification.telegram : {};
@@ -916,10 +826,8 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         baseCurrency: normalizeBaseCurrencyCode(fxFeed.baseCurrency, fallback.dataSources.fxFeed.baseCurrency),
         pairs: normalizePairs(fxFeed.pairs).length ? normalizePairs(fxFeed.pairs) : clone(fallback.dataSources.fxFeed.pairs),
       },
-      llmAnalysis: normalizedLlmAnalysis,
       llmModels: (() => {
-        const rawModels = Array.isArray(llmModels) ? llmModels : [];
-        if (rawModels.length === 0) return deriveLegacyLlmModels(normalizedLlmAnalysis);
+        const rawModels = llmModels.length > 0 ? llmModels : clone(fallback.dataSources.llmModels);
         return rawModels.map((m: Record<string, unknown>) => ({
           id: String(m.id || "").trim() || "llm_model_default",
           label: String(m.label || m.id || "模型").trim(),
@@ -937,30 +845,13 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       const brain = isRecord(source.brain) ? source.brain : {};
       const fb = fallback.brain ?? {
         mode: "autopilot" as DaaBrainMode,
-        allowConfigPatch: true,
-        autoApplyLowRiskPatch: true,
-        configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
       };
       const rawMode = String(brain.mode ?? "");
       const validModes = new Set(["advisor", "operator", "autopilot"]);
       const mode = (validModes.has(rawMode) ? rawMode : fb.mode) as DaaBrainMode;
-      const allowConfigPatch = mode === "advisor"
-        ? false
-        : toBool(brain.allowConfigPatch, fb.allowConfigPatch);
-      const rawWhitelist = Array.isArray(brain.configPatchWhitelist)
-        ? brain.configPatchWhitelist
-            .map((item) => String(item || "").trim())
-            .filter(Boolean)
-            .slice(0, 20)
-        : clone(fb.configPatchWhitelist);
 
       return {
         mode,
-        allowConfigPatch,
-        autoApplyLowRiskPatch: mode === "autopilot"
-          ? toBool(brain.autoApplyLowRiskPatch, fb.autoApplyLowRiskPatch)
-          : false,
-        configPatchWhitelist: rawWhitelist.length ? rawWhitelist : clone(fb.configPatchWhitelist),
       };
     })(),
     cognitiveAgent: (() => {
@@ -975,8 +866,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         scheduleTimesUtc: ["13:00", "21:00"],
         memoryDecayRate: 0.97,
         memoryArchiveThreshold: 0.05,
-        agentOverlayEnabled: true,
-        agentTriggerEnabled: true,
         thesisStalenessDays: 7,
       };
       const validSchedules = new Set(["2x_daily", "daily", "every_6h", "manual_only"]);
@@ -991,8 +880,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         scheduleTimesUtc: Array.isArray(ca.scheduleTimesUtc) ? (ca.scheduleTimesUtc as string[]).filter(t => /^\d{1,2}:\d{2}$/.test(String(t))).slice(0, 4) : clone(fb.scheduleTimesUtc),
         memoryDecayRate: clamp(Number(ca.memoryDecayRate) || fb.memoryDecayRate, 0.5, 1.0),
         memoryArchiveThreshold: clamp(Number(ca.memoryArchiveThreshold) || fb.memoryArchiveThreshold, 0.01, 0.5),
-        agentOverlayEnabled: toBool(ca.agentOverlayEnabled, fb.agentOverlayEnabled ?? true),
-        agentTriggerEnabled: toBool(ca.agentTriggerEnabled, fb.agentTriggerEnabled ?? true),
         thesisStalenessDays: clamp(Math.trunc(Number(ca.thesisStalenessDays) || fb.thesisStalenessDays || 7), 1, 60),
       };
     })(),

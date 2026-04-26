@@ -296,7 +296,6 @@ export async function POST(req: Request) {
           source: "alpaca_ws_realtime",
           reason: `realtime high-impact news: ${event.headline}`,
           affectedSymbols: [...majorEventSymbols],
-          forceAgentRun: true,
         }).catch((error) => {
           logSwallowed("newsRealtime.autopilot", error);
           return {

@@ -38,6 +38,10 @@ vi.mock("@/src/daa/modules/workbench/workbenchRebalanceCycleService", () => ({
   generateWorkbenchRebalanceCycle: vi.fn(),
 }));
 
+vi.mock("@/src/daa/modules/workbench/executionGateway", () => ({
+  executeRebalanceViaGateway: vi.fn(),
+}));
+
 vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
   buildWorkbenchBootstrap: vi.fn().mockResolvedValue(buildWorkbenchBootstrapFixture({
     account: { cash: 3200, investableCash: 3000, frozenCash: 0, totalEquity: 52300 },
@@ -81,6 +85,7 @@ import { POST as fxRefreshPost } from "@/app/api/daa/cron/fx-refresh/route";
 import { POST as newsRefreshPost } from "@/app/api/daa/cron/news-refresh/route";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
@@ -242,6 +247,29 @@ beforeEach(() => {
   vi.mocked(parseSymbolsFromNewsQuery).mockReturnValue([]);
   vi.mocked(refreshMarketIndicators).mockResolvedValue({ marketContext: null, indicators: [], refreshedCount: 0 });
   vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult());
+  vi.mocked(executeRebalanceViaGateway).mockResolvedValue({
+    cycle: {
+      cycleId: "cycle-exec",
+      status: "completed",
+      triggerSource: "calendar",
+      triggerReason: "test",
+      snapshotAt: "2026-03-01T00:00:00.000Z",
+      equitySnapshot: 1000,
+      driftSnapshot: [],
+      proposals: [],
+      riskCheck: { overallStatus: "pass", items: [] },
+      executedAt: "2026-03-01T00:00:00.000Z",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      executedOrders: [],
+      executionSummary: null,
+      cancelledAt: null,
+      cancelReason: null,
+      notes: null,
+      marketContext: null,
+      agentDecisionSnapshot: null,
+    },
+    logs: [],
+  });
   vi.mocked(sendFeishuByEnv).mockResolvedValue(false);
   vi.mocked(sendTelegramByEnv).mockResolvedValue(false);
 });
@@ -462,6 +490,81 @@ describe("cron-ops-routes-v1", () => {
     expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
     expect(vi.mocked(sendFeishuByEnv)).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(sendFeishuByEnv).mock.calls[0]?.[0] || "")).toContain("AAPL");
+  });
+
+  it("daily-analysis 自动执行会先应用单笔 NAV 硬上限", async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      rebalanceStrategy: {
+        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
+        autoGenerateEnabled: true,
+        autoExecuteEnabled: true,
+        autoExecuteMaxSinglePct: 10,
+      },
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: true,
+          dailyReport: false,
+        },
+        feishu: {
+          enabled: false,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: false,
+          dailyReport: false,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildWorkbenchBootstrapFixture({
+      account: { cash: 5000, investableCash: 5000, frozenCash: 0, totalEquity: 5000 },
+      assetUniverse: [],
+    }));
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
+      cycle: {
+        cycleId: "cycle-large-1",
+        triggerReason: "定期再平衡触发",
+        riskCheck: { overallStatus: "pass" },
+        proposals: [{
+          assetKey: "US::NVDA",
+          symbol: "NVDA",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 4,
+          suggestedNotional: 1000,
+          price: 250,
+          reason: "large proposal",
+          selected: true,
+          hfContribution: null,
+        }],
+      },
+      created: true,
+      message: "已生成再平衡周期 cycle-large-1",
+      portfolioStatus: "needs_rebalance",
+    }));
+
+    const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.autoExecute).toMatchObject({
+      attempted: true,
+      executed: false,
+      ordersCount: 0,
+    });
+    expect(json.data.autoExecute.error).toContain("autoExecuteMaxSinglePct");
+    expect(vi.mocked(executeRebalanceViaGateway)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledWith(
+      expect.stringContaining("自动执行已阻止"),
+      expect.objectContaining({
+        eventType: "auto_execute_blocked",
+        triggerSource: "cron_daily_analysis",
+        cycleId: "cycle-large-1",
+      }),
+    );
   });
 
   it("daily-analysis 会优先按 analysisTimeUtc 推导整点窗口，而不是继续依赖旧 hourly 字段", async () => {

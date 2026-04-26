@@ -20,7 +20,6 @@ import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
 
 export type LlmRuntimeConfig = {
   enabled: boolean;
-  enabledInDecision: boolean;
   provider: string;
   model: string;
   endpoint: string;
@@ -108,7 +107,6 @@ function resolveRequestEndpoint(provider: string, endpoint: string): string {
 
 export async function resolveLlmConfig(taskType: LlmTaskType = "analysis"): Promise<LlmRuntimeConfig> {
   const system = await getDaaSystemConfig();
-  const legacyConfig = system.config.dataSources.llmAnalysis;
   const modelConfigs = Array.isArray(system.config.dataSources.llmModels)
     ? system.config.dataSources.llmModels.filter((item) => item && item.enabled !== false)
     : [];
@@ -116,7 +114,7 @@ export async function resolveLlmConfig(taskType: LlmTaskType = "analysis"): Prom
     || modelConfigs.find((item) => item.taskType === "analysis")
     || modelConfigs[0]
     || null;
-  const provider = normalizeText(selectedModel?.provider, normalizeText(legacyConfig.provider, "deepseek")).toLowerCase();
+  const provider = normalizeText(selectedModel?.provider, "deepseek").toLowerCase();
 
   const defaults = getProviderDefaults(provider);
 
@@ -133,9 +131,9 @@ export async function resolveLlmConfig(taskType: LlmTaskType = "analysis"): Prom
   const apiKey = providerApiKey || genericApiKey;
   const secretEndpoint = await resolveSecret("llm_endpoint");
   const secretModel = await resolveSecret("llm_model");
-  const configuredEndpoint = normalizeText(selectedModel?.endpoint, normalizeText(legacyConfig.endpoint, ""));
+  const configuredEndpoint = normalizeText(selectedModel?.endpoint, "");
   const endpoint = normalizeText(configuredEndpoint, normalizeText(secretEndpoint, defaults.endpoint));
-  const configuredModel = normalizeText(selectedModel?.model, normalizeText(legacyConfig.model, ""));
+  const configuredModel = normalizeText(selectedModel?.model, "");
   const resolvedModel = normalizeText(configuredModel, normalizeText(secretModel, defaults.model));
 
   // LLM 调用受网络延迟和模型推理时间影响，超时不宜过短
@@ -144,15 +142,12 @@ export async function resolveLlmConfig(taskType: LlmTaskType = "analysis"): Prom
   const minTimeout = isReasonerModel ? 60000 : 15000;
   const defaultTimeout = isReasonerModel ? 90000 : 30000;
   const maxTimeout = isReasonerModel ? 180000 : 120000;
-  const configuredTimeoutMs = Number(selectedModel?.timeoutMs) || Number(legacyConfig.timeoutMs) || defaultTimeout;
+  const configuredTimeoutMs = Number(selectedModel?.timeoutMs) || defaultTimeout;
   const timeoutMs = Math.max(minTimeout, Math.min(maxTimeout, Math.trunc(toFinite(configuredTimeoutMs, defaultTimeout))));
-  const enabled = Boolean(legacyConfig.enabled)
-    && (taskType !== "decision" || legacyConfig.enabledInDecision !== false)
-    && (selectedModel?.enabled !== false);
+  const enabled = Boolean(selectedModel) && selectedModel?.enabled !== false;
 
   return {
     enabled,
-    enabledInDecision: legacyConfig.enabledInDecision !== false,
     provider,
     model: resolvedModel,
     endpoint: endpoint || defaults.endpoint,

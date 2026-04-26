@@ -80,21 +80,22 @@ export async function GET(req: Request) {
     if (denied) return denied;
 
     const system = await getDaaSystemConfig();
-    const llm = system.config.dataSources.llmAnalysis;
-    const provider = normalizeText(llm.provider || "deepseek").toLowerCase();
+    const models = system.config.dataSources.llmModels.filter((item) => item.enabled !== false);
+    const selected = models.find((item) => item.taskType === "analysis") || models[0] || null;
+    const provider = normalizeText(selected?.provider || "deepseek").toLowerCase();
 
     // Use secretsManager for env > DB resolution
     const apiKey = await resolveSecret("llm_api_key");
-    const endpoint = normalizeText(await resolveSecret("llm_endpoint"), "https://api.deepseek.com/v1/chat/completions");
+    const endpoint = normalizeText(await resolveSecret("llm_endpoint"), normalizeText(selected?.endpoint, "https://api.deepseek.com/v1/chat/completions"));
     const secretModel = await resolveSecret("llm_model");
-    const model = normalizeText(secretModel, normalizeText(llm.model, "deepseek-chat"));
+    const model = normalizeText(secretModel, normalizeText(selected?.model, "deepseek-chat"));
     const health = await probeLlmEndpoint({ endpoint, apiKey, model });
 
     return ok({
       provider,
       endpointConfigured: Boolean(endpoint),
       apiKeyConfigured: Boolean(apiKey),
-      modelConfigured: Boolean(secretModel || llm.model),
+      modelConfigured: Boolean(secretModel || selected?.model),
       endpointHint: endpoint ? `${endpoint.slice(0, 64)}${endpoint.length > 64 ? "..." : ""}` : "",
       model,
       reachable: health.reachable,

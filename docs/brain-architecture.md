@@ -112,8 +112,8 @@
 
 3. **Autopilot**
    - 对预授权动作直接执行
-   - 高风险动作仍需确认
-   - 配置变更只允许在白名单范围内自动落地
+   - 高风险动作仍需确认或由风控阻断
+   - Agent 只能输出目标权重计划，不能自动修改系统配置
 
 ### E. Review Plane（复盘层）
 
@@ -146,7 +146,7 @@
 - 模拟交易 / 模拟调仓执行：保留确认
 - 真实交易：不支持
 - 密钥明文读取：不支持
-- 配置直改：还未开放
+- 配置直改：不开放给 Agent
 
 ## 本次继续补充的控制面
 
@@ -161,12 +161,12 @@
   - 运行认知循环
   - 初始化 thesis
   - 模拟交易 / 模拟调仓
-  - 配置 patch 建议 / 自动落地
+  - Autopilot 下按目标权重计划触发本地模拟调仓
 
 当前默认推荐：
 
-- **Operator** 作为日常模式
-- **Autopilot** 只在白名单字段、复盘链路和回滚机制都稳定后开启
+- **Operator** 作为人工协作模式
+- **Autopilot** 作为事件驱动模式，但权限边界固定为目标权重计划 + 统一风控 + 本地执行网关
 
 ## 下一阶段建议
 
@@ -179,26 +179,19 @@
 - `generate_rebalance`
 - `execute_rebalance_sim`
 - `execute_trade_sim`
-- `propose_config_patch`
-- `apply_config_patch`
 
 Chat / Agent / UI 都走同一层。
 
-### 阶段三：配置也纳入大脑
+### 阶段三：自动调仓审计面
 
-让大脑可以：
+让每次自动调仓都能回答：
 
-- 读取完整配置
-- 生成结构化 config patch
-- 对低风险 patch 自动落库
-- 对高风险 patch 进入确认
-
-建议只开放白名单字段，例如：
-
-- `cognitiveAgent.schedule`
-- `cognitiveAgent.maxInvestigationTargets`
-- `dataSources.llmModels`
-- `rebalanceStrategy.analysisFocus`
+- 哪个事件触发了 Agent
+- 本轮目标权重计划是什么
+- 哪些 intent 被接受或跳过
+- 生成了哪些提案
+- 哪条风控规则允许或阻断了执行
+- 通知是否成功送达
 
 ### 阶段四：事件驱动脑
 

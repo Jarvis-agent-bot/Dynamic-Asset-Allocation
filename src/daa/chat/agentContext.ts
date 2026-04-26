@@ -196,7 +196,7 @@ export function buildAssistantSystemDigest(input: {
     .join("；");
 
   const cognitiveSummary = input.cognitiveAgent?.enabled
-    ? `已启用（频率 ${input.cognitiveAgent.schedule}，最多调查 ${input.cognitiveAgent.maxInvestigationTargets} 个论点，参数覆盖 ${input.cognitiveAgent.agentOverlayEnabled ? "开启" : "关闭"}，主动触发再平衡 ${input.cognitiveAgent.agentTriggerEnabled ? "开启" : "关闭"}）`
+    ? `已启用（频率 ${input.cognitiveAgent.schedule}，最多调查 ${input.cognitiveAgent.maxInvestigationTargets} 个论点，输出目标权重计划）`
     : "未启用";
 
   return [
@@ -213,7 +213,6 @@ export function buildAssistantSystemDigest(input: {
 export async function loadAssistantRuntimeContext(sessionId: string): Promise<DaaAssistantRuntimeContext> {
   const emptyRoute: LlmRuntimeConfig = {
     enabled: false,
-    enabledInDecision: false,
     provider: "unavailable",
     model: "未配置",
     endpoint: "",

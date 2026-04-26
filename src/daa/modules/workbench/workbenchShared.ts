@@ -465,22 +465,14 @@ function buildPreTradeRiskCheckFromBootstrap(input: {
     bootstrap: WorkbenchBootstrap;
     systemConfig: Awaited<ReturnType<typeof getDaaSystemConfig>>["config"];
     proposals: RebalanceProposal[];
-    /** Agent Config Overlay 的风控收紧建议（取 min(agent, config)） */
-    agentRiskAdjustments?: Array<{ assetKey: string; maxPositionPctOverride: number }>;
 }): PreTradeRiskCheck {
-    // Agent overlay: 如果有 riskAdjustments，取所有建议中最低的上限与全局 config 的 min
-    let effectiveMaxPositionPct = input.systemConfig.strategy.constraints.maxPositionPct;
-    if (input.agentRiskAdjustments?.length) {
-      const lowestAgentLimit = Math.min(...input.agentRiskAdjustments.map(a => a.maxPositionPctOverride));
-      effectiveMaxPositionPct = Math.min(effectiveMaxPositionPct, lowestAgentLimit);
-    }
     return buildPreTradeRiskCheck({
         assetUniverse: input.bootstrap.assetUniverse,
         proposals: input.proposals,
         totalEquity: Math.max(0, toFinite(input.bootstrap.account.totalEquity, 0)),
         availableCash: Math.max(0, toFinite(input.bootstrap.account.investableCash, 0)),
         constraints: {
-            maxPositionPct: effectiveMaxPositionPct,
+            maxPositionPct: input.systemConfig.strategy.constraints.maxPositionPct,
             maxOrderPctOfNav: input.systemConfig.strategy.constraints.maxOrderPctOfNav,
         },
         risk: {

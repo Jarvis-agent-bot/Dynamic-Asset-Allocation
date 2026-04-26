@@ -16,7 +16,6 @@ describe("assistant-planning-fallback", () => {
   it("LLM 不可用时会沿用只读会话的降级规则", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: false,
-      enabledInDecision: false,
       provider: "deepseek",
       model: "deepseek-chat",
       endpoint: "https://api.deepseek.com/v1/chat/completions",

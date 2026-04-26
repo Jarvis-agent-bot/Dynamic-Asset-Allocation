@@ -1,6 +1,5 @@
 import { buildBrainConfigForMode, getBrainModeLabel } from "@/src/daa/brain/brainPolicy";
 import {
-  DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_,
   type DaaBrainMode,
   type DaaSystemConfig,
 } from "@/src/daa/config/systemConfig";
@@ -27,28 +26,13 @@ const MODE_OPTIONS: Array<{
   {
     value: "operator",
     title: "操作员",
-    description: "允许手动运行认知循环、初始化论点、模拟执行；配置 patch 仅建议，不自动落地。",
+    description: "允许手动运行认知循环、初始化论点和本地模拟执行，但不自动改系统配置。",
   },
   {
     value: "autopilot",
     title: "自动驾驶",
-    description: "作为系统大脑运行：事件驱动分析、主动触发本地模拟调仓，并对白名单参数自动落地。",
+    description: "作为系统大脑运行：事件驱动分析，并在风控内按目标权重计划执行本地模拟调仓。",
   },
-] as const;
-
-const CONFIG_PATCH_OPTIONS: Array<{ path: string; label: string; hint: string }> = [
-  { path: "/cognitiveAgent/schedule", label: "认知循环频率", hint: "允许 AI 调整日更 / 双更 / 仅手动节奏。" },
-  { path: "/cognitiveAgent/maxInvestigationTargets", label: "单次调查论点数", hint: "允许 AI 调整每轮调查深度。" },
-  { path: "/cognitiveAgent/reviewIntervalDays", label: "论点复盘间隔", hint: "允许 AI 调整 thesis 复盘节奏。" },
-  { path: "/cognitiveAgent/agentOverlayEnabled", label: "规则参数建议", hint: "允许 AI 生成漂移阈值、风控上限与主动调仓建议。" },
-  { path: "/cognitiveAgent/agentTriggerEnabled", label: "主动触发再平衡", hint: "允许 AI 打开或关闭事件驱动再平衡触发。" },
-  { path: "/rebalanceStrategy/autoGenerateEnabled", label: "自动生成调仓周期", hint: "允许 AI 确保事件触发后能生成本地模拟调仓周期。" },
-  { path: "/rebalanceStrategy/autoExecuteEnabled", label: "自动执行模拟调仓", hint: "允许 AI 确保低风险周期能自动执行到本地模拟账本。" },
-  { path: "/rebalanceStrategy/autoExecuteMaxSinglePct", label: "自动执行单笔上限", hint: "允许 AI 在急迫风险下收紧单笔自动执行上限。" },
-  { path: "/rebalanceStrategy/drift/thresholdPct", label: "漂移触发阈值", hint: "允许 AI 按最近研究结果调整组合漂移触发敏感度。" },
-  { path: "/rebalanceStrategy/analysisFocus", label: "分析重点", hint: "允许 AI 修改当前分析主线和关注语境。" },
-  { path: "/strategy/constraints/maxPositionPct", label: "最大单仓上限", hint: "允许 AI 在风险升高时收紧最大单仓位。" },
-  { path: "/dataSources/llmModels", label: "多模型路由", hint: "允许 AI 在白名单内调整分析 / 决策 / 研究模型路由。" },
 ] as const;
 
 export function SettingsBrainSection(props: {
@@ -58,9 +42,6 @@ export function SettingsBrainSection(props: {
   const { config, setConfig } = props;
   const brain = config.brain ?? {
     mode: "autopilot" as const,
-    allowConfigPatch: true,
-    autoApplyLowRiskPatch: true,
-    configPatchWhitelist: [...DEFAULT_BRAIN_CONFIG_PATCH_WHITELIST_],
   };
   const agent = config.cognitiveAgent ?? {
     enabled: true,
@@ -88,13 +69,6 @@ export function SettingsBrainSection(props: {
     } : prev);
   };
 
-  const toggleWhitelistPath = (path: string, checked: boolean) => {
-    const current = new Set(brain.configPatchWhitelist ?? []);
-    if (checked) current.add(path);
-    else current.delete(path);
-    updateBrain({ configPatchWhitelist: Array.from(current) });
-  };
-
   return (
     <section id="settings-brain" className="scroll-mt-28">
       <SectionCard
@@ -105,7 +79,7 @@ export function SettingsBrainSection(props: {
           <div>
             <div className="text-sm font-semibold text-[var(--text)]">授权等级</div>
             <div className="mt-1 text-xs leading-6 text-[var(--muted)]">
-              当前模式：{getBrainModeLabel(brain.mode)}。自动驾驶会把 AI 作为系统大脑：自动分析、自动调参，并在风控内执行本地模拟调仓。
+              当前模式：{getBrainModeLabel(brain.mode)}。自动驾驶会把 AI 作为系统大脑：自动分析、输出目标权重计划，并在风控内执行本地模拟调仓。
             </div>
           </div>
 
@@ -131,7 +105,7 @@ export function SettingsBrainSection(props: {
           </div>
 
           <div className="rounded-xl border border-[rgba(125,211,252,0.18)] bg-[rgba(56,189,248,0.08)] p-4 text-xs leading-6 text-[var(--muted)]">
-            当前执行边界仍然是本地模拟账本，不会触达真实券商；但在这个边界内，自动驾驶会作为事件驱动的大脑主动运行。
+            当前执行边界仍然是本地模拟账本，不会触达真实券商；自动驾驶只能通过目标权重计划触发调仓，不会自动修改系统配置或风险护栏。
           </div>
         </div>
 
@@ -139,7 +113,7 @@ export function SettingsBrainSection(props: {
           <div className="mb-4">
             <div className="text-sm font-semibold text-[var(--text)]">认知引擎</div>
             <div className="mt-1 text-xs leading-6 text-[var(--muted)]">
-              这部分控制大脑的调查频率、记忆深度和是否允许由 Agent 主动触发策略动作。
+              这部分控制大脑的调查频率、记忆深度和运行稳定性。Agent 触发调仓时只提交目标权重计划，再由统一风控决定是否生成和执行。
             </div>
           </div>
 
@@ -223,66 +197,6 @@ export function SettingsBrainSection(props: {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            <CheckboxRow
-              checked={agent.agentOverlayEnabled ?? false}
-              onChange={(value) => update({ agentOverlayEnabled: value })}
-            >
-              允许 Agent 生成规则参数建议
-            </CheckboxRow>
-            <CheckboxRow
-              checked={agent.agentTriggerEnabled ?? false}
-              onChange={(value) => update({ agentTriggerEnabled: value })}
-              disabled={brain.mode === "advisor"}
-            >
-              允许 Agent 主动触发再平衡
-            </CheckboxRow>
-          </div>
-        </div>
-
-        <div className="mt-6 border-t border-[var(--border)] pt-6">
-          <div className="mb-4">
-            <div className="text-sm font-semibold text-[var(--text)]">配置落地策略</div>
-            <div className="mt-1 text-xs leading-6 text-[var(--muted)]">
-              建议只对白名单低风险字段开放配置 patch。这样 AI 可以帮我们调优，但不会直接把系统改乱。
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <CheckboxRow
-              checked={brain.allowConfigPatch}
-              onChange={(value) => updateBrain({
-                allowConfigPatch: value,
-                autoApplyLowRiskPatch: value ? brain.autoApplyLowRiskPatch : false,
-              })}
-              disabled={brain.mode === "advisor"}
-            >
-              允许大脑生成配置 patch 建议
-            </CheckboxRow>
-            <CheckboxRow
-              checked={brain.autoApplyLowRiskPatch}
-              onChange={(value) => updateBrain({ autoApplyLowRiskPatch: value })}
-              disabled={brain.mode !== "autopilot" || !brain.allowConfigPatch}
-            >
-              自动落地白名单低风险 patch（仅自动驾驶）
-            </CheckboxRow>
-          </div>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {CONFIG_PATCH_OPTIONS.map((item) => (
-              <div key={item.path} className="rounded-xl border border-[var(--border)] bg-[rgba(255,255,255,0.02)] p-4">
-                <CheckboxRow
-                  checked={brain.configPatchWhitelist.includes(item.path)}
-                  onChange={(checked) => toggleWhitelistPath(item.path, checked)}
-                  disabled={!brain.allowConfigPatch || brain.mode === "advisor"}
-                >
-                  {item.label}
-                </CheckboxRow>
-                <div className="mt-2 text-xs leading-6 text-[var(--muted)]">{item.hint}</div>
-                <div className="mt-1 text-[11px] leading-5 text-[var(--faint)]">{item.path}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </SectionCard>
     </section>

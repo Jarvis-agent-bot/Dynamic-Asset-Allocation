@@ -344,7 +344,7 @@ ${prevBriefingText}
 只输出 JSON，不要其他文字。`;
 }
 
-// ── 策略顾问 Prompt（surfaceNode 末尾，生成 Config Overlay） ──
+// ── 策略顾问 Prompt（surfaceNode 末尾，生成目标权重计划） ──
 
 export function buildStrategyAdvisorPrompt(ctx: {
   holdings: Array<{ assetKey: string; symbol: string; weightPct: number; price: number }>;
@@ -386,49 +386,35 @@ ${surpriseLines}
 ## 自动跟踪项
 ${gapLines}
 
-## 当前规则引擎设置
-- 默认漂移阈值: ${(ctx.defaultDriftThresholdPct * 100).toFixed(1)}%
+## 当前执行约束
 - 市场 regime (规则判定): ${ctx.ruleRegime}
-- 最大单仓位: ${(ctx.maxPositionPct * 100).toFixed(0)}%
+- 单资产目标权重硬上限: ${(ctx.maxPositionPct * 100).toFixed(0)}%
 
 ## 任务
-根据你的分析输出 JSON 参数建议：
+根据你的分析输出 JSON 目标权重计划：
 
-1. **driftOverrides**: 哪些资产需要不同于默认的漂移阈值？高 conviction bearish 论点的资产应收紧阈值（更敏感），低 conviction 或无论点的放宽。只列出需要调整的。
-2. **regimeOverride**: 你是否同意规则引擎的 regime 判断？如果不同意且置信度 >= 80，给出你的判断。同意则设为 null。
-3. **riskAdjustments**: 哪些资产需要收紧仓位上限？只能收紧不能放宽。
-4. **rebalanceTrigger**: 你是否认为现在应该触发调仓？只在有明确理由时设为 recommended: true。
+1. **regimeOverride**: 你是否同意规则引擎的 regime 判断？如果不同意且置信度 >= 80，给出你的判断。同意则设为 null。
+2. **targetAllocationPlan**: 如果你希望 AI 全权调仓，请直接给出“最终目标权重”。执行层会把目标权重差额转成订单，并继续执行硬风控；低置信度不要输出。
 
 ## 输出格式（严格 JSON）
 \`\`\`json
 {
-  "driftOverrides": [
-    {"symbol": "AAPL", "assetKey": "US:AAPL", "recommendedThresholdPct": 0.03, "reasoning": "高conviction bearish论点，需收紧监控"}
-  ],
   "regimeOverride": null,
-  "riskAdjustments": [
-    {"symbol": "NVDA", "assetKey": "US:NVDA", "maxPositionPctOverride": 0.20, "reasoning": "集中度过高且论点面临AI竞争风险"}
-  ],
-  "rebalanceTrigger": null
+  "targetAllocationPlan": null
 }
 \`\`\`
 
 ## 示例输出
 \`\`\`json
 {
-  "driftOverrides": [
-    {"symbol": "TSLA", "assetKey": "US:TSLA", "recommendedThresholdPct": 0.03, "reasoning": "conviction从high降至low，波动率高，需紧盯"},
-    {"symbol": "BND", "assetKey": "US:BND", "recommendedThresholdPct": 0.10, "reasoning": "债券配置稳定，无需频繁调整"}
-  ],
   "regimeOverride": {"suggestedRegime": "risk_off", "confidence": 82, "reasoning": "信用利差HYG/LQD持续走阔但VIX尚未反应，规则引擎滞后", "ruleBasedRegime": "${ctx.ruleRegime}"},
-  "riskAdjustments": [],
-  "rebalanceTrigger": {"recommended": true, "urgency": "normal", "reasoning": "TSLA论点崩塌+仓位超配，建议减仓至目标权重", "affectedAssets": ["US:TSLA"]}
+  "targetAllocationPlan": {"reasoning": "TSLA论点崩塌，主动降至观察仓；现金保留为防守缓冲", "intents": [{"symbol": "TSLA", "assetKey": "US::TSLA", "proposedTargetWeightPct": 3, "confidence": 86, "reasoning": "论点失效且波动放大"}]}
 }
 \`\`\`
 
 规则:
-- recommendedThresholdPct 范围: 0.02 ~ 0.15（低于2%或高于15%的建议无效）
-- maxPositionPctOverride 范围: 0.10 ~ 0.30（低于10%或高于30%的建议无效）
+- proposedTargetWeightPct 使用百分比口径，例如 3 表示 3%；自动执行时会被单仓上限截断
+- targetAllocationPlan.intents 只列需要改变目标权重的资产；confidence < 70 不会自动采纳
 - regimeOverride.confidence < 80 时不会被采纳
 - 保守为主，只在有充分理由时给出非默认建议
 
@@ -642,13 +628,12 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     lines.push("");
   }
 
-  // ── Overlay 策略建议（如有） ──
+  // ── Agent 目标权重计划（如有） ──
   if (briefing.configOverlay) {
     const ov = briefing.configOverlay;
     const parts: string[] = [];
-    if (ov.driftOverrides.length > 0) parts.push(`漂移调整: ${ov.driftOverrides.map(o => `${o.symbol}→${(o.recommendedThresholdPct * 100).toFixed(0)}%`).join(", ")}`);
     if (ov.regimeOverride) parts.push(`Regime: ${ov.regimeOverride.ruleBasedRegime}→${ov.regimeOverride.suggestedRegime} (${ov.regimeOverride.confidence}%)`);
-    if (ov.rebalanceTrigger?.recommended) parts.push(`\u{26A0}\u{FE0F} 建议调仓: ${ov.rebalanceTrigger.reasoning.slice(0, 60)}`);
+    if (ov.targetAllocationPlan?.intents?.length) parts.push(`目标权重: ${ov.targetAllocationPlan.intents.slice(0, 4).map(i => `${i.symbol}→${i.proposedTargetWeightPct.toFixed(1)}%`).join(", ")}`);
     if (parts.length > 0) {
       lines.push("<b>\u{1F916} 策略建议</b>");
       for (const part of parts) lines.push(`• ${part}`);

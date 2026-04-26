@@ -1,10 +1,11 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
-import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildDailyReportText, DAILY_REPORT_PARSE_MODE } from "@/src/daa/notify/dailyReportBuilder";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
@@ -44,7 +45,7 @@ type DailyAnalysisJobResult = {
   feishu: { sent: boolean };
   marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string };
   dailyReport: { sent: boolean; telegram: boolean; feishu: boolean };
-  autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string };
+  autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string; blockedReason?: string | null };
   at: string;
 };
 
@@ -148,6 +149,7 @@ export async function POST(req: Request) {
 
         // ── Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled) ──
         let autoGenerate: Omit<DailyAnalysisJobResult, "dailyReport" | "at" | "autoExecute">;
+        let generatedCycleForAutoExecute: RebalanceCycle | null = null;
 
         if (strategy.autoGenerateEnabled) {
           let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
@@ -168,6 +170,7 @@ export async function POST(req: Request) {
           });
 
           const cycle = generated.cycle;
+          generatedCycleForAutoExecute = cycle;
 
           // Send notifications for onSuggestionGenerated
           // 抑制 0 提案推送：Agent 判断"今日无须调仓"时不发 TG/飞书（噪声消息）
@@ -246,7 +249,7 @@ export async function POST(req: Request) {
         }
 
         // ── Phase C: auto-execute (gated by autoExecuteEnabled) ──
-        let autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string } = {
+        let autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string; blockedReason?: string | null } = {
           attempted: false,
           executed: false,
           ordersCount: 0,
@@ -258,44 +261,21 @@ export async function POST(req: Request) {
           autoGenerate.created &&
           autoGenerate.cycleId
         ) {
-          autoExecute.attempted = true;
-          try {
-            const execResult = await executeRebalanceViaGateway({
+          const result = await executeAutoRebalanceCycle({
+            cycle: generatedCycleForAutoExecute ?? {
               cycleId: autoGenerate.cycleId,
-              executeMode: "all",
-              notifyMode: "fanout",
-            });
-            const executedCount = execResult.logs.filter((l) => l.status === "executed").length;
-            autoExecute.executed = executedCount > 0;
-            autoExecute.ordersCount = executedCount;
-          } catch (err) {
-            autoExecute.error = err instanceof Error ? err.message : String(err);
-            logSwallowed("dailyAnalysisRoute.autoExecute", err);
-            // 自动执行失败时发送失败通知
-            const failMsg = `[自动执行失败] 周期 ${autoGenerate.cycleId}\n原因: ${autoExecute.error}`;
-            try {
-              const sends: Promise<boolean>[] = [];
-              if (notif.telegram.enabled && notif.telegram.onTradeExecuted) {
-                sends.push(sendTelegramByEnv(failMsg, {
-                  eventType: "auto_execute_failed",
-                  triggerSource: "cron_daily_analysis",
-                  cycleId: autoGenerate.cycleId,
-                  requestJson: { error: autoExecute.error },
-                }));
-              }
-              if (notif.feishu.enabled && notif.feishu.onTradeExecuted) {
-                sends.push(sendFeishuByEnv(failMsg, {
-                  eventType: "auto_execute_failed",
-                  triggerSource: "cron_daily_analysis",
-                  cycleId: autoGenerate.cycleId,
-                  requestJson: { error: autoExecute.error },
-                }));
-              }
-              await Promise.allSettled(sends);
-            } catch (notifyErr) {
-              logSwallowed("dailyAnalysisRoute.autoExecuteNotify", notifyErr);
-            }
-          }
+              proposals: [],
+            },
+            systemConfig: system.config,
+            triggerSource: "cron_daily_analysis",
+          });
+          autoExecute = {
+            attempted: result.attempted,
+            executed: result.executed,
+            ordersCount: result.ordersCount,
+            error: result.error || result.blockedReason || undefined,
+            blockedReason: result.blockedReason,
+          };
         }
 
         // ── Phase D: daily report (independent of autoGenerateEnabled) ──
@@ -370,4 +350,3 @@ export async function POST(req: Request) {
     });
   });
 }
-

@@ -30,9 +30,6 @@ describe("assistant-context-digest", () => {
       ],
       brain: {
         mode: "operator",
-        allowConfigPatch: true,
-        autoApplyLowRiskPatch: false,
-        configPatchWhitelist: ["/dataSources/llmModels"],
       },
       cognitiveAgent: {
         enabled: true,
@@ -44,8 +41,6 @@ describe("assistant-context-digest", () => {
         scheduleTimesUtc: ["02:00"],
         memoryDecayRate: 0.97,
         memoryArchiveThreshold: 0.05,
-        agentOverlayEnabled: true,
-        agentTriggerEnabled: false,
         thesisStalenessDays: 7,
       },
     });
@@ -57,6 +52,6 @@ describe("assistant-context-digest", () => {
     expect(digest).toContain("分析解读：启用 / openai / gpt-5.4 / llm-api.onekeytest.com");
     expect(digest).toContain("深度研究：关闭 / openai / gpt-5.4 / llm-api.onekeytest.com");
     expect(digest).toContain("认知 Agent：已启用");
-    expect(digest).toContain("参数覆盖 开启");
+    expect(digest).toContain("输出目标权重计划");
   });
 });

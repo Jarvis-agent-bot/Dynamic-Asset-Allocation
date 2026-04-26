@@ -14,6 +14,8 @@ import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { shouldSendAgentBriefingTelegram } from "@/src/daa/automation/automationGuards";
 
 /**
  * 代码直出“自动跟踪清单”（原 cognitionGaps）。
@@ -219,8 +221,8 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
       estimatedCost: totalTkn * DEEPSEEK_AVG_COST_PER_TOKEN,
     };
 
-    // 策略顾问 LLM — 生成 Agent Config Overlay（仅在 agentOverlayEnabled 时）
-    if (state.agentConfig?.agentOverlayEnabled && !shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
+    // 策略顾问 LLM — 生成 Agent 目标权重计划
+    if (state.agentConfig?.enabled !== false && !shouldCircuitBreak(state.errors ?? [], state.agentConfig?.circuitBreakerThreshold ?? 3)) {
       try {
         // 策略参数实时从 systemConfig 读取，避免 agentConfig 副本陈旧
         const { getDaaSystemConfig } = await import("@/src/daa/store/accountStore");
@@ -251,23 +253,36 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
 
         if (overlayResult.data) {
           const raw = overlayResult.data;
-          // 安全校验：clamp 范围
-          const driftOverrides = (Array.isArray(raw.driftOverrides) ? raw.driftOverrides : [])
-            .filter(o => o.recommendedThresholdPct >= 0.02 && o.recommendedThresholdPct <= 0.15);
-          const riskAdjustments = (Array.isArray(raw.riskAdjustments) ? raw.riskAdjustments : [])
-            .filter(o => o.maxPositionPctOverride >= 0.10 && o.maxPositionPctOverride <= 0.30);
+          const targetAllocationPlan = raw.targetAllocationPlan && typeof raw.targetAllocationPlan === "object"
+            ? {
+              reasoning: String(raw.targetAllocationPlan.reasoning || "").slice(0, 500),
+              intents: (Array.isArray(raw.targetAllocationPlan.intents) ? raw.targetAllocationPlan.intents : [])
+                .filter((item) => (
+                  item
+                  && typeof item === "object"
+                  && Number.isFinite(Number(item.proposedTargetWeightPct))
+                  && Number(item.proposedTargetWeightPct) >= 0
+                  && Number.isFinite(Number(item.confidence))
+                  && Number(item.confidence) >= 0
+                ))
+                .slice(0, 12)
+                .map((item) => ({
+                  assetKey: String(item.assetKey || "").trim(),
+                  symbol: String(item.symbol || "").trim(),
+                  proposedTargetWeightPct: Number(item.proposedTargetWeightPct),
+                  confidence: Number(item.confidence),
+                  reasoning: String(item.reasoning || "").slice(0, 300),
+                })),
+            }
+            : null;
 
           briefing.configOverlay = {
             generatedAt: new Date().toISOString(),
             agentRunId: `surface-${new Date().toISOString()}`,
-            driftOverrides,
             regimeOverride: raw.regimeOverride && typeof raw.regimeOverride === "object"
               ? { ...raw.regimeOverride, ruleBasedRegime: state.market?.regime ?? "unknown" }
               : null,
-            riskAdjustments,
-            rebalanceTrigger: raw.rebalanceTrigger && typeof raw.rebalanceTrigger === "object"
-              ? raw.rebalanceTrigger
-              : null,
+            targetAllocationPlan,
           };
 
           // 更新 briefing token 计数
@@ -281,6 +296,21 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
 
     // 尝试推送 Telegram（非阻塞）
     try {
+      const system = await getDaaSystemConfig();
+      if (!shouldSendAgentBriefingTelegram(system.config)) {
+        return {
+          briefing, // 将完整 briefing 传入状态
+          totalTokens: tokensUsed,
+          reasoningTraces: [{
+            node: "surface",
+            threadId: null,
+            input: `${theses.length} theses, ${(state.surprises ?? []).length} surprises`,
+            output: `briefing: ${briefing.surprises.length} surprises, ${briefing.cognitionGaps.length} gaps, ${briefing.mindChangeConditions.length} conditions`,
+            tokensUsed,
+            durationMs: Date.now() - t0,
+          }],
+        };
+      }
       const { sendTelegramByEnv } = await import("@/src/daa/notify/telegram");
       const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
       const tgText = formatBriefingForTelegram(briefing, {

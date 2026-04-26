@@ -317,6 +317,11 @@ export type GenerateRebalanceCycleInput = {
   triggerReason?: string;
   analysisFocus?: string;
   manual?: boolean;
+  /**
+   * 临时目标权重覆盖（0-1），用于 Agent 全权调仓。
+   * 只影响本次周期生成，不直接写入系统配置。
+   */
+  targetWeightOverrides?: Record<string, number>;
 };
 
 /**

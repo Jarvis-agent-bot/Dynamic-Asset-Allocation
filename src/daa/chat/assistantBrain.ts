@@ -78,12 +78,10 @@ export async function runAssistantCognitiveCycle(runtimeContext?: DaaAssistantRu
     const result = await runAutopilotLoop({
       source: "manual",
       reason: "assistant_chat_manual_autopilot",
-      forceAgentRun: true,
     });
     return [
       "已手动触发一轮 Autopilot 大脑闭环。",
       result.skipped ? `状态：已跳过，原因：${result.reason || "未知"}` : `runId: ${result.cognitiveRun.runId || "-"}`,
-      `配置落地：${result.configPatch.applied ? result.configPatch.paths.join(", ") : "无新增 patch"}`,
       `主动调仓：${result.rebalance.created ? `已生成周期 ${result.rebalance.cycleId}` : result.rebalance.reason || "未触发"}`,
       `模拟执行：${result.rebalance.autoExecute.executed ? `已执行 ${result.rebalance.autoExecute.ordersCount} 笔` : result.rebalance.autoExecute.blockedReason || result.rebalance.autoExecute.error || "未执行"}`,
       `Tokens：${result.cognitiveRun.totalTokens}`,
@@ -110,25 +108,17 @@ export async function switchAssistantBrainMode(input: {
 }): Promise<string> {
   const current = input.runtimeContext.systemConfig.brain;
   const next = buildBrainConfigForMode(input.mode, current);
-  const patches = [
+  const patches: Array<{ path: string; value: unknown }> = [
     { path: "/brain/mode", value: next.mode },
-    { path: "/brain/allowConfigPatch", value: next.allowConfigPatch },
-    { path: "/brain/autoApplyLowRiskPatch", value: next.autoApplyLowRiskPatch },
-    { path: "/brain/configPatchWhitelist", value: next.configPatchWhitelist },
   ];
   if (next.mode === "autopilot") {
     patches.push(
       { path: "/cognitiveAgent/enabled", value: true },
-      { path: "/cognitiveAgent/agentOverlayEnabled", value: true },
-      { path: "/cognitiveAgent/agentTriggerEnabled", value: true },
       { path: "/rebalanceStrategy/autoGenerateEnabled", value: true },
       { path: "/rebalanceStrategy/autoExecuteEnabled", value: true },
     );
   } else if (
     current?.mode === next.mode
-    && current?.allowConfigPatch === next.allowConfigPatch
-    && current?.autoApplyLowRiskPatch === next.autoApplyLowRiskPatch
-    && JSON.stringify(current?.configPatchWhitelist ?? []) === JSON.stringify(next.configPatchWhitelist)
   ) {
     return `当前已经是${getBrainModeLabel(next.mode)}模式，无需切换。`;
   }

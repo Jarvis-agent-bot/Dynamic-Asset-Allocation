@@ -16,7 +16,6 @@ describe("assistant-planner", () => {
   it("优先使用 LLM 规划 trade 动作", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: true,
-      enabledInDecision: true,
       provider: "openai",
       model: "gpt-4o-mini",
       endpoint: "https://api.openai.com/v1/chat/completions",
@@ -63,7 +62,6 @@ describe("assistant-planner", () => {
   it("LLM 不可用时退回规则解析", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: false,
-      enabledInDecision: false,
       provider: "deepseek",
       model: "deepseek-chat",
       endpoint: "https://api.deepseek.com/v1/chat/completions",
@@ -91,7 +89,6 @@ describe("assistant-planner", () => {
   it("LLM 可以规划 thesis_status 和 agent_briefing 这类 Agent 查询", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: true,
-      enabledInDecision: true,
       provider: "openai",
       model: "gpt-5.4",
       endpoint: "https://llm-api.onekeytest.com/v1/responses",
@@ -134,7 +131,6 @@ describe("assistant-planner", () => {
   it("LLM 可以规划 brain_status 和 agent_run 这类大脑控制意图", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: true,
-      enabledInDecision: true,
       provider: "openai",
       model: "gpt-5.4",
       endpoint: "https://llm-api.onekeytest.com/v1/responses",
@@ -177,7 +173,6 @@ describe("assistant-planner", () => {
   it("LLM 可以规划 brain_set_mode 这类大脑配置意图", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: true,
-      enabledInDecision: true,
       provider: "openai",
       model: "gpt-5.4",
       endpoint: "https://llm-api.onekeytest.com/v1/responses",
@@ -205,7 +200,7 @@ describe("assistant-planner", () => {
       userText: "切到自动驾驶模式",
       allowExecution: true,
       contextDigest: "",
-      systemDigest: "大脑模式：操作员模式；仅生成 patch 建议；白名单 6 项",
+      systemDigest: "大脑模式：操作员模式；配置写入关闭；自动调仓只接受目标权重计划",
       sessionSummary: "",
       recentConversation: "",
       pendingActionDescription: "无",

@@ -36,6 +36,10 @@ import type {
   UpdateRebalanceCycleInput,
 } from "./workbenchTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import {
+  applyTargetWeightOverridesToBootstrap,
+  buildEmptyAutoTriggerSkipMessage,
+} from "@/src/daa/automation/automationGuards";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { validateExecutionRisk } from "./workbenchExecutionService";
@@ -68,11 +72,12 @@ export async function generateWorkbenchRebalanceCycle(
   const triggerSource: RebalanceTriggerSource = input.triggerSource || "manual";
   const manual = input.manual === true || triggerSource === "manual";
 
-  const [bootstrap, systemRow, recentCycles] = await Promise.all([
+  const [rawBootstrap, systemRow, recentCycles] = await Promise.all([
     buildWorkbenchBootstrap({ syncPrices: true }),
     getDaaSystemConfig(),
     listDaaRebalanceCycles(120),
   ]);
+  const bootstrap = applyTargetWeightOverridesToBootstrap(rawBootstrap, input.targetWeightOverrides);
   const recentLearningsText = await buildAgentLearningDigest(6);
 
   const latestCycle = recentCycles[0] || null;
@@ -382,6 +387,15 @@ export async function generateWorkbenchRebalanceCycle(
   }
 
   const mergedProposals = [...draft.proposals, ...tlhProposals];
+  const emptyAutoTriggerSkipMessage = buildEmptyAutoTriggerSkipMessage({
+    triggerSource,
+    manual,
+    proposalCount: mergedProposals.length,
+    agentSummary: agentResult.llmSummary,
+  });
+  if (emptyAutoTriggerSkipMessage) {
+    return skipWithLatest(emptyAutoTriggerSkipMessage);
+  }
 
   // ── Step F: 风险检查 ──────────────────────────────────────────────
   const baseRiskCheck = buildPreTradeRiskCheckFromBootstrap({
@@ -692,7 +706,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
     });
     return {
       cycle: mapStoreCycleToView(reviewed)!,
-      logs: await listDaaTradeTickets({ limit: 200 }),
+      logs: [],
     };
   }
 

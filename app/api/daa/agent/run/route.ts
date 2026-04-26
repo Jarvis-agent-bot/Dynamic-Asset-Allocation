@@ -22,7 +22,6 @@ export async function POST(req: Request) {
       const result = await runAutopilotLoop({
         source: "manual",
         reason: "manual api autopilot run",
-        forceAgentRun: true,
       });
       return ok({
         autopilot: true,

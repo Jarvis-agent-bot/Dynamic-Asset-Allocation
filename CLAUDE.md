@@ -259,26 +259,27 @@ import { fetchPriceSeriesWithCache, fetchMultiplePriceSeriesWithCache } from "@/
 
 ### Rebalancing Strategies
 - Calendar-based (monthly / quarterly / semi-annual / annual)
-- Drift-based (threshold-triggered, configurable, Agent overlay 可覆盖 per-asset 阈值)
-- Agent-triggered (Agent LLM 建议主动调仓；Autopilot 下定时循环、新闻刷新和实时重大事件可主动触发)
+- Drift-based (threshold-triggered, configurable)
+- Agent-triggered (Agent LLM 输出目标权重计划；Autopilot 下定时循环、新闻刷新和实时重大事件可主动触发)
 - Risk-aware order generation with pre-trade checks
 
-### Agent Config Overlay（AI 驱动规则引擎）
+### Agent Target Allocation Plan（AI 驱动调仓）
 
-Agent 每个 cycle 在 surfaceNode 末尾调用 LLM"策略顾问"，输出参数建议存入 `DailyBriefing.configOverlay`：
+Agent 每个 cycle 在 surfaceNode 末尾调用 LLM 策略顾问，输出本轮 `targetAllocationPlan`：
 
-| 功能 | 描述 | 开关 |
+| 功能 | 描述 | 约束 |
 |------|------|------|
-| per-asset 漂移阈值 | Agent 建议每个资产的漂移检测灵敏度（2%-15%） | `agentOverlayEnabled` |
-| 市场 regime 覆盖 | Agent 不同意规则引擎时可覆盖（confidence >= 80%） | `agentOverlayEnabled` |
-| 风控参数收紧 | Agent 建议收紧特定资产的仓位上限（只收紧不放宽） | `agentOverlayEnabled` |
-| 主动调仓触发 | Agent 认为应该调仓时可直接生成并执行本地模拟调仓周期 | `agentTriggerEnabled` |
+| 目标权重计划 | Agent 给出最终目标权重，而不是修改系统配置 | 只作用于本轮 cycle |
+| 资产范围 | 只接受资产池里已知的 `assetKey` | 未知资产直接跳过 |
+| 置信度过滤 | 低置信度 intent 不进入执行层 | 默认阈值 70 |
+| 单仓截断 | 目标权重不能超过 `maxPositionPct` | 只截断，不自动放宽护栏 |
+| 自动执行 | 统一走本地执行网关 | `autoExecuteMaxSinglePct` + 执行前风控 |
 
 **安全约束**：
-- 所有建议经 `validateShape()` + 范围 clamp 校验
-- Overlay 24 小时过期，自动回退默认规则
-- Autopilot 只消费本轮 Agent run 产出的 overlay，避免误用历史建议主动执行
-- 风控 `maxPositionPctOverride` 取 `min(agent, config)`，只收紧
+- Agent 不能自动修改 `systemConfig`
+- 0 条可执行提案时跳过创建 cycle
+- Autopilot 只消费本轮 Agent run 产出的目标权重计划，避免误用历史建议主动执行
+- 所有自动执行路径共用 `executeAutoRebalanceCycle`
 - LLM 失败不影响正常 Agent cycle（熔断兼容）
 
 ### Ensemble Backtest Strategies

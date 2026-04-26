@@ -181,18 +181,10 @@ export interface DailyBriefing {
 
 // ── Agent 策略 Overlay ──
 
-/** Agent LLM 输出的参数建议，驱动规则引擎漂移阈值/regime/风控/调仓触发 */
+/** Agent LLM 输出的目标权重计划，执行层负责转成订单并做硬风控 */
 export interface AgentConfigOverlay {
   generatedAt: string;
   agentRunId: string;
-
-  /** 每资产漂移阈值建议（只列需要调整的） */
-  driftOverrides: Array<{
-    assetKey: string;
-    symbol: string;
-    recommendedThresholdPct: number; // 0.02 ~ 0.15
-    reasoning: string;
-  }>;
 
   /** 市场 regime 覆盖（null 表示同意规则引擎判断） */
   regimeOverride: {
@@ -202,20 +194,17 @@ export interface AgentConfigOverlay {
     ruleBasedRegime: string;
   } | null;
 
-  /** 风控参数收紧建议（只允许收紧，不可放宽） */
-  riskAdjustments: Array<{
-    assetKey: string;
-    symbol: string;
-    maxPositionPctOverride: number; // 0.10 ~ 0.30
+  targetAllocationPlan?: {
     reasoning: string;
-  }>;
-
-  /** 主动调仓触发建议 */
-  rebalanceTrigger: {
-    recommended: boolean;
-    urgency: "normal" | "urgent";
-    reasoning: string;
-    affectedAssets: string[];
+    intents: Array<{
+      assetKey: string;
+      symbol: string;
+      /** 百分比口径，例如 3 表示 3% NAV */
+      proposedTargetWeightPct: number;
+      /** 0-100；低置信度意图不会自动执行 */
+      confidence: number;
+      reasoning: string;
+    }>;
   } | null;
 }
 

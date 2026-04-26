@@ -32,8 +32,6 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
           scheduleTimesUtc: ca.scheduleTimesUtc,
           memoryDecayRate: ca.memoryDecayRate,
           memoryArchiveThreshold: ca.memoryArchiveThreshold,
-          agentOverlayEnabled: ca.agentOverlayEnabled ?? false,
-          agentTriggerEnabled: ca.agentTriggerEnabled ?? false,
           thesisStalenessDays: ca.thesisStalenessDays ?? 7,
         };
       }
