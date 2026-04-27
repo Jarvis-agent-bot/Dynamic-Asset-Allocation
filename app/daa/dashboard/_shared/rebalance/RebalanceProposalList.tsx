@@ -15,6 +15,7 @@ import {
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
 import type {
+  PreTradeRiskCheck,
   RebalanceCycle,
   WorkbenchBootstrap,
 } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -24,7 +25,7 @@ import { cycleStatusTone, llmAdjustmentLabel, marketRegimeLabel, riskOverallTone
 export function RebalanceProposalList(props: {
   bootstrap: WorkbenchBootstrap;
   currentCycle: RebalanceCycle | null;
-  currentRiskCheck: { overallStatus: "pass" | "warn" | "block" } | null;
+  currentRiskCheck: PreTradeRiskCheck | null;
   busy: boolean;
   isCurrentCycleTerminal: boolean;
   canEditCurrentCycle: boolean;
@@ -46,6 +47,22 @@ export function RebalanceProposalList(props: {
     }
     return m;
   }, [props.currentCycle?.driftSnapshot]);
+
+  const visibleRiskItems = useMemo(
+    () => (props.currentRiskCheck?.items ?? []).filter((item) => item.status !== "pass"),
+    [props.currentRiskCheck?.items],
+  );
+  const emptyCycleReasons = useMemo(() => {
+    const cycle = props.currentCycle;
+    if (!cycle || cycle.proposals.length > 0) return [];
+    const rows = [
+      cycle.triggerReason ? `触发原因：${cycle.triggerReason}` : null,
+      cycle.agentDecisionSnapshot?.summary ? `Agent 判断：${cycle.agentDecisionSnapshot.summary}` : null,
+      cycle.notes ? cycle.notes.split("\n").find((line) => line.includes("Agent摘要")) ?? null : null,
+      visibleRiskItems[0]?.message ? `风控提示：${visibleRiskItems[0].message}` : null,
+    ].filter(Boolean) as string[];
+    return rows.length > 0 ? rows : ["本轮没有达到可执行金额、信念强度或风控条件，因此没有生成交易建议。"];
+  }, [props.currentCycle, visibleRiskItems]);
 
   return (
     <DaaSurfacePanel
@@ -77,6 +94,26 @@ export function RebalanceProposalList(props: {
           {props.currentCycle.triggerSource === "risk" ? (
             <DaaSurfaceNoticeBox tone="amber" icon={<TriangleAlert className="h-4 w-4" />} title="风险触发建议待处理" description="该周期由止盈/止损阈值触发，请先看理由和风控，再决定是否执行。" />
           ) : null}
+          <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-2 px-4 py-3")}>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-[var(--faint)]">触发</span>
+              <span className="text-[var(--text)]">{props.currentCycle.triggerReason || "组合调仓检查"}</span>
+            </div>
+            {props.currentCycle.agentDecisionSnapshot?.summary ? (
+              <div className="text-xs leading-5 text-[var(--muted)]">
+                Agent：{props.currentCycle.agentDecisionSnapshot.summary}
+              </div>
+            ) : null}
+            {visibleRiskItems.length > 0 ? (
+              <div className="space-y-1 border-t border-[rgba(255,255,255,0.06)] pt-2 text-xs">
+                {visibleRiskItems.slice(0, 3).map((item) => (
+                  <div key={`${item.rule}-${item.message}`} className={item.status === "block" ? "text-red-300" : "text-amber-300"}>
+                    {item.status === "block" ? "阻断" : "警告"}：{item.message}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
 
           {props.currentCycle.proposals.length > 0 ? (
             <>
@@ -212,7 +249,20 @@ export function RebalanceProposalList(props: {
               </div>
             </>
           ) : (
-            <DaaSurfaceEmptyState title="当前周期没有生成建议" description="可以先调整观察列表目标权重，再重新生成建议。" />
+            <div className="space-y-3">
+              <DaaSurfaceEmptyState title="当前周期没有可执行建议" description="系统已完成检查，但本轮没有留下可执行买卖单。" />
+              <div className={cn(daaSurfaceSubtlePanelClassName, "space-y-2 px-4 py-3")}>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">为什么是空的</div>
+                <ul className="space-y-1.5 text-xs leading-5 text-[var(--muted)]">
+                  {emptyCycleReasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+                <div className="text-xs text-[var(--faint)]">
+                  观察列表资产需要有目标权重和可用价格；自动周期若最终没有提案，会跳过创建新周期。
+                </div>
+              </div>
+            </div>
           )}
         </div>
       ) : (

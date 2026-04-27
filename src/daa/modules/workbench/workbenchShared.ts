@@ -833,6 +833,9 @@ function buildCycleDraftFromBootstrap(input: {
         if (side === "BUY") {
             buyNotionalUsed += suggestedNotional;
         }
+        const targetSource = row.watchEnabled && targetPct > 0
+            ? "观察列表目标权重"
+            : "持仓回归目标权重";
         proposals.push({
             assetKey: row.assetKey,
             symbol: row.symbol,
@@ -842,7 +845,7 @@ function buildCycleDraftFromBootstrap(input: {
             suggestedQty,
             suggestedNotional,
             price,
-            reason: `偏移 ${(driftPct * 100).toFixed(2)}%，回归目标权重`,
+            reason: `${targetSource}：偏移 ${(driftPct * 100).toFixed(2)}%，回归目标权重`,
             selected: true,
             hfContribution: row.hfSignal
                 ? `${row.hfSignal.icon} ${row.hfSignal.label} ${row.hfSignal.aggregatedScorePct.toFixed(1)}%`

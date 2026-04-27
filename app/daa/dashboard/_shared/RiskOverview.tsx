@@ -21,7 +21,7 @@ export function RiskOverview(props: {
   const hasTradeRiskIssue = props.currentRiskCheck && props.currentRiskCheck.overallStatus !== "pass";
 
   return (
-    <div className="space-y-4">
+    <div id="portfolio-risk-overview" className="scroll-mt-24 space-y-4">
       {/* 交易前风控告警（仅在有 warn/block 时显示）*/}
       {hasTradeRiskIssue && props.currentRiskCheck ? (
         <RebalanceRiskAlerts currentRiskCheck={props.currentRiskCheck} />

@@ -6,6 +6,9 @@
  */
 import { describe, it, expect } from "vitest";
 
+import { selectPrimaryRebalanceThesis } from "@/src/daa/agent/agentRebalanceAdapter";
+import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
+
 // 从适配器源码中提取的 conviction multiplier 映射（与源码保持同步）
 const CONVICTION_MULTIPLIER: Record<string, number> = {
   high: 1.0,
@@ -94,5 +97,41 @@ describe("Decision Context 映射", () => {
     expect(ctx.signalAction).toBe("reduce_or_avoid");
     expect(ctx.signalScore).toBe(30);
     expect(ctx.signalConfidence).toBe(35);
+  });
+});
+
+describe("主调仓论点选择", () => {
+  const makeThread = (overrides: Partial<ResearchThread>): ResearchThread => ({
+    id: "t",
+    title: "test",
+    status: "active",
+    thesisText: "test",
+    conviction: "uncertain",
+    invalidationConditions: null,
+    reviewAt: null,
+    assetKeys: ["US::NVDA"],
+    tags: [],
+    priorityScore: 0.5,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  });
+
+  it("同资产存在 uncertain 和 medium 时，优先用有方向的论点驱动调仓", () => {
+    const thesis = selectPrimaryRebalanceThesis([
+      makeThread({ id: "u", conviction: "uncertain", priorityScore: 0.99, updatedAt: "2026-01-03T00:00:00.000Z" }),
+      makeThread({ id: "m", conviction: "medium", priorityScore: 0.4, updatedAt: "2026-01-02T00:00:00.000Z" }),
+    ]);
+
+    expect(thesis?.id).toBe("m");
+  });
+
+  it("同 conviction 时按 priorityScore 再按更新时间排序", () => {
+    const thesis = selectPrimaryRebalanceThesis([
+      makeThread({ id: "older", conviction: "medium", priorityScore: 0.4, updatedAt: "2026-01-01T00:00:00.000Z" }),
+      makeThread({ id: "newer", conviction: "medium", priorityScore: 0.6, updatedAt: "2026-01-02T00:00:00.000Z" }),
+    ]);
+
+    expect(thesis?.id).toBe("newer");
   });
 });

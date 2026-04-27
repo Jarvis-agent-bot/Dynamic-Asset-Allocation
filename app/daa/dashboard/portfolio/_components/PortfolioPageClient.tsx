@@ -48,6 +48,14 @@ export default function PortfolioPageClient(props: { initialTab?: string }) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    if (tab === "analysis") {
+      window.setTimeout(() => {
+        document.getElementById("portfolio-risk-overview")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 80);
+    }
   }
 
   function navigateToRebalance() {

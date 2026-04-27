@@ -76,8 +76,8 @@ export function ActiveTabPanel(props: {
               <RiskOverview
                 bootstrap={model.bootstrap}
                 snapshots={model.snapshots}
-                latestCycle={null}
-                currentRiskCheck={null}
+                latestCycle={model.bootstrap.latestCycle ?? null}
+                currentRiskCheck={model.bootstrap.latestCycle?.riskCheck ?? null}
               />
             </SectionErrorBoundary>
           ) : (

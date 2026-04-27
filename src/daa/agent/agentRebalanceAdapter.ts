@@ -9,6 +9,7 @@
  * 3. 填充 decisionContext，供前端展示和审计追踪
  */
 
+import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 import type { RebalanceProposal, ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
 import { getActiveTheses, getThesisAccuracyAvg } from "@/src/daa/agent/store/thesisStore";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
@@ -23,6 +24,29 @@ const CONVICTION_MULTIPLIER: Record<string, number> = {
   low: 0.2,
   uncertain: 0, // 跳过
 };
+
+const CONVICTION_RANK: Record<string, number> = {
+  high: 4,
+  medium: 3,
+  low: 2,
+  uncertain: 1,
+};
+
+function thesisUpdatedMs(thesis: Pick<ResearchThread, "updatedAt">): number {
+  const ms = Date.parse(thesis.updatedAt || "");
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+export function selectPrimaryRebalanceThesis(theses: ResearchThread[]): ResearchThread | null {
+  if (theses.length === 0) return null;
+  return [...theses].sort((a, b) => {
+    const rankDelta = (CONVICTION_RANK[b.conviction] ?? 0) - (CONVICTION_RANK[a.conviction] ?? 0);
+    if (rankDelta !== 0) return rankDelta;
+    const priorityDelta = (b.priorityScore ?? 0) - (a.priorityScore ?? 0);
+    if (priorityDelta !== 0) return priorityDelta;
+    return thesisUpdatedMs(b) - thesisUpdatedMs(a);
+  })[0] ?? null;
+}
 
 export interface AgentRebalanceResult {
   proposals: RebalanceProposal[];
@@ -87,10 +111,11 @@ export async function enhanceProposalsWithAgent(input: {
 
     for (const proposal of draftProposals) {
       const relatedTheses = thesesByAssetKey.get(proposal.assetKey) ?? [];
-      const thesis = relatedTheses[0] ?? null; // 主 thesis（优先级最高的）
+      const thesis = selectPrimaryRebalanceThesis(relatedTheses);
       const thesisIds = relatedTheses.map((t) => t.id);
       const conviction = thesis?.conviction ?? "medium";
       let multiplier = CONVICTION_MULTIPLIER[conviction] ?? 0.6;
+      const hasUncertainConflict = relatedTheses.some((t) => t.id !== thesis?.id && t.conviction === "uncertain");
 
       // 动态调整：基于历史准确率微调 multiplier
       if (thesis && accuracyCache.has(thesis.id)) {
@@ -126,7 +151,7 @@ export async function enhanceProposalsWithAgent(input: {
           ? `[Agent] ${sanitizeForPrompt(thesis.thesisText, 120)} (conviction: ${thesis.conviction})`
           : null,
         finalQtyMultiplier: multiplier,
-        conflictFlags: [],
+        conflictFlags: hasUncertainConflict ? ["存在同资产未定论点，已用更高 conviction 论点驱动仓位"] : [],
         effectiveMarketRegime: marketRegime ?? null,
       };
 

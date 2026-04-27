@@ -25,6 +25,23 @@ export function QuickConfigPopover(props: {
     setDriftThreshold(String((props.driftThresholdPct ?? 0.05) * 100));
   }, [props.driftThresholdPct]);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void getSystemConfig().then((current) => {
+      if (cancelled) return;
+      setDriftThreshold(String((current.config.rebalanceStrategy.drift.thresholdPct ?? 0.05) * 100));
+      setMaxPosition(String((current.config.strategy.constraints.maxPositionPct ?? 0.2) * 100));
+      setStopLoss(String((current.config.strategy.risk.perAssetStopLossPct ?? 0.1) * 100));
+      setTakeProfit(String((current.config.strategy.risk.perAssetTakeProfitPct ?? 0.3) * 100));
+    }).catch(() => {
+      // 打开调参面板时读取失败不阻断，保存时仍会重新读取版本。
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   const handleSave = useCallback(async () => {
     const vals = [Number(driftThreshold), Number(maxPosition), Number(stopLoss), Number(takeProfit)];
     if (vals.some((v) => !Number.isFinite(v) || v <= 0)) {
@@ -38,7 +55,7 @@ export function QuickConfigPopover(props: {
         baseVersion: current.version,
         patches: [
           { path: "rebalanceStrategy.drift.thresholdPct", value: Number(driftThreshold) / 100 },
-          { path: "strategy.constraints.maxPositionPct", value: Number(maxPosition) },
+          { path: "strategy.constraints.maxPositionPct", value: Number(maxPosition) / 100 },
           { path: "strategy.risk.perAssetStopLossPct", value: Number(stopLoss) / 100 },
           { path: "strategy.risk.perAssetTakeProfitPct", value: Number(takeProfit) / 100 },
         ],
