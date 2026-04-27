@@ -1,4 +1,7 @@
-import { canBrainRunAction } from "@/src/daa/brain/brainPolicy";
+import {
+  evaluateBrainActionAuthority,
+  evaluateManualRebalanceAuthority,
+} from "@/src/daa/automation/automationAuthority";
 
 import { describePendingAction, isPendingActionExpired } from "./agentContext";
 import { executePendingRebalanceAction, createAssistantRebalanceHandlers } from "./agentRebalanceExecutionHandlers";
@@ -45,9 +48,21 @@ export function createAssistantExecutionHandlers(input: DaaAgentToolContext): Ma
         pendingAction,
       };
     }
+    const pendingCycle = pendingAction.kind === "rebalance_execute"
+      ? input.readModel.cycles.find((cycle) => cycle.cycleId === pendingAction.cycleId)
+        ?? input.readModel.bootstrap.latestCycle
+      : null;
     const permission = pendingAction.kind === "trade"
-      ? canBrainRunAction(input.systemConfig, "simulate_trade")
-      : canBrainRunAction(input.systemConfig, "simulate_rebalance");
+      ? evaluateBrainActionAuthority({
+        systemConfig: input.systemConfig,
+        action: "simulate_trade",
+      })
+      : evaluateManualRebalanceAuthority({
+        systemConfig: input.systemConfig,
+        cycleId: pendingAction.cycleId,
+        proposalCount: pendingCycle?.proposals.length ?? (pendingAction.cycleId ? 1 : 0),
+        executionVenueMode: "local",
+      });
     if (!permission.allowed) {
       return {
         text: `${permission.reason}\n如需继续，请到设置页调整大脑授权等级。`,

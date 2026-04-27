@@ -9,6 +9,10 @@ import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { listDaaAssetUniverse } from "@/src/daa/store/assetUniverseStore";
 import { listDaaFxRates } from "@/src/daa/store/fxStore";
 import { buildAssetUniverseViewRows } from "@/src/daa/modules/workbench/assetUniverseService";
+import {
+  buildFxLookupToBase,
+  summarizeMarkToMarketPortfolio,
+} from "@/src/daa/modules/portfolio/portfolioValuation";
 import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -78,20 +82,34 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
         cash,
         targetWeights: {},
       });
+      const valuation = summarizeMarkToMarketPortfolio({
+        positions: rawRows.map((row) => ({
+          symbol: row.symbol,
+          market: row.market,
+          currency: row.currency,
+          qty: row.holdingQty,
+          holdingPrice: row.holdingPrice,
+          lastPrice: row.lastPrice,
+        })),
+        baseCurrency,
+        cash,
+        fxLookup: buildFxLookupToBase(fxRates),
+        accountTotalEquity: accountState.totalEquity,
+      });
+      const valuationByAssetKey = new Map(valuation.rows.map((row) => [row.assetKey, row]));
       const holdingRows = viewRows.filter(r => r.holdingQty > 0);
-      const holdingsValueBase = holdingRows.reduce((sum, r) => sum + Math.max(0, r.valuationBase ?? 0), 0);
-      const totalEquity = holdingsValueBase + cash;
+      const totalEquity = valuation.totalEquity;
       portfolio.holdings = holdingRows.map(r => ({
         assetKey: r.assetKey,
         symbol: r.symbol,
         holdingQty: r.holdingQty,
         lastPrice: r.lastPrice,
-        valuationBase: r.valuationBase ?? null,
-        weightPct: totalEquity > 0 ? (r.valuationBase ?? 0) / totalEquity : 0,
+        valuationBase: valuationByAssetKey.get(r.assetKey)?.baseValue ?? null,
+        weightPct: totalEquity > 0 ? (valuationByAssetKey.get(r.assetKey)?.baseValue ?? 0) / totalEquity : 0,
         unrealizedPnlPct: r.unrealizedPnlPct != null ? r.unrealizedPnlPct / 100 : null,
       }));
       portfolio.totalEquity = totalEquity;
-      portfolio.cashPct = totalEquity > 0 ? cash / totalEquity : 0;
+      portfolio.cashPct = totalEquity > 0 ? valuation.cash / totalEquity : 0;
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.portfolio", e);
     }

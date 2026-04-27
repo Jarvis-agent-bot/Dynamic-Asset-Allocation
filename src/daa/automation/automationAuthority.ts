@@ -35,7 +35,10 @@ function pushCheck(
   checks.push({ id, passed, message });
 }
 
-function finalize(checks: AutomationAuthorityDecision["checks"]): AutomationAuthorityDecision {
+function finalize(
+  checks: AutomationAuthorityDecision["checks"],
+  successReason = "自动执行授权通过。",
+): AutomationAuthorityDecision {
   const failed = checks.find((check) => !check.passed);
   if (failed) {
     return {
@@ -48,7 +51,7 @@ function finalize(checks: AutomationAuthorityDecision["checks"]): AutomationAuth
   return {
     allowed: true,
     requiresConfirmation: false,
-    reason: "自动执行授权通过。",
+    reason: successReason,
     checks,
   };
 }
@@ -60,7 +63,7 @@ export function evaluateBrainActionAuthority(input: {
   const checks: AutomationAuthorityDecision["checks"] = [];
   const permission = canBrainRunAction(input.systemConfig, input.action);
   pushCheck(checks, "brain-mode-action", permission.allowed, permission.reason);
-  return finalize(checks);
+  return finalize(checks, "大脑动作授权通过。");
 }
 
 export function evaluateAutoRebalanceAuthority(input: {
@@ -109,4 +112,37 @@ export function evaluateAutoRebalanceAuthority(input: {
   );
 
   return finalize(checks);
+}
+
+export function evaluateManualRebalanceAuthority(input: {
+  systemConfig: DaaSystemConfig;
+  cycleId?: string | null;
+  proposalCount: number;
+  executionVenueMode?: "local" | "remote" | "unknown";
+}): AutomationAuthorityDecision {
+  const checks: AutomationAuthorityDecision["checks"] = [];
+  const venueMode = input.executionVenueMode ?? "local";
+
+  const brainPermission = canBrainRunAction(input.systemConfig, "simulate_rebalance");
+  pushCheck(checks, "brain-mode-simulate-rebalance", brainPermission.allowed, brainPermission.reason);
+  pushCheck(
+    checks,
+    "local-execution-venue",
+    venueMode === "local",
+    "手动调仓执行仅允许本地模拟执行网关。",
+  );
+  pushCheck(
+    checks,
+    "cycle-present",
+    Boolean(input.cycleId),
+    "缺少可执行的再平衡周期。",
+  );
+  pushCheck(
+    checks,
+    "proposal-present",
+    input.proposalCount > 0,
+    "没有可执行提案，不能执行调仓。",
+  );
+
+  return finalize(checks, "手动执行授权通过。");
 }

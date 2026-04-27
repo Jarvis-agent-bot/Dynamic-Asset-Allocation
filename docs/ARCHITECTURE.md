@@ -234,7 +234,7 @@ daa_macro_cycle_snapshots           — 宏观周期
 daa_external_payload_raw_v1         — 原始 API 响应（90 天）
 ```
 
-### 5.4 运营与其他（8 张）
+### 5.4 运营与其他
 
 ```
 daa_account_state_v2               — 账户状态
@@ -243,7 +243,7 @@ daa_job_execution_logs             — Cron 日志（90 天）
 daa_notification_delivery_logs     — 通知发送记录
 daa_today_cache                    — Today 页面缓存
 daa_strategy_lab_run_snapshots     — 回测快照
-daa_broker_*                       — 券商相关（预留，未启用）
+daa_broker_*                       — 本地执行网关的订单/账户/持仓快照
 daa_schema_migrations_v1           — 迁移元表
 ```
 

@@ -306,8 +306,6 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | `daa_target_allocations` | 目标权重 |
 | `daa_market_price_snapshots` | 最新市场价格 |
 
-**注意**：旧表 `daa_asset_universe` 仍存在于数据库中但已不再读写，待后续清理。
-
 ## Key Files
 
 | Purpose | Path |
@@ -317,7 +315,8 @@ Core tables: `daa_account_state_v2`, `daa_asset_master`, `daa_portfolio_position
 | Rebalancing engine | `src/core/rebalanceCore.ts` |
 | Signal fusion | `src/daa/signals/fusion.ts` |
 | System config model | `src/daa/config/systemConfig.ts` |
-| Strategy params (可调阈值) | `src/daa/config/systemConfig.ts` (`DaaStrategyParams`) |
+| Authority gate（自动/手动执行授权） | `src/daa/automation/automationAuthority.ts` |
+| Portfolio valuation（金额来源） | `src/daa/modules/portfolio/portfolioValuation.ts` |
 | Market data client | `src/market/marketDataClient.ts` |
 | DB schema migrations | `src/daa/store/runtimeMigrations.ts` |
 | Workbench types | `src/daa/modules/workbench/workbenchTypes.ts` |

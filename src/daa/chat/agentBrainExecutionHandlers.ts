@@ -1,4 +1,4 @@
-import { canBrainRunAction } from "@/src/daa/brain/brainPolicy";
+import { evaluateBrainActionAuthority } from "@/src/daa/automation/automationAuthority";
 
 import { appendChatToolCall } from "./chatRepo";
 import { runAssistantBootstrap, runAssistantCognitiveCycle, switchAssistantBrainMode } from "./assistantBrain";
@@ -44,7 +44,10 @@ export function createAssistantBrainExecutionHandlers(input: DaaAgentToolContext
   });
 
   handlers.set("agent_run", async () => {
-    const permission = canBrainRunAction(input.systemConfig, "run_agent_cycle");
+    const permission = evaluateBrainActionAuthority({
+      systemConfig: input.systemConfig,
+      action: "run_agent_cycle",
+    });
     if (!permission.allowed) {
       return {
         text: `${permission.reason}\n如需放开，请到设置页切换到「操作员」或「自动驾驶」模式。`,
@@ -70,7 +73,10 @@ export function createAssistantBrainExecutionHandlers(input: DaaAgentToolContext
   });
 
   handlers.set("agent_bootstrap", async () => {
-    const permission = canBrainRunAction(input.systemConfig, "bootstrap_theses");
+    const permission = evaluateBrainActionAuthority({
+      systemConfig: input.systemConfig,
+      action: "bootstrap_theses",
+    });
     if (!permission.allowed) {
       return {
         text: `${permission.reason}\n如需放开，请到设置页切换到「操作员」或「自动驾驶」模式。`,

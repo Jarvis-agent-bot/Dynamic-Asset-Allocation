@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateAutoRebalanceAuthority,
   evaluateBrainActionAuthority,
+  evaluateManualRebalanceAuthority,
 } from "@/src/daa/automation/automationAuthority";
 import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 
@@ -18,6 +19,12 @@ describe("automation-authority snapshots", () => {
       autoRebalance: evaluateAutoRebalanceAuthority({
         systemConfig: config,
         triggerSource: "agent_trigger",
+        cycleId: "cycle-1",
+        proposalCount: 1,
+        executionVenueMode: "local",
+      }),
+      manualRebalance: evaluateManualRebalanceAuthority({
+        systemConfig: config,
         cycleId: "cycle-1",
         proposalCount: 1,
         executionVenueMode: "local",
@@ -71,7 +78,7 @@ describe("automation-authority snapshots", () => {
                 "passed": true,
               },
             ],
-            "reason": "自动执行授权通过。",
+            "reason": "大脑动作授权通过。",
             "requiresConfirmation": false,
           },
           "simulateRebalance": {
@@ -83,9 +90,36 @@ describe("automation-authority snapshots", () => {
                 "passed": true,
               },
             ],
-            "reason": "自动执行授权通过。",
+            "reason": "大脑动作授权通过。",
             "requiresConfirmation": false,
           },
+        },
+        "manualRebalance": {
+          "allowed": true,
+          "checks": [
+            {
+              "id": "brain-mode-simulate-rebalance",
+              "message": "自动驾驶模式允许「执行模拟调仓」。",
+              "passed": true,
+            },
+            {
+              "id": "local-execution-venue",
+              "message": "手动调仓执行仅允许本地模拟执行网关。",
+              "passed": true,
+            },
+            {
+              "id": "cycle-present",
+              "message": "缺少可执行的再平衡周期。",
+              "passed": true,
+            },
+            {
+              "id": "proposal-present",
+              "message": "没有可执行提案，不能执行调仓。",
+              "passed": true,
+            },
+          ],
+          "reason": "手动执行授权通过。",
+          "requiresConfirmation": false,
         },
       }
     `);

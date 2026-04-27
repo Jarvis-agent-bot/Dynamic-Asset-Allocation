@@ -214,7 +214,6 @@ docker compose up -d daa-web
 | `*/30 * * * *` | `health-check` | 每 30 分钟检查核心 cron 是否正常，失败 TG 告警 |
 | `0 * * * *` | `cognitive-agent` | 每小时触发（路由内按 `schedule` + `scheduleTimesUtc ±30min` 自门控） |
 | `40 3 * * *` | `entity-backfill` | 每日 03:40 幂等补齐存量记忆/论点的实体图 |
-| （手动） | `broker-orders-sync` | 券商订单同步（预留） |
 | （手动） | `monthly-report` | 月度报告（手动触发） |
 
 ### 5.2 手动触发

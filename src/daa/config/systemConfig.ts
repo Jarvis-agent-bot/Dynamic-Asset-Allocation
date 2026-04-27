@@ -42,27 +42,6 @@ export type DaaMarketIndicatorsConfig = {
   };
 };
 
-// ─── Strategy Params（可调参数，从硬编码提取为配置）─────────────────────
-
-export type DaaStrategyParams = {
-  signalFusion: {
-    /** 冲突惩罚 [人因vs技术, 新闻vs技术, 人因弱+技术强, 技术强+估值贵, 技术弱+估值便宜] */
-    conflictPenalties: [number, number, number, number, number];
-    maxConflictPenalty: number;
-    conflictConfidenceImpact: number;
-    actionThresholds: {
-      openOrAdd: { score: number; confidence: number };
-      watch: { score: number; confidence: number };
-    };
-    confidenceWeights: { human: number; news: number; technical: number; valuation: number };
-    macroCycleAdjustments: Record<string, number>;
-  };
-  marketRegime: {
-    riskOffThreshold: number;
-    riskOnThreshold: number;
-  };
-};
-
 export type DaaBrainMode = "advisor" | "operator" | "autopilot";
 
 export type DaaSystemConfig = {
@@ -99,8 +78,6 @@ export type DaaSystemConfig = {
       enforceOnExecution: boolean;
     };
     targetWeights: Record<string, number>;
-    /** 可调策略参数（信号融合、决策融合、市场环境阈值） */
-    strategyParams?: Partial<DaaStrategyParams>;
   };
   rebalanceStrategy: {
     calendar: {

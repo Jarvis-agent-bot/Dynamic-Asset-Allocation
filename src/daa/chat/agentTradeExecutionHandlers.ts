@@ -1,5 +1,5 @@
 import { appendAgentLearningEvent } from "@/src/daa/agent/agentLearningRepo";
-import { canBrainRunAction } from "@/src/daa/brain/brainPolicy";
+import { evaluateBrainActionAuthority } from "@/src/daa/automation/automationAuthority";
 import { executeTradeViaGateway, previewTradeViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { ExecuteManualTradeResult, PreviewManualTradeResult } from "@/src/daa/modules/workbench/manualTradeService";
 
@@ -83,7 +83,10 @@ export async function executeTradeIntent(input: {
   }
 
   const intent = input.toolContext.intent;
-  const permission = canBrainRunAction(input.toolContext.systemConfig, "simulate_trade");
+  const permission = evaluateBrainActionAuthority({
+    systemConfig: input.toolContext.systemConfig,
+    action: "simulate_trade",
+  });
   if (!permission.allowed) {
     return {
       text: `${permission.reason}\n你仍然可以先查询持仓、信号和调仓建议。`,
@@ -188,7 +191,10 @@ export async function executePendingTradeAction(input: {
   toolContext: DaaAgentToolContext;
   pendingAction: Extract<DaaChatPendingAction, { kind: "trade" }>;
 }): Promise<DaaAgentToolResult> {
-  const permission = canBrainRunAction(input.toolContext.systemConfig, "simulate_trade");
+  const permission = evaluateBrainActionAuthority({
+    systemConfig: input.toolContext.systemConfig,
+    action: "simulate_trade",
+  });
   if (!permission.allowed) {
     return {
       text: `${permission.reason}\n当前待确认动作已取消。`,

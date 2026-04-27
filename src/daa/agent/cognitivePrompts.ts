@@ -9,7 +9,6 @@ import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition, CognitionGap } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import { formatAssetLabel, formatAssetLabelByKey } from "@/src/daa/assetRegistry";
-// V1 compat types removed — buildReactFollowUpPrompt now uses inline type
 
 // ── Prioritize 节点 Prompt ──
 
@@ -538,7 +537,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   // ── 持仓概览（从 portfolio 合并） ──
   if (meta.portfolio) {
     const p = meta.portfolio;
-    const holdingsValue = p.holdings.reduce((s, h) => s + (h.valuationBase ?? h.lastPrice * h.holdingQty), 0);
+    const holdingsValue = p.holdings.reduce((s, h) => s + (h.valuationBase ?? 0), 0);
     lines.push("<b>\u{1F4B0} 组合概览</b>");
     lines.push(`总权益 <code>$${fmtK(p.totalEquity)}</code> | 持仓 <code>$${fmtK(holdingsValue)}</code> (${p.holdings.length}个) | 现金 <code>${(p.cashPct * 100).toFixed(0)}%</code>`);
     lines.push("");
@@ -549,7 +548,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
       lines.push("<b>\u{1F4CB} 持仓</b>");
       for (const h of sorted.slice(0, 8)) {
         const pnl = h.unrealizedPnlPct != null ? `${h.unrealizedPnlPct >= 0 ? "+" : ""}${(h.unrealizedPnlPct * 100).toFixed(1)}%` : "";
-        lines.push(`• ${formatAssetLabel({ symbol: h.symbol, assetKey: h.assetKey })} ${(h.weightPct * 100).toFixed(1)}% $${fmtK(h.valuationBase ?? h.lastPrice * h.holdingQty)} ${pnl}`);
+        lines.push(`• ${formatAssetLabel({ symbol: h.symbol, assetKey: h.assetKey })} ${(h.weightPct * 100).toFixed(1)}% $${fmtK(h.valuationBase ?? 0)} ${pnl}`);
       }
       lines.push("");
     }

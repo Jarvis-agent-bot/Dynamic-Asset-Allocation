@@ -1,5 +1,5 @@
 import { appendAgentLearningEvent } from "@/src/daa/agent/agentLearningRepo";
-import { canBrainRunAction } from "@/src/daa/brain/brainPolicy";
+import { evaluateManualRebalanceAuthority } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
@@ -166,7 +166,13 @@ export function createAssistantRebalanceHandlers(input: DaaAgentToolContext): Ma
   });
 
   handlers.set("rebalance_execute", async () => {
-    const permission = canBrainRunAction(input.systemConfig, "simulate_rebalance");
+    const latestCycle = input.readModel.bootstrap.latestCycle;
+    const permission = evaluateManualRebalanceAuthority({
+      systemConfig: input.systemConfig,
+      cycleId: latestCycle?.cycleId ?? null,
+      proposalCount: latestCycle?.proposals.length ?? 0,
+      executionVenueMode: "local",
+    });
     if (!permission.allowed) {
       return {
         text: `${permission.reason}\n你仍然可以先生成调仓建议，但不能继续进入模拟执行。`,
@@ -174,7 +180,6 @@ export function createAssistantRebalanceHandlers(input: DaaAgentToolContext): Ma
         pendingAction: null,
       };
     }
-    const latestCycle = input.readModel.bootstrap.latestCycle;
     if (!latestCycle) {
       return {
         text: "当前没有可执行的调仓周期。先发“生成调仓建议”生成一轮，再执行。",

@@ -11,7 +11,6 @@ import {
   getDaaMarketCacheHealthStats,
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
-import { buildFxLookupToBase, summarizeMarkToMarketPortfolio } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { computeCorrelationMatrix } from "./correlationService";
 import type {
   HfSignalSummary,
@@ -722,39 +721,6 @@ function buildTargetWeightsFromConfig(input: {
     return out;
 }
 
-function computeTotalEquity(input: {
-    rows: Array<{
-        symbol: string;
-        market: string;
-        currency: string;
-        holdingQty: number;
-        holdingPrice: number;
-        lastPrice: number;
-    }>;
-    fxRates: Array<{
-        baseCcy: string;
-        quoteCcy: string;
-        rate: number;
-    }>;
-    baseCurrency: string;
-    cash: number;
-}): number {
-    const fxLookup = buildFxLookupToBase(input.fxRates);
-    return summarizeMarkToMarketPortfolio({
-        positions: input.rows.map((row) => ({
-            symbol: row.symbol,
-            market: row.market,
-            currency: row.currency,
-            qty: toPositive(row.holdingQty, 0),
-            lastPrice: row.lastPrice,
-            holdingPrice: row.holdingPrice,
-        })),
-        baseCurrency: input.baseCurrency,
-        cash: input.cash,
-        fxLookup,
-    }).totalEquity;
-}
-
 function priceAgeSec(ts: string | null): number | null {
     const iso = normalizeText(ts);
     if (!iso)
@@ -1190,7 +1156,6 @@ export {
   buildMarketFacts,
   mapStoreCycleReportToView,
   buildTargetWeightsFromConfig,
-  computeTotalEquity,
   priceAgeSec,
   buildWorkbenchMarketDataHealth,
   buildCycleDraftFromBootstrap,
