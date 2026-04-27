@@ -77,9 +77,10 @@ export function buildAssetUniverseViewRows(input: {
     });
 
     const valBase = valuation?.baseValue ?? 0;
-    const costInBase = row.costBasisInBase ?? ((row.costBasis ?? 0) * (fxRateToBase ?? 1));
-    const unrealizedPnlBase = valBase > 0 && costInBase > 0 ? valBase - costInBase : null;
-    const unrealizedPnlPct = costInBase > 0 ? ((valBase - costInBase) / costInBase) * 100 : null;
+    const costInBase = row.costBasisInBase ?? null;
+    const hasCostInBase = costInBase != null && costInBase > 0;
+    const unrealizedPnlBase = valBase > 0 && hasCostInBase ? valBase - costInBase : null;
+    const unrealizedPnlPct = hasCostInBase ? ((valBase - costInBase) / costInBase) * 100 : null;
 
     return {
       assetKey: row.assetKey,
@@ -95,7 +96,7 @@ export function buildAssetUniverseViewRows(input: {
       holdingQty: row.holdingQty,
       holdingPrice: row.holdingPrice,
       costBasis: row.costBasis,
-      costBasisInBase: costInBase > 0 ? costInBase : null,
+      costBasisInBase: hasCostInBase ? costInBase : null,
       unrealizedPnlBase,
       unrealizedPnlPct,
       holdingTags: row.holdingTags,

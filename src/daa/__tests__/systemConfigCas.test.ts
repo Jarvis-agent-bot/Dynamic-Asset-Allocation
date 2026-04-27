@@ -248,6 +248,38 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     });
   });
 
+  it("已创建账户后忽略 system config 对 baseCurrency 的改写", async () => {
+    const current = await getDaaSystemConfig();
+    expect(current.config.strategy.account.baseCurrency).toBe("USD");
+
+    const saved = await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "HKD",
+            cash: 1234,
+          },
+        },
+      },
+    });
+
+    expect(saved.config.strategy.account.baseCurrency).toBe("USD");
+    expect(saved.config.strategy.account.cash).toBeCloseTo(1234, 6);
+
+    await withDaaPgClient(async ({ query }) => {
+      const accountRows = await query(
+        "SELECT base_currency, cash FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
+      );
+      const account = accountRows.rows[0] as Record<string, unknown>;
+      expect(String(account.base_currency)).toBe("USD");
+      expect(Number(account.cash)).toBeCloseTo(1234, 6);
+    });
+  });
+
   it("cash ledger 更新现金时保留管理员写入的非 account 配置", async () => {
     const current = await getDaaSystemConfig();
     await saveDaaSystemConfig({

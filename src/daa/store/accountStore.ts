@@ -239,10 +239,11 @@ export async function writeAccountStateInTx(
   const cash = Object.prototype.hasOwnProperty.call(nextRaw, "cash")
     ? Math.max(0, toFiniteNumber(nextRaw.cash, current.cash))
     : current.cash;
-  const baseCurrency = normalizeCurrencyAlias(
+  const requestedBaseCurrency = normalizeCurrencyAlias(
     normalizeText(nextRaw.baseCurrency, current.baseCurrency),
     current.baseCurrency,
   );
+  const baseCurrency = requestedBaseCurrency === current.baseCurrency ? requestedBaseCurrency : current.baseCurrency;
   const frozenCash = Object.prototype.hasOwnProperty.call(nextRaw, "frozenCash")
     ? Math.max(0, Math.min(cash, toFiniteNumber(nextRaw.frozenCash, current.frozenCash)))
     : current.frozenCash;
@@ -439,6 +440,4 @@ export async function patchDaaSystemConfig(input: {
     }
   });
 }
-
-
 

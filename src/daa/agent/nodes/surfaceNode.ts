@@ -44,8 +44,12 @@ function computeDueForReview(
       if (!uncertainMatch && !staleMatch) continue;
 
       const triggerReason = uncertainMatch
-        ? `论点判断仍未收敛（conviction=uncertain，权重 ${(weight * 100).toFixed(1)}%）`
-        : `持仓权重 ${(weight * 100).toFixed(1)}%，已 ${days} 天未得到新调查`;
+        ? (
+          days <= 1
+            ? `论点刚进入观察态，等待下一轮证据确认（权重 ${(weight * 100).toFixed(1)}%）`
+            : `论点仍处观察态，尚未形成高置信度方向（权重 ${(weight * 100).toFixed(1)}%，${days} 天未更新）`
+        )
+        : `高权重持仓需要复核：权重 ${(weight * 100).toFixed(1)}%，已 ${days} 天未得到新调查`;
       const focusHint = t.invalidationConditions
         ? `核对失效条件：${t.invalidationConditions.slice(0, 80)}`
         : (t.tags.length > 0 ? `关注维度：${t.tags.slice(0, 3).join("、")}` : `重新检视论点：${t.title}`);
@@ -319,10 +323,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         thesesCount: theses.length,
         memoriesCount: memCount,
         portfolio: {
-          holdings: portfolio.holdings.map(h => ({
-            ...h,
-            valuationBase: h.lastPrice * h.holdingQty,
-          })),
+          holdings: portfolio.holdings,
           totalEquity: portfolio.totalEquity,
           cashPct: portfolio.cashPct,
           marketRegime: state.market?.regime ?? undefined,

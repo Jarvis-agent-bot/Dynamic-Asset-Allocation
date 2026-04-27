@@ -350,7 +350,7 @@ export function buildStrategyAdvisorPrompt(ctx: {
   holdings: Array<{ assetKey: string; symbol: string; weightPct: number; price: number }>;
   theses: ResearchThread[];
   surprises: Array<{ title: string; severityScore: number; suggestedAction: string }>;
-  cognitionGaps: Array<{ assetKey: string; portfolioWeight: number; daysSinceLastInvestigation: number }>;
+  cognitionGaps: Array<{ assetKey: string; portfolioWeight: number; daysSinceLastInvestigation: number; uncertaintyReason?: string; suggestedInvestigation?: string }>;
   ruleRegime: string;
   defaultDriftThresholdPct: number;
   maxPositionPct: number;
@@ -369,7 +369,7 @@ export function buildStrategyAdvisorPrompt(ctx: {
     : "无意外";
 
   const gapLines = ctx.cognitionGaps.length > 0
-    ? ctx.cognitionGaps.map(g => `${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}% ${g.daysSinceLastInvestigation}天未更新`).join("\n")
+    ? ctx.cognitionGaps.map(g => `${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}%：${sanitizeForPrompt(g.uncertaintyReason || `${g.daysSinceLastInvestigation}天未更新`, 90)}${g.suggestedInvestigation ? `；${sanitizeForPrompt(g.suggestedInvestigation, 90)}` : ""}`).join("\n")
     : "无";
 
   return `你是投资组合的「策略顾问」。基于当前组合状况和论点分析，输出你对规则引擎参数的建议。
@@ -629,16 +629,28 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   }
 
   // ── Agent 目标权重计划（如有） ──
-  if (briefing.configOverlay) {
-    const ov = briefing.configOverlay;
-    const parts: string[] = [];
-    if (ov.regimeOverride) parts.push(`Regime: ${ov.regimeOverride.ruleBasedRegime}→${ov.regimeOverride.suggestedRegime} (${ov.regimeOverride.confidence}%)`);
-    if (ov.targetAllocationPlan?.intents?.length) parts.push(`目标权重: ${ov.targetAllocationPlan.intents.slice(0, 4).map(i => `${i.symbol}→${i.proposedTargetWeightPct.toFixed(1)}%`).join(", ")}`);
-    if (parts.length > 0) {
-      lines.push("<b>\u{1F916} 策略建议</b>");
-      for (const part of parts) lines.push(`• ${part}`);
-      lines.push("");
+  const ov = briefing.configOverlay ?? null;
+  const strategyLines: string[] = [];
+  if (ov?.regimeOverride) {
+    strategyLines.push(`Regime: ${ov.regimeOverride.ruleBasedRegime}→${ov.regimeOverride.suggestedRegime} (${ov.regimeOverride.confidence}%)`);
+  }
+  const intents = ov?.targetAllocationPlan?.intents ?? [];
+  if (intents.length > 0) {
+    const topIntents = intents.slice(0, 4).map(i => {
+      const label = i.symbol || formatAssetLabelByKey(i.assetKey);
+      return `${label}→${i.proposedTargetWeightPct.toFixed(1)}% (${i.confidence.toFixed(0)}%)`;
+    }).join(", ");
+    strategyLines.push(`目标权重: ${topIntents}`);
+    if (ov?.targetAllocationPlan?.reasoning) {
+      strategyLines.push(`理由: ${ov.targetAllocationPlan.reasoning.slice(0, 120)}`);
     }
+  } else if (briefing.cognitionGaps.length > 0) {
+    strategyLines.push("本轮仅保持自动跟踪，未形成高置信度目标权重计划；不会仅因观察态论点直接调仓。");
+  }
+  if (strategyLines.length > 0) {
+    lines.push("<b>\u{1F916} 策略建议</b>");
+    for (const part of strategyLines) lines.push(`• ${part}`);
+    lines.push("");
   }
 
   lines.push(`<i>\u{1F4CA} 论点: ${meta.thesesCount} | 记忆: ${meta.memoriesCount} | Tokens: ${meta.totalTokens} | ${(meta.durationMs / 1000).toFixed(1)}s</i>`);

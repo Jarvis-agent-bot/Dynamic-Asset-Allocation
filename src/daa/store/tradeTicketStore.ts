@@ -1795,11 +1795,12 @@ export async function applyDaaBrokerOrderSync(input: {
         const fxRateToBase = current.fxRateToBase && current.fxRateToBase > 0
           ? current.fxRateToBase
           : resolveFxRateToBase(current.baseCurrency, current.instrumentCurrency, fxMap);
+        if (!(fxRateToBase && fxRateToBase > 0)) {
+          throw new Error(`missing fx rate for trade-ticket execution: ${current.instrumentCurrency}/${current.baseCurrency}`);
+        }
         const effectivePrice = avgFillPrice && avgFillPrice > 0 ? avgFillPrice : current.price;
         const grossNotionalDelta = deltaFilledQty * effectivePrice;
-        const notionalInBaseDelta = fxRateToBase && fxRateToBase > 0
-          ? grossNotionalDelta * fxRateToBase
-          : grossNotionalDelta;
+        const notionalInBaseDelta = grossNotionalDelta * fxRateToBase;
         const ledgerSide: DaaStoreCashLedgerSide = current.side === "BUY" ? "withdraw" : "deposit";
         const ledgerAmount = current.side === "BUY"
           ? notionalInBaseDelta
@@ -1969,7 +1970,10 @@ export async function updateDaaTradeTicket(input: {
         : current.reasonTags;
 
       const grossNotional = qty * price;
-      const fxRateToBase = current.fxRateToBase ?? 1;
+      const fxRateToBase = current.fxRateToBase && current.fxRateToBase > 0 ? current.fxRateToBase : 0;
+      if (!(fxRateToBase > 0)) {
+        throw new Error(`missing fx rate for trade-ticket update: ${current.instrumentCurrency}/${current.baseCurrency}`);
+      }
       const notionalInBase = grossNotional * fxRateToBase;
       await query(
         "UPDATE daa_trade_tickets SET qty = $1, price = $2, fee = $3, gross_notional = $4, notional_in_base = $5, reason_text = $6, reason_tags = $7, updated_at = NOW() WHERE ticket_id = $8",

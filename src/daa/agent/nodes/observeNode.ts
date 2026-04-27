@@ -86,6 +86,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
         symbol: r.symbol,
         holdingQty: r.holdingQty,
         lastPrice: r.lastPrice,
+        valuationBase: r.valuationBase ?? null,
         weightPct: totalEquity > 0 ? (r.valuationBase ?? 0) / totalEquity : 0,
         unrealizedPnlPct: r.unrealizedPnlPct != null ? r.unrealizedPnlPct / 100 : null,
       }));

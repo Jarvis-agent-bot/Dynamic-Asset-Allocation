@@ -858,12 +858,15 @@ function buildCycleDraftFromBootstrap(input: {
             if (suggestedNotional > cashRemaining) {
                 suggestedNotional = cashRemaining; // 截断至可用现金
             }
-            buyNotionalUsed += suggestedNotional;
         }
 
         const fxRateToBase = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : null;
-        const localNotional = fxRateToBase ? (suggestedNotional / fxRateToBase) : suggestedNotional;
+        if (!fxRateToBase) continue;
+        const localNotional = suggestedNotional / fxRateToBase;
         const suggestedQty = localNotional / price;
+        if (side === "BUY") {
+            buyNotionalUsed += suggestedNotional;
+        }
         proposals.push({
             assetKey: row.assetKey,
             symbol: row.symbol,
@@ -991,7 +994,9 @@ function buildRiskCycleDraft(input: {
         const suggestedNotional = Math.max(0, (row.valuationBase || 0) * sellRatio);
         if (!(suggestedNotional > 0))
             continue;
-        const localNotional = row.fxRateToBase && row.fxRateToBase > 0 ? (suggestedNotional / row.fxRateToBase) : suggestedNotional;
+        const fxRateToBase = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : null;
+        if (!fxRateToBase) continue;
+        const localNotional = suggestedNotional / fxRateToBase;
         const suggestedQty = Math.min(row.holdingQty, localNotional / px);
         if (!(suggestedQty > 0))
             continue;
@@ -999,7 +1004,7 @@ function buildRiskCycleDraft(input: {
             assetKey: row.assetKey,
             symbol: row.symbol,
             currency: row.currency,
-            fxRateToBase: row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : null,
+            fxRateToBase,
             side: "SELL",
             suggestedQty,
             suggestedNotional,

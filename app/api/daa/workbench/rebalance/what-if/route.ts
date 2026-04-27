@@ -40,13 +40,13 @@ export async function POST(req: Request) {
 
     const proposals = ((cycle as Record<string, unknown>).proposals as Array<{
       assetKey: string; symbol: string; side: "BUY" | "SELL";
-      suggestedQty: number; price: number; selected: boolean;
+      suggestedQty: number; price: number; selected: boolean; suggestedNotional: number;
     }> ?? []).filter((p) =>
       selectedKeys.size === 0 || selectedKeys.has(`${p.assetKey}-${p.side}`),
     );
 
     const baseCurrency = bootstrap.baseCurrency;
-    type AssetRow = { assetKey: string; symbol: string; holdingQty: number; lastPrice: number; fxRateToBase: number | null };
+    type AssetRow = { assetKey: string; symbol: string; holdingQty: number; valuationBase: number | null; fxMissing: boolean };
     const holdings = (bootstrap.assetUniverse as AssetRow[]).filter((h) => h.holdingQty > 0);
     const cash = bootstrap.account.cash;
 
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     let totalHoldingsValue = 0;
 
     for (const h of holdings) {
-      const val = h.holdingQty * h.lastPrice * (h.fxRateToBase ?? 1);
+      const val = h.valuationBase ?? 0;
       totalHoldingsValue += val;
       beforeItems.push({ name: h.symbol, value: +val.toFixed(2), weightPct: 0 });
     }
@@ -70,9 +70,7 @@ export async function POST(req: Request) {
     let sellTotal = 0;
 
     for (const p of proposals) {
-      const h = holdMap.get(p.assetKey);
-      const fx = h?.fxRateToBase ?? 1;
-      const delta = p.suggestedQty * p.price * fx;
+      const delta = Math.max(0, Number(p.suggestedNotional) || 0);
       if (p.side === "BUY") {
         adjustments.set(p.assetKey, (adjustments.get(p.assetKey) ?? 0) + delta);
         buyTotal += delta;
@@ -87,7 +85,7 @@ export async function POST(req: Request) {
 
     for (const h of holdings) {
       if (h.holdingQty > 0 || adjustments.has(h.assetKey)) {
-        const currentVal = h.holdingQty * h.lastPrice * (h.fxRateToBase ?? 1);
+        const currentVal = h.valuationBase ?? 0;
         const adj = adjustments.get(h.assetKey) ?? 0;
         const newVal = Math.max(0, currentVal + adj);
         if (newVal > 0) {

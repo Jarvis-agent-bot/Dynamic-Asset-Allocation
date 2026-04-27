@@ -6,6 +6,7 @@ import {
   buildPrioritizePrompt,
   buildReflectPrompt,
   buildReviewPrompt,
+  buildStrategyAdvisorPrompt,
   buildSurfacePrompt,
   formatBriefingForTelegram,
 } from "@/src/daa/agent/cognitivePrompts";
@@ -173,6 +174,30 @@ describe("buildSurfacePrompt", () => {
   });
 });
 
+describe("buildStrategyAdvisorPrompt", () => {
+  it("把自动跟踪项的 Agent 语义传给策略顾问，而不是只给天数", () => {
+    const prompt = buildStrategyAdvisorPrompt({
+      holdings: [{ assetKey: "US:NVDA", symbol: "NVDA", weightPct: 0.107, price: 980 }],
+      theses: [{ ...mockThread, conviction: "uncertain" }],
+      surprises: [],
+      cognitionGaps: [{
+        assetKey: "US:NVDA",
+        portfolioWeight: 0.107,
+        daysSinceLastInvestigation: 2,
+        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向",
+        suggestedInvestigation: "关注维度：组合、资产配置、宏观",
+      }],
+      ruleRegime: "risk_on",
+      defaultDriftThresholdPct: 0.05,
+      maxPositionPct: 0.3,
+    });
+
+    expect(prompt).toContain("论点仍处观察态");
+    expect(prompt).toContain("关注维度");
+    expect(prompt).not.toContain("US:NVDA 权重10.7% 2天未更新");
+  });
+});
+
 // ── formatBriefingForTelegram ──
 
 describe("formatBriefingForTelegram", () => {
@@ -193,6 +218,41 @@ describe("formatBriefingForTelegram", () => {
     expect(html).toContain("测试论点");
   });
 
+  it("组合概览优先使用基准货币估值，避免港股原币种金额放大", () => {
+    const briefing: DailyBriefing = {
+      surprises: [],
+      cognitionGaps: [],
+      mindChangeConditions: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+    };
+    const html = formatBriefingForTelegram(briefing, {
+      totalTokens: 0,
+      durationMs: 1000,
+      thesesCount: 1,
+      memoriesCount: 0,
+      portfolio: {
+        totalEquity: 10_200,
+        cashPct: 0.9,
+        holdings: [{
+          assetKey: "HK::0388.HK",
+          symbol: "0388.HK",
+          holdingQty: 20,
+          lastPrice: 390,
+          valuationBase: 1_000,
+          weightPct: 0.098,
+          unrealizedPnlPct: 0.032,
+        }],
+      },
+    });
+
+    expect(html).toContain("持仓 <code>$1.0K</code>");
+    expect(html).toContain("香港交易所 0388.HK 9.8% $1.0K");
+    expect(html).not.toContain("$7.8K");
+  });
+
   it("空 briefing 也能正常格式化", () => {
     const briefing: DailyBriefing = {
       surprises: [],
@@ -205,6 +265,64 @@ describe("formatBriefingForTelegram", () => {
     };
     const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 0, memoriesCount: 0 });
     expect(html).toContain("市场与预期一致");
+  });
+
+  it("有自动跟踪但无目标权重计划时，明确说明不会直接调仓", () => {
+    const briefing: DailyBriefing = {
+      surprises: [],
+      cognitionGaps: [{
+        assetKey: "US::NVDA",
+        portfolioWeight: 0.107,
+        daysSinceLastInvestigation: 2,
+        uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向（权重 10.7%，2 天未更新）",
+        suggestedInvestigation: "关注维度：组合、资产配置、宏观",
+      }],
+      mindChangeConditions: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+      configOverlay: {
+        generatedAt: "2026-04-27T00:00:00.000Z",
+        agentRunId: "run-1",
+        regimeOverride: null,
+        targetAllocationPlan: null,
+      },
+    };
+    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
+    expect(html).toContain("策略建议");
+    expect(html).toContain("本轮仅保持自动跟踪");
+    expect(html).toContain("不会仅因观察态论点直接调仓");
+  });
+
+  it("有目标权重计划时，展示 Agent 的目标权重、置信度和理由", () => {
+    const briefing: DailyBriefing = {
+      surprises: [],
+      cognitionGaps: [],
+      mindChangeConditions: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+      configOverlay: {
+        generatedAt: "2026-04-27T00:00:00.000Z",
+        agentRunId: "run-1",
+        regimeOverride: null,
+        targetAllocationPlan: {
+          reasoning: "NVDA 论点失效风险抬升，先降至观察仓。",
+          intents: [{
+            assetKey: "US::NVDA",
+            symbol: "NVDA",
+            proposedTargetWeightPct: 3,
+            confidence: 86,
+            reasoning: "论点证据转弱",
+          }],
+        },
+      },
+    };
+    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
+    expect(html).toContain("目标权重: NVDA→3.0% (86%)");
+    expect(html).toContain("理由: NVDA 论点失效风险抬升");
   });
 
   it("渲染风险暴露板块（thesisFailureImpacts 存在且达 medium 及以上）", () => {

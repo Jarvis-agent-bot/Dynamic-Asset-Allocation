@@ -119,7 +119,7 @@ export async function buildWorkbenchExecuteSummary(input: {
   const feeRate = feeRateBps / 10000;
   const buyNotional = rows.filter((row) => row.side === "BUY").reduce((sum, row) => sum + row.suggestedNotional, 0);
   const sellNotional = rows.filter((row) => row.side === "SELL").reduce((sum, row) => sum + row.suggestedNotional, 0);
-  const estimatedFees = rows.reduce((sum, row) => sum + (row.suggestedQty * row.price * feeRate), 0);
+  const estimatedFees = rows.reduce((sum, row) => sum + (row.suggestedNotional * feeRate), 0);
   const netCashImpact = sellNotional - buyNotional - estimatedFees;
 
   const totalEquity = Math.max(1e-9, toFinite(bootstrap.account.totalEquity, 0));

@@ -166,11 +166,28 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
       }
       if (b.cognitionGaps.length > 0) {
         parts.push("\n🔍 自动跟踪中:");
-        for (const g of b.cognitionGaps.slice(0, 3)) parts.push(`  ${g.assetKey} (权重${(g.portfolioWeight * 100).toFixed(1)}%) — ${g.daysSinceLastInvestigation}天未更新`);
+        for (const g of b.cognitionGaps.slice(0, 3)) {
+          parts.push(`  ${g.assetKey} — ${g.uncertaintyReason}`);
+          if (g.suggestedInvestigation) parts.push(`    ↳ ${g.suggestedInvestigation}`);
+        }
       }
       if (b.mindChangeConditions.length > 0) {
         parts.push("\n🔄 改观条件:");
         for (const m of b.mindChangeConditions.slice(0, 3)) parts.push(`  "${m.thesisTitle}" (${m.currentConviction}): ${m.conditions.slice(0, 2).join("; ")}`);
+      }
+      const overlay = b.configOverlay ?? null;
+      const intents = overlay?.targetAllocationPlan?.intents ?? [];
+      if (overlay?.regimeOverride || intents.length > 0 || b.cognitionGaps.length > 0) {
+        parts.push("\n🤖 策略建议:");
+        if (overlay?.regimeOverride) {
+          parts.push(`  Regime: ${overlay.regimeOverride.ruleBasedRegime} → ${overlay.regimeOverride.suggestedRegime} (${overlay.regimeOverride.confidence}%)`);
+        }
+        if (intents.length > 0) {
+          parts.push(`  目标权重: ${intents.slice(0, 4).map(i => `${i.symbol || i.assetKey}→${i.proposedTargetWeightPct.toFixed(1)}% (${i.confidence.toFixed(0)}%)`).join(", ")}`);
+          if (overlay?.targetAllocationPlan?.reasoning) parts.push(`  理由: ${overlay.targetAllocationPlan.reasoning.slice(0, 120)}`);
+        } else if (b.cognitionGaps.length > 0) {
+          parts.push("  本轮仅保持自动跟踪，未形成高置信度目标权重计划；不会仅因观察态论点直接调仓。");
+        }
       }
       parts.push(`\n📊 论点更新: ${b.thesesUpdated} | 记忆: ${b.memoriesCreated} | Tokens: ${b.totalTokens}`);
       return { text: parts.join("\n"), intentKind: "agent_briefing", pendingAction: input.currentPendingAction };

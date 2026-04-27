@@ -180,13 +180,12 @@ export const DAILY_REPORT_PARSE_MODE = "HTML";
 
 // ─── Helpers ───
 
-function computePnlPct(row: { unrealizedPnlPct?: number | null; costBasisInBase?: number | null; costBasis?: number | null; valuationBase?: number | null; fxRateToBase?: number | null }): number {
+function computePnlPct(row: { unrealizedPnlPct?: number | null; costBasisInBase?: number | null; valuationBase?: number | null }): number {
   // 优先使用服务层预计算的 PnL
   if (row.unrealizedPnlPct != null && Number.isFinite(row.unrealizedPnlPct)) return row.unrealizedPnlPct;
-  // Fallback: costBasisInBase
-  const costInBase = row.costBasisInBase ?? ((row.costBasis ?? 0) * (row.fxRateToBase ?? 1));
+  const costInBase = row.costBasisInBase ?? null;
   const val = row.valuationBase ?? 0;
-  if (costInBase > 0 && val > 0) return ((val - costInBase) / costInBase) * 100;
+  if (costInBase != null && costInBase > 0 && val > 0) return ((val - costInBase) / costInBase) * 100;
   return 0;
 }
 

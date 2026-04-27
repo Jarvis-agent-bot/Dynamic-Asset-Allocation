@@ -4,31 +4,29 @@
 
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import {
+  buildFxRateBook,
+  normalizeMoneyCurrency,
+  normalizeMoneyPair,
+  resolveFxRateToBaseCurrency,
+  type FxRateBook,
+} from "@/src/daa/modules/money/money";
 import { withDaaPgClient, toIsoString } from "./storeShared";
 import type { DaaStoreFxRate } from "./storeTypes";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
 
 export function normalizeCcyCode(value: unknown, fallback = "USD"): string {
-  return normalizeCurrencyAlias(value, fallback);
+  return normalizeMoneyCurrency(value, fallback);
 }
 
 export function normalizeFxPair(baseCcy: string, quoteCcy: string): string {
-  return `${normalizeCcyCode(baseCcy)}/${normalizeCcyCode(quoteCcy)}`;
+  return normalizeMoneyPair(baseCcy, quoteCcy);
 }
 
-export type DaaFxLookupMap = Map<string, number>;
+export type DaaFxLookupMap = FxRateBook;
 
 export function buildFxLookupMap(rows: Array<Record<string, unknown>>): DaaFxLookupMap {
-  const out = new Map<string, number>();
-  for (const row of rows) {
-    const base = normalizeCcyCode(row.base_ccy, "USD");
-    const quote = normalizeCcyCode(row.quote_ccy, "USD");
-    const rate = Math.max(0, toFiniteNumber(row.rate, 0));
-    if (!base || !quote || rate <= 0) continue;
-    out.set(normalizeFxPair(base, quote), rate);
-  }
-  return out;
+  return buildFxRateBook(rows);
 }
 
 export function resolveFxRateToBase(
@@ -36,14 +34,7 @@ export function resolveFxRateToBase(
   instrumentCurrency: string,
   fxMap: DaaFxLookupMap,
 ): number | null {
-  const base = normalizeCcyCode(baseCurrency, "USD");
-  const local = normalizeCcyCode(instrumentCurrency, base);
-  if (local === base) return 1;
-  const direct = fxMap.get(normalizeFxPair(local, base));
-  if (direct && direct > 0) return direct;
-  const reverse = fxMap.get(normalizeFxPair(base, local));
-  if (reverse && reverse > 0) return 1 / reverse;
-  return null;
+  return resolveFxRateToBaseCurrency(baseCurrency, instrumentCurrency, fxMap);
 }
 
 export function mapFxRateRow(row: Record<string, unknown>): DaaStoreFxRate {
@@ -143,4 +134,3 @@ export async function upsertDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Pr
     return result.rows.map((row) => mapFxRateRow(row as Record<string, unknown>));
   });
 }
-

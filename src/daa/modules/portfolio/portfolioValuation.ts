@@ -2,6 +2,12 @@ import {
   buildDaaAssetKey,
   normalizeDaaCurrencyCode,
 } from "@/src/daa/assetKey";
+import {
+  buildFxRateBook,
+  convertLocalMoneyToBase,
+  resolveFxRateToBaseCurrency,
+  type FxRateBook,
+} from "@/src/daa/modules/money/money";
 
 export type DaaFxRateLike = {
   baseCcy?: unknown;
@@ -33,6 +39,7 @@ export type DaaPositionValuationRow = {
   currency: string;
   localValue: number;
   baseValue: number | null;
+  fxRateToBase: number | null;
   fxMissing: boolean;
 };
 
@@ -42,52 +49,42 @@ export type DaaMarkToMarketValuationRow = DaaPositionValuationRow & {
 };
 
 export function buildFxLookupToBase(rows: DaaFxRateLike[]): Map<string, number> {
-  const output = new Map<string, number>();
-  for (const row of rows) {
-    const base = normalizeDaaCurrencyCode(row.baseCcy, "");
-    const quote = normalizeDaaCurrencyCode(row.quoteCcy, "");
-    const rate = Number(row.rate);
-    if (!base || !quote || !Number.isFinite(rate) || rate <= 0) continue;
-    output.set(`${base}/${quote}`, rate);
-  }
-  return output;
+  return buildFxRateBook(rows);
 }
 
 export function resolveFxRateToBase(
   baseCurrency: string,
   localCurrency: unknown,
-  fxLookup: Map<string, number>,
+  fxLookup: FxRateBook,
 ): number | null {
-  const base = normalizeDaaCurrencyCode(baseCurrency, "USD");
-  const local = normalizeDaaCurrencyCode(localCurrency, base);
-  if (local === base) return 1;
-  const direct = fxLookup.get(`${local}/${base}`);
-  if (direct && direct > 0) return direct;
-  const reverse = fxLookup.get(`${base}/${local}`);
-  if (reverse && reverse > 0) return 1 / reverse;
-  return null;
+  return resolveFxRateToBaseCurrency(baseCurrency, localCurrency, fxLookup);
 }
 
 export function buildPositionValuationRows(
   positions: DaaPositionLike[],
   baseCurrency: string,
-  fxLookup: Map<string, number>,
+  fxLookup: FxRateBook,
 ): DaaPositionValuationRow[] {
   return positions.map((position) => {
     const symbol = String(position.symbol || "").trim().toUpperCase();
     const market = String(position.market || "US").trim().toUpperCase() || "US";
     const currency = normalizeDaaCurrencyCode(position.currency, baseCurrency);
     const localValue = Number(position.qty || 0) * Number(position.price || 0);
-    const fxRate = resolveFxRateToBase(baseCurrency, currency, fxLookup);
-    const baseValue = fxRate != null ? localValue * fxRate : null;
+    const conversion = convertLocalMoneyToBase({
+      amount: localValue,
+      localCurrency: currency,
+      baseCurrency,
+      fxBook: fxLookup,
+    });
     return {
       assetKey: buildDaaAssetKey(symbol, market),
       symbol,
       market,
       currency,
       localValue,
-      baseValue,
-      fxMissing: localValue > 0 && baseValue == null,
+      baseValue: conversion.base?.amount ?? null,
+      fxRateToBase: conversion.fxRateToBase,
+      fxMissing: conversion.fxMissing,
     };
   });
 }
@@ -106,7 +103,7 @@ export function resolveMarkToMarketPrice(input: {
 export function buildMarkToMarketValuationRows(
   positions: DaaMarkToMarketPositionLike[],
   baseCurrency: string,
-  fxLookup: Map<string, number>,
+  fxLookup: FxRateBook,
 ): DaaMarkToMarketValuationRow[] {
   return positions.map((position) => {
     const markPrice = resolveMarkToMarketPrice({
@@ -133,6 +130,7 @@ export function buildMarkToMarketValuationRows(
         currency: normalizeDaaCurrencyCode(position.currency, baseCurrency),
         localValue: 0,
         baseValue: null,
+        fxRateToBase: null,
         fxMissing: false,
       }),
       markPrice,
@@ -145,19 +143,27 @@ export function summarizeMarkToMarketPortfolio(input: {
   positions: DaaMarkToMarketPositionLike[];
   baseCurrency: string;
   cash?: unknown;
-  fxLookup: Map<string, number>;
+  fxLookup: FxRateBook;
 }): {
   rows: DaaMarkToMarketValuationRow[];
+  baseCurrency: string;
   holdingsValue: number;
+  cash: number;
   totalEquity: number;
+  fxMissingAssets: DaaMarkToMarketValuationRow[];
+  equitySource: "derived_mark_to_market";
 } {
   const rows = buildMarkToMarketValuationRows(input.positions, input.baseCurrency, input.fxLookup);
   const holdingsValue = rows.reduce((sum, row) => sum + (row.baseValue ?? 0), 0);
   const cash = Math.max(0, Number(input.cash) || 0);
   return {
     rows,
+    baseCurrency: normalizeDaaCurrencyCode(input.baseCurrency, "USD"),
     holdingsValue,
+    cash,
     totalEquity: holdingsValue + cash,
+    fxMissingAssets: rows.filter((row) => row.fxMissing),
+    equitySource: "derived_mark_to_market",
   };
 }
 
@@ -173,4 +179,3 @@ export function buildActualWeightMap(
   }
   return map;
 }
-

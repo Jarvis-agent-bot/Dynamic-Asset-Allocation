@@ -28,6 +28,8 @@ export interface PortfolioSnapshot {
     symbol: string;
     holdingQty: number;
     lastPrice: number;
+    /** 基准货币估值，用于跨市场展示和权重计算，避免把 HKD/CNY 原币种金额当 USD 相加。 */
+    valuationBase?: number | null;
     weightPct: number;
     unrealizedPnlPct: number | null;
   }>;
