@@ -3,10 +3,8 @@ import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { getAgentConfigOverlayForRun } from "@/src/daa/agent/store/overlayStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
-import {
-  canBrainRunAction,
-  resolveBrainConfig,
-} from "@/src/daa/brain/brainPolicy";
+import { resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
+import { evaluateBrainActionAuthority } from "@/src/daa/automation/automationAuthority";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -240,7 +238,10 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
       reason: "认知 Agent 已关闭。",
     });
   }
-  const permission = canBrainRunAction(row.config, "run_agent_cycle");
+  const permission = evaluateBrainActionAuthority({
+    systemConfig: row.config,
+    action: "run_agent_cycle",
+  });
   if (!permission.allowed) {
     return buildSkippedResult({
       source: input.source,

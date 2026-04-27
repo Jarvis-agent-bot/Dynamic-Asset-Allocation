@@ -56,6 +56,9 @@ export type WorkbenchAllocationSummary = {
   investableCash: number;
   frozenCash: number;
   totalEquity: number;
+  equitySource: "derived_mark_to_market" | "account_state_override";
+  derivedTotalEquity: number;
+  fxMissingAssetKeys: string[];
   topHoldings: Array<{
     assetKey: string;
     symbol: string;

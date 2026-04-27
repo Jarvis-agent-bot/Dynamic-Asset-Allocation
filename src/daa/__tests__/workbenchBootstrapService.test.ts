@@ -29,7 +29,15 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
 
 vi.mock("@/src/daa/modules/portfolio/portfolioValuation", () => ({
   buildFxLookupToBase: vi.fn(() => new Map()),
-  summarizeMarkToMarketPortfolio: vi.fn(() => ({ rows: [], holdingsValue: 0, totalEquity: 1000 })),
+  summarizeMarkToMarketPortfolio: vi.fn(() => ({
+    rows: [],
+    holdingsValue: 0,
+    cash: 1000,
+    derivedTotalEquity: 1000,
+    totalEquity: 1000,
+    fxMissingAssets: [],
+    equitySource: "account_state_override",
+  })),
 }));
 
 vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({

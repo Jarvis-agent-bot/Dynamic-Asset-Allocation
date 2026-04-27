@@ -16,7 +16,7 @@ cron/手动                                              TG 日报推送
 
 核心理念：系统不问"该买什么"，而是维护一组持续演化的**投资论点（Thesis）**，每天问"我现在最可能错在哪里"。
 
-当前为模拟执行模式，不对接真实券商。
+当前为本地模拟执行模式，不对接真实券商。手动交易/手动调仓走确认交互；Autopilot 开启时可以按显式配置自动生成并执行本地模拟调仓。
 
 ## Tech Stack
 
@@ -147,6 +147,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 - 所有 LLM 输出经 `validateShape()` 结构校验
 - 每个 prompt 包含 few-shot JSON 示例
 - 新 thesis 创建前去重检查（assetKeys + 标题子串匹配）
+- Autopilot 自动执行统一经过 `AutomationAuthority`、单笔 NAV 上限、执行前风控和本地执行网关；LLM 只能输出本轮目标权重计划，不能直接改永久配置或绕过执行授权
 
 **数据模型**（8 张表）：
 - `daa_research_threads` — 研究论点

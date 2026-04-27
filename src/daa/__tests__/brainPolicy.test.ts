@@ -49,9 +49,21 @@ describe("brain-policy", () => {
 
   it("默认大脑配置是自动驾驶，并启用本地自动调仓闭环", () => {
     const config = normalizeSystemConfig({});
-    expect(config.brain?.mode).toBe("autopilot");
-    expect(config.rebalanceStrategy.autoGenerateEnabled).toBe(true);
-    expect(config.rebalanceStrategy.autoExecuteEnabled).toBe(true);
+    expect({
+      brainMode: config.brain?.mode,
+      autoGenerateEnabled: config.rebalanceStrategy.autoGenerateEnabled,
+      autoExecuteEnabled: config.rebalanceStrategy.autoExecuteEnabled,
+      autoExecuteMaxSinglePct: config.rebalanceStrategy.autoExecuteMaxSinglePct,
+      executionBoundary: buildBrainBoundaryText(config),
+    }).toMatchInlineSnapshot(`
+      {
+        "autoExecuteEnabled": true,
+        "autoExecuteMaxSinglePct": 10,
+        "autoGenerateEnabled": true,
+        "brainMode": "autopilot",
+        "executionBoundary": "自动驾驶模式：允许运行认知循环、初始化论点与本地模拟执行；Agent 只能输出目标权重计划，不能自动修改系统配置。",
+      }
+    `);
   });
 
   it("缺省解析只回退模式，不恢复旧自动配置权限", () => {

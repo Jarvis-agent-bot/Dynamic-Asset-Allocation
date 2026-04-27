@@ -21,6 +21,10 @@ import {
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 
 import { buildAssetUniverseViewRows } from "./assetUniverseService";
+import {
+  buildFxLookupToBase,
+  summarizeMarkToMarketPortfolio,
+} from "@/src/daa/modules/portfolio/portfolioValuation";
 import type {
   RebalanceCycle,
   WorkbenchBootstrap,
@@ -37,7 +41,6 @@ import {
   buildTargetWeightsFromConfig,
   buildWorkbenchMarketDataHealth,
   calcHoldingCostPerUnit,
-  computeTotalEquity,
   mapStoreCycleReportToView,
   mapStoreCycleToView,
   priceAgeSec,
@@ -345,9 +348,21 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
   const holdingsValue = assetUniverse
     .filter((row) => row.holdingQty > 0)
     .reduce((sum, row) => sum + Math.max(0, toFinite(row.valuationBase, 0)), 0);
-  const totalEquity = runtimePortfolio.account.totalEquity == null
-    ? holdingsValue + cash
-    : toPositive(runtimePortfolio.account.totalEquity, holdingsValue + cash);
+  const portfolioValuation = summarizeMarkToMarketPortfolio({
+    positions: rowsWithPriceContext.map((row) => ({
+      symbol: row.symbol,
+      market: row.market,
+      currency: row.currency,
+      qty: row.holdingQty,
+      holdingPrice: row.holdingPrice,
+      lastPrice: row.lastPrice,
+    })),
+    baseCurrency,
+    cash,
+    fxLookup: buildFxLookupToBase(fxRates),
+    accountTotalEquity: runtimePortfolio.account.totalEquity,
+  });
+  const totalEquity = portfolioValuation.totalEquity;
 
   const logs = allTickets
     .filter((ticket) => ticket.status !== "ready")
@@ -502,6 +517,13 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
         investableCash,
         frozenCash,
         totalEquity,
+        valuation: {
+          holdingsValue: portfolioValuation.holdingsValue,
+          derivedTotalEquity: portfolioValuation.derivedTotalEquity,
+          totalEquity: portfolioValuation.totalEquity,
+          equitySource: portfolioValuation.equitySource,
+          fxMissingAssetKeys: portfolioValuation.fxMissingAssets.map((row) => row.assetKey),
+        },
         cashMutationsAllowed: runtimePortfolio.account.cashMutationsAllowed,
         readOnlyReason: runtimePortfolio.account.readOnlyReason,
         accountBreakdown: runtimePortfolio.account.accountBreakdown,

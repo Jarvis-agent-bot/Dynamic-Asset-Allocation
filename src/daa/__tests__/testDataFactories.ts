@@ -148,6 +148,13 @@ export function buildWorkbenchBootstrap(
       investableCash: 1000,
       frozenCash: 0,
       totalEquity: 1000,
+      valuation: {
+        holdingsValue: 0,
+        derivedTotalEquity: 1000,
+        totalEquity: 1000,
+        equitySource: "derived_mark_to_market",
+        fxMissingAssetKeys: [],
+      },
     },
     assetUniverse: [],
     execution: {

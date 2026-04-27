@@ -10,9 +10,9 @@
 
 DAA Rebalance 是面向**单个投资者**的动态资产配置与再平衡金融系统。
 
-- 不是实盘交易系统 — 不对接任何券商 API
+- 不是实盘交易系统 — 默认执行边界是本地 `sim` / `crypto_paper`，不向真实券商下单
 - 不是多租户 SaaS — 硬编码 `'default'` 账户
-- 是"观察 + 研究 + 建议 + 模拟执行 + 复盘"的闭环工作台
+- 是"观察 + 研究 + 目标权重计划 + 本地模拟执行 + 复盘"的闭环工作台
 - AI-Native：系统不只是展示数据，而是维护一组持续演化的**投资论点（Thesis）**，每天自问"我现在最可能错在哪里"
 
 ---
@@ -127,7 +127,19 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 | 订单生成 | `src/core/rebalanceCore.ts` 纯算法：最小化交易次数，满足权重约束 |
 | 风控预检 | 市场 regime、单仓上限、流动性、手续费阈值 |
 | 模拟执行 | 无券商对接，直接写 `daa_portfolio_positions` + `daa_decision_log` |
-| 执行边界 | Autopilot 只允许本地模拟账本自动执行；真实券商链路未接入 |
+| 执行边界 | Autopilot 可在显式配置下自动执行本地模拟账本；真实券商链路未接入 |
+
+**自动化权限边界**：
+
+所有自动执行统一经过 `src/daa/automation/automationAuthority.ts`：
+
+1. `brain.mode` 必须允许对应动作。
+2. `autoGenerateEnabled` / `autoExecuteEnabled` 必须同时开启。
+3. 执行网关必须是本地模拟网关。
+4. 必须存在可执行 cycle 与 proposal。
+5. 之后继续经过单笔 NAV 上限、执行前风控、trade ticket 执行校验。
+
+因此，Autopilot 可以自动执行，但只能在本地模拟账户内执行，不能绕过 Authority 直接从 LLM 输出下单。
 
 **信号融合**（`src/daa/signals/fusion.ts`）：
 - `technicalSignal.ts` — SMA / 动量 / 趋势
@@ -245,11 +257,11 @@ daa_schema_migrations_v1           — 迁移元表
 
 所有表硬编码 `'default'` 账户。不支持多用户 / 多组合。
 
-### 6.2 baseCurrency 不可变
+### 6.2 Money / Valuation Domain
 
-系统基准货币 USD（`strategy.account.baseCurrency`），一旦设定不应更改，否则历史 PnL 失真。
+系统基准货币默认 USD，一旦设定不应更改，否则历史 PnL 失真。运行时账户状态是基准货币 source of truth，系统配置只作为默认值和展示配置。
 
-所有面向用户的金额必须用基准货币：
+所有组合级金额必须由 Money/Valuation Domain 输出，不能在 UI、Agent、通知或 cron 中各自拼装：
 
 | 字段 | 币种 | 用途 |
 |------|------|------|
@@ -258,6 +270,11 @@ daa_schema_migrations_v1           — 迁移元表
 | `valuationBase` | 基准货币 | 当前市值 |
 | `unrealizedPnlBase` | 基准货币 | 浮动盈亏金额 |
 | `unrealizedPnlPct` | 百分比 | 浮动盈亏百分比 |
+| `derivedTotalEquity` | 基准货币 | `holdingsValue + cash` 推导权益 |
+| `totalEquity` | 基准货币 | 权重、风控和自动执行上限使用的总权益 |
+| `equitySource` | 枚举 | `derived_mark_to_market` / `account_state_override` |
+
+缺失 FX 时，展示层可以带状态降级，执行层不可静默按 1:1 处理。
 
 FX 转换只在交易入库时做一次（锁定当时汇率），不随汇率浮动。前端**禁止**手动 `costBasis * fxRate`。
 

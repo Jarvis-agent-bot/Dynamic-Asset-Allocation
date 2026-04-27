@@ -39,9 +39,45 @@ describe("money valuation boundary", () => {
     });
 
     expect(summary.holdingsValue).toBeCloseTo(1000, 6);
+    expect(summary.derivedTotalEquity).toBeCloseTo(1200, 6);
     expect(summary.totalEquity).toBeCloseTo(1200, 6);
+    expect(summary.equitySource).toBe("derived_mark_to_market");
     expect(summary.fxMissingAssets).toHaveLength(1);
     expect(summary.fxMissingAssets[0]?.symbol).toBe("600519.SS");
+  });
+
+  it("总权益来源快照区分估值推导和账户覆盖", () => {
+    const fxLookup = buildFxLookupToBase([
+      { baseCcy: "USD", quoteCcy: "HKD", rate: 7.8 },
+    ]);
+
+    const summary = summarizeMarkToMarketPortfolio({
+      baseCurrency: "USD",
+      cash: 200,
+      fxLookup,
+      accountTotalEquity: 1300,
+      positions: [
+        { symbol: "0388.HK", market: "HK", currency: "HKD", qty: 20, lastPrice: 390 },
+      ],
+    });
+
+    expect({
+      holdingsValue: Number(summary.holdingsValue.toFixed(6)),
+      cash: summary.cash,
+      derivedTotalEquity: Number(summary.derivedTotalEquity.toFixed(6)),
+      totalEquity: summary.totalEquity,
+      equitySource: summary.equitySource,
+      fxMissingAssetKeys: summary.fxMissingAssets.map((row) => row.assetKey),
+    }).toMatchInlineSnapshot(`
+      {
+        "cash": 200,
+        "derivedTotalEquity": 1200,
+        "equitySource": "account_state_override",
+        "fxMissingAssetKeys": [],
+        "holdingsValue": 1000,
+        "totalEquity": 1300,
+      }
+    `);
   });
 
   it("资产视图不再用成本本币乘当前 FX 作为 PnL 展示 fallback", () => {

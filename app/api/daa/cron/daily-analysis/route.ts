@@ -248,19 +248,14 @@ export async function POST(req: Request) {
           };
         }
 
-        // ── Phase C: auto-execute (gated by autoExecuteEnabled) ──
+        // ── Phase C: auto-execute（统一交给 AutomationAuthority 判定） ──
         let autoExecute: { attempted: boolean; executed: boolean; ordersCount: number; error?: string; blockedReason?: string | null } = {
           attempted: false,
           executed: false,
           ordersCount: 0,
         };
 
-        if (
-          strategy.autoExecuteEnabled &&
-          strategy.autoGenerateEnabled &&
-          autoGenerate.created &&
-          autoGenerate.cycleId
-        ) {
+        if (autoGenerate.created && autoGenerate.cycleId) {
           const result = await executeAutoRebalanceCycle({
             cycle: generatedCycleForAutoExecute ?? {
               cycleId: autoGenerate.cycleId,

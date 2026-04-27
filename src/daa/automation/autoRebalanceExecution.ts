@@ -1,4 +1,5 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { evaluateAutoRebalanceAuthority, type AutomationAuthorityDecision, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
@@ -14,6 +15,7 @@ export type AutoRebalanceExecutionResult = {
   ordersCount: number;
   blockedReason: string | null;
   error: string | null;
+  authority: AutomationAuthorityDecision | null;
 };
 
 async function notifyAutoExecutionIssue(input: {
@@ -48,7 +50,7 @@ async function notifyAutoExecutionIssue(input: {
 export async function executeAutoRebalanceCycle(input: {
   cycle: Pick<RebalanceCycle, "cycleId" | "proposals">;
   systemConfig: DaaSystemConfig;
-  triggerSource: string;
+  triggerSource: AutomationAuthorityTrigger;
   totalEquity?: number | null;
 }): Promise<AutoRebalanceExecutionResult> {
   const base: AutoRebalanceExecutionResult = {
@@ -57,13 +59,23 @@ export async function executeAutoRebalanceCycle(input: {
     ordersCount: 0,
     blockedReason: null,
     error: null,
+    authority: null,
   };
 
-  if (!input.systemConfig.rebalanceStrategy.autoExecuteEnabled) {
+  const authority = evaluateAutoRebalanceAuthority({
+    systemConfig: input.systemConfig,
+    triggerSource: input.triggerSource,
+    cycleId: input.cycle.cycleId,
+    proposalCount: input.cycle.proposals.length,
+    executionVenueMode: "local",
+  });
+  if (!authority.allowed) {
     return {
       ...base,
       attempted: false,
-      error: "自动执行未开启。",
+      blockedReason: authority.reason,
+      error: authority.reason,
+      authority,
     };
   }
 
@@ -90,6 +102,7 @@ export async function executeAutoRebalanceCycle(input: {
     return {
       ...base,
       blockedReason: message,
+      authority,
     };
   }
 
@@ -106,6 +119,7 @@ export async function executeAutoRebalanceCycle(input: {
       ...base,
       executed: executedCount > 0,
       ordersCount: executedCount,
+      authority,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || "");
@@ -121,6 +135,7 @@ export async function executeAutoRebalanceCycle(input: {
     return {
       ...base,
       error: message,
+      authority,
     };
   }
 }

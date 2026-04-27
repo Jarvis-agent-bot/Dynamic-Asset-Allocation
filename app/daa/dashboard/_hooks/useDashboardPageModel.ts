@@ -114,13 +114,13 @@ export function useDashboardPageModel(input: {
     mergeCycleState,
   });
 
-  const holdingsValue = allocationSummary?.holdingValue ?? assetRows
+  const holdingsValue = allocationSummary?.holdingValue ?? bootstrap?.account.valuation?.holdingsValue ?? assetRows
     .filter((row) => row.holdingQty > 0)
     .reduce((sum, row) => sum + (row.valuationBase ?? 0), 0);
   const totalCashValue = allocationSummary?.cashValue ?? bootstrap?.account.cash ?? 0;
   const frozenCashValue = allocationSummary?.frozenCash ?? bootstrap?.account.frozenCash ?? 0;
   const availableCashValue = Math.max(0, totalCashValue - frozenCashValue);
-  const totalEquity = allocationSummary?.totalEquity ?? (holdingsValue + totalCashValue);
+  const totalEquity = allocationSummary?.totalEquity ?? bootstrap?.account.valuation?.totalEquity ?? bootstrap?.account.totalEquity ?? 0;
 
   const rebalanceSectionProps = bootstrap ? {
     bootstrap,

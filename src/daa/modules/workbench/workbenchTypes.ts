@@ -432,6 +432,13 @@ export type WorkbenchBootstrap = {
     investableCash: number;
     frozenCash: number;
     totalEquity: number | null;
+    valuation?: {
+      holdingsValue: number;
+      derivedTotalEquity: number;
+      totalEquity: number;
+      equitySource: "derived_mark_to_market" | "account_state_override";
+      fxMissingAssetKeys: string[];
+    };
     cashMutationsAllowed?: boolean;
     readOnlyReason?: string | null;
     accountBreakdown?: WorkbenchAccountBreakdownItem[];

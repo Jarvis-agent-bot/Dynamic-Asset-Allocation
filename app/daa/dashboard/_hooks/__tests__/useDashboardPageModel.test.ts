@@ -145,6 +145,9 @@ describe("useDashboardPageModel", () => {
         investableCash: 548,
         frozenCash: 226,
         totalEquity: 774,
+        equitySource: "derived_mark_to_market",
+        derivedTotalEquity: 774,
+        fxMissingAssetKeys: [],
         topHoldings: [],
       },
       setCycles: vi.fn(),
@@ -168,7 +171,7 @@ describe("useDashboardPageModel", () => {
     expect(result.current.frozenCashValue).toBe(226);
   });
 
-  it("在 read model 缺失时回退到 持仓 + 现金，并拆分冻结现金", () => {
+  it("在 read model 缺失时优先使用 bootstrap 的账户权益来源，并拆分冻结现金", () => {
     mockUseWorkbenchModel.mockReturnValue({
       activeTab: "positions",
       setActiveTab: vi.fn(),
@@ -211,7 +214,7 @@ describe("useDashboardPageModel", () => {
     const { result } = renderHook(() => useDashboardPageModel());
 
     expect(result.current.holdingsValue).toBe(150);
-    expect(result.current.totalEquity).toBe(350);
+    expect(result.current.totalEquity).toBe(999);
     expect(result.current.availableCashValue).toBe(150);
     expect(result.current.frozenCashValue).toBe(50);
   });

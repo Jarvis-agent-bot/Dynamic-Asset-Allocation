@@ -48,6 +48,19 @@ export type DaaMarkToMarketValuationRow = DaaPositionValuationRow & {
   markPriceSource: "last_price" | "holding_price" | "missing";
 };
 
+export type PortfolioEquitySource = "derived_mark_to_market" | "account_state_override";
+
+export type PortfolioValuationSummary = {
+  rows: DaaMarkToMarketValuationRow[];
+  baseCurrency: string;
+  holdingsValue: number;
+  cash: number;
+  derivedTotalEquity: number;
+  totalEquity: number;
+  fxMissingAssets: DaaMarkToMarketValuationRow[];
+  equitySource: PortfolioEquitySource;
+};
+
 export function buildFxLookupToBase(rows: DaaFxRateLike[]): Map<string, number> {
   return buildFxRateBook(rows);
 }
@@ -144,26 +157,23 @@ export function summarizeMarkToMarketPortfolio(input: {
   baseCurrency: string;
   cash?: unknown;
   fxLookup: FxRateBook;
-}): {
-  rows: DaaMarkToMarketValuationRow[];
-  baseCurrency: string;
-  holdingsValue: number;
-  cash: number;
-  totalEquity: number;
-  fxMissingAssets: DaaMarkToMarketValuationRow[];
-  equitySource: "derived_mark_to_market";
-} {
+  accountTotalEquity?: unknown;
+}): PortfolioValuationSummary {
   const rows = buildMarkToMarketValuationRows(input.positions, input.baseCurrency, input.fxLookup);
   const holdingsValue = rows.reduce((sum, row) => sum + (row.baseValue ?? 0), 0);
   const cash = Math.max(0, Number(input.cash) || 0);
+  const derivedTotalEquity = holdingsValue + cash;
+  const accountTotalEquity = Number(input.accountTotalEquity);
+  const hasAccountOverride = Number.isFinite(accountTotalEquity) && accountTotalEquity >= 0;
   return {
     rows,
     baseCurrency: normalizeDaaCurrencyCode(input.baseCurrency, "USD"),
     holdingsValue,
     cash,
-    totalEquity: holdingsValue + cash,
+    derivedTotalEquity,
+    totalEquity: hasAccountOverride ? accountTotalEquity : derivedTotalEquity,
     fxMissingAssets: rows.filter((row) => row.fxMissing),
-    equitySource: "derived_mark_to_market",
+    equitySource: hasAccountOverride ? "account_state_override" : "derived_mark_to_market",
   };
 }
 
