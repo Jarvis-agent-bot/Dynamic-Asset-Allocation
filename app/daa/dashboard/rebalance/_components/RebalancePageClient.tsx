@@ -1,24 +1,79 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot } from "lucide-react";
+import { Bot, CalendarClock, Gauge, ShieldCheck, WalletCards } from "lucide-react";
 
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { DaaSurfaceStatusPill } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
+import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 
 import { DashboardNotificationBar } from "@/app/daa/dashboard/_shared/DashboardNotificationBar";
 import { DashboardDialogs } from "@/app/daa/dashboard/_shared/DashboardDialogs";
 import { RebalanceProposalList } from "@/app/daa/dashboard/_shared/rebalance/RebalanceProposalList";
 import { WhatIfPreview } from "@/app/daa/dashboard/_shared/rebalance/WhatIfPreview";
 import { DriftBarChart } from "@/app/daa/dashboard/_shared/rebalance/DriftBarChart";
+import {
+  cycleStatusLabel,
+  cycleStatusTone,
+  marketRegimeLabel,
+  marketRegimeTone,
+  riskOverallTone,
+  riskStatusLabel,
+  triggerSourceLabel,
+} from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
 // 历史周期已移至交易记录页
 import { MarketIndicatorDashboard } from "@/app/daa/dashboard/_shared/MarketIndicatorDashboard";
 
 import { QuickConfigPopover } from "./QuickConfigPopover";
 import { MarketContextCard } from "./MarketContextCard";
 import { ExecutionPanel } from "./ExecutionPanel";
+
+function formatSnapshotTime(value: string | null | undefined) {
+  if (!value) return "等待生成";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16);
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function WorkbenchStatusCard(props: {
+  label: string;
+  value: string;
+  hint: string;
+  icon: ReactNode;
+  tone?: "cyan" | "green" | "amber" | "red" | "indigo" | "slate";
+}) {
+  const toneClass = props.tone === "green"
+    ? "border-[var(--success-border)] bg-[var(--success-bg)] text-[var(--success)]"
+    : props.tone === "amber"
+      ? "border-[var(--amber-border)] bg-[var(--amber-bg)] text-[var(--amber)]"
+      : props.tone === "red"
+        ? "border-[var(--danger-border)] bg-[var(--danger-bg)] text-[var(--danger)]"
+        : props.tone === "indigo"
+          ? "border-[var(--indigo-border)] bg-[var(--indigo-bg)] text-[var(--indigo)]"
+          : "border-[var(--primary-border)] bg-[var(--primary-bg)] text-[var(--primary)]";
+  return (
+    <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.88)] px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border ${toneClass}`}>
+          {props.icon}
+        </div>
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--faint)]">{props.label}</div>
+          <div className="mt-1 truncate text-sm font-semibold text-[var(--text)]">{props.value}</div>
+          <div className="mt-0.5 line-clamp-1 text-xs text-[var(--muted)]">{props.hint}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function RebalancePageClient() {
   const wbModel = useDashboardPageModel();
@@ -59,6 +114,41 @@ export default function RebalancePageClient() {
     };
   }, [rp?.currentCycle?.agentDecisionSnapshot]);
 
+  const cycle = rp?.currentCycle ?? null;
+  const riskStatus = rp?.currentRiskCheck?.overallStatus ?? "pass";
+  const statusCards = wbModel.bootstrap && rp ? [
+    {
+      label: "周期状态",
+      value: cycle ? cycleStatusLabel(cycle.status) : "未生成",
+      hint: cycle ? `${triggerSourceLabel(cycle.triggerSource)} · ${cycle.cycleId.slice(0, 8)}` : "生成后可审阅建议",
+      icon: <Gauge className="h-4 w-4" />,
+      tone: cycle ? cycleStatusTone(cycle.status) : "slate",
+    },
+    {
+      label: "调仓时点",
+      value: formatSnapshotTime(cycle?.snapshotAt),
+      hint: cycle?.triggerReason || "等待触发原因",
+      icon: <CalendarClock className="h-4 w-4" />,
+      tone: "indigo" as const,
+    },
+    {
+      label: "市场与风控",
+      value: `${marketRegimeLabel(wbModel.bootstrap.marketContext?.regime)} / ${riskStatusLabel(riskStatus)}`,
+      hint: `风险分 ${(wbModel.bootstrap.marketContext?.riskOffScorePct ?? 0).toFixed(0)} · ${rp.currentRiskCheck?.items.filter((item) => item.status !== "pass").length ?? 0} 条提示`,
+      icon: <ShieldCheck className="h-4 w-4" />,
+      tone: riskStatus === "pass" ? marketRegimeTone(wbModel.bootstrap.marketContext?.regime) : riskOverallTone(riskStatus),
+    },
+    {
+      label: "执行范围",
+      value: rp.selectedProposalCount > 0
+        ? formatCurrency(rp.selectedProposalNotional, wbModel.bootstrap.baseCurrency)
+        : `${cycle?.proposals.length ?? 0} 条建议`,
+      hint: rp.selectedProposalCount > 0 ? `已选 ${rp.selectedProposalCount} 条` : `买入 ${rp.buyProposalCount} · 卖出 ${rp.sellProposalCount}`,
+      icon: <WalletCards className="h-4 w-4" />,
+      tone: rp.selectedProposalCount > 0 ? "green" as const : "cyan" as const,
+    },
+  ] : [];
+
   return (
     <div className="space-y-4">
       <DashboardNotificationBar
@@ -71,48 +161,32 @@ export default function RebalancePageClient() {
         warnings={wbModel.bootstrap?.warnings || []}
       />
 
-      {/* 顶部工具栏 */}
-      <div className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--border)] bg-[rgba(8,12,20,0.42)] px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <Bot className="h-4 w-4 text-[var(--primary)]" />
-          <span className="text-sm text-[var(--muted)]">AI 决策</span>
-          <DaaSurfaceStatusPill tone={wbModel.priceStreamConnected ? "green" : "slate"}>
-            {wbModel.priceStreamConnected ? "实时" : "离线"}
-          </DaaSurfaceStatusPill>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(8,12,20,0.52)] p-3">
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-[var(--primary)]" />
+            <span className="text-sm font-semibold text-[var(--text)]">调仓工作台</span>
+            <DaaSurfaceStatusPill tone={wbModel.priceStreamConnected ? "green" : "slate"}>
+              {wbModel.priceStreamConnected ? "实时价格" : "价格离线"}
+            </DaaSurfaceStatusPill>
+          </div>
           <QuickConfigPopover driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct} />
         </div>
+        {statusCards.length > 0 ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {statusCards.map((card) => (
+              <WorkbenchStatusCard key={card.label} {...card} />
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* ── 两栏决策区域 ── */}
       {wbModel.bootstrap && rp ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-            {/* 左侧：市场环境 + 提案列表 */}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            {/* 左侧：提案列表 + 漂移概览 */}
             <div className="space-y-4">
-              <SectionErrorBoundary sectionName="市场环境">
-                <MarketContextCard
-                  marketContext={wbModel.bootstrap.marketContext ?? null}
-                  aiSnapshot={aiSnapshot}
-                />
-              </SectionErrorBoundary>
-
-              {driftCount > 0 ? (
-                <SectionErrorBoundary sectionName="漂移概览">
-                  <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
-                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
-                      漂移概览 ({driftCount} 项超阈值)
-                    </div>
-                    <DriftBarChart
-                      rows={wbModel.tableProps.rows}
-                      thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
-                      maxItems={8}
-                    />
-                  </div>
-                </SectionErrorBoundary>
-              ) : null}
-
               <SectionErrorBoundary sectionName="调仓建议">
                 <RebalanceProposalList
                   bootstrap={wbModel.bootstrap}
@@ -131,10 +205,35 @@ export default function RebalancePageClient() {
                   onGenerateCycle={rp.onGenerateCycle}
                 />
               </SectionErrorBoundary>
+
+              <SectionErrorBoundary sectionName="漂移概览">
+                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                      漂移概览 ({driftCount} 项超阈值)
+                    </div>
+                    <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                      {driftCount > 0 ? "需要关注" : "目标内"}
+                    </DaaSurfaceStatusPill>
+                  </div>
+                  <DriftBarChart
+                    rows={wbModel.tableProps.rows}
+                    thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
+                    maxItems={8}
+                  />
+                </div>
+              </SectionErrorBoundary>
             </div>
 
-            {/* 右侧：执行面板 + What-If 预览 */}
+            {/* 右侧：市场、风控与执行 */}
             <div className="space-y-4">
+              <SectionErrorBoundary sectionName="市场环境">
+                <MarketContextCard
+                  marketContext={wbModel.bootstrap.marketContext ?? null}
+                  aiSnapshot={aiSnapshot}
+                />
+              </SectionErrorBoundary>
+
               <ExecutionPanel
                 currentCycle={rp.currentCycle}
                 currentRiskCheck={rp.currentRiskCheck}
