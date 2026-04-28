@@ -531,6 +531,43 @@ VIX: ${ctx.vix ?? "N/A"}
 
 // ── Telegram 格式化 ──
 
+function normalizeBriefingText(text: string): string {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+export function formatBriefingTextExcerpt(text: string, charLimit: number): string {
+  const normalized = normalizeBriefingText(text);
+  if (normalized.length <= charLimit) return normalized;
+
+  const head = normalized.slice(0, charLimit);
+  const minBoundary = Math.max(24, Math.floor(charLimit * 0.45));
+  let boundary = -1;
+
+  for (let i = head.length - 1; i >= minBoundary; i -= 1) {
+    const ch = head[i];
+    if ("。！？；;!?".includes(ch)) {
+      boundary = i + 1;
+      break;
+    }
+    if (ch === "." && !/\d/.test(head[i - 1] || "") && !/\d/.test(normalized[i + 1] || "")) {
+      boundary = i + 1;
+      break;
+    }
+  }
+
+  if (boundary < 0) {
+    for (let i = head.length - 1; i >= minBoundary; i -= 1) {
+      if ("，,、 ".includes(head[i])) {
+        boundary = i;
+        break;
+      }
+    }
+  }
+
+  const clipped = (boundary > 0 ? head.slice(0, boundary) : head).trim();
+  return clipped.endsWith("…") ? clipped : `${clipped}…`;
+}
+
 export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   totalTokens: number;
   durationMs: number;
@@ -573,7 +610,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     lines.push("<b>\u26A1 今日意外</b>");
     for (const s of briefing.surprises.slice(0, 3)) {
       lines.push(`• [${s.severityScore}/10] ${s.title}`);
-      lines.push(`  ${s.description.slice(0, 80)}`);
+      lines.push(`  ${formatBriefingTextExcerpt(s.description, 160)}`);
     }
     lines.push("");
   } else {
@@ -609,7 +646,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     lines.push("<b>\u{1F504} 改观条件</b>");
     for (const m of briefing.mindChangeConditions.slice(0, 3)) {
       lines.push(`• "${m.thesisTitle}" (${m.currentConviction})`);
-      lines.push(`  改变条件: ${m.conditions.slice(0, 2).join("; ")}`);
+      lines.push(`  改变条件: ${formatBriefingTextExcerpt(m.conditions.slice(0, 2).join("; "), 260)}`);
     }
     lines.push("");
   }
@@ -627,10 +664,8 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
       for (const i of ranked) {
         const levelLabel = i.riskLevel === "critical" ? "严重" : i.riskLevel === "high" ? "高" : "中";
         const assets = i.affectedAssets.slice(0, 3).map(a => formatAssetLabelByKey(a.assetKey)).join(", ");
-        // lossMultiplier: high=0.5, medium=0.3 (代码约定的经验系数, 非 VaR)
-        const lossMult = i.conviction === "high" ? "50%" : "30%";
         lines.push(`• [${levelLabel}] "${i.thesisTitle}" (${i.conviction})`);
-        lines.push(`  暴露 ${(i.totalExposurePct * 100).toFixed(1)}% · 若失效估损 ${(i.estimatedLossPct * 100).toFixed(1)}% (暴露×${lossMult}) · ${assets}`);
+        lines.push(`  相关持仓约 ${(i.totalExposurePct * 100).toFixed(1)}%；若该论点被证伪，优先复核这些资产的目标权重、止损和降仓条件：${assets}`);
       }
       lines.push("");
     }
@@ -669,7 +704,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     }).join(", ");
     strategyLines.push(`目标权重: ${topIntents}`);
     if (ov?.targetAllocationPlan?.reasoning) {
-      strategyLines.push(`理由: ${ov.targetAllocationPlan.reasoning.slice(0, 120)}`);
+      strategyLines.push(`理由: ${formatBriefingTextExcerpt(ov.targetAllocationPlan.reasoning, 220)}`);
     }
   } else if (briefing.cognitionGaps.length > 0 || (briefing.autopilotCoverage?.watchlistCandidates ?? 0) > 0) {
     strategyLines.push("本轮未形成高置信度目标权重计划；执行层不会仅因观察态论点或观察列表存在而直接调仓。");

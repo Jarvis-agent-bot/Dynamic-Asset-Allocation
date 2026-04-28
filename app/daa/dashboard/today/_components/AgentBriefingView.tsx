@@ -46,6 +46,7 @@ interface ThesisFailureImpact {
   threadId: string;
   thesisTitle: string;
   conviction: string;
+  affectedAssets: Array<{ assetKey: string; weightPct: number }>;
   totalExposurePct: number;
   estimatedLossPct: number;
   riskLevel: string;
@@ -456,30 +457,33 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-red-300">
             <AlertTriangle className="h-3.5 w-3.5" />
             风险暴露
-            <span className="ml-1 text-[10px] font-normal text-[var(--faint)]">(若论点失效的假设情景)</span>
+            <span className="ml-1 text-[10px] font-normal text-[var(--faint)]">(按相关持仓权重衡量复核优先级)</span>
           </h3>
           <div className="space-y-2">
             {briefing.thesisFailureImpacts!.filter(r => r.riskLevel !== "low").map((r, i) => {
               const riskColor = r.riskLevel === "critical" ? "text-red-400 bg-red-500/20" : r.riskLevel === "high" ? "text-orange-400 bg-orange-500/20" : "text-amber-400 bg-amber-500/20";
-              const lossMult = r.conviction === "high" ? "50%" : "30%";
+              const riskLabel = r.riskLevel === "critical" ? "严重复核" : r.riskLevel === "high" ? "高优先级" : "中优先级";
               return (
-                <div key={i} className="flex items-center justify-between text-xs">
+                <div key={i} className="flex items-start justify-between gap-3 text-xs">
                   <div className="min-w-0 flex-1">
                     <Link href={`/daa/dashboard/today/thesis/${r.threadId}`} className="font-medium text-[var(--text)] hover:text-indigo-400 transition-colors">{r.thesisTitle}</Link>
                     <span className="ml-2 text-[var(--faint)]">({r.conviction})</span>
+                    <p className="mt-0.5 text-[var(--faint)]">
+                      相关资产: {r.affectedAssets.slice(0, 3).map(a => formatAssetLabelByKey(a.assetKey)).join(", ")}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     <span
                       className="text-[var(--faint)]"
-                      title="敞口 = 该论点涉及资产在组合中的权重合计"
+                      title="相关持仓 = 该论点涉及资产在组合中的权重合计；用于提示复核优先级，不是收益预测或 VaR。"
                     >
-                      敞口 {(r.totalExposurePct * 100).toFixed(1)}%
+                      相关持仓 {(r.totalExposurePct * 100).toFixed(1)}%
                     </span>
                     <span
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${riskColor}`}
-                      title={`情景分析，非 VaR：假设该论点完全失效，按 ${r.conviction} conviction 经验系数 ${lossMult} 估算潜在下行。敞口 × ${lossMult} = ${(r.estimatedLossPct * 100).toFixed(1)}%`}
+                      title="该等级来自相关持仓规模与论点置信度的内部排序，只用于提醒优先复核。"
                     >
-                      若失效 -{(r.estimatedLossPct * 100).toFixed(1)}%
+                      {riskLabel}
                     </span>
                   </div>
                 </div>

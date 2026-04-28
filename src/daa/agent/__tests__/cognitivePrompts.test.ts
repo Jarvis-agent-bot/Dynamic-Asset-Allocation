@@ -385,6 +385,41 @@ describe("formatBriefingForTelegram", () => {
     expect(html).toContain("理由: NVDA 论点失效风险抬升");
   });
 
+  it("日报长文本按句子收口，避免硬截断成半句话", () => {
+    const longDescription = "在仅持有NVDA与0388.HK两只股票的情况下，现金占比达到80%，显著高于常规防守配置区间，组合主要矛盾已经从选股错误转为暴露不足，需要优先复核建仓节奏。结合当前市场regime为transitional、VIX仅18.02且SPY过去90天回报为正同时最大回撤温和所以这里是非常长的第二句话没有可用句号，旧逻辑会直接切断。";
+    const longReasoning = "当前组合现金拖累较高，但已有NVDA与0388.HK均接近单仓上限，因此目标权重计划应优先把现有超限仓位拉回规则边界，再用SPY承接一部分核心市场暴露，避免把新增风险继续压到单一高弹性资产上，同时保留足够现金缓冲来应对VIX快速上行、港股流动性回落、跨市场相关性上升以及模拟仓执行回执延迟。更稳妥的规则参数建议是：将现有超限仓位小幅回落到上限以下，并把观察列表中的核心宽基资产纳入分步买入，随后根据执行回执和风险检查结果逐步提高目标权重。如果仍然不足，再由下一轮自动驾驶重新评估。";
+    const briefing: DailyBriefing = {
+      surprises: [{ title: "现金仓位异常偏高", description: longDescription, relatedThesisId: null, severityScore: 8, suggestedAction: "复核建仓节奏" }],
+      cognitionGaps: [],
+      mindChangeConditions: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+      configOverlay: {
+        generatedAt: "2026-04-27T00:00:00.000Z",
+        agentRunId: "run-1",
+        regimeOverride: null,
+        targetAllocationPlan: {
+          reasoning: longReasoning,
+          intents: [{
+            assetKey: "US::SPY",
+            symbol: "SPY",
+            proposedTargetWeightPct: 8,
+            confidence: 76,
+            reasoning: "承接核心市场暴露",
+          }],
+        },
+      },
+    };
+
+    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
+    expect(html).toContain("需要优先复核建仓节奏。…");
+    expect(html).not.toContain("VIX仅");
+    expect(html).toContain("逐步提高目标权重。…");
+    expect(html).not.toContain("如果仍然不足");
+  });
+
   it("渲染风险暴露板块（thesisFailureImpacts 存在且达 medium 及以上）", () => {
     const briefing: DailyBriefing = {
       surprises: [],
@@ -422,6 +457,11 @@ describe("formatBriefingForTelegram", () => {
     expect(html).toContain("超高集中度论点");
     // 资产标签走 assetRegistry：HK::0388.HK → "香港交易所 0388.HK"
     expect(html).toContain("香港交易所 0388.HK");
+    expect(html).toContain("相关持仓约 87.5%");
+    expect(html).toContain("优先复核这些资产的目标权重、止损和降仓条件");
+    expect(html).not.toContain("暴露×");
+    expect(html).not.toContain("若失效估损");
+    expect(html).not.toContain("43.7%");
     // low 级别不展示
     expect(html).not.toContain("小仓位论点");
   });

@@ -1,4 +1,5 @@
 import { buildAssistantBrainStatusText } from "./assistantBrain";
+import { formatBriefingTextExcerpt } from "@/src/daa/agent/cognitivePrompts";
 import { formatMoney, formatPct } from "./agentContext";
 import type { DaaAgentToolContext, DaaAgentToolExecutor, DaaAgentToolResult } from "./agentToolTypes";
 import type { DaaChatPendingAction } from "./chatTypes";
@@ -192,7 +193,7 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         }
         if (intents.length > 0) {
           parts.push(`  目标权重: ${intents.slice(0, 4).map(i => `${i.symbol || i.assetKey}→${i.proposedTargetWeightPct.toFixed(1)}% (${i.confidence.toFixed(0)}%)`).join(", ")}`);
-          if (overlay?.targetAllocationPlan?.reasoning) parts.push(`  理由: ${overlay.targetAllocationPlan.reasoning.slice(0, 120)}`);
+          if (overlay?.targetAllocationPlan?.reasoning) parts.push(`  理由: ${formatBriefingTextExcerpt(overlay.targetAllocationPlan.reasoning, 220)}`);
         } else if (b.cognitionGaps.length > 0 || (b.autopilotCoverage?.watchlistCandidates ?? 0) > 0) {
           parts.push("  本轮未形成高置信度目标权重计划；执行层不会仅因观察态论点或观察列表存在而直接调仓。");
         }
