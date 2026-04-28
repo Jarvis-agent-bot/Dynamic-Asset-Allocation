@@ -16,6 +16,7 @@ import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { shouldSendAgentBriefingTelegram } from "@/src/daa/automation/automationGuards";
+import { buildAutopilotCoverageSummary } from "@/src/daa/agent/autopilotCoverage";
 
 /**
  * 代码直出“自动跟踪清单”（原 cognitionGaps）。
@@ -242,6 +243,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
             weightPct: h.weightPct,
             price: h.lastPrice ?? 0,
           })),
+          watchlist: state.watchlist?.candidates ?? [],
           theses,
           surprises: briefing.surprises,
           cognitionGaps: briefing.cognitionGaps,
@@ -297,6 +299,12 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         logSwallowed("cognitiveGraph.surface.advisor", e);
       }
     }
+
+    briefing.autopilotCoverage = buildAutopilotCoverageSummary({
+      portfolio,
+      watchlist: state.watchlist ?? null,
+      overlay: briefing.configOverlay ?? null,
+    });
 
     // 尝试推送 Telegram（非阻塞）
     try {

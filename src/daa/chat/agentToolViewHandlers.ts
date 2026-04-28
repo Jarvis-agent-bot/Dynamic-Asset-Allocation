@@ -165,10 +165,18 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         parts.push("⚡ 市场与预期一致，无重大意外。");
       }
       if (b.cognitionGaps.length > 0) {
-        parts.push("\n🔍 自动跟踪中:");
+        parts.push("\n🔍 持仓论点待复核:");
         for (const g of b.cognitionGaps.slice(0, 3)) {
           parts.push(`  ${g.assetKey} — ${g.uncertaintyReason}`);
           if (g.suggestedInvestigation) parts.push(`    ↳ ${g.suggestedInvestigation}`);
+        }
+      }
+      if (b.autopilotCoverage) {
+        const c = b.autopilotCoverage;
+        parts.push("\n🧭 自动驾驶覆盖:");
+        parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
+        if (c.skipReasonSummary.length > 0) {
+          parts.push(`  规则建仓跳过: ${c.skipReasonSummary.slice(0, 3).map(r => `${r.reason}×${r.count}`).join("；")}`);
         }
       }
       if (b.mindChangeConditions.length > 0) {
@@ -185,11 +193,11 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         if (intents.length > 0) {
           parts.push(`  目标权重: ${intents.slice(0, 4).map(i => `${i.symbol || i.assetKey}→${i.proposedTargetWeightPct.toFixed(1)}% (${i.confidence.toFixed(0)}%)`).join(", ")}`);
           if (overlay?.targetAllocationPlan?.reasoning) parts.push(`  理由: ${overlay.targetAllocationPlan.reasoning.slice(0, 120)}`);
-        } else if (b.cognitionGaps.length > 0) {
-          parts.push("  本轮仅保持自动跟踪，未形成高置信度目标权重计划；不会仅因观察态论点直接调仓。");
+        } else if (b.cognitionGaps.length > 0 || (b.autopilotCoverage?.watchlistCandidates ?? 0) > 0) {
+          parts.push("  本轮未形成高置信度目标权重计划；执行层不会仅因观察态论点或观察列表存在而直接调仓。");
         }
       }
-      parts.push(`\n📊 论点更新: ${b.thesesUpdated} | 记忆: ${b.memoriesCreated} | Tokens: ${b.totalTokens}`);
+      parts.push(`\n📊 论点更新: ${b.thesesUpdated} | 记忆: ${b.memoriesCreated}`);
       return { text: parts.join("\n"), intentKind: "agent_briefing", pendingAction: input.currentPendingAction };
     } catch {
       return { text: "查询 Agent 日报失败，请稍后重试。", intentKind: "agent_briefing", pendingAction: input.currentPendingAction };

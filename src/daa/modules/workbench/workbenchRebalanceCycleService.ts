@@ -77,6 +77,7 @@ export async function generateWorkbenchRebalanceCycle(
     getDaaSystemConfig(),
     listDaaRebalanceCycles(120),
   ]);
+  const hasAgentTargetOverrides = Object.keys(input.targetWeightOverrides || {}).length > 0;
   const bootstrap = applyTargetWeightOverridesToBootstrap(rawBootstrap, input.targetWeightOverrides);
   const recentLearningsText = await buildAgentLearningDigest(6);
 
@@ -361,12 +362,20 @@ export async function generateWorkbenchRebalanceCycle(
 
   // ── Step B-E: Cognitive Agent 驱动调仓 ──
   // Agent thesis conviction → 提案量调整
-  const agentResult = await enhanceProposalsWithAgent({
-    draftProposals: draft.proposals,
-    marketRegime: marketContext?.regime ?? null,
-    totalEquity: bootstrap.account.totalEquity ?? 0,
-    maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
-  });
+  const agentResult = hasAgentTargetOverrides && triggerSource === "agent_trigger"
+    ? {
+      proposals: draft.proposals,
+      llmSummary: `Agent 目标权重计划已进入执行层，生成 ${draft.proposals.length} 个 BUY/SELL 提案。`,
+      marketRegime: marketContext?.regime ?? null,
+      agentStatus: "ok" as const,
+      tokensUsed: 0,
+    }
+    : await enhanceProposalsWithAgent({
+      draftProposals: draft.proposals,
+      marketRegime: marketContext?.regime ?? null,
+      totalEquity: bootstrap.account.totalEquity ?? 0,
+      maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
+    });
 
   draft.proposals = agentResult.proposals;
 

@@ -2,7 +2,7 @@
  * Cognitive Agent — Observe 节点（代码驱动，不调 LLM）
  */
 
-import type { CognitiveState, CognitiveUpdate, PortfolioSnapshot, MarketSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
+import type { CognitiveState, CognitiveUpdate, PortfolioSnapshot, WatchlistSnapshot, MarketSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import { getDaaSystemConfig, getDaaAccountState } from "@/src/daa/store/accountStore";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
@@ -67,6 +67,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
     //    直接用 r.holdingQty * r.lastPrice 会把 HKD / CNY 等原币种金额当作 USD 相加，
     //    导致 HK 持仓被严重放大（例如 0388.HK 按 HKD 计算被当成 87.5% 的仓位）。
     const portfolio: PortfolioSnapshot = { holdings: [], totalEquity: 0, cashPct: 0 };
+    const watchlist: WatchlistSnapshot = { candidates: [] };
     try {
       const [accountState, rawRows, fxRates] = await Promise.all([
         getDaaAccountState(),
@@ -110,6 +111,21 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       }));
       portfolio.totalEquity = totalEquity;
       portfolio.cashPct = totalEquity > 0 ? valuation.cash / totalEquity : 0;
+      watchlist.candidates = viewRows
+        .filter(r => r.watchEnabled && r.holdingQty <= 0)
+        .map(r => ({
+          assetKey: r.assetKey,
+          symbol: r.symbol,
+          lastPrice: r.lastPrice > 0 ? r.lastPrice : r.holdingPrice,
+          targetWeightPct: r.targetWeightPct,
+          autoEntryEnabled: r.autoEntryEnabled,
+          entryTargetWeightPct: r.entryTargetWeightPct,
+          entryCooldownDays: r.entryCooldownDays,
+          lastEntryTriggeredAt: r.lastEntryTriggeredAt,
+          fxMissing: r.fxMissing,
+          notes: r.notes,
+          tags: r.watchTags,
+        }));
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.portfolio", e);
     }
@@ -157,6 +173,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
     return {
       agentConfig,
       portfolio,
+      watchlist,
       market,
       news,
       activeTheses,

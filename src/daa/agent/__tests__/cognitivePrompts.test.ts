@@ -178,6 +178,7 @@ describe("buildStrategyAdvisorPrompt", () => {
   it("把自动跟踪项的 Agent 语义传给策略顾问，而不是只给天数", () => {
     const prompt = buildStrategyAdvisorPrompt({
       holdings: [{ assetKey: "US:NVDA", symbol: "NVDA", weightPct: 0.107, price: 980 }],
+      watchlist: [],
       theses: [{ ...mockThread, conviction: "uncertain" }],
       surprises: [],
       cognitionGaps: [{
@@ -195,6 +196,36 @@ describe("buildStrategyAdvisorPrompt", () => {
     expect(prompt).toContain("论点仍处观察态");
     expect(prompt).toContain("关注维度");
     expect(prompt).not.toContain("US:NVDA 权重10.7% 2天未更新");
+  });
+
+  it("把观察列表候选交给策略顾问，使大脑可以生成 BUY 目标权重", () => {
+    const prompt = buildStrategyAdvisorPrompt({
+      holdings: [],
+      watchlist: [{
+        assetKey: "US::QQQ",
+        symbol: "QQQ",
+        lastPrice: 663,
+        targetWeightPct: 0,
+        autoEntryEnabled: false,
+        entryTargetWeightPct: null,
+        entryCooldownDays: 14,
+        lastEntryTriggeredAt: null,
+        fxMissing: false,
+        notes: "纳指核心观察",
+        tags: ["growth"],
+      }],
+      theses: [],
+      surprises: [],
+      cognitionGaps: [],
+      ruleRegime: "risk_on",
+      defaultDriftThresholdPct: 0.05,
+      maxPositionPct: 0.3,
+    });
+
+    expect(prompt).toContain("观察列表候选");
+    expect(prompt).toContain("QQQ (US::QQQ)");
+    expect(prompt).toContain("可以对观察列表候选给出新目标权重");
+    expect(prompt).toContain("这会生成 BUY 提案");
   });
 });
 
@@ -291,8 +322,37 @@ describe("formatBriefingForTelegram", () => {
     };
     const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
     expect(html).toContain("策略建议");
-    expect(html).toContain("本轮仅保持自动跟踪");
-    expect(html).toContain("不会仅因观察态论点直接调仓");
+    expect(html).toContain("本轮未形成高置信度目标权重计划");
+    expect(html).toContain("不会仅因观察态论点或观察列表存在而直接调仓");
+  });
+
+  it("日报展示自动驾驶覆盖和规则建仓跳过原因", () => {
+    const briefing: DailyBriefing = {
+      surprises: [],
+      cognitionGaps: [],
+      mindChangeConditions: [],
+      thesesUpdated: 0,
+      memoriesCreated: 0,
+      totalTokens: 0,
+      estimatedCost: 0,
+      autopilotCoverage: {
+        holdingAssets: 2,
+        watchlistCandidates: 16,
+        ruleAutoEntryEnabled: 0,
+        watchlistWithRuleTarget: 0,
+        brainPlanIntents: 0,
+        acceptedBrainPlanIntents: 0,
+        skipReasonSummary: [
+          { reason: "未开启规则自动建仓", count: 16 },
+          { reason: "未设置规则目标权重", count: 16 },
+        ],
+        watchlistSkips: [],
+      },
+    };
+    const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
+    expect(html).toContain("自动驾驶覆盖");
+    expect(html).toContain("观察候选 <code>16</code>");
+    expect(html).toContain("未开启规则自动建仓×16");
   });
 
   it("有目标权重计划时，展示 Agent 的目标权重、置信度和理由", () => {

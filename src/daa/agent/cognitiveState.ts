@@ -37,6 +37,22 @@ export interface PortfolioSnapshot {
   cashPct: number;
 }
 
+export interface WatchlistSnapshot {
+  candidates: Array<{
+    assetKey: string;
+    symbol: string;
+    lastPrice: number;
+    targetWeightPct: number;
+    autoEntryEnabled: boolean;
+    entryTargetWeightPct: number | null;
+    entryCooldownDays: number;
+    lastEntryTriggeredAt: string | null;
+    fxMissing: boolean;
+    notes: string | null;
+    tags: string[];
+  }>;
+}
+
 export interface NewsSnapshot {
   items: Array<{
     symbol: string;
@@ -54,6 +70,7 @@ export interface NewsSnapshot {
 export const CognitiveStateAnnotation = Annotation.Root({
   // 输入数据（observe 节点填充）
   portfolio: Annotation<PortfolioSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
+  watchlist: Annotation<WatchlistSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   market: Annotation<MarketSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   news: Annotation<NewsSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   activeTheses: Annotation<ResearchThread[]>({ reducer: (_, b) => b, default: () => [] }),

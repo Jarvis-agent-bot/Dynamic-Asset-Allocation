@@ -157,12 +157,28 @@ export interface ThesisConflict {
   llmAssessment: string | null;
 }
 
+export interface AutopilotCoverageSummary {
+  holdingAssets: number;
+  watchlistCandidates: number;
+  ruleAutoEntryEnabled: number;
+  watchlistWithRuleTarget: number;
+  brainPlanIntents: number;
+  acceptedBrainPlanIntents: number;
+  skipReasonSummary: Array<{ reason: string; count: number }>;
+  watchlistSkips: Array<{
+    assetKey: string;
+    symbol: string;
+    reasons: string[];
+  }>;
+}
+
 export interface DailyBriefing {
   surprises: Surprise[];
   cognitionGaps: CognitionGap[];
   mindChangeConditions: MindChangeCondition[];
   thesisFailureImpacts?: ThesisFailureImpact[];
   thesisConflicts?: ThesisConflict[];
+  autopilotCoverage?: AutopilotCoverageSummary;
   /** Agent 策略顾问的参数建议（由 LLM 生成，规则引擎消费） */
   configOverlay?: AgentConfigOverlay;
   /** Phase 4: 子 agent 并行调查的摘要（可选，向后兼容） */

@@ -7,7 +7,7 @@
 
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
 import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition, CognitionGap } from "@/src/daa/agent/cognitiveTypes";
-import type { MarketSnapshot, PortfolioSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
+import type { MarketSnapshot, PortfolioSnapshot, WatchlistSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import { formatAssetLabel, formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 
 // ── Prioritize 节点 Prompt ──
@@ -347,6 +347,7 @@ ${prevBriefingText}
 
 export function buildStrategyAdvisorPrompt(ctx: {
   holdings: Array<{ assetKey: string; symbol: string; weightPct: number; price: number }>;
+  watchlist?: WatchlistSnapshot["candidates"];
   theses: ResearchThread[];
   surprises: Array<{ title: string; severityScore: number; suggestedAction: string }>;
   cognitionGaps: Array<{ assetKey: string; portfolioWeight: number; daysSinceLastInvestigation: number; uncertaintyReason?: string; suggestedInvestigation?: string }>;
@@ -363,6 +364,15 @@ export function buildStrategyAdvisorPrompt(ctx: {
     `"${sanitizeForPrompt(t.title, 50)}" conviction=${t.conviction} 资产=${t.assetKeys.join(",")} 失效条件=${sanitizeForPrompt(t.invalidationConditions ?? "无", 60)}`
   ).join("\n");
 
+  const watchlistLines = (ctx.watchlist ?? []).slice(0, 40).map(w => {
+    const thesis = ctx.theses.find(t => t.assetKeys.includes(w.assetKey));
+    const tags = w.tags.length > 0 ? ` tags=${w.tags.slice(0, 3).join("/")}` : "";
+    const target = w.targetWeightPct > 0 ? ` 规则目标${w.targetWeightPct.toFixed(1)}%` : "";
+    const autoEntry = w.autoEntryEnabled ? "规则自动建仓=开" : "规则自动建仓=关";
+    const note = w.notes ? ` notes="${sanitizeForPrompt(w.notes, 50)}"` : "";
+    return `${w.symbol} (${w.assetKey}) 现价$${w.lastPrice.toFixed(2)} ${autoEntry}${target}${tags}${note}${thesis ? ` 论点="${sanitizeForPrompt(thesis.title, 40)}" conviction=${thesis.conviction}` : " 无论点"}`;
+  }).join("\n") || "无";
+
   const surpriseLines = ctx.surprises.length > 0
     ? ctx.surprises.map(s => `[${s.severityScore}/10] ${sanitizeForPrompt(s.title, 60)}`).join("\n")
     : "无意外";
@@ -375,6 +385,9 @@ export function buildStrategyAdvisorPrompt(ctx: {
 
 ## 当前持仓
 ${holdingLines}
+
+## 观察列表候选
+${watchlistLines}
 
 ## 活跃论点
 ${thesisLines}
@@ -393,7 +406,7 @@ ${gapLines}
 根据你的分析输出 JSON 目标权重计划：
 
 1. **regimeOverride**: 你是否同意规则引擎的 regime 判断？如果不同意且置信度 >= 80，给出你的判断。同意则设为 null。
-2. **targetAllocationPlan**: 如果你希望 AI 全权调仓，请直接给出“最终目标权重”。执行层会把目标权重差额转成订单，并继续执行硬风控；低置信度不要输出。
+2. **targetAllocationPlan**: 如果你希望 AI 全权调仓，请直接给出“最终目标权重”。执行层会把目标权重差额转成 BUY/SELL 订单，并继续执行硬风控；低置信度不要输出。
 
 ## 输出格式（严格 JSON）
 \`\`\`json
@@ -413,6 +426,7 @@ ${gapLines}
 
 规则:
 - proposedTargetWeightPct 使用百分比口径，例如 3 表示 3%；自动执行时会被单仓上限截断
+- 可以对观察列表候选给出新目标权重；这会生成 BUY 提案。可以对当前持仓给出更低目标权重甚至 0；这会生成 SELL 提案。
 - targetAllocationPlan.intents 只列需要改变目标权重的资产；confidence < 70 不会自动采纳
 - regimeOverride.confidence < 80 时不会被采纳
 - 保守为主，只在有充分理由时给出非默认建议
@@ -567,12 +581,26 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   }
 
   if (briefing.cognitionGaps.length > 0) {
-    lines.push("<b>\u{1F50D} 自动跟踪中</b>");
+    lines.push("<b>\u{1F50D} 持仓论点待复核</b>");
     for (const g of briefing.cognitionGaps.slice(0, 3)) {
       lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
       if (g.suggestedInvestigation) {
         lines.push(`  ↳ ${g.suggestedInvestigation}`);
       }
+    }
+    lines.push("");
+  }
+
+  if (briefing.autopilotCoverage) {
+    const c = briefing.autopilotCoverage;
+    lines.push("<b>\u{1F9ED} 自动驾驶覆盖</b>");
+    lines.push(`• 持仓复核 <code>${c.holdingAssets}</code> 个 | 观察候选 <code>${c.watchlistCandidates}</code> 个 | 大脑目标计划 <code>${c.acceptedBrainPlanIntents}/${c.brainPlanIntents}</code> 条`);
+    if (c.watchlistCandidates > 0) {
+      lines.push(`• 规则建仓准备度: 已开启 <code>${c.ruleAutoEntryEnabled}</code> 个 | 已设规则目标 <code>${c.watchlistWithRuleTarget}</code> 个`);
+    }
+    if (c.skipReasonSummary.length > 0) {
+      const reasons = c.skipReasonSummary.slice(0, 3).map(r => `${r.reason}×${r.count}`).join("；");
+      lines.push(`• 规则建仓跳过: ${reasons}`);
     }
     lines.push("");
   }
@@ -643,8 +671,8 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     if (ov?.targetAllocationPlan?.reasoning) {
       strategyLines.push(`理由: ${ov.targetAllocationPlan.reasoning.slice(0, 120)}`);
     }
-  } else if (briefing.cognitionGaps.length > 0) {
-    strategyLines.push("本轮仅保持自动跟踪，未形成高置信度目标权重计划；不会仅因观察态论点直接调仓。");
+  } else if (briefing.cognitionGaps.length > 0 || (briefing.autopilotCoverage?.watchlistCandidates ?? 0) > 0) {
+    strategyLines.push("本轮未形成高置信度目标权重计划；执行层不会仅因观察态论点或观察列表存在而直接调仓。");
   }
   if (strategyLines.length > 0) {
     lines.push("<b>\u{1F916} 策略建议</b>");
@@ -652,7 +680,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     lines.push("");
   }
 
-  lines.push(`<i>\u{1F4CA} 论点: ${meta.thesesCount} | 记忆: ${meta.memoriesCount} | Tokens: ${meta.totalTokens} | ${(meta.durationMs / 1000).toFixed(1)}s</i>`);
+  lines.push(`<i>\u{1F4CA} 论点: ${meta.thesesCount} | 记忆: ${meta.memoriesCount}</i>`);
   return lines.join("\n");
 }
 

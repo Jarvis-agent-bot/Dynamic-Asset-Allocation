@@ -196,4 +196,28 @@ describe("automationGuards", () => {
     expect(next.assetUniverse[1]?.targetWeightPct).toBe(8);
     expect(next).not.toBe(bootstrap);
   });
+
+  it("目标权重覆盖可作用于无持仓观察列表资产，后续执行层会转成 BUY 偏移", () => {
+    const bootstrap = buildWorkbenchBootstrap({
+      account: { totalEquity: 10000, cash: 8000, investableCash: 8000, frozenCash: 0 },
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: "US::QQQ",
+          symbol: "QQQ",
+          watchEnabled: true,
+          holdingQty: 0,
+          actualWeightPct: 0,
+          targetWeightPct: 0,
+          gapPct: null,
+        }),
+      ],
+    });
+
+    const next = applyTargetWeightOverridesToBootstrap(bootstrap, {
+      "US::QQQ": 0.05,
+    });
+
+    expect(next.assetUniverse[0]?.targetWeightPct).toBe(5);
+    expect(next.assetUniverse[0]?.gapPct).toBe(5);
+  });
 });

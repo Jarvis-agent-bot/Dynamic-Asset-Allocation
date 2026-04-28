@@ -176,9 +176,6 @@ async function maybeRunAgentDrivenRebalance(input: {
     maxPositionPct: input.row.config.strategy.constraints.maxPositionPct,
     minConfidence: 70,
   });
-  if (!targetPlan) {
-    return { ...empty, reason: "Agent 未给出可执行目标权重计划。" };
-  }
   const prerequisites = validateAutopilotPrerequisites(input.row.config);
   if (!prerequisites.ready) {
     return { ...empty, reason: prerequisites.reason };
@@ -194,7 +191,9 @@ async function maybeRunAgentDrivenRebalance(input: {
 
   const generated = await generateWorkbenchRebalanceCycle({
     triggerSource: "agent_trigger",
-    triggerReason: `Agent 目标权重调仓: ${targetPlan.reason}；${targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`,
+    triggerReason: targetPlan
+      ? `Agent 目标权重调仓: ${targetPlan.reason}；${targetPlan.summary}${eventContext ? `；触发事件: ${eventContext}` : ""}`
+      : `Agent 自动驾驶检查${eventContext ? `: ${eventContext}` : ""}`,
     manual: false,
     targetWeightOverrides: targetPlan?.targetWeightOverrides,
   });
