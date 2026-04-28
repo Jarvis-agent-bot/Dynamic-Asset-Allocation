@@ -11,6 +11,126 @@ import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { findSimilarThesis } from "@/src/daa/agent/store/thesisStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
+const DEFAULT_MAX_INVESTIGATION_TARGETS = 5;
+
+type RawInvestigationTarget = {
+  threadId: string | null;
+  reason?: string;
+  dataNeeded?: string[];
+};
+
+type QueuedInvestigationTarget = {
+  target: InvestigationTarget;
+  priority: number;
+  source: "llm" | "rotation";
+  order: number;
+};
+
+function normalizeThreadId(raw: string | null | undefined, theses: ResearchThread[]): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const candidates = [
+    trimmed,
+    trimmed.replace(/^[\["']+|[\]"']+$/g, ""),
+    trimmed.match(/[0-9a-f]{8}(?:-[0-9a-f]{4}){0,3}(?:-[0-9a-f]{12})?/i)?.[0] ?? "",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const exact = theses.find(t => t.id === candidate);
+    if (exact) return exact.id;
+  }
+
+  for (const candidate of candidates) {
+    if (candidate.length < 8) continue;
+    const matches = theses.filter(t => t.id.startsWith(candidate));
+    if (matches.length === 1) return matches[0].id;
+  }
+
+  return null;
+}
+
+function normalizeDataNeeded(value: unknown): string[] {
+  if (!Array.isArray(value)) return ["news", "technical"];
+  return value
+    .map(v => String(v || "").trim())
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
+function addQueuedTarget(
+  byThreadId: Map<string, QueuedInvestigationTarget>,
+  item: QueuedInvestigationTarget,
+) {
+  const id = item.target.threadId;
+  if (!id) return;
+  const prev = byThreadId.get(id);
+  if (
+    !prev
+    || item.priority > prev.priority
+    || (item.priority === prev.priority && item.order < prev.order)
+  ) {
+    byThreadId.set(id, item);
+  }
+}
+
+function buildRotationTargets(state: CognitiveState, stalenessDays: number): QueuedInvestigationTarget[] {
+  const now = Date.now();
+  const holdingWeights = new Map<string, number>();
+  for (const h of state.portfolio?.holdings ?? []) {
+    holdingWeights.set(h.assetKey, Math.max(holdingWeights.get(h.assetKey) ?? 0, h.weightPct ?? 0));
+  }
+  const watchlistKeys = new Set((state.watchlist?.candidates ?? []).map(c => c.assetKey));
+
+  return state.activeTheses
+    .map((t, order): QueuedInvestigationTarget | null => {
+      const updatedAt = Date.parse(t.updatedAt);
+      const days = Number.isFinite(updatedAt) ? Math.floor((now - updatedAt) / 86400000) : stalenessDays + 1;
+      const maxHoldingWeight = Math.max(0, ...t.assetKeys.map(k => holdingWeights.get(k) ?? 0));
+      const inWatchlist = t.assetKeys.some(k => watchlistKeys.has(k));
+      const reviewDue = t.reviewAt ? Date.parse(t.reviewAt) <= now : false;
+      const stale = days >= stalenessDays;
+      const staleDirectional = (t.conviction === "medium" || t.conviction === "high") && stale;
+      const uncertainHolding = t.conviction === "uncertain" && maxHoldingWeight > 0;
+      const staleHighWeightHolding = maxHoldingWeight > 0.05 && stale;
+      const watchlistNeedsReview = inWatchlist && (t.conviction === "uncertain" || stale);
+
+      let priority = 0;
+      let reason = "";
+      if (uncertainHolding) {
+        priority = 1000 + days;
+        reason = `轮询复核：持仓论点仍为观察态，权重 ${(maxHoldingWeight * 100).toFixed(1)}%，已 ${days} 天未有效调查`;
+      } else if (staleHighWeightHolding) {
+        priority = 950 + days;
+        reason = `轮询复核：高权重持仓论点已 ${days} 天未有效调查，权重 ${(maxHoldingWeight * 100).toFixed(1)}%`;
+      } else if (reviewDue) {
+        priority = 900 + days;
+        reason = `轮询复核：论点已到 reviewAt，距离上次有效调查 ${days} 天`;
+      } else if (staleDirectional) {
+        priority = 850 + days;
+        reason = `轮询复核：${t.conviction} conviction 论点已 ${days} 天未有效调查`;
+      } else if (watchlistNeedsReview) {
+        priority = 800 + days;
+        reason = `轮询复核：观察列表相关论点需要刷新，距离上次有效调查 ${days} 天`;
+      }
+
+      if (priority <= 0) return null;
+      return {
+        target: {
+          threadId: t.id,
+          reason,
+          dataNeeded: ["news", "technical"],
+        },
+        priority,
+        source: "rotation",
+        order,
+      };
+    })
+    .filter((v): v is QueuedInvestigationTarget => Boolean(v))
+    .sort((a, b) => b.priority - a.priority || a.order - b.order);
+}
+
 export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
   try {
@@ -38,7 +158,7 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
     });
 
     const { data, tokensUsed } = await callDeepSeekJson<{
-      targets: Array<{ threadId: string | null; reason: string; dataNeeded: string[] }>;
+      targets: RawInvestigationTarget[];
       newThreads: Array<{ title: string; initialThesis: string; assetKeys: string[]; tags: string[] }>;
     }>(prompt, "cognitiveGraph.prioritize", { tier: "fast" });
 
@@ -102,69 +222,56 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       }
     }
 
-    // 设置调查队列 — 先过滤掉 threadId 为 null/空的 target（LLM 偶尔会返回
-    // "请求创建新 thesis"的占位 target，这些不能作为调查对象），防止下游条件
-    // 分支因 currentThread=null 而跳过 investigate。
-    const maxTargets = state.agentConfig?.maxInvestigationTargets ?? 3;
-    const validTargets = (data.targets ?? []).filter(t => {
-      const id = typeof t?.threadId === "string" ? t.threadId.trim() : "";
-      return id.length > 0;
-    });
-    const targets: InvestigationTarget[] = validTargets.slice(0, maxTargets);
-
-    // Starvation prevention: 保证 medium+ conviction thesis 在 staleness 窗口内被调查。
-    // 修复之前的 bug：prioritize 偏向 uncertain 调查型 thesis，导致真正有 conviction
-    // 的 medium thesis 永远不进调查队列，日报里"X天未调查"天数只涨不降。
-    // 规则：至少预留 1 个槽位给超过阈值的 medium+ thesis（按 stale 天数倒序选最久的）。
+    // 设置调查队列：LLM 给方向，代码做 id 归一、去重和轮询补位。
+    // 这样即使模型返回短 id，或遗漏长期未调查的持仓/观察列表论点，本轮仍能落到可加载 thesis。
+    const maxTargets = state.agentConfig?.maxInvestigationTargets ?? DEFAULT_MAX_INVESTIGATION_TARGETS;
     const stalenessDays = state.agentConfig?.thesisStalenessDays ?? 7;
-    const stalenessCutoff = Date.now() - stalenessDays * 86400000;
-    const targetIds = new Set(targets.map(t => t.threadId).filter(Boolean) as string[]);
-    const staleDirectional = state.activeTheses
-      .filter(t =>
-        (t.conviction === "medium" || t.conviction === "high")
-        && !targetIds.has(t.id)
-        && Date.parse(t.updatedAt) < stalenessCutoff,
-      )
-      .sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt)); // 最旧优先
+    const queuedByThreadId = new Map<string, QueuedInvestigationTarget>();
+    const rawTargets = data.targets ?? [];
+    let normalizedLlmTargets = 0;
+    rawTargets.forEach((t, order) => {
+      const id = normalizeThreadId(t?.threadId, state.activeTheses);
+      if (!id) return;
+      normalizedLlmTargets++;
+      addQueuedTarget(queuedByThreadId, {
+        target: {
+          threadId: id,
+          reason: typeof t.reason === "string" && t.reason.trim() ? t.reason.trim() : "LLM 选中的调查目标",
+          dataNeeded: normalizeDataNeeded(t.dataNeeded),
+        },
+        priority: 700 - order,
+        source: "llm",
+        order,
+      });
+    });
 
-    if (staleDirectional.length > 0) {
-      const inject: InvestigationTarget = {
-        threadId: staleDirectional[0].id,
-        reason: `starvation prevention: ${staleDirectional[0].conviction} conviction thesis 已 ${Math.floor((Date.now() - Date.parse(staleDirectional[0].updatedAt)) / 86400000)} 天未调查`,
-        dataNeeded: ["technical", "news"],
-      };
-      // 挤掉 LLM 选中的最后一个 uncertain 槽位（若 maxTargets 已满），否则直接追加
-      if (targets.length >= maxTargets) {
-        const lastUncertainIdx = targets.findIndex(t => {
-          const th = state.activeTheses.find(a => a.id === t.threadId);
-          return th?.conviction === "uncertain";
-        });
-        if (lastUncertainIdx >= 0) {
-          targets[lastUncertainIdx] = inject;
-        } else {
-          targets[targets.length - 1] = inject;
-        }
-      } else {
-        targets.push(inject);
-      }
+    for (const item of buildRotationTargets(state, stalenessDays)) {
+      addQueuedTarget(queuedByThreadId, item);
     }
 
-    // 选定第一个能加载到 thread 的 target —— 即使 threadId 合法，也可能
-    // 因 DB 同步差异/归档等原因无法加载；此时自动降级到队列中下一个可用的 target，
-    // 避免 currentThread=null 导致条件边跳过 investigate。
+    const candidates = Array.from(queuedByThreadId.values())
+      .sort((a, b) => b.priority - a.priority || a.order - b.order);
+
+    const targets: InvestigationTarget[] = [];
     let first: InvestigationTarget | null = null;
     let currentThread: ResearchThread | null = null;
     const skippedTargets: Array<{ threadId: string; reason: string }> = [];
-    for (const candidate of targets) {
-      if (!candidate?.threadId) continue;
-      const loaded = await thesisStore.getThesisById(candidate.threadId);
-      if (loaded) {
-        first = candidate;
-        currentThread = loaded;
-        break;
+    for (const candidate of candidates) {
+      if (targets.length >= maxTargets) break;
+      const id = candidate.target.threadId;
+      if (!id) continue;
+      const loaded = await thesisStore.getThesisById(id);
+      if (!loaded) {
+        skippedTargets.push({ threadId: id, reason: "getThesisById returned null" });
+        continue;
       }
-      skippedTargets.push({ threadId: candidate.threadId, reason: "getThesisById returned null" });
+      targets.push(candidate.target);
+      if (!first) {
+        first = candidate.target;
+        currentThread = loaded;
+      }
     }
+
     // 如果没有一个 target 能加载到 thread，降级到 review
     if (!first) {
       logSwallowed(
@@ -195,8 +302,12 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       logSwallowed("cognitiveGraph.prioritize.matchStrategies", e);
     }
 
-    const llmRawTargetCount = (data.targets ?? []).length;
-    const filteredOut = llmRawTargetCount - validTargets.length;
+    const llmRawTargetCount = rawTargets.length;
+    const filteredOut = llmRawTargetCount - normalizedLlmTargets;
+    const rotationCount = targets.filter(t => {
+      const queued = t.threadId ? queuedByThreadId.get(t.threadId) : null;
+      return queued?.source === "rotation";
+    }).length;
     const routingSignal = first && currentThread ? "→investigate" : "→review(no loadable target)";
 
     return {
@@ -210,7 +321,7 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
         node: "prioritize",
         threadId: first?.threadId ?? null,
         input: `${state.activeTheses.length} theses, ${state.portfolio.holdings.length} holdings`,
-        output: `${targets.length} targets (LLM ${llmRawTargetCount}, filtered ${filteredOut}, skipped ${skippedTargets.length}), first=${first?.threadId ?? "none"}, thread=${currentThread ? "loaded" : "null"} ${routingSignal}`,
+        output: `${targets.length} targets (LLM ${llmRawTargetCount}, normalized ${normalizedLlmTargets}, rotation ${rotationCount}, filtered ${filteredOut}, skipped ${skippedTargets.length}), first=${first?.threadId ?? "none"}, thread=${currentThread ? "loaded" : "null"} ${routingSignal}`,
         tokensUsed,
         durationMs: Date.now() - t0,
       }],

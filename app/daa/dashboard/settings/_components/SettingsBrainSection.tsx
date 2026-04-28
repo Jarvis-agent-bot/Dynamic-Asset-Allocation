@@ -45,7 +45,7 @@ export function SettingsBrainSection(props: {
   };
   const agent = config.cognitiveAgent ?? {
     enabled: true,
-    maxInvestigationTargets: 3,
+    maxInvestigationTargets: 5,
     reviewIntervalDays: 14,
     memoryRecallLimit: 5,
     circuitBreakerThreshold: 3,

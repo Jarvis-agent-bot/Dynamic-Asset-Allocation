@@ -42,6 +42,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     // Phase 4: 子 agent 并行调查（父处理 item[0]，子 agent 并行处理 item[1..N]）
     const subAgentResultsForState: CognitiveUpdate["subAgentResults"] = [];
     let subAgentMemCount = 0;
+    let subAgentFanoutCompleted = false;
     if (state.investigationQueue.length > 1) {
       try {
         const { runSubAgentInvestigation } = await import("@/src/daa/agent/subAgent");
@@ -144,6 +145,7 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
             }
           }
         }
+        subAgentFanoutCompleted = true;
       } catch (e) {
         logSwallowed("cognitiveGraph.investigate.subAgents", e);
       }
@@ -423,6 +425,8 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
     const subAgentTokens = subAgentResultsForState.reduce((sum, r) => sum + r.tokensUsed, 0);
 
     return {
+      // 剩余队列已经由子 agent 并行消费，清掉它们，避免 LangGraph 后续循环重复调查。
+      investigationQueue: subAgentFanoutCompleted ? [target] : state.investigationQueue,
       investigateResult: result,
       retrievedMemories: memories,
       surprises: result?.surprises ?? [],

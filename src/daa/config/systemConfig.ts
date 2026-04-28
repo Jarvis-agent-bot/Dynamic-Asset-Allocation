@@ -165,7 +165,7 @@ export type DaaSystemConfig = {
   /** 认知 Agent 配置 */
   cognitiveAgent?: {
     enabled: boolean;
-    /** 每次调查最大论点数（默认 3） */
+    /** 每次调查最大论点数（默认 5） */
     maxInvestigationTargets: number;
     /** 新论点默认复盘间隔天数（默认 14） */
     reviewIntervalDays: number;
@@ -389,7 +389,7 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
   },
   cognitiveAgent: {
     enabled: true,
-    maxInvestigationTargets: 3,
+    maxInvestigationTargets: 5,
     reviewIntervalDays: 14,
     memoryRecallLimit: 5,
     circuitBreakerThreshold: 3,
@@ -835,7 +835,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       const ca = isRecord(source.cognitiveAgent) ? source.cognitiveAgent : {};
       const fb = fallback.cognitiveAgent ?? {
         enabled: true,
-        maxInvestigationTargets: 3,
+        maxInvestigationTargets: 5,
         reviewIntervalDays: 14,
         memoryRecallLimit: 5,
         circuitBreakerThreshold: 3,

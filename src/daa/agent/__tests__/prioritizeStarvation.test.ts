@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CognitiveState } from "@/src/daa/agent/cognitiveState";
-import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
+import type { InvestigationTarget, ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 
 vi.mock("@/src/daa/agent/store/thesisStore", async () => {
   const actual = await vi.importActual<typeof import("@/src/daa/agent/store/thesisStore")>(
@@ -101,7 +101,35 @@ function makeState(overrides: Partial<CognitiveState>): CognitiveState {
 describe("prioritizeNode starvation prevention", () => {
   beforeEach(async () => {
     const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
+    const thesisStore = await import("@/src/daa/agent/store/thesisStore");
     vi.mocked(callDeepSeekJson).mockReset();
+    vi.mocked(thesisStore.getThesisById).mockClear();
+  });
+
+  it("把 LLM 返回的 8 位短 id 归一成完整 thread id", async () => {
+    const { callDeepSeekJson } = await import("@/src/daa/agent/helpers/llm");
+    const thesisStore = await import("@/src/daa/agent/store/thesisStore");
+    const fullId = "de08afe3-7056-4a5c-84a8-8377afbcd9fa";
+    vi.mocked(callDeepSeekJson).mockResolvedValue({
+      data: {
+        targets: [{ threadId: "de08afe3", reason: "LLM returned short id", dataNeeded: ["news"] }],
+        newThreads: [],
+      },
+      tokensUsed: 100,
+    });
+
+    const state = makeState({
+      activeTheses: [
+        makeThesis({ id: fullId, conviction: "uncertain", assetKeys: ["US::NVDA"], updatedAt: new Date().toISOString() }),
+      ],
+    });
+
+    const { prioritizeNode } = await import("@/src/daa/agent/nodes/prioritizeNode");
+    const result = await prioritizeNode(state);
+
+    const currentTarget = result.currentTarget as InvestigationTarget | null;
+    expect(currentTarget?.threadId).toBe(fullId);
+    expect(vi.mocked(thesisStore.getThesisById)).toHaveBeenCalledWith(fullId);
   });
 
   it("注入 9 天未调查的 medium thesis 到队列", async () => {
@@ -164,8 +192,7 @@ describe("prioritizeNode starvation prevention", () => {
 
     const queue = (result.investigationQueue ?? []) as Array<{ threadId: string | null }>;
     const queueIds = queue.map(t => t.threadId);
-    expect(queueIds).toContain("h_oldest"); // 最旧优先
-    expect(queueIds).not.toContain("m_newer"); // 相对新的不注入
+    expect(queueIds).toEqual(["h_oldest", "m_older", "m_newer"]); // 按最旧优先轮询填满槽位
   });
 
   it("medium thesis 未超阈值时不注入", async () => {
@@ -246,6 +273,6 @@ describe("prioritizeNode starvation prevention", () => {
 
     const queue = (result.investigationQueue ?? []) as Array<{ threadId: string | null }>;
     expect(queue).toHaveLength(2);
-    expect(queue.map(t => t.threadId)).toEqual(["u1", "m1"]);
+    expect(queue.map(t => t.threadId)).toEqual(["m1", "u1"]);
   });
 });

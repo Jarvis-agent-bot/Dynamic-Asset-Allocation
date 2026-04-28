@@ -30,7 +30,7 @@ export function buildPrioritizePrompt(ctx: {
     .map(t => {
       const acc = ctx.thesisAccuracy?.get(t.id);
       const accStr = acc != null ? ` 准确率=${(acc * 100).toFixed(0)}%` : "";
-      return `[${t.id.slice(0, 8)}] "${sanitizeForPrompt(t.title, 60)}" conviction=${t.conviction}${accStr} 资产=${t.assetKeys.join(",")}`;
+      return `[id=${t.id}] "${sanitizeForPrompt(t.title, 60)}" conviction=${t.conviction}${accStr} 资产=${t.assetKeys.join(",")}`;
     })
     .join("\n");
 
@@ -69,7 +69,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
 {
   "targets": [
     {
-      "threadId": "论点ID或null（null表示新建）",
+      "threadId": "完整论点ID或null（null表示新建；不要只返回8位短ID）",
       "reason": "为什么需要调查",
       "dataNeeded": ["technical", "valuation", "news"]
     }
@@ -89,7 +89,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
 \`\`\`json
 {
   "targets": [
-    {"threadId": "a1b2c3d4", "reason": "NVDA 权重15%但论点20天未更新，且近期有重大新闻", "dataNeeded": ["technical", "news"]},
+    {"threadId": "a1b2c3d4-1111-2222-3333-444455556666", "reason": "NVDA 权重15%但论点20天未更新，且近期有重大新闻", "dataNeeded": ["technical", "news"]},
     {"threadId": null, "reason": "VIX 突破25但无对应宏观避险论点", "dataNeeded": ["technical"]}
   ],
   "newThreads": [
