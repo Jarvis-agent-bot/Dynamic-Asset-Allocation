@@ -1,5 +1,5 @@
 /**
- * POST /api/daa/agent/bootstrap — 初始化 Thesis（扫描持仓生成初始论点）
+ * POST /api/daa/agent/bootstrap — 初始化 Thesis（扫描持仓和观察列表生成初始论点）
  */
 
 export const runtime = "nodejs";
@@ -16,16 +16,19 @@ export async function POST(req: Request) {
     if (denied) return denied;
 
     const rows = await listDaaAssetUniverse();
-    const holdings = rows
-      .filter(r => r.holdingQty > 0)
+    const assets = rows
+      .filter(r => r.holdingQty > 0 || r.watchEnabled)
       .map(r => ({
         assetKey: r.assetKey,
         symbol: r.symbol,
         holdingQty: r.holdingQty,
-        lastPrice: r.lastPrice,
+        lastPrice: r.lastPrice > 0 ? r.lastPrice : r.holdingPrice,
+        role: r.holdingQty > 0 ? "holding" as const : "watchlist" as const,
+        notes: r.notes,
+        tags: r.holdingQty > 0 ? r.holdingTags : r.watchTags,
       }));
 
-    const result = await bootstrapTheses(holdings);
+    const result = await bootstrapTheses(assets);
     return ok(result);
   });
 }

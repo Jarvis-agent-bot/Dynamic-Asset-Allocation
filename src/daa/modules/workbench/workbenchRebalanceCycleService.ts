@@ -451,17 +451,6 @@ export async function generateWorkbenchRebalanceCycle(
     agentDecisionSnapshot,
   });
 
-  // Watchlist 自动建仓：标记冷静期起点（即便最终未执行，也避免每个 cycle 反复建仓）
-  if (watchlistEntryProposals.length > 0) {
-    await Promise.all(
-      watchlistEntryProposals.map((p) =>
-        markWatchlistEntryTriggered(p.assetKey).catch((err) =>
-          logSwallowed("workbenchRebalanceCycleService.markWatchlistTriggered", err),
-        ),
-      ),
-    );
-  }
-
   await appendTriggerEventSafe({
     triggerSource,
     triggerReason: draft.triggerReason,
@@ -800,6 +789,25 @@ export async function executeWorkbenchRebalanceCycle(input: {
 
   const logs = await listDaaTradeTickets({ limit: 300 });
   const cycleLogs = logs.filter((row) => createdTicketIds.includes(row.ticketId));
+  const watchlistEntryKeys = new Set(
+    executionRows
+      .filter((row) => (row as RebalanceProposal).proposalType === "watchlist_entry")
+      .map((row) => row.assetKey.toUpperCase()),
+  );
+  const executedWatchlistEntryKeys = new Set(
+    cycleLogs
+      .filter((row) => row.status === "executed" && watchlistEntryKeys.has(row.assetKey.toUpperCase()))
+      .map((row) => row.assetKey),
+  );
+  if (executedWatchlistEntryKeys.size > 0) {
+    await Promise.all(
+      [...executedWatchlistEntryKeys].map((assetKey) =>
+        markWatchlistEntryTriggered(assetKey).catch((err) =>
+          logSwallowed("workbenchRebalanceCycleService.markWatchlistTriggered", err),
+        ),
+      ),
+    );
+  }
 
   // P0: 交易结果反馈 → thesis evidence 闭环（按 assetKey 匹配活跃 thesis）
   try {

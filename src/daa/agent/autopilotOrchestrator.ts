@@ -1,4 +1,4 @@
-import { bootstrapTheses } from "@/src/daa/agent/bootstrap";
+import { bootstrapTheses, ensureAssetThesisCoverage, type BootstrapAsset } from "@/src/daa/agent/bootstrap";
 import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { getAgentConfigOverlayForRun } from "@/src/daa/agent/store/overlayStore";
@@ -108,32 +108,36 @@ export function validateAutopilotPrerequisites(config: DaaSystemConfig): {
   if (config.rebalanceStrategy.autoGenerateEnabled !== true) {
     missing.push("/rebalanceStrategy/autoGenerateEnabled");
   }
-  if (config.rebalanceStrategy.autoExecuteEnabled !== true) {
-    missing.push("/rebalanceStrategy/autoExecuteEnabled");
-  }
   return {
     ready: missing.length === 0,
     missing,
-    reason: missing.length > 0 ? `自动驾驶缺少必要开关：${missing.join(", ")}` : null,
+    reason: missing.length > 0 ? `自动驾驶无法生成调仓周期，缺少必要开关：${missing.join(", ")}` : null,
   };
 }
 
-async function ensureThesesIfNeeded(): Promise<AutopilotLoopResult["bootstrapped"]> {
-  const count = await thesisStore.countThreads().catch(() => 0);
-  if (count > 0) return { attempted: false, created: 0, errors: [] };
-
-  const rows = await listDaaAssetUniverse().catch(() => []);
-  const holdings = rows
-    .filter((row) => row.holdingQty > 0)
+function buildFocusAssets(rows: Awaited<ReturnType<typeof listDaaAssetUniverse>>): BootstrapAsset[] {
+  return rows
+    .filter((row) => row.holdingQty > 0 || row.watchEnabled)
     .map((row) => ({
       assetKey: row.assetKey,
       symbol: row.symbol,
       holdingQty: row.holdingQty,
-      lastPrice: row.lastPrice,
+      lastPrice: row.lastPrice > 0 ? row.lastPrice : row.holdingPrice,
+      role: row.holdingQty > 0 ? "holding" : "watchlist",
+      notes: row.notes,
+      tags: row.holdingQty > 0 ? row.holdingTags : row.watchTags,
     }));
-  if (holdings.length === 0) return { attempted: false, created: 0, errors: ["当前没有持仓，跳过自动初始化论点。"] };
+}
 
-  const result = await bootstrapTheses(holdings);
+async function ensureThesisCoverage(): Promise<AutopilotLoopResult["bootstrapped"]> {
+  const count = await thesisStore.countThreads().catch(() => 0);
+  const rows = await listDaaAssetUniverse().catch(() => []);
+  const focusAssets = buildFocusAssets(rows);
+  if (focusAssets.length === 0) return { attempted: false, created: 0, errors: ["当前没有持仓或观察列表，跳过自动初始化论点。"] };
+
+  const result = count === 0
+    ? await bootstrapTheses(focusAssets)
+    : await ensureAssetThesisCoverage(focusAssets);
   return { attempted: true, created: result.created, errors: result.errors };
 }
 
@@ -249,7 +253,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     });
   }
 
-  const bootstrapped = await ensureThesesIfNeeded();
+  const bootstrapped = await ensureThesisCoverage();
   const cognitiveRun: AutopilotLoopResult["cognitiveRun"] = {
     attempted: true,
     runId: null,
@@ -260,7 +264,10 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     errors: [],
   };
 
-  const run = await runCognitiveAgentCycle(input.source === "cron_cognitive_agent" ? "scheduled" : "event_driven");
+  const run = await runCognitiveAgentCycle(
+    input.source === "cron_cognitive_agent" ? "scheduled" : "event_driven",
+    { focusSymbols: input.affectedSymbols },
+  );
   cognitiveRun.runId = run.runId;
   cognitiveRun.thesesUpdated = run.thesesUpdated;
   cognitiveRun.surprisesCount = run.surprises.length;

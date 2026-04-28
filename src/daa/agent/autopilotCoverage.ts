@@ -43,8 +43,15 @@ export function buildAutopilotCoverageSummary(input: {
     }
   }
 
+  const knownAssetKeys = new Set([
+    ...input.portfolio.holdings.map((holding) => holding.assetKey.toUpperCase()),
+    ...candidates.map((candidate) => candidate.assetKey.toUpperCase()),
+  ]);
   const planIntents = input.overlay?.targetAllocationPlan?.intents ?? [];
-  const acceptedPlanIntents = planIntents.filter(intent => Number(intent.confidence) >= 70);
+  const acceptedPlanIntents = planIntents.filter(intent => (
+    Number(intent.confidence) >= 70
+    && knownAssetKeys.has(String(intent.assetKey || "").trim().toUpperCase())
+  ));
   return {
     holdingAssets: input.portfolio.holdings.length,
     watchlistCandidates: candidates.length,

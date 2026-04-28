@@ -149,6 +149,10 @@ export function setCurrentRunId(runId: string | null): void {
   _currentRunId = runId;
 }
 
+export function getCurrentRunId(): string | null {
+  return _currentRunId;
+}
+
 async function logToolExecution(result: ToolResultV2, inputParams: Record<string, unknown>): Promise<void> {
   if (!_currentRunId) return; // 无 runId 时静默跳过
   try {

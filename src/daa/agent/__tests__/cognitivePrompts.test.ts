@@ -80,6 +80,36 @@ describe("buildPrioritizePrompt", () => {
     expect(prompt).toContain("15.0%");
   });
 
+  it("把观察列表和事件资产纳入研究优先级上下文", () => {
+    const prompt = buildPrioritizePrompt({
+      portfolio: mockPortfolio,
+      watchlist: [{
+        assetKey: "US::QQQ",
+        symbol: "QQQ",
+        lastPrice: 663,
+        targetWeightPct: 0,
+        autoEntryEnabled: false,
+        entryTargetWeightPct: null,
+        entryCooldownDays: 14,
+        lastEntryTriggeredAt: null,
+        fxMissing: false,
+        notes: "纳指核心观察",
+        tags: ["growth"],
+      }],
+      market: mockMarket,
+      news: { items: [] },
+      theses: [mockThread],
+      focusSymbols: ["QQQ"],
+      maxTargets: 5,
+    });
+
+    expect(prompt).toContain("观察列表");
+    expect(prompt).toContain("US::QQQ");
+    expect(prompt).toContain("事件触发资产");
+    expect(prompt).toContain("QQQ");
+    expect(prompt).toContain("1-5 个");
+  });
+
   it("返回非空字符串", () => {
     const prompt = buildPrioritizePrompt({
       portfolio: { holdings: [], totalEquity: 0, cashPct: 0 },

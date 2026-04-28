@@ -106,3 +106,33 @@ export async function listJobExecutionLogs(limit = 50): Promise<DaaJobExecutionL
     return result.rows.map((row) => mapJobLogRow(row as Record<string, unknown>));
   });
 }
+
+export async function findRecentJobExecutionByIdempotencyKey(input: {
+  jobType: string;
+  idempotencyKey: string;
+  withinMinutes: number;
+  statuses?: string[];
+}): Promise<DaaJobExecutionLog | null> {
+  const key = normalizeText(input.idempotencyKey);
+  if (!key) return null;
+  await ensureDaaStoreSchemaPg();
+  const safeMinutes = Math.max(1, Math.min(24 * 60, Math.trunc(Number(input.withinMinutes) || 60)));
+  const statuses = (input.statuses && input.statuses.length > 0 ? input.statuses : ["succeeded"])
+    .map((status) => normalizeText(status))
+    .filter(Boolean);
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT job_id, job_type, request_id, trigger_source, idempotency_key, status,
+              started_at, finished_at, duration_ms, result_json, error_text, created_at
+       FROM daa_job_execution_logs
+       WHERE job_type = $1
+         AND idempotency_key = $2
+         AND started_at >= NOW() - ($3::int * INTERVAL '1 minute')
+         AND status = ANY($4::text[])
+       ORDER BY started_at DESC, created_at DESC
+       LIMIT 1`,
+      [normalizeText(input.jobType), key, safeMinutes, statuses],
+    );
+    return result.rows[0] ? mapJobLogRow(result.rows[0] as Record<string, unknown>) : null;
+  });
+}

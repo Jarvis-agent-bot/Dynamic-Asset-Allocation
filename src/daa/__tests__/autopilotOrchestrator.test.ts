@@ -4,7 +4,7 @@ import { validateAutopilotPrerequisites } from "@/src/daa/agent/autopilotOrchest
 import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 
 describe("autopilot-orchestrator", () => {
-  it("自动驾驶不再自动改配置，而是显式报告缺失的执行开关", () => {
+  it("自动驾驶生成提案只要求自动生成开关，执行开关交给执行层判定", () => {
     const config = normalizeSystemConfig({
       cognitiveAgent: {
         enabled: true,
@@ -19,17 +19,16 @@ describe("autopilot-orchestrator", () => {
       ready: false,
       missing: [
         "/rebalanceStrategy/autoGenerateEnabled",
-        "/rebalanceStrategy/autoExecuteEnabled",
       ],
-      reason: "自动驾驶缺少必要开关：/rebalanceStrategy/autoGenerateEnabled, /rebalanceStrategy/autoExecuteEnabled",
+      reason: "自动驾驶无法生成调仓周期，缺少必要开关：/rebalanceStrategy/autoGenerateEnabled",
     });
   });
 
-  it("自动驾驶必要开关齐备时可继续运行", () => {
+  it("只开启自动生成时也可继续生成周期", () => {
     const config = normalizeSystemConfig({
       rebalanceStrategy: {
         autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
+        autoExecuteEnabled: false,
       },
     });
 

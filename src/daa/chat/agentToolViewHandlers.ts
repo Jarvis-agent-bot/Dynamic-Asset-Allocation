@@ -166,7 +166,7 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         parts.push("⚡ 市场与预期一致，无重大意外。");
       }
       if (b.cognitionGaps.length > 0) {
-        parts.push("\n🔍 持仓论点待复核:");
+        parts.push("\n🔍 研究论点待复核:");
         for (const g of b.cognitionGaps.slice(0, 3)) {
           parts.push(`  ${g.assetKey} — ${g.uncertaintyReason}`);
           if (g.suggestedInvestigation) parts.push(`    ↳ ${g.suggestedInvestigation}`);

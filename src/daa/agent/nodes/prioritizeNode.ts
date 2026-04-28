@@ -75,7 +75,15 @@ function addQueuedTarget(
   }
 }
 
-function buildRotationTargets(state: CognitiveState, stalenessDays: number): QueuedInvestigationTarget[] {
+function assetKeyMatchesFocus(assetKey: string, focusSymbols: Set<string>): boolean {
+  if (focusSymbols.size === 0) return false;
+  const normalized = String(assetKey || "").trim().toUpperCase();
+  if (!normalized) return false;
+  const symbol = normalized.includes("::") ? normalized.split("::").pop()! : normalized;
+  return focusSymbols.has(symbol);
+}
+
+function buildRotationTargets(state: CognitiveState, stalenessDays: number, focusSymbols: Set<string>): QueuedInvestigationTarget[] {
   const now = Date.now();
   const holdingWeights = new Map<string, number>();
   for (const h of state.portfolio?.holdings ?? []) {
@@ -91,6 +99,7 @@ function buildRotationTargets(state: CognitiveState, stalenessDays: number): Que
       const inWatchlist = t.assetKeys.some(k => watchlistKeys.has(k));
       const reviewDue = t.reviewAt ? Date.parse(t.reviewAt) <= now : false;
       const stale = days >= stalenessDays;
+      const focusEvent = t.assetKeys.some(k => assetKeyMatchesFocus(k, focusSymbols));
       const staleDirectional = (t.conviction === "medium" || t.conviction === "high") && stale;
       const uncertainHolding = t.conviction === "uncertain" && maxHoldingWeight > 0;
       const staleHighWeightHolding = maxHoldingWeight > 0.05 && stale;
@@ -98,7 +107,10 @@ function buildRotationTargets(state: CognitiveState, stalenessDays: number): Que
 
       let priority = 0;
       let reason = "";
-      if (uncertainHolding) {
+      if (focusEvent) {
+        priority = 1100 + days;
+        reason = `事件触发复核：相关资产出现在本轮新闻/外部事件中，距离上次有效调查 ${days} 天`;
+      } else if (uncertainHolding) {
         priority = 1000 + days;
         reason = `轮询复核：持仓论点仍为观察态，权重 ${(maxHoldingWeight * 100).toFixed(1)}%，已 ${days} 天未有效调查`;
       } else if (staleHighWeightHolding) {
@@ -149,12 +161,21 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       }
     }
 
+    const maxTargets = state.agentConfig?.maxInvestigationTargets ?? DEFAULT_MAX_INVESTIGATION_TARGETS;
+    const stalenessDays = state.agentConfig?.thesisStalenessDays ?? 7;
+    const focusSymbols = new Set((state.focusSymbols ?? [])
+      .map((symbol) => String(symbol || "").trim().toUpperCase())
+      .filter(Boolean));
+
     const prompt = buildPrioritizePrompt({
       portfolio: state.portfolio,
+      watchlist: state.watchlist?.candidates ?? [],
       market: state.market ?? { regime: "unknown", vix: null, indicators: {} },
       news: state.news ?? { items: [] },
       theses: state.activeTheses,
       thesisAccuracy,
+      focusSymbols: [...focusSymbols],
+      maxTargets,
     });
 
     const { data, tokensUsed } = await callDeepSeekJson<{
@@ -224,8 +245,6 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
 
     // 设置调查队列：LLM 给方向，代码做 id 归一、去重和轮询补位。
     // 这样即使模型返回短 id，或遗漏长期未调查的持仓/观察列表论点，本轮仍能落到可加载 thesis。
-    const maxTargets = state.agentConfig?.maxInvestigationTargets ?? DEFAULT_MAX_INVESTIGATION_TARGETS;
-    const stalenessDays = state.agentConfig?.thesisStalenessDays ?? 7;
     const queuedByThreadId = new Map<string, QueuedInvestigationTarget>();
     const rawTargets = data.targets ?? [];
     let normalizedLlmTargets = 0;
@@ -245,7 +264,7 @@ export async function prioritizeNode(state: CognitiveState): Promise<CognitiveUp
       });
     });
 
-    for (const item of buildRotationTargets(state, stalenessDays)) {
+    for (const item of buildRotationTargets(state, stalenessDays, focusSymbols)) {
       addQueuedTarget(queuedByThreadId, item);
     }
 

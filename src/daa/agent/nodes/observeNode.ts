@@ -13,6 +13,7 @@ import {
   buildFxLookupToBase,
   summarizeMarkToMarketPortfolio,
 } from "@/src/daa/modules/portfolio/portfolioValuation";
+import { ensureAssetThesisCoverage, type BootstrapAsset } from "@/src/daa/agent/bootstrap";
 import { listLatestDaaMarketIndicatorSnapshots, listDaaNewsItemsBySymbol } from "@/src/daa/store/marketCacheStore";
 import { normalizeDaaCurrencyCode } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -50,18 +51,6 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
     } catch (e) {
       logSwallowed("cognitiveGraph.observe.memoryDecay", e);
     }
-
-    // P0-4: 归档超过 7 天未转正的调查型（uncertain）thesis，避免冲突/缺口噪声
-    try {
-      const archivedIds = await thesisStore.archiveStaleUncertainTheses(7);
-      if (archivedIds.length > 0) {
-        logSwallowed("cognitiveGraph.observe.archiveStale", new Error(`archived ${archivedIds.length} stale uncertain theses`));
-      }
-    } catch (e) {
-      logSwallowed("cognitiveGraph.observe.archiveStale", e);
-    }
-
-    const activeTheses = await thesisStore.getActiveTheses();
 
     // 1. 组合数据 — 使用 buildAssetUniverseViewRows 以获得基准货币（USD）下的正确估值和权重。
     //    直接用 r.holdingQty * r.lastPrice 会把 HKD / CNY 等原币种金额当作 USD 相加，
@@ -151,12 +140,58 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       logSwallowed("cognitiveGraph.observe.market", e);
     }
 
+    const focusAssets: BootstrapAsset[] = [
+      ...portfolio.holdings.map((h) => ({
+        assetKey: h.assetKey,
+        symbol: h.symbol,
+        holdingQty: h.holdingQty,
+        lastPrice: h.lastPrice,
+        role: "holding" as const,
+        tags: ["持仓"],
+      })),
+      ...watchlist.candidates.map((w) => ({
+        assetKey: w.assetKey,
+        symbol: w.symbol,
+        holdingQty: 0,
+        lastPrice: w.lastPrice,
+        role: "watchlist" as const,
+        notes: w.notes,
+        tags: w.tags,
+      })),
+    ];
+    const focusAssetKeys = Array.from(new Set(focusAssets.map((asset) => asset.assetKey).filter(Boolean)));
+    let thesisCoverageCreated = 0;
+    try {
+      const stalenessDays = agentConfig?.thesisStalenessDays ?? 7;
+      const archivedIds = await thesisStore.archiveStaleUncertainTheses(stalenessDays, focusAssetKeys);
+      if (archivedIds.length > 0) {
+        logSwallowed("cognitiveGraph.observe.archiveStale", new Error(`archived ${archivedIds.length} stale non-focus uncertain theses`));
+      }
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.archiveStale", e);
+    }
+    try {
+      const coverage = await ensureAssetThesisCoverage(focusAssets);
+      thesisCoverageCreated = coverage.created;
+      if (coverage.errors.length > 0) {
+        logSwallowed("cognitiveGraph.observe.thesisCoverage", new Error(coverage.errors.slice(0, 3).join("; ")));
+      }
+    } catch (e) {
+      logSwallowed("cognitiveGraph.observe.thesisCoverage", e);
+    }
+
+    const activeTheses = await thesisStore.getActiveTheses();
+
     // 3. 最近新闻（从 DB 缓存读取，不调外部 API）
     const news: NewsSnapshot = { items: [] };
     try {
-      // 获取持仓资产的最近新闻
-      const holdingSymbols = portfolio.holdings.slice(0, 10).map(h => h.symbol);
-      for (const sym of holdingSymbols.slice(0, 5)) {
+      const focusSymbols = new Set((state.focusSymbols ?? []).map((symbol) => String(symbol || "").trim().toUpperCase()).filter(Boolean));
+      const newsSymbols = Array.from(new Set([
+        ...focusSymbols,
+        ...portfolio.holdings.map(h => h.symbol.toUpperCase()),
+        ...watchlist.candidates.map(w => w.symbol.toUpperCase()),
+      ].filter(Boolean))).slice(0, 12);
+      for (const sym of newsSymbols) {
         const items = await listDaaNewsItemsBySymbol({ symbol: sym, limit: 3 });
         for (const item of items) {
           news.items.push({
@@ -177,7 +212,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
       market,
       news,
       activeTheses,
-      toolsCalled: [{ tool: "observe", input: {}, outputSummary: `${activeTheses.length} theses, ${portfolio.holdings.length} holdings, ${news.items.length} news, regime=${market.regime}`, durationMs: Date.now() - t0 }],
+      toolsCalled: [{ tool: "observe", input: {}, outputSummary: `${activeTheses.length} theses, ${portfolio.holdings.length} holdings, ${watchlist.candidates.length} watchlist, ${news.items.length} news, coverage+${thesisCoverageCreated}, regime=${market.regime}`, durationMs: Date.now() - t0 }],
     };
   } catch (e) {
     logSwallowed("cognitiveGraph.observe", e);

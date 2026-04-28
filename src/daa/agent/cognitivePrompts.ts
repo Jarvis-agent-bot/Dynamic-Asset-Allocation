@@ -14,9 +14,12 @@ import { formatAssetLabel, formatAssetLabelByKey } from "@/src/daa/assetRegistry
 
 export function buildPrioritizePrompt(ctx: {
   portfolio: PortfolioSnapshot;
+  watchlist?: WatchlistSnapshot["candidates"];
   market: MarketSnapshot;
   news: NewsSnapshot;
   theses: ResearchThread[];
+  focusSymbols?: string[];
+  maxTargets?: number;
   /** 2B: 每个 thesis 的历史准确率（0-1），用于指导优先级 */
   thesisAccuracy?: Map<string, number>;
 }): string {
@@ -39,6 +42,18 @@ export function buildPrioritizePrompt(ctx: {
     .map(n => `${n.symbol}: ${sanitizeForPrompt(n.title, 80)}`)
     .join("\n");
 
+  const watchlistSummary = (ctx.watchlist ?? [])
+    .slice(0, 30)
+    .map(w => `${w.assetKey} 现价${w.lastPrice > 0 ? w.lastPrice.toFixed(2) : "N/A"} ${w.autoEntryEnabled ? "规则建仓=开" : "规则建仓=关"}${w.entryTargetWeightPct ? ` 规则目标${w.entryTargetWeightPct.toFixed(1)}%` : ""}${w.notes ? ` 备注=${sanitizeForPrompt(w.notes, 60)}` : ""}`)
+    .join("\n");
+
+  const focusSummary = (ctx.focusSymbols ?? [])
+    .map(symbol => String(symbol || "").trim().toUpperCase())
+    .filter(Boolean)
+    .slice(0, 10)
+    .join(", ");
+  const maxTargets = Math.max(1, Math.min(10, Math.trunc(Number(ctx.maxTargets) || 5)));
+
   return `你是一个投资研究操作系统的「投委会主席」。你的职责是决定今天最值得深入调查的研究线索。
 
 ## 当前组合
@@ -46,9 +61,15 @@ export function buildPrioritizePrompt(ctx: {
 现金占比: ${(ctx.portfolio.cashPct * 100).toFixed(1)}%
 ${holdingSummary}
 
+## 观察列表
+${watchlistSummary || "无观察列表候选"}
+
 ## 市场环境
 Regime: ${ctx.market?.regime ?? "unknown"}
 VIX: ${ctx.market?.vix ?? "N/A"}
+
+## 事件触发资产
+${focusSummary || "无"}
 
 ## 最近新闻
 ${newsSummary || "无最新新闻"}
@@ -57,8 +78,10 @@ ${newsSummary || "无最新新闻"}
 ${thesisSummary || "暂无活跃论点（首次运行）"}
 
 ## 任务
-1. 从活跃论点中选出最需要立即调查的 1-3 个。优先级依据：
+1. 从活跃论点中选出最需要立即调查的 1-${maxTargets} 个。优先级依据：
+   - 事件触发资产相关论点优先
    - 相关资产权重高但 thesis 久未更新
+   - 观察列表资产没有稳定方向，且可能进入目标权重计划
    - 新闻与现有 thesis 矛盾
    - conviction 为 "uncertain" 需要明确
    - 历史准确率低（<50%）的论点需要重新审视
@@ -378,7 +401,10 @@ export function buildStrategyAdvisorPrompt(ctx: {
     : "无意外";
 
   const gapLines = ctx.cognitionGaps.length > 0
-    ? ctx.cognitionGaps.map(g => `${g.assetKey} 权重${(g.portfolioWeight * 100).toFixed(1)}%：${sanitizeForPrompt(g.uncertaintyReason || `${g.daysSinceLastInvestigation}天未更新`, 90)}${g.suggestedInvestigation ? `；${sanitizeForPrompt(g.suggestedInvestigation, 90)}` : ""}`).join("\n")
+    ? ctx.cognitionGaps.map(g => {
+      const scope = g.portfolioWeight > 0 ? `权重${(g.portfolioWeight * 100).toFixed(1)}%` : "观察列表";
+      return `${g.assetKey} ${scope}：${sanitizeForPrompt(g.uncertaintyReason || `${g.daysSinceLastInvestigation}天未更新`, 90)}${g.suggestedInvestigation ? `；${sanitizeForPrompt(g.suggestedInvestigation, 90)}` : ""}`;
+    }).join("\n")
     : "无";
 
   return `你是投资组合的「策略顾问」。基于当前组合状况和论点分析，输出你对规则引擎参数的建议。
@@ -618,7 +644,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   }
 
   if (briefing.cognitionGaps.length > 0) {
-    lines.push("<b>\u{1F50D} 持仓论点待复核</b>");
+    lines.push("<b>\u{1F50D} 研究论点待复核</b>");
     for (const g of briefing.cognitionGaps.slice(0, 3)) {
       lines.push(`• ${formatAssetLabelByKey(g.assetKey)} — ${g.uncertaintyReason}`);
       if (g.suggestedInvestigation) {

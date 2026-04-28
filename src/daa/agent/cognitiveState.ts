@@ -69,6 +69,7 @@ export interface NewsSnapshot {
  */
 export const CognitiveStateAnnotation = Annotation.Root({
   // 输入数据（observe 节点填充）
+  focusSymbols: Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
   portfolio: Annotation<PortfolioSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   watchlist: Annotation<WatchlistSnapshot | null>({ reducer: (_, b) => b, default: () => null }),
   market: Annotation<MarketSnapshot | null>({ reducer: (_, b) => b, default: () => null }),

@@ -107,16 +107,20 @@ export async function getActiveTheses(): Promise<ResearchThread[]> {
  * 它们会在冲突检测、认知缺口等下游产生噪声。此函数在每次 observe 时清扫一次。
  * 返回归档的 thesis id 列表，便于日志观察。
  */
-export async function archiveStaleUncertainTheses(staleDays = 7): Promise<string[]> {
+export async function archiveStaleUncertainTheses(staleDays = 7, protectedAssetKeys: string[] = []): Promise<string[]> {
   return withDaaPgClient(async ({ query }) => {
+    const protectedKeys = protectedAssetKeys
+      .map((key) => String(key || "").trim())
+      .filter(Boolean);
     const res = await query<{ id: string }>(
       `UPDATE daa_research_threads
        SET status = 'archived', updated_at = now()
        WHERE status = 'active'
          AND conviction = 'uncertain'
          AND updated_at < now() - (interval '1 day' * $1)
+         AND (cardinality($2::text[]) = 0 OR NOT (asset_keys && $2::text[]))
        RETURNING id`,
-      [staleDays],
+      [staleDays, protectedKeys],
     );
     return res.rows.map(r => r.id);
   });

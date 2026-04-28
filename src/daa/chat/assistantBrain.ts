@@ -1,6 +1,6 @@
 import "@/src/daa/agent/tools/index";
 
-import { bootstrapTheses } from "@/src/daa/agent/bootstrap";
+import { bootstrapTheses, ensureAssetThesisCoverage } from "@/src/daa/agent/bootstrap";
 import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
@@ -49,25 +49,31 @@ export async function buildAssistantBrainStatusText(runtimeContext: DaaAssistant
 }
 
 export async function runAssistantBootstrap(runtimeContext: DaaAssistantRuntimeContext): Promise<string> {
-  const holdings = runtimeContext.readModel.bootstrap.assetUniverse
-    .filter((item) => Number(item.holdingQty) > 0)
+  const focusAssets = runtimeContext.readModel.bootstrap.assetUniverse
+    .filter((item) => Number(item.holdingQty) > 0 || item.watchEnabled)
     .map((item) => ({
       assetKey: item.assetKey,
       symbol: item.symbol,
       holdingQty: Number(item.holdingQty) || 0,
-      lastPrice: Number(item.lastPrice) || 0,
+      lastPrice: Number(item.lastPrice) || Number(item.holdingPrice) || 0,
+      role: Number(item.holdingQty) > 0 ? "holding" as const : "watchlist" as const,
+      notes: item.notes,
+      tags: Number(item.holdingQty) > 0 ? item.holdingTags : item.watchTags,
     }));
 
-  if (holdings.length === 0) {
-    return "当前没有持仓，无法初始化论点。请先同步组合或建立持仓后再执行。";
+  if (focusAssets.length === 0) {
+    return "当前没有持仓或观察列表，无法初始化论点。请先同步组合或添加观察资产后再执行。";
   }
 
   const existing = await getActiveTheses().catch(() => []);
   if (existing.length > 0) {
-    return `当前已经存在 ${existing.length} 个活跃论点，暂不重复初始化。如需重建，建议先归档旧论点后再执行。`;
+    const result = await ensureAssetThesisCoverage(focusAssets);
+    return result.created > 0
+      ? `已补齐研究覆盖，新增 ${result.created} 个研究论点。当前活跃论点 ${existing.length + result.created} 个。${result.errors.length > 0 ? `\n附带告警：${result.errors.slice(0, 3).join("；")}` : ""}`
+      : `当前已有 ${existing.length} 个活跃论点，持仓和观察列表覆盖已齐备。`;
   }
 
-  const result = await bootstrapTheses(holdings);
+  const result = await bootstrapTheses(focusAssets);
   return result.created > 0
     ? `已完成论点初始化，新增 ${result.created} 个研究论点。${result.errors.length > 0 ? `\n附带告警：${result.errors.slice(0, 3).join("；")}` : ""}`
     : `初始化未产生新论点。${result.errors.length > 0 ? `\n原因：${result.errors.slice(0, 3).join("；")}` : ""}`;

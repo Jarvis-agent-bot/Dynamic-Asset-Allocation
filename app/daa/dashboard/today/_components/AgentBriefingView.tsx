@@ -370,7 +370,7 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
         <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-300">
             <Search className="h-3.5 w-3.5" />
-            待复核线索
+            研究论点待复核
             <span className="ml-1 text-[10px] font-normal leading-5 text-[var(--faint)]">
               （这里显示距离论点有效更新的时间；定时任务仍会运行，但不代表每轮都会改写该论点）
             </span>
@@ -386,7 +386,7 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
                   )}
                 </div>
                 <span className="ml-2 shrink-0 rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-400" title="距上次论点有效调查更新的天数，不等于任务未运行">
-                  论点 {g.daysSinceLastInvestigation}天未更新
+                  {g.portfolioWeight > 0 ? "持仓" : "观察"}论点 {g.daysSinceLastInvestigation}天未更新
                 </span>
               </div>
             ))}

@@ -85,7 +85,17 @@ export function getCognitiveGraph() {
 /**
  * 运行一次完整的认知 Agent 循环。
  */
-export async function runCognitiveAgentCycle(trigger: "scheduled" | "manual" | "event_driven" = "manual"): Promise<{
+function normalizeFocusSymbols(symbols: string[] | undefined): string[] {
+  return Array.from(new Set((symbols ?? [])
+    .map((symbol) => String(symbol || "").trim().toUpperCase())
+    .filter(Boolean)))
+    .slice(0, 20);
+}
+
+export async function runCognitiveAgentCycle(
+  trigger: "scheduled" | "manual" | "event_driven" = "manual",
+  options: { focusSymbols?: string[] } = {},
+): Promise<{
   runId: string;
   thesesUpdated: number;
   surprises: Surprise[];
@@ -107,7 +117,7 @@ export async function runCognitiveAgentCycle(trigger: "scheduled" | "manual" | "
   try {
     const graph = getCognitiveGraph();
     const result = await graph.invoke(
-      {},
+      { focusSymbols: normalizeFocusSymbols(options.focusSymbols) },
       { configurable: { thread_id: threadId } },
     );
 
