@@ -24,6 +24,20 @@ import * as memoryStore from "@/src/daa/agent/store/memoryStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
+function buildNoResultFallback(prefix: string): InvestigateOutput {
+  return {
+    thesisChanged: false,
+    updatedThesis: null,
+    newConviction: null,
+    evidenceType: "neutral",
+    evidenceSummary: `${prefix}已触达该论点并执行调查，但模型未返回可解析的结构化结论；本轮保留原论点，等待下一轮证据确认。`,
+    surprises: [],
+    invalidationConditions: null,
+    suggestedReviewDays: 3,
+    nextActions: ["下一轮继续复核该论点的最新证据。"],
+  };
+}
+
 export async function investigateNode(state: CognitiveState): Promise<CognitiveUpdate> {
   const t0 = Date.now();
   const target = state.currentTarget;
@@ -75,8 +89,8 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
         for (const s of settled) {
           if (s.status !== "fulfilled" || !s.value) continue;
           const r = s.value;
-          const out = r.investigateOutput;
           const subThread = await thesisStore.getThesisById(r.threadId).catch(() => null);
+          const out = r.investigateOutput ?? (subThread ? buildNoResultFallback("[子 agent 轮询] ") : null);
           subAgentResultsForState.push({
             threadId: r.threadId,
             threadTitle: r.threadTitle,
@@ -338,6 +352,10 @@ export async function investigateNode(state: CognitiveState): Promise<CognitiveU
       if (forceAction?.action === "result") {
         result = forceAction.result;
       }
+    }
+
+    if (!result) {
+      result = buildNoResultFallback("[Agent 轮询] ");
     }
 
     // 校验 investigate 输出
