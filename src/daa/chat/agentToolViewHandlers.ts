@@ -13,7 +13,7 @@ export function buildAssistantHelpText(): string {
     "4. 运行一轮 Agent 调查 / 初始化论点 / 查看 Agent 日报",
     "5. 生成调仓建议 / 执行调仓",
     "6. 买入 QQQ 10股 / 卖出 AAPL 5股（本地模拟）",
-    "7. 活跃论点 / Agent 日报 / 自动跟踪中",
+    "7. 活跃论点 / Agent 日报 / 研究论点待复核",
     "8. 执行类命令会先进入待确认，回复“确认”才真正执行",
     "9. 如果要放弃待确认动作，直接回复“取消”",
   ].join("\n");
@@ -176,9 +176,6 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         const c = b.autopilotCoverage;
         parts.push("\n🧭 自动驾驶覆盖:");
         parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
-        if (c.skipReasonSummary.length > 0) {
-          parts.push(`  规则建仓跳过: ${c.skipReasonSummary.slice(0, 3).map(r => `${r.reason}×${r.count}`).join("；")}`);
-        }
       }
       if (b.mindChangeConditions.length > 0) {
         parts.push("\n🔄 改观条件:");

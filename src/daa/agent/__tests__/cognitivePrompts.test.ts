@@ -356,7 +356,7 @@ describe("formatBriefingForTelegram", () => {
     expect(html).toContain("不会仅因观察态论点或观察列表存在而直接调仓");
   });
 
-  it("日报展示自动驾驶覆盖和规则建仓跳过原因", () => {
+  it("日报展示自动驾驶覆盖，不再输出规则建仓跳过噪声", () => {
     const briefing: DailyBriefing = {
       surprises: [],
       cognitionGaps: [],
@@ -368,21 +368,15 @@ describe("formatBriefingForTelegram", () => {
       autopilotCoverage: {
         holdingAssets: 2,
         watchlistCandidates: 16,
-        ruleAutoEntryEnabled: 0,
-        watchlistWithRuleTarget: 0,
         brainPlanIntents: 0,
         acceptedBrainPlanIntents: 0,
-        skipReasonSummary: [
-          { reason: "未开启规则自动建仓", count: 16 },
-          { reason: "未设置规则目标权重", count: 16 },
-        ],
-        watchlistSkips: [],
       },
     };
     const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
     expect(html).toContain("自动驾驶覆盖");
     expect(html).toContain("观察候选 <code>16</code>");
-    expect(html).toContain("未开启规则自动建仓×16");
+    expect(html).not.toContain("规则建仓跳过");
+    expect(html).not.toContain("未开启规则自动建仓");
   });
 
   it("有目标权重计划时，展示 Agent 的目标权重、置信度和理由", () => {

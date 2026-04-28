@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildAutopilotCoverageSummary } from "@/src/daa/agent/autopilotCoverage";
 
 describe("buildAutopilotCoverageSummary", () => {
-  it("汇总持仓、观察候选和规则建仓跳过原因", () => {
+  it("汇总持仓、观察候选和大脑目标计划采纳数", () => {
     const summary = buildAutopilotCoverageSummary({
       portfolio: {
         holdings: [
@@ -58,11 +58,7 @@ describe("buildAutopilotCoverageSummary", () => {
 
     expect(summary.holdingAssets).toBe(1);
     expect(summary.watchlistCandidates).toBe(2);
-    expect(summary.ruleAutoEntryEnabled).toBe(1);
-    expect(summary.watchlistWithRuleTarget).toBe(1);
     expect(summary.brainPlanIntents).toBe(2);
     expect(summary.acceptedBrainPlanIntents).toBe(1);
-    expect(summary.skipReasonSummary).toContainEqual({ reason: "未开启规则自动建仓", count: 1 });
-    expect(summary.skipReasonSummary).toContainEqual({ reason: "未设置规则目标权重", count: 1 });
   });
 });

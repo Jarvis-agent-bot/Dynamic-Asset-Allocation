@@ -98,13 +98,13 @@ export async function ensureAssetThesisCoverage(assets: BootstrapAsset[]): Promi
  * 扫描持仓和观察列表资产，为每个生成初始 thesis。
  * 首次为空时走 LLM 初始化；已有论点时只补齐缺失资产的覆盖。
  */
-export async function bootstrapTheses(holdings: BootstrapAsset[]): Promise<{
+export async function bootstrapTheses(assets: BootstrapAsset[]): Promise<{
   created: number;
   errors: string[];
 }> {
   const count = await thesisStore.countThreads();
   if (count > 0) {
-    const coverage = await ensureAssetThesisCoverage(holdings);
+    const coverage = await ensureAssetThesisCoverage(assets);
     return coverage.created > 0
       ? coverage
       : { created: 0, errors: ["已存在 thesis，且持仓/观察列表覆盖已齐备"] };
@@ -118,7 +118,7 @@ export async function bootstrapTheses(holdings: BootstrapAsset[]): Promise<{
   let created = 0;
   const errors: string[] = [];
 
-  for (const asset of holdings.slice(0, 30)) {
+  for (const asset of assets.slice(0, 30)) {
     try {
       const role = asset.role ?? (asset.holdingQty > 0 ? "holding" : "watchlist");
       const roleLabel = role === "holding" ? "当前持仓" : "观察列表候选";

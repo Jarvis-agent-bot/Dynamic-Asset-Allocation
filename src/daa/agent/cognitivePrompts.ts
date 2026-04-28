@@ -44,7 +44,10 @@ export function buildPrioritizePrompt(ctx: {
 
   const watchlistSummary = (ctx.watchlist ?? [])
     .slice(0, 30)
-    .map(w => `${w.assetKey} 现价${w.lastPrice > 0 ? w.lastPrice.toFixed(2) : "N/A"} ${w.autoEntryEnabled ? "规则建仓=开" : "规则建仓=关"}${w.entryTargetWeightPct ? ` 规则目标${w.entryTargetWeightPct.toFixed(1)}%` : ""}${w.notes ? ` 备注=${sanitizeForPrompt(w.notes, 60)}` : ""}`)
+    .map((w) => {
+      const targetPct = w.entryTargetWeightPct ?? (w.targetWeightPct > 0 ? w.targetWeightPct : null);
+      return `${w.assetKey} 现价${w.lastPrice > 0 ? w.lastPrice.toFixed(2) : "N/A"}${targetPct ? ` 观察目标${targetPct.toFixed(1)}%` : ""}${w.notes ? ` 备注=${sanitizeForPrompt(w.notes, 60)}` : ""}`;
+    })
     .join("\n");
 
   const focusSummary = (ctx.focusSymbols ?? [])
@@ -390,10 +393,9 @@ export function buildStrategyAdvisorPrompt(ctx: {
   const watchlistLines = (ctx.watchlist ?? []).slice(0, 40).map(w => {
     const thesis = ctx.theses.find(t => t.assetKeys.includes(w.assetKey));
     const tags = w.tags.length > 0 ? ` tags=${w.tags.slice(0, 3).join("/")}` : "";
-    const target = w.targetWeightPct > 0 ? ` 规则目标${w.targetWeightPct.toFixed(1)}%` : "";
-    const autoEntry = w.autoEntryEnabled ? "规则自动建仓=开" : "规则自动建仓=关";
+    const target = w.targetWeightPct > 0 ? ` 观察目标${w.targetWeightPct.toFixed(1)}%` : "";
     const note = w.notes ? ` notes="${sanitizeForPrompt(w.notes, 50)}"` : "";
-    return `${w.symbol} (${w.assetKey}) 现价$${w.lastPrice.toFixed(2)} ${autoEntry}${target}${tags}${note}${thesis ? ` 论点="${sanitizeForPrompt(thesis.title, 40)}" conviction=${thesis.conviction}` : " 无论点"}`;
+    return `${w.symbol} (${w.assetKey}) 现价$${w.lastPrice.toFixed(2)}${target}${tags}${note}${thesis ? ` 论点="${sanitizeForPrompt(thesis.title, 40)}" conviction=${thesis.conviction}` : " 无论点"}`;
   }).join("\n") || "无";
 
   const surpriseLines = ctx.surprises.length > 0
@@ -658,13 +660,6 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
     const c = briefing.autopilotCoverage;
     lines.push("<b>\u{1F9ED} 自动驾驶覆盖</b>");
     lines.push(`• 持仓复核 <code>${c.holdingAssets}</code> 个 | 观察候选 <code>${c.watchlistCandidates}</code> 个 | 大脑目标计划 <code>${c.acceptedBrainPlanIntents}/${c.brainPlanIntents}</code> 条`);
-    if (c.watchlistCandidates > 0) {
-      lines.push(`• 规则建仓准备度: 已开启 <code>${c.ruleAutoEntryEnabled}</code> 个 | 已设规则目标 <code>${c.watchlistWithRuleTarget}</code> 个`);
-    }
-    if (c.skipReasonSummary.length > 0) {
-      const reasons = c.skipReasonSummary.slice(0, 3).map(r => `${r.reason}×${r.count}`).join("；");
-      lines.push(`• 规则建仓跳过: ${reasons}`);
-    }
     lines.push("");
   }
 

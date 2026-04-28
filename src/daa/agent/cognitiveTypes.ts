@@ -160,16 +160,8 @@ export interface ThesisConflict {
 export interface AutopilotCoverageSummary {
   holdingAssets: number;
   watchlistCandidates: number;
-  ruleAutoEntryEnabled: number;
-  watchlistWithRuleTarget: number;
   brainPlanIntents: number;
   acceptedBrainPlanIntents: number;
-  skipReasonSummary: Array<{ reason: string; count: number }>;
-  watchlistSkips: Array<{
-    assetKey: string;
-    symbol: string;
-    reasons: string[];
-  }>;
 }
 
 export interface DailyBriefing {

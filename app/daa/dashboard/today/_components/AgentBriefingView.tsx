@@ -365,7 +365,7 @@ function BriefingPanels({ briefing }: { briefing: DailyBriefing }) {
         </div>
       )}
 
-      {/* 待复核线索（原 cognitionGaps，改由代码直出而非 LLM 生成） */}
+      {/* 研究论点待复核：由代码按 thesis 状态确定，避免让 LLM 编造权重或天数。 */}
       {hasGaps && (
         <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-blue-300">
