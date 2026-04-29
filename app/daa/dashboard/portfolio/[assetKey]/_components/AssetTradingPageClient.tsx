@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { useDashboardPageModel } from "@/app/daa/dashboard/_hooks/useDashboardPageModel";
 import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErrorBoundary";
 import { AssetKlineChart, type KlineTradeMarker } from "@/app/daa/dashboard/_shared/AssetKlineChart";
+import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 
 import { AssetInfoBar } from "./AssetInfoBar";
 import { InlineTradePanel } from "./InlineTradePanel";
@@ -61,6 +62,9 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
 
   // 交易标记
   const tradeMarkers = useTradeMarkers(row?.symbol ?? "");
+  const sparklineSymbols = useMemo(() => row ? [row.yfinanceSymbol || row.symbol] : [], [row]);
+  const sparklines = useSparklines(sparklineSymbols);
+  const sparkData = row ? (sparklines[row.yfinanceSymbol || row.symbol] ?? sparklines[row.symbol] ?? null) : null;
 
   // 成本价（单价）
   const costBasisPerShare = useMemo(() => {
@@ -104,10 +108,10 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
   return (
     <div className="space-y-4">
       {/* 顶部信息栏 */}
-      <AssetInfoBar row={row} baseCurrency={baseCurrency} />
+      <AssetInfoBar row={row} baseCurrency={baseCurrency} sparkData={sparkData} />
 
       {/* 主体：左 K 线 + 右面板 */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* 左侧：K 线图 */}
         <SectionErrorBoundary sectionName="K线图">
           <div className="rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-2">
@@ -121,18 +125,8 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
           </div>
         </SectionErrorBoundary>
 
-        {/* 右侧：Agent 视角 + 持仓 + 交易面板 */}
+        {/* 右侧：交易面板 + 持仓状态 + Agent 视角 */}
         <div className="space-y-4">
-          {row.holdingQty > 0 || row.targetWeightHint > 0 ? (
-            <SectionErrorBoundary sectionName="持仓状态">
-              <AssetPositionPanel row={row} />
-            </SectionErrorBoundary>
-          ) : null}
-
-          <SectionErrorBoundary sectionName="Agent 观点">
-            <AgentViewPanel assetKey={props.assetKey} />
-          </SectionErrorBoundary>
-
           <SectionErrorBoundary sectionName="交易面板">
             <InlineTradePanel
               row={row}
@@ -142,6 +136,16 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
               callbacks={tradeCallbacks}
               onOrderCompleted={() => void wbModel.loadBootstrap(true)}
             />
+          </SectionErrorBoundary>
+
+          {row.holdingQty > 0 || row.targetWeightHint > 0 ? (
+            <SectionErrorBoundary sectionName="持仓状态">
+              <AssetPositionPanel row={row} />
+            </SectionErrorBoundary>
+          ) : null}
+
+          <SectionErrorBoundary sectionName="Agent 观点">
+            <AgentViewPanel assetKey={props.assetKey} />
           </SectionErrorBoundary>
 
           {row.watchEnabled && row.holdingQty === 0 ? (

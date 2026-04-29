@@ -13,14 +13,15 @@ import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTyp
 export function AssetPositionPanel({ row }: { row: AssetUniverseView }) {
   const actualPct = row.actualWeightPct ?? 0;
   const targetPct = row.targetWeightPct ?? row.targetWeightHint ?? 0;
-  const gap = row.gapPct ?? (actualPct - targetPct);
+  const gap = row.gapPct ?? (targetPct - actualPct);
   const hasTarget = targetPct > 0;
+  const displayGap = -gap;
 
   // 漂移状态
   const absGap = Math.abs(gap);
-  const gapState = absGap < 0.005 ? "onTarget"
-    : absGap < 0.02 ? "slight"
-    : absGap < 0.05 ? "moderate"
+  const gapState = absGap < 0.05 ? "onTarget"
+    : absGap < 2 ? "slight"
+    : absGap < 5 ? "moderate"
     : "significant";
 
   const gapColor = {
@@ -36,6 +37,7 @@ export function AssetPositionPanel({ row }: { row: AssetUniverseView }) {
     moderate: "中度偏离",
     significant: "显著偏离",
   }[gapState];
+  const gapDirectionLabel = displayGap > 0 ? "高于目标" : displayGap < 0 ? "低于目标" : "贴近目标";
 
   return (
     <div className="rounded-xl border border-[rgba(255,255,255,0.06)] bg-[rgba(255,255,255,0.02)] p-4">
@@ -50,28 +52,28 @@ export function AssetPositionPanel({ row }: { row: AssetUniverseView }) {
           <div className="mb-1.5 flex items-baseline justify-between text-xs">
             <span className="text-[var(--faint)]">当前权重</span>
             <span className="font-[var(--font-mono)] text-sm font-semibold text-[var(--text)]">
-              {(actualPct * 100).toFixed(2)}%
+              {actualPct.toFixed(2)}%
             </span>
           </div>
           <div className="relative h-2 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
             <div
               className="absolute inset-y-0 left-0 bg-indigo-400/80"
-              style={{ width: `${Math.min(100, Math.max(0, actualPct * 100))}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, actualPct))}%` }}
             />
             {hasTarget && (
               <div
                 className="absolute inset-y-0 w-0.5 bg-[var(--text)]"
-                style={{ left: `${Math.min(100, Math.max(0, targetPct * 100))}%` }}
-                title={`目标权重 ${(targetPct * 100).toFixed(2)}%`}
+                style={{ left: `${Math.min(100, Math.max(0, targetPct))}%` }}
+                title={`目标权重 ${targetPct.toFixed(2)}%`}
               />
             )}
           </div>
           {hasTarget && (
             <div className="mt-1 flex items-center justify-between text-[10px] text-[var(--faint)]">
-              <span>目标 {(targetPct * 100).toFixed(2)}%</span>
+              <span>目标 {targetPct.toFixed(2)}%</span>
               <span className={cn("flex items-center gap-1 font-medium", gapColor)}>
-                {gap > 0.002 ? <TrendingUp className="h-3 w-3" /> : gap < -0.002 ? <TrendingDown className="h-3 w-3" /> : null}
-                {gapLabel} ({gap >= 0 ? "+" : ""}{(gap * 100).toFixed(2)}%)
+                {displayGap > 0.05 ? <TrendingUp className="h-3 w-3" /> : displayGap < -0.05 ? <TrendingDown className="h-3 w-3" /> : null}
+                {gapLabel} · {gapDirectionLabel} {Math.abs(displayGap).toFixed(2)}%
               </span>
             </div>
           )}

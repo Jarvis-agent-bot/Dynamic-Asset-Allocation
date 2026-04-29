@@ -280,6 +280,77 @@ export function computeHhiPct(weightsPct: number[]): number {
     return weightsPct.reduce((sum, weight) => sum + ((weight / 100) ** 2), 0) * 100;
 }
 
+type ProjectedPositionRiskRow = {
+    assetKey: string;
+    symbol: string;
+    currentValue: number;
+    nextValue: number;
+    currentWeightPct: number;
+    projectedWeightPct: number;
+    targetWeightPct: number;
+    netDelta: number;
+    touched: boolean;
+};
+
+function buildMaxPositionRiskItem(input: {
+    rows: ProjectedPositionRiskRow[];
+    maxPositionLimitPct: number;
+    preferTouched: boolean;
+}): PreTradeRiskCheckItem {
+    const liveRows = input.rows.filter((row) => row.nextValue > 0);
+    const touchedRows = liveRows.filter((row) => row.touched);
+    const candidates = input.preferTouched && touchedRows.length > 0 ? touchedRows : liveRows;
+    const fallback: ProjectedPositionRiskRow = {
+        assetKey: "",
+        symbol: "组合",
+        currentValue: 0,
+        nextValue: 0,
+        currentWeightPct: 0,
+        projectedWeightPct: 0,
+        targetWeightPct: 0,
+        netDelta: 0,
+        touched: false,
+    };
+    const assessed = candidates.map((row) => {
+        const currentDistance = Math.abs(row.currentWeightPct - row.targetWeightPct);
+        const projectedDistance = Math.abs(row.projectedWeightPct - row.targetWeightPct);
+        const isReducingTowardTarget = row.netDelta < 0 && projectedDistance < currentDistance;
+        const exceeds = row.projectedWeightPct > input.maxPositionLimitPct;
+        const status: PreTradeRiskCheckItem["status"] = exceeds
+            ? (isReducingTowardTarget ? "warn" : "block")
+            : "pass";
+        const message = exceeds
+            ? (isReducingTowardTarget
+                ? `${row.symbol || "标的"} 交易后仓位 ${row.projectedWeightPct.toFixed(2)}% 仍超过上限 ${input.maxPositionLimitPct.toFixed(2)}%，但本次交易正向目标 ${row.targetWeightPct.toFixed(2)}% 收敛，按提醒放行`
+                : `${row.symbol || "标的"} 交易后仓位 ${row.projectedWeightPct.toFixed(2)}% 超过上限 ${input.maxPositionLimitPct.toFixed(2)}%`)
+            : `${row.symbol || "标的"} 交易后仓位 ${row.projectedWeightPct.toFixed(2)}%`;
+        return {
+            row,
+            item: {
+                rule: "max_position" as const,
+                status,
+                current: row.projectedWeightPct,
+                limit: input.maxPositionLimitPct,
+                message,
+            },
+        };
+    });
+    const severity = { block: 2, warn: 1, pass: 0 } satisfies Record<PreTradeRiskCheckItem["status"], number>;
+    const best = assessed.sort((a, b) => {
+        const severityDelta = severity[b.item.status] - severity[a.item.status];
+        if (severityDelta !== 0)
+            return severityDelta;
+        return b.row.projectedWeightPct - a.row.projectedWeightPct;
+    })[0];
+    return best?.item ?? {
+        rule: "max_position",
+        status: "pass",
+        current: fallback.projectedWeightPct,
+        limit: input.maxPositionLimitPct,
+        message: `最大单一持仓交易后仓位 ${fallback.projectedWeightPct.toFixed(2)}%`,
+    };
+}
+
 function isCycleTerminal(status: RebalanceCycle["status"] | DaaStoreRebalanceCycle["status"]): boolean {
   return status === "completed" || status === "cancelled";
 }
@@ -342,25 +413,36 @@ function buildPreTradeRiskCheck(input: {
     const maxConcentrationPct = Math.max(0, input.risk.maxConcentrationPct) * 100;
     const stopLossPct = Math.max(0, input.risk.perAssetStopLossPct) * 100;
     const currentValueByAssetKey = new Map<string, number>();
+    const projectedValueByAssetKey = new Map<string, number>();
     const symbolByAssetKey = new Map<string, string>();
+    const targetPctByAssetKey = new Map<string, number>();
+    const netDeltaByAssetKey = new Map<string, number>();
     for (const row of input.assetUniverse) {
-        currentValueByAssetKey.set(row.assetKey, Math.max(0, toFinite(row.valuationBase, 0)));
+        const currentValue = Math.max(0, toFinite(row.valuationBase, 0));
+        currentValueByAssetKey.set(row.assetKey, currentValue);
+        projectedValueByAssetKey.set(row.assetKey, currentValue);
         symbolByAssetKey.set(row.assetKey, row.symbol);
+        targetPctByAssetKey.set(row.assetKey, Math.max(0, toFinite(row.targetWeightPct, 0)));
     }
     for (const proposal of input.proposals) {
-        const currentValue = currentValueByAssetKey.get(proposal.assetKey) || 0;
+        const currentValue = projectedValueByAssetKey.get(proposal.assetKey) || 0;
         const proposalNotional = Math.max(0, toFinite(proposal.suggestedNotional, 0));
         const delta = proposal.side === "BUY" ? proposalNotional : -proposalNotional;
-        currentValueByAssetKey.set(proposal.assetKey, Math.max(0, currentValue + delta));
+        projectedValueByAssetKey.set(proposal.assetKey, Math.max(0, currentValue + delta));
+        netDeltaByAssetKey.set(proposal.assetKey, (netDeltaByAssetKey.get(proposal.assetKey) || 0) + delta);
         if (!symbolByAssetKey.has(proposal.assetKey)) {
             symbolByAssetKey.set(proposal.assetKey, proposal.symbol);
         }
     }
-    const projectedAssetRows = Array.from(currentValueByAssetKey.entries())
+    const projectedAssetRows = Array.from(projectedValueByAssetKey.entries())
         .map(([assetKey, nextValue]) => ({
         assetKey,
         symbol: symbolByAssetKey.get(assetKey) || assetKey,
+        currentValue: Math.max(0, currentValueByAssetKey.get(assetKey) || 0),
         nextValue: Math.max(0, nextValue),
+        targetWeightPct: targetPctByAssetKey.get(assetKey) || 0,
+        netDelta: netDeltaByAssetKey.get(assetKey) || 0,
+        touched: netDeltaByAssetKey.has(assetKey),
     }))
         .filter((row) => row.nextValue > 0);
     const totalProjectedAssetValue = projectedAssetRows.reduce((sum, row) => sum + row.nextValue, 0);
@@ -368,26 +450,17 @@ function buildPreTradeRiskCheck(input: {
     const riskNavBase = input.totalEquity > 0
         ? input.totalEquity
         : Math.max(totalProjectedAssetValue, totalNotional, 1e-9);
-    const projectedWeights = projectedAssetRows.map((row) => ({
+    const projectedWeights: ProjectedPositionRiskRow[] = projectedAssetRows.map((row) => ({
         ...row,
-        weightPct: riskNavBase > 0 ? (row.nextValue / riskNavBase) * 100 : 0,
+        currentWeightPct: riskNavBase > 0 ? (row.currentValue / riskNavBase) * 100 : 0,
+        projectedWeightPct: riskNavBase > 0 ? (row.nextValue / riskNavBase) * 100 : 0,
     }));
-    const maxProjected = projectedWeights.reduce((max, row) => row.weightPct > max.weightPct ? row : max, {
-        assetKey: "",
-        symbol: "组合",
-        nextValue: 0,
-        weightPct: 0,
-    });
-    items.push({
-        rule: "max_position",
-        status: maxProjected.weightPct > maxPositionLimitPct ? "block" : "pass",
-        current: maxProjected.weightPct,
-        limit: maxPositionLimitPct,
-        message: maxProjected.weightPct > maxPositionLimitPct
-            ? `${maxProjected.symbol || "标的"} 交易后仓位 ${maxProjected.weightPct.toFixed(2)}% 超过上限 ${maxPositionLimitPct.toFixed(2)}%`
-            : `最大单一持仓交易后仓位 ${maxProjected.weightPct.toFixed(2)}%`,
-    });
-    const totalWeightPct = projectedWeights.reduce((sum, row) => sum + row.weightPct, 0);
+    items.push(buildMaxPositionRiskItem({
+        rows: projectedWeights,
+        maxPositionLimitPct,
+        preferTouched: input.proposals.length > 0,
+    }));
+    const totalWeightPct = projectedWeights.reduce((sum, row) => sum + row.projectedWeightPct, 0);
     items.push({
         rule: "total_weight",
         status: totalWeightPct > 100.0001 ? "block" : "pass",
@@ -407,7 +480,7 @@ function buildPreTradeRiskCheck(input: {
             ? `单日交易占比 ${orderPctOfNav.toFixed(2)}% 超过阈值 ${maxOrderPctOfNav.toFixed(2)}%`
             : `单日交易占比 ${orderPctOfNav.toFixed(2)}%`,
     });
-    const hhi = computeHhiPct(projectedWeights.map((row) => row.weightPct));
+    const hhi = computeHhiPct(projectedWeights.map((row) => row.projectedWeightPct));
     items.push({
         rule: "concentration",
         status: hhi > maxConcentrationPct ? "warn" : "pass",
@@ -501,8 +574,10 @@ function buildManualPreTradeRiskCheck(input: {
     const maxConcentrationPct = Math.max(0, input.risk.maxConcentrationPct) * 100;
     const stopLossPct = Math.max(0, input.risk.perAssetStopLossPct) * 100;
     const currentValueByAssetKey = new Map<string, number>();
+    const targetPctByAssetKey = new Map<string, number>();
     for (const row of input.assetUniverse) {
         currentValueByAssetKey.set(row.assetKey, Math.max(0, toFinite(row.valuationBase, 0)));
+        targetPctByAssetKey.set(row.assetKey, Math.max(0, toFinite(row.targetWeightPct, 0)));
     }
     const currentProposalValue = currentValueByAssetKey.get(input.proposal.assetKey) || 0;
     const proposalNotional = Math.max(0, toFinite(input.proposal.suggestedNotional, 0));
@@ -525,22 +600,35 @@ function buildManualPreTradeRiskCheck(input: {
         return {
             assetKey: row.assetKey,
             symbol: row.symbol,
+            currentValue,
             nextValue,
-            weightPct: riskNavBase > 0 ? (nextValue / riskNavBase) * 100 : 0,
+            currentWeightPct: riskNavBase > 0 ? (currentValue / riskNavBase) * 100 : 0,
+            projectedWeightPct: riskNavBase > 0 ? (nextValue / riskNavBase) * 100 : 0,
+            targetWeightPct: targetPctByAssetKey.get(row.assetKey) || 0,
+            netDelta: row.assetKey === input.proposal.assetKey ? proposalDelta : 0,
+            touched: row.assetKey === input.proposal.assetKey,
         };
     })
         .filter((row) => row.nextValue > 0);
-    const projectedWeightPct = riskNavBase > 0 ? (nextProposalValue / riskNavBase) * 100 : 0;
-    items.push({
-        rule: "max_position",
-        status: projectedWeightPct > maxPositionLimitPct ? "block" : "pass",
-        current: projectedWeightPct,
-        limit: maxPositionLimitPct,
-        message: projectedWeightPct > maxPositionLimitPct
-            ? `${input.proposal.symbol} 交易后仓位 ${projectedWeightPct.toFixed(2)}% 超过上限 ${maxPositionLimitPct.toFixed(2)}%`
-            : `${input.proposal.symbol} 交易后仓位 ${projectedWeightPct.toFixed(2)}%`,
-    });
-    const investedWeightPct = projectedWeights.reduce((sum, row) => sum + row.weightPct, 0);
+    if (!projectedWeights.some((row) => row.assetKey === input.proposal.assetKey)) {
+        projectedWeights.push({
+            assetKey: input.proposal.assetKey,
+            symbol: input.proposal.symbol,
+            currentValue: currentProposalValue,
+            nextValue: nextProposalValue,
+            currentWeightPct: riskNavBase > 0 ? (currentProposalValue / riskNavBase) * 100 : 0,
+            projectedWeightPct: riskNavBase > 0 ? (nextProposalValue / riskNavBase) * 100 : 0,
+            targetWeightPct: targetPctByAssetKey.get(input.proposal.assetKey) || 0,
+            netDelta: proposalDelta,
+            touched: true,
+        });
+    }
+    items.push(buildMaxPositionRiskItem({
+        rows: projectedWeights,
+        maxPositionLimitPct,
+        preferTouched: true,
+    }));
+    const investedWeightPct = projectedWeights.reduce((sum, row) => sum + row.projectedWeightPct, 0);
     items.push({
         rule: "total_weight",
         status: investedWeightPct > 100.0001 ? "block" : "pass",
@@ -560,7 +648,7 @@ function buildManualPreTradeRiskCheck(input: {
             ? `单日交易占比 ${orderPctOfNav.toFixed(2)}% 超过阈值 ${maxOrderPctOfNav.toFixed(2)}%`
             : `单日交易占比 ${orderPctOfNav.toFixed(2)}%`,
     });
-    const hhi = computeHhiPct(projectedWeights.map((row) => row.weightPct));
+    const hhi = computeHhiPct(projectedWeights.map((row) => row.projectedWeightPct));
     items.push({
         rule: "concentration",
         status: hhi > maxConcentrationPct ? "warn" : "pass",

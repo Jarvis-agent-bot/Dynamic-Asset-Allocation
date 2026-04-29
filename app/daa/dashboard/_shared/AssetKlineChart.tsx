@@ -369,7 +369,7 @@ export function AssetKlineChart({
         else entry.sells += m.qty;
         dayMap.set(m.date, entry);
       }
-      // 交易所风格：小圆点标记在 K 线上方/下方，不显示文字避免遮挡
+      // 交易所风格：箭头比小圆点更容易在深色 K 线上定位真实买卖点
       const markerData = [...dayMap.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .flatMap(([date, agg]) => {
@@ -386,9 +386,9 @@ export function AssetKlineChart({
               time: date as Time,
               position: "belowBar",
               color: "#22c55e",
-              shape: "circle",
-              size: 0.5,
-              text: `B ${agg.buys.toFixed(2)}`,
+              shape: "arrowUp",
+              size: 1.3,
+              text: `买 ${agg.buys.toFixed(2)}`,
             });
           }
           if (agg.sells > 0) {
@@ -396,9 +396,9 @@ export function AssetKlineChart({
               time: date as Time,
               position: "aboveBar",
               color: "#ef4444",
-              shape: "circle",
-              size: 0.5,
-              text: `S ${agg.sells.toFixed(2)}`,
+              shape: "arrowDown",
+              size: 1.3,
+              text: `卖 ${agg.sells.toFixed(2)}`,
             });
           }
           return out;

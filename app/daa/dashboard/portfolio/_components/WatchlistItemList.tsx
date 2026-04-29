@@ -7,6 +7,7 @@ import { ChevronRight, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
+import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -18,10 +19,8 @@ import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTyp
 function WatchlistRow(props: { row: AssetUniverseView; sparkData: number[] | null; onClick: () => void }) {
   const { row, sparkData } = props;
 
-  const priceDelta = (row as Record<string, unknown>).priceDelta as number | undefined;
-  const changePct = priceDelta != null && row.lastPrice > 0
-    ? (priceDelta / (row.lastPrice - priceDelta)) * 100
-    : null;
+  const priceChange = deriveAssetPriceChange(row, sparkData);
+  const changePct = priceChange?.changePct ?? null;
   const isUp = changePct != null ? changePct >= 0 : null;
   const sparkColor = isUp === true ? "hsl(142 71% 45%)" : isUp === false ? "hsl(0 84% 60%)" : "hsl(188 95% 60%)";
 
@@ -63,7 +62,9 @@ function WatchlistRow(props: { row: AssetUniverseView; sparkData: number[] | nul
           )}>
             {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
           </div>
-        ) : null}
+        ) : (
+          <div className="font-[var(--font-mono)] text-xs text-[var(--faint)]">--</div>
+        )}
       </div>
 
       {/* Sparkline */}

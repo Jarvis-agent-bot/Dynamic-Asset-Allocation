@@ -184,8 +184,8 @@ export default function RebalancePageClient() {
       {/* ── 两栏决策区域 ── */}
       {wbModel.bootstrap && rp ? (
         <>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-            {/* 左侧：提案列表 + 漂移概览 */}
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+            {/* 左侧：提案列表 */}
             <div className="space-y-4">
               <SectionErrorBoundary sectionName="调仓建议">
                 <RebalanceProposalList
@@ -205,35 +205,10 @@ export default function RebalancePageClient() {
                   onGenerateCycle={rp.onGenerateCycle}
                 />
               </SectionErrorBoundary>
-
-              <SectionErrorBoundary sectionName="漂移概览">
-                <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
-                      漂移概览 ({driftCount} 项超阈值)
-                    </div>
-                    <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
-                      {driftCount > 0 ? "需要关注" : "目标内"}
-                    </DaaSurfaceStatusPill>
-                  </div>
-                  <DriftBarChart
-                    rows={wbModel.tableProps.rows}
-                    thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
-                    maxItems={8}
-                  />
-                </div>
-              </SectionErrorBoundary>
             </div>
 
-            {/* 右侧：市场、风控与执行 */}
-            <div className="space-y-4">
-              <SectionErrorBoundary sectionName="市场环境">
-                <MarketContextCard
-                  marketContext={wbModel.bootstrap.marketContext ?? null}
-                  aiSnapshot={aiSnapshot}
-                />
-              </SectionErrorBoundary>
-
+            {/* 右侧：审阅与执行 */}
+            <div className="space-y-4 xl:sticky xl:top-20">
               <ExecutionPanel
                 currentCycle={rp.currentCycle}
                 currentRiskCheck={rp.currentRiskCheck}
@@ -262,6 +237,34 @@ export default function RebalancePageClient() {
                 </SectionErrorBoundary>
               ) : null}
             </div>
+          </div>
+
+          {/* ── 辅助证据区：市场环境 + 漂移分布 ── */}
+          <div className="grid items-start gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
+            <SectionErrorBoundary sectionName="市场环境">
+              <MarketContextCard
+                marketContext={wbModel.bootstrap.marketContext ?? null}
+                aiSnapshot={aiSnapshot}
+              />
+            </SectionErrorBoundary>
+
+            <SectionErrorBoundary sectionName="漂移概览">
+              <div className="rounded-[14px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+                    漂移概览 ({driftCount} 项超阈值)
+                  </div>
+                  <DaaSurfaceStatusPill tone={driftCount > 0 ? "amber" : "green"}>
+                    {driftCount > 0 ? "需要关注" : "目标内"}
+                  </DaaSurfaceStatusPill>
+                </div>
+                <DriftBarChart
+                  rows={wbModel.tableProps.rows}
+                  thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
+                  maxItems={8}
+                />
+              </div>
+            </SectionErrorBoundary>
           </div>
 
           {/* ── 全宽：市场指标仪表盘（美林时钟 + 指标概览 + scope 分析） ── */}

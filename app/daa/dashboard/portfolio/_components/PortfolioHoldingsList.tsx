@@ -7,6 +7,7 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { Sparkline } from "@/app/daa/dashboard/_components/Sparkline";
+import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { DaaSurfaceEmptyState, DaaSurfacePanel } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { holdingCategoryKey, HOLDING_CATEGORY_META } from "@/app/daa/dashboard/_components/assetLabels";
 import { useSparklines } from "@/app/daa/dashboard/_hooks/useSparklines";
@@ -21,10 +22,8 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; spark
 
   const pnl = row.unrealizedPnlPct ?? null;
 
-  const priceDelta = (row as Record<string, unknown>).priceDelta as number | undefined;
-  const priceChangePercent = priceDelta != null && row.lastPrice > 0
-    ? (priceDelta / (row.lastPrice - priceDelta)) * 100
-    : null;
+  const priceChange = deriveAssetPriceChange(row, sparkData);
+  const priceChangePercent = priceChange?.changePct ?? null;
 
   const isUp = priceChangePercent != null ? priceChangePercent >= 0 : null;
   const sparkColor = isUp === true ? "hsl(142 71% 45%)" : isUp === false ? "hsl(0 84% 60%)" : "hsl(188 95% 60%)";
@@ -57,7 +56,9 @@ function HoldingRow(props: { row: AssetUniverseView; baseCurrency: string; spark
           )}>
             {priceChangePercent >= 0 ? "+" : ""}{priceChangePercent.toFixed(2)}%
           </div>
-        ) : null}
+        ) : (
+          <div className="font-[var(--font-mono)] text-xs text-[var(--faint)]">--</div>
+        )}
       </div>
 
       {/* Sparkline */}

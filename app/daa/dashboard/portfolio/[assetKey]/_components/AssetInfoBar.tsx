@@ -4,20 +4,20 @@ import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
+import { deriveAssetPriceChange } from "@/app/daa/dashboard/_components/assetPriceChange";
 import { cn } from "@/lib/utils";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export function AssetInfoBar(props: {
   row: AssetUniverseView;
   baseCurrency: string;
+  sparkData?: number[] | null;
 }) {
-  const { row, baseCurrency } = props;
+  const { row, baseCurrency, sparkData } = props;
   const router = useRouter();
 
-  const priceDelta = (row as Record<string, unknown>).priceDelta as number | undefined;
-  const priceChangePercent = priceDelta != null && row.lastPrice > 0
-    ? (priceDelta / (row.lastPrice - priceDelta)) * 100
-    : null;
+  const priceChange = deriveAssetPriceChange(row, sparkData);
+  const priceChangePercent = priceChange?.changePct ?? null;
 
   // 成本与盈亏 — 优先使用 DB 侧预计算的基准货币成本
   const costInBase = row.costBasisInBase ?? 0;
