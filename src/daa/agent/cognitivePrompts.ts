@@ -659,7 +659,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   if (briefing.autopilotCoverage) {
     const c = briefing.autopilotCoverage;
     lines.push("<b>\u{1F9ED} 自动驾驶覆盖</b>");
-    lines.push(`• 持仓复核 <code>${c.holdingAssets}</code> 个 | 观察候选 <code>${c.watchlistCandidates}</code> 个 | 大脑目标计划 <code>${c.acceptedBrainPlanIntents}/${c.brainPlanIntents}</code> 条`);
+    lines.push(`• 持仓复核 <code>${c.holdingAssets}</code> 个 | 观察候选 <code>${c.watchlistCandidates}</code> 个 | 已设目标 <code>${c.watchlistTargetedAssets}</code> 个 | 可自动建仓 <code>${c.autoEntryReadyAssets}</code> 个 | 大脑目标计划 <code>${c.acceptedBrainPlanIntents}/${c.brainPlanIntents}</code> 条`);
     lines.push("");
   }
 

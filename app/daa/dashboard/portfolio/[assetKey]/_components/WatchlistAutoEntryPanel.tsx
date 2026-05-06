@@ -21,8 +21,23 @@ type AutoEntryRow = {
 
 const DEFAULT_RULES = { minTechnicalScore: 65, minValuationScore: 60, minFusionScore: 62, requireStrongMomentum: false };
 
-export function WatchlistAutoEntryPanel(props: { assetKey: string }) {
-  const { assetKey } = props;
+function isCooldownReady(lastEntryTriggeredAt: string | null, cooldownDays: number): boolean {
+  if (!lastEntryTriggeredAt) return true;
+  const lastMs = Date.parse(lastEntryTriggeredAt);
+  if (!Number.isFinite(lastMs)) return true;
+  return Date.now() - lastMs >= Math.max(1, cooldownDays) * 24 * 60 * 60 * 1000;
+}
+
+export function WatchlistAutoEntryPanel(props: {
+  assetKey: string;
+  assetSnapshot: {
+    targetWeightHint: number;
+    fxMissing: boolean;
+    lastPrice: number;
+    holdingPrice: number;
+  };
+}) {
+  const { assetKey, assetSnapshot } = props;
   const [row, setRow] = useState<AutoEntryRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -121,6 +136,22 @@ export function WatchlistAutoEntryPanel(props: { assetKey: string }) {
   const lastTriggeredLabel = row.lastEntryTriggeredAt
     ? new Date(row.lastEntryTriggeredAt).toLocaleString("zh-CN", { hour12: false })
     : "尚未触发";
+  const fallbackTargetWeightPct = Math.max(0, assetSnapshot.targetWeightHint || 0) * 100;
+  const explicitTargetWeightPct = row.entryTargetWeightPct;
+  const effectiveTargetWeightPct = explicitTargetWeightPct ?? (fallbackTargetWeightPct > 0 ? fallbackTargetWeightPct : null);
+  const effectiveTargetSource = explicitTargetWeightPct != null && explicitTargetWeightPct > 0
+    ? "单资产规则"
+    : (fallbackTargetWeightPct > 0 ? "观察列表目标权重" : "未设置");
+  const livePrice = assetSnapshot.lastPrice > 0 ? assetSnapshot.lastPrice : assetSnapshot.holdingPrice;
+  const firstBlocker = !row.autoEntryEnabled
+    ? "未启用本标的自动建仓"
+    : !(effectiveTargetWeightPct != null && effectiveTargetWeightPct > 0)
+      ? "未设置有效目标权重"
+      : !(livePrice > 0) || assetSnapshot.fxMissing
+        ? "缺少价格或汇率"
+        : !isCooldownReady(row.lastEntryTriggeredAt, row.entryCooldownDays)
+          ? `冷静期未过（${row.entryCooldownDays}天）`
+          : "已就绪，等待技术 + 估值信号达标";
 
   return (
     <div className="space-y-3 rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
@@ -131,6 +162,25 @@ export function WatchlistAutoEntryPanel(props: { assetKey: string }) {
       <p className="text-xs leading-relaxed text-[var(--muted)]">
         技术 + 估值信号同时达标时，下一次再平衡 cron 会为此标的生成 BUY 提案。需在"设置 → 再平衡策略"开启全局开关。
       </p>
+
+      <div className="grid gap-2 rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] p-3 text-xs text-[var(--muted)]">
+        <div className="flex items-center justify-between gap-3">
+          <span>当前状态</span>
+          <span className={cn("font-medium", row.autoEntryEnabled ? "text-emerald-300" : "text-amber-300")}>
+            {row.autoEntryEnabled ? "已开启" : "未开启"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span>有效目标</span>
+          <span className="font-medium text-[var(--text)]">
+            {effectiveTargetWeightPct != null ? `${effectiveTargetWeightPct.toFixed(1)}% · ${effectiveTargetSource}` : "未设置"}
+          </span>
+        </div>
+        <div className="flex items-start justify-between gap-3">
+          <span>首要阻断</span>
+          <span className="max-w-[220px] text-right text-[var(--text)]">{firstBlocker}</span>
+        </div>
+      </div>
 
       {/* 启用开关 */}
       <label className="flex items-center gap-2 text-sm text-[var(--text)]">

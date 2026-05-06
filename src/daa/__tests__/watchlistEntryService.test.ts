@@ -128,13 +128,24 @@ describe("generateWatchlistEntryProposals", () => {
     expect(listActiveWatchlistAutoEntries).not.toHaveBeenCalled();
   });
 
-  it("未启用时无候选 → 提前返回", async () => {
+  it("观察列表为空时直接返回空", async () => {
     vi.mocked(listActiveWatchlistAutoEntries).mockResolvedValue([]);
     const result = await generateWatchlistEntryProposals({
-      bootstrap: mockBootstrap([mockAsset()]),
+      bootstrap: mockBootstrap([]),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(0);
+    expect(result.evaluations).toHaveLength(0);
+  });
+
+  it("未启用自动建仓时，即使已有目标权重也不会自动买入", async () => {
+    vi.mocked(listActiveWatchlistAutoEntries).mockResolvedValue([]);
+    const result = await generateWatchlistEntryProposals({
+      bootstrap: mockBootstrap([mockAsset({ targetWeightHint: 0.05 })]),
+      systemConfig: mockSystemConfig(true),
+    });
+    expect(result.proposals).toHaveLength(0);
+    expect(result.evaluations[0]?.rejectReason).toMatch(/未启用自动建仓/);
   });
 
   it("已持仓 → 跳过并记录 rejectReason", async () => {
@@ -142,11 +153,11 @@ describe("generateWatchlistEntryProposals", () => {
       { assetKey: "US::SPY", autoEntryEnabled: true, entryTargetWeightPct: 5, entryRules: null, entryCooldownDays: 14, lastEntryTriggeredAt: null },
     ]);
     const result = await generateWatchlistEntryProposals({
-      bootstrap: mockBootstrap([mockAsset({ holdingQty: 10 })]),
+      bootstrap: mockBootstrap([mockAsset({ holdingQty: 10, autoEntryEnabled: true })]),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(0);
-    expect(result.evaluations[0]?.rejectReason).toMatch(/已有持仓/);
+    expect(result.evaluations).toHaveLength(0);
   });
 
   it("冷静期未过 → 跳过", async () => {
@@ -155,28 +166,28 @@ describe("generateWatchlistEntryProposals", () => {
       { assetKey: "US::SPY", autoEntryEnabled: true, entryTargetWeightPct: 5, entryRules: null, entryCooldownDays: 14, lastEntryTriggeredAt: recent },
     ]);
     const result = await generateWatchlistEntryProposals({
-      bootstrap: mockBootstrap([mockAsset()]),
+      bootstrap: mockBootstrap([mockAsset({ autoEntryEnabled: true, lastEntryTriggeredAt: recent })]),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(0);
     expect(result.evaluations[0]?.rejectReason).toMatch(/冷静期/);
   });
 
-  it("信号达标 → 生成 BUY 提案，现金分配在上限内", async () => {
+  it("信号达标且 entryTargetWeightPct 为空时，会回退到 targetWeightHint 生成 BUY 提案", async () => {
     vi.mocked(listActiveWatchlistAutoEntries).mockResolvedValue([
-      { assetKey: "US::SPY", autoEntryEnabled: true, entryTargetWeightPct: 5, entryRules: null, entryCooldownDays: 14, lastEntryTriggeredAt: null },
+      { assetKey: "US::SPY", autoEntryEnabled: true, entryTargetWeightPct: null, entryRules: null, entryCooldownDays: 14, lastEntryTriggeredAt: null },
     ]);
     vi.mocked(buildTechnicalSignalForSymbol).mockResolvedValue(mockTech(75, "strong"));
     vi.mocked(buildValuationSignalForSymbol).mockResolvedValue(mockVal(70));
 
     const result = await generateWatchlistEntryProposals({
-      bootstrap: mockBootstrap([mockAsset()], 10000, 50000),
+      bootstrap: mockBootstrap([mockAsset({ autoEntryEnabled: true, targetWeightHint: 0.05 })], 10000, 50000),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(1);
     expect(result.proposals[0]?.side).toBe("BUY");
     expect(result.proposals[0]?.proposalType).toBe("watchlist_entry");
-    expect(result.proposals[0]?.reason).toMatch(/自动建仓/);
+    expect(result.proposals[0]?.reason).toMatch(/观察列表自动建仓/);
     // 目标 5% × 50000 = 2500，现金上限 30% × 10000 = 3000 → min = 2500
     expect(result.proposals[0]?.suggestedNotional).toBeCloseTo(2500, 0);
   });
@@ -188,7 +199,7 @@ describe("generateWatchlistEntryProposals", () => {
     vi.mocked(buildTechnicalSignalForSymbol).mockResolvedValue(mockTech(50));
     vi.mocked(buildValuationSignalForSymbol).mockResolvedValue(mockVal(70));
     const result = await generateWatchlistEntryProposals({
-      bootstrap: mockBootstrap([mockAsset()]),
+      bootstrap: mockBootstrap([mockAsset({ autoEntryEnabled: true })]),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(0);
@@ -208,8 +219,8 @@ describe("generateWatchlistEntryProposals", () => {
       .mockResolvedValueOnce(mockVal(85));
 
     const assets = [
-      mockAsset({ assetKey: "US::AAA", symbol: "AAA" }),
-      mockAsset({ assetKey: "US::BBB", symbol: "BBB" }),
+      mockAsset({ assetKey: "US::AAA", symbol: "AAA", autoEntryEnabled: true }),
+      mockAsset({ assetKey: "US::BBB", symbol: "BBB", autoEntryEnabled: true }),
     ];
     const result = await generateWatchlistEntryProposals({
       bootstrap: mockBootstrap(assets, 10000, 50000),
@@ -226,7 +237,7 @@ describe("generateWatchlistEntryProposals", () => {
     vi.mocked(buildTechnicalSignalForSymbol).mockResolvedValue(mockTech(45));
     vi.mocked(buildValuationSignalForSymbol).mockResolvedValue(mockVal(45));
     const result = await generateWatchlistEntryProposals({
-      bootstrap: mockBootstrap([mockAsset()]),
+      bootstrap: mockBootstrap([mockAsset({ autoEntryEnabled: true })]),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(1);
@@ -239,7 +250,7 @@ describe("generateWatchlistEntryProposals", () => {
     vi.mocked(buildTechnicalSignalForSymbol).mockResolvedValue(mockTech(80, "neutral"));
     vi.mocked(buildValuationSignalForSymbol).mockResolvedValue(mockVal(70));
     const result = await generateWatchlistEntryProposals({
-      bootstrap: mockBootstrap([mockAsset()]),
+      bootstrap: mockBootstrap([mockAsset({ autoEntryEnabled: true })]),
       systemConfig: mockSystemConfig(true),
     });
     expect(result.proposals).toHaveLength(0);

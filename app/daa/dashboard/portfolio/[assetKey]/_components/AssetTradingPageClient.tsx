@@ -150,7 +150,15 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
 
           {row.watchEnabled && row.holdingQty === 0 ? (
             <SectionErrorBoundary sectionName="自动建仓规则">
-              <WatchlistAutoEntryPanel assetKey={row.assetKey} />
+              <WatchlistAutoEntryPanel
+                assetKey={row.assetKey}
+                assetSnapshot={{
+                  targetWeightHint: row.targetWeightHint,
+                  fxMissing: row.fxMissing,
+                  lastPrice: row.lastPrice,
+                  holdingPrice: row.holdingPrice,
+                }}
+              />
             </SectionErrorBoundary>
           ) : null}
         </div>

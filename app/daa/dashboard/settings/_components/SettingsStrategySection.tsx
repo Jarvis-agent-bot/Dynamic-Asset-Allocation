@@ -346,7 +346,7 @@ export function SettingsStrategySection(props: {
         </div>
       </SectionCard>
 
-      <SectionCard title="观察列表自动建仓" description="技术 + 估值信号同时达标时，为观察列表中的资产自动生成 BUY 提案。需要在单个资产页面开启规则。">
+      <SectionCard title="观察列表自动建仓" description="技术 + 估值信号同时达标时，为观察列表中的资产自动生成 BUY 提案。仅加入观察列表不会自动买入；还需要在单个资产页面显式开启 auto-entry。">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
             checked={config.watchlistEntry?.enabled ?? false}
@@ -398,6 +398,9 @@ export function SettingsStrategySection(props: {
                 )
               }
             />
+            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
+              当前语义：`Watchlist` 只是候选池。系统只会自动买入已显式开启 auto-entry、具备有效目标权重、价格 / FX 正常且不在冷静期内的观察标的。
+            </div>
           </div>
 
           <div>

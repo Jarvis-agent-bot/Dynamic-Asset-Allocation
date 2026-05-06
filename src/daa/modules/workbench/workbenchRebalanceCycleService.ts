@@ -65,6 +65,88 @@ import {
   toIsoByMs,
 } from "./workbenchShared";
 
+const AUTO_REBALANCE_MIN_NOTIONAL_BASE = 100;
+
+function isAutoCooldownGuardTrigger(input: {
+  triggerSource: RebalanceTriggerSource;
+  manual: boolean;
+}): boolean {
+  return !input.manual && input.triggerSource !== "risk";
+}
+
+function isCycleWithinCooldownWindow(input: {
+  cycle: DaaStoreRebalanceCycle;
+  cooldownMs: number;
+  nowMs: number;
+}): boolean {
+  const lastMs = Date.parse(input.cycle.createdAt || input.cycle.snapshotAt);
+  return Number.isFinite(lastMs) && lastMs + input.cooldownMs > input.nowMs;
+}
+
+function filterSmallAutomaticProposals(input: {
+  proposals: RebalanceProposal[];
+  manual: boolean;
+}): RebalanceProposal[] {
+  if (input.manual) return input.proposals;
+  return input.proposals.filter((proposal) => Math.max(0, toFinite(proposal.suggestedNotional, 0)) >= AUTO_REBALANCE_MIN_NOTIONAL_BASE);
+}
+
+function relabelAgentEntryProposals(input: {
+  proposals: RebalanceProposal[];
+  bootstrap: Awaited<ReturnType<typeof buildWorkbenchBootstrap>>;
+}): RebalanceProposal[] {
+  const holdingKeys = new Set(
+    input.bootstrap.assetUniverse
+      .filter((row) => row.holdingQty > 0)
+      .map((row) => row.assetKey.toUpperCase()),
+  );
+  return input.proposals.map((proposal) => {
+    if (proposal.proposalType === "watchlist_entry") return proposal;
+    if (proposal.side !== "BUY" || holdingKeys.has(proposal.assetKey.toUpperCase())) return proposal;
+    if (!proposal.reason.startsWith("观察列表目标建仓")) return proposal;
+    return {
+      ...proposal,
+      reason: proposal.reason.replace(/^观察列表目标建仓/, "Agent 目标建仓"),
+    };
+  });
+}
+
+function isPureRiskReductionAgentCycle(input: {
+  bootstrap: Awaited<ReturnType<typeof buildWorkbenchBootstrap>>;
+  proposals: RebalanceProposal[];
+  maxPositionPct: number;
+}): boolean {
+  const selectedProposals = input.proposals.filter((proposal) => proposal.selected !== false);
+  if (selectedProposals.length === 0) return false;
+  if (selectedProposals.some((proposal) => proposal.side === "BUY")) return false;
+
+  const totalEquity = Math.max(0, toFinite(input.bootstrap.account.totalEquity, 0));
+  if (!(totalEquity > 0)) return false;
+  const maxPositionLimitPct = Math.max(0, Number(input.maxPositionPct) || 0) * 100;
+  const currentValueByAssetKey = new Map(
+    input.bootstrap.assetUniverse.map((row) => [row.assetKey.toUpperCase(), Math.max(0, toFinite(row.valuationBase, 0))] as const),
+  );
+  const actualWeightPctByAssetKey = new Map(
+    input.bootstrap.assetUniverse.map((row) => [row.assetKey.toUpperCase(), Math.max(0, toFinite(row.actualWeightPct, 0))] as const),
+  );
+  const sellDeltaByAssetKey = new Map<string, number>();
+  for (const proposal of selectedProposals) {
+    const assetKey = proposal.assetKey.toUpperCase();
+    const delta = proposal.side === "SELL" ? -Math.max(0, toFinite(proposal.suggestedNotional, 0)) : Math.max(0, toFinite(proposal.suggestedNotional, 0));
+    sellDeltaByAssetKey.set(assetKey, (sellDeltaByAssetKey.get(assetKey) || 0) + delta);
+  }
+
+  return Array.from(sellDeltaByAssetKey.entries()).some(([assetKey, delta]) => {
+    if (!(delta < 0)) return false;
+    const currentWeightPct = actualWeightPctByAssetKey.get(assetKey) || 0;
+    if (!(currentWeightPct > maxPositionLimitPct)) return false;
+    const currentValue = currentValueByAssetKey.get(assetKey) || 0;
+    const nextValue = Math.max(0, currentValue + delta);
+    const nextWeightPct = (nextValue / totalEquity) * 100;
+    return nextWeightPct < currentWeightPct;
+  });
+}
+
 
 export async function generateWorkbenchRebalanceCycle(
   input: GenerateRebalanceCycleInput = {},
@@ -191,19 +273,25 @@ export async function generateWorkbenchRebalanceCycle(
 
   const cooldownHours = Math.max(1, systemRow.config.rebalanceStrategy.cooldownHours);
   const cooldownMs = cooldownHours * 60 * 60 * 1000;
-  const cooldownScopedTriggerSource = !manual && (triggerSource === "drift" || triggerSource === "calendar")
-    ? triggerSource
-    : null;
-  const latestAutoComparableCycle = cooldownScopedTriggerSource
-    ? (recentCycles.find((row) => row.triggerSource === cooldownScopedTriggerSource) || null)
+  const latestAutoComparableCycle = isAutoCooldownGuardTrigger({ triggerSource, manual })
+    ? (recentCycles.find((row) => row.triggerSource !== "manual" && row.triggerSource !== "risk") || null)
     : null;
   cooldownReferenceCycle = latestAutoComparableCycle || latestCycle;
-  if (cooldownScopedTriggerSource && latestAutoComparableCycle) {
+  let autoCooldownUntil: string | null = null;
+  let shouldCheckAgentRiskReductionException = false;
+  if (latestAutoComparableCycle && isCycleWithinCooldownWindow({
+    cycle: latestAutoComparableCycle,
+    cooldownMs,
+    nowMs: Date.now(),
+  })) {
     const lastMs = Date.parse(latestAutoComparableCycle.createdAt || latestAutoComparableCycle.snapshotAt);
-    if (Number.isFinite(lastMs) && lastMs + cooldownMs > Date.now()) {
+    autoCooldownUntil = Number.isFinite(lastMs) ? toIsoByMs(lastMs + cooldownMs) : null;
+    if (triggerSource === "agent_trigger") {
+      shouldCheckAgentRiskReductionException = true;
+    } else {
       return skipWithLatest(
         `冷静期生效中，${cooldownHours} 小时内不重复自动触发`,
-        { skippedByCooldown: true, cooldownUntil: toIsoByMs(lastMs + cooldownMs), attachLatestCycle: true },
+        { skippedByCooldown: true, cooldownUntil: autoCooldownUntil, attachLatestCycle: true },
       );
     }
   }
@@ -378,6 +466,9 @@ export async function generateWorkbenchRebalanceCycle(
     });
 
   draft.proposals = agentResult.proposals;
+  if (hasAgentTargetOverrides && triggerSource === "agent_trigger") {
+    draft.proposals = relabelAgentEntryProposals({ proposals: draft.proposals, bootstrap });
+  }
 
   // ── Step E.5: Tax-Loss Harvesting 扫描 ────────────────────────────
   let tlhProposals: RebalanceProposal[] = [];
@@ -395,7 +486,20 @@ export async function generateWorkbenchRebalanceCycle(
     logSwallowed("workbenchRebalanceCycleService.tlhScan", err);
   }
 
-  const mergedProposals = [...draft.proposals, ...tlhProposals];
+  const mergedProposals = filterSmallAutomaticProposals({
+    proposals: [...draft.proposals, ...tlhProposals],
+    manual,
+  });
+  if (shouldCheckAgentRiskReductionException && !isPureRiskReductionAgentCycle({
+    bootstrap,
+    proposals: mergedProposals,
+    maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
+  })) {
+    return skipWithLatest(
+      `冷静期生效中，${cooldownHours} 小时内仅允许纯降风险 SELL；本轮 Agent 调整未满足放行条件`,
+      { skippedByCooldown: true, cooldownUntil: autoCooldownUntil, attachLatestCycle: true },
+    );
+  }
   const emptyAutoTriggerSkipMessage = buildEmptyAutoTriggerSkipMessage({
     triggerSource,
     manual,

@@ -368,6 +368,8 @@ describe("formatBriefingForTelegram", () => {
       autopilotCoverage: {
         holdingAssets: 2,
         watchlistCandidates: 16,
+        watchlistTargetedAssets: 0,
+        autoEntryReadyAssets: 0,
         brainPlanIntents: 0,
         acceptedBrainPlanIntents: 0,
       },
@@ -375,6 +377,8 @@ describe("formatBriefingForTelegram", () => {
     const html = formatBriefingForTelegram(briefing, { totalTokens: 0, durationMs: 100, thesesCount: 1, memoriesCount: 0 });
     expect(html).toContain("自动驾驶覆盖");
     expect(html).toContain("观察候选 <code>16</code>");
+    expect(html).toContain("已设目标 <code>0</code>");
+    expect(html).toContain("可自动建仓 <code>0</code>");
     expect(html).not.toContain("规则建仓跳过");
     expect(html).not.toContain("未开启规则自动建仓");
   });

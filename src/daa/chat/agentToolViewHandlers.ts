@@ -175,7 +175,7 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
       if (b.autopilotCoverage) {
         const c = b.autopilotCoverage;
         parts.push("\n🧭 自动驾驶覆盖:");
-        parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
+        parts.push(`  持仓复核 ${c.holdingAssets} 个 | 观察候选 ${c.watchlistCandidates} 个 | 已设目标 ${c.watchlistTargetedAssets} 个 | 可自动建仓 ${c.autoEntryReadyAssets} 个 | 大脑目标计划 ${c.acceptedBrainPlanIntents}/${c.brainPlanIntents} 条`);
       }
       if (b.mindChangeConditions.length > 0) {
         parts.push("\n🔄 改观条件:");

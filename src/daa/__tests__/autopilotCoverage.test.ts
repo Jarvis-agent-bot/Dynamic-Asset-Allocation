@@ -58,6 +58,8 @@ describe("buildAutopilotCoverageSummary", () => {
 
     expect(summary.holdingAssets).toBe(1);
     expect(summary.watchlistCandidates).toBe(2);
+    expect(summary.watchlistTargetedAssets).toBe(1);
+    expect(summary.autoEntryReadyAssets).toBe(1);
     expect(summary.brainPlanIntents).toBe(2);
     expect(summary.acceptedBrainPlanIntents).toBe(1);
   });

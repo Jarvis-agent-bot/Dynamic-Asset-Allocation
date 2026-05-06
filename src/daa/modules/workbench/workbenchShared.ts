@@ -921,9 +921,9 @@ function buildCycleDraftFromBootstrap(input: {
         if (side === "BUY") {
             buyNotionalUsed += suggestedNotional;
         }
-        const targetSource = row.watchEnabled && targetPct > 0
-            ? "观察列表目标权重"
-            : "持仓回归目标权重";
+        const targetSource = row.holdingQty > 0
+            ? "持仓目标权重回归"
+            : "观察列表目标建仓";
         proposals.push({
             assetKey: row.assetKey,
             symbol: row.symbol,

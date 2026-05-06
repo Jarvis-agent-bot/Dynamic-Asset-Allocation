@@ -160,6 +160,8 @@ export interface ThesisConflict {
 export interface AutopilotCoverageSummary {
   holdingAssets: number;
   watchlistCandidates: number;
+  watchlistTargetedAssets: number;
+  autoEntryReadyAssets: number;
   brainPlanIntents: number;
   acceptedBrainPlanIntents: number;
 }

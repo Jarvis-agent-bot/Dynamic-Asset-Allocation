@@ -238,4 +238,287 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
     expect(generated.skippedByCooldown).toBe(false);
     expect(generated.cycle?.triggerSource).toBe("drift");
   }, 20000);
+
+  it("agent_trigger 在冷静期内重复加仓会被跳过", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 9600,
+            investableCash: 9600,
+            frozenCash: 0,
+          },
+          targetWeights: {},
+        },
+        rebalanceStrategy: {
+          ...current.config.rebalanceStrategy,
+          cooldownHours: 24,
+        },
+      },
+    });
+
+    await upsertDaaAssetUniverseRow({
+      symbol: "AAPL",
+      market: "US",
+      currency: "USD",
+      watchEnabled: true,
+      targetWeightHint: 0.08,
+      lastPrice: 100,
+    });
+    await patchDaaAssetUniverseRow({
+      assetKey: "US::AAPL",
+      holdingQty: 8,
+      holdingPrice: 100,
+    });
+
+    await createDaaRebalanceCycle({
+      triggerSource: "calendar",
+      triggerReason: "recent auto cycle",
+      equitySnapshot: 4800,
+      driftSnapshot: [],
+      proposals: [
+        {
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "SELL",
+          suggestedQty: 1,
+          suggestedNotional: 100,
+          price: 100,
+          reason: "recent auto",
+          selected: true,
+          hfContribution: null,
+        },
+      ],
+      riskCheck: { overallStatus: "pass", items: [] },
+    });
+
+    const generated = await generateWorkbenchRebalanceCycle({
+      triggerSource: "agent_trigger",
+      triggerReason: "repeat buy within cooldown",
+      manual: false,
+      targetWeightOverrides: { "US::AAPL": 0.12 },
+    });
+
+    expect(generated.created).toBe(false);
+    expect(generated.skippedByCooldown).toBe(true);
+    expect(generated.message).toContain("仅允许纯降风险 SELL");
+  }, 20000);
+
+  it("agent_trigger 在冷静期内的纯降风险 SELL 仍可放行", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          constraints: {
+            ...current.config.strategy.constraints,
+            maxPositionPct: 0.1,
+          },
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 8000,
+            investableCash: 8000,
+            frozenCash: 0,
+          },
+          targetWeights: {},
+        },
+        rebalanceStrategy: {
+          ...current.config.rebalanceStrategy,
+          cooldownHours: 24,
+        },
+      },
+    });
+
+    await upsertDaaAssetUniverseRow({
+      symbol: "NVDA",
+      market: "US",
+      currency: "USD",
+      watchEnabled: true,
+      targetWeightHint: 0.2,
+      lastPrice: 100,
+    });
+    await patchDaaAssetUniverseRow({
+      assetKey: "US::NVDA",
+      holdingQty: 20,
+      holdingPrice: 100,
+    });
+
+    await createDaaRebalanceCycle({
+      triggerSource: "drift",
+      triggerReason: "recent auto cycle",
+      equitySnapshot: 10000,
+      driftSnapshot: [],
+      proposals: [
+        {
+          assetKey: "US::NVDA",
+          symbol: "NVDA",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 1,
+          suggestedNotional: 100,
+          price: 100,
+          reason: "recent auto",
+          selected: true,
+          hfContribution: null,
+        },
+      ],
+      riskCheck: { overallStatus: "pass", items: [] },
+    });
+
+    const generated = await generateWorkbenchRebalanceCycle({
+      triggerSource: "agent_trigger",
+      triggerReason: "risk reduction sell within cooldown",
+      manual: false,
+      targetWeightOverrides: { "US::NVDA": 0.05 },
+    });
+
+    expect(generated.created).toBe(true);
+    expect(generated.skippedByCooldown).toBe(false);
+    expect(generated.cycle?.proposals.every((proposal) => proposal.side === "SELL")).toBe(true);
+  }, 20000);
+
+  it("自动触发的小额提案会被过滤，但手动提案保留", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 1000,
+            investableCash: 1000,
+            frozenCash: 0,
+          },
+          targetWeights: {},
+        },
+      },
+    });
+
+    await upsertDaaAssetUniverseRow({
+      symbol: "QQQ",
+      market: "US",
+      currency: "USD",
+      watchEnabled: true,
+      targetWeightHint: 0,
+      lastPrice: 100,
+    });
+
+    const autoGenerated = await generateWorkbenchRebalanceCycle({
+      triggerSource: "agent_trigger",
+      triggerReason: "tiny auto proposal",
+      manual: false,
+      targetWeightOverrides: { "US::QQQ": 0.005 },
+    });
+    const manualGenerated = await generateWorkbenchRebalanceCycle({
+      triggerSource: "manual",
+      triggerReason: "tiny manual proposal",
+      manual: true,
+      targetWeightOverrides: { "US::QQQ": 0.005 },
+    });
+
+    expect(autoGenerated.created).toBe(false);
+    expect(autoGenerated.message).toContain("未生成可执行提案");
+    expect(manualGenerated.created).toBe(true);
+    expect((manualGenerated.cycle?.proposals[0]?.suggestedNotional ?? 0) < 100).toBe(true);
+  }, 20000);
+
+  it("已持仓资产的目标回归提案不再显示观察列表目标权重文案", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 1000,
+            investableCash: 1000,
+            frozenCash: 0,
+          },
+          targetWeights: {},
+        },
+      },
+    });
+
+    await upsertDaaAssetUniverseRow({
+      symbol: "AAPL",
+      market: "US",
+      currency: "USD",
+      watchEnabled: true,
+      targetWeightHint: 0.2,
+      lastPrice: 100,
+    });
+    await patchDaaAssetUniverseRow({
+      assetKey: "US::AAPL",
+      holdingQty: 10,
+      holdingPrice: 100,
+    });
+
+    const generated = await generateWorkbenchRebalanceCycle({
+      triggerSource: "manual",
+      triggerReason: "holding reason copy",
+      manual: true,
+    });
+
+    expect(generated.created).toBe(true);
+    expect(generated.cycle?.proposals[0]?.reason).toContain("持仓目标权重回归");
+    expect(generated.cycle?.proposals[0]?.reason).not.toContain("观察列表目标权重");
+  }, 20000);
+
+  it("Agent 对新资产建仓时使用独立文案", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          account: {
+            ...current.config.strategy.account,
+            baseCurrency: "USD",
+            cash: 5000,
+            investableCash: 5000,
+            frozenCash: 0,
+          },
+          targetWeights: {},
+        },
+      },
+    });
+
+    await upsertDaaAssetUniverseRow({
+      symbol: "SPY",
+      market: "US",
+      currency: "USD",
+      watchEnabled: true,
+      targetWeightHint: 0,
+      lastPrice: 100,
+    });
+
+    const generated = await generateWorkbenchRebalanceCycle({
+      triggerSource: "agent_trigger",
+      triggerReason: "agent entry reason copy",
+      manual: false,
+      targetWeightOverrides: { "US::SPY": 0.05 },
+    });
+
+    expect(generated.created).toBe(true);
+    expect(generated.cycle?.proposals[0]?.reason).toContain("Agent 目标建仓");
+  }, 20000);
 });
