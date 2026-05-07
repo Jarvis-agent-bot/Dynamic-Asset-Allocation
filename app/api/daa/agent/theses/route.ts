@@ -14,6 +14,7 @@ import {
 import { getLatestRun } from "@/src/daa/agent/store/agentRunStore";
 import { countMemories } from "@/src/daa/agent/store/memoryStore";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { deriveCognitiveAgentScheduleTimesUtc } from "@/src/daa/config/systemConfig";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export async function GET(req: Request) {
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
       if (ca?.enabled) {
         schedule = {
           mode: ca.schedule ?? "2x_daily",
-          timesUtc: ca.scheduleTimesUtc ?? ["13:00", "21:00"],
+          timesUtc: deriveCognitiveAgentScheduleTimesUtc(ca.schedule ?? "2x_daily"),
         };
       }
     } catch (e) {

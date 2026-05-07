@@ -346,10 +346,10 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 | `reviewIntervalDays` | `14` | 新 thesis 默认复盘间隔 |
 | `memoryRecallLimit` | `5` | 每次调查召回记忆条数 |
 | `memoryDecayRate` | `0.97` | 每日衰减率 |
-| `memoryArchiveThreshold` | `0.05` | 低于此 strength 不参与召回 |
 | `circuitBreakerThreshold` | `3` | 连续 LLM 失败次数触发熔断 |
 | `schedule` | `"2x_daily"` | `2x_daily` / `daily` / `every_6h` / `manual_only` |
-| `scheduleTimesUtc` | `["13:00","21:00"]` | 允许运行时间窗口（UTC, ±30min） |
+
+运行时间窗口不再作为独立配置持久化，而是由 `schedule` 统一派生，避免出现“频率为 daily 但仍保留两个窗口”的冲突。
 
 ---
 
@@ -363,7 +363,7 @@ Autopilot 自动执行不需要用户逐笔确认；它依赖显式配置和权�
 | `GET /api/daa/agent/thesis/[id]` | 论点详情（证据链 + 复盘历史） |
 | `GET /api/daa/agent/memories` | 分页列出记忆（支持 type 过滤） |
 | `DELETE /api/daa/agent/memories?id=xxx` | 删除单条记忆 |
-| `POST /api/daa/cron/cognitive-agent` | 自门控 cron（每小时触发，按 schedule + scheduleTimesUtc 过滤） |
+| `POST /api/daa/cron/cognitive-agent` | 自门控 cron（每小时触发，按 schedule 派生窗口过滤） |
 | `POST /api/daa/cron/entity-backfill` | 实体图幂等回填（每日 03:40 UTC） |
 
 ---

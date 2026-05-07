@@ -34,9 +34,7 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
           memoryRecallLimit: ca.memoryRecallLimit,
           circuitBreakerThreshold: ca.circuitBreakerThreshold,
           schedule: ca.schedule,
-          scheduleTimesUtc: ca.scheduleTimesUtc,
           memoryDecayRate: ca.memoryDecayRate,
-          memoryArchiveThreshold: ca.memoryArchiveThreshold,
           thesisStalenessDays: ca.thesisStalenessDays ?? 7,
         };
       }

@@ -87,7 +87,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     });
   });
 
-  it("notification.dailyAnalysisHourUtc 会从 analysisTimeUtc 自动推导，避免保留冲突旧值", () => {
+  it("notification.dailyAnalysisHourUtc 作为旧字段会被丢弃，只保留 analysisTimeUtc 一个调度来源", () => {
     const normalized = normalizeSystemConfig({
       rebalanceStrategy: {
         analysisTimeUtc: "10:51",
@@ -98,7 +98,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     });
 
     expect(normalized.rebalanceStrategy.analysisTimeUtc).toBe("10:51");
-    expect(normalized.notification.dailyAnalysisHourUtc).toBe(11);
+    expect("dailyAnalysisHourUtc" in (normalized.notification as unknown as Record<string, unknown>)).toBe(false);
   });
 
   it("相同 baseVersion 并发保存时只允许一个成功", async () => {
@@ -111,7 +111,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
           ...current.config,
           rebalanceStrategy: {
             ...current.config.rebalanceStrategy,
-            analysisFocus: "focus-A",
+            timezone: "Etc/UTC",
           },
         },
       }),
@@ -121,7 +121,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
           ...current.config,
           rebalanceStrategy: {
             ...current.config.rebalanceStrategy,
-            analysisFocus: "focus-B",
+            timezone: "Asia/Tokyo",
           },
         },
       }),
@@ -136,7 +136,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
 
     const latest = await getDaaSystemConfig();
     expect(latest.version).toBe(current.version + 1);
-    expect(["focus-A", "focus-B"]).toContain(latest.config.rebalanceStrategy.analysisFocus);
+    expect(["Etc/UTC", "Asia/Tokyo"]).toContain(latest.config.rebalanceStrategy.timezone);
   });
 
   it("会清理重复的 system config 行并保留最新配置", async () => {
@@ -154,14 +154,14 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
         ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
         rebalanceStrategy: {
           ...structuredClone(DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy),
-          analysisFocus: "duplicate-older",
+          timezone: "Etc/UTC",
         },
       };
       const latestConfig = {
         ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
         rebalanceStrategy: {
           ...structuredClone(DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy),
-          analysisFocus: "duplicate-latest",
+          timezone: "Asia/Tokyo",
         },
       };
 
@@ -180,7 +180,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
 
     const current = await getDaaSystemConfig();
     expect(current.version).toBe(2);
-    expect(current.config.rebalanceStrategy.analysisFocus).toBe("duplicate-latest");
+    expect(current.config.rebalanceStrategy.timezone).toBe("Asia/Tokyo");
 
     await withDaaPgClient(async ({ query }) => {
       const rows = await query("SELECT id, version FROM daa_system_config_v2 WHERE id = 'default' ORDER BY version DESC");
@@ -203,7 +203,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
         ...current.config,
         rebalanceStrategy: {
           ...current.config.rebalanceStrategy,
-          analysisFocus: "runtime-account-separated",
+          timezone: "Etc/UTC",
         },
         strategy: {
           ...current.config.strategy,
@@ -224,7 +224,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     expect(latest.config.strategy.account.investableCash).toBeCloseTo(760, 6);
     expect(latest.config.strategy.account.frozenCash).toBeCloseTo(40, 6);
     expect(latest.config.strategy.account.totalEquity).toBeCloseTo(1500, 6);
-    expect(latest.config.rebalanceStrategy.analysisFocus).toBe("runtime-account-separated");
+    expect(latest.config.rebalanceStrategy.timezone).toBe("Etc/UTC");
 
     await withDaaPgClient(async ({ query }) => {
       const configRows = await query("SELECT config_json FROM daa_system_config_v2 WHERE id = 'default' LIMIT 1");
@@ -234,7 +234,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
       expect(persisted.strategy.account.investableCash).toBe(0);
       expect(persisted.strategy.account.frozenCash).toBe(0);
       expect(persisted.strategy.account.totalEquity).toBe(null);
-      expect(persisted.rebalanceStrategy.analysisFocus).toBe("runtime-account-separated");
+      expect(persisted.rebalanceStrategy.timezone).toBe("Etc/UTC");
 
       const accountRows = await query(
         "SELECT base_currency, cash, investable_cash, frozen_cash, total_equity FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
@@ -288,7 +288,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
         ...current.config,
         rebalanceStrategy: {
           ...current.config.rebalanceStrategy,
-          analysisFocus: "preserve-non-account-fields",
+          cooldownHours: 96,
         },
         strategy: {
           ...current.config.strategy,
@@ -313,7 +313,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     const latest = await getDaaSystemConfig();
     expect(applied.account.cash).toBeCloseTo(620, 6);
     expect(applied.account.totalEquity).toBeGreaterThanOrEqual(applied.account.cash);
-    expect(latest.config.rebalanceStrategy.analysisFocus).toBe("preserve-non-account-fields");
+    expect(latest.config.rebalanceStrategy.cooldownHours).toBe(96);
     expect(latest.config.strategy.account.cash).toBeCloseTo(620, 6);
   });
 });

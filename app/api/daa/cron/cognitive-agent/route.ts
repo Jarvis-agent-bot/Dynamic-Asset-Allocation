@@ -2,9 +2,9 @@
  * POST /api/daa/cron/cognitive-agent — 定时触发 Cognitive Agent 循环
  *
  * Feature D: 自门控 — 外部 cron 可频繁触发（如每小时），本路由检查当前 UTC 时间
- * 是否匹配配置的 scheduleTimesUtc，不匹配则跳过。
+ * 是否匹配由 schedule 派生出的 UTC 窗口，不匹配则跳过。
  *
- * 配置在 Settings → 认知 Agent → 运行频率 / 运行时间
+ * 配置在 Settings → 认知 Agent → 运行频率
  */
 
 export const runtime = "nodejs";
@@ -16,6 +16,7 @@ import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { findRecentJobExecutionByIdempotencyKey } from "@/src/daa/store/jobExecutionLogRepo";
 import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
+import { deriveCognitiveAgentScheduleTimesUtc } from "@/src/daa/config/systemConfig";
 import { countThreads } from "@/src/daa/agent/store/thesisStore";
 import { countMemories } from "@/src/daa/agent/store/memoryStore";
 import { getDaaSystemConfig } from "@/src/daa/store/accountStore";
@@ -90,12 +91,12 @@ export async function POST(req: Request) {
         if (ca.schedule === "manual_only") {
           return ok({ skipped: true, reason: "Agent 运行频率设为仅手动。" });
         }
-        // 检查当前 UTC 小时是否匹配配置的调度时间
+        // 检查当前 UTC 时间是否匹配当前频率对应的调度窗口
         const nowUtc = new Date();
         const nowHH = String(nowUtc.getUTCHours()).padStart(2, "0");
         const nowMM = String(nowUtc.getUTCMinutes()).padStart(2, "0");
         const nowHHMM = `${nowHH}:${nowMM}`;
-        const times = ca.scheduleTimesUtc ?? [];
+        const times = deriveCognitiveAgentScheduleTimesUtc(ca.schedule ?? "daily");
         // 允许 ±30 分钟窗口，并用命中的计划槽位作为幂等 key。
         const scheduledWindow = findScheduledWindow(nowUtc, times);
         if (!scheduledWindow && times.length > 0) {

@@ -133,28 +133,6 @@ export function SettingsRiskSection(props: {
         ),
     },
     {
-      label: "最大回撤阈值 (%)",
-      value: config.strategy.risk.maxDrawdownPct * 100,
-      min: 5,
-      max: 80,
-      step: 0.5,
-      onChange: (value: number) =>
-        setConfig((prev) =>
-          prev
-            ? {
-                ...prev,
-                strategy: {
-                  ...prev.strategy,
-                  risk: {
-                    ...prev.strategy.risk,
-                    maxDrawdownPct: Math.max(0.05, Math.min(0.8, value / 100)),
-                  },
-                },
-              }
-            : prev,
-        ),
-    },
-    {
       label: "单资产止损阈值 (%)",
       value: config.strategy.risk.perAssetStopLossPct * 100,
       min: 5,

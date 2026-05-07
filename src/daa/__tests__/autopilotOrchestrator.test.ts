@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { validateAutopilotPrerequisites } from "@/src/daa/agent/autopilotOrchestrator";
+import {
+  getAutopilotRebalanceBlockedReasonAfterRun,
+  validateAutopilotPrerequisites,
+} from "@/src/daa/agent/autopilotOrchestrator";
 import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 
 describe("autopilot-orchestrator", () => {
@@ -37,5 +40,10 @@ describe("autopilot-orchestrator", () => {
       missing: [],
       reason: null,
     });
+  });
+
+  it("认知 Agent 本轮存在错误时不应继续进入自动调仓", () => {
+    expect(getAutopilotRebalanceBlockedReasonAfterRun([])).toBeNull();
+    expect(getAutopilotRebalanceBlockedReasonAfterRun(["observe: market data stale"])).toContain("自动调仓已降级为仅报告");
   });
 });

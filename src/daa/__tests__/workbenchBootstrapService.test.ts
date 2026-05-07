@@ -98,7 +98,6 @@ function buildBootstrapConfigRow(input?: {
       cooldownHours: 24,
       analysisTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
-      analysisFocus: "mock",
       autoGenerateEnabled: false,
     },
   });

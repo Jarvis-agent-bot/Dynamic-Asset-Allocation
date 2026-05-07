@@ -11,11 +11,10 @@ import { useId } from "react";
 import type { DaaMarketIndicatorConfigKey, DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 export const SETTINGS_NAV_ITEMS_ = [
-  { id: "strategy", label: "基础策略", desc: "调仓节奏、执行规则与风控参数。" },
-  { id: "brain", label: "大脑与自动化", desc: "AI 授权等级、认知循环与配置落地策略。" },
-  { id: "data", label: "数据与模型", desc: "行情、资讯、汇率、AI 解读与人因输入。" },
-  { id: "notification", label: "通知", desc: "Telegram 与飞书的触发策略和运行状态。" },
-  { id: "secrets", label: "凭证与连接", desc: "API Key、Token、Webhook 与连通性管理。" },
+  { id: "strategy", label: "策略与风控" },
+  { id: "brain", label: "大脑" },
+  { id: "data", label: "数据与连接" },
+  { id: "notification", label: "通知" },
 ] as const;
 
 export type SettingsNavItemId = (typeof SETTINGS_NAV_ITEMS_)[number]["id"];
@@ -33,6 +32,11 @@ export const MARKET_INDICATOR_ITEMS_: Array<{
   { key: "btcEthRatio", label: "比特币/以太坊比 (BTC/ETH)", hint: "观察加密市场在防守与进攻风格之间的切换。", dependencies: "BTC-USD, ETH-USD" },
   { key: "btcVolatility", label: "比特币波动率 (BTC)", hint: "衡量加密市场核心资产的波动风险。", dependencies: "BTC-USD" },
   { key: "goldSilverRatio", label: "金银比 (GC/SI)", hint: "高位通常意味着宏观资金更偏防御。", dependencies: "GC=F, SI=F" },
+  { key: "yieldCurveSpread", label: "收益率曲线斜率 (IEF/SHY)", hint: "观察债券期限结构是否进入更防守的宏观状态。", dependencies: "IEF, SHY" },
+  { key: "usdStrength", label: "美元强弱波动 (UUP)", hint: "衡量美元波动压力，对非美风险资产有辅助解释。", dependencies: "UUP" },
+  { key: "creditSpread", label: "信用利差 (HYG/LQD)", hint: "观察信用风险偏好是否收缩。", dependencies: "HYG, LQD" },
+  { key: "inflationExpectation", label: "通胀预期 (TIP/IEF)", hint: "观察通胀预期是否影响权益与债券配置语境。", dependencies: "TIP, IEF" },
+  { key: "marketBreadth", label: "市场广度 (RSP/SPY)", hint: "观察美股上涨是否由少数头部资产驱动。", dependencies: "RSP, SPY" },
 ];
 
 export type SettingsConfigSetter = Dispatch<SetStateAction<DaaSystemConfig | null>>;

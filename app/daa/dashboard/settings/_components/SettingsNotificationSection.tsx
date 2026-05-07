@@ -182,7 +182,7 @@ function RunningStatusTile(props: {
 
 function ChannelConfigCard(props: {
   title: string;
-  description: string;
+  description?: string;
   enabled: boolean;
   onEnabledChange: (value: boolean) => void;
   onDriftChange: (value: boolean) => void;
@@ -215,10 +215,7 @@ function ChannelConfigCard(props: {
   const testDisabled = props.testing || Boolean(effectiveDisabledReason);
 
   return (
-    <SubsectionCard
-      title={props.title}
-      description={props.description}
-    >
+    <SubsectionCard title={props.title} description={props.description}>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <DaaSurfaceStatusPill tone={props.summary ? channelPillTone(props.summary) : "slate"}>
           {props.statusLoading ? "加载中" : props.summary ? channelPillText(props.summary) : "状态未知"}
@@ -446,11 +443,7 @@ export function SettingsNotificationSection(props: {
   const statusLoading = loading && !summary && !statusError;
 
   return (
-    <section id="settings-notification" className="scroll-mt-28">
-      <SectionCard
-        title="通知"
-        description="先看真实运行态，再改待保存开关，避免把当前生效和草稿修改混在一起。"
-      >
+    <SectionCard title="通知">
         <div style={{ display: "grid", gap: 16 }}>
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12 }}>
             <div style={{ maxWidth: 720 }}>
@@ -531,7 +524,6 @@ export function SettingsNotificationSection(props: {
           <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
             <ChannelConfigCard
               title="Telegram"
-              description="这里负责出站通知；下方额外显示入站对话助手是否真正可用。"
               enabled={config.notification.telegram.enabled}
               onEnabledChange={(value) =>
                 setConfig((prev) =>
@@ -630,7 +622,6 @@ export function SettingsNotificationSection(props: {
 
             <ChannelConfigCard
               title="飞书"
-              description="当前只支持出站 webhook 广播；若要做飞书对话，需要补 App Bot 的入站事件、鉴权和回消息链路。"
               enabled={config.notification.feishu.enabled}
               onEnabledChange={(value) =>
                 setConfig((prev) =>
@@ -724,10 +715,7 @@ export function SettingsNotificationSection(props: {
             />
           </div>
 
-          <SubsectionCard
-            title="最近通知投递"
-            description="这里只看真实发出去的结果，不看表单勾选。"
-          >
+          <SubsectionCard title="最近通知投递">
             {loading ? (
               <div style={{ padding: "12px 0", fontSize: 12, color: "var(--muted)" }}>加载通知投递记录…</div>
             ) : entries.length > 0 ? (
@@ -779,6 +767,5 @@ export function SettingsNotificationSection(props: {
           </SubsectionCard>
         </div>
       </SectionCard>
-    </section>
   );
 }

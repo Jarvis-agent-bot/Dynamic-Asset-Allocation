@@ -3,7 +3,6 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import {
   CheckboxRow,
   FieldLabel,
-  FormInput,
   NumberInput,
   SubsectionCard,
   settingsGridCols2Style,
@@ -40,54 +39,6 @@ export function SettingsPriceFeedBlock(props: {
         >
           启用行情源
         </CheckboxRow>
-
-        <div>
-          <FieldLabel>行情提供方</FieldLabel>
-          <FormInput
-            value={config.dataSources.priceFeed.provider}
-            onChange={(e) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      dataSources: {
-                        ...prev.dataSources,
-                        priceFeed: {
-                          ...prev.dataSources.priceFeed,
-                          provider: e.target.value.trim() || "yfinance",
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          />
-        </div>
-
-        <div>
-          <FieldLabel>行情刷新间隔（分钟）</FieldLabel>
-          <NumberInput
-            value={config.dataSources.priceFeed.intervalMinutes}
-            min={1}
-            max={240}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      dataSources: {
-                        ...prev.dataSources,
-                        priceFeed: {
-                          ...prev.dataSources.priceFeed,
-                          intervalMinutes: Math.max(1, Math.trunc(value || 1)),
-                        },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          />
-        </div>
 
         <div>
           <FieldLabel>缓存新鲜阈值（分钟）</FieldLabel>

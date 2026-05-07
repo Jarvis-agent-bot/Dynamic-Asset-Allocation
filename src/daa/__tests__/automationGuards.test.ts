@@ -4,7 +4,9 @@ import {
   applyTargetWeightOverridesToBootstrap,
   buildAgentTargetWeightOverrides,
   buildEmptyAutoTriggerSkipMessage,
+  filterRecentAutoTradeReversals,
   findAutoExecuteSingleOrderBreach,
+  findAutoExecuteTurnoverBreach,
   shouldSendAgentBriefingTelegram,
 } from "@/src/daa/automation/automationGuards";
 import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
@@ -42,6 +44,60 @@ describe("automationGuards", () => {
     expect(breach?.symbol).toBe("NVDA");
     expect(breach?.message).toContain("autoExecuteMaxSinglePct");
     expect(breach?.message).toContain("超过 NAV 的 10.0% 上限");
+  });
+
+  it("能识别自动执行总换手超过 NAV 上限", () => {
+    const breach = findAutoExecuteTurnoverBreach({
+      totalEquity: 10000,
+      maxTurnoverPct: 0.1,
+      proposals: [
+        { assetKey: "US::AAPL", symbol: "AAPL", suggestedNotional: 700 },
+        { assetKey: "US::MSFT", symbol: "MSFT", suggestedNotional: 600 },
+      ],
+    });
+
+    expect(breach?.totalNotional).toBe(1300);
+    expect(breach?.message).toContain("maxOrderPctOfNav");
+    expect(breach?.message).toContain("超过 NAV 的 10.0% 上限");
+  });
+
+  it("会过滤自动反向交易冷却期内的同资产反向提案", () => {
+    const nowMs = Date.parse("2026-03-10T00:00:00.000Z");
+    const result = filterRecentAutoTradeReversals({
+      nowMs,
+      proposals: [
+        {
+          assetKey: "US::SPY",
+          symbol: "SPY",
+          side: "SELL",
+          suggestedNotional: 500,
+          selected: true,
+        },
+        {
+          assetKey: "US::NVDA",
+          symbol: "NVDA",
+          side: "BUY",
+          suggestedNotional: 500,
+          selected: true,
+        },
+      ],
+      recentTrades: [
+        {
+          ticketId: "ticket-spy-buy",
+          assetKey: "US::SPY",
+          symbol: "SPY",
+          side: "BUY",
+          status: "executed",
+          executedAt: "2026-03-06T00:00:00.000Z",
+        },
+      ],
+      buyToSellCooldownDays: 14,
+    });
+
+    expect(result.proposals.map((row) => row.assetKey)).toEqual(["US::NVDA"]);
+    expect(result.blocked).toHaveLength(1);
+    expect(result.blocked[0]?.blockedReason).toContain("反向交易冷却期");
+    expect(result.blocked[0]?.cooldownUntil).toBe("2026-03-20T00:00:00.000Z");
   });
 
   it("Agent 日报推送必须同时满足 Telegram 开关和 dailyReport 开关", () => {
@@ -164,6 +220,56 @@ describe("automationGuards", () => {
     });
 
     expect(plan?.targetWeightOverrides).toEqual({ "US::NVDA": 0.03 });
+  });
+
+  it("Agent 加仓必须有高/中 conviction 论点支持，但降仓可直接进入风控", () => {
+    const overlay: AgentConfigOverlay = {
+      generatedAt: "2026-03-01T00:00:00.000Z",
+      agentRunId: "run-1",
+      regimeOverride: null,
+      targetAllocationPlan: {
+        reasoning: "一个加仓、一个降仓。",
+        intents: [
+          {
+            assetKey: "US::SPY",
+            symbol: "SPY",
+            proposedTargetWeightPct: 5,
+            confidence: 90,
+            reasoning: "没有论点支持的新增仓位应跳过",
+          },
+          {
+            assetKey: "US::NVDA",
+            symbol: "NVDA",
+            proposedTargetWeightPct: 3,
+            confidence: 90,
+            reasoning: "降仓是风险收缩",
+          },
+          {
+            assetKey: "US::MSFT",
+            symbol: "MSFT",
+            proposedTargetWeightPct: 4,
+            confidence: 90,
+            reasoning: "单冒号论点 key 也应能支持加仓",
+          },
+        ],
+      },
+    };
+
+    const plan = buildAgentTargetWeightOverrides({
+      overlay,
+      knownAssetKeys: ["US::SPY", "US::NVDA", "US::MSFT"],
+      currentTargetWeights: {
+        "US::SPY": 0,
+        "US::NVDA": 0.1,
+        "US::MSFT": 0,
+      },
+      supportedIncreaseAssetKeys: ["US::NVDA", "US:MSFT"],
+      maxPositionPct: 0.1,
+      minConfidence: 70,
+    });
+
+    expect(plan?.targetWeightOverrides).toEqual({ "US::NVDA": 0.03, "US::MSFT": 0.04 });
+    expect(plan?.skippedCount).toBe(1);
   });
 
   it("目标权重覆盖会重算 workbench 资产目标与偏移", () => {

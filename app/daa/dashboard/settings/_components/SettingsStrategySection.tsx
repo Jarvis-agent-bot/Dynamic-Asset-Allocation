@@ -16,10 +16,12 @@ export function SettingsStrategySection(props: {
   setConfig: SettingsConfigSetter;
 }) {
   const { config, setConfig } = props;
+  const calendarFrequency = config.rebalanceStrategy.calendar.frequency;
+  const usesCalendarDueDay = calendarFrequency !== "every_3_days" && calendarFrequency !== "weekly";
 
   return (
-    <section id="settings-strategy" className="scroll-mt-28">
-      <SectionCard title="再平衡策略" description="支持定期触发和偏移触发，两者可并行启用。">
+    <>
+      <SectionCard title="再平衡策略">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
             checked={config.rebalanceStrategy.calendar.enabled}
@@ -70,30 +72,32 @@ export function SettingsStrategySection(props: {
             </FormSelect>
           </div>
 
-          <div>
-            <FieldLabel>执行日（1-28）</FieldLabel>
-            <NumberInput
-              value={config.rebalanceStrategy.calendar.dayOfMonth}
-              min={1}
-              max={28}
-              onChange={(value) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          calendar: {
-                            ...prev.rebalanceStrategy.calendar,
-                            dayOfMonth: Math.max(1, Math.min(28, Math.trunc(value || 1))),
+          {usesCalendarDueDay ? (
+            <div>
+              <FieldLabel>执行日（1-28）</FieldLabel>
+              <NumberInput
+                value={config.rebalanceStrategy.calendar.dayOfMonth}
+                min={1}
+                max={28}
+                onChange={(value) =>
+                  setConfig((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          rebalanceStrategy: {
+                            ...prev.rebalanceStrategy,
+                            calendar: {
+                              ...prev.rebalanceStrategy.calendar,
+                              dayOfMonth: Math.max(1, Math.min(28, Math.trunc(value || 1))),
+                            },
                           },
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
+                        }
+                      : prev,
+                  )
+                }
+              />
+            </div>
+          ) : null}
 
           <CheckboxRow
             checked={config.rebalanceStrategy.drift.enabled}
@@ -141,7 +145,7 @@ export function SettingsStrategySection(props: {
           </div>
 
           <div>
-            <FieldLabel>检查频率</FieldLabel>
+            <FieldLabel>偏移去重窗口</FieldLabel>
             <FormSelect
               value={config.rebalanceStrategy.drift.checkFrequency}
               onChange={(e) =>
@@ -161,8 +165,8 @@ export function SettingsStrategySection(props: {
                 )
               }
             >
-              <option value="daily">每日</option>
-              <option value="weekly">每周</option>
+              <option value="daily">每日最多一次</option>
+              <option value="weekly">每周最多一次</option>
             </FormSelect>
           </div>
 
@@ -250,7 +254,7 @@ export function SettingsStrategySection(props: {
               )
             }
           >
-            自动模式（自动生成再平衡建议）
+            自动生成建议
           </CheckboxRow>
 
           {config.rebalanceStrategy.autoGenerateEnabled && (
@@ -277,7 +281,7 @@ export function SettingsStrategySection(props: {
                     )
                   }
                 >
-                  自动驾驶（风控通过后自动执行调仓）
+                  自动执行通过风控的建议
                 </CheckboxRow>
 
                 {config.rebalanceStrategy.autoExecuteEnabled && (
@@ -324,29 +328,10 @@ export function SettingsStrategySection(props: {
             </div>
           )}
 
-          <div style={{ gridColumn: "1 / -1" }}>
-            <FieldLabel>AI 关注重点</FieldLabel>
-            <FormInput
-              value={config.rebalanceStrategy.analysisFocus}
-              onChange={(e) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          analysisFocus: e.target.value,
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="观察列表自动建仓" description="技术 + 估值信号同时达标时，为观察列表中的资产自动生成 BUY 提案。仅加入观察列表不会自动买入；还需要在单个资产页面显式开启 auto-entry。">
+      <SectionCard title="观察列表自动建仓">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
             checked={config.watchlistEntry?.enabled ?? false}
@@ -539,6 +524,6 @@ export function SettingsStrategySection(props: {
           </div>
         </div>
       </SectionCard>
-    </section>
+    </>
   );
 }

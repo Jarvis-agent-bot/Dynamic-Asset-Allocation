@@ -409,7 +409,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
         assetUniverse,
         execution: {
           logs: [],
-          feeRateBps: systemRow.config.strategy.execution?.feeRateBps ?? systemRow.config.strategy.constraints.tradeFeeRateBps ?? 0,
+          feeRateBps: systemRow.config.strategy.execution?.feeRateBps ?? 0,
           slippageBps: systemRow.config.strategy.execution?.slippageBps ?? 0,
           minNotional: systemRow.config.strategy.constraints.minNotional ?? 0,
         },
@@ -418,8 +418,6 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
           autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
           analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
           timezone: rebalanceStrategy.timezone,
-
-          analysisFocus: rebalanceStrategy.analysisFocus,
         },
         rebalanceStrategy,
         latestCycle: null,
@@ -524,7 +522,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
       assetUniverse,
       execution: {
         logs,
-        feeRateBps: strategy.execution?.feeRateBps ?? strategy.constraints.tradeFeeRateBps ?? 0,
+        feeRateBps: strategy.execution?.feeRateBps ?? 0,
         slippageBps: strategy.execution?.slippageBps ?? 0,
         minNotional: strategy.constraints.minNotional ?? 0,
       },
@@ -533,7 +531,6 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
         autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
         analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
         timezone: rebalanceStrategy.timezone,
-        analysisFocus: rebalanceStrategy.analysisFocus,
       },
       rebalanceStrategy: {
         calendar: rebalanceStrategy.calendar,
@@ -541,7 +538,6 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
         cooldownHours: rebalanceStrategy.cooldownHours,
         analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
         timezone: rebalanceStrategy.timezone,
-        analysisFocus: rebalanceStrategy.analysisFocus,
         autoGenerateEnabled: rebalanceStrategy.autoGenerateEnabled,
       },
       latestCycle,

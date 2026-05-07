@@ -63,7 +63,6 @@ vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
       autoAnalysisEnabled: false,
       analysisTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
-      analysisFocus: "mock",
     },
   })),
 }));
@@ -155,7 +154,6 @@ function buildSystemConfig(input?: {
       autoGenerateEnabled: input?.autoGenerateEnabled ?? false,
     },
     notification: {
-      dailyAnalysisHourUtc: new Date().getUTCHours(),
       telegram: {
         enabled: (input?.telegramOnSuggestion ?? false) || (input?.telegramDailyReport ?? false),
         onDriftTrigger: false,
@@ -567,6 +565,304 @@ describe("cron-ops-routes-v1", () => {
     );
   });
 
+  it("daily-analysis 自动执行只执行已选中的提案", async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      rebalanceStrategy: {
+        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
+        autoGenerateEnabled: true,
+        autoExecuteEnabled: true,
+        autoExecuteMaxSinglePct: 10,
+      },
+      strategy: {
+        account: { totalEquity: 10000 },
+        constraints: {
+          maxOrderPctOfNav: 0.1,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildWorkbenchBootstrapFixture({
+      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
+      assetUniverse: [],
+    }));
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
+      cycle: {
+        cycleId: "cycle-selected-only-1",
+        triggerReason: "定期再平衡触发",
+        riskCheck: { overallStatus: "pass" },
+        proposals: [
+          {
+            assetKey: "US::AAPL",
+            symbol: "AAPL",
+            currency: "USD",
+            fxRateToBase: 1,
+            side: "BUY",
+            suggestedQty: 3,
+            suggestedNotional: 300,
+            price: 100,
+            reason: "selected proposal",
+            selected: true,
+            hfContribution: null,
+          },
+          {
+            assetKey: "US::TLH",
+            symbol: "TLH",
+            currency: "USD",
+            fxRateToBase: 1,
+            side: "SELL",
+            suggestedQty: 1,
+            suggestedNotional: 100,
+            price: 100,
+            reason: "manual-review-only proposal",
+            selected: false,
+            hfContribution: null,
+          },
+        ],
+      },
+      created: true,
+      message: "已生成再平衡周期 cycle-selected-only-1",
+      portfolioStatus: "needs_rebalance",
+    }));
+
+    const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(vi.mocked(executeRebalanceViaGateway)).toHaveBeenCalledWith({
+      cycleId: "cycle-selected-only-1",
+      executeMode: "selected",
+      notifyMode: "fanout",
+    });
+  });
+
+  it("daily-analysis 只有未选中提案时不会进入执行网关", async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      rebalanceStrategy: {
+        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
+        autoGenerateEnabled: true,
+        autoExecuteEnabled: true,
+        autoExecuteMaxSinglePct: 10,
+      },
+      strategy: {
+        account: { totalEquity: 10000 },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildWorkbenchBootstrapFixture({
+      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
+      assetUniverse: [],
+    }));
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
+      cycle: {
+        cycleId: "cycle-unselected-only-1",
+        triggerReason: "定期再平衡触发",
+        riskCheck: { overallStatus: "pass" },
+        proposals: [{
+          assetKey: "US::TLH",
+          symbol: "TLH",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "SELL",
+          suggestedQty: 1,
+          suggestedNotional: 100,
+          price: 100,
+          reason: "manual-review-only proposal",
+          selected: false,
+          hfContribution: null,
+        }],
+      },
+      created: true,
+      message: "已生成再平衡周期 cycle-unselected-only-1",
+      portfolioStatus: "needs_rebalance",
+    }));
+
+    const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.autoExecute).toMatchObject({
+      attempted: false,
+      executed: false,
+      ordersCount: 0,
+    });
+    expect(json.data.autoExecute.error).toContain("没有可执行提案");
+    expect(vi.mocked(executeRebalanceViaGateway)).not.toHaveBeenCalled();
+  });
+
+  it("daily-analysis 自动执行会应用总换手 NAV 硬上限", async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      rebalanceStrategy: {
+        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
+        autoGenerateEnabled: true,
+        autoExecuteEnabled: true,
+        autoExecuteMaxSinglePct: 10,
+      },
+      strategy: {
+        account: { totalEquity: 10000 },
+        constraints: {
+          maxOrderPctOfNav: 0.1,
+        },
+      },
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: true,
+          dailyReport: false,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildWorkbenchBootstrapFixture({
+      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
+      assetUniverse: [],
+    }));
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
+      cycle: {
+        cycleId: "cycle-turnover-1",
+        triggerReason: "定期再平衡触发",
+        riskCheck: { overallStatus: "warn" },
+        proposals: [
+          {
+            assetKey: "US::AAPL",
+            symbol: "AAPL",
+            currency: "USD",
+            fxRateToBase: 1,
+            side: "BUY",
+            suggestedQty: 7,
+            suggestedNotional: 700,
+            price: 100,
+            reason: "turnover proposal 1",
+            selected: true,
+            hfContribution: null,
+          },
+          {
+            assetKey: "US::MSFT",
+            symbol: "MSFT",
+            currency: "USD",
+            fxRateToBase: 1,
+            side: "BUY",
+            suggestedQty: 6,
+            suggestedNotional: 600,
+            price: 100,
+            reason: "turnover proposal 2",
+            selected: true,
+            hfContribution: null,
+          },
+        ],
+      },
+      created: true,
+      message: "已生成再平衡周期 cycle-turnover-1",
+      portfolioStatus: "needs_rebalance",
+    }));
+
+    const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.autoExecute).toMatchObject({
+      attempted: true,
+      executed: false,
+      ordersCount: 0,
+    });
+    expect(json.data.autoExecute.error).toContain("maxOrderPctOfNav");
+    expect(vi.mocked(executeRebalanceViaGateway)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledWith(
+      expect.stringContaining("自动执行已阻止"),
+      expect.objectContaining({
+        eventType: "auto_execute_blocked",
+        triggerSource: "cron_daily_analysis",
+        cycleId: "cycle-turnover-1",
+      }),
+    );
+  });
+
+  it("daily-analysis 自动执行遇到非纯 SELL 风控 warn 时转人工", async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
+      rebalanceStrategy: {
+        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
+        autoGenerateEnabled: true,
+        autoExecuteEnabled: true,
+        autoExecuteMaxSinglePct: 10,
+      },
+      strategy: {
+        account: { totalEquity: 10000 },
+        constraints: {
+          maxOrderPctOfNav: 0.1,
+        },
+      },
+      notification: {
+        telegram: {
+          enabled: true,
+          onDriftTrigger: false,
+          onSuggestionGenerated: false,
+          onTradeExecuted: true,
+          dailyReport: false,
+        },
+      },
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildWorkbenchBootstrapFixture({
+      account: { cash: 10000, investableCash: 10000, frozenCash: 0, totalEquity: 10000 },
+      assetUniverse: [],
+    }));
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
+      cycle: {
+        cycleId: "cycle-risk-warn-1",
+        triggerReason: "定期再平衡触发",
+        riskCheck: {
+          overallStatus: "warn",
+          items: [
+            {
+              rule: "correlation",
+              status: "warn",
+              current: 82,
+              limit: 60,
+              message: "AAPL/MSFT 相关性过高",
+            },
+          ],
+        },
+        proposals: [{
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 5,
+          suggestedNotional: 500,
+          price: 100,
+          reason: "risk warn proposal",
+          selected: true,
+          hfContribution: null,
+        }],
+      },
+      created: true,
+      message: "已生成再平衡周期 cycle-risk-warn-1",
+      portfolioStatus: "needs_rebalance",
+    }));
+
+    const response = await dailyAnalysisPost(new Request("http://localhost/api/daa/cron/daily-analysis", { method: "POST" }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.autoExecute).toMatchObject({
+      attempted: true,
+      executed: false,
+      ordersCount: 0,
+    });
+    expect(json.data.autoExecute.error).toContain("preTradeRiskCheck");
+    expect(vi.mocked(executeRebalanceViaGateway)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledWith(
+      expect.stringContaining("风控完全通过"),
+      expect.objectContaining({
+        eventType: "auto_execute_blocked",
+        triggerSource: "cron_daily_analysis",
+        cycleId: "cycle-risk-warn-1",
+      }),
+    );
+  });
+
   it("daily-analysis 会优先按 analysisTimeUtc 推导整点窗口，而不是继续依赖旧 hourly 字段", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-19T11:05:00.000Z"));
@@ -577,7 +873,6 @@ describe("cron-ops-routes-v1", () => {
         autoGenerateEnabled: false,
       },
       notification: {
-        dailyAnalysisHourUtc: 1,
         telegram: {
           enabled: false,
           onDriftTrigger: false,

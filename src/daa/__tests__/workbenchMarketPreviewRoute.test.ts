@@ -49,8 +49,8 @@ function buildPreviewConfig(input?: {
 }) {
   return buildSystemConfigRow({
     strategy: {
-      constraints: {
-        tradeFeeRateBps: 5,
+      execution: {
+        feeRateBps: 5,
       },
     },
     dataSources: {

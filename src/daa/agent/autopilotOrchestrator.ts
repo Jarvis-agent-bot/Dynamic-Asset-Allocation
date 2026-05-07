@@ -99,6 +99,31 @@ function buildSkippedResult(input: {
   };
 }
 
+function buildSkippedRebalance(reason: string): AutopilotLoopResult["rebalance"] {
+  return {
+    attempted: false,
+    created: false,
+    cycleId: null,
+    proposalCount: 0,
+    autoExecute: {
+      attempted: false,
+      executed: false,
+      ordersCount: 0,
+      blockedReason: null,
+      error: null,
+    },
+    reason,
+  };
+}
+
+export function getAutopilotRebalanceBlockedReasonAfterRun(errors: string[]): string | null {
+  const meaningfulErrors = (errors || [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  if (meaningfulErrors.length === 0) return null;
+  return `认知 Agent 本轮存在 ${meaningfulErrors.length} 个错误，自动调仓已降级为仅报告，避免把不完整推理直接转成交易。`;
+}
+
 export function validateAutopilotPrerequisites(config: DaaSystemConfig): {
   ready: boolean;
   missing: string[];
@@ -174,9 +199,25 @@ async function maybeRunAgentDrivenRebalance(input: {
   };
 
   const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+  const activeTheses = await thesisStore.getActiveTheses().catch(() => []);
+  const supportedIncreaseAssetKeys = Array.from(new Set(
+    activeTheses
+      .filter((thesis) => thesis.conviction === "high" || thesis.conviction === "medium")
+      .flatMap((thesis) => thesis.assetKeys)
+      .map((assetKey) => String(assetKey || "").trim().toUpperCase())
+      .filter(Boolean),
+  ));
+  const currentTargetWeights = Object.fromEntries(
+    bootstrap.assetUniverse.map((row) => [
+      row.assetKey.toUpperCase(),
+      Math.max(0, Number(row.targetWeightPct || 0) || 0) / 100,
+    ]),
+  );
   const targetPlan = buildAgentTargetWeightOverrides({
     overlay: input.overlay,
     knownAssetKeys: bootstrap.assetUniverse.map((row) => row.assetKey),
+    currentTargetWeights,
+    supportedIncreaseAssetKeys,
     maxPositionPct: input.row.config.strategy.constraints.maxPositionPct,
     minConfidence: 70,
   });
@@ -275,30 +316,31 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
   cognitiveRun.durationMs = run.durationMs;
   cognitiveRun.errors = run.errors;
 
-  const overlay = await getAgentConfigOverlayForRun(run.runId);
-
-  const rebalance = await maybeRunAgentDrivenRebalance({
-    row,
-    overlay,
-    reason: input.reason,
-    affectedSymbols: input.affectedSymbols,
-  }).catch((error) => {
-    logSwallowed("autopilot.rebalance", error);
-    return {
-      attempted: true,
-      created: false,
-      cycleId: null,
-      proposalCount: 0,
-      autoExecute: {
-        attempted: false,
-        executed: false,
-        ordersCount: 0,
-        blockedReason: null,
-        error: error instanceof Error ? error.message : String(error || ""),
-      },
-      reason: "Agent 主动调仓执行失败。",
-    };
-  });
+  const rebalanceBlockedReason = getAutopilotRebalanceBlockedReasonAfterRun(run.errors);
+  const rebalance = rebalanceBlockedReason
+    ? buildSkippedRebalance(rebalanceBlockedReason)
+    : await maybeRunAgentDrivenRebalance({
+      row,
+      overlay: await getAgentConfigOverlayForRun(run.runId),
+      reason: input.reason,
+      affectedSymbols: input.affectedSymbols,
+    }).catch((error) => {
+      logSwallowed("autopilot.rebalance", error);
+      return {
+        attempted: true,
+        created: false,
+        cycleId: null,
+        proposalCount: 0,
+        autoExecute: {
+          attempted: false,
+          executed: false,
+          ordersCount: 0,
+          blockedReason: null,
+          error: error instanceof Error ? error.message : String(error || ""),
+        },
+        reason: "Agent 主动调仓执行失败。",
+      };
+    });
 
   return {
     skipped: false,

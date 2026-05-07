@@ -7,7 +7,7 @@ import {
   describeBrainModeSummary,
   resolveBrainConfig,
 } from "@/src/daa/brain/brainPolicy";
-import { normalizeSystemConfig } from "@/src/daa/config/systemConfig";
+import { deriveCognitiveAgentScheduleTimesUtc, normalizeSystemConfig } from "@/src/daa/config/systemConfig";
 
 describe("brain-policy", () => {
   it("advisor 模式只允许只读建议，不允许运行认知循环和模拟执行", () => {
@@ -69,6 +69,26 @@ describe("brain-policy", () => {
   it("缺省解析只回退模式，不恢复旧自动配置权限", () => {
     const brain = resolveBrainConfig(undefined);
     expect(brain).toEqual({ mode: "autopilot" });
+  });
+
+  it("认知 Agent 调度窗口只由频率派生，不再持久化旧窗口字段", () => {
+    const daily = normalizeSystemConfig({
+      cognitiveAgent: {
+        schedule: "daily",
+        scheduleTimesUtc: ["13:00", "21:00"],
+      },
+    });
+    const manual = normalizeSystemConfig({
+      cognitiveAgent: {
+        schedule: "manual_only",
+        scheduleTimesUtc: ["13:00", "21:00"],
+      },
+    });
+
+    expect("scheduleTimesUtc" in (daily.cognitiveAgent as unknown as Record<string, unknown>)).toBe(false);
+    expect("scheduleTimesUtc" in (manual.cognitiveAgent as unknown as Record<string, unknown>)).toBe(false);
+    expect(deriveCognitiveAgentScheduleTimesUtc(daily.cognitiveAgent?.schedule ?? "daily")).toEqual(["21:00"]);
+    expect(deriveCognitiveAgentScheduleTimesUtc(manual.cognitiveAgent?.schedule ?? "manual_only")).toEqual([]);
   });
 
   it("模式预设只改变大脑模式", () => {

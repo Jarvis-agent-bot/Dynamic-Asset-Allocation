@@ -176,7 +176,6 @@ export function buildWorkbenchBootstrap(
       autoAnalysisEnabled: false,
       analysisTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
-      analysisFocus: "mock",
     },
     rebalanceStrategy: DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy,
     latestCycle: null,

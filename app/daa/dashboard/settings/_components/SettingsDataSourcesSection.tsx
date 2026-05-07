@@ -16,7 +16,7 @@ export function SettingsDataSourcesSection(props: {
 
   return (
     <section id="settings-data" className="scroll-mt-28">
-      <SectionCard title="数据源与模型" description="把外部行情、资讯、汇率与 AI 解释链路放在一起管理，方便统一检查输入是否完整。">
+      <SectionCard title="数据源与模型">
         <div style={{ display: "grid", gap: 18 }}>
           <SettingsAiAnalysisBlock config={config} setConfig={setConfig} />
           <div

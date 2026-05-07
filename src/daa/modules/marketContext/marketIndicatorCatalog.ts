@@ -28,6 +28,21 @@ export const MARKET_INDICATOR_KEYS_: DaaMarketIndicatorKey[] = [
   "market_breadth",
 ];
 
+export const MARKET_INDICATOR_CONFIG_KEYS_: DaaMarketIndicatorConfigKey[] = [
+  "vix",
+  "qqqSpyRatio",
+  "fxiVolatility",
+  "kwebFxiRatio",
+  "btcEthRatio",
+  "btcVolatility",
+  "goldSilverRatio",
+  "yieldCurveSpread",
+  "usdStrength",
+  "creditSpread",
+  "inflationExpectation",
+  "marketBreadth",
+];
+
 export const MARKET_INDICATOR_KEY_BY_CONFIG_KEY_: Record<DaaMarketIndicatorConfigKey, DaaMarketIndicatorKey> = {
   vix: "vix",
   qqqSpyRatio: "qqq_spy_ratio",

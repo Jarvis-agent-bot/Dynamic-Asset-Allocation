@@ -7,7 +7,6 @@ export const runtime = "nodejs";
 type Body = {
   triggerSource?: unknown;
   triggerReason?: unknown;
-  analysisFocus?: unknown;
   manual?: unknown;
   targetWeightOverrides?: unknown;
 };
@@ -43,7 +42,6 @@ export async function POST(req: Request) {
     const data = await generateWorkbenchRebalanceCycle({
       triggerSource: toTriggerSource(payload.triggerSource),
       triggerReason: String(payload.triggerReason || "").trim(),
-      analysisFocus: String(payload.analysisFocus || "").trim() || undefined,
       manual: payload.manual === true || payload.manual === "1" || payload.manual === "true",
       targetWeightOverrides: toTargetWeightOverrides(payload.targetWeightOverrides),
     });

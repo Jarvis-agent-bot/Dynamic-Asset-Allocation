@@ -4,7 +4,7 @@ import {
   normalizeCurrencyPairToken,
   type CurrencyCode,
 } from "@/src/daa/config/currency";
-import { DEFAULT_ANALYSIS_FOCUS_ } from "@/src/daa/llm/analysisFocusDefaults";
+import { MARKET_INDICATOR_CONFIG_KEYS_ } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 
 type DaaFundKind = "equity" | "qdii" | "balanced";
 
@@ -31,7 +31,6 @@ type DaaMarketIndicatorConfigItem = {
 };
 
 export type DaaMarketIndicatorsConfig = {
-  id: string;
   enabled: boolean;
   refreshIntervalMinutes: number;
   indicators: Record<DaaMarketIndicatorConfigKey, DaaMarketIndicatorConfigItem>;
@@ -43,6 +42,18 @@ export type DaaMarketIndicatorsConfig = {
 };
 
 export type DaaBrainMode = "advisor" | "operator" | "autopilot";
+export type DaaCognitiveAgentSchedule = "2x_daily" | "daily" | "every_6h" | "manual_only";
+
+const COGNITIVE_AGENT_SCHEDULE_TIMES_: Record<DaaCognitiveAgentSchedule, string[]> = {
+  "2x_daily": ["13:00", "21:00"],
+  daily: ["21:00"],
+  every_6h: ["01:00", "07:00", "13:00", "19:00"],
+  manual_only: [],
+};
+
+export function deriveCognitiveAgentScheduleTimesUtc(schedule: DaaCognitiveAgentSchedule): string[] {
+  return [...(COGNITIVE_AGENT_SCHEDULE_TIMES_[schedule] ?? COGNITIVE_AGENT_SCHEDULE_TIMES_.daily)];
+}
 
 export type DaaSystemConfig = {
   strategy: {
@@ -57,24 +68,13 @@ export type DaaSystemConfig = {
       maxPositionPct: number;
       minNotional: number;
       maxOrderPctOfNav: number;
-      tradeFeeRateBps?: number;
     };
     execution: DaaStrategyExecutionConfig;
-    policy: {
-      baseDriftTriggerPct: number;
-      strongTrendDriftTriggerPct: number;
-      riskOffConsensusPct: number;
-      riskOffScalePct: number;
-      valueTrapThesisDriftPct: number;
-      sbIsolationScorePct: number;
-    };
     risk: {
-      maxDrawdownPct: number;
       perAssetStopLossPct: number;
       perAssetTakeProfitPct: number;
       maxConcentrationPct: number;
       correlationCapPct: number;
-      maxTotalRiskExposurePct: number;
       enforceOnExecution: boolean;
     };
   };
@@ -92,32 +92,19 @@ export type DaaSystemConfig = {
     cooldownHours: number;
     analysisTimeUtc: string;
     timezone: string;
-    analysisFocus: string;
     autoGenerateEnabled: boolean;
     /** 自动驾驶：风控通过后自动执行再平衡（需同时开启 autoGenerateEnabled） */
     autoExecuteEnabled?: boolean;
     /** 单次自动执行最大占 NAV 百分比（默认 10%） */
     autoExecuteMaxSinglePct?: number;
-    /** P1-2: 现金分类配置（对应 classifyCash 参数）*/
-    cash?: {
-      operationalReservePct?: number;
-      idleThresholdPct?: number;
-      idleCooldownDays?: number;
-      lastDepositAt?: string | null;
-    };
   };
   dataSources: {
     hfFund: {
-      id: string;
       enabled: boolean;
       funds: DaaHfFundTrack[];
-      marketScope: string[];
     };
     priceFeed: {
-      id: string;
       enabled: boolean;
-      provider: string;
-      intervalMinutes: number;
       symbols: string[];
       marketCache: {
         freshMinutes: number;
@@ -126,17 +113,12 @@ export type DaaSystemConfig = {
       };
     };
     newsFeed: {
-      id: string;
       enabled: boolean;
-      provider: string;
       query: string;
       symbols: string[];
-      valuationEnabled: boolean;
     };
     fxFeed: {
-      id: string;
       enabled: boolean;
-      provider: string;
       baseCurrency: CurrencyCode;
       pairs: string[];
     };
@@ -173,13 +155,9 @@ export type DaaSystemConfig = {
     /** 连续 LLM 失败触发熔断的阈值（默认 3） */
     circuitBreakerThreshold: number;
     /** 运行频率 */
-    schedule: "2x_daily" | "daily" | "every_6h" | "manual_only";
-    /** 运行时间 UTC（如 ["13:00", "21:00"]） */
-    scheduleTimesUtc: string[];
+    schedule: DaaCognitiveAgentSchedule;
     /** 记忆衰减率 per day（默认 0.97，约 23 天半衰期） */
     memoryDecayRate: number;
-    /** 记忆归档阈值（strength 低于此值不参与召回，默认 0.05） */
-    memoryArchiveThreshold: number;
     /** medium+ conviction thesis 超过此天数未被调查时，强制占用 1 个调查槽位（默认 7 天，防止 LLM 永远只调查 uncertain） */
     thesisStalenessDays?: number;
   };
@@ -201,7 +179,6 @@ export type DaaSystemConfig = {
     notionalCashCapPct: number;
   };
   notification: {
-    dailyAnalysisHourUtc: number;
     telegram: {
       enabled: boolean;
       onDriftTrigger: boolean;
@@ -250,28 +227,17 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       maxPositionPct: 0.3,
       minNotional: 200,
       maxOrderPctOfNav: 0.1,
-      tradeFeeRateBps: 5,
     },
     execution: {
       feeRateBps: 5,
       slippageBps: 0,
       timing: "t_plus_1_close",
     },
-    policy: {
-      baseDriftTriggerPct: 0.05,
-      strongTrendDriftTriggerPct: 0.1,
-      riskOffConsensusPct: 0.6,
-      riskOffScalePct: 0.7,
-      valueTrapThesisDriftPct: 0.12,
-      sbIsolationScorePct: 0.35,
-    },
     risk: {
-      maxDrawdownPct: 0.15,
       perAssetStopLossPct: 0.2,
       perAssetTakeProfitPct: 0.25,
       maxConcentrationPct: 0.3,
       correlationCapPct: 0.6,
-      maxTotalRiskExposurePct: 0.7,
       enforceOnExecution: true,
     },
   },
@@ -289,23 +255,17 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     cooldownHours: 72,
     analysisTimeUtc: "00:20",
     timezone: "Asia/Shanghai",
-    analysisFocus: DEFAULT_ANALYSIS_FOCUS_,
     autoGenerateEnabled: true,
     autoExecuteEnabled: true,
     autoExecuteMaxSinglePct: 10,
   },
   dataSources: {
     hfFund: {
-      id: "hf_fund.default",
       enabled: true,
       funds: DEFAULT_HF_FUNDS_,
-      marketScope: ["US", "HK", "CN"],
     },
     priceFeed: {
-      id: "price_feed.default",
       enabled: true,
-      provider: "yfinance",
-      intervalMinutes: 5,
       symbols: ["SPY", "QQQ", "BND", "TSLA"],
       marketCache: {
         freshMinutes: 15,
@@ -314,17 +274,12 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       },
     },
     newsFeed: {
-      id: "news_feed.default",
       enabled: true,
-      provider: "yahoo_rss",
       query: "SPY OR QQQ OR TSLA",
       symbols: [],
-      valuationEnabled: true,
     },
     fxFeed: {
-      id: "fx_feed.default",
       enabled: true,
-      provider: "manual",
       baseCurrency: "USD",
       pairs: ["USD/CNY", "USD/HKD", "USD/USDT"],
     },
@@ -358,7 +313,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       },
     ],
     marketIndicators: {
-      id: "market_indicators.default",
       enabled: true,
       refreshIntervalMinutes: 30,
       indicators: {
@@ -392,9 +346,7 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     memoryRecallLimit: 5,
     circuitBreakerThreshold: 3,
     schedule: "2x_daily",
-    scheduleTimesUtc: ["13:00", "21:00"],
     memoryDecayRate: 0.97,
-    memoryArchiveThreshold: 0.05,
     thesisStalenessDays: 7,
   },
   watchlistEntry: {
@@ -409,7 +361,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
     notionalCashCapPct: 0.3,
   },
   notification: {
-    dailyAnalysisHourUtc: 1,
     telegram: {
       enabled: false,
       onDriftTrigger: false,
@@ -483,16 +434,6 @@ function normalizeFundRows(input: unknown): DaaHfFundTrack[] {
   return [...out.values()];
 }
 
-const MARKET_INDICATOR_CONFIG_KEYS_: DaaMarketIndicatorConfigKey[] = [
-  "vix",
-  "qqqSpyRatio",
-  "fxiVolatility",
-  "kwebFxiRatio",
-  "btcEthRatio",
-  "btcVolatility",
-  "goldSilverRatio",
-];
-
 function normalizeMarketIndicatorWeights(
   input: unknown,
   fallback: DaaMarketIndicatorsConfig["indicators"],
@@ -521,7 +462,6 @@ function normalizeMarketIndicatorConfig(
   const source = isRecord(input) ? input : {};
   const overlays = isRecord(source.overlays) ? source.overlays : {};
   return {
-    id: String(source.id || fallback.id).trim() || fallback.id,
     enabled: toBool(source.enabled, fallback.enabled),
     refreshIntervalMinutes: Math.max(
       5,
@@ -596,15 +536,6 @@ function normalizeAnalysisTimeUtc(value: unknown, fallback: string): string {
   return `${matched[1]}:${matched[2]}`;
 }
 
-function deriveDailyAnalysisHourUtc(analysisTimeUtc: string, fallback: number): number {
-  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(analysisTimeUtc || "").trim());
-  if (!matched) return fallback;
-  const hour = Number(matched[1]);
-  const minute = Number(matched[2]);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return fallback;
-  return minute > 0 ? (hour + 1) % 24 : hour;
-}
-
 function normalizeStrategyExecutionTiming(value: unknown, fallback: DaaStrategyExecutionTiming = "t_plus_1_close"): DaaStrategyExecutionTiming {
   const text = String(value || "").trim().toLowerCase();
   if (text === "t_plus_1_close") return "t_plus_1_close";
@@ -618,14 +549,11 @@ export function getStrategyExecutionConfig(config: Pick<DaaSystemConfig, "strate
   const execution = config.strategy.execution || fallback.execution;
   const constraints = config.strategy.constraints || fallback.constraints;
   const feeRateBpsRaw = Number(execution.feeRateBps);
-  const fallbackConstraintFeeRateBps = Number(constraints.tradeFeeRateBps);
 
   return {
     maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav), 0.01, 1),
     feeRateBps: clamp(
-      Number.isFinite(feeRateBpsRaw)
-        ? feeRateBpsRaw
-        : (Number.isFinite(fallbackConstraintFeeRateBps) ? fallbackConstraintFeeRateBps : fallback.execution.feeRateBps),
+      Number.isFinite(feeRateBpsRaw) ? feeRateBpsRaw : fallback.execution.feeRateBps,
       0,
       500,
     ),
@@ -642,7 +570,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const account = isRecord(strategy.account) ? strategy.account : {};
   const constraints = isRecord(strategy.constraints) ? strategy.constraints : {};
   const execution = isRecord(strategy.execution) ? strategy.execution : {};
-  const policy = isRecord(strategy.policy) ? strategy.policy : {};
   const risk = isRecord(strategy.risk) ? strategy.risk : {};
 
   const rebalanceStrategy = isRecord(source.rebalanceStrategy) ? source.rebalanceStrategy : {};
@@ -680,39 +607,17 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         maxPositionPct: clamp(Number(constraints.maxPositionPct) || fallback.strategy.constraints.maxPositionPct, 0.01, 1),
         minNotional: toPositiveNumber(constraints.minNotional, fallback.strategy.constraints.minNotional),
         maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav) || fallback.strategy.constraints.maxOrderPctOfNav, 0.01, 1),
-        tradeFeeRateBps: clamp(
-          Number.isFinite(Number(constraints.tradeFeeRateBps))
-            ? Number(constraints.tradeFeeRateBps)
-            : Number(fallback.strategy.constraints.tradeFeeRateBps || 5),
-          0,
-          500,
-        ),
       },
       execution: {
         feeRateBps: clamp(
-          Number.isFinite(Number(execution.feeRateBps))
-            ? Number(execution.feeRateBps)
-            : (
-              Number.isFinite(Number(constraints.tradeFeeRateBps))
-                ? Number(constraints.tradeFeeRateBps)
-                : fallback.strategy.execution.feeRateBps
-            ),
+          Number.isFinite(Number(execution.feeRateBps)) ? Number(execution.feeRateBps) : fallback.strategy.execution.feeRateBps,
           0,
           500,
         ),
         slippageBps: clamp(Number(execution.slippageBps) || fallback.strategy.execution.slippageBps, 0, 500),
         timing: normalizeStrategyExecutionTiming(execution.timing, fallback.strategy.execution.timing),
       },
-      policy: {
-        baseDriftTriggerPct: clamp(Number(policy.baseDriftTriggerPct) || fallback.strategy.policy.baseDriftTriggerPct, 0.01, 0.5),
-        strongTrendDriftTriggerPct: clamp(Number(policy.strongTrendDriftTriggerPct) || fallback.strategy.policy.strongTrendDriftTriggerPct, 0.01, 0.5),
-        riskOffConsensusPct: clamp(Number(policy.riskOffConsensusPct) || fallback.strategy.policy.riskOffConsensusPct, 0.1, 1),
-        riskOffScalePct: clamp(Number(policy.riskOffScalePct) || fallback.strategy.policy.riskOffScalePct, 0.1, 1),
-        valueTrapThesisDriftPct: clamp(Number(policy.valueTrapThesisDriftPct) || fallback.strategy.policy.valueTrapThesisDriftPct, 0.01, 0.5),
-        sbIsolationScorePct: clamp(Number(policy.sbIsolationScorePct) || fallback.strategy.policy.sbIsolationScorePct, 0.1, 0.8),
-      },
       risk: {
-        maxDrawdownPct: clamp(Number(risk.maxDrawdownPct) || fallback.strategy.risk.maxDrawdownPct, 0.05, 0.5),
         perAssetStopLossPct: clamp(Number(risk.perAssetStopLossPct) || fallback.strategy.risk.perAssetStopLossPct, 0.05, 0.5),
         perAssetTakeProfitPct: clamp(
           Number(risk.perAssetTakeProfitPct) || fallback.strategy.risk.perAssetTakeProfitPct,
@@ -721,7 +626,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         ),
         maxConcentrationPct: clamp(Number(risk.maxConcentrationPct) || fallback.strategy.risk.maxConcentrationPct, 0.1, 1),
         correlationCapPct: clamp(Number(risk.correlationCapPct) || fallback.strategy.risk.correlationCapPct, 0.1, 1),
-        maxTotalRiskExposurePct: clamp(Number(risk.maxTotalRiskExposurePct) || fallback.strategy.risk.maxTotalRiskExposurePct, 0.1, 1),
         enforceOnExecution: toBool(risk.enforceOnExecution, fallback.strategy.risk.enforceOnExecution),
       },
     },
@@ -739,23 +643,17 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       cooldownHours: Math.max(1, Math.trunc(Number(rebalanceStrategy.cooldownHours) || fallback.rebalanceStrategy.cooldownHours)),
       analysisTimeUtc: normalizedAnalysisTimeUtc,
       timezone: String(rebalanceStrategy.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
-      analysisFocus: String(rebalanceStrategy.analysisFocus || fallback.rebalanceStrategy.analysisFocus).trim() || fallback.rebalanceStrategy.analysisFocus,
       autoGenerateEnabled: toBool(rebalanceStrategy.autoGenerateEnabled, fallback.rebalanceStrategy.autoGenerateEnabled),
       autoExecuteEnabled: toBool(rebalanceStrategy.autoExecuteEnabled, fallback.rebalanceStrategy.autoExecuteEnabled ?? false),
       autoExecuteMaxSinglePct: clamp(Number(rebalanceStrategy.autoExecuteMaxSinglePct) || (fallback.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10), 1, 50),
     },
     dataSources: {
       hfFund: {
-        id: String(hfFund.id || fallback.dataSources.hfFund.id).trim() || fallback.dataSources.hfFund.id,
         enabled: toBool(hfFund.enabled, fallback.dataSources.hfFund.enabled),
         funds: normalizeFundRows(hfFund.funds).length ? normalizeFundRows(hfFund.funds) : clone(fallback.dataSources.hfFund.funds),
-        marketScope: normalizeSymbols(hfFund.marketScope).length ? normalizeSymbols(hfFund.marketScope) : clone(fallback.dataSources.hfFund.marketScope),
       },
       priceFeed: {
-        id: String(priceFeed.id || fallback.dataSources.priceFeed.id).trim() || fallback.dataSources.priceFeed.id,
         enabled: toBool(priceFeed.enabled, fallback.dataSources.priceFeed.enabled),
-        provider: String(priceFeed.provider || fallback.dataSources.priceFeed.provider).trim() || fallback.dataSources.priceFeed.provider,
-        intervalMinutes: Math.max(1, Math.trunc(Number(priceFeed.intervalMinutes) || fallback.dataSources.priceFeed.intervalMinutes)),
         symbols: normalizeSymbols(priceFeed.symbols).length ? normalizeSymbols(priceFeed.symbols) : clone(fallback.dataSources.priceFeed.symbols),
         marketCache: {
           freshMinutes: Math.max(
@@ -773,17 +671,12 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         },
       },
       newsFeed: {
-        id: String(newsFeed.id || fallback.dataSources.newsFeed.id).trim() || fallback.dataSources.newsFeed.id,
         enabled: toBool(newsFeed.enabled, fallback.dataSources.newsFeed.enabled),
-        provider: String(newsFeed.provider || fallback.dataSources.newsFeed.provider).trim() || fallback.dataSources.newsFeed.provider,
         query: String(newsFeed.query || fallback.dataSources.newsFeed.query).trim(),
         symbols: normalizeSymbols(newsFeed.symbols),
-        valuationEnabled: toBool(newsFeed.valuationEnabled, fallback.dataSources.newsFeed.valuationEnabled),
       },
       fxFeed: {
-        id: String(fxFeed.id || fallback.dataSources.fxFeed.id).trim() || fallback.dataSources.fxFeed.id,
         enabled: toBool(fxFeed.enabled, fallback.dataSources.fxFeed.enabled),
-        provider: String(fxFeed.provider || fallback.dataSources.fxFeed.provider).trim() || fallback.dataSources.fxFeed.provider,
         baseCurrency: normalizeBaseCurrencyCode(fxFeed.baseCurrency, fallback.dataSources.fxFeed.baseCurrency),
         pairs: normalizePairs(fxFeed.pairs).length ? normalizePairs(fxFeed.pairs) : clone(fallback.dataSources.fxFeed.pairs),
       },
@@ -824,23 +717,22 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         memoryRecallLimit: 5,
         circuitBreakerThreshold: 3,
         schedule: "2x_daily" as const,
-        scheduleTimesUtc: ["13:00", "21:00"],
         memoryDecayRate: 0.97,
-        memoryArchiveThreshold: 0.05,
         thesisStalenessDays: 7,
       };
-      const validSchedules = new Set(["2x_daily", "daily", "every_6h", "manual_only"]);
+      const validSchedules = new Set<DaaCognitiveAgentSchedule>(["2x_daily", "daily", "every_6h", "manual_only"]);
       const rawSchedule = String(ca.schedule ?? "");
+      const schedule = (validSchedules.has(rawSchedule as DaaCognitiveAgentSchedule)
+        ? rawSchedule
+        : fb.schedule) as DaaCognitiveAgentSchedule;
       return {
         enabled: toBool(ca.enabled, fb.enabled),
         maxInvestigationTargets: clamp(Math.trunc(Number(ca.maxInvestigationTargets) || fb.maxInvestigationTargets), 1, 10),
         reviewIntervalDays: clamp(Math.trunc(Number(ca.reviewIntervalDays) || fb.reviewIntervalDays), 1, 90),
         memoryRecallLimit: clamp(Math.trunc(Number(ca.memoryRecallLimit) || fb.memoryRecallLimit), 1, 20),
         circuitBreakerThreshold: clamp(Math.trunc(Number(ca.circuitBreakerThreshold) || fb.circuitBreakerThreshold), 1, 10),
-        schedule: (validSchedules.has(rawSchedule) ? rawSchedule : fb.schedule) as "2x_daily" | "daily" | "every_6h" | "manual_only",
-        scheduleTimesUtc: Array.isArray(ca.scheduleTimesUtc) ? (ca.scheduleTimesUtc as string[]).filter(t => /^\d{1,2}:\d{2}$/.test(String(t))).slice(0, 4) : clone(fb.scheduleTimesUtc),
+        schedule,
         memoryDecayRate: clamp(Number(ca.memoryDecayRate) || fb.memoryDecayRate, 0.5, 1.0),
-        memoryArchiveThreshold: clamp(Number(ca.memoryArchiveThreshold) || fb.memoryArchiveThreshold, 0.01, 0.5),
         thesisStalenessDays: clamp(Math.trunc(Number(ca.thesisStalenessDays) || fb.thesisStalenessDays || 7), 1, 60),
       };
     })(),
@@ -866,10 +758,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
       };
     })(),
     notification: {
-      dailyAnalysisHourUtc: deriveDailyAnalysisHourUtc(
-        normalizedAnalysisTimeUtc,
-        Math.min(23, Math.max(0, Math.trunc(Number(notification.dailyAnalysisHourUtc) || fallback.notification.dailyAnalysisHourUtc))),
-      ),
       telegram: {
         enabled: toBool(notificationTelegram.enabled, fallback.notification.telegram.enabled),
         onDriftTrigger: toBool(notificationTelegram.onDriftTrigger, fallback.notification.telegram.onDriftTrigger),

@@ -2,8 +2,6 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 import {
   CheckboxRow,
-  FieldLabel,
-  FormInput,
   SectionCard,
   settingsGridCols2Style,
   type SettingsConfigSetter,
@@ -17,7 +15,7 @@ export function SettingsHumanFactorSection(props: {
 
   return (
     <section id="settings-human-factor" className="scroll-mt-28">
-      <SectionCard title="人因输入与基金池" description="把人工观察范围与辅助信号放到数据输入层统一管理。">
+      <SectionCard title="人因输入与基金池">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
             checked={config.dataSources.hfFund.enabled}
@@ -37,33 +35,6 @@ export function SettingsHumanFactorSection(props: {
           >
             启用人因信号
           </CheckboxRow>
-
-          <div>
-            <FieldLabel>市场范围</FieldLabel>
-            <FormInput
-              value={config.dataSources.hfFund.marketScope.join(", ")}
-              onChange={(e) => {
-                const marketScope = e.target.value
-                  .split(/[,\s]+/g)
-                  .map((item) => item.trim().toUpperCase())
-                  .filter(Boolean);
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        dataSources: {
-                          ...prev.dataSources,
-                          hfFund: {
-                            ...prev.dataSources.hfFund,
-                            marketScope: [...new Set(marketScope)],
-                          },
-                        },
-                      }
-                    : prev,
-                );
-              }}
-            />
-          </div>
 
           <div
             style={{

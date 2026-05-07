@@ -23,7 +23,7 @@ function makeBootstrap(overrides?: Partial<WorkbenchBootstrap>): WorkbenchBootst
   return {
     baseCurrency: "CNY",
     assetRows: [],
-    rebalanceStrategy: { analysisFocus: [] } as never,
+    rebalanceStrategy: {},
     marketContext: null,
     positions: [],
     candidateAssets: [],

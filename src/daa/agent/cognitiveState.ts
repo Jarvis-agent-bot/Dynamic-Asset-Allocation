@@ -130,9 +130,7 @@ export const CognitiveStateAnnotation = Annotation.Root({
     memoryRecallLimit: number;
     circuitBreakerThreshold: number;
     schedule?: string;
-    scheduleTimesUtc?: string[];
     memoryDecayRate?: number;
-    memoryArchiveThreshold?: number;
     maxReactRounds?: number;
     thesisStalenessDays?: number;
   } | null>({ reducer: (_, b) => b, default: () => null }),

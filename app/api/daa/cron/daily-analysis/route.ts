@@ -17,7 +17,6 @@ export const runtime = "nodejs";
 
 function resolveScheduledHourUtc(config: {
   rebalanceStrategy?: { analysisTimeUtc?: unknown };
-  notification?: { dailyAnalysisHourUtc?: unknown };
 }): number {
   const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(config.rebalanceStrategy?.analysisTimeUtc || "").trim());
   if (matched) {
@@ -27,10 +26,7 @@ function resolveScheduledHourUtc(config: {
       return minute > 0 ? (hour + 1) % 24 : hour;
     }
   }
-  const fallbackHour = Number(config.notification?.dailyAnalysisHourUtc);
-  return Number.isFinite(fallbackHour)
-    ? Math.min(23, Math.max(0, Math.trunc(fallbackHour)))
-    : 1;
+  return 1;
 }
 
 type DailyAnalysisJobResult = {

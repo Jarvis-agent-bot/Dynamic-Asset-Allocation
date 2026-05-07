@@ -28,7 +28,7 @@ function makeBootstrap(): WorkbenchBootstrap {
   return {
     baseCurrency: "CNY",
     assetRows: [],
-    rebalanceStrategy: { analysisFocus: [] },
+    rebalanceStrategy: {},
     marketContext: null,
     positions: [],
     candidateAssets: [],

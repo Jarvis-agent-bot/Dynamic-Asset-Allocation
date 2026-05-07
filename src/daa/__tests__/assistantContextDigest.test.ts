@@ -38,9 +38,7 @@ describe("assistant-context-digest", () => {
         memoryRecallLimit: 5,
         circuitBreakerThreshold: 3,
         schedule: "daily",
-        scheduleTimesUtc: ["02:00"],
         memoryDecayRate: 0.97,
-        memoryArchiveThreshold: 0.05,
         thesisStalenessDays: 7,
       },
     });

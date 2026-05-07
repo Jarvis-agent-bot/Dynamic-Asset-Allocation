@@ -214,21 +214,6 @@ export type RebalanceCycle = {
   createdAt: string;
 };
 
-/**
- * P1-2: 现金分类配置（对应 classifyCash 中的 config 参数）。
- * 放入 RebalanceStrategyConfig.cash，避免 (strategy as any).cash 不安全访问。
- */
-type RebalanceCashConfig = {
-  /** 运营储备占比（0-1），默认 0 */
-  operationalReservePct?: number;
-  /** 闲置触发阈值占比（0-1），默认 0.1 */
-  idleThresholdPct?: number;
-  /** 闲置冷静期天数，默认 7 */
-  idleCooldownDays?: number;
-  /** 最近入金时间（ISO 字符串），用于冷静期计算 */
-  lastDepositAt?: string | null;
-};
-
 export type RebalanceStrategyConfig = {
   calendar: {
     enabled: boolean;
@@ -243,10 +228,7 @@ export type RebalanceStrategyConfig = {
   cooldownHours: number;
   analysisTimeUtc: string;
   timezone: string;
-  analysisFocus: string;
   autoGenerateEnabled: boolean;
-  /** P1-2: 现金分类配置，可选（未配置时使用 classifyCash 默认值）*/
-  cash?: RebalanceCashConfig;
 };
 
 type WorkbenchTradeOrderView = TradeTicket & {
@@ -315,7 +297,6 @@ export type WorkbenchRebalanceCycleReport = {
 export type GenerateRebalanceCycleInput = {
   triggerSource?: RebalanceTriggerSource;
   triggerReason?: string;
-  analysisFocus?: string;
   manual?: boolean;
   /**
    * 临时目标权重覆盖（0-1），用于 Agent 全权调仓。
@@ -467,7 +448,6 @@ type WorkbenchRebalanceConfig = {
   autoAnalysisEnabled: boolean;
   analysisTimeUtc: string;
   timezone: string;
-  analysisFocus: string;
 };
 
 export type WorkbenchExecutionExecuteInput = {

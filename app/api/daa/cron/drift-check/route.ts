@@ -75,10 +75,11 @@ async function runDriftCheck() {
     } | null = null;
 
     if (strategy.autoGenerateEnabled) {
-      if (hasDrift) {
+      const hasWatchlistEntryPath = system.config.watchlistEntry?.enabled === true;
+      if (hasDrift || hasWatchlistEntryPath) {
         generated = await generateWorkbenchRebalanceCycle({
           triggerSource: "drift",
-          triggerReason: "偏移量阈值触发",
+          triggerReason: hasDrift ? "偏移量阈值触发" : "观察列表自动建仓检查",
           manual: false,
         });
       }
@@ -97,7 +98,7 @@ async function runDriftCheck() {
         );
 
         const msgParts = [
-          "DAA 偏移触发通知",
+          hasDrift ? "DAA 偏移触发通知" : "DAA 自动调仓触发通知",
           cycle ? `Cycle: ${cycle.cycleId}` : "未生成周期（自动生成已关闭）",
           `偏移标的: ${driftedAssets.length} 个`,
           ...driftLines,

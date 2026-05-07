@@ -18,10 +18,7 @@ export function SettingsMarketContextBlock(props: {
   const { config, setConfig } = props;
 
   return (
-    <SubsectionCard
-      title="市场状态层"
-      description="把各市场的温度、风格和风险提示整理成统一上下文，只影响执行节奏和解释层，不直接改写底层行情。"
-    >
+    <SubsectionCard title="市场状态层">
       <div
         style={{
           padding: 16,
@@ -86,7 +83,7 @@ export function SettingsMarketContextBlock(props: {
           <div style={{ gridColumn: "1 / -1", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", padding: "10px 12px" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>市场划分说明</div>
             <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)", lineHeight: 1.7 }}>
-              美股使用恐慌指数与成长/大盘比；港股 / 中概使用港中概波动率与中概互联/大盘比；加密使用比特币/以太坊比与比特币波动率；宏观防御使用金银比作为辅助观察。
+              美股使用恐慌指数、成长/大盘比与市场广度；港股 / 中概使用港中概波动率与中概互联/大盘比；加密使用比特币/以太坊比与比特币波动率；宏观层使用金银比、收益率曲线、美元、信用与通胀代理指标。
             </div>
           </div>
         </div>
@@ -103,7 +100,7 @@ export function SettingsMarketContextBlock(props: {
             lineHeight: 1.7,
           }}
         >
-          数据源对照：美股恐慌指数 → ^VIX；美股成长/大盘比 → QQQ / SPY；港中概波动率 → FXI；中概互联/大盘比 → KWEB / FXI；比特币/以太坊比 → BTC-USD / ETH-USD；比特币波动率 → BTC-USD；金银比 → GC=F / SI=F。
+          数据源对照：VIX → ^VIX；QQQ/SPY → QQQ / SPY；FXI 波动率 → FXI；KWEB/FXI → KWEB / FXI；BTC/ETH → BTC-USD / ETH-USD；BTC 波动率 → BTC-USD；金银比 → GC=F / SI=F；收益率曲线 → IEF / SHY；美元 → UUP；信用利差 → HYG / LQD；通胀预期 → TIP / IEF；市场广度 → RSP / SPY。
         </div>
 
         <div style={{ marginTop: 16 }}>

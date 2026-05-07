@@ -1,13 +1,16 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { evaluateAutoRebalanceAuthority, type AutomationAuthorityDecision, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
-import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck, RebalanceCycle, RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-import { findAutoExecuteSingleOrderBreach } from "./automationGuards";
+import {
+  findAutoExecuteSingleOrderBreach,
+  findAutoExecuteTurnoverBreach,
+} from "./automationGuards";
 
 export type AutoRebalanceExecutionResult = {
   attempted: boolean;
@@ -47,8 +50,29 @@ async function notifyAutoExecutionIssue(input: {
   await Promise.allSettled(sends);
 }
 
+function selectedProposals(proposals: RebalanceProposal[]): RebalanceProposal[] {
+  return proposals.filter((row) => row.selected !== false);
+}
+
+function findAutoExecutionRiskBreach(input: {
+  riskCheck?: PreTradeRiskCheck | null;
+  proposals: RebalanceProposal[];
+}): string | null {
+  const riskCheck = input.riskCheck ?? null;
+  if (!riskCheck || riskCheck.overallStatus === "pass") return null;
+
+  const selected = selectedProposals(input.proposals);
+  const pureRiskReductionSell = selected.length > 0 && selected.every((row) => row.side === "SELL");
+  if (riskCheck.overallStatus === "warn" && pureRiskReductionSell) return null;
+
+  const items = Array.isArray(riskCheck.items) ? riskCheck.items : [];
+  const firstItem = items.find((item) => item.status !== "pass") ?? null;
+  const detail = firstItem ? `；${firstItem.rule}: ${firstItem.message}` : "";
+  return `[preTradeRiskCheck 守门] 自动执行要求风控完全通过，当前状态为 ${riskCheck.overallStatus}${detail}`;
+}
+
 export async function executeAutoRebalanceCycle(input: {
-  cycle: Pick<RebalanceCycle, "cycleId" | "proposals">;
+  cycle: Pick<RebalanceCycle, "cycleId" | "proposals"> & { riskCheck?: PreTradeRiskCheck | null };
   systemConfig: DaaSystemConfig;
   triggerSource: AutomationAuthorityTrigger;
   totalEquity?: number | null;
@@ -62,11 +86,12 @@ export async function executeAutoRebalanceCycle(input: {
     authority: null,
   };
 
+  const selectedProposalCount = selectedProposals(input.cycle.proposals).length;
   const authority = evaluateAutoRebalanceAuthority({
     systemConfig: input.systemConfig,
     triggerSource: input.triggerSource,
     cycleId: input.cycle.cycleId,
-    proposalCount: input.cycle.proposals.length,
+    proposalCount: selectedProposalCount,
     executionVenueMode: "local",
   });
   if (!authority.allowed) {
@@ -106,10 +131,54 @@ export async function executeAutoRebalanceCycle(input: {
     };
   }
 
+  const turnoverBreach = findAutoExecuteTurnoverBreach({
+    totalEquity,
+    maxTurnoverPct: input.systemConfig.strategy.constraints.maxOrderPctOfNav,
+    proposals: input.cycle.proposals,
+  });
+  if (turnoverBreach) {
+    const message = turnoverBreach.message;
+    logSwallowed(`${input.triggerSource}.autoExecuteTurnoverGate`, new Error(message));
+    await notifyAutoExecutionIssue({
+      systemConfig: input.systemConfig,
+      eventType: "auto_execute_blocked",
+      triggerSource: input.triggerSource,
+      cycleId: input.cycle.cycleId,
+      message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${message}`,
+      requestJson: { reason: "maxOrderPctOfNav", totalNotional: turnoverBreach.totalNotional },
+    }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteTurnoverGateNotify`, err));
+    return {
+      ...base,
+      blockedReason: message,
+      authority,
+    };
+  }
+
+  const riskBreach = findAutoExecutionRiskBreach({
+    riskCheck: input.cycle.riskCheck ?? null,
+    proposals: input.cycle.proposals,
+  });
+  if (riskBreach) {
+    logSwallowed(`${input.triggerSource}.autoExecuteRiskGate`, new Error(riskBreach));
+    await notifyAutoExecutionIssue({
+      systemConfig: input.systemConfig,
+      eventType: "auto_execute_blocked",
+      triggerSource: input.triggerSource,
+      cycleId: input.cycle.cycleId,
+      message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${riskBreach}`,
+      requestJson: { reason: "preTradeRiskCheck", riskStatus: input.cycle.riskCheck?.overallStatus ?? null },
+    }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteRiskGateNotify`, err));
+    return {
+      ...base,
+      blockedReason: riskBreach,
+      authority,
+    };
+  }
+
   try {
     const execResult = await executeRebalanceViaGateway({
       cycleId: input.cycle.cycleId,
-      executeMode: "all",
+      executeMode: "selected",
       notifyMode: "fanout",
     });
     const executedCount = execResult.logs.filter((row) => (

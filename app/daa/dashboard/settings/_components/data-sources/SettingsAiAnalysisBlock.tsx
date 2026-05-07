@@ -228,10 +228,7 @@ export function SettingsAiAnalysisBlock(props: {
   };
 
   return (
-    <SubsectionCard
-      title="AI 解读"
-      description="配置多模型支持：分析解读、决策执行、深度研究可使用不同模型。"
-    >
+    <SubsectionCard title="AI 解读">
       <div className="mb-4 rounded-xl border border-[rgba(125,211,252,0.18)] bg-[rgba(56,189,248,0.08)] p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>

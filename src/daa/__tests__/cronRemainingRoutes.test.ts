@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextResponse } from 'next/server';
-import { buildSystemConfigRow } from '@/src/daa/__tests__/testDataFactories';
+import {
+  buildAssetUniverseView,
+  buildSystemConfigRow,
+  buildWorkbenchBootstrap as buildWorkbenchBootstrapFixture,
+} from '@/src/daa/__tests__/testDataFactories';
 
 vi.mock('@/src/daa/cron/auth', () => ({
   requireCronAuth: vi.fn(async () => null),
@@ -14,7 +18,6 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
         drift: { enabled: true, thresholdPct: 0.05 },
       },
       notification: {
-        dailyAnalysisHourUtc: new Date().getUTCHours(),
         telegram: {
           enabled: true,
           onDriftTrigger: true,
@@ -119,11 +122,15 @@ function buildDriftConfig(input: {
   autoGenerateEnabled: boolean;
   telegramEnabled?: boolean;
   feishuEnabled?: boolean;
+  watchlistEntryEnabled?: boolean;
 }) {
   return buildSystemConfigRow({
     rebalanceStrategy: {
       autoGenerateEnabled: input.autoGenerateEnabled,
       drift: { enabled: true, thresholdPct: 0.05, checkFrequency: 'daily' },
+    },
+    watchlistEntry: {
+      enabled: input.watchlistEntryEnabled ?? false,
     },
     notification: {
       telegram: {
@@ -261,6 +268,49 @@ describe('cron-remaining-routes-v1', () => {
     });
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('cycle-drift-1');
+  });
+
+  it('drift-check 在无持仓偏移但开启 watchlistEntry 时仍进入生成服务', async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildDriftConfig({
+      autoGenerateEnabled: true,
+      telegramEnabled: true,
+      feishuEnabled: false,
+      watchlistEntryEnabled: true,
+    }));
+    vi.mocked(buildWorkbenchBootstrap).mockResolvedValue(buildWorkbenchBootstrapFixture({
+      account: { cash: 3000, investableCash: 3000, frozenCash: 0, totalEquity: 50000 },
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: 'US::SPY',
+          symbol: 'SPY',
+          holdingQty: 0,
+          lastPrice: 500,
+          holdingPrice: 0,
+          gapPct: null,
+          watchEnabled: true,
+          targetWeightHint: 0.05,
+        }),
+      ],
+      marketContext: { regime: 'risk_on', indicators: [], scopes: [] },
+    }));
+
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data).toMatchObject({
+      driftDetected: false,
+      driftedAssetCount: 0,
+      created: true,
+      cycleId: 'cycle-drift-1',
+    });
+    expect(vi.mocked(generateWorkbenchRebalanceCycle)).toHaveBeenCalledWith({
+      triggerSource: 'drift',
+      triggerReason: '观察列表自动建仓检查',
+      manual: false,
+    });
+    expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('自动调仓触发');
   });
 
   it('hf-ingest 在 fallback_seed 时记录 partial job log', async () => {

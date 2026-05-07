@@ -16,6 +16,7 @@ import {
   listDaaRebalanceCycles,
   listDaaTradeTickets,
   patchDaaRebalanceCycle,
+  patchDaaAssetUniverseRow,
   upsertDaaCycleReport,
   type DaaStoreRebalanceCycle,
 } from "@/src/daa/store/daaStorePg";
@@ -39,6 +40,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   applyTargetWeightOverridesToBootstrap,
   buildEmptyAutoTriggerSkipMessage,
+  filterRecentAutoTradeReversals,
 } from "@/src/daa/automation/automationGuards";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
@@ -110,6 +112,65 @@ function relabelAgentEntryProposals(input: {
       reason: proposal.reason.replace(/^观察列表目标建仓/, "Agent 目标建仓"),
     };
   });
+}
+
+function normalizeTargetWeightOverridesSnapshot(
+  targetWeightOverrides: Record<string, number> | null | undefined,
+): Record<string, number> | null {
+  const entries = Object.entries(targetWeightOverrides || {})
+    .map(([assetKey, value]) => [
+      assetKey.trim().toUpperCase(),
+      Math.max(0, Math.min(1, Number(value) || 0)),
+    ] as const)
+    .filter(([assetKey, value]) => assetKey && Number.isFinite(value));
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+function readAgentTargetWeightOverridesFromCycle(
+  cycle: Pick<DaaStoreRebalanceCycle, "agentDecisionSnapshot">,
+): Record<string, number> | null {
+  const snapshot = cycle.agentDecisionSnapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+  const raw = (snapshot as Record<string, unknown>).targetWeightOverrides;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw as Record<string, unknown>)
+    .map(([assetKey, value]) => [
+      assetKey.trim().toUpperCase(),
+      Math.max(0, Math.min(1, Number(value) || 0)),
+    ] as const)
+    .filter(([assetKey, value]) => assetKey && Number.isFinite(value));
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+async function persistExecutedAgentTargetWeights(input: {
+  cycle: DaaStoreRebalanceCycle;
+  cycleLogs: Awaited<ReturnType<typeof listDaaTradeTickets>>;
+}): Promise<number> {
+  const targetWeightOverrides = readAgentTargetWeightOverridesFromCycle(input.cycle);
+  if (!targetWeightOverrides) return 0;
+
+  const executedAssetKeys = new Set(
+    input.cycleLogs
+      .filter((row) => row.status === "executed")
+      .map((row) => row.assetKey.toUpperCase()),
+  );
+  const entries = Object.entries(targetWeightOverrides)
+    .filter(([assetKey]) => executedAssetKeys.has(assetKey));
+  if (entries.length === 0) return 0;
+
+  const results = await Promise.allSettled(entries.map(([assetKey, targetWeightHint]) =>
+    patchDaaAssetUniverseRow({
+      assetKey,
+      watchEnabled: true,
+      targetWeightHint,
+    }),
+  ));
+  for (const result of results) {
+    if (result.status === "rejected") {
+      logSwallowed("workbenchRebalanceCycleService.persistAgentTarget", result.reason);
+    }
+  }
+  return results.filter((result) => result.status === "fulfilled").length;
 }
 
 function isPureRiskReductionAgentCycle(input: {
@@ -351,8 +412,6 @@ export async function generateWorkbenchRebalanceCycle(
   }
 
   // ── Step B: 现金三层分类 ─────────────────────────────────────────
-  // P1-2: strategy.cash 已在 RebalanceStrategyConfig 中定义，无需 as any
-  const cashConfig = strategy.cash ?? {};
   const cashClassification = classifyCash({
     totalCash: bootstrap.account.cash,
     frozenCash: bootstrap.account.frozenCash,
@@ -364,11 +423,11 @@ export async function generateWorkbenchRebalanceCycle(
       holdingTags: row.holdingTags ?? [],
     })),
     config: {
-      operationalReservePct: toFinite(cashConfig.operationalReservePct, 0),
-      idleThresholdPct: toFinite(cashConfig.idleThresholdPct, 0.1),
-      idleCooldownDays: toFinite(cashConfig.idleCooldownDays, 7),
+      operationalReservePct: 0,
+      idleThresholdPct: 0.1,
+      idleCooldownDays: 7,
     },
-    lastDepositAt: cashConfig.lastDepositAt ?? null,
+    lastDepositAt: null,
   });
 
   // ── 手动触发 + 无 proposals → 组合健康，返回洞察快照 ─────────────
@@ -508,15 +567,29 @@ export async function generateWorkbenchRebalanceCycle(
     logSwallowed("workbenchRebalanceCycleService.tlhScan", err);
   }
 
-  const mergedProposals = filterSmallCycleProposals({
+  let mergedProposals = filterSmallCycleProposals({
     proposals: [...draft.proposals, ...tlhProposals],
     minNotionalBase: systemRow.config.strategy.constraints.minNotional,
   });
-  if (shouldCheckAgentRiskReductionException && !isPureRiskReductionAgentCycle({
+  const isAgentPureRiskReduction = triggerSource === "agent_trigger" && isPureRiskReductionAgentCycle({
     bootstrap,
     proposals: mergedProposals,
     maxPositionPct: systemRow.config.strategy.constraints.maxPositionPct,
-  })) {
+  });
+  const reversalGuard = !manual && triggerSource !== "risk" && !isAgentPureRiskReduction
+    ? filterRecentAutoTradeReversals({
+      proposals: mergedProposals,
+      recentTrades: await listDaaTradeTickets({ status: "executed", limit: 300 }),
+    })
+    : { proposals: mergedProposals, blocked: [] };
+  mergedProposals = reversalGuard.proposals;
+  if (reversalGuard.blocked.length > 0 && mergedProposals.length === 0) {
+    return skipWithLatest(
+      `自动调仓反向交易冷却中：${reversalGuard.blocked.map((row) => row.blockedReason).join("；")}`,
+      { attachLatestCycle: true },
+    );
+  }
+  if (shouldCheckAgentRiskReductionException && !isAgentPureRiskReduction) {
     return skipWithLatest(
       `冷静期生效中，${cooldownHours} 小时内仅允许纯降风险 SELL；本轮 Agent 调整未满足放行条件`,
       { skippedByCooldown: true, cooldownUntil: autoCooldownUntil, attachLatestCycle: true },
@@ -549,6 +622,9 @@ export async function generateWorkbenchRebalanceCycle(
     `Agent(${agentResult.agentStatus}): ${agentResult.proposals.length} 个提案`,
     marketContext ? `市场环境: ${marketRegimeLabelZh(marketContext.regime)} / 风险分 ${marketContext.riskOffScorePct.toFixed(1)}` : null,
     agentResult.llmSummary ? `Agent摘要: ${agentResult.llmSummary.slice(0, 120)}` : null,
+    reversalGuard.blocked.length > 0
+      ? `反向交易冷却: ${reversalGuard.blocked.map((row) => row.blockedReason).join("；").slice(0, 240)}`
+      : null,
     cashClassification.cashIdleWarning
       ? `现金提示: 闲置资金 ${(cashClassification.investableIdlePct * 100).toFixed(1)}%（已${cashClassification.cashIdleDays}天）`
       : null,
@@ -557,11 +633,14 @@ export async function generateWorkbenchRebalanceCycle(
       : null,
   ].filter(Boolean).join("\n");
 
+  const normalizedAgentTargetWeightOverrides = normalizeTargetWeightOverridesSnapshot(input.targetWeightOverrides);
   const agentDecisionSnapshot: Record<string, unknown> | null = {
     status: agentResult.agentStatus,
     summary: agentResult.llmSummary,
     marketRegime: agentResult.marketRegime,
     tokensUsed: agentResult.tokensUsed,
+    targetWeightOverrides: normalizedAgentTargetWeightOverrides,
+    targetWeightLifecycle: normalizedAgentTargetWeightOverrides ? "persist_after_successful_execution" : null,
   };
 
   const created = await createDaaRebalanceCycle({
@@ -920,6 +999,10 @@ export async function executeWorkbenchRebalanceCycle(input: {
 
   const logs = await listDaaTradeTickets({ limit: 300 });
   const cycleLogs = logs.filter((row) => createdTicketIds.includes(row.ticketId));
+  const persistedAgentTargetCount = await persistExecutedAgentTargetWeights({
+    cycle,
+    cycleLogs,
+  });
   const watchlistEntryKeys = new Set(
     executionRows
       .filter((row) => (row as RebalanceProposal).proposalType === "watchlist_entry")
@@ -987,6 +1070,9 @@ export async function executeWorkbenchRebalanceCycle(input: {
   const executionNotes = priceAdjustmentNotes.length > 0
     ? `\n[执行价格] ${priceAdjustmentNotes.join(" | ")}`
     : "";
+  const agentTargetNotes = persistedAgentTargetCount > 0
+    ? `\n[Agent目标] 已将 ${persistedAgentTargetCount} 个已成交标的的目标权重写入持久目标，避免后续 drift 反向卖出。`
+    : "";
   const hasOpenOrders = submittedCount > 0;
 
   const completed = await patchDaaRebalanceCycle({
@@ -1001,7 +1087,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
       totalNotional,
       newMaxDriftPct,
     },
-    notes: (cycle.notes || "") + executionNotes || null,
+    notes: (cycle.notes || "") + executionNotes + agentTargetNotes || null,
   });
 
   if (hasOpenOrders) {

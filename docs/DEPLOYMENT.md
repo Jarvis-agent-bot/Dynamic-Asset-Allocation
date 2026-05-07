@@ -212,7 +212,7 @@ docker compose up -d daa-web
 | `30 1 * * *` | `dividend-refresh` | 每日 01:30 刷新分红数据 |
 | `20 0 * * *` | `cache-cleanup` | 每日 00:20 统一清理过期缓存 |
 | `*/30 * * * *` | `health-check` | 每 30 分钟检查核心 cron 是否正常，失败 TG 告警 |
-| `0 * * * *` | `cognitive-agent` | 每小时触发（路由内按 `schedule` + `scheduleTimesUtc ±30min` 自门控） |
+| `0 * * * *` | `cognitive-agent` | 每小时触发（路由内按 `schedule` 派生窗口自门控） |
 | `40 3 * * *` | `entity-backfill` | 每日 03:40 幂等补齐存量记忆/论点的实体图 |
 | （手动） | `monthly-report` | 月度报告（手动触发） |
 
@@ -225,7 +225,6 @@ curl -X POST -H "x-daa-cron-token: $CRON_TOKEN" \
 ```
 
 常见调试参数：
-- `cognitive-agent?force=1` — 忽略 `scheduleTimesUtc` 强制跑
 - `entity-backfill?memoryLimit=1000&thesisLimit=1000` — 增大批量
 
 ---

@@ -7,6 +7,24 @@ export type AutoExecuteBreachProposal = {
   assetKey?: string | null;
   symbol?: string | null;
   suggestedNotional?: number | null;
+  selected?: boolean | null;
+};
+
+export type RecentExecutedTradeForReversal = {
+  ticketId?: string | null;
+  cycleId?: string | null;
+  assetKey?: string | null;
+  symbol?: string | null;
+  side?: string | null;
+  status?: string | null;
+  executedAt?: string | null;
+  createdAt?: string | null;
+};
+
+export type AutoReversalBlockedProposal<T> = T & {
+  blockedReason: string;
+  cooldownUntil: string;
+  lastTrade: RecentExecutedTradeForReversal;
 };
 
 export function buildEmptyAutoTriggerSkipMessage(input: {
@@ -40,6 +58,7 @@ export function findAutoExecuteSingleOrderBreach(input: {
   if (!(totalEquity > 0) || !(maxSinglePct > 0)) return null;
 
   const proposal = input.proposals.find((row) => {
+    if (row.selected === false) return false;
     const notional = Math.max(0, Number(row.suggestedNotional) || 0);
     return notional / totalEquity > maxSinglePct;
   });
@@ -51,6 +70,101 @@ export function findAutoExecuteSingleOrderBreach(input: {
     ...proposal,
     message: `[autoExecuteMaxSinglePct 守门] ${label} 单笔 $${notional.toFixed(0)} 超过 NAV 的 ${(maxSinglePct * 100).toFixed(1)}% 上限，已阻止自动执行`,
   };
+}
+
+export function findAutoExecuteTurnoverBreach(input: {
+  totalEquity: number;
+  maxTurnoverPct: number;
+  proposals: AutoExecuteBreachProposal[];
+}): { totalNotional: number; message: string } | null {
+  const totalEquity = Math.max(0, Number(input.totalEquity) || 0);
+  const maxTurnoverPct = Math.max(0, Number(input.maxTurnoverPct) || 0);
+  if (!(totalEquity > 0) || !(maxTurnoverPct > 0)) return null;
+
+  const totalNotional = input.proposals
+    .filter((row) => row.selected !== false)
+    .reduce((sum, row) => sum + Math.max(0, Number(row.suggestedNotional) || 0), 0);
+  if (!(totalNotional / totalEquity > maxTurnoverPct)) return null;
+
+  return {
+    totalNotional,
+    message: `[maxOrderPctOfNav 守门] 自动执行总换手 $${totalNotional.toFixed(0)} 超过 NAV 的 ${(maxTurnoverPct * 100).toFixed(1)}% 上限，已阻止自动执行`,
+  };
+}
+
+function isOppositeSide(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = String(a || "").trim().toUpperCase();
+  const right = String(b || "").trim().toUpperCase();
+  return (left === "BUY" && right === "SELL") || (left === "SELL" && right === "BUY");
+}
+
+function toTradeMs(trade: RecentExecutedTradeForReversal): number {
+  const text = trade.executedAt || trade.createdAt || "";
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+export function filterRecentAutoTradeReversals<T extends {
+  assetKey: string;
+  symbol?: string | null;
+  side: "BUY" | "SELL";
+  selected?: boolean | null;
+}>(input: {
+  proposals: T[];
+  recentTrades: RecentExecutedTradeForReversal[];
+  nowMs?: number;
+  buyToSellCooldownDays?: number;
+  sellToBuyCooldownDays?: number;
+}): {
+  proposals: T[];
+  blocked: Array<AutoReversalBlockedProposal<T>>;
+} {
+  const nowMs = Number.isFinite(input.nowMs) ? Number(input.nowMs) : Date.now();
+  const buyToSellCooldownMs = Math.max(0, Number(input.buyToSellCooldownDays ?? 14) || 0) * 24 * 60 * 60 * 1000;
+  const sellToBuyCooldownMs = Math.max(0, Number(input.sellToBuyCooldownDays ?? 3) || 0) * 24 * 60 * 60 * 1000;
+  const executedTrades = input.recentTrades
+    .filter((trade) => String(trade.status || "").trim().toLowerCase() === "executed")
+    .map((trade) => ({ trade, ms: toTradeMs(trade) }))
+    .filter((row) => Number.isFinite(row.ms))
+    .sort((a, b) => b.ms - a.ms);
+
+  const proposals: T[] = [];
+  const blocked: Array<AutoReversalBlockedProposal<T>> = [];
+
+  for (const proposal of input.proposals) {
+    if (proposal.selected === false) {
+      proposals.push(proposal);
+      continue;
+    }
+    const assetKey = proposal.assetKey.toUpperCase();
+    const tradeRow = executedTrades.find(({ trade }) => (
+      String(trade.assetKey || "").trim().toUpperCase() === assetKey
+      && isOppositeSide(trade.side, proposal.side)
+    ));
+    if (!tradeRow) {
+      proposals.push(proposal);
+      continue;
+    }
+
+    const cooldownMs = String(tradeRow.trade.side || "").trim().toUpperCase() === "BUY"
+      ? buyToSellCooldownMs
+      : sellToBuyCooldownMs;
+    if (!(cooldownMs > 0) || tradeRow.ms + cooldownMs <= nowMs) {
+      proposals.push(proposal);
+      continue;
+    }
+
+    const cooldownUntil = new Date(tradeRow.ms + cooldownMs).toISOString();
+    const label = formatAssetLabel({ symbol: proposal.symbol || tradeRow.trade.symbol || undefined, assetKey: proposal.assetKey });
+    blocked.push({
+      ...proposal,
+      lastTrade: tradeRow.trade,
+      cooldownUntil,
+      blockedReason: `${label} 最近 ${tradeRow.trade.side} 后尚在反向交易冷却期，自动 ${proposal.side} 已跳过（冷却至 ${cooldownUntil}）`,
+    });
+  }
+
+  return { proposals, blocked };
 }
 
 export function shouldSendAgentBriefingTelegram(config: DaaSystemConfig): boolean {
@@ -69,6 +183,8 @@ export type AgentTargetWeightOverrides = {
 export function buildAgentTargetWeightOverrides(input: {
   overlay: AgentConfigOverlay | null;
   knownAssetKeys: string[];
+  currentTargetWeights?: Record<string, number>;
+  supportedIncreaseAssetKeys?: string[];
   maxPositionPct: number;
   minConfidence?: number;
 }): AgentTargetWeightOverrides | null {
@@ -85,6 +201,15 @@ export function buildAgentTargetWeightOverrides(input: {
   }
   const maxPositionPct = Math.max(0, Number(input.maxPositionPct) || 0);
   const minConfidence = Math.max(0, Number(input.minConfidence ?? 70) || 0);
+  const supportedIncreaseKeys = input.supportedIncreaseAssetKeys
+    ? new Set(input.supportedIncreaseAssetKeys.flatMap((rawKey) => {
+      const key = String(rawKey || "").trim().toUpperCase();
+      if (!key) return [];
+      const aliases = [key, key.replace("::", ":")];
+      if (!key.includes("::") && key.includes(":")) aliases.push(key.replace(":", "::"));
+      return aliases;
+    }))
+    : null;
   const targetWeightOverrides: Record<string, number> = {};
   const acceptedLabels: string[] = [];
   let skippedCount = 0;
@@ -105,6 +230,12 @@ export function buildAgentTargetWeightOverrides(input: {
     }
 
     const targetPct = Math.min(proposedPct / 100, maxPositionPct > 0 ? maxPositionPct : proposedPct / 100);
+    const currentTargetWeight = Math.max(0, Number(input.currentTargetWeights?.[canonicalAssetKey] ?? 0) || 0);
+    const canonicalKey = canonicalAssetKey.toUpperCase();
+    if (supportedIncreaseKeys && targetPct > currentTargetWeight + 1e-9 && !supportedIncreaseKeys.has(canonicalKey) && !supportedIncreaseKeys.has(canonicalKey.replace("::", ":"))) {
+      skippedCount += 1;
+      continue;
+    }
     targetWeightOverrides[canonicalAssetKey] = Number(Math.max(0, targetPct).toFixed(6));
     acceptedLabels.push(`${symbol || canonicalAssetKey}→${(targetWeightOverrides[canonicalAssetKey] * 100).toFixed(1)}%`);
   }
