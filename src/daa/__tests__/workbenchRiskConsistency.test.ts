@@ -7,7 +7,7 @@ vi.mock("@/src/daa/agent/agentRebalanceAdapter", () => ({
     proposals: input.draftProposals.map((p) => ({
       ...p,
       suggestedQty: Math.round(p.suggestedQty * 0.7),
-      suggestedNotional: p.suggestedNotional * 0.7,
+      suggestedNotional: (p.suggestedQty > 0 ? (p.suggestedNotional / p.suggestedQty) * Math.round(p.suggestedQty * 0.7) : 0),
       reason: p.reason + " | Agent: mock (medium)",
       decisionContext: {
         driftReason: p.reason,
@@ -61,7 +61,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-risk-consistency-v1", () => {
             frozenCash: 0,
             investableCash: 10000,
           },
-          targetWeights: {},
         },
       },
     });
@@ -204,7 +203,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-risk-consistency-v1", () => {
             frozenCash: 0,
             investableCash: 923.89,
           },
-          targetWeights: {},
         },
       },
     });

@@ -24,39 +24,43 @@ registerTool(
     },
     tags: ["rebalance", "simulation", "portfolio"],
   },
-  async (params: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolResultV2> => {
+  async (params: Record<string, unknown>, _ctx: ToolExecutionContext): Promise<ToolResultV2> => {
     const t0 = Date.now();
-
-    if (!ctx.portfolio || ctx.portfolio.holdings.length === 0) {
-      return { toolName: "simulate_rebalance", category: "analyze", success: false, data: null, outputFields: {}, error: "无持仓数据", latencyMs: Date.now() - t0 };
-    }
 
     try {
       const { rebalanceCore } = await import("@/src/core/rebalanceCore");
-      const { listDaaAssetUniverse } = await import("@/src/daa/store/assetUniverseStore");
+      const { buildWorkbenchBootstrap } = await import("@/src/daa/modules/workbench/workbenchReadService");
 
-      // 从 asset universe 读取目标权重（targetWeightHint 字段，百分比形式 0-100）
-      const allAssets = await listDaaAssetUniverse();
-      const assetsWithTarget = allAssets.filter(a => a.targetWeightHint > 0);
+      const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+      const assetRows = bootstrap.assetUniverse.filter((row) => row.holdingQty > 0 || row.targetWeightPct > 0);
+      const assetsWithTarget = assetRows.filter((row) => row.targetWeightPct > 0);
+      if (!assetRows.length) {
+        return { toolName: "simulate_rebalance", category: "analyze", success: false, data: null, outputFields: {}, error: "无可模拟的持仓或目标配置", latencyMs: Date.now() - t0 };
+      }
       if (!assetsWithTarget.length) {
         return { toolName: "simulate_rebalance", category: "analyze", success: false, data: null, outputFields: {}, error: "未设置目标权重", latencyMs: Date.now() - t0 };
       }
 
       // 构建 rebalanceCore 请求
       const holdings = Object.fromEntries(
-        ctx.portfolio.holdings.map(h => [h.symbol, h.holdingQty]),
+        assetRows
+          .filter((row) => row.holdingQty > 0)
+          .map((row) => [row.symbol, row.holdingQty]),
       );
       const prices = Object.fromEntries(
-        ctx.portfolio.holdings.map(h => [h.symbol, h.lastPrice]),
+        assetRows.map((row) => [row.symbol, row.lastPrice > 0 ? row.lastPrice : row.holdingPrice]),
       );
       const targetWeights = Object.fromEntries(
-        assetsWithTarget.map(a => [a.symbol, a.targetWeightHint / 100]),
+        assetsWithTarget.map((row) => [row.symbol, row.targetWeightPct / 100]),
       );
 
       const driftThresholdPct = Number(params.driftThresholdPct) || 5;
 
       const result = rebalanceCore({
-        account: { cash: ctx.portfolio.totalEquity * ctx.portfolio.cashPct },
+        account: {
+          cash: bootstrap.account.cash,
+          totalEquity: bootstrap.account.totalEquity == null ? undefined : bootstrap.account.totalEquity,
+        },
         holdings,
         prices,
         targetWeights,

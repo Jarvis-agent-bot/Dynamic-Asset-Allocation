@@ -4,10 +4,22 @@
  * 注意：enhanceProposalsWithAgent 依赖 DB，这里只测试可导出的常量和映射逻辑。
  * 通过 import 验证模块可正常加载。
  */
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 
-import { selectPrimaryRebalanceThesis } from "@/src/daa/agent/agentRebalanceAdapter";
+vi.mock("@/src/daa/agent/store/thesisStore", () => ({
+  getActiveTheses: vi.fn(),
+  getThesisAccuracyAvg: vi.fn(),
+}));
+
+vi.mock("@/src/daa/llm/llmClient", () => ({
+  callLlm: vi.fn(),
+  resolveLlmConfig: vi.fn(),
+}));
+
+import { enhanceProposalsWithAgent, selectPrimaryRebalanceThesis } from "@/src/daa/agent/agentRebalanceAdapter";
 import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
+import { getActiveTheses, getThesisAccuracyAvg } from "@/src/daa/agent/store/thesisStore";
+import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 
 // 从适配器源码中提取的 conviction multiplier 映射（与源码保持同步）
 const CONVICTION_MULTIPLIER: Record<string, number> = {
@@ -16,6 +28,15 @@ const CONVICTION_MULTIPLIER: Record<string, number> = {
   low: 0.2,
   uncertain: 0,
 };
+
+beforeEach(() => {
+  vi.mocked(getActiveTheses).mockReset();
+  vi.mocked(getThesisAccuracyAvg).mockReset();
+  vi.mocked(callLlm).mockReset();
+  vi.mocked(resolveLlmConfig).mockReset();
+  vi.mocked(getThesisAccuracyAvg).mockResolvedValue(null);
+  vi.mocked(resolveLlmConfig).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof resolveLlmConfig>>);
+});
 
 describe("Conviction Multiplier 映射", () => {
   it("high → 1.0 (全量执行)", () => {
@@ -69,6 +90,50 @@ describe("提案量调整逻辑", () => {
 
   it("1 股 low conviction 趋近 0", () => {
     expect(applyMultiplier(1, "low")).toBe(0); // 1 * 0.2 = 0.2 → 0
+  });
+
+  it("enhanceProposalsWithAgent 会按最终 qty 回算 suggestedNotional", async () => {
+    vi.mocked(getActiveTheses).mockResolvedValue([
+      {
+        id: "t-medium",
+        title: "medium thesis",
+        status: "active",
+        thesisText: "medium thesis text",
+        conviction: "medium",
+        invalidationConditions: null,
+        reviewAt: null,
+        assetKeys: ["US::AAPL"],
+        tags: [],
+        priorityScore: 0.6,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ] as ResearchThread[]);
+
+    const result = await enhanceProposalsWithAgent({
+      draftProposals: [
+        {
+          assetKey: "US::AAPL",
+          symbol: "AAPL",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 3,
+          suggestedNotional: 300,
+          price: 100,
+          reason: "draft",
+          selected: true,
+          hfContribution: null,
+        },
+      ],
+      marketRegime: null,
+      totalEquity: 1000,
+      maxPositionPct: 0.1,
+    });
+
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0]?.suggestedQty).toBe(2);
+    expect(result.proposals[0]?.suggestedNotional).toBe(200);
   });
 });
 

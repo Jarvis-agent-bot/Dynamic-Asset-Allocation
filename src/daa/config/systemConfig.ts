@@ -77,7 +77,6 @@ export type DaaSystemConfig = {
       maxTotalRiskExposurePct: number;
       enforceOnExecution: boolean;
     };
-    targetWeights: Record<string, number>;
   };
   rebalanceStrategy: {
     calendar: {
@@ -275,7 +274,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       maxTotalRiskExposurePct: 0.7,
       enforceOnExecution: true,
     },
-    targetWeights: {},
   },
   rebalanceStrategy: {
     calendar: {
@@ -560,19 +558,6 @@ function normalizePairs(input: unknown): string[] {
   return [...out];
 }
 
-function normalizeTargetWeights(input: unknown): Record<string, number> {
-  const source = isRecord(input) ? input : {};
-  const out: Record<string, number> = {};
-  for (const [symbolRaw, weightRaw] of Object.entries(source)) {
-    const symbol = String(symbolRaw || "").trim().toUpperCase();
-    if (!symbol) continue;
-    const weight = Number(weightRaw);
-    if (!Number.isFinite(weight) || weight <= 0) continue;
-    out[symbol] = clamp(weight, 0, 1);
-  }
-  return out;
-}
-
 function normalizeCalendarFrequency(
   value: unknown,
   fallback: DaaSystemConfig["rebalanceStrategy"]["calendar"]["frequency"],
@@ -739,7 +724,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         maxTotalRiskExposurePct: clamp(Number(risk.maxTotalRiskExposurePct) || fallback.strategy.risk.maxTotalRiskExposurePct, 0.1, 1),
         enforceOnExecution: toBool(risk.enforceOnExecution, fallback.strategy.risk.enforceOnExecution),
       },
-      targetWeights: normalizeTargetWeights(strategy.targetWeights),
     },
     rebalanceStrategy: {
       calendar: {

@@ -31,7 +31,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
             frozenCash: 0,
             investableCash: 10000,
           },
-          targetWeights: {},
         },
       },
     });
@@ -210,7 +209,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
             frozenCash: 800,
             investableCash: 200,
           },
-          targetWeights: {},
         },
         dataSources: {
           ...current.config.dataSources,
@@ -307,7 +305,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
             ...current.config.strategy.constraints,
             maxOrderPctOfNav: 0.2,
           },
-          targetWeights: {},
         },
       },
     });
@@ -388,7 +385,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-trade-flow-route-v1", () => {
             frozenCash: 0,
             investableCash: 10000,
           },
-          targetWeights: {},
         },
         dataSources: {
           ...current.config.dataSources,

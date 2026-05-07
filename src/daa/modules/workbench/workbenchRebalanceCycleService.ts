@@ -300,6 +300,7 @@ export async function generateWorkbenchRebalanceCycle(
   const draft = buildCycleDraftFromBootstrap({
     bootstrap,
     triggerReason: input.triggerReason,
+    allowUnheldBuyTargets: hasAgentTargetOverrides,
   });
 
   // ── drift 触发的阈值守卫（仅自动触发需要）────────────────────────
@@ -605,11 +606,16 @@ export async function updateWorkbenchRebalanceCycle(
       buildWorkbenchBootstrap({ syncPrices: false }),
       getDaaSystemConfig(),
     ]);
-    nextRiskCheck = buildPreTradeRiskCheckFromBootstrap({
+    const baseRiskCheck = buildPreTradeRiskCheckFromBootstrap({
       bootstrap,
       systemConfig: systemRow.config,
       proposals: proposals.filter((row) => row.selected),
     });
+    nextRiskCheck = await enrichRiskCheckWithCorrelation(
+      baseRiskCheck,
+      bootstrap.assetUniverse,
+      systemRow.config.strategy.risk.correlationCapPct,
+    );
   }
 
   const patchInput: Parameters<typeof patchDaaRebalanceCycle>[0] = {

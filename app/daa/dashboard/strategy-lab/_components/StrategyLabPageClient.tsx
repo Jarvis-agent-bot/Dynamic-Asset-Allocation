@@ -29,7 +29,7 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatDateTime } from "@/app/daa/dashboard/_components/daaFormatters";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
-import { applyTargetWeights } from "@/src/daa/modules/store/storeApi";
+import { applyWorkbenchTargetWeights } from "@/src/daa/modules/workbench/targetAllocationApply";
 import { runBacktest, getBacktestHistory } from "@/src/daa/modules/strategyLab/strategyLabApi";
 import type {
   StrategyLabRunParams,
@@ -571,7 +571,9 @@ export default function StrategyLabPageClient() {
                           const key = item.symbol.includes(":") ? item.symbol : `US:${item.symbol}`;
                           weights[key] = Number((item.avgWeight * 100).toFixed(2));
                         }
-                        await applyTargetWeights(weights);
+                        await applyWorkbenchTargetWeights(weights);
+                        const nextModel = await getWorkbenchReadModel({ syncPrices: false });
+                        setAssets(nextModel.bootstrap.assetUniverse);
                         toast.success("已将回测权重应用为目标配置");
                       } catch (err) {
                         toast.error("应用失败：" + (err instanceof Error ? err.message : "未知错误"));

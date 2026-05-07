@@ -70,7 +70,6 @@ export async function observeNode(state: CognitiveState): Promise<CognitiveUpdat
         fxRates,
         baseCurrency,
         cash,
-        targetWeights: {},
       });
       const valuation = summarizeMarkToMarketPortfolio({
         positions: rawRows.map((row) => ({

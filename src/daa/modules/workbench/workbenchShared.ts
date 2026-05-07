@@ -758,57 +758,6 @@ function mapStoreCycleReportToView(report: Awaited<ReturnType<typeof getDaaCycle
     };
 }
 
-function buildTargetWeightsFromConfig(input: {
-    targetWeightsRaw: Record<string, unknown>;
-    assetRows: Array<{
-        assetKey: string;
-        symbol: string;
-        watchEnabled: boolean;
-        targetWeightHint: number;
-    }>;
-}): Record<string, number> {
-    const out: Record<string, number> = {};
-    const watchRows = input.assetRows.filter((row) => row.watchEnabled);
-    for (const [rawKey, rawValue] of Object.entries(input.targetWeightsRaw || {})) {
-        const weight = Number(rawValue);
-        const keyText = normalizeText(rawKey).toUpperCase();
-        if (!keyText) {
-            throw new Error("targetWeights key must not be empty");
-        }
-        if (!Number.isFinite(weight)) {
-            throw new Error(`targetWeights[${keyText}] must be a finite number`);
-        }
-        if (weight < 0) {
-            throw new Error(`targetWeights[${keyText}] must be non-negative`);
-        }
-        if (weight === 0)
-            continue;
-        const parsedAssetKey = parseDaaAssetKey(keyText);
-        if (!parsedAssetKey) {
-            throw new Error(`targetWeights key ${keyText} is invalid, expected MARKET::SYMBOL`);
-        }
-        const assetKey = `${parsedAssetKey.market}::${parsedAssetKey.symbol}`;
-        out[assetKey] = (out[assetKey] ?? 0) + weight;
-    }
-    for (const row of watchRows) {
-        if (!row.assetKey)
-            continue;
-        const parsedAssetKey = parseDaaAssetKey(row.assetKey);
-        if (!parsedAssetKey) {
-            throw new Error(`asset universe row has invalid assetKey: ${row.assetKey}`);
-        }
-        const hint = Math.max(0, toFinite(row.targetWeightHint, 0));
-        if (hint > 0) {
-            out[row.assetKey] = hint;
-            continue;
-        }
-        if (out[row.assetKey] != null) {
-            delete out[row.assetKey];
-        }
-    }
-    return out;
-}
-
 function priceAgeSec(ts: string | null): number | null {
     const iso = normalizeText(ts);
     if (!iso)
@@ -862,6 +811,7 @@ function buildWorkbenchMarketDataHealth(input: {
 function buildCycleDraftFromBootstrap(input: {
     bootstrap: WorkbenchBootstrap;
     triggerReason?: string;
+    allowUnheldBuyTargets?: boolean;
 }): {
     triggerReason: string;
     driftSnapshot: RebalanceCycle["driftSnapshot"];
@@ -904,6 +854,9 @@ function buildCycleDraftFromBootstrap(input: {
         if (!(suggestedNotional > 0))
             continue;
         const side: "BUY" | "SELL" = driftPct > 0 ? "SELL" : "BUY";
+        const isUnheldTargetEntry = row.holdingQty <= 0 && side === "BUY";
+        if (isUnheldTargetEntry && input.allowUnheldBuyTargets !== true)
+            continue;
 
         // BUY 提案现金上限防护：累计买入金额不超过可用现金
         if (side === "BUY") {
@@ -1246,7 +1199,6 @@ export {
   mapStoreCycleToView,
   buildMarketFacts,
   mapStoreCycleReportToView,
-  buildTargetWeightsFromConfig,
   priceAgeSec,
   buildWorkbenchMarketDataHealth,
   buildCycleDraftFromBootstrap,

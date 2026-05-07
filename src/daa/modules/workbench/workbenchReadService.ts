@@ -38,7 +38,6 @@ import {
   buildHfSignalMap,
   buildPreTradeRiskCheck,
   buildRiskCycleDraft,
-  buildTargetWeightsFromConfig,
   buildWorkbenchMarketDataHealth,
   calcHoldingCostPerUnit,
   mapStoreCycleReportToView,
@@ -301,16 +300,6 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     dataQualityWarnings.push("市场价格缓存读取异常，已回退到库内快照价格。");
   }
 
-  const targetWeights = buildTargetWeightsFromConfig({
-    targetWeightsRaw: (strategy.targetWeights || {}) as Record<string, unknown>,
-    assetRows: rows.map((row) => ({
-      assetKey: row.assetKey,
-      symbol: row.symbol,
-      watchEnabled: row.watchEnabled,
-      targetWeightHint: row.targetWeightHint,
-    })),
-  });
-
   const rowsWithPriceContext = rows.map((row) => {
     const key = `${String(row.market || "").toUpperCase()}::${String(row.symbol || "").toUpperCase()}`;
     const priceContext = priceContextByKey[key];
@@ -326,7 +315,6 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     fxRates,
     baseCurrency,
     cash,
-    targetWeights,
   });
   const assetUniverse = assetUniverseBase.map((row) => {
     const key = `${String(row.market || "").toUpperCase()}::${String(row.symbol || "").toUpperCase()}`;

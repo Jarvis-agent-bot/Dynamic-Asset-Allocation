@@ -9,7 +9,7 @@ import {
   DaaSurfaceActionButton,
   DaaSurfaceDialogShell,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import { applyTargetWeights } from "@/src/daa/modules/store/storeApi";
+import { applyWorkbenchTargetWeights } from "@/src/daa/modules/workbench/targetAllocationApply";
 
 type Template = {
   id: string;
@@ -60,6 +60,7 @@ const TEMPLATES: Template[] = [
 export function PortfolioTemplateDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onApplied?: () => void | Promise<void>;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
@@ -69,7 +70,8 @@ export function PortfolioTemplateDialog(props: {
     if (!tpl) return;
     setApplying(true);
     try {
-      await applyTargetWeights(tpl.weights);
+      await applyWorkbenchTargetWeights(tpl.weights);
+      await props.onApplied?.();
       toast.success(`已应用「${tpl.name}」模板为目标权重`);
       props.onOpenChange(false);
     } catch (err) {

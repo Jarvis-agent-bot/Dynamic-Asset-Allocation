@@ -62,7 +62,10 @@ export function ActiveTabPanel(props: {
       {/* 观察列表（OKX 风格） + 搜索添加 */}
       {model.activeTab === "watchlist" ? (
         <div className="space-y-4">
-          <TargetWeightSummary rows={model.tableProps.rows} />
+          <TargetWeightSummary
+            rows={model.tableProps.rows}
+            onTemplateApplied={() => model.loadBootstrap(true)}
+          />
           <WatchlistSearchBar {...model.watchlistBuilderProps} />
           <WatchlistItemList rows={model.tableProps.rows} />
         </div>

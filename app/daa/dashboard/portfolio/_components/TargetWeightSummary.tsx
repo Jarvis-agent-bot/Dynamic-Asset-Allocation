@@ -30,7 +30,10 @@ type AssetRow = {
   watchEnabled: boolean;
 };
 
-export function TargetWeightSummary(props: { rows: AssetRow[] }) {
+export function TargetWeightSummary(props: {
+  rows: AssetRow[];
+  onTemplateApplied?: () => void | Promise<void>;
+}) {
   const [templateOpen, setTemplateOpen] = useState(false);
 
   const basketRows = useMemo(
@@ -87,7 +90,11 @@ export function TargetWeightSummary(props: { rows: AssetRow[] }) {
         </DaaSurfaceActionButton>
       }
     >
-      <PortfolioTemplateDialog open={templateOpen} onOpenChange={setTemplateOpen} />
+      <PortfolioTemplateDialog
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        onApplied={props.onTemplateApplied}
+      />
       <div className="grid gap-4 lg:grid-cols-[1fr_200px]">
         {/* Left: Stats + Progress Bar */}
         <div className="space-y-3">

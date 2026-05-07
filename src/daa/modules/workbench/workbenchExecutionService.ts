@@ -15,6 +15,7 @@ import {
   buildCycleDraftFromBootstrap,
   buildManualPreTradeRiskCheck,
   buildPreTradeRiskCheckFromBootstrap,
+  enrichRiskCheckWithCorrelation,
   normalizeText,
   toFinite,
 } from "./workbenchShared";
@@ -37,11 +38,16 @@ export async function runWorkbenchRiskCheck(input?: {
     })
     : buildCycleDraftFromBootstrap({ bootstrap }).proposals;
 
-  return buildPreTradeRiskCheckFromBootstrap({
+  const baseRiskCheck = buildPreTradeRiskCheckFromBootstrap({
     bootstrap,
     systemConfig: systemRow.config,
     proposals,
   });
+  return enrichRiskCheckWithCorrelation(
+    baseRiskCheck,
+    bootstrap.assetUniverse,
+    systemRow.config.strategy.risk.correlationCapPct,
+  );
 }
 
 export async function validateExecutionRisk(input: {
@@ -88,7 +94,7 @@ export async function validateExecutionRisk(input: {
     hfContribution: null,
   };
 
-  return buildManualPreTradeRiskCheck({
+  const baseRiskCheck = buildManualPreTradeRiskCheck({
     assetUniverse: bootstrap.assetUniverse,
     proposal,
     totalEquity: Math.max(0, toFinite(bootstrap.account.totalEquity, 0)),
@@ -101,6 +107,11 @@ export async function validateExecutionRisk(input: {
       maxConcentrationPct: systemRow.config.strategy.risk.maxConcentrationPct,
     },
   });
+  return enrichRiskCheckWithCorrelation(
+    baseRiskCheck,
+    bootstrap.assetUniverse,
+    systemRow.config.strategy.risk.correlationCapPct,
+  );
 }
 
 export async function buildWorkbenchExecuteSummary(input: {

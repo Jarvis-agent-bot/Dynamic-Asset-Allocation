@@ -82,7 +82,6 @@ function buildBootstrapConfigRow(input?: {
         frozenCash: 0,
         totalEquity: 1000,
       },
-      targetWeights: {},
       constraints: {
         maxPositionPct: 0.3,
         maxOrderPctOfNav: 0.1,

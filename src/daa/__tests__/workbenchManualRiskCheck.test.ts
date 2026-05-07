@@ -23,7 +23,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-manual-risk-check-v1", () => {
             frozenCash: 0,
             investableCash: 10000,
           },
-          targetWeights: {},
         },
       },
     });
@@ -93,7 +92,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-manual-risk-check-v1", () => {
             frozenCash: 0,
             investableCash: 0,
           },
-          targetWeights: {},
         },
       },
     });

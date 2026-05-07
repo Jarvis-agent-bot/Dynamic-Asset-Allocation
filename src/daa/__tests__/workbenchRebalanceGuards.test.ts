@@ -135,7 +135,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             investableCash: 0,
             frozenCash: 0,
           },
-          targetWeights: {},
         },
       },
     });
@@ -176,7 +175,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             investableCash: 1000,
             frozenCash: 0,
           },
-          targetWeights: {},
         },
         rebalanceStrategy: {
           ...current.config.rebalanceStrategy,
@@ -254,7 +252,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             investableCash: 9600,
             frozenCash: 0,
           },
-          targetWeights: {},
         },
         rebalanceStrategy: {
           ...current.config.rebalanceStrategy,
@@ -331,7 +328,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             investableCash: 8000,
             frozenCash: 0,
           },
-          targetWeights: {},
         },
         rebalanceStrategy: {
           ...current.config.rebalanceStrategy,
@@ -404,7 +400,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             investableCash: 1000,
             frozenCash: 0,
           },
-          targetWeights: {},
         },
       },
     });
@@ -452,7 +447,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             investableCash: 1000,
             frozenCash: 0,
           },
-          targetWeights: {},
         },
       },
     });
@@ -497,7 +491,6 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             investableCash: 5000,
             frozenCash: 0,
           },
-          targetWeights: {},
         },
       },
     });

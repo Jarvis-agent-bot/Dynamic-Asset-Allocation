@@ -37,7 +37,6 @@ export function buildAssetUniverseViewRows(input: {
   fxRates: DaaStoreFxRate[];
   baseCurrency: string;
   cash: number;
-  targetWeights: Record<string, number>;
 }): AssetUniverseView[] {
   const rows = Array.isArray(input.rows) ? input.rows : [];
   const baseCurrency = String(input.baseCurrency || "USD").trim().toUpperCase() || "USD";
@@ -64,7 +63,7 @@ export function buildAssetUniverseViewRows(input: {
   return rows.map((row, index) => {
     const valuation = valuationRows[index];
     const fxRateToBase = resolveFxRateToBase(baseCurrency, row.currency, fxLookup);
-    const targetWeightPct = Math.max(0, toFinite(input.targetWeights?.[row.assetKey] ?? row.targetWeightHint ?? 0)) * 100;
+    const targetWeightPct = Math.max(0, toFinite(row.targetWeightHint ?? 0)) * 100;
     const actualWeightPct = actualWeightMap.get(row.assetKey) ?? 0;
     const gapPct = targetWeightPct > 0 || actualWeightPct > 0 ? targetWeightPct - actualWeightPct : null;
     const yfinanceSymbol = toYfinanceSymbolByMarket(row.symbol, row.market);

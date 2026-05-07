@@ -84,7 +84,6 @@ describe("money valuation boundary", () => {
     const rows = buildAssetUniverseViewRows({
       baseCurrency: "USD",
       cash: 0,
-      targetWeights: {},
       fxRates: [{ id: "USD/HKD", baseCcy: "USD", quoteCcy: "HKD", rate: 7.8, source: "test", asOfTs: "2026-04-27T00:00:00.000Z", updatedAt: "2026-04-27T00:00:00.000Z" }],
       rows: [{
         assetKey: "HK::0388.HK",

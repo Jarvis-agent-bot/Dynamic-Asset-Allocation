@@ -48,6 +48,20 @@ export function selectPrimaryRebalanceThesis(theses: ResearchThread[]): Research
   })[0] ?? null;
 }
 
+function scaleProposalForConviction(proposal: RebalanceProposal, multiplier: number): {
+  adjustedQty: number;
+  adjustedNotional: number;
+} {
+  const adjustedQty = Math.round(proposal.suggestedQty * multiplier);
+  const perUnitNotional = proposal.suggestedQty > 0
+    ? proposal.suggestedNotional / proposal.suggestedQty
+    : 0;
+  const adjustedNotional = adjustedQty > 0
+    ? perUnitNotional * adjustedQty
+    : 0;
+  return { adjustedQty, adjustedNotional };
+}
+
 export interface AgentRebalanceResult {
   proposals: RebalanceProposal[];
   llmSummary: string | null;
@@ -131,8 +145,7 @@ export async function enhanceProposalsWithAgent(input: {
       }
 
       // 调整提案量
-      const adjustedQty = Math.round(proposal.suggestedQty * multiplier);
-      const adjustedNotional = proposal.suggestedNotional * multiplier;
+      const { adjustedQty, adjustedNotional } = scaleProposalForConviction(proposal, multiplier);
 
       if (adjustedQty <= 0 || adjustedNotional < 10) {
         skippedByAgent.push(proposal.symbol);
