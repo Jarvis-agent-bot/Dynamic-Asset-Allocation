@@ -17,6 +17,7 @@ import {
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
   normalizeText,
+  summarizeProposalExecutionCosts,
   toFinite,
 } from "./workbenchShared";
 
@@ -126,29 +127,32 @@ export async function buildWorkbenchExecuteSummary(input: {
     getDaaSystemConfig(),
   ]);
   const rows = cycle.proposals.filter((row) => input.executeMode === "all" || row.selected);
-  const feeRateBps = getStrategyExecutionConfig(systemRow.config).feeRateBps;
-  const feeRate = feeRateBps / 10000;
-  const buyNotional = rows.filter((row) => row.side === "BUY").reduce((sum, row) => sum + row.suggestedNotional, 0);
-  const sellNotional = rows.filter((row) => row.side === "SELL").reduce((sum, row) => sum + row.suggestedNotional, 0);
-  const estimatedFees = rows.reduce((sum, row) => sum + (row.suggestedNotional * feeRate), 0);
-  const netCashImpact = sellNotional - buyNotional - estimatedFees;
+  const executionConfig = getStrategyExecutionConfig(systemRow.config);
+  const costSummary = summarizeProposalExecutionCosts({
+    proposals: rows,
+    feeRateBps: executionConfig.feeRateBps,
+    slippageBps: executionConfig.slippageBps,
+  });
 
   const totalEquity = Math.max(1e-9, toFinite(bootstrap.account.totalEquity, 0));
-  const valuationBySymbol = new Map<string, number>();
+  const valuationByAssetKey = new Map<string, number>();
+  const symbolByAssetKey = new Map<string, string>();
   for (const row of bootstrap.assetUniverse) {
-    valuationBySymbol.set(row.symbol.toUpperCase(), Math.max(0, toFinite(row.valuationBase, 0)));
+    valuationByAssetKey.set(row.assetKey.toUpperCase(), Math.max(0, toFinite(row.valuationBase, 0)));
+    symbolByAssetKey.set(row.assetKey.toUpperCase(), row.symbol);
   }
-  const touched = new Set(rows.map((row) => row.symbol.toUpperCase()));
-  const topWeightChanges = [...touched].map((symbol) => {
-    const currentValue = valuationBySymbol.get(symbol) || 0;
-    const delta = rows
-      .filter((row) => row.symbol.toUpperCase() === symbol)
-      .reduce((sum, row) => sum + (row.side === "BUY" ? row.suggestedNotional : -row.suggestedNotional), 0);
+  const assetDeltaByKey = new Map<string, number>();
+  for (const row of costSummary.estimates) {
+    const key = row.assetKey.toUpperCase();
+    assetDeltaByKey.set(key, (assetDeltaByKey.get(key) || 0) + row.assetValueDeltaBase);
+  }
+  const topWeightChanges = [...assetDeltaByKey.entries()].map(([assetKey, delta]) => {
+    const currentValue = valuationByAssetKey.get(assetKey) || 0;
     const projectedValue = Math.max(0, currentValue + delta);
     const currentWeightPct = (currentValue / totalEquity) * 100;
     const projectedWeightPct = (projectedValue / totalEquity) * 100;
     return {
-      symbol,
+      symbol: symbolByAssetKey.get(assetKey) || assetKey,
       currentWeightPct,
       projectedWeightPct,
       changePct: projectedWeightPct - currentWeightPct,
@@ -167,10 +171,10 @@ export async function buildWorkbenchExecuteSummary(input: {
     cycleId: cycle.cycleId,
     executeMode: input.executeMode,
     orderCount: rows.length,
-    buyNotional,
-    sellNotional,
-    estimatedFees,
-    netCashImpact,
+    buyNotional: costSummary.buyNotional,
+    sellNotional: costSummary.sellNotional,
+    estimatedFees: costSummary.estimatedFees,
+    netCashImpact: costSummary.netCashImpact,
     topWeightChanges,
     riskWarnings,
     riskOverallStatus: riskCheck.overallStatus,

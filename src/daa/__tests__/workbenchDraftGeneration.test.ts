@@ -64,4 +64,73 @@ describe("buildCycleDraftFromBootstrap", () => {
     expect(draft.proposals[0]?.side).toBe("BUY");
     expect(draft.proposals[0]?.reason).toContain("观察列表目标建仓");
   });
+
+  it("BUY 提案会为滑点和手续费预留现金预算", () => {
+    const bootstrap = buildWorkbenchBootstrap({
+      account: {
+        cash: 1000,
+        investableCash: 1000,
+        frozenCash: 0,
+        totalEquity: 1000,
+      },
+      execution: {
+        feeRateBps: 100,
+        slippageBps: 100,
+        minNotional: 0,
+      },
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: "US::MSFT",
+          symbol: "MSFT",
+          holdingQty: 0,
+          actualWeightPct: 0,
+          targetWeightPct: 100,
+          targetWeightHint: 1,
+          lastPrice: 100,
+          fxRateToBase: 1,
+          watchEnabled: true,
+        }),
+      ],
+    });
+
+    const draft = buildCycleDraftFromBootstrap({ bootstrap, allowUnheldBuyTargets: true });
+
+    expect(draft.proposals).toHaveLength(1);
+    expect(draft.proposals[0]?.suggestedNotional).toBeCloseTo(1000 / (1.01 * 1.01), 6);
+    expect(draft.proposals[0]?.suggestedQty).toBeCloseTo((1000 / (1.01 * 1.01)) / 100, 6);
+  });
+
+  it("小于 minNotional 的 drift 提案会被直接过滤", () => {
+    const bootstrap = buildWorkbenchBootstrap({
+      account: {
+        cash: 1000,
+        investableCash: 1000,
+        frozenCash: 0,
+        totalEquity: 1000,
+      },
+      execution: {
+        minNotional: 200,
+      },
+      assetUniverse: [
+        buildAssetUniverseView({
+          assetKey: "US::NVDA",
+          symbol: "NVDA",
+          holdingQty: 1,
+          holdingPrice: 100,
+          valuationBase: 100,
+          actualWeightPct: 10,
+          targetWeightPct: 5,
+          targetWeightHint: 0.05,
+          lastPrice: 100,
+          fxRateToBase: 1,
+          watchEnabled: true,
+        }),
+      ],
+    });
+
+    const draft = buildCycleDraftFromBootstrap({ bootstrap });
+
+    expect(draft.maxAbsDriftPct).toBeCloseTo(5, 6);
+    expect(draft.proposals).toHaveLength(0);
+  });
 });

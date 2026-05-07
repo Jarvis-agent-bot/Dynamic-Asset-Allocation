@@ -15,6 +15,7 @@ import {
   getDaaSystemConfig,
   listDaaRebalanceCycles,
   patchDaaAssetUniverseRow,
+  replaceDaaAccountState,
   saveDaaSystemConfig,
   upsertDaaAssetUniverseRow,
 } from "@/src/daa/store/daaStorePg";
@@ -235,6 +236,56 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
     expect(generated.created).toBe(true);
     expect(generated.skippedByCooldown).toBe(false);
     expect(generated.cycle?.triggerSource).toBe("drift");
+  }, 20000);
+
+  it("手动再平衡遇到小额 drift 时会按最小成交门槛跳过", async () => {
+    const current = await getDaaSystemConfig();
+    await saveDaaSystemConfig({
+      baseVersion: current.version,
+      config: {
+        ...current.config,
+        strategy: {
+          ...current.config.strategy,
+          constraints: {
+            ...current.config.strategy.constraints,
+            minNotional: 200,
+          },
+        },
+      },
+    });
+
+    await replaceDaaAccountState({
+      baseCurrency: "USD",
+      cash: 900,
+      investableCash: 900,
+      frozenCash: 0,
+      totalEquity: 1000,
+    });
+
+    await upsertDaaAssetUniverseRow({
+      symbol: "AAPL",
+      market: "US",
+      currency: "USD",
+      watchEnabled: true,
+      targetWeightHint: 0.05,
+      lastPrice: 100,
+    });
+    await patchDaaAssetUniverseRow({
+      assetKey: "US::AAPL",
+      holdingQty: 1,
+      holdingPrice: 100,
+    });
+
+    const generated = await generateWorkbenchRebalanceCycle({
+      triggerSource: "manual",
+      triggerReason: "small drift below min notional",
+      manual: true,
+    });
+
+    expect(generated.created).toBe(false);
+    expect(generated.portfolioStatus).toBe("skipped");
+    expect(generated.message).toContain("最小成交额或费用门槛");
+    expect(generated.healthyInsight ?? null).toBeNull();
   }, 20000);
 
   it("agent_trigger 在冷静期内重复加仓会被跳过", async () => {

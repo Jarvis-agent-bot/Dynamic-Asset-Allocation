@@ -448,7 +448,9 @@ export type WorkbenchBootstrap = {
   assetUniverse: AssetUniverseView[];
   execution: {
     logs: TradeTicket[];
+    feeRateBps?: number;
     slippageBps?: number;
+    minNotional?: number;
   };
   rebalance: WorkbenchRebalanceConfig;
   rebalanceStrategy: RebalanceStrategyConfig;

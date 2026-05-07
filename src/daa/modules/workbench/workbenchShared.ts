@@ -821,12 +821,16 @@ function buildCycleDraftFromBootstrap(input: {
 } {
     const totalEquity = Math.max(0, toFinite(input.bootstrap.account.totalEquity, 0));
     const availableCash = Math.max(0, toFinite(input.bootstrap.account.investableCash, 0));
+    const feeRate = Math.max(0, toFinite(input.bootstrap.execution.feeRateBps, 0)) / 10_000;
+    const slippageRate = Math.max(0, toFinite(input.bootstrap.execution.slippageBps, 0)) / 10_000;
+    const minNotionalBase = Math.max(0, toFinite(input.bootstrap.execution.minNotional, 0));
+    const buyCashMultiplier = (1 + slippageRate) * (1 + feeRate);
     const driftSnapshot: RebalanceCycle["driftSnapshot"] = [];
     const proposals: RebalanceProposal[] = [];
     let maxAbsDrift = 0;
     let maxAbsDriftRow: WorkbenchBootstrap["assetUniverse"][number] | null = null;
-    // 跟踪 BUY 提案累计金额，不超过可用现金
-    let buyNotionalUsed = 0;
+    // 跟踪 BUY 提案累计预计占用现金（含滑点/手续费）
+    let buyCashReserved = 0;
     for (const row of input.bootstrap.assetUniverse) {
         if (!(row.watchEnabled || row.holdingQty > 0))
             continue;
@@ -858,21 +862,33 @@ function buildCycleDraftFromBootstrap(input: {
         if (isUnheldTargetEntry && input.allowUnheldBuyTargets !== true)
             continue;
 
-        // BUY 提案现金上限防护：累计买入金额不超过可用现金
+        // BUY 提案现金上限防护：累计买入总成本（含滑点/手续费）不超过可用现金
         if (side === "BUY") {
-            const cashRemaining = Math.max(0, availableCash - buyNotionalUsed);
-            if (cashRemaining <= 0) continue; // 现金已耗尽，跳过后续 BUY 提案
-            if (suggestedNotional > cashRemaining) {
-                suggestedNotional = cashRemaining; // 截断至可用现金
+            const cashRemaining = Math.max(0, availableCash - buyCashReserved);
+            if (cashRemaining <= 0)
+                continue;
+            const maxAffordableNotional = buyCashMultiplier > 0
+                ? (cashRemaining / buyCashMultiplier)
+                : cashRemaining;
+            if (!(maxAffordableNotional > 0))
+                continue;
+            if (suggestedNotional > maxAffordableNotional) {
+                suggestedNotional = maxAffordableNotional;
             }
         }
 
+        if (minNotionalBase > 0 && suggestedNotional + 1e-9 < minNotionalBase)
+            continue;
+
         const fxRateToBase = row.fxRateToBase && row.fxRateToBase > 0 ? row.fxRateToBase : null;
-        if (!fxRateToBase) continue;
+        if (!fxRateToBase)
+            continue;
         const localNotional = suggestedNotional / fxRateToBase;
         const suggestedQty = localNotional / price;
+        if (!(suggestedQty > 0))
+            continue;
         if (side === "BUY") {
-            buyNotionalUsed += suggestedNotional;
+            buyCashReserved += suggestedNotional * buyCashMultiplier;
         }
         const targetSource = row.holdingQty > 0
             ? "持仓目标权重回归"
@@ -952,6 +968,64 @@ function calcHoldingCostPerUnit(row: Pick<WorkbenchBootstrap["assetUniverse"][nu
     if (row.holdingPrice > 0)
         return row.holdingPrice;
     return 0;
+}
+
+function estimateProposalExecutionCost(input: {
+    proposal: Pick<RebalanceProposal, "assetKey" | "symbol" | "side" | "suggestedNotional">;
+    feeRateBps?: number;
+    slippageBps?: number;
+}) {
+    const feeRate = Math.max(0, toFinite(input.feeRateBps, 0)) / 10_000;
+    const slippageRate = Math.max(0, toFinite(input.slippageBps, 0)) / 10_000;
+    const baseNotional = Math.max(0, toFinite(input.proposal.suggestedNotional, 0));
+    const slippageMultiplier = input.proposal.side === "BUY"
+        ? (1 + slippageRate)
+        : Math.max(0, 1 - slippageRate);
+    const grossNotionalBase = baseNotional * slippageMultiplier;
+    const feeBase = grossNotionalBase * feeRate;
+    const assetValueDeltaBase = input.proposal.side === "BUY"
+        ? grossNotionalBase
+        : -grossNotionalBase;
+    const netCashImpactBase = input.proposal.side === "BUY"
+        ? -(grossNotionalBase + feeBase)
+        : (grossNotionalBase - feeBase);
+    return {
+        assetKey: input.proposal.assetKey,
+        symbol: input.proposal.symbol,
+        side: input.proposal.side,
+        baseNotional,
+        grossNotionalBase,
+        feeBase,
+        assetValueDeltaBase,
+        netCashImpactBase,
+    };
+}
+
+function summarizeProposalExecutionCosts(input: {
+    proposals: Array<Pick<RebalanceProposal, "assetKey" | "symbol" | "side" | "suggestedNotional">>;
+    feeRateBps?: number;
+    slippageBps?: number;
+}) {
+    const estimates = input.proposals.map((proposal) => estimateProposalExecutionCost({
+        proposal,
+        feeRateBps: input.feeRateBps,
+        slippageBps: input.slippageBps,
+    }));
+    const buyNotional = estimates
+        .filter((row) => row.side === "BUY")
+        .reduce((sum, row) => sum + row.grossNotionalBase, 0);
+    const sellNotional = estimates
+        .filter((row) => row.side === "SELL")
+        .reduce((sum, row) => sum + row.grossNotionalBase, 0);
+    const estimatedFees = estimates.reduce((sum, row) => sum + row.feeBase, 0);
+    const netCashImpact = estimates.reduce((sum, row) => sum + row.netCashImpactBase, 0);
+    return {
+        estimates,
+        buyNotional,
+        sellNotional,
+        estimatedFees,
+        netCashImpact,
+    };
 }
 
 function buildRiskCycleDraft(input: {
@@ -1204,6 +1278,8 @@ export {
   buildCycleDraftFromBootstrap,
   appendTriggerEventSafe,
   calcHoldingCostPerUnit,
+  estimateProposalExecutionCost,
+  summarizeProposalExecutionCosts,
   buildRiskCycleDraft,
   toCycleReportSnapshot,
 };

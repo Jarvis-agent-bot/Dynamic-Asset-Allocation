@@ -167,6 +167,9 @@ export function buildWorkbenchBootstrap(
     assetUniverse: [],
     execution: {
       logs: [],
+      feeRateBps: DEFAULT_SYSTEM_CONFIG_.strategy.execution.feeRateBps,
+      slippageBps: DEFAULT_SYSTEM_CONFIG_.strategy.execution.slippageBps,
+      minNotional: DEFAULT_SYSTEM_CONFIG_.strategy.constraints.minNotional,
     },
     rebalance: {
       mode: "manual",

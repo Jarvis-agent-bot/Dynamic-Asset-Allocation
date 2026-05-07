@@ -65,8 +65,6 @@ import {
   toIsoByMs,
 } from "./workbenchShared";
 
-const AUTO_REBALANCE_MIN_NOTIONAL_BASE = 100;
-
 function isAutoCooldownGuardTrigger(input: {
   triggerSource: RebalanceTriggerSource;
   manual: boolean;
@@ -83,12 +81,15 @@ function isCycleWithinCooldownWindow(input: {
   return Number.isFinite(lastMs) && lastMs + input.cooldownMs > input.nowMs;
 }
 
-function filterSmallAutomaticProposals(input: {
+function filterSmallCycleProposals(input: {
   proposals: RebalanceProposal[];
-  manual: boolean;
+  minNotionalBase: number;
 }): RebalanceProposal[] {
-  if (input.manual) return input.proposals;
-  return input.proposals.filter((proposal) => Math.max(0, toFinite(proposal.suggestedNotional, 0)) >= AUTO_REBALANCE_MIN_NOTIONAL_BASE);
+  const minNotionalBase = Math.max(0, toFinite(input.minNotionalBase, 0));
+  if (!(minNotionalBase > 0)) return input.proposals;
+  return input.proposals.filter(
+    (proposal) => Math.max(0, toFinite(proposal.suggestedNotional, 0)) + 1e-9 >= minNotionalBase,
+  );
 }
 
 function relabelAgentEntryProposals(input: {
@@ -392,6 +393,26 @@ export async function generateWorkbenchRebalanceCycle(
       return skipWithLatest("目标资产缺少可执行价格或汇率，请先刷新行情 / FX 后再生成建议。");
     }
 
+    const guardlessDraft = hasMeaningfulDrift
+      ? buildCycleDraftFromBootstrap({
+        bootstrap: {
+          ...bootstrap,
+          execution: {
+            ...bootstrap.execution,
+            feeRateBps: 0,
+            slippageBps: 0,
+            minNotional: 0,
+          },
+        },
+      })
+      : null;
+    const blockedByTradeGuards = (guardlessDraft?.proposals.length ?? 0) > 0;
+    if (blockedByTradeGuards) {
+      return skipWithLatest(
+        `当前最大偏移 ${draft.maxAbsDriftPct.toFixed(2)}%，但未达到最小成交额或费用门槛，暂不调仓。`,
+      );
+    }
+
     // 尝试获取信号洞察（非阻断，失败则返回空快照）
     let healthyInsight: PortfolioHealthyInsight = {
       maxDriftPct: draft.maxAbsDriftPct,
@@ -487,9 +508,9 @@ export async function generateWorkbenchRebalanceCycle(
     logSwallowed("workbenchRebalanceCycleService.tlhScan", err);
   }
 
-  const mergedProposals = filterSmallAutomaticProposals({
+  const mergedProposals = filterSmallCycleProposals({
     proposals: [...draft.proposals, ...tlhProposals],
-    manual,
+    minNotionalBase: systemRow.config.strategy.constraints.minNotional,
   });
   if (shouldCheckAgentRiskReductionException && !isPureRiskReductionAgentCycle({
     bootstrap,
@@ -952,7 +973,11 @@ export async function executeWorkbenchRebalanceCycle(input: {
   const executedCount = cycleLogs.filter((row) => row.status === "executed").length;
   const submittedCount = cycleLogs.filter((row) => row.status === "submitted" || row.status === "partially_filled").length;
   const failedCount = cycleLogs.filter((row) => row.status === "rejected" || row.status === "canceled").length;
-  const totalNotional = toExecute.reduce((sum, row) => sum + row.suggestedNotional, 0);
+  const totalNotional = executionRows.reduce((sum, row) => {
+    const fxRateToBase = Math.max(0, toFinite(row.fxRateToBase, 0));
+    const grossNotional = Math.max(0, toFinite(row.suggestedQty, 0)) * Math.max(0, toFinite(row.price, 0));
+    return sum + (fxRateToBase > 0 ? grossNotional * fxRateToBase : 0);
+  }, 0);
   const newMaxDriftPct = cycle.driftSnapshot.reduce((max, row) => Math.max(max, Math.abs(row.driftPct * 100)), 0);
 
   const priceAdjustmentNotes = executionRows

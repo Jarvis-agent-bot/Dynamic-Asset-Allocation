@@ -1,6 +1,9 @@
 import { requireDaaAdminViewerAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { getStrategyExecutionConfig } from "@/src/daa/config/systemConfig";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
+import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { summarizeProposalExecutionCosts } from "@/src/daa/modules/workbench/workbenchShared";
 
 export const runtime = "nodejs";
 
@@ -27,7 +30,10 @@ export async function POST(req: Request) {
     }
 
     const selectedKeys = new Set(body.selectedProposalKeys ?? []);
-    const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false });
+    const [bootstrap, systemRow] = await Promise.all([
+      buildWorkbenchBootstrap({ syncPrices: false }),
+      getDaaSystemConfig(),
+    ]);
 
     // 找到对应 cycle
     const cycle = bootstrap.latestCycle?.cycleId === body.cycleId
@@ -65,19 +71,15 @@ export async function POST(req: Request) {
     for (const item of beforeItems) item.weightPct = beforeTotal > 0 ? +(item.value / beforeTotal * 100).toFixed(2) : 0;
 
     // 执行后配置
+    const executionConfig = getStrategyExecutionConfig(systemRow.config);
+    const costSummary = summarizeProposalExecutionCosts({
+      proposals,
+      feeRateBps: executionConfig.feeRateBps,
+      slippageBps: executionConfig.slippageBps,
+    });
     const adjustments = new Map<string, number>();
-    let buyTotal = 0;
-    let sellTotal = 0;
-
-    for (const p of proposals) {
-      const delta = Math.max(0, Number(p.suggestedNotional) || 0);
-      if (p.side === "BUY") {
-        adjustments.set(p.assetKey, (adjustments.get(p.assetKey) ?? 0) + delta);
-        buyTotal += delta;
-      } else {
-        adjustments.set(p.assetKey, (adjustments.get(p.assetKey) ?? 0) - delta);
-        sellTotal += delta;
-      }
+    for (const row of costSummary.estimates) {
+      adjustments.set(row.assetKey, (adjustments.get(row.assetKey) ?? 0) + row.assetValueDeltaBase);
     }
 
     const afterItems: AllocationItem[] = [];
@@ -105,7 +107,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const afterCash = cash - buyTotal + sellTotal;
+    const afterCash = cash + costSummary.netCashImpact;
     if (afterCash > 0) {
       afterTotalValue += afterCash;
       afterItems.push({ name: "现金", value: +afterCash.toFixed(2), weightPct: 0 });
@@ -131,8 +133,8 @@ export async function POST(req: Request) {
       selectedCount: proposals.length,
       before: beforeItems,
       after: afterItems,
-      totalBuy: +buyTotal.toFixed(2),
-      totalSell: +sellTotal.toFixed(2),
+      totalBuy: +costSummary.buyNotional.toFixed(2),
+      totalSell: +costSummary.sellNotional.toFixed(2),
       weightChanges,
     });
   });

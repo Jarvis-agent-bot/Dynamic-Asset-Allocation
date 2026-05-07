@@ -407,7 +407,12 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
           totalEquity,
         },
         assetUniverse,
-        execution: { logs: [] },
+        execution: {
+          logs: [],
+          feeRateBps: systemRow.config.strategy.execution?.feeRateBps ?? systemRow.config.strategy.constraints.tradeFeeRateBps ?? 0,
+          slippageBps: systemRow.config.strategy.execution?.slippageBps ?? 0,
+          minNotional: systemRow.config.strategy.constraints.minNotional ?? 0,
+        },
         rebalance: {
           mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",
           autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
@@ -519,7 +524,9 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
       assetUniverse,
       execution: {
         logs,
+        feeRateBps: strategy.execution?.feeRateBps ?? strategy.constraints.tradeFeeRateBps ?? 0,
         slippageBps: strategy.execution?.slippageBps ?? 0,
+        minNotional: strategy.constraints.minNotional ?? 0,
       },
       rebalance: {
         mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",
