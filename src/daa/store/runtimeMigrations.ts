@@ -252,9 +252,7 @@ const MIGRATIONS_: Migration[] = [
         )
       `);
       await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_created_desc ON daa_notification_delivery_logs(created_at DESC)");
-      await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_owner_created_desc ON daa_notification_delivery_logs(owner_account_id, created_at DESC)");
       await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_channel_created_desc ON daa_notification_delivery_logs(channel, created_at DESC)");
-      await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_owner_channel_created_desc ON daa_notification_delivery_logs(owner_account_id, channel, created_at DESC)");
       await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_job_id ON daa_notification_delivery_logs(job_id)");
     },
   },
@@ -536,11 +534,6 @@ const MIGRATIONS_: Migration[] = [
       await query(`
         CREATE INDEX IF NOT EXISTS idx_daa_notif_dedup_major_event
         ON daa_notification_delivery_logs (event_type, success, created_at DESC)
-        WHERE event_type = 'news_major_event' AND success = TRUE
-      `);
-      await query(`
-        CREATE INDEX IF NOT EXISTS idx_daa_notif_dedup_major_event_owner
-        ON daa_notification_delivery_logs (owner_account_id, event_type, success, created_at DESC)
         WHERE event_type = 'news_major_event' AND success = TRUE
       `);
     },
