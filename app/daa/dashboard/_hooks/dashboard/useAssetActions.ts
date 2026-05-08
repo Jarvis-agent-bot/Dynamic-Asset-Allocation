@@ -123,10 +123,12 @@ export function useAssetActions(input: {
   const handleListFeaturedAssets = useCallback(async (payload: {
     market: string;
     assetClass: string;
+    theme?: string;
     limitPerMarket?: number;
   }): Promise<WorkbenchFeaturedAssetsResult> => listWorkbenchFeaturedAssets({
     market: payload.market,
     assetClass: payload.assetClass,
+    theme: payload.theme,
     limitPerMarket: payload.limitPerMarket,
   }), []);
 
@@ -140,6 +142,23 @@ export function useAssetActions(input: {
     });
     await inputRef.current.loadBootstrap(true);
   }, []);
+
+  const handleRemoveWatchlistAssetItem = useCallback(async (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => {
+    const market = String(item.market || "").trim().toUpperCase();
+    const symbol = String(item.symbol || "").trim().toUpperCase();
+    if (!market || !symbol || assetActioningKey) return;
+    const key = `${market}::${symbol}`;
+    setAssetActioningKey(key);
+    try {
+      await patchWorkbenchAsset(key, { watchEnabled: false, targetWeightHint: 0 });
+      toast.success(`${item.name || item.symbol} 已移出观察列表`);
+      await inputRef.current.loadBootstrap(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "移除观察失败");
+    } finally {
+      setAssetActioningKey(null);
+    }
+  }, [assetActioningKey]);
 
   const handleRemoveFromWatchlist = useCallback(async (row: AssetUniverseView) => {
     if (assetActioningKey) return;
@@ -270,6 +289,7 @@ export function useAssetActions(input: {
     onListFeaturedAssets: handleListFeaturedAssets,
     onSearch: handleSearchAssets,
     onAddAsset: handleAddWatchlistAsset,
+    onRemoveAsset: handleRemoveWatchlistAssetItem,
   };
 
   return {

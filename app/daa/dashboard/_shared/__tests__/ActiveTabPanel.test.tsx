@@ -142,6 +142,7 @@ function createModel(overrides: DashboardPageModelOverrides = {}): DashboardPage
     onListFeaturedAssets: vi.fn(async () => ({ groups: [], generatedAt: "2026-03-01T00:00:00.000Z" })),
     onSearch: vi.fn(async () => []),
     onAddAsset: vi.fn(async () => undefined),
+    onRemoveAsset: vi.fn(async () => undefined),
     ...watchlistBuilderPropsOverride,
   };
   const rebalanceSectionProps = rebalanceSectionPropsOverride === null

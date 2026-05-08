@@ -62,12 +62,14 @@ export async function searchWorkbenchAssets(input: {
 export async function listWorkbenchFeaturedAssets(input: {
   market?: string;
   assetClass?: string;
+  theme?: string;
   limitPerMarket?: number;
 }): Promise<WorkbenchFeaturedAssetsResult> {
   const qs = new URLSearchParams();
   if (input.market) qs.set("market", String(input.market).trim());
   if (input.assetClass) qs.set("assetClass", String(input.assetClass).trim());
-  qs.set("limitPerMarket", String(Math.max(1, Math.min(20, Math.trunc(input.limitPerMarket ?? 8)))));
+  if (input.theme) qs.set("theme", String(input.theme).trim());
+  qs.set("limitPerMarket", String(Math.max(1, Math.min(20, Math.trunc(input.limitPerMarket ?? 12)))));
   const data = await requestData<WorkbenchFeaturedAssetsResult>(
     `/api/daa/workbench/featured-assets?${qs.toString()}`,
     {

@@ -142,23 +142,60 @@ function readAgentTargetWeightOverridesFromCycle(
   return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
-async function persistExecutedAgentTargetWeights(input: {
-  cycle: DaaStoreRebalanceCycle;
-  cycleLogs: Awaited<ReturnType<typeof listDaaTradeTickets>>;
-}): Promise<number> {
-  const targetWeightOverrides = readAgentTargetWeightOverridesFromCycle(input.cycle);
-  if (!targetWeightOverrides) return 0;
+export type ExecutedTargetWeightPatch = {
+  assetKey: string;
+  targetWeightHint: number;
+  reason: "agent_target" | "proposal_target";
+};
 
+export function buildExecutedTargetWeightPatches(input: {
+  cycle: Pick<DaaStoreRebalanceCycle, "agentDecisionSnapshot" | "proposals">;
+  cycleLogs: Array<{ assetKey: string; status: string }>;
+}): ExecutedTargetWeightPatch[] {
   const executedAssetKeys = new Set(
     input.cycleLogs
       .filter((row) => row.status === "executed")
       .map((row) => row.assetKey.toUpperCase()),
   );
-  const entries = Object.entries(targetWeightOverrides)
-    .filter(([assetKey]) => executedAssetKeys.has(assetKey));
-  if (entries.length === 0) return 0;
+  if (executedAssetKeys.size === 0) return [];
 
-  const results = await Promise.allSettled(entries.map(([assetKey, targetWeightHint]) =>
+  const patches = new Map<string, ExecutedTargetWeightPatch>();
+  const targetWeightOverrides = readAgentTargetWeightOverridesFromCycle(input.cycle);
+  for (const [assetKey, targetWeightHint] of Object.entries(targetWeightOverrides || {})) {
+    const normalizedKey = assetKey.toUpperCase();
+    if (!executedAssetKeys.has(normalizedKey)) continue;
+    patches.set(normalizedKey, {
+      assetKey: normalizedKey,
+      targetWeightHint: Math.max(0, Math.min(1, Number(targetWeightHint) || 0)),
+      reason: "agent_target",
+    });
+  }
+
+  for (const proposal of input.cycle.proposals) {
+    const normalizedKey = proposal.assetKey.toUpperCase();
+    if (!executedAssetKeys.has(normalizedKey)) continue;
+    if (patches.has(normalizedKey)) continue;
+    if (proposal.side !== "BUY") continue;
+    const targetWeightPct = Number(proposal.targetWeightPct);
+    if (!Number.isFinite(targetWeightPct) || targetWeightPct <= 0) continue;
+    patches.set(normalizedKey, {
+      assetKey: normalizedKey,
+      targetWeightHint: Math.max(0, Math.min(1, targetWeightPct / 100)),
+      reason: "proposal_target",
+    });
+  }
+
+  return Array.from(patches.values());
+}
+
+async function persistExecutedTargetWeights(input: {
+  cycle: DaaStoreRebalanceCycle;
+  cycleLogs: Awaited<ReturnType<typeof listDaaTradeTickets>>;
+}): Promise<number> {
+  const patches = buildExecutedTargetWeightPatches(input);
+  if (patches.length === 0) return 0;
+
+  const results = await Promise.allSettled(patches.map(({ assetKey, targetWeightHint }) =>
     patchDaaAssetUniverseRow({
       assetKey,
       watchEnabled: true,
@@ -167,7 +204,7 @@ async function persistExecutedAgentTargetWeights(input: {
   ));
   for (const result of results) {
     if (result.status === "rejected") {
-      logSwallowed("workbenchRebalanceCycleService.persistAgentTarget", result.reason);
+      logSwallowed("workbenchRebalanceCycleService.persistExecutedTarget", result.reason);
     }
   }
   return results.filter((result) => result.status === "fulfilled").length;
@@ -999,7 +1036,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
 
   const logs = await listDaaTradeTickets({ limit: 300 });
   const cycleLogs = logs.filter((row) => createdTicketIds.includes(row.ticketId));
-  const persistedAgentTargetCount = await persistExecutedAgentTargetWeights({
+  const persistedTargetCount = await persistExecutedTargetWeights({
     cycle,
     cycleLogs,
   });
@@ -1070,8 +1107,8 @@ export async function executeWorkbenchRebalanceCycle(input: {
   const executionNotes = priceAdjustmentNotes.length > 0
     ? `\n[执行价格] ${priceAdjustmentNotes.join(" | ")}`
     : "";
-  const agentTargetNotes = persistedAgentTargetCount > 0
-    ? `\n[Agent目标] 已将 ${persistedAgentTargetCount} 个已成交标的的目标权重写入持久目标，避免后续 drift 反向卖出。`
+  const targetWeightNotes = persistedTargetCount > 0
+    ? `\n[目标权重] 已将 ${persistedTargetCount} 个已成交标的的目标权重写入持久目标，避免后续 drift 反向卖出。`
     : "";
   const hasOpenOrders = submittedCount > 0;
 
@@ -1087,7 +1124,7 @@ export async function executeWorkbenchRebalanceCycle(input: {
       totalNotional,
       newMaxDriftPct,
     },
-    notes: (cycle.notes || "") + executionNotes + agentTargetNotes || null,
+    notes: (cycle.notes || "") + executionNotes + targetWeightNotes || null,
   });
 
   if (hasOpenOrders) {

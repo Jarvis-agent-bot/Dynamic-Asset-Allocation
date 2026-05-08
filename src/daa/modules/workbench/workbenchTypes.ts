@@ -134,6 +134,8 @@ export type RebalanceProposal = {
   reason: string;
   selected: boolean;
   hfContribution: string | null;
+  /** 此提案希望成交后保留的目标权重百分比，例如 5 表示 5%。 */
+  targetWeightPct?: number | null;
   /** 提案来源类型（默认 "drift"，观察列表信号建仓为 "watchlist_entry"） */
   proposalType?: ProposalType;
   /**
@@ -566,6 +568,8 @@ export type WorkbenchSearchAssetResult = {
 
 export type WorkbenchFeaturedAssetItem = WorkbenchSearchAssetResult & {
   thesisTagZh: string;
+  themeKey: string;
+  themeLabelZh: string;
 };
 
 export type WorkbenchFeaturedAssetGroup = {

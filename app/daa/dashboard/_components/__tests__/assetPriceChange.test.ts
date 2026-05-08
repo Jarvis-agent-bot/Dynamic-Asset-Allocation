@@ -49,12 +49,20 @@ function makeRow(overrides: Partial<AssetUniverseView> = {}): AssetUniverseView 
 }
 
 describe("deriveAssetPriceChange", () => {
-  it("优先用 sparkline 最近两个收盘价，而不是 SSE 首包 0 delta", () => {
+  it("SSE 首包 0 delta 时回退到 sparkline 最近两个收盘价", () => {
     const change = deriveAssetPriceChange(makeRow({ priceDelta: 0 } as Partial<AssetUniverseView>), [98, 100, 103]);
 
     expect(change?.source).toBe("sparkline");
     expect(change?.change).toBe(3);
     expect(change?.changePct).toBeCloseTo(3, 6);
+  });
+
+  it("SSE 有真实非 0 delta 时优先使用实时涨跌", () => {
+    const change = deriveAssetPriceChange(makeRow({ lastPrice: 106, priceDelta: 2 } as Partial<AssetUniverseView>), [98, 100, 101]);
+
+    expect(change?.source).toBe("live");
+    expect(change?.change).toBe(2);
+    expect(change?.changePct).toBeCloseTo(1.923076, 5);
   });
 
   it("没有 sparkline 且 live delta 为 0 时返回空态", () => {

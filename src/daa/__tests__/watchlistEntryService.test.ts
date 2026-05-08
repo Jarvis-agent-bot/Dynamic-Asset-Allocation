@@ -187,6 +187,7 @@ describe("generateWatchlistEntryProposals", () => {
     expect(result.proposals).toHaveLength(1);
     expect(result.proposals[0]?.side).toBe("BUY");
     expect(result.proposals[0]?.proposalType).toBe("watchlist_entry");
+    expect(result.proposals[0]?.targetWeightPct).toBe(5);
     expect(result.proposals[0]?.reason).toMatch(/观察列表自动建仓/);
     // 目标 5% × 50000 = 2500，现金上限 30% × 10000 = 3000 → min = 2500
     expect(result.proposals[0]?.suggestedNotional).toBeCloseTo(2500, 0);

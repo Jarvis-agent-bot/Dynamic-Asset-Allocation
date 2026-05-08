@@ -45,5 +45,5 @@ export function deriveAssetPriceChange(
   row: AssetUniverseView,
   sparkData?: number[] | null,
 ): AssetPriceChange | null {
-  return fromSparkline(sparkData) ?? fromLiveDelta(row);
+  return fromLiveDelta(row) ?? fromSparkline(sparkData);
 }

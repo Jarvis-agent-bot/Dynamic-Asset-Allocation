@@ -698,6 +698,11 @@ function normalizeCycleProposals(value: unknown): DaaStoreRebalanceCycle["propos
     const assetKey = normalizeText(row.assetKey, symbol ? `US::${symbol}` : "").toUpperCase();
     if (!symbol || !assetKey) continue;
     const side = normalizeText(row.side, "BUY").toUpperCase() === "SELL" ? "SELL" : "BUY";
+    const proposalTypeRaw = normalizeText(row.proposalType).toLowerCase();
+    const proposalType = proposalTypeRaw === "watchlist_entry" || proposalTypeRaw === "tax_loss_harvest" || proposalTypeRaw === "drift"
+      ? proposalTypeRaw
+      : undefined;
+    const targetWeightPct = row.targetWeightPct == null ? null : Math.max(0, toFiniteNumber(row.targetWeightPct, 0));
     out.push({
       assetKey,
       symbol,
@@ -710,6 +715,8 @@ function normalizeCycleProposals(value: unknown): DaaStoreRebalanceCycle["propos
       reason: normalizeText(row.reason, ""),
       selected: toBoolean(row.selected, true),
       hfContribution: normalizeText(row.hfContribution, "") || null,
+      targetWeightPct,
+      proposalType,
       decisionContext: normalizeProposalDecisionContext(row.decisionContext),
     });
   }

@@ -8,7 +8,7 @@ import type {
   DaaMarketIndicatorKey,
   DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
-import type { ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { ProposalDecisionContext, ProposalType } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 
 export type DaaStorePosition = {
@@ -500,6 +500,8 @@ export type DaaStoreRebalanceCycle = {
     reason: string;
     selected: boolean;
     hfContribution: string | null;
+    targetWeightPct?: number | null;
+    proposalType?: ProposalType;
     decisionContext?: ProposalDecisionContext | null;
   }>;
   riskCheck: DaaStorePreTradeRiskCheck;

@@ -65,10 +65,11 @@ describe("workbench-featured-assets-route-v1", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(Array.isArray(json.data.groups)).toBe(true);
-    expect(json.data.groups.map((group: { market: string }) => group.market)).toEqual(["US", "HK", "CN"]);
+    expect(json.data.groups.map((group: { market: string }) => group.market)).toEqual(["US", "HK", "CN", "KR"]);
     expect(json.data.groups[0]?.items[0]).toMatchObject({
       market: "US",
       assetClass: "EQUITY",
+      themeKey: expect.any(String),
     });
   });
 
@@ -91,6 +92,36 @@ describe("workbench-featured-assets-route-v1", () => {
     expect(json.data.groups.length).toBe(1);
     expect(json.data.groups[0]?.market).toBe("CRYPTO");
     expect(json.data.groups[0]?.items.every((item: { assetClass: string }) => item.assetClass === "CRYPTO")).toBe(true);
+  });
+
+  it("theme=semiconductor 返回半导体主题资产", async () => {
+    const response = await GET(new Request("http://localhost/api/daa/workbench/featured-assets?theme=semiconductor&limitPerMarket=20"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.groups.length).toBeGreaterThan(0);
+    expect(json.data.groups.flatMap((group: { items: Array<{ themeKey: string }> }) => group.items)
+      .every((item: { themeKey: string }) => item.themeKey === "semiconductor")).toBe(true);
+  });
+
+  it.each([
+    ["ai_infrastructure", "AI基础设施"],
+    ["optical_networking", "光互联/网络"],
+    ["power_grid", "电力/电网"],
+    ["robotics", "机器人/自动化"],
+    ["cybersecurity", "网络安全"],
+    ["ai_software", "AI应用软件"],
+    ["global_region", "全球区域"],
+  ])("theme=%s 返回对应主题资产", async (theme, label) => {
+    const response = await GET(new Request(`http://localhost/api/daa/workbench/featured-assets?theme=${theme}&limitPerMarket=20`));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    const items = json.data.groups.flatMap((group: { items: Array<{ themeKey: string; themeLabelZh: string }> }) => group.items);
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((item: { themeKey: string; themeLabelZh: string }) => item.themeKey === theme && item.themeLabelZh === label)).toBe(true);
   });
 
   it("limitPerMarket 生效", async () => {

@@ -262,6 +262,7 @@ export async function generateWatchlistEntryProposals(input: {
       reason,
       selected: true,
       hfContribution: asset.hfSignal ? `${asset.hfSignal.icon} ${asset.hfSignal.label}` : null,
+      targetWeightPct: targetPct * 100,
       proposalType: "watchlist_entry",
     });
     cashUsed += baseNotional;

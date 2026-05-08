@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Search, Sparkles } from "lucide-react";
+import { Loader2, Minus, Plus, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -33,8 +33,9 @@ export function WatchlistSearchBar(props: {
   loading?: boolean;
   joinedAssetKeys: Record<string, true>;
   onSearch: (input: { q: string; market: string; assetClass: string; region: string }) => Promise<WorkbenchSearchAssetResult[]>;
-  onListFeaturedAssets: (input: { market: string; assetClass: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
+  onListFeaturedAssets: (input: { market: string; assetClass: string; theme?: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
   onAddAsset: (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => Promise<void>;
+  onRemoveAsset: (item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) => Promise<void>;
 }) {
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
@@ -65,6 +66,19 @@ export function WatchlistSearchBar(props: {
       await props.onAddAsset(item);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "加入失败");
+    } finally {
+      setAddingKey(null);
+    }
+  }
+
+  async function handleRemove(item: WorkbenchSearchAssetResult | WorkbenchFeaturedAssetItem) {
+    if (addingKey) return;
+    const key = assetKey(item);
+    setAddingKey(key);
+    try {
+      await props.onRemoveAsset(item);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "移除失败");
     } finally {
       setAddingKey(null);
     }
@@ -146,11 +160,11 @@ export function WatchlistSearchBar(props: {
                   <DaaSurfaceActionButton
                     tone={joined ? "slate" : "primary"}
                     className="h-8 shrink-0 rounded-full px-3 text-xs"
-                    disabled={busy || props.loading || joined}
-                    onClick={() => void handleAdd(item)}
+                    disabled={busy || props.loading}
+                    onClick={() => void (joined ? handleRemove(item) : handleAdd(item))}
                   >
-                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="h-3.5 w-3.5" />}
-                    {joined ? "已加入" : "加入"}
+                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                    {joined ? "移除" : "加入"}
                   </DaaSurfaceActionButton>
                 </div>
               );
@@ -166,6 +180,7 @@ export function WatchlistSearchBar(props: {
         joinedAssetKeys={props.joinedAssetKeys}
         onListFeaturedAssets={props.onListFeaturedAssets}
         onAddAsset={handleAdd}
+        onRemoveAsset={handleRemove}
         loading={props.loading}
       />
     </div>
@@ -180,32 +195,33 @@ function FeaturedAssetsDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   joinedAssetKeys: Record<string, true>;
-  onListFeaturedAssets: (input: { market: string; assetClass: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
+  onListFeaturedAssets: (input: { market: string; assetClass: string; theme?: string; limitPerMarket?: number }) => Promise<WorkbenchFeaturedAssetsResult>;
   onAddAsset: (item: WorkbenchFeaturedAssetItem) => Promise<void>;
+  onRemoveAsset: (item: WorkbenchFeaturedAssetItem) => Promise<void>;
   loading?: boolean;
 }) {
   const [groups, setGroups] = useState<WorkbenchFeaturedAssetGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [market, setMarket] = useState("ALL");
   const [assetClass, setAssetClass] = useState("ALL");
+  const [theme, setTheme] = useState("ALL");
   const [addingKey, setAddingKey] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await props.onListFeaturedAssets({ market, assetClass, limitPerMarket: 8 });
+      const data = await props.onListFeaturedAssets({ market, assetClass, theme, limitPerMarket: 12 });
       setGroups(Array.isArray(data.groups) ? data.groups : []);
     } catch {
       setGroups([]);
     } finally {
       setLoading(false);
     }
-  }, [market, assetClass, props.onListFeaturedAssets]);
+  }, [market, assetClass, theme, props.onListFeaturedAssets]);
 
-  // 弹窗打开时自动加载
   useEffect(() => {
     if (props.open) void loadData();
-  }, [props.open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [props.open, loadData]);
 
   function isJoined(input: { market: string; symbol: string }): boolean {
     return Boolean(props.joinedAssetKeys[assetKey(input)]);
@@ -224,14 +240,45 @@ function FeaturedAssetsDialog(props: {
     }
   }
 
+  async function handleRemove(item: WorkbenchFeaturedAssetItem) {
+    if (addingKey) return;
+    const key = assetKey(item);
+    setAddingKey(key);
+    try {
+      await props.onRemoveAsset(item);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "移除失败");
+    } finally {
+      setAddingKey(null);
+    }
+  }
+
   const MARKETS = [
     { value: "ALL", label: "全部" }, { value: "US", label: "美股" },
-    { value: "HK", label: "港股" }, { value: "CN", label: "A股" }, { value: "CRYPTO", label: "加密" },
+    { value: "HK", label: "港股" }, { value: "CN", label: "A股" }, { value: "KR", label: "韩股" }, { value: "CRYPTO", label: "加密" },
   ];
   const CLASSES = [
     { value: "ALL", label: "全部" }, { value: "EQUITY", label: "股票" },
     { value: "ETF", label: "ETF" }, { value: "COMMODITY", label: "商品" },
     { value: "BOND", label: "债券" }, { value: "CRYPTO", label: "加密" },
+  ];
+  const THEMES = [
+    { value: "ALL", label: "全部" },
+    { value: "semiconductor", label: "半导体" },
+    { value: "ai_compute", label: "AI算力" },
+    { value: "ai_infrastructure", label: "AI基建" },
+    { value: "memory_storage", label: "存储/内存" },
+    { value: "optical_networking", label: "光互联" },
+    { value: "platform", label: "平台软件" },
+    { value: "ai_software", label: "AI软件" },
+    { value: "power_grid", label: "电力电网" },
+    { value: "robotics", label: "机器人" },
+    { value: "cybersecurity", label: "网络安全" },
+    { value: "broad_etf", label: "宽基ETF" },
+    { value: "china_core", label: "中国资产" },
+    { value: "global_region", label: "全球区域" },
+    { value: "defensive_income", label: "防守收益" },
+    { value: "commodity_resource", label: "商品资源" },
   ];
 
   return (
@@ -265,6 +312,16 @@ function FeaturedAssetsDialog(props: {
               ))}
             </div>
           </div>
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">主题</div>
+            <div className="flex flex-wrap gap-1.5">
+              {THEMES.map((item) => (
+                <DaaSurfaceFilterChip key={item.value} active={theme === item.value} onClick={() => { setTheme(item.value); }}>
+                  {item.label}
+                </DaaSurfaceFilterChip>
+              ))}
+            </div>
+          </div>
           <DaaSurfaceActionButton tone="primary" className="mt-auto h-8 rounded-full px-4 text-xs" onClick={() => void loadData()} disabled={loading}>
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             刷新
@@ -292,6 +349,9 @@ function FeaturedAssetsDialog(props: {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-[var(--text)]">{item.symbol}</div>
                       <div className="mt-0.5 truncate text-[11px] text-[var(--muted)]">{name}</div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <DaaSurfaceStatusPill tone="slate">{item.themeLabelZh || item.thesisTagZh}</DaaSurfaceStatusPill>
+                      </div>
                       {item.price > 0 ? (
                         <div className="mt-0.5 font-[var(--font-mono)] text-xs text-[var(--text)]">
                           {formatCurrency(item.price, item.currency)}
@@ -301,11 +361,11 @@ function FeaturedAssetsDialog(props: {
                     <DaaSurfaceActionButton
                       tone={joined ? "slate" : "primary"}
                       className="h-8 shrink-0 rounded-full px-3 text-xs"
-                      disabled={busy || props.loading || joined}
-                      onClick={() => void handleAdd(item)}
+                      disabled={busy || props.loading}
+                      onClick={() => void (joined ? handleRemove(item) : handleAdd(item))}
                     >
-                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? null : <Plus className="h-3.5 w-3.5" />}
-                      {joined ? "已加入" : "加入"}
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : joined ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                      {joined ? "移除" : "加入"}
                     </DaaSurfaceActionButton>
                   </div>
                 );

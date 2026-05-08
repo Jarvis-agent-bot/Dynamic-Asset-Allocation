@@ -907,6 +907,7 @@ function buildCycleDraftFromBootstrap(input: {
             hfContribution: row.hfSignal
                 ? `${row.hfSignal.icon} ${row.hfSignal.label} ${row.hfSignal.aggregatedScorePct.toFixed(1)}%`
                 : null,
+            targetWeightPct: targetPct * 100,
         });
     }
     const triggerReason = normalizeText(input.triggerReason)
