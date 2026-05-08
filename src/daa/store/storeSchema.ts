@@ -10,6 +10,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   archiveTable,
   ensureTableColumn,
+  hasTable,
   isMissingRelationError,
   type SchemaQueryFn,
 } from "./storeShared";
@@ -175,6 +176,37 @@ async function ensureDaaStoreRuntimeMigrationsApplied(): Promise<void> {
   await st.runtimeMigrationInit;
 }
 
+async function ensureOwnerColumnsBeforeSchema(query: SchemaQueryFn): Promise<void> {
+  const scopedTables = [
+    "daa_positions_v2",
+    "daa_broker_positions",
+    "daa_watchlist_entries",
+    "daa_target_allocations",
+    "daa_equity_snapshots_v2",
+    "daa_portfolio_ledger_events",
+    "daa_trade_journal",
+    "daa_trade_baskets",
+    "daa_trade_tickets",
+    "daa_broker_account_state",
+    "daa_broker_order_snapshots",
+    "daa_rebalance_cycles",
+    "daa_cycle_reports",
+    "daa_trigger_events",
+    "daa_rebalance_decisions",
+    "daa_execution_orders",
+    "daa_execution_order_events",
+    "daa_run_history",
+    "daa_op_log",
+    "daa_llm_feedback",
+    "daa_notification_delivery_logs",
+  ];
+
+  for (const tableName of scopedTables) {
+    if (!(await hasTable(query, tableName))) continue;
+    await ensureTableColumn(query, tableName, "owner_account_id", "TEXT NOT NULL DEFAULT 'default'");
+  }
+}
+
 export async function ensureDaaStoreSchemaPg(): Promise<void> {
   const st = getStoreState();
   if (st.schemaInit) {
@@ -194,6 +226,8 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           await archiveTable(query as any, "daa_equity_snapshots"),
           await archiveTable(query as any, "daa_positions"),
         ]).some(Boolean);
+
+        await ensureOwnerColumnsBeforeSchema(query as any);
 
         await query(`
           CREATE TABLE IF NOT EXISTS daa_positions_v2 (
