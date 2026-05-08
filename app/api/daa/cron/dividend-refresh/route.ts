@@ -1,6 +1,13 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import {
+  buildAccountScopedRequestIdempotencyKey,
+  buildUtcCronWindowIdempotencyKey,
+  runForEachActiveDaaAccountScope,
+  runIdempotentAccountScopedCronJob,
+  summarizeAccountScopedCronRuns,
+  unwrapSingleAccountCronResult,
+} from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { extractDividendsFromRawPayloads } from "@/src/daa/modules/dividend/dividendExtractor";
 import {
   creditPendingDividends,
@@ -26,11 +33,22 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJob({
+    const fallbackKey = buildUtcCronWindowIdempotencyKey("cron_dividend_refresh", 24 * 60);
+    const runs = await runForEachActiveDaaAccountScope((scope) =>
+      runDividendRefreshJob(req, buildAccountScopedRequestIdempotencyKey(scope, req, fallbackKey)),
+    );
+    const single = unwrapSingleAccountCronResult(runs);
+    return ok(single ?? summarizeAccountScopedCronRuns(runs));
+  });
+}
+
+async function runDividendRefreshJob(req: Request, idempotencyKey: string | null): Promise<Record<string, unknown>> {
+    return runIdempotentAccountScopedCronJob({
       req,
       jobType: "cron_dividend_refresh",
       triggerSource: "cron_dividend_refresh",
-      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      idempotencyKey,
+      duplicateReason: "当前账号同一 dividend-refresh 幂等任务已完成，跳过重复触发。",
       summarize: (result) => ({
         extracted: result.extracted,
         incomeProcessed: result.incomeProcessed,
@@ -107,13 +125,4 @@ export async function POST(req: Request) {
         };
       },
     });
-
-    return ok({
-      ...execution.result,
-      requestId: execution.requestId,
-      jobId: execution.jobId,
-      durationMs: execution.durationMs,
-    });
-  });
 }
-

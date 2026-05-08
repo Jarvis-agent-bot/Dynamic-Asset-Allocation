@@ -1,7 +1,14 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
+import {
+  buildAccountScopedRequestIdempotencyKey,
+  buildUtcCronWindowIdempotencyKey,
+  runForEachActiveDaaAccountScope,
+  runIdempotentAccountScopedCronJob,
+  summarizeAccountScopedCronRuns,
+  unwrapSingleAccountCronResult,
+} from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
@@ -99,11 +106,22 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJob<DailyAnalysisJobResult>({
+    const fallbackKey = buildUtcCronWindowIdempotencyKey("cron_daily_analysis", 60);
+    const runs = await runForEachActiveDaaAccountScope((scope) =>
+      runDailyAnalysisJob(req, buildAccountScopedRequestIdempotencyKey(scope, req, fallbackKey)),
+    );
+    const single = unwrapSingleAccountCronResult(runs);
+    return ok(single ?? summarizeAccountScopedCronRuns(runs));
+  });
+}
+
+async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null): Promise<Record<string, unknown>> {
+    return runIdempotentAccountScopedCronJob<DailyAnalysisJobResult>({
       req,
       jobType: "cron_daily_analysis",
       triggerSource: "cron_daily_analysis",
-      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      idempotencyKey,
+      duplicateReason: "当前账号同一 daily-analysis 幂等任务已完成，跳过重复触发。",
       summarize: (result) => ({
         skipped: result.skipped,
         created: result.created,
@@ -332,12 +350,4 @@ export async function POST(req: Request) {
         };
       },
     });
-
-    return ok({
-      ...execution.result,
-      requestId: execution.requestId,
-      jobId: execution.jobId,
-      durationMs: execution.durationMs,
-    });
-  });
 }

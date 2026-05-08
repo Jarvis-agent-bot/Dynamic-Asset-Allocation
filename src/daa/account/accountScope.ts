@@ -9,6 +9,13 @@ type DaaAccountScopeStore = {
   accountId: string;
 };
 
+export type DaaActiveAccountScope = {
+  authAccountId: string;
+  username: string;
+  scopeId: string;
+  isPrimary: boolean;
+};
+
 const scopeStorage = new AsyncLocalStorage<DaaAccountScopeStore>();
 
 export function normalizeDaaAccountScopeId(raw: unknown): string {
@@ -58,6 +65,52 @@ export async function resolvePrimaryDaaAccountScopeId(): Promise<string> {
   } catch (err) {
     logSwallowed("accountScope.resolvePrimaryDaaAccountScopeId", err);
     return DEFAULT_DAA_ACCOUNT_SCOPE_ID;
+  }
+}
+
+export async function listActiveDaaAccountScopes(): Promise<DaaActiveAccountScope[]> {
+  if (!(await authAccountsTableExists())) {
+    return [{
+      authAccountId: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+      username: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+      scopeId: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+      isPrimary: true,
+    }];
+  }
+
+  try {
+    return await withDaaPgClient(async ({ query }) => {
+      const res = await query(
+        "SELECT account_id, username FROM daa_auth_accounts WHERE status = 'active' ORDER BY created_at ASC, account_id ASC",
+      );
+      const rows = res.rows
+        .map((row, idx) => {
+          const authAccountId = normalizeDaaAccountScopeId(row.account_id);
+          const username = typeof row.username === "string" && row.username.trim() ? row.username.trim() : authAccountId;
+          return {
+            authAccountId,
+            username,
+            scopeId: idx === 0 ? DEFAULT_DAA_ACCOUNT_SCOPE_ID : authAccountId,
+            isPrimary: idx === 0,
+          } satisfies DaaActiveAccountScope;
+        })
+        .filter((row) => row.authAccountId);
+      if (rows.length > 0) return rows;
+      return [{
+        authAccountId: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+        username: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+        scopeId: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+        isPrimary: true,
+      }];
+    });
+  } catch (err) {
+    logSwallowed("accountScope.listActiveDaaAccountScopes", err);
+    return [{
+      authAccountId: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+      username: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+      scopeId: DEFAULT_DAA_ACCOUNT_SCOPE_ID,
+      isPrimary: true,
+    }];
   }
 }
 

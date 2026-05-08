@@ -1,6 +1,13 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import {
+  buildAccountScopedRequestIdempotencyKey,
+  buildUtcCronWindowIdempotencyKey,
+  runForEachActiveDaaAccountScope,
+  runIdempotentAccountScopedCronJob,
+  summarizeAccountScopedCronRuns,
+  unwrapSingleAccountCronResult,
+} from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { buildNewsSignals, type DaaNewsSignal } from "@/src/daa/signals/newsSignal";
 import { majorEventTypeLabelZh } from "@/src/daa/signals/newsLlmAnalyzer";
 import { getDaaSystemConfig, listDaaAssetUniverse } from "@/src/daa/store/daaStorePg";
@@ -130,11 +137,22 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJob({
+    const fallbackKey = buildUtcCronWindowIdempotencyKey("cron_news_refresh", 30);
+    const runs = await runForEachActiveDaaAccountScope((scope) =>
+      runNewsRefreshJob(req, buildAccountScopedRequestIdempotencyKey(scope, req, fallbackKey)),
+    );
+    const single = unwrapSingleAccountCronResult(runs);
+    return ok(single ?? summarizeAccountScopedCronRuns(runs));
+  });
+}
+
+async function runNewsRefreshJob(req: Request, idempotencyKey: string | null): Promise<Record<string, unknown>> {
+    return runIdempotentAccountScopedCronJob({
       req,
       jobType: "cron_news_refresh",
       triggerSource: "cron_news_refresh",
-      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      idempotencyKey,
+      duplicateReason: "当前账号同一 news-refresh 幂等任务已完成，跳过重复触发。",
       summarize: (r) => {
         const result = r as Record<string, unknown>;
         return { symbols: result.refreshedSymbols, signals: result.signals, majorEvents: result.majorEventsPushed };
@@ -177,12 +195,4 @@ export async function POST(req: Request) {
         };
       },
     });
-
-    return ok({
-      ...(execution.result as Record<string, unknown>),
-      requestId: execution.requestId,
-      jobId: execution.jobId,
-      durationMs: execution.durationMs,
-    });
-  });
 }

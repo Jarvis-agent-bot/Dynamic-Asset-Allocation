@@ -4,9 +4,11 @@ import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
 import { toIsoString, toNullableNumber, parseJsonb } from "@/src/daa/store/storeShared";
 import { normalizeText } from "@/src/daa/utils/normalize";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 
 export type DaaJobExecutionLog = {
   jobId: string;
+  ownerAccountId: string;
   jobType: string;
   requestId: string | null;
   triggerSource: string;
@@ -23,6 +25,7 @@ export type DaaJobExecutionLog = {
 function mapJobLogRow(row: Record<string, unknown>): DaaJobExecutionLog {
   return {
     jobId: normalizeText(row.job_id),
+    ownerAccountId: normalizeText(row.owner_account_id, "default"),
     jobType: normalizeText(row.job_type),
     requestId: row.request_id == null ? null : normalizeText(row.request_id) || null,
     triggerSource: normalizeText(row.trigger_source),
@@ -51,18 +54,20 @@ export async function appendJobExecutionLog(input: {
   errorText?: string | null;
 }): Promise<DaaJobExecutionLog> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const jobId = normalizeText(input.jobId) || randomUUID();
     const result = await query(
       `INSERT INTO daa_job_execution_logs (
-        job_id, job_type, request_id, trigger_source, idempotency_key, status,
+        owner_account_id, job_id, job_type, request_id, trigger_source, idempotency_key, status,
         started_at, finished_at, duration_ms, result_json, error_text
       ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10::jsonb, $11
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11::jsonb, $12
       )
       ON CONFLICT (job_id) DO UPDATE
-      SET job_type = EXCLUDED.job_type,
+      SET owner_account_id = EXCLUDED.owner_account_id,
+          job_type = EXCLUDED.job_type,
           request_id = EXCLUDED.request_id,
           trigger_source = EXCLUDED.trigger_source,
           idempotency_key = EXCLUDED.idempotency_key,
@@ -72,8 +77,9 @@ export async function appendJobExecutionLog(input: {
           duration_ms = EXCLUDED.duration_ms,
           result_json = EXCLUDED.result_json,
           error_text = EXCLUDED.error_text
-      RETURNING job_id, job_type, request_id, trigger_source, idempotency_key, status, started_at, finished_at, duration_ms, result_json, error_text, created_at`,
+      RETURNING owner_account_id, job_id, job_type, request_id, trigger_source, idempotency_key, status, started_at, finished_at, duration_ms, result_json, error_text, created_at`,
       [
+        ownerAccountId,
         jobId,
         normalizeText(input.jobType),
         input.requestId ? normalizeText(input.requestId) : null,
@@ -93,15 +99,17 @@ export async function appendJobExecutionLog(input: {
 
 export async function listJobExecutionLogs(limit = 50): Promise<DaaJobExecutionLog[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const safeLimit = Math.max(1, Math.min(200, Math.trunc(Number(limit) || 50)));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT job_id, job_type, request_id, trigger_source, idempotency_key, status,
+      `SELECT owner_account_id, job_id, job_type, request_id, trigger_source, idempotency_key, status,
               started_at, finished_at, duration_ms, result_json, error_text, created_at
        FROM daa_job_execution_logs
+       WHERE owner_account_id = $1
        ORDER BY started_at DESC, created_at DESC
-       LIMIT $1`,
-      [safeLimit],
+       LIMIT $2`,
+      [ownerAccountId, safeLimit],
     );
     return result.rows.map((row) => mapJobLogRow(row as Record<string, unknown>));
   });
@@ -116,22 +124,24 @@ export async function findRecentJobExecutionByIdempotencyKey(input: {
   const key = normalizeText(input.idempotencyKey);
   if (!key) return null;
   await ensureDaaStoreSchemaPg();
-  const safeMinutes = Math.max(1, Math.min(24 * 60, Math.trunc(Number(input.withinMinutes) || 60)));
+  const ownerAccountId = getDaaAccountScopeId();
+  const safeMinutes = Math.max(1, Math.min(90 * 24 * 60, Math.trunc(Number(input.withinMinutes) || 60)));
   const statuses = (input.statuses && input.statuses.length > 0 ? input.statuses : ["succeeded"])
     .map((status) => normalizeText(status))
     .filter(Boolean);
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT job_id, job_type, request_id, trigger_source, idempotency_key, status,
+      `SELECT owner_account_id, job_id, job_type, request_id, trigger_source, idempotency_key, status,
               started_at, finished_at, duration_ms, result_json, error_text, created_at
        FROM daa_job_execution_logs
-       WHERE job_type = $1
-         AND idempotency_key = $2
-         AND started_at >= NOW() - ($3::int * INTERVAL '1 minute')
-         AND status = ANY($4::text[])
+       WHERE owner_account_id = $1
+         AND job_type = $2
+         AND idempotency_key = $3
+         AND started_at >= NOW() - ($4::int * INTERVAL '1 minute')
+         AND status = ANY($5::text[])
        ORDER BY started_at DESC, created_at DESC
        LIMIT 1`,
-      [normalizeText(input.jobType), key, safeMinutes, statuses],
+      [ownerAccountId, normalizeText(input.jobType), key, safeMinutes, statuses],
     );
     return result.rows[0] ? mapJobLogRow(result.rows[0] as Record<string, unknown>) : null;
   });

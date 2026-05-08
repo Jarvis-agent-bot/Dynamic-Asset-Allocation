@@ -15,6 +15,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { shouldSendAgentBriefingTelegram } from "@/src/daa/automation/automationGuards";
 import { buildAutopilotCoverageSummary } from "@/src/daa/agent/autopilotCoverage";
 import { getCurrentRunId } from "@/src/daa/agent/tools/registry";
@@ -333,6 +334,24 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
           }],
         };
       }
+      const alreadySentToday = await hasTodayNotification("agent_briefing").catch((e) => {
+        logSwallowed("cognitiveGraph.surface.telegramThrottle", e);
+        return true;
+      });
+      if (alreadySentToday) {
+        return {
+          briefing,
+          totalTokens: tokensUsed,
+          reasoningTraces: [{
+            node: "surface",
+            threadId: null,
+            input: `${theses.length} theses, ${(state.surprises ?? []).length} surprises`,
+            output: "briefing generated, telegram skipped by daily throttle",
+            tokensUsed,
+            durationMs: Date.now() - t0,
+          }],
+        };
+      }
       const { sendTelegramByEnv } = await import("@/src/daa/notify/telegram");
       const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };
       const tgText = formatBriefingForTelegram(briefing, {
@@ -351,6 +370,10 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         eventType: "agent_briefing",
         triggerSource: "cognitive_agent",
         parseMode: "HTML",
+        requestJson: {
+          throttleKey: "agent_briefing:daily",
+          runId: getCurrentRunId(),
+        },
       }).catch(e => logSwallowed("cognitiveGraph.surface.telegram", e));
     } catch (e) {
       logSwallowed("cognitiveGraph.surface.telegramImport", e);

@@ -1,6 +1,13 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import {
+  buildAccountScopedRequestIdempotencyKey,
+  buildUtcCronWindowIdempotencyKey,
+  runForEachActiveDaaAccountScope,
+  runIdempotentAccountScopedCronJob,
+  summarizeAccountScopedCronRuns,
+  unwrapSingleAccountCronResult,
+} from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { extractDividendsFromRawPayloads } from "@/src/daa/modules/dividend/dividendExtractor";
 import { refreshMarketPrices, type MarketPriceAssetInput } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getMarketIndicatorRefreshSymbols } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
@@ -14,6 +21,7 @@ import {
 import { batchUpdateDaaAssetUniverseLastPrices } from "@/src/daa/store/assetUniverseStore";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
+import { hasRecentNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -58,11 +66,22 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJob({
+    const fallbackKey = buildUtcCronWindowIdempotencyKey("cron_price_refresh", 15);
+    const runs = await runForEachActiveDaaAccountScope((scope) =>
+      runPriceRefreshJob(req, buildAccountScopedRequestIdempotencyKey(scope, req, fallbackKey)),
+    );
+    const single = unwrapSingleAccountCronResult(runs);
+    return ok(single ?? summarizeAccountScopedCronRuns(runs));
+  });
+}
+
+async function runPriceRefreshJob(req: Request, idempotencyKey: string | null): Promise<Record<string, unknown>> {
+    return runIdempotentAccountScopedCronJob({
       req,
       jobType: "cron_price_refresh",
       triggerSource: "cron_price_refresh",
-      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      idempotencyKey,
+      duplicateReason: "当前账号同一 price-refresh 幂等任务已完成，跳过重复触发。",
       summarize: (result) => ({
         requested: result.requested,
         refreshedSymbols: result.refreshedSymbols,
@@ -168,6 +187,7 @@ export async function POST(req: Request) {
         let priceAlertsTriggered = 0;
         try {
           type PriceAlertHit = { symbol: string; alertType: "above" | "below"; price: number; threshold: number };
+          type SendablePriceAlertHit = PriceAlertHit & { throttleKey: string };
           const alertHits: PriceAlertHit[] = [];
           for (const row of assetRows) {
             const key = `${normalizeUpper(row.market, "US")}::${normalizeUpper(row.symbol)}`;
@@ -185,31 +205,48 @@ export async function POST(req: Request) {
           }
 
           if (alertHits.length > 0) {
-            priceAlertsTriggered = alertHits.length;
-            const alertLines = alertHits.slice(0, 10).map(
-              (h) => `${h.symbol}: ${h.alertType === "above" ? "上穿" : "下穿"} ${h.threshold}（现价 ${h.price.toFixed(2)}）`,
-            );
-            const alertMsg = ["DAA 价格报警通知", `触发 ${alertHits.length} 项`, ...alertLines].join("\n");
+            const sendableHits: SendablePriceAlertHit[] = [];
+            for (const hit of alertHits) {
+              const throttleKey = `price_alert:${normalizeUpper(hit.symbol)}:${hit.alertType}:${hit.threshold}`;
+              const alreadySent = await hasRecentNotification({
+                eventType: "price_alert",
+                withinMinutes: 24 * 60,
+                throttleKey,
+              }).catch((err) => {
+                logSwallowed("priceRefreshRoute.priceAlertThrottle", err);
+                return true;
+              });
+              if (!alreadySent) sendableHits.push({ ...hit, throttleKey });
+            }
 
-            const notif = system.config.notification;
-            const sends: Promise<boolean>[] = [];
-            if (notif.telegram.enabled) {
-              sends.push(sendTelegramByEnv(alertMsg, {
-                eventType: "price_alert",
-                triggerSource: "cron_price_refresh",
-                cycleId: null,
-                requestJson: { alerts: alertHits.slice(0, 10) },
-              }));
+            priceAlertsTriggered = sendableHits.length;
+            if (sendableHits.length > 0) {
+              const alertLines = sendableHits.slice(0, 10).map(
+                (h) => `${h.symbol}: ${h.alertType === "above" ? "上穿" : "下穿"} ${h.threshold}（现价 ${h.price.toFixed(2)}）`,
+              );
+              const throttleKeys = sendableHits.map((hit) => hit.throttleKey);
+              const alertMsg = ["DAA 价格报警通知", `触发 ${sendableHits.length} 项`, ...alertLines].join("\n");
+
+              const notif = system.config.notification;
+              const sends: Promise<boolean>[] = [];
+              if (notif.telegram.enabled) {
+                sends.push(sendTelegramByEnv(alertMsg, {
+                  eventType: "price_alert",
+                  triggerSource: "cron_price_refresh",
+                  cycleId: null,
+                  requestJson: { alerts: sendableHits.slice(0, 10), throttleKeys },
+                }));
+              }
+              if (notif.feishu.enabled) {
+                sends.push(sendFeishuByEnv(alertMsg, {
+                  eventType: "price_alert",
+                  triggerSource: "cron_price_refresh",
+                  cycleId: null,
+                  requestJson: { alerts: sendableHits.slice(0, 10), throttleKeys },
+                }));
+              }
+              await Promise.allSettled(sends);
             }
-            if (notif.feishu.enabled) {
-              sends.push(sendFeishuByEnv(alertMsg, {
-                eventType: "price_alert",
-                triggerSource: "cron_price_refresh",
-                cycleId: null,
-                requestJson: { alerts: alertHits.slice(0, 10) },
-              }));
-            }
-            await Promise.allSettled(sends);
           }
         } catch (err) {
           logSwallowed("priceRefreshRoute.priceAlertCheck", err);
@@ -228,13 +265,4 @@ export async function POST(req: Request) {
         };
       },
     });
-
-    return ok({
-      ...execution.result,
-      requestId: execution.requestId,
-      jobId: execution.jobId,
-      durationMs: execution.durationMs,
-    });
-  });
 }
-

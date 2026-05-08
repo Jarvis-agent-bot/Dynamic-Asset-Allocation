@@ -210,6 +210,7 @@ const MIGRATIONS_: Migration[] = [
     async apply(query) {
       await query(`
         CREATE TABLE IF NOT EXISTS daa_job_execution_logs (
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
           job_id TEXT PRIMARY KEY,
           job_type TEXT NOT NULL,
           request_id TEXT,
@@ -226,6 +227,7 @@ const MIGRATIONS_: Migration[] = [
       `);
       await query("CREATE INDEX IF NOT EXISTS idx_daa_job_execution_logs_type_started_desc ON daa_job_execution_logs(job_type, started_at DESC)");
       await query("CREATE INDEX IF NOT EXISTS idx_daa_job_execution_logs_request_id ON daa_job_execution_logs(request_id)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_job_execution_logs_owner_type_started_desc ON daa_job_execution_logs(owner_account_id, job_type, started_at DESC)");
     },
   },
   {
@@ -553,6 +555,7 @@ const MIGRATIONS_: Migration[] = [
       // 研究线索：Agent 的认知单元
       await query(`
         CREATE TABLE IF NOT EXISTS daa_research_threads (
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
           id TEXT PRIMARY KEY,
           title TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'active',
@@ -571,6 +574,7 @@ const MIGRATIONS_: Migration[] = [
       // 证据链：支撑或反驳 thesis 的每条证据
       await query(`
         CREATE TABLE IF NOT EXISTS daa_evidence_items (
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
           id TEXT PRIMARY KEY,
           thread_id TEXT NOT NULL REFERENCES daa_research_threads(id) ON DELETE CASCADE,
           evidence_type TEXT NOT NULL,
@@ -586,6 +590,7 @@ const MIGRATIONS_: Migration[] = [
       // Agent 运行记录
       await query(`
         CREATE TABLE IF NOT EXISTS daa_agent_runs (
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
           id TEXT PRIMARY KEY,
           trigger TEXT NOT NULL,
           langgraph_thread_id TEXT,
@@ -608,6 +613,7 @@ const MIGRATIONS_: Migration[] = [
       // Agent 长期记忆（pgvector 语义检索）
       await query(`
         CREATE TABLE IF NOT EXISTS daa_agent_memory (
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
           id TEXT PRIMARY KEY,
           memory_type TEXT NOT NULL,
           content TEXT NOT NULL,
@@ -623,6 +629,7 @@ const MIGRATIONS_: Migration[] = [
       // 决策复盘
       await query(`
         CREATE TABLE IF NOT EXISTS daa_thesis_reviews (
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
           id TEXT PRIMARY KEY,
           thread_id TEXT NOT NULL REFERENCES daa_research_threads(id) ON DELETE CASCADE,
           review_window TEXT NOT NULL,
@@ -949,6 +956,47 @@ const MIGRATIONS_: Migration[] = [
           ON daa_notification_delivery_logs (owner_account_id, event_type, success, created_at DESC)
           WHERE event_type = 'news_major_event' AND success = TRUE
         `);
+      }
+    },
+  },
+  {
+    id: "20260508_account_scoped_job_execution_logs",
+    async apply(query) {
+      await addOwnerColumnAndBackfill(query, "daa_job_execution_logs");
+      if (await tableExists(query, "daa_job_execution_logs")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_job_execution_logs_owner_type_started_desc ON daa_job_execution_logs(owner_account_id, job_type, started_at DESC)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_job_execution_logs_owner_idempotency_started_desc ON daa_job_execution_logs(owner_account_id, job_type, idempotency_key, started_at DESC)");
+      }
+    },
+  },
+  {
+    id: "20260508_account_scoped_agent_state",
+    async apply(query) {
+      for (const tableName of [
+        "daa_research_threads",
+        "daa_evidence_items",
+        "daa_thesis_reviews",
+        "daa_agent_runs",
+        "daa_agent_memory",
+      ]) {
+        await addOwnerColumnAndBackfill(query, tableName);
+      }
+
+      if (await tableExists(query, "daa_research_threads")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_research_threads_owner_status_updated ON daa_research_threads(owner_account_id, status, updated_at DESC)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_research_threads_asset_keys ON daa_research_threads USING gin (asset_keys)");
+      }
+      if (await tableExists(query, "daa_evidence_items")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_evidence_items_owner_thread_created ON daa_evidence_items(owner_account_id, thread_id, created_at DESC)");
+      }
+      if (await tableExists(query, "daa_thesis_reviews")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_thesis_reviews_owner_thread_created ON daa_thesis_reviews(owner_account_id, thread_id, created_at DESC)");
+      }
+      if (await tableExists(query, "daa_agent_runs")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_agent_runs_owner_created ON daa_agent_runs(owner_account_id, created_at DESC)");
+      }
+      if (await tableExists(query, "daa_agent_memory")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_agent_memory_owner_strength_created ON daa_agent_memory(owner_account_id, strength DESC, created_at DESC)");
       }
     },
   },

@@ -77,6 +77,7 @@ vi.mock("@/src/daa/notify/telegram", () => ({
 
 vi.mock("@/src/daa/store/jobExecutionLogRepo", () => ({
   appendJobExecutionLog: vi.fn().mockResolvedValue(undefined),
+  findRecentJobExecutionByIdempotencyKey: vi.fn().mockResolvedValue(null),
 }));
 
 import { POST as dailyAnalysisPost } from "@/app/api/daa/cron/daily-analysis/route";

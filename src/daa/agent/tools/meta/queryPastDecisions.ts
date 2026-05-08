@@ -29,15 +29,18 @@ registerTool(
 
     try {
       const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
+      const { getDaaAccountScopeId } = await import("@/src/daa/account/accountScope");
+      const ownerAccountId = getDaaAccountScopeId();
 
       const rows = await withDaaPgClient(async (client) => {
         const res = await client.query(
           `SELECT id, trigger, status, target_thread_ids, tools_called, briefing,
                   total_tokens, total_cost_usd, duration_ms, created_at
            FROM daa_agent_runs
+           WHERE owner_account_id = $2
            ORDER BY created_at DESC
            LIMIT $1`,
-          [limit],
+          [limit, ownerAccountId],
         );
         return res.rows as Array<{
           id: string;

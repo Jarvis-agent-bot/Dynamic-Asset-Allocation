@@ -4,6 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import type { AgentRun, AgentRunStatus, AgentTrigger, DailyBriefing, ReasoningTrace, Surprise, ToolCallRecord } from "@/src/daa/agent/cognitiveTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -38,13 +39,14 @@ export async function createAgentRun(data: {
   trigger: AgentTrigger;
   langgraphThreadId?: string;
 }): Promise<AgentRun> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const id = randomUUID();
     const res = await query(
-      `INSERT INTO daa_agent_runs (id, trigger, langgraph_thread_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO daa_agent_runs (owner_account_id, id, trigger, langgraph_thread_id)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [id, data.trigger, data.langgraphThreadId ?? null],
+      [ownerAccountId, id, data.trigger, data.langgraphThreadId ?? null],
     );
     return mapRunRow(res.rows[0]);
   });
@@ -64,6 +66,7 @@ export async function completeAgentRun(
     durationMs?: number;
   },
 ): Promise<void> {
+  const ownerAccountId = getDaaAccountScopeId();
   await withDaaPgClient(async ({ query }) => {
     await query(
       `UPDATE daa_agent_runs SET
@@ -77,7 +80,7 @@ export async function completeAgentRun(
          total_cost_usd = $8,
          duration_ms = $9,
          completed_at = now()
-       WHERE id = $10`,
+       WHERE owner_account_id = $10 AND id = $11`,
       [
         result.status,
         result.targetThreadIds ?? [],
@@ -88,6 +91,7 @@ export async function completeAgentRun(
         result.totalTokens ?? 0,
         result.totalCostUsd ?? 0,
         result.durationMs ?? null,
+        ownerAccountId,
         id,
       ],
     );
@@ -95,15 +99,17 @@ export async function completeAgentRun(
 }
 
 export async function getLatestRun(): Promise<AgentRun | null> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    const res = await query(`SELECT * FROM daa_agent_runs ORDER BY created_at DESC LIMIT 1`);
+    const res = await query(`SELECT * FROM daa_agent_runs WHERE owner_account_id = $1 ORDER BY created_at DESC LIMIT 1`, [ownerAccountId]);
     return res.rows[0] ? mapRunRow(res.rows[0]) : null;
   });
 }
 
 export async function getRunById(id: string): Promise<AgentRun | null> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    const res = await query(`SELECT * FROM daa_agent_runs WHERE id = $1`, [id]);
+    const res = await query(`SELECT * FROM daa_agent_runs WHERE owner_account_id = $1 AND id = $2`, [ownerAccountId, id]);
     return res.rows[0] ? mapRunRow(res.rows[0]) : null;
   });
 }

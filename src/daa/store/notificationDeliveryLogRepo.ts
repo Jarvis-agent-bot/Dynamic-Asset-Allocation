@@ -151,6 +151,40 @@ export async function hasTodayNotification(eventType: string): Promise<boolean> 
   });
 }
 
+/**
+ * 检查当前账号近期是否已成功投递同类通知。
+ * throttleKey 用于价格报警等细粒度场景，同一天不同触发项不会互相误伤。
+ */
+export async function hasRecentNotification(input: {
+  eventType: string;
+  withinMinutes: number;
+  throttleKey?: string | null;
+}): Promise<boolean> {
+  await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
+  const eventType = normalizeText(input.eventType, "unknown");
+  const withinMinutes = Math.max(1, Math.min(7 * 24 * 60, Math.trunc(Number(input.withinMinutes) || 60)));
+  const throttleKey = input.throttleKey ? normalizeText(input.throttleKey) || null : null;
+
+  return withDaaPgClient(async ({ query }) => {
+    const result = await query(
+      `SELECT 1 FROM daa_notification_delivery_logs
+       WHERE owner_account_id = $1
+         AND event_type = $2
+         AND success = TRUE
+         AND created_at > NOW() - ($3::int * INTERVAL '1 minute')
+         AND (
+           $4::text IS NULL
+           OR request_json->>'throttleKey' = $4::text
+           OR COALESCE(request_json->'throttleKeys', '[]'::jsonb) ? $4::text
+         )
+       LIMIT 1`,
+      [ownerAccountId, eventType, withinMinutes, throttleKey],
+    );
+    return result.rows.length > 0;
+  });
+}
+
 export async function listNotificationDeliveryLogs(input: {
   limit?: number;
   channel?: DaaNotificationChannel | null;

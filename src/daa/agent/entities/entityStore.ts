@@ -7,6 +7,7 @@
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import type { EntityKind, ExtractedEntity } from "@/src/daa/agent/entities/entityExtractor";
 import type { AgentMemory, ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 
@@ -136,16 +137,17 @@ export async function getMemoriesByEntity(
   value: string,
   limit = 10,
 ): Promise<Array<AgentMemory & { linkWeight: number }>> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const res = await query(
       `SELECT m.*, l.weight AS link_weight
        FROM daa_memory_entity_link l
        JOIN daa_agent_entity e ON e.id = l.entity_id
        JOIN daa_agent_memory m ON m.id = l.memory_id
-       WHERE e.kind = $1 AND e.value = $2 AND m.strength >= 0.05
+       WHERE e.kind = $1 AND e.value = $2 AND m.owner_account_id = $4 AND m.strength >= 0.05
        ORDER BY l.weight * m.strength DESC, m.last_accessed DESC
        LIMIT $3`,
-      [kind, value, limit],
+      [kind, value, limit, ownerAccountId],
     );
     return res.rows.map(r => ({
       id: String(r.id),
@@ -170,16 +172,17 @@ export async function getThesesByEntity(
   value: string,
   limit = 10,
 ): Promise<Array<Pick<ResearchThread, "id" | "title" | "conviction" | "status" | "assetKeys" | "updatedAt"> & { linkWeight: number }>> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const res = await query(
       `SELECT t.id, t.title, t.conviction, t.status, t.asset_keys, t.updated_at, l.weight AS link_weight
        FROM daa_thesis_entity_link l
        JOIN daa_agent_entity e ON e.id = l.entity_id
        JOIN daa_research_threads t ON t.id = l.thesis_id
-       WHERE e.kind = $1 AND e.value = $2
+       WHERE e.kind = $1 AND e.value = $2 AND t.owner_account_id = $4
        ORDER BY l.weight DESC, t.updated_at DESC
        LIMIT $3`,
-      [kind, value, limit],
+      [kind, value, limit, ownerAccountId],
     );
     return res.rows.map(r => ({
       id: String(r.id),
@@ -201,6 +204,7 @@ export async function getCoMentionedEntities(
   value: string,
   limit = 10,
 ): Promise<Array<AgentEntity & { coCount: number }>> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const res = await query(
       `WITH target AS (
@@ -210,13 +214,17 @@ export async function getCoMentionedEntities(
          SELECT l2.entity_id AS co_id, COUNT(*) AS cnt
          FROM daa_memory_entity_link l1
          JOIN daa_memory_entity_link l2 ON l1.memory_id = l2.memory_id AND l1.entity_id <> l2.entity_id
+         JOIN daa_agent_memory m ON m.id = l1.memory_id
          WHERE l1.entity_id IN (SELECT id FROM target)
+           AND m.owner_account_id = $4
          GROUP BY l2.entity_id
          UNION ALL
          SELECT l2.entity_id AS co_id, COUNT(*) AS cnt
          FROM daa_thesis_entity_link l1
          JOIN daa_thesis_entity_link l2 ON l1.thesis_id = l2.thesis_id AND l1.entity_id <> l2.entity_id
+         JOIN daa_research_threads t ON t.id = l1.thesis_id
          WHERE l1.entity_id IN (SELECT id FROM target)
+           AND t.owner_account_id = $4
          GROUP BY l2.entity_id
        ),
        agg AS (
@@ -230,7 +238,7 @@ export async function getCoMentionedEntities(
        FROM agg
        JOIN daa_agent_entity e ON e.id = agg.co_id
        ORDER BY agg.total DESC`,
-      [kind, value, limit],
+      [kind, value, limit, ownerAccountId],
     );
     return res.rows.map(r => ({
       ...mapEntityRow(r),

@@ -11,9 +11,16 @@ export const runtime = "nodejs";
 export const maxDuration = 300; // 5 分钟
 
 import { withApiHandler, ok, fail } from "@/src/daa/api/routeHelpers";
+import {
+  buildAccountScopedRequestIdempotencyKey,
+  runForEachActiveDaaAccountScope,
+  summarizeAccountScopedCronRuns,
+  unwrapSingleAccountCronResult,
+} from "@/src/daa/cron/accountCronScope";
+import type { DaaActiveAccountScope } from "@/src/daa/account/accountScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { runLoggedJob } from "@/src/daa/jobs/jobService";
-import { withDaaPgClient } from "@/src/daa/pg/daaPg";
+import { isDaaPgEnabled, withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { findRecentJobExecutionByIdempotencyKey } from "@/src/daa/store/jobExecutionLogRepo";
 import { runAutopilotLoop } from "@/src/daa/agent/autopilotOrchestrator";
 import { deriveCognitiveAgentScheduleTimesUtc } from "@/src/daa/config/systemConfig";
@@ -55,23 +62,32 @@ async function withJobIdempotencyLock<T>(
     return { acquired: true, result: await run() };
   }
 
-  const lockKey = `daa:${jobType}:${idempotencyKey}`;
-  return withDaaPgClient(async ({ query }) => {
-    const lock = await query(
-      "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
-      [lockKey],
-    );
-    const acquired = lock.rows[0]?.acquired === true;
-    if (!acquired) return { acquired: false };
+  if (!isDaaPgEnabled()) {
+    return { acquired: true, result: await run() };
+  }
 
-    try {
-      return { acquired: true, result: await run() };
-    } finally {
-      await query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]).catch((e) => {
-        logSwallowed("cognitiveAgent.cron.idempotencyUnlock", e);
-      });
-    }
-  });
+  const lockKey = `daa:${jobType}:${idempotencyKey}`;
+  try {
+    return await withDaaPgClient(async ({ query }) => {
+      const lock = await query(
+        "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired",
+        [lockKey],
+      );
+      const acquired = lock.rows[0]?.acquired === true;
+      if (!acquired) return { acquired: false };
+
+      try {
+        return { acquired: true, result: await run() };
+      } finally {
+        await query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]).catch((e) => {
+          logSwallowed("cognitiveAgent.cron.idempotencyUnlock", e);
+        });
+      }
+    });
+  } catch (e) {
+    logSwallowed("cognitiveAgent.cron.idempotencyLock", e);
+    return { acquired: true, result: await run() };
+  }
 }
 
 export async function POST(req: Request) {
@@ -79,6 +95,13 @@ export async function POST(req: Request) {
     const denied = await requireCronAuth(req);
     if (denied) return fail("CRON_AUTH_FAILED", "认证失败", { status: 401 });
 
+    const runs = await runForEachActiveDaaAccountScope((scope) => runCognitiveAgentJob(req, scope));
+    const single = unwrapSingleAccountCronResult(runs);
+    return ok(single ?? summarizeAccountScopedCronRuns(runs));
+  });
+}
+
+async function runCognitiveAgentJob(req: Request, scope: DaaActiveAccountScope): Promise<Record<string, unknown>> {
     let scheduleIdempotencyKey: string | null = null;
     // Feature D: 自门控 — 检查配置判断是否应该运行
     try {
@@ -86,10 +109,10 @@ export async function POST(req: Request) {
       const ca = sysConfig.config.cognitiveAgent;
       if (ca) {
         if (!ca.enabled) {
-          return ok({ skipped: true, reason: "认知 Agent 已在设置中禁用。" });
+          return { skipped: true, reason: "认知 Agent 已在设置中禁用。" };
         }
         if (ca.schedule === "manual_only") {
-          return ok({ skipped: true, reason: "Agent 运行频率设为仅手动。" });
+          return { skipped: true, reason: "Agent 运行频率设为仅手动。" };
         }
         // 检查当前 UTC 时间是否匹配当前频率对应的调度窗口
         const nowUtc = new Date();
@@ -100,7 +123,7 @@ export async function POST(req: Request) {
         // 允许 ±30 分钟窗口，并用命中的计划槽位作为幂等 key。
         const scheduledWindow = findScheduledWindow(nowUtc, times);
         if (!scheduledWindow && times.length > 0) {
-          return ok({ skipped: true, reason: `当前 UTC ${nowHHMM} 不在调度窗口内（配置: ${times.join(", ")}）。` });
+          return { skipped: true, reason: `当前 UTC ${nowHHMM} 不在调度窗口内（配置: ${times.join(", ")}）。` };
         }
         if (scheduledWindow) {
           scheduleIdempotencyKey = `cron_cognitive_agent:${scheduledWindow.scheduledAt.toISOString().slice(0, 16)}`;
@@ -111,7 +134,7 @@ export async function POST(req: Request) {
       // 配置加载失败不阻止执行
     }
 
-    const idempotencyKey = req.headers.get("x-daa-idempotency-key") || scheduleIdempotencyKey;
+    const idempotencyKey = buildAccountScopedRequestIdempotencyKey(scope, req, scheduleIdempotencyKey);
     if (idempotencyKey) {
       const duplicate = await findRecentJobExecutionByIdempotencyKey({
         jobType: "cron_cognitive_agent",
@@ -123,14 +146,14 @@ export async function POST(req: Request) {
         return null;
       });
       if (duplicate) {
-        return ok({
+        return {
           skipped: true,
           reason: "当前调度窗口已完成过认知 Agent 循环，跳过重复触发。",
           requestId: duplicate.requestId,
           jobId: duplicate.jobId,
           duplicateOf: duplicate.jobId,
           idempotencyKey,
-        });
+        };
       }
     }
 
@@ -159,24 +182,23 @@ export async function POST(req: Request) {
       }),
     );
     if (!locked.acquired) {
-      return ok({
+      return {
         skipped: true,
         reason: "当前调度窗口已有认知 Agent 循环正在执行，跳过并发触发。",
         idempotencyKey,
-      });
+      };
     }
     const execution = locked.result;
 
     const threadCount = await countThreads();
     const memoryCount = await countMemories();
 
-    return ok({
+    return {
       ...execution.result,
       threadCount,
       memoryCount,
       requestId: execution.requestId,
       jobId: execution.jobId,
       durationMs: execution.durationMs,
-    });
-  });
+    };
 }

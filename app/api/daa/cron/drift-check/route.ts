@@ -1,7 +1,14 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { executeAutoRebalanceCycle } from "@/src/daa/automation/autoRebalanceExecution";
+import {
+  buildAccountScopedRequestIdempotencyKey,
+  buildUtcCronWindowIdempotencyKey,
+  runForEachActiveDaaAccountScope,
+  runIdempotentAccountScopedCronJob,
+  summarizeAccountScopedCronRuns,
+  unwrapSingleAccountCronResult,
+} from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
@@ -22,25 +29,28 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJob({
+    const fallbackKey = buildUtcCronWindowIdempotencyKey("cron_drift_check", 60);
+    const runs = await runForEachActiveDaaAccountScope((scope) =>
+      runDriftCheckJob(req, buildAccountScopedRequestIdempotencyKey(scope, req, fallbackKey)),
+    );
+    const single = unwrapSingleAccountCronResult(runs);
+    return ok(single ?? summarizeAccountScopedCronRuns(runs));
+  });
+}
+
+async function runDriftCheckJob(req: Request, idempotencyKey: string | null): Promise<Record<string, unknown>> {
+    return runIdempotentAccountScopedCronJob({
       req,
       jobType: "cron_drift_check",
       triggerSource: "cron_drift_check",
-      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      idempotencyKey,
+      duplicateReason: "当前账号同一 drift-check 幂等任务已完成，跳过重复触发。",
       summarize: (r) => {
         const result = r as Record<string, unknown>;
         return { created: result.created, driftedAssetCount: result.driftedAssetCount, riskTriggeredCount: result.riskTriggeredCount };
       },
       handler: async () => runDriftCheck(),
     });
-
-    return ok({
-      ...(execution.result as Record<string, unknown>),
-      requestId: execution.requestId,
-      jobId: execution.jobId,
-      durationMs: execution.durationMs,
-    });
-  });
 }
 
 async function runDriftCheck() {
@@ -48,11 +58,11 @@ async function runDriftCheck() {
     const strategy = system.config.rebalanceStrategy;
 
     if (!strategy.drift.enabled) {
-      return ok({
+      return {
         skipped: true,
         reason: "drift trigger disabled",
         at: new Date().toISOString(),
-      });
+      };
     }
 
     // Always run bootstrap to detect drift (independent of autoGenerateEnabled)
@@ -213,6 +223,7 @@ async function runDriftCheck() {
 
     // 止损/止盈通知
     let riskTriggerNotified = false;
+    let riskTriggerSkippedReason: string | null = null;
     if (riskTriggeredAssets.length > 0) {
       const stopLossCount = riskTriggeredAssets.filter(
         (a) => a.triggerType === "stop_loss",
@@ -232,37 +243,41 @@ async function runDriftCheck() {
       ].join("\n");
 
       try {
-        const sends: Promise<boolean>[] = [];
-        if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
-          sends.push(
-            sendTelegramByEnv(riskMsg, {
-              eventType: "risk_triggered",
-              triggerSource: "cron_drift_check",
-              cycleId: null,
-              requestJson: {
-                stopLossCount,
-                takeProfitCount,
-                assets: riskTriggeredAssets.slice(0, 8),
-              },
-            }),
-          );
+        if (await hasTodayNotification("risk_triggered")) {
+          riskTriggerSkippedReason = "risk_triggered already delivered today";
+        } else {
+          const sends: Promise<boolean>[] = [];
+          if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
+            sends.push(
+              sendTelegramByEnv(riskMsg, {
+                eventType: "risk_triggered",
+                triggerSource: "cron_drift_check",
+                cycleId: null,
+                requestJson: {
+                  stopLossCount,
+                  takeProfitCount,
+                  assets: riskTriggeredAssets.slice(0, 8),
+                },
+              }),
+            );
+          }
+          if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
+            sends.push(
+              sendFeishuByEnv(riskMsg, {
+                eventType: "risk_triggered",
+                triggerSource: "cron_drift_check",
+                cycleId: null,
+                requestJson: {
+                  stopLossCount,
+                  takeProfitCount,
+                  assets: riskTriggeredAssets.slice(0, 8),
+                },
+              }),
+            );
+          }
+          await Promise.allSettled(sends);
+          riskTriggerNotified = sends.length > 0;
         }
-        if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
-          sends.push(
-            sendFeishuByEnv(riskMsg, {
-              eventType: "risk_triggered",
-              triggerSource: "cron_drift_check",
-              cycleId: null,
-              requestJson: {
-                stopLossCount,
-                takeProfitCount,
-                assets: riskTriggeredAssets.slice(0, 8),
-              },
-            }),
-          );
-        }
-        await Promise.allSettled(sends);
-        riskTriggerNotified = sends.length > 0;
       } catch (err) {
         logSwallowed("driftCheckRoute.riskNotify", err);
       }
@@ -284,6 +299,7 @@ async function runDriftCheck() {
       autoExecute,
       riskTriggeredCount: riskTriggeredAssets.length,
       riskTriggerNotified,
+      riskTriggerSkippedReason,
       at: new Date().toISOString(),
     };
 }

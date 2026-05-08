@@ -1,6 +1,12 @@
 import { fail, ok, withApiHandler } from "@/src/daa/api/routeHelpers";
+import {
+  buildAccountScopedRequestIdempotencyKey,
+  runForEachActiveDaaAccountScope,
+  runIdempotentAccountScopedCronJob,
+  summarizeAccountScopedCronRuns,
+  unwrapSingleAccountCronResult,
+} from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
-import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { DAA_BRAND_NAME } from "@/src/daa/brand";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
@@ -26,6 +32,11 @@ type MonthlyReportJobResult = {
 
 function formatNum(v: number): string {
   return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function getPreviousMonthLabel(now = new Date()): string {
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function buildMonthlyReportText(input: {
@@ -75,11 +86,23 @@ export async function POST(req: Request) {
       return fail(status === 401 ? "CRON_AUTH_FAILED" : "ROUTE_DENIED", "cron unauthorized", { status });
     }
 
-    const execution = await runLoggedJob<MonthlyReportJobResult>({
+    const fallbackKey = `cron_monthly_report:${getPreviousMonthLabel()}`;
+    const runs = await runForEachActiveDaaAccountScope((scope) =>
+      runMonthlyReportJob(req, buildAccountScopedRequestIdempotencyKey(scope, req, fallbackKey)),
+    );
+    const single = unwrapSingleAccountCronResult(runs);
+    return ok(single ?? summarizeAccountScopedCronRuns(runs));
+  });
+}
+
+async function runMonthlyReportJob(req: Request, idempotencyKey: string | null): Promise<Record<string, unknown>> {
+    return runIdempotentAccountScopedCronJob<MonthlyReportJobResult>({
       req,
       jobType: "cron_monthly_report",
       triggerSource: "cron_monthly_report",
-      idempotencyKey: req.headers.get("x-daa-idempotency-key"),
+      idempotencyKey,
+      duplicateReason: "当前账号同一 monthly-report 幂等任务已完成，跳过重复触发。",
+      duplicateWindowMinutes: 45 * 24 * 60,
       summarize: (result) => ({
         month: result.month,
         telegramSent: result.telegram.sent,
@@ -89,8 +112,7 @@ export async function POST(req: Request) {
       handler: async ({ jobId }) => {
         const now = new Date();
         const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-        const monthLabel = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
+        const monthLabel = getPreviousMonthLabel(now);
 
         const [system, bootstrap, cycles, tickets] = await Promise.all([
           getDaaSystemConfig(),
@@ -186,12 +208,4 @@ export async function POST(req: Request) {
         };
       },
     });
-
-    return ok({
-      ...execution.result,
-      requestId: execution.requestId,
-      jobId: execution.jobId,
-      durationMs: execution.durationMs,
-    });
-  });
 }

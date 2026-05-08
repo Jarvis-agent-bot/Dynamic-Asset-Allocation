@@ -8,6 +8,7 @@
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 
 function normalizeOverlayFromBriefing(briefingRaw: unknown): AgentConfigOverlay | null {
   const briefing = typeof briefingRaw === "string"
@@ -33,14 +34,16 @@ export async function getAgentConfigOverlayForRun(runId: string): Promise<AgentC
   try {
     const id = String(runId || "").trim();
     if (!id) return null;
+    const ownerAccountId = getDaaAccountScopeId();
     const row = await withDaaPgClient(async (client) => {
       const result = await client.query(
         `SELECT briefing FROM daa_agent_runs
-         WHERE id = $1
+         WHERE owner_account_id = $1
+           AND id = $2
            AND status IN ('completed', 'completed_with_errors')
            AND briefing IS NOT NULL
          LIMIT 1`,
-        [id],
+        [ownerAccountId, id],
       );
       return result.rows[0] ?? null;
     });

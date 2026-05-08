@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import type { AgentMemory, MemoryType } from "@/src/daa/agent/cognitiveTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 
 function mapMemoryRow(r: Record<string, unknown>): AgentMemory {
   return {
@@ -30,14 +31,15 @@ export async function createMemory(data: {
   /** 可选：关联的 thesis（用于实体图的 asset/ticker 抽取） */
   thread?: { id: string; assetKeys?: string[]; tags?: string[] };
 }): Promise<AgentMemory> {
+  const ownerAccountId = getDaaAccountScopeId();
   const created = await withDaaPgClient(async ({ query }) => {
     const id = randomUUID();
     const embeddingStr = data.embedding ? `[${data.embedding.join(",")}]` : null;
     const res = await query(
-      `INSERT INTO daa_agent_memory (id, memory_type, content, source_run_ids, relevance_tags, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6::vector)
+      `INSERT INTO daa_agent_memory (owner_account_id, id, memory_type, content, source_run_ids, relevance_tags, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::vector)
        RETURNING *`,
-      [id, data.memoryType, data.content, data.sourceRunIds ?? [], data.relevanceTags ?? [], embeddingStr],
+      [ownerAccountId, id, data.memoryType, data.content, data.sourceRunIds ?? [], data.relevanceTags ?? [], embeddingStr],
     );
     return mapMemoryRow(res.rows[0]);
   });
@@ -73,6 +75,7 @@ export async function recallMemory(opts: {
   limit?: number;
 }): Promise<AgentMemory[]> {
   const limit = opts.limit ?? 5;
+  const ownerAccountId = getDaaAccountScopeId();
 
   return withDaaPgClient(async ({ query }) => {
     // 优先用向量搜索
@@ -83,17 +86,17 @@ export async function recallMemory(opts: {
         const res = await query(
           `SELECT *, 1 - (embedding <=> $1::vector) AS similarity
            FROM daa_agent_memory
-           WHERE embedding IS NOT NULL AND strength >= 0.05
+           WHERE owner_account_id = $3 AND embedding IS NOT NULL AND strength >= 0.05
            ORDER BY (1 - (embedding <=> $1::vector)) * strength DESC
            LIMIT $2`,
-          [embStr, limit],
+          [embStr, limit, ownerAccountId],
         );
         if (res.rows.length > 0) {
           // 更新 last_accessed
           const ids = res.rows.map(r => String(r.id));
           await query(
-            `UPDATE daa_agent_memory SET last_accessed = now() WHERE id = ANY($1)`,
-            [ids],
+            `UPDATE daa_agent_memory SET last_accessed = now() WHERE owner_account_id = $1 AND id = ANY($2)`,
+            [ownerAccountId, ids],
           ).catch(e => logSwallowed("memoryStore.updateAccess", e));
           return res.rows.map(mapMemoryRow);
         }
@@ -106,18 +109,18 @@ export async function recallMemory(opts: {
     if (opts.tags && opts.tags.length > 0) {
       const res = await query(
         `SELECT * FROM daa_agent_memory
-         WHERE relevance_tags && $1 AND strength >= 0.05
+         WHERE owner_account_id = $3 AND relevance_tags && $1 AND strength >= 0.05
          ORDER BY strength DESC, created_at DESC
          LIMIT $2`,
-        [opts.tags, limit],
+        [opts.tags, limit, ownerAccountId],
       );
       return res.rows.map(mapMemoryRow);
     }
 
     // 最终退回：最近最强的记忆
     const res = await query(
-      `SELECT * FROM daa_agent_memory WHERE strength >= 0.05 ORDER BY strength DESC, created_at DESC LIMIT $1`,
-      [limit],
+      `SELECT * FROM daa_agent_memory WHERE owner_account_id = $1 AND strength >= 0.05 ORDER BY strength DESC, created_at DESC LIMIT $2`,
+      [ownerAccountId, limit],
     );
     return res.rows.map(mapMemoryRow);
   });
@@ -136,15 +139,16 @@ export async function searchMemoriesByKeyword(
   const minSim = opts.minSimilarity ?? 0.1;
   const kw = keyword.trim();
   if (!kw) return [];
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     try {
       const res = await query(
         `SELECT *, similarity(content, $1) AS sim
          FROM daa_agent_memory
-         WHERE content % $1 AND strength >= 0.05
+         WHERE owner_account_id = $3 AND content % $1 AND strength >= 0.05
          ORDER BY sim * strength DESC
          LIMIT $2`,
-        [kw, limit],
+        [kw, limit, ownerAccountId],
       );
       return res.rows
         .filter(r => Number(r.sim ?? 0) >= minSim)
@@ -154,10 +158,10 @@ export async function searchMemoriesByKeyword(
       logSwallowed("memoryStore.trgmSearch", e);
       const res = await query(
         `SELECT * FROM daa_agent_memory
-         WHERE content ILIKE $1 AND strength >= 0.05
+         WHERE owner_account_id = $3 AND content ILIKE $1 AND strength >= 0.05
          ORDER BY strength DESC
          LIMIT $2`,
-        [`%${kw}%`, limit],
+        [`%${kw}%`, limit, ownerAccountId],
       );
       return res.rows.map(mapMemoryRow);
     }
@@ -210,10 +214,11 @@ export async function listMemories(opts: {
 }): Promise<{ items: AgentMemory[]; total: number }> {
   const limit = opts.limit ?? 20;
   const offset = opts.offset ?? 0;
+  const ownerAccountId = getDaaAccountScopeId();
 
   return withDaaPgClient(async ({ query }) => {
-    const conditions = opts.type ? "WHERE memory_type = $1" : "";
-    const params: unknown[] = opts.type ? [opts.type] : [];
+    const conditions = opts.type ? "WHERE owner_account_id = $1 AND memory_type = $2" : "WHERE owner_account_id = $1";
+    const params: unknown[] = opts.type ? [ownerAccountId, opts.type] : [ownerAccountId];
 
     const countRes = await query(
       `SELECT COUNT(*) as cnt FROM daa_agent_memory ${conditions}`,
@@ -221,9 +226,9 @@ export async function listMemories(opts: {
     );
     const total = Number(countRes.rows[0]?.cnt ?? 0);
 
-    const dataParams = opts.type ? [opts.type, limit, offset] : [limit, offset];
-    const limitIdx = opts.type ? "$2" : "$1";
-    const offsetIdx = opts.type ? "$3" : "$2";
+    const dataParams = opts.type ? [ownerAccountId, opts.type, limit, offset] : [ownerAccountId, limit, offset];
+    const limitIdx = opts.type ? "$3" : "$2";
+    const offsetIdx = opts.type ? "$4" : "$3";
 
     const dataRes = await query(
       `SELECT * FROM daa_agent_memory ${conditions} ORDER BY strength DESC, created_at DESC LIMIT ${limitIdx} OFFSET ${offsetIdx}`,
@@ -241,8 +246,9 @@ export async function listMemories(opts: {
  * 删除单条记忆。
  */
 export async function deleteMemory(id: string): Promise<void> {
+  const ownerAccountId = getDaaAccountScopeId();
   await withDaaPgClient(async ({ query }) => {
-    await query(`DELETE FROM daa_agent_memory WHERE id = $1`, [id]);
+    await query(`DELETE FROM daa_agent_memory WHERE owner_account_id = $1 AND id = $2`, [ownerAccountId, id]);
   });
 }
 
@@ -252,29 +258,33 @@ export async function deleteMemory(id: string): Promise<void> {
  * 只处理 last_accessed > 1 天前且 strength > 0.01 的记忆。
  */
 export async function applyMemoryDecay(decayRate: number = 0.97): Promise<number> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     // 2A: 先硬删除僵尸记忆（strength < 0.01 且 30 天未访问）
     await query(
       `DELETE FROM daa_agent_memory
-       WHERE strength < 0.01 AND last_accessed < NOW() - INTERVAL '30 days'`,
+       WHERE owner_account_id = $1 AND strength < 0.01 AND last_accessed < NOW() - INTERVAL '30 days'`,
+      [ownerAccountId],
     ).catch(e => logSwallowed("memoryStore.zombieCleanup", e));
 
     // 衰减仍活跃的记忆
     const res = await query(
       `UPDATE daa_agent_memory
        SET strength = strength * POWER($1, EXTRACT(EPOCH FROM (NOW() - last_accessed)) / 86400)
-       WHERE last_accessed < NOW() - INTERVAL '1 day'
+       WHERE owner_account_id = $2
+         AND last_accessed < NOW() - INTERVAL '1 day'
          AND strength > 0.01
        RETURNING id`,
-      [decayRate],
+      [decayRate, ownerAccountId],
     );
     return res.rows.length;
   });
 }
 
 export async function countMemories(): Promise<number> {
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    const res = await query(`SELECT COUNT(*) as cnt FROM daa_agent_memory`);
+    const res = await query(`SELECT COUNT(*) as cnt FROM daa_agent_memory WHERE owner_account_id = $1`, [ownerAccountId]);
     return Number(res.rows[0]?.cnt ?? 0);
   });
 }

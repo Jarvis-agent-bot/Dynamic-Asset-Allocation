@@ -199,6 +199,12 @@ async function ensureOwnerColumnsBeforeSchema(query: SchemaQueryFn): Promise<voi
     "daa_op_log",
     "daa_llm_feedback",
     "daa_notification_delivery_logs",
+    "daa_job_execution_logs",
+    "daa_research_threads",
+    "daa_evidence_items",
+    "daa_thesis_reviews",
+    "daa_agent_runs",
+    "daa_agent_memory",
   ];
 
   for (const tableName of scopedTables) {
