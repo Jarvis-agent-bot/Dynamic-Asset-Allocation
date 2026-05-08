@@ -61,6 +61,13 @@ function unauthorized() {
   );
 }
 
+function authUnavailable() {
+  return NextResponse.json(
+    { ok: false, error: "auth_unavailable" },
+    { status: 503 },
+  );
+}
+
 export type DaaAdminActorUserId = "viewer-token" | "editor-token" | "unknown-token";
 
 export function inferDaaAdminActorUserId(providedToken: string | null | undefined): DaaAdminActorUserId {
@@ -76,7 +83,7 @@ export function getDaaAdminActorUserIdFromRequestSync(req: Request): DaaAdminAct
 
 // Session-based actor id; used by write endpoints so audit logs can attribute actions.
 export async function getDaaAdminActorUserIdFromRequest(req: Request): Promise<string> {
-  const ctx = await getDaaAuthContextFromRequest(req);
+  const ctx = await getDaaAuthContextFromRequest(req).catch(() => null);
   if (ctx?.account?.username) return `auth:${ctx.account.username}`;
   if (ctx?.account?.accountId) return `auth:${ctx.account.accountId}`;
   return getDaaAdminActorUserIdFromRequestSync(req);
@@ -96,7 +103,12 @@ function roleSatisfied(required: DaaAdminRole, rolesRaw: unknown): boolean {
  * - Roles are derived from the Postgres-backed auth account/session
  */
 export async function requireDaaAdminRole(req: Request, role: DaaAdminRole): Promise<NextResponse | null> {
-  const ctx = await getDaaAuthContextFromRequest(req);
+  let ctx: Awaited<ReturnType<typeof getDaaAuthContextFromRequest>>;
+  try {
+    ctx = await getDaaAuthContextFromRequest(req);
+  } catch {
+    return authUnavailable();
+  }
   if (!ctx) return unauthorized();
   if (!roleSatisfied(role, ctx.account.roles)) return unauthorized();
   return null;

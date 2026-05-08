@@ -56,7 +56,7 @@ export function SettingsMarketContextBlock(props: {
 
         <div style={{ ...settingsGridCols2Style, marginTop: 16 }}>
           <div>
-            <FieldLabel>刷新间隔（分钟）</FieldLabel>
+            <FieldLabel>缓存有效期（分钟）</FieldLabel>
             <NumberInput
               value={config.dataSources.marketIndicators.refreshIntervalMinutes}
               min={5}
@@ -78,6 +78,9 @@ export function SettingsMarketContextBlock(props: {
                 )
               }
             />
+            <div style={{ marginTop: 6, fontSize: 11, color: "var(--faint)", lineHeight: 1.5 }}>
+              控制市场状态快照多久算新鲜；定时任务触发频率由部署 cron 控制。
+            </div>
           </div>
 
           <div style={{ gridColumn: "1 / -1", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", padding: "10px 12px" }}>

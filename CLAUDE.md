@@ -23,7 +23,7 @@ cron/手动                                              TG 日报推送
 - **Framework**: Next.js 14 (App Router), React 18, TypeScript 5
 - **Styling**: Tailwind CSS, shadcn/ui, Framer Motion
 - **Database**: PostgreSQL
-- **Auth**: Supabase Auth (email-based)
+- **Auth**: 本地 PostgreSQL 账号与 Session（scrypt 密码哈希）
 - **LLM**: DeepSeek (primary), OpenAI-compatible fallback
 - **Charts**: Recharts
 - **Package Manager**: pnpm 10

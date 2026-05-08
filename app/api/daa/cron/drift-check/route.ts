@@ -5,6 +5,7 @@ import { runLoggedJob } from "@/src/daa/jobs/jobService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
+import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -88,54 +89,63 @@ async function runDriftCheck() {
     const cycle = generated?.cycle ?? null;
     const notif = system.config.notification;
 
-    // Phase B: drift notification (independent of autoGenerateEnabled)
-    // Send if drift detected OR if a cycle was created
+    // Phase B: drift notification (independent of autoGenerateEnabled).
+    // 漂移持续存在时，cron 一天会进来多次；同类通知当天成功投递后不再重复刷屏。
+    let driftTriggerNotified = false;
+    let driftTriggerSkippedReason: string | null = null;
     try {
-      if (hasDrift || (cycle && generated?.created)) {
-        const topDrift = driftedAssets.slice(0, 5);
-        const driftLines = topDrift.map(
-          (a) => `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
-        );
+      const shouldNotifyTrigger = hasDrift || (cycle && generated?.created);
+      if (shouldNotifyTrigger) {
+        const isRepeatedDriftReminder = hasDrift && generated?.created !== true;
+        if (isRepeatedDriftReminder && await hasTodayNotification("drift_triggered")) {
+          driftTriggerSkippedReason = "drift_triggered already delivered today";
+        } else {
+          const topDrift = driftedAssets.slice(0, 5);
+          const driftLines = topDrift.map(
+            (a) => `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
+          );
 
-        const msgParts = [
-          hasDrift ? "DAA 偏移触发通知" : "DAA 自动调仓触发通知",
-          cycle ? `Cycle: ${cycle.cycleId}` : "未生成周期（自动生成已关闭）",
-          `偏移标的: ${driftedAssets.length} 个`,
-          ...driftLines,
-        ];
-        if (cycle) {
-          msgParts.push(`建议数: ${cycle.proposals.length}`);
-          msgParts.push(`风控: ${cycle.riskCheck.overallStatus}`);
-        }
-        const driftMsg = msgParts.join("\n");
+          const msgParts = [
+            hasDrift ? "DAA 偏移触发通知" : "DAA 自动调仓触发通知",
+            cycle ? `Cycle: ${cycle.cycleId}` : "未生成周期（自动生成已关闭）",
+            `偏移标的: ${driftedAssets.length} 个`,
+            ...driftLines,
+          ];
+          if (cycle) {
+            msgParts.push(`建议数: ${cycle.proposals.length}`);
+            msgParts.push(`风控: ${cycle.riskCheck.overallStatus}`);
+          }
+          const driftMsg = msgParts.join("\n");
 
-        const sends: Promise<boolean>[] = [];
-        if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
-          sends.push(sendTelegramByEnv(driftMsg, {
-            eventType: "drift_triggered",
-            triggerSource: "cron_drift_check",
-            cycleId: cycle?.cycleId || null,
-            requestJson: {
-              driftedAssetCount: driftedAssets.length,
-              autoGenerateEnabled: strategy.autoGenerateEnabled,
-            },
-          }));
+          const sends: Promise<boolean>[] = [];
+          if (notif.telegram.enabled && notif.telegram.onDriftTrigger) {
+            sends.push(sendTelegramByEnv(driftMsg, {
+              eventType: "drift_triggered",
+              triggerSource: "cron_drift_check",
+              cycleId: cycle?.cycleId || null,
+              requestJson: {
+                driftedAssetCount: driftedAssets.length,
+                autoGenerateEnabled: strategy.autoGenerateEnabled,
+              },
+            }));
+          }
+          if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
+            sends.push(sendFeishuByEnv(driftMsg, {
+              eventType: "drift_triggered",
+              triggerSource: "cron_drift_check",
+              cycleId: cycle?.cycleId || null,
+              requestJson: {
+                driftedAssetCount: driftedAssets.length,
+                autoGenerateEnabled: strategy.autoGenerateEnabled,
+              },
+            }));
+          }
+          await Promise.allSettled(sends);
+          driftTriggerNotified = sends.length > 0;
         }
-        if (notif.feishu.enabled && notif.feishu.onDriftTrigger) {
-          sends.push(sendFeishuByEnv(driftMsg, {
-            eventType: "drift_triggered",
-            triggerSource: "cron_drift_check",
-            cycleId: cycle?.cycleId || null,
-            requestJson: {
-              driftedAssetCount: driftedAssets.length,
-              autoGenerateEnabled: strategy.autoGenerateEnabled,
-            },
-          }));
-        }
-        await Promise.allSettled(sends);
       }
     } catch (err) {
-  logSwallowed("driftCheckRoute.notify", err);
+      logSwallowed("driftCheckRoute.notify", err);
     }
 
     // ── Phase C: auto-execute（统一交给 AutomationAuthority 判定） ──
@@ -268,6 +278,8 @@ async function runDriftCheck() {
       proposalCount: cycle?.proposals.length || 0,
       driftDetected: hasDrift,
       driftedAssetCount: driftedAssets.length,
+      driftTriggerNotified,
+      driftTriggerSkippedReason,
       autoGenerateEnabled: strategy.autoGenerateEnabled,
       autoExecute,
       riskTriggeredCount: riskTriggeredAssets.length,

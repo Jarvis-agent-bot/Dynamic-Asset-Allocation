@@ -1,5 +1,5 @@
-import { createSupabaseServerClient } from "@/src/daa/supabase/server";
 import { fail, ok } from "@/src/daa/api/routeHelpers";
+import { getDaaAuthContextFromRequest } from "@/src/daa/auth/daaAuthRequest";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ function isSilentMode(req: Request): boolean {
     const normalized = value.trim().toLowerCase();
     return normalized === "1" || normalized === "true" || normalized === "yes";
   } catch (err) {
-  logSwallowed("meRoute.resolveSupabaseSession", err);
+    logSwallowed("meRoute.isSilentMode", err);
     return false;
   }
 }
@@ -19,30 +19,25 @@ function isSilentMode(req: Request): boolean {
 export async function GET(req: Request) {
   try {
     const silent = isSilentMode(req);
-    const supabase = createSupabaseServerClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const ctx = await getDaaAuthContextFromRequest(req);
 
-    if (error || !user) {
+    if (!ctx) {
       return fail("UNAUTHORIZED", "not_authenticated", { status: silent ? 200 : 401 });
     }
 
-    const roles = Array.isArray(user.app_metadata?.roles)
-      ? user.app_metadata.roles
-      : ["viewer"];
-
     return ok({
       account: {
-        accountId: user.id,
-        username: user.email || user.id,
-        roles,
-        status: "active",
+        accountId: ctx.account.accountId,
+        username: ctx.account.username,
+        roles: ctx.account.roles,
+        status: ctx.account.status,
       },
       session: {
-        sessionId: user.id,
-        createdAt: user.created_at || new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        revokedAt: null,
-        lastSeenAt: new Date().toISOString(),
+        sessionId: ctx.session.sessionId,
+        createdAt: ctx.session.createdAt,
+        expiresAt: ctx.session.expiresAt,
+        revokedAt: ctx.session.revokedAt,
+        lastSeenAt: ctx.session.lastSeenAt,
       },
     });
   } catch (error) {

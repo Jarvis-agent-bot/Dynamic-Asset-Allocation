@@ -13,7 +13,7 @@
 │  app/daa/dashboard/                                                 │
 │  ┌────────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────────────┐  │
 │  │ Workbench  │ │  Trades  │ │ Settings │ │  Login / Session    │  │
-│  │ - Cockpit  │ │ - History│ │ - Config │ │  - Supabase Auth    │  │
+│  │ - Cockpit  │ │ - History│ │ - Config │ │  - Local Auth       │  │
 │  │ - Watchlist│ │ - Tickets│ │ - Secrets│ │  - Role Guard       │  │
 │  │ - Rebalance│ │ - Reports│ │ - Notify │ │                     │  │
 │  │ - Cash     │ │          │ │ - Strategy│ │                     │  │
@@ -264,7 +264,7 @@ Twitter/X ──────┘                        ├── News Signal (RS
 | Frontend | Next.js 14, React 18, TypeScript 5, Tailwind CSS, shadcn/ui, Framer Motion |
 | Backend | Node.js, Next.js API Routes |
 | Database | PostgreSQL |
-| Auth | Supabase (email-based) |
+| Auth | Local Postgres account/session |
 | LLM | DeepSeek (primary), OpenAI (fallback) |
 | Charts | Recharts |
 | Package Manager | pnpm 10 |

@@ -3,17 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-        - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
     environment:
       - PORT=3000
       # Required: Postgres DB URL for auth + store persistence.
       - DAA_DB_URL=postgresql://daa:daa@postgres:5432/daa
-      # Supabase Auth
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - DAA_CRON_TOKEN=${DAA_CRON_TOKEN}
       - DAA_SECRETS_ENCRYPTION_KEY=${DAA_SECRETS_ENCRYPTION_KEY}
       # LLM runtime（支持 OpenAI / 代理 Responses API）

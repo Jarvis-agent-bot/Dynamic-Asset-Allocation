@@ -33,9 +33,8 @@
 └───────────────────────────────────────────────────────────┘
 
 External:
-  Supabase Auth → 用户登录
   DeepSeek API  → LLM 调用
-  Alpaca (WS) / Yahoo / 雪球 / 蛋卷 → 行情与新闻
+  Alpaca (WS) / Yahoo / 蛋卷基金 → 新闻、行情与基金持仓
   Telegram Bot / Feishu / Resend → 通知
 ```
 
@@ -60,9 +59,6 @@ External:
 | 变量 | 说明 |
 |------|------|
 | `DAA_DB_URL` | Postgres 连接串，例如 `postgresql://daa:daa@postgres:5432/daa` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase 项目 URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase 前端 key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase 服务端 key（管理员操作） |
 | `DAA_LLM_API_KEY` | LLM API Key（DeepSeek / OpenAI 兼容） |
 | `DAA_CRON_TOKEN` | Cron 容器调 web API 的共享密钥（64 字符随机） |
 | `DAA_SECRETS_ENCRYPTION_KEY` | 数据库中 secrets 的加密密钥 |
@@ -112,7 +108,7 @@ docker run -d --name daa-pg -p 15432:5432 \
 
 # 3. 配置 .env.local
 cp .env.example .env.local
-# 填入 DAA_DB_URL / Supabase / DAA_LLM_API_KEY（其他都可选）
+# 填入 DAA_DB_URL / DAA_LLM_API_KEY（其他都可选）
 
 # 4. 运行 dev
 pnpm dev    # http://localhost:3000

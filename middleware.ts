@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { updateSupabaseSession } from "./src/daa/supabase/middleware";
+import { hasDaaAuthSessionCookie } from "./src/daa/auth/daaAuthCookies";
 
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -18,21 +18,18 @@ export async function middleware(req: NextRequest) {
 
   // Login page is always accessible.
   if (pathname === "/daa/login" || pathname.startsWith("/daa/login/")) {
-    // Still refresh session so auto-redirect works if already signed in.
-    const { supabaseResponse } = await updateSupabaseSession(req);
-    return supabaseResponse;
+    return NextResponse.next();
   }
 
-  // Auth gate: all other DAA pages require a Supabase session.
-  const { user, supabaseResponse } = await updateSupabaseSession(req);
-
-  if (!user) {
+  // Middleware only checks the HttpOnly session cookie presence. API routes
+  // still validate the token hash and roles against Postgres.
+  if (!hasDaaAuthSessionCookie(req.headers.get("cookie"))) {
     const returnTo = `${pathname}${search}`;
     const login = `/daa/login?returnTo=${encodeURIComponent(returnTo)}`;
     return NextResponse.redirect(new URL(login, req.url), 307);
   }
 
-  return supabaseResponse;
+  return NextResponse.next();
 }
 
 export const config = {

@@ -377,15 +377,3 @@ export async function buildTechnicalSignalForSymbol(symbol: string): Promise<Daa
     reasons,
   };
 }
-
-export async function buildTechnicalSignals(symbols: string[]): Promise<DaaTechnicalSignal[]> {
-  const uniq = [...new Set(symbols.map((x) => String(x || "").trim().toUpperCase()).filter(Boolean))];
-  if (!uniq.length) return [];
-
-  const out: DaaTechnicalSignal[] = [];
-  for (const symbol of uniq) {
-    const signal = await buildTechnicalSignalForSymbol(symbol);
-    if (signal) out.push(signal);
-  }
-  return out;
-}

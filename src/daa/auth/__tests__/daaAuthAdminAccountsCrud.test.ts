@@ -7,6 +7,7 @@ import {
   deleteDaaAuthAccount,
   getDaaAuthAccountByUsername,
   listDaaAuthAccounts,
+  resetDaaAuthAccountPassword,
   updateDaaAuthAccount,
 } from "../daaAuthStore";
 
@@ -38,5 +39,21 @@ describe.skipIf(!isTestDbAvailable())("daa/auth admin accounts CRUD v0", () => {
 
     const xs2 = await listDaaAuthAccounts();
     expect(xs2.map((x) => x.username)).toEqual(["a1@example.com"]);
+  });
+
+  it("supports resetting an account password without exposing the hash", async () => {
+    resetTestDb();
+
+    const a1 = await createDaaAuthAccount({ username: "reset@example.com", password: "pw-old", roles: ["viewer"] });
+    expect(await authenticateDaaAuthAccount({ username: "reset@example.com", password: "pw-old" })).not.toBe(null);
+
+    const reset = await resetDaaAuthAccountPassword({ accountId: a1.accountId, password: "pw-new" });
+    expect(reset.ok).toBe(true);
+    if (reset.ok) {
+      expect((reset.account as any).passwordHash).toBeUndefined();
+    }
+
+    expect(await authenticateDaaAuthAccount({ username: "reset@example.com", password: "pw-old" })).toBe(null);
+    expect(await authenticateDaaAuthAccount({ username: "reset@example.com", password: "pw-new" })).not.toBe(null);
   });
 });

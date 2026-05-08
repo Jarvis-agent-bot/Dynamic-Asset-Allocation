@@ -1,32 +1,43 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  createSupabaseServerClient: vi.fn(),
+  appendDaaAuthAuditEvent: vi.fn(async () => ({})),
+  authenticateDaaAuthAccount: vi.fn(),
+  createDaaAuthSession: vi.fn(),
+  getDaaAuthContextFromRequest: vi.fn(),
+  revokeDaaAuthSession: vi.fn(async () => ({ ok: true })),
 }));
 
-vi.mock("@/src/daa/supabase/server", () => ({
-  createSupabaseServerClient: mocks.createSupabaseServerClient,
-  createSupabaseFromRequest: vi.fn(() => ({
-    auth: { getUser: vi.fn(async () => ({ data: { user: null }, error: { message: "n/a" } })) },
-  })),
+vi.mock("@/src/daa/auth/daaAuthStore", () => ({
+  appendDaaAuthAuditEvent: mocks.appendDaaAuthAuditEvent,
+  authenticateDaaAuthAccount: mocks.authenticateDaaAuthAccount,
+  createDaaAuthSession: mocks.createDaaAuthSession,
+  revokeDaaAuthSession: mocks.revokeDaaAuthSession,
+}));
+
+vi.mock("@/src/daa/auth/daaAuthRequest", () => ({
+  getClientIpFromRequest: vi.fn(() => "127.0.0.1"),
+  getUserAgentFromRequest: vi.fn(() => "vitest"),
+  getDaaAuthContextFromRequest: mocks.getDaaAuthContextFromRequest,
 }));
 
 import { POST as loginPost } from "@/app/api/daa/auth/login/route";
 import { POST as logoutPost } from "@/app/api/daa/auth/logout/route";
 import { GET as meGet } from "@/app/api/daa/auth/me/route";
 
-function mockSignIn(user: any, error: any = null) {
-  mocks.createSupabaseServerClient.mockReturnValue({
-    auth: {
-      signInWithPassword: vi.fn(async () => ({
-        data: { user, session: user ? { access_token: "tok-1" } : null },
-        error,
-      })),
-      signOut: vi.fn(async () => ({ error: null })),
-      getUser: vi.fn(async () => ({
-        data: { user },
-        error: user ? null : { message: "not authenticated" },
-      })),
+function mockLoginAccount(account: { accountId: string; username: string; roles: string[] }) {
+  mocks.authenticateDaaAuthAccount.mockResolvedValue(account);
+  mocks.createDaaAuthSession.mockResolvedValue({
+    token: "session-token-1",
+    session: {
+      sessionId: "session-1",
+      accountId: account.accountId,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      expiresAt: "2026-02-01T00:00:00.000Z",
+      revokedAt: null,
+      lastSeenAt: null,
+      userAgent: "vitest",
+      ip: "127.0.0.1",
     },
   });
 }
@@ -36,17 +47,17 @@ describe("auth-routes-api-response-v1", () => {
     vi.clearAllMocks();
   });
 
-  it("login 返回 ApiResponse 成功结构", async () => {
-    mockSignIn({
-      id: "user-1",
-      email: "admin@example.com",
-      app_metadata: { roles: ["editor"] },
+  it("login 返回 ApiResponse 成功结构并设置 HttpOnly session cookie", async () => {
+    mockLoginAccount({
+      accountId: "user-1",
+      username: "admin@example.com",
+      roles: ["editor"],
     });
 
     const response = await loginPost(new Request("http://localhost/api/daa/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "admin@example.com", password: "pw-1", returnTo: "/daa/dashboard" }),
+      body: JSON.stringify({ username: "admin@example.com", password: "pw-1", returnTo: "/daa/dashboard" }),
     }));
     const json = await response.json();
 
@@ -61,15 +72,17 @@ describe("auth-routes-api-response-v1", () => {
       },
     });
     expect(json.data.redirectTo).toContain("notice=signed_in");
+    expect(response.headers.get("set-cookie")).toContain("daa_auth_session=");
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
   });
 
   it("login 凭证错误时返回 401", async () => {
-    mockSignIn(null, { message: "Invalid login credentials" });
+    mocks.authenticateDaaAuthAccount.mockResolvedValue(null);
 
     const response = await loginPost(new Request("http://localhost/api/daa/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "admin@example.com", password: "wrong" }),
+      body: JSON.stringify({ username: "admin@example.com", password: "wrong" }),
     }));
     const json = await response.json();
 
@@ -79,16 +92,16 @@ describe("auth-routes-api-response-v1", () => {
   });
 
   it("login 会保留 dashboard 深链 returnTo", async () => {
-    mockSignIn({
-      id: "user-1",
-      email: "admin@example.com",
-      app_metadata: { roles: ["editor"] },
+    mockLoginAccount({
+      accountId: "user-1",
+      username: "admin@example.com",
+      roles: ["editor"],
     });
 
     const response = await loginPost(new Request("http://localhost/api/daa/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "admin@example.com", password: "pw-1", returnTo: "/daa/dashboard/workbench?from=login" }),
+      body: JSON.stringify({ username: "admin@example.com", password: "pw-1", returnTo: "/daa/dashboard/workbench?from=login" }),
     }));
     const json = await response.json();
 
@@ -97,7 +110,7 @@ describe("auth-routes-api-response-v1", () => {
   });
 
   it("me silent 未登录时返回 not_authenticated", async () => {
-    mockSignIn(null, { message: "not authenticated" });
+    mocks.getDaaAuthContextFromRequest.mockResolvedValue(null);
 
     const response = await meGet(new Request("http://localhost/api/daa/auth/me?silent=1"));
     const json = await response.json();
@@ -112,8 +125,40 @@ describe("auth-routes-api-response-v1", () => {
     });
   });
 
-  it("logout 返回 signedOut: true", async () => {
-    mockSignIn(null);
+  it("me 已登录时返回本地账号和 session", async () => {
+    mocks.getDaaAuthContextFromRequest.mockResolvedValue({
+      token: "session-token-1",
+      account: {
+        accountId: "user-1",
+        username: "admin@example.com",
+        roles: ["editor"],
+        status: "active",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      session: {
+        sessionId: "session-1",
+        accountId: "user-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        expiresAt: "2026-02-01T00:00:00.000Z",
+        revokedAt: null,
+        lastSeenAt: "2026-01-02T00:00:00.000Z",
+        userAgent: "vitest",
+        ip: "127.0.0.1",
+      },
+    });
+
+    const response = await meGet(new Request("http://localhost/api/daa/auth/me?silent=1"));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data.account.username).toBe("admin@example.com");
+    expect(json.data.session.sessionId).toBe("session-1");
+  });
+
+  it("logout 返回 signedOut: true 并清理 session cookie", async () => {
+    mocks.getDaaAuthContextFromRequest.mockResolvedValue(null);
 
     const response = await logoutPost(new Request("http://localhost/api/daa/auth/logout", {
       method: "POST",
@@ -125,5 +170,7 @@ describe("auth-routes-api-response-v1", () => {
       ok: true,
       data: { signedOut: true },
     });
+    expect(response.headers.get("set-cookie")).toContain("daa_auth_session=");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 });

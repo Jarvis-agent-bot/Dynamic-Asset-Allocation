@@ -11,6 +11,7 @@ vi.mock('@/src/daa/cron/auth', () => ({
 }));
 
 vi.mock('@/src/daa/store/daaStorePg', () => ({
+  ensureDaaStoreSchemaPg: vi.fn(async () => undefined),
   getDaaSystemConfig: vi.fn(async () => ({
     config: {
       rebalanceStrategy: {
@@ -35,6 +36,10 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
       },
     },
   })),
+}));
+
+vi.mock('@/src/daa/store/notificationDeliveryLogRepo', () => ({
+  hasTodayNotification: vi.fn(async () => false),
 }));
 
 vi.mock('@/src/daa/modules/workbench/workbenchReadService', () => ({
@@ -117,6 +122,7 @@ import { buildWorkbenchBootstrap } from '@/src/daa/modules/workbench/workbenchRe
 import { generateWorkbenchRebalanceCycle } from '@/src/daa/modules/workbench/workbenchRebalanceCycleService';
 import { runHumanIngest } from '@/src/daa/hf/hfService';
 import { getDaaSystemConfig } from '@/src/daa/store/daaStorePg';
+import { hasTodayNotification } from '@/src/daa/store/notificationDeliveryLogRepo';
 
 function buildDriftConfig(input: {
   autoGenerateEnabled: boolean;
@@ -198,6 +204,7 @@ describe('cron-remaining-routes-v1', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(requireCronAuth).mockResolvedValue(null);
+    vi.mocked(hasTodayNotification).mockResolvedValue(false);
   });
 
   it('drift-check 未通过 cron 鉴权时返回 401', async () => {
@@ -268,6 +275,42 @@ describe('cron-remaining-routes-v1', () => {
     });
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('cycle-drift-1');
+  });
+
+  it('drift-check 当天已成功推送漂移通知时不重复发送旧周期提醒', async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildDriftConfig({
+      autoGenerateEnabled: true,
+      telegramEnabled: true,
+      feishuEnabled: false,
+    }));
+    vi.mocked(hasTodayNotification).mockResolvedValue(true);
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValueOnce({
+      created: false,
+      skippedByCooldown: false,
+      cooldownUntil: null,
+      message: '当日偏移检查已完成，跳过重复触发。',
+      cycle: {
+        cycleId: 'cycle-drift-1',
+        triggerReason: '偏移量阈值触发',
+        proposals: [{ assetKey: 'US::AAPL' }, { assetKey: 'US::BND' }],
+        riskCheck: { overallStatus: 'warn' },
+      },
+    } as any);
+
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data).toMatchObject({
+      created: false,
+      cycleId: 'cycle-drift-1',
+      driftDetected: true,
+      driftTriggerNotified: false,
+      driftTriggerSkippedReason: 'drift_triggered already delivered today',
+    });
+    expect(vi.mocked(hasTodayNotification)).toHaveBeenCalledWith('drift_triggered');
+    expect(vi.mocked(sendTelegramByEnv)).not.toHaveBeenCalled();
   });
 
   it('drift-check 在无持仓偏移但开启 watchlistEntry 时仍进入生成服务', async () => {

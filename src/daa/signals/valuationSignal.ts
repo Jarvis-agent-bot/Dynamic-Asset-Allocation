@@ -456,20 +456,3 @@ export async function buildValuationSignalForSymbol(
     specific,
   };
 }
-
-export async function buildValuationSignals(symbols: string[]): Promise<DaaValuationSignal[]> {
-  const cleanSymbols = [...new Set((symbols || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean))];
-  if (!cleanSymbols.length) return [];
-
-  const closesCache = new Map<string, Promise<number[]>>();
-  const getCloses = (symbol: string, days = 320) => {
-    const key = `${normalizeYfinanceSymbol(symbol)}::${days}`;
-    if (!closesCache.has(key)) {
-      closesCache.set(key, fetchDailyCloses(symbol, days));
-    }
-    return closesCache.get(key)!;
-  };
-
-  const rows = await Promise.all(cleanSymbols.map((symbol) => buildValuationSignalForSymbol(symbol, { getCloses })));
-  return rows.filter((item): item is DaaValuationSignal => Boolean(item));
-}

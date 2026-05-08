@@ -76,7 +76,7 @@ Web UI + Telegram Bot，14 种意图，可查组合/市场/风险、发起调仓
 |---|------|
 | 框架 | Next.js 14 · React 18 · TypeScript 5 |
 | UI | Tailwind CSS · shadcn/ui · Recharts · lightweight-charts |
-| 后端 | PostgreSQL + pgvector + pg_trgm · Supabase Auth |
+| 后端 | PostgreSQL + pgvector + pg_trgm · 本地账号会话 |
 | LLM | DeepSeek（主） · OpenAI 兼容（备） |
 | Embedding | Ollama BGE-M3（本地，零成本） · SiliconFlow · OpenAI |
 | Agent | LangGraph.js 1.2 |
@@ -100,7 +100,7 @@ docker run -d --name daa-pg -p 15432:5432 \
 
 # 3. 配置环境变量
 cp .env.example .env.local
-# 填 DAA_DB_URL / Supabase / DAA_LLM_API_KEY 即可启动
+# 填 DAA_DB_URL / DAA_LLM_API_KEY 即可启动
 
 # 4. 启动
 pnpm dev     # http://localhost:3000/daa/dashboard

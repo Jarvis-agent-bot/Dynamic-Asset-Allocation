@@ -30,7 +30,7 @@ DAA Rebalance 是面向**单个投资者**的动态资产配置与再平衡金�
 | LLM | DeepSeek（主）· OpenAI 兼容（备） | — | 决策 / 反思 / 日报 |
 | Embedding | Ollama `bge-m3`（本地）/ SiliconFlow / OpenAI | 1024 维 | 语义记忆 |
 | Agent 工作流 | `@langchain/langgraph` | 1.2.8 | Cognitive Agent 6 节点编排 |
-| 认证 | Supabase Auth (email) | SSR + JS SDK | 登录 / 会话 |
+| 认证 | 本地 Postgres Auth | `daa_auth_accounts` / `daa_auth_sessions` | 登录 / 会话 / 角色 |
 | 通知 | Telegram Bot · Feishu · Email (Resend) | — | 日报推送 + 告警 |
 | 测试 | Vitest（单测）· Playwright（e2e） | 4.0 / 1.58 | — |
 | 包管理 | pnpm | 10.28.2 | — |
@@ -54,11 +54,11 @@ DAA Rebalance 是面向**单个投资者**的动态资产配置与再平衡金�
 │  └─ _hooks/        页面模型与流程 hook                         │
 ├────────────────────────────────────────────────────────────────┤
 │  API Layer    app/api/daa/                                     │
-│  ├─ auth/          Supabase 登录 / 回调                        │
+│  ├─ auth/          本地账号 / 会话 / 角色管理                  │
 │  ├─ workbench/     资产发现 / 洞察 / 再平衡 / 执行             │
 │  ├─ read/          聚合读模型（组合 / 交易 / today）           │
 │  ├─ store/         持久化写入（配置 / 账本 / 快照）            │
-│  ├─ market/        行情代理（Yahoo / Xueqiu / Danjuan）        │
+│  ├─ market/        行情代理（Yahoo / yfinance / 指标序列）     │
 │  ├─ agent/         Cognitive Agent（run / theses / memories）  │
 │  ├─ chat/          Web 对话 + Telegram webhook                 │
 │  ├─ hf/            基金经理持仓追踪                            │
@@ -80,10 +80,9 @@ DAA Rebalance 是面向**单个投资者**的动态资产配置与再平衡金�
 ├────────────────────────────────────────────────────────────────┤
 │  Core         src/core/   （纯算法，零副作用，零 import daa）  │
 │  ├─ rebalanceCore.ts    订单生成 / 漂移 / 约束                │
-│  ├─ ensemble/           多策略权重融合                         │
+│  ├─ ensemble/           多资产目标权重生成                     │
 │  ├─ backtest/           归因分析                               │
-│  ├─ domain.ts           PriceBar / Strategy / Signal 类型     │
-│  └─ config.ts           Ensemble 策略配置                      │
+│  └─ domain.ts           PriceBar / BacktestMetrics 类型       │
 ├────────────────────────────────────────────────────────────────┤
 │  Market       src/market/                                      │
 │  ├─ yfinance.ts         Yahoo Finance 适配器                   │
@@ -158,7 +157,7 @@ observe → prioritize → investigate ⇄ reflect → review → surface → EN
 |----|----|------|
 | 最新快照 | `daa_market_price_snapshots` | 15 分钟 fresh / 48 小时 stale |
 | 历史序列 | `daa_market_price_history_v1` | 永久（cron 定期刷新） |
-| 指标 | `daa_market_indicator_snapshot_v1` | 由 cron 刷新间隔决定 |
+| 指标 | `daa_market_indicator_snapshot_v1` | 由市场状态缓存有效期决定 |
 | 原始响应 | `daa_external_payload_raw_v1` | 90 天 |
 
 流程：**DB 优先 → 判断新鲜度 → 按需补增量 → 异步写回 DB → 外部失败时降级返回缓存**。
@@ -342,7 +341,7 @@ marketContext.decide({ regime, buyScale, highRiskBuyScale })
    ├─ Agent overlay（若启用）→ 覆盖 regime / 单资产阈值
    │
    ▼
-src/core/rebalanceCore.generateOrders()      ← 纯算法
+src/core/rebalanceCore.rebalanceCore()       ← 纯算法
    │
    ▼
 runWorkbenchRiskCheck()                       ← 风控预检

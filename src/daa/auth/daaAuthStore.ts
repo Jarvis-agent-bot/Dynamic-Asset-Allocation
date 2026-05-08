@@ -784,6 +784,38 @@ export async function updateDaaAuthAccount(args: {
   throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
 }
 
+export async function resetDaaAuthAccountPassword(args: {
+  accountId: string;
+  password: string;
+  updatedAt?: string;
+}): Promise<{ ok: true; account: DaaAuthAccount } | { ok: false; error: string }> {
+  const accountId = String(args.accountId ?? "").trim();
+  if (!accountId) return { ok: false, error: "missing accountId" };
+
+  const password = typeof args.password === "string" ? args.password : "";
+  if (!password.trim()) return { ok: false, error: "missing password" };
+
+  const passwordHash = hashPassword(password);
+  const updatedAt = ensureIsoOrNow(args.updatedAt);
+
+  await ensureAuthSchemaIfPg();
+
+  if (isDaaPgEnabled()) {
+    const row = await withDaaPgClient(async ({ query }) => {
+      const r = await query(
+        "UPDATE daa_auth_accounts SET password_hash = $1, updated_at = $2 WHERE account_id = $3 RETURNING account_id, username, roles_json, status, created_at, updated_at",
+        [passwordHash, updatedAt, accountId],
+      );
+      return (r.rows && r.rows[0]) || null;
+    });
+
+    if (!row) return { ok: false, error: "not_found" };
+    return { ok: true, account: rowToAccount(row) };
+  }
+
+  throw new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)");
+}
+
 export async function deleteDaaAuthAccount(args: { accountId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   const accountId = String(args.accountId ?? "").trim();
   if (!accountId) return { ok: false, error: "missing accountId" };

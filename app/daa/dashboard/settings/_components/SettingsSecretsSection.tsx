@@ -24,12 +24,11 @@ const GROUP_META: Record<string, { label: string; order: number }> = {
   llm: { label: "LLM / 研究模型", order: 0 },
   telegram: { label: "Telegram", order: 1 },
   feishu: { label: "飞书", order: 2 },
-  supabase: { label: "Supabase 认证", order: 3 },
-  cron: { label: "定时任务", order: 4 },
-  fred: { label: "FRED 宏观数据", order: 5 },
-  twitter_data: { label: "Twitter 数据", order: 6 },
-  finnhub: { label: "Finnhub 新闻", order: 7 },
-  embedding: { label: "Embedding 向量", order: 8 },
+  cron: { label: "定时任务", order: 3 },
+  fred: { label: "FRED 宏观数据", order: 4 },
+  twitter_data: { label: "Twitter 数据", order: 5 },
+  finnhub: { label: "Finnhub 新闻", order: 6 },
+  embedding: { label: "Embedding 向量", order: 7 },
 };
 
 const TESTABLE_KEYS = new Set(["llm_api_key", "telegram_bot_token", "feishu_webhook_url", "fred_api_key", "finnhub_api_key", "embedding_api_key"]);

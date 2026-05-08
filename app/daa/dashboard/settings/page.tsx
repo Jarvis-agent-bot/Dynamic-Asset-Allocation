@@ -71,6 +71,24 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const refreshDataHealthAssets = useCallback(async () => {
+    try {
+      const wb = await getWorkbenchReadModel({ syncPrices: false });
+      setDataHealthAssets(
+        wb.bootstrap.assetUniverse.map((a) => ({
+          assetKey: a.assetKey,
+          symbol: a.symbol,
+          market: a.market,
+          priceStatus: a.priceStatus,
+          priceUpdatedAt: a.priceUpdatedAt,
+          priceAgeSec: a.priceAgeSec,
+        })),
+      );
+    } catch {
+      /* 静默失败 — 数据质量面板非关键 */
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -91,21 +109,9 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    void getWorkbenchReadModel({ syncPrices: false }).then((wb) => {
-      setDataHealthAssets(
-        wb.bootstrap.assetUniverse.map((a) => ({
-          assetKey: a.assetKey,
-          symbol: a.symbol,
-          market: a.market,
-          priceStatus: a.priceStatus,
-          priceUpdatedAt: a.priceUpdatedAt,
-          priceAgeSec: a.priceAgeSec,
-        })),
-      );
-    }).catch(() => {
-      /* 静默失败 — 数据质量面板非关键 */
-    });
-  }, []);
+    if (activeSection !== "data") return;
+    void refreshDataHealthAssets();
+  }, [activeSection, refreshDataHealthAssets]);
 
   const isDirty = useMemo(() => {
     if (!config || !baselineConfig) return false;
@@ -135,7 +141,7 @@ export default function SettingsPage() {
 
   const dataHealthSummary = useMemo(() => {
     if (dataHealthAssets.length === 0) {
-      return { healthyCount: 0, attentionCount: 0, label: "尚未载入行情健康状态" };
+      return { healthyCount: 0, attentionCount: 0, label: "切换到数据页后同步行情健康状态" };
     }
 
     const healthyCount = dataHealthAssets.filter((asset) => asset.priceStatus === "fresh").length;
