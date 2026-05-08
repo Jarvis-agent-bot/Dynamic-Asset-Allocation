@@ -4,6 +4,7 @@ import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { ensureDaaStoreSchemaPg } from "@/src/daa/store/daaStorePg";
 import { toIsoString, toNullableNumber, parseJsonb } from "@/src/daa/store/storeShared";
 import { normalizeText } from "@/src/daa/utils/normalize";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 
 export type DaaNotificationChannel = "telegram" | "feishu";
 
@@ -66,19 +67,21 @@ export async function appendNotificationDeliveryLog(input: {
   responseJson?: Record<string, unknown> | null;
 }): Promise<DaaNotificationDeliveryLog> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const id = normalizeText(input.id) || randomUUID();
     const result = await query(
       `INSERT INTO daa_notification_delivery_logs (
-        id, channel, event_type, trigger_source, success, status_code, error_code, error_message,
+        owner_account_id, id, channel, event_type, trigger_source, success, status_code, error_code, error_message,
         recipient_hint, job_id, cycle_id, ticket_id, request_json, response_json
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,
-        $9,$10,$11,$12,$13::jsonb,$14::jsonb
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,
+        $10,$11,$12,$13,$14::jsonb,$15::jsonb
       )
       RETURNING id, channel, event_type, trigger_source, success, status_code, error_code, error_message,
                 recipient_hint, job_id, cycle_id, ticket_id, request_json, response_json, created_at`,
       [
+        ownerAccountId,
         id,
         input.channel,
         normalizeText(input.eventType, "unknown"),
@@ -110,16 +113,18 @@ export async function hasRecentMajorEventNotification(input: {
 }): Promise<boolean> {
   await ensureDaaStoreSchemaPg();
   const hours = input.withinHours ?? 24;
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT 1 FROM daa_notification_delivery_logs
-       WHERE event_type = 'news_major_event'
+       WHERE owner_account_id = $1
+         AND event_type = 'news_major_event'
          AND success = TRUE
-         AND created_at > NOW() - make_interval(hours => $1)
-         AND request_json->>'symbol' = $2
-         AND request_json->>'majorEventType' = $3
+         AND created_at > NOW() - make_interval(hours => $2)
+         AND request_json->>'symbol' = $3
+         AND request_json->>'majorEventType' = $4
        LIMIT 1`,
-      [hours, input.symbol, input.majorEventType],
+      [ownerAccountId, hours, input.symbol, input.majorEventType],
     );
     return result.rows.length > 0;
   });
@@ -131,14 +136,16 @@ export async function hasRecentMajorEventNotification(input: {
  */
 export async function hasTodayNotification(eventType: string): Promise<boolean> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT 1 FROM daa_notification_delivery_logs
-       WHERE event_type = $1
+       WHERE owner_account_id = $1
+         AND event_type = $2
          AND success = TRUE
          AND created_at >= CURRENT_DATE
        LIMIT 1`,
-      [eventType],
+      [ownerAccountId, eventType],
     );
     return result.rows.length > 0;
   });
@@ -149,10 +156,11 @@ export async function listNotificationDeliveryLogs(input: {
   channel?: DaaNotificationChannel | null;
 } = {}): Promise<DaaNotificationDeliveryLog[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const limit = Math.max(1, Math.min(200, Math.trunc(Number(input.limit) || 20)));
   return withDaaPgClient(async ({ query }) => {
-    const where: string[] = [];
-    const params: unknown[] = [];
+    const where: string[] = ["owner_account_id = $1"];
+    const params: unknown[] = [ownerAccountId];
     if (input.channel) {
       params.push(input.channel);
       where.push(`channel = $${params.length}`);

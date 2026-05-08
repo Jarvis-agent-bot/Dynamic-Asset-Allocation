@@ -5,6 +5,7 @@
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { buildDaaAssetKey } from "@/src/daa/assetKey";
 import {
   withDaaPgClient,
@@ -62,17 +63,19 @@ export async function replacePositionsV2SnapshotInTx(
   query: DaaTxQueryFn,
   rows: Array<Partial<DaaPositionSnapshotRow>>,
 ): Promise<void> {
-  await query("DELETE FROM daa_positions_v2");
+  const ownerAccountId = getDaaAccountScopeId();
+  await query("DELETE FROM daa_positions_v2 WHERE owner_account_id = $1", [ownerAccountId]);
   for (const raw of rows) {
     const row = normalizePositionSnapshotRow(raw);
     if (!row || !(row.qty > 0)) continue;
     await query(
       `INSERT INTO daa_positions_v2 (
-         asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
+         owner_account_id, asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
        )`,
       [
+        ownerAccountId,
         row.assetKey,
         row.symbol,
         row.market,
@@ -92,19 +95,20 @@ export async function syncSinglePositionV2InTx(
   query: DaaTxQueryFn,
   row: Partial<DaaPositionSnapshotRow>,
 ): Promise<void> {
+  const ownerAccountId = getDaaAccountScopeId();
   const normalized = normalizePositionSnapshotRow(row);
   if (!normalized) return;
   if (!(normalized.qty > 0)) {
-    await query("DELETE FROM daa_positions_v2 WHERE asset_key = $1", [normalized.assetKey]);
+    await query("DELETE FROM daa_positions_v2 WHERE owner_account_id = $1 AND asset_key = $2", [ownerAccountId, normalized.assetKey]);
     return;
   }
   await query(
     `INSERT INTO daa_positions_v2 (
-       asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
+       owner_account_id, asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
      )
-     ON CONFLICT (asset_key) DO UPDATE
+     ON CONFLICT (owner_account_id, asset_key) DO UPDATE
      SET
        symbol = EXCLUDED.symbol,
        market = EXCLUDED.market,
@@ -116,6 +120,7 @@ export async function syncSinglePositionV2InTx(
        tags = EXCLUDED.tags,
        updated_at = EXCLUDED.updated_at`,
     [
+      ownerAccountId,
       normalized.assetKey,
       normalized.symbol,
       normalized.market,
@@ -168,9 +173,11 @@ export function mapBrokerPositionRow(row: Record<string, unknown>): DaaStorePosi
 
 export async function listDaaPositions(): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
+      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE owner_account_id = $1 AND qty > 0 ORDER BY symbol ASC, market ASC",
+      [ownerAccountId],
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -195,6 +202,7 @@ export async function listDaaPositions(): Promise<DaaStorePosition[]> {
 
 export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const txQuery = query as DaaTxQueryFn;
     await txQuery("BEGIN");
@@ -238,7 +246,8 @@ export async function replaceDaaPositions(rows: Array<Partial<DaaStorePosition>>
     }
 
     const result = await query(
-      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
+      "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE owner_account_id = $1 AND qty > 0 ORDER BY symbol ASC, market ASC",
+      [ownerAccountId],
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -265,13 +274,14 @@ export async function listDaaBrokerPositions(
   brokerKind: DaaStoreBrokerKind = "sim",
 ): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
        FROM daa_broker_positions
-       WHERE broker_kind = $1 AND qty > 0
+       WHERE owner_account_id = $1 AND broker_kind = $2 AND qty > 0
        ORDER BY symbol ASC, market ASC`,
-      [brokerKind],
+      [ownerAccountId, brokerKind],
     );
     return result.rows.map((row) => mapBrokerPositionRow(row as Record<string, unknown>));
   });
@@ -283,21 +293,22 @@ export async function replaceDaaBrokerPositions(input: {
   rows: Array<Partial<DaaStorePosition>>;
 }): Promise<DaaStorePosition[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     await query("BEGIN");
     try {
-      await query("DELETE FROM daa_broker_positions WHERE broker_kind = $1", [input.brokerKind]);
+      await query("DELETE FROM daa_broker_positions WHERE owner_account_id = $1 AND broker_kind = $2", [ownerAccountId, input.brokerKind]);
       for (const raw of input.rows) {
         const row = normalizePositionSnapshotRow(raw);
         if (!row || !(row.qty > 0)) continue;
 
         await query(
           `INSERT INTO daa_broker_positions (
-             broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
+             owner_account_id, broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
            ) VALUES (
-             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
            )
-           ON CONFLICT (broker_kind, asset_key) DO UPDATE
+           ON CONFLICT (owner_account_id, broker_kind, asset_key) DO UPDATE
            SET
              account_id = EXCLUDED.account_id,
              symbol = EXCLUDED.symbol,
@@ -309,6 +320,7 @@ export async function replaceDaaBrokerPositions(input: {
              tags = EXCLUDED.tags,
              updated_at = EXCLUDED.updated_at`,
           [
+            ownerAccountId,
             input.brokerKind,
             input.accountId ?? null,
             row.assetKey,
@@ -343,11 +355,10 @@ export async function replaceDaaBrokerPositions(input: {
     const result = await query(
       `SELECT broker_kind, account_id, asset_key, symbol, market, currency, qty, price, cost_basis, tags, updated_at
        FROM daa_broker_positions
-       WHERE broker_kind = $1 AND qty > 0
+       WHERE owner_account_id = $1 AND broker_kind = $2 AND qty > 0
        ORDER BY symbol ASC, market ASC`,
-      [input.brokerKind],
+      [ownerAccountId, input.brokerKind],
     );
     return result.rows.map((row) => mapBrokerPositionRow(row as Record<string, unknown>));
   });
 }
-

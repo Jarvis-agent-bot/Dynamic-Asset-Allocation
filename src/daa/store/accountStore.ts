@@ -5,6 +5,7 @@
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import {
   applySystemConfigPatches,
   DEFAULT_SYSTEM_CONFIG_,
@@ -38,7 +39,7 @@ export function resolveInvestableCash(cash: number, frozenCash: number, investab
 function mapAccountStateRow(row: Record<string, unknown>): DaaStoreAccountState {
   const totalEquityRaw = row.total_equity == null ? Number.NaN : toFiniteNumber(row.total_equity, Number.NaN);
   return {
-    id: "default",
+    id: normalizeText(row.id, getDaaAccountScopeId()),
     baseCurrency: normalizeCurrencyAlias(normalizeText(row.base_currency, "USD"), "USD"),
     cash: Math.max(0, toFiniteNumber(row.cash, 0)),
     investableCash: Math.max(0, toFiniteNumber(row.investable_cash, 0)),
@@ -172,6 +173,7 @@ export async function ensureSystemConfigRowInTx(
 export async function ensureAccountStateRowInTx(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
 ): Promise<DaaStoreAccountState> {
+  const accountId = getDaaAccountScopeId();
   await query(`
     CREATE TABLE IF NOT EXISTS daa_account_state_v2 (
       id TEXT PRIMARY KEY,
@@ -185,7 +187,8 @@ export async function ensureAccountStateRowInTx(
   `);
 
   const existing = await query(
-    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
+    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state_v2 WHERE id = $1 LIMIT 1",
+    [accountId],
   );
   if (existing.rows.length > 0) {
     return mapAccountStateRow(existing.rows[0]);
@@ -205,9 +208,9 @@ export async function ensureAccountStateRowInTx(
     `INSERT INTO daa_account_state_v2 (
       id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at
     ) VALUES (
-      'default', $1, $2, $3, $4, $5, NOW()
+      $1, $2, $3, $4, $5, $6, NOW()
     ) RETURNING id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
-    [baseCurrency, cash, investableCash, frozenCash, totalEquity],
+    [accountId, baseCurrency, cash, investableCash, frozenCash, totalEquity],
   );
   return mapAccountStateRow(inserted.rows[0]);
 }
@@ -215,9 +218,11 @@ export async function ensureAccountStateRowInTx(
 export async function getAccountStateForUpdateInTx(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
 ): Promise<DaaStoreAccountState> {
+  const accountId = getDaaAccountScopeId();
   await ensureAccountStateRowInTx(query);
   const locked = await query(
-    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1 FOR UPDATE",
+    "SELECT id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at FROM daa_account_state_v2 WHERE id = $1 LIMIT 1 FOR UPDATE",
+    [accountId],
   );
   if (locked.rows.length > 0) {
     return mapAccountStateRow(locked.rows[0]);
@@ -235,6 +240,7 @@ export async function writeAccountStateInTx(
     totalEquity?: unknown;
   },
 ): Promise<DaaStoreAccountState> {
+  const accountId = getDaaAccountScopeId();
   const current = await getAccountStateForUpdateInTx(query);
   const cash = Object.prototype.hasOwnProperty.call(nextRaw, "cash")
     ? Math.max(0, toFiniteNumber(nextRaw.cash, current.cash))
@@ -269,9 +275,9 @@ export async function writeAccountStateInTx(
          frozen_cash = $4,
          total_equity = $5::numeric,
          updated_at = NOW()
-     WHERE id = 'default'
+     WHERE id = $6
      RETURNING id, base_currency, cash, investable_cash, frozen_cash, total_equity, updated_at`,
-    [baseCurrency, cash, investableCash, frozenCash, totalEquity],
+    [baseCurrency, cash, investableCash, frozenCash, totalEquity, accountId],
   );
   if (updated.rows.length > 0) {
     return mapAccountStateRow(updated.rows[0]);
@@ -440,4 +446,3 @@ export async function patchDaaSystemConfig(input: {
     }
   });
 }
-

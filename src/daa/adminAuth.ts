@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { getDaaAuthContextFromRequest } from "./auth/daaAuthRequest";
+import { enterDaaAccountScopeForAuthAccount } from "./account/accountScope";
 
 export type DaaAdminRole = "viewer" | "editor";
 
@@ -111,6 +112,7 @@ export async function requireDaaAdminRole(req: Request, role: DaaAdminRole): Pro
   }
   if (!ctx) return unauthorized();
   if (!roleSatisfied(role, ctx.account.roles)) return unauthorized();
+  await enterDaaAccountScopeForAuthAccount(ctx.account.accountId);
   return null;
 }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { resolveInvestableCash } from "@/src/daa/account/resolveInvestableCash";
+import { DEFAULT_DAA_ACCOUNT_SCOPE_ID } from "@/src/daa/account/accountScope";
 import { toFinite } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -52,6 +53,26 @@ async function tableExists(query: QueryFn, tableName: string): Promise<boolean> 
     [tableName],
   );
   return result.rows.length > 0;
+}
+
+async function addOwnerColumnAndBackfill(query: QueryFn, tableName: string): Promise<void> {
+  if (!(await tableExists(query, tableName))) return;
+  await query(`ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS owner_account_id TEXT NOT NULL DEFAULT '${DEFAULT_DAA_ACCOUNT_SCOPE_ID}'`);
+}
+
+async function addPrimaryKeyIfMissing(query: QueryFn, tableName: string, constraintName: string, columnsSql: string): Promise<void> {
+  await query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = '${tableName}'::regclass
+          AND conname = '${constraintName}'
+      ) THEN
+        ALTER TABLE ${tableName} ADD CONSTRAINT ${constraintName} PRIMARY KEY (${columnsSql});
+      END IF;
+    END $$;
+  `);
 }
 
 async function ensureVersionTable(query: QueryFn): Promise<void> {
@@ -212,6 +233,7 @@ const MIGRATIONS_: Migration[] = [
     async apply(query) {
       await query(`
         CREATE TABLE IF NOT EXISTS daa_notification_delivery_logs (
+          owner_account_id TEXT NOT NULL DEFAULT 'default',
           id TEXT PRIMARY KEY,
           channel TEXT NOT NULL,
           event_type TEXT NOT NULL,
@@ -230,7 +252,9 @@ const MIGRATIONS_: Migration[] = [
         )
       `);
       await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_created_desc ON daa_notification_delivery_logs(created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_owner_created_desc ON daa_notification_delivery_logs(owner_account_id, created_at DESC)");
       await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_channel_created_desc ON daa_notification_delivery_logs(channel, created_at DESC)");
+      await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_owner_channel_created_desc ON daa_notification_delivery_logs(owner_account_id, channel, created_at DESC)");
       await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_job_id ON daa_notification_delivery_logs(job_id)");
     },
   },
@@ -512,6 +536,11 @@ const MIGRATIONS_: Migration[] = [
       await query(`
         CREATE INDEX IF NOT EXISTS idx_daa_notif_dedup_major_event
         ON daa_notification_delivery_logs (event_type, success, created_at DESC)
+        WHERE event_type = 'news_major_event' AND success = TRUE
+      `);
+      await query(`
+        CREATE INDEX IF NOT EXISTS idx_daa_notif_dedup_major_event_owner
+        ON daa_notification_delivery_logs (owner_account_id, event_type, success, created_at DESC)
         WHERE event_type = 'news_major_event' AND success = TRUE
       `);
     },
@@ -798,6 +827,135 @@ const MIGRATIONS_: Migration[] = [
           `CREATE INDEX IF NOT EXISTS idx_agent_memory_content_trgm
              ON daa_agent_memory USING gin (content gin_trgm_ops)`,
         );
+      }
+    },
+  },
+  {
+    id: "20260508_account_scoped_portfolio",
+    async apply(query) {
+      for (const tableName of [
+        "daa_positions_v2",
+        "daa_broker_positions",
+        "daa_watchlist_entries",
+        "daa_target_allocations",
+        "daa_equity_snapshots_v2",
+        "daa_portfolio_ledger_events",
+        "daa_trade_journal",
+        "daa_trade_baskets",
+        "daa_trade_tickets",
+        "daa_broker_account_state",
+        "daa_broker_order_snapshots",
+        "daa_rebalance_cycles",
+        "daa_cycle_reports",
+        "daa_trigger_events",
+        "daa_rebalance_decisions",
+        "daa_execution_orders",
+        "daa_execution_order_events",
+        "daa_run_history",
+        "daa_op_log",
+        "daa_llm_feedback",
+        "daa_notification_delivery_logs",
+      ]) {
+        await addOwnerColumnAndBackfill(query, tableName);
+      }
+
+      if (await tableExists(query, "daa_positions_v2")) {
+        await query("DROP INDEX IF EXISTS idx_daa_positions_v2_symbol_market");
+        await query("ALTER TABLE daa_positions_v2 DROP CONSTRAINT IF EXISTS daa_positions_v2_pkey");
+        await addPrimaryKeyIfMissing(query, "daa_positions_v2", "daa_positions_v2_pkey", "owner_account_id, asset_key");
+        await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_positions_v2_owner_symbol_market ON daa_positions_v2(owner_account_id, symbol, market)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_positions_v2_owner_updated_desc ON daa_positions_v2(owner_account_id, updated_at DESC)");
+      }
+
+      if (await tableExists(query, "daa_broker_positions")) {
+        await query("ALTER TABLE daa_broker_positions DROP CONSTRAINT IF EXISTS daa_broker_positions_pkey");
+        await addPrimaryKeyIfMissing(query, "daa_broker_positions", "daa_broker_positions_pkey", "owner_account_id, broker_kind, asset_key");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_owner_kind_updated_desc ON daa_broker_positions(owner_account_id, broker_kind, updated_at DESC)");
+      }
+
+      if (await tableExists(query, "daa_broker_account_state")) {
+        await query("ALTER TABLE daa_broker_account_state DROP CONSTRAINT IF EXISTS daa_broker_account_state_pkey");
+        await addPrimaryKeyIfMissing(query, "daa_broker_account_state", "daa_broker_account_state_pkey", "owner_account_id, broker_kind");
+      }
+
+      if (await tableExists(query, "daa_watchlist_entries")) {
+        await query("ALTER TABLE daa_watchlist_entries DROP CONSTRAINT IF EXISTS daa_watchlist_entries_pkey");
+        await addPrimaryKeyIfMissing(query, "daa_watchlist_entries", "daa_watchlist_entries_pkey", "owner_account_id, asset_key");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_watchlist_entries_owner_enabled ON daa_watchlist_entries(owner_account_id, watch_enabled)");
+      }
+
+      if (await tableExists(query, "daa_target_allocations")) {
+        await query("ALTER TABLE daa_target_allocations DROP CONSTRAINT IF EXISTS daa_target_allocations_pkey");
+        await addPrimaryKeyIfMissing(query, "daa_target_allocations", "daa_target_allocations_pkey", "owner_account_id, asset_key");
+      }
+
+      if (await tableExists(query, "daa_equity_snapshots_v2")) {
+        await query("ALTER TABLE daa_equity_snapshots_v2 DROP CONSTRAINT IF EXISTS daa_equity_snapshots_v2_pkey");
+        await addPrimaryKeyIfMissing(query, "daa_equity_snapshots_v2", "daa_equity_snapshots_v2_pkey", "owner_account_id, ts");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_equity_snapshots_v2_owner_ts_desc ON daa_equity_snapshots_v2(owner_account_id, ts DESC)");
+      }
+
+      if (await tableExists(query, "daa_portfolio_ledger_events")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_portfolio_ledger_events_owner_ts_desc ON daa_portfolio_ledger_events(owner_account_id, ts DESC)");
+      }
+
+      if (await tableExists(query, "daa_trade_baskets")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_baskets_owner_status_created_desc ON daa_trade_baskets(owner_account_id, status, created_at DESC)");
+      }
+
+      if (await tableExists(query, "daa_trade_tickets")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_created_desc ON daa_trade_tickets(owner_account_id, created_at DESC)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_status_created_desc ON daa_trade_tickets(owner_account_id, status, created_at DESC)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_cycle_created_desc ON daa_trade_tickets(owner_account_id, cycle_id, created_at DESC)");
+      }
+
+      if (await tableExists(query, "daa_rebalance_cycles")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_owner_created_desc ON daa_rebalance_cycles(owner_account_id, created_at DESC)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_owner_status_created_desc ON daa_rebalance_cycles(owner_account_id, status, created_at DESC)");
+      }
+
+      if (await tableExists(query, "daa_trigger_events")) {
+        await query("ALTER TABLE daa_trigger_events DROP CONSTRAINT IF EXISTS daa_trigger_events_idempotency_key_key");
+        await query("DROP INDEX IF EXISTS daa_trigger_events_idempotency_key_key");
+        await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_trigger_events_owner_idempotency_key ON daa_trigger_events(owner_account_id, idempotency_key)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trigger_events_owner_created_desc ON daa_trigger_events(owner_account_id, created_at DESC)");
+      }
+
+      if (await tableExists(query, "daa_rebalance_decisions")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_rebalance_decisions_owner_created_desc ON daa_rebalance_decisions(owner_account_id, created_at DESC)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_rebalance_decisions_owner_status_created_desc ON daa_rebalance_decisions(owner_account_id, status, created_at DESC)");
+      }
+
+      if (await tableExists(query, "daa_execution_orders")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_execution_orders_owner_decision_status ON daa_execution_orders(owner_account_id, decision_id, status)");
+      }
+
+      if (await tableExists(query, "daa_run_history")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_run_history_owner_ts_desc ON daa_run_history(owner_account_id, ts DESC)");
+      }
+
+      if (await tableExists(query, "daa_op_log")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_op_log_owner_ts_desc ON daa_op_log(owner_account_id, ts DESC)");
+      }
+
+      if (await tableExists(query, "daa_broker_order_snapshots")) {
+        await query("DROP INDEX IF EXISTS idx_daa_broker_order_snapshots_order_unique");
+        await query("CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_owner_order_unique ON daa_broker_order_snapshots(owner_account_id, broker_kind, broker_order_id)");
+      }
+
+      if (await tableExists(query, "daa_trade_tickets")) {
+        await query("DROP INDEX IF EXISTS idx_daa_trade_tickets_broker_order_id");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_broker_order_id ON daa_trade_tickets(owner_account_id, broker_order_id)");
+      }
+
+      if (await tableExists(query, "daa_notification_delivery_logs")) {
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_owner_created_desc ON daa_notification_delivery_logs(owner_account_id, created_at DESC)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_notification_delivery_logs_owner_channel_created_desc ON daa_notification_delivery_logs(owner_account_id, channel, created_at DESC)");
+        await query(`
+          CREATE INDEX IF NOT EXISTS idx_daa_notif_dedup_major_event_owner
+          ON daa_notification_delivery_logs (owner_account_id, event_type, success, created_at DESC)
+          WHERE event_type = 'news_major_event' AND success = TRUE
+        `);
       }
     },
   },

@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { resolveSecret } from "@/src/daa/config/secretsManager";
+import { enterPrimaryDaaAccountScope } from "@/src/daa/account/accountScope";
 
 function normalizeToken(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
@@ -28,7 +29,10 @@ export async function requireCronAuth(req: Request): Promise<NextResponse | null
     const { createHash } = await import("node:crypto");
     const hashA = createHash("sha256").update(provided).digest();
     const hashB = createHash("sha256").update(expected).digest();
-    if (timingSafeEqual(hashA, hashB)) return null;
+    if (timingSafeEqual(hashA, hashB)) {
+      await enterPrimaryDaaAccountScope();
+      return null;
+    }
   }
 
   return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });

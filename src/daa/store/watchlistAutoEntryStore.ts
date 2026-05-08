@@ -8,6 +8,7 @@
 import { withDaaPgClient, toFinite } from "./storeShared";
 import { ensureDaaStoreSchemaPg } from "./storeSchema";
 import { normalizeText } from "@/src/daa/utils/normalize";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 
 export type WatchlistEntryRulesOverride = {
   minTechnicalScore?: number;
@@ -50,12 +51,14 @@ function mapRow(row: Record<string, unknown>): WatchlistAutoEntryRow {
 /** 列出所有启用自动建仓的 watchlist 资产（由上层按持仓/冷静期再筛选）。 */
 export async function listActiveWatchlistAutoEntries(): Promise<WatchlistAutoEntryRow[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT asset_key, auto_entry_enabled, entry_target_weight_pct,
               entry_rules_json, entry_cooldown_days, last_entry_triggered_at
        FROM daa_watchlist_entries
-       WHERE auto_entry_enabled = TRUE AND watch_enabled = TRUE`,
+       WHERE owner_account_id = $1 AND auto_entry_enabled = TRUE AND watch_enabled = TRUE`,
+      [ownerAccountId],
     );
     return result.rows.map((r) => mapRow(r as Record<string, unknown>));
   });
@@ -66,12 +69,13 @@ export async function getWatchlistAutoEntry(assetKey: string): Promise<Watchlist
   const key = normalizeText(assetKey).toUpperCase();
   if (!key) return null;
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT asset_key, auto_entry_enabled, entry_target_weight_pct,
               entry_rules_json, entry_cooldown_days, last_entry_triggered_at
-       FROM daa_watchlist_entries WHERE asset_key = $1 LIMIT 1`,
-      [key],
+       FROM daa_watchlist_entries WHERE owner_account_id = $1 AND asset_key = $2 LIMIT 1`,
+      [ownerAccountId, key],
     );
     if (result.rows.length === 0) return null;
     return mapRow(result.rows[0] as Record<string, unknown>);
@@ -93,6 +97,7 @@ export async function updateWatchlistAutoEntry(
   const key = normalizeText(assetKey).toUpperCase();
   if (!key) return null;
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const sets: string[] = [];
     const params: unknown[] = [];
@@ -119,16 +124,16 @@ export async function updateWatchlistAutoEntry(
       const existing = await query(
         `SELECT asset_key, auto_entry_enabled, entry_target_weight_pct,
                 entry_rules_json, entry_cooldown_days, last_entry_triggered_at
-         FROM daa_watchlist_entries WHERE asset_key = $1 LIMIT 1`,
-        [key],
+         FROM daa_watchlist_entries WHERE owner_account_id = $1 AND asset_key = $2 LIMIT 1`,
+        [ownerAccountId, key],
       );
       return existing.rows.length === 0 ? null : mapRow(existing.rows[0] as Record<string, unknown>);
     }
 
     sets.push("updated_at = NOW()");
-    params.push(key);
+    params.push(ownerAccountId, key);
     const result = await query(
-      `UPDATE daa_watchlist_entries SET ${sets.join(", ")} WHERE asset_key = $${idx}
+      `UPDATE daa_watchlist_entries SET ${sets.join(", ")} WHERE owner_account_id = $${idx} AND asset_key = $${idx + 1}
        RETURNING asset_key, auto_entry_enabled, entry_target_weight_pct,
                  entry_rules_json, entry_cooldown_days, last_entry_triggered_at`,
       params,
@@ -143,12 +148,13 @@ export async function markWatchlistEntryTriggered(assetKey: string): Promise<voi
   const key = normalizeText(assetKey).toUpperCase();
   if (!key) return;
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   await withDaaPgClient(async ({ query }) => {
     await query(
       `UPDATE daa_watchlist_entries
        SET last_entry_triggered_at = NOW(), updated_at = NOW()
-       WHERE asset_key = $1`,
-      [key],
+       WHERE owner_account_id = $1 AND asset_key = $2`,
+      [ownerAccountId, key],
     );
   });
 }

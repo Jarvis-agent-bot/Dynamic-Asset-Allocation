@@ -636,7 +636,7 @@ export type DaaStoreSystemConfigRow = {
 };
 
 export type DaaStoreAccountState = {
-  id: "default";
+  id: string;
   baseCurrency: string;
   cash: number;
   investableCash: number;

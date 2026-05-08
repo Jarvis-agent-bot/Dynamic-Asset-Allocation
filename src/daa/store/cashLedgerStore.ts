@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { withDaaPgClient, toIsoString, type DaaTxQueryFn } from "./storeShared";
 import type {
   DaaStoreCashLedgerEntry, DaaStoreCashLedgerSide, DaaStoreCashLedgerEntryKind,
@@ -46,12 +47,14 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
 }
 
 export async function getCurrentLedgerStartTsInTx(query: DaaTxQueryFn): Promise<string | null> {
+  const ownerAccountId = getDaaAccountScopeId();
   const result = await query(
     `SELECT ts
      FROM daa_portfolio_ledger_events
-     WHERE event_kind = 'ledger_reset'
+     WHERE owner_account_id = $1 AND event_kind = 'ledger_reset'
      ORDER BY ts DESC
      LIMIT 1`,
+    [ownerAccountId],
   );
   if (!result.rows.length) return null;
   return toIsoString(result.rows[0].ts);
@@ -59,16 +62,17 @@ export async function getCurrentLedgerStartTsInTx(query: DaaTxQueryFn): Promise<
 
 export async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCashLedgerEntry[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
               amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
        FROM daa_portfolio_ledger_events
-       WHERE event_kind <> 'ledger_reset'
+       WHERE owner_account_id = $1 AND event_kind <> 'ledger_reset'
        ORDER BY ts DESC
-       LIMIT $1`,
-      [n],
+       LIMIT $2`,
+      [ownerAccountId, n],
     );
     return result.rows.map((row) => mapCashLedgerRow(row as Record<string, unknown>));
   });
@@ -81,6 +85,7 @@ export async function getDaaLedgerStartTs(): Promise<string | null> {
 
 export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const ledgerStartTs = await getCurrentLedgerStartTsInTx(query as DaaTxQueryFn);
     if (!ledgerStartTs) {
@@ -97,30 +102,31 @@ export async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
       query(
         `SELECT amount_in_account_base, amount
          FROM daa_portfolio_ledger_events
-         WHERE event_kind = 'opening_balance'
+         WHERE owner_account_id = $2
+           AND event_kind = 'opening_balance'
            AND ts >= $1
          ORDER BY ts ASC
          LIMIT 1`,
-        [ledgerStartTs],
+        [ledgerStartTs, ownerAccountId],
       ),
       query(
         `SELECT COUNT(*)::int AS count
          FROM daa_rebalance_cycles
-         WHERE created_at < $1`,
-        [ledgerStartTs],
+         WHERE owner_account_id = $2 AND created_at < $1`,
+        [ledgerStartTs, ownerAccountId],
       ),
       query(
         `SELECT COUNT(*)::int AS count
          FROM daa_trade_tickets
-         WHERE created_at < $1`,
-        [ledgerStartTs],
+         WHERE owner_account_id = $2 AND created_at < $1`,
+        [ledgerStartTs, ownerAccountId],
       ),
       query(
         `SELECT COUNT(*)::int AS count
          FROM daa_cycle_reports r
          JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
-         WHERE c.created_at < $1`,
-        [ledgerStartTs],
+         WHERE c.owner_account_id = $2 AND c.created_at < $1`,
+        [ledgerStartTs, ownerAccountId],
       ),
     ]);
 
@@ -153,6 +159,7 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
   equitySnapshot: DaaStoreEquitySnapshot;
 }> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const sideRaw = normalizeText(input.side, "deposit").toLowerCase();
     const side: DaaStoreCashLedgerSide = sideRaw === "withdraw" ? "withdraw" : "deposit";
@@ -207,12 +214,13 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
       const settlementTs = input.settlementTs ? toIsoString(input.settlementTs, ts) : null;
       await query(
         `INSERT INTO daa_portfolio_ledger_events (
-           event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+           owner_account_id, event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
            amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,NOW()
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,NOW()
          )`,
         [
+          ownerAccountId,
           entryId,
           ts,
           eventKind,
@@ -231,16 +239,17 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
       );
 
       await query(
-        "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
-        [ts, valuation.totalEquity, valuation.holdingsValue, account.cash, "cash_ledger"],
+        "INSERT INTO daa_equity_snapshots_v2 (owner_account_id, ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5,$6)",
+        [ownerAccountId, ts, valuation.totalEquity, valuation.holdingsValue, account.cash, "cash_ledger"],
       );
 
       const opLogMessage = side === "deposit"
         ? `资金入金 ${amount.toFixed(2)} ${entryCurrency}（折算 ${amountInAccountBase.toFixed(2)} ${account.baseCurrency}，余额 ${account.cash.toFixed(2)} ${account.baseCurrency}）`
         : `资金出金 ${amount.toFixed(2)} ${entryCurrency}（折算 ${amountInAccountBase.toFixed(2)} ${account.baseCurrency}，余额 ${account.cash.toFixed(2)} ${account.baseCurrency}）`;
       await query(
-        "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'info', $2, $3)",
+        "INSERT INTO daa_op_log (owner_account_id, id, ts, level, message, context_json) VALUES ($1, $2, NOW(), 'info', $3, $4)",
         [
+          ownerAccountId,
           randomUUID(),
           opLogMessage,
           JSON.stringify({
@@ -264,9 +273,9 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
         `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
                 amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
          FROM daa_portfolio_ledger_events
-         WHERE event_id = $1
+         WHERE owner_account_id = $1 AND event_id = $2
          LIMIT 1`,
-        [entryId],
+        [ownerAccountId, entryId],
       );
 
       return {
@@ -293,4 +302,3 @@ export async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInp
     }
   });
 }
-

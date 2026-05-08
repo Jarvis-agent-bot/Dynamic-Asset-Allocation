@@ -57,6 +57,7 @@ async function isStoreSchemaReady(): Promise<boolean> {
         "market_group",
       ],
       daa_trade_tickets: [
+        "owner_account_id",
         "ticket_id",
         "basket_id",
         "cycle_id",
@@ -66,6 +67,7 @@ async function isStoreSchemaReady(): Promise<boolean> {
         "price_snapshot_at",
       ],
       daa_portfolio_ledger_events: [
+        "owner_account_id",
         "event_id",
         "event_kind",
         "side",
@@ -89,6 +91,7 @@ async function isStoreSchemaReady(): Promise<boolean> {
         "updated_at",
       ],
       daa_equity_snapshots_v2: [
+        "owner_account_id",
         "ts",
         "total_equity",
         "holdings_value",
@@ -96,6 +99,7 @@ async function isStoreSchemaReady(): Promise<boolean> {
         "source",
       ],
       daa_positions_v2: [
+        "owner_account_id",
         "asset_key",
         "symbol",
         "market",
@@ -193,7 +197,8 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
 
         await query(`
           CREATE TABLE IF NOT EXISTS daa_positions_v2 (
-            asset_key TEXT PRIMARY KEY,
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
+            asset_key TEXT NOT NULL,
             symbol TEXT NOT NULL,
             market TEXT NOT NULL DEFAULT 'US',
             currency TEXT NOT NULL DEFAULT 'USD',
@@ -201,11 +206,12 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             price NUMERIC NOT NULL DEFAULT 0,
             cost_basis NUMERIC,
             tags TEXT[] NOT NULL DEFAULT '{}',
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (owner_account_id, asset_key)
           );
 
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_positions_v2_symbol_market
-            ON daa_positions_v2(symbol, market);
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_positions_v2_owner_symbol_market
+            ON daa_positions_v2(owner_account_id, symbol, market);
 
           CREATE TABLE IF NOT EXISTS daa_account_state_v2 (
             id TEXT PRIMARY KEY,
@@ -218,14 +224,17 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           );
 
           CREATE TABLE IF NOT EXISTS daa_equity_snapshots_v2 (
-            ts TIMESTAMPTZ PRIMARY KEY,
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
+            ts TIMESTAMPTZ NOT NULL,
             total_equity NUMERIC NOT NULL,
             holdings_value NUMERIC NOT NULL,
             cash NUMERIC NOT NULL,
-            source TEXT NOT NULL DEFAULT 'cron'
+            source TEXT NOT NULL DEFAULT 'cron',
+            PRIMARY KEY (owner_account_id, ts)
           );
 
           CREATE TABLE IF NOT EXISTS daa_portfolio_ledger_events (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             event_id TEXT PRIMARY KEY,
             ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             event_kind TEXT NOT NULL,
@@ -243,11 +252,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_portfolio_ledger_events_ts_desc
-            ON daa_portfolio_ledger_events(ts DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_portfolio_ledger_events_owner_ts_desc
+            ON daa_portfolio_ledger_events(owner_account_id, ts DESC);
 
           CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_portfolio_ledger_events_ticket_unique
-            ON daa_portfolio_ledger_events(ticket_id)
+            ON daa_portfolio_ledger_events(owner_account_id, ticket_id)
             WHERE ticket_id IS NOT NULL;
 
           CREATE TABLE IF NOT EXISTS daa_price_history (
@@ -262,6 +271,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             ON daa_price_history(symbol, ts DESC);
 
           CREATE TABLE IF NOT EXISTS daa_trade_journal (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             id TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
             side TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
@@ -278,9 +288,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           );
 
           CREATE INDEX IF NOT EXISTS idx_daa_trade_journal_symbol_executed_desc
-            ON daa_trade_journal(symbol, executed_at DESC);
+            ON daa_trade_journal(owner_account_id, symbol, executed_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_trade_baskets (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             basket_id TEXT PRIMARY KEY,
             source TEXT NOT NULL CHECK (source IN ('manual', 'decision', 'mixed', 'migration')),
             status TEXT NOT NULL CHECK (status IN ('draft', 'executing', 'executed', 'partial', 'canceled')),
@@ -291,10 +302,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             executed_at TIMESTAMPTZ
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_trade_baskets_status_created_desc
-            ON daa_trade_baskets(status, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_trade_baskets_owner_status_created_desc
+            ON daa_trade_baskets(owner_account_id, status, created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_trade_tickets (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             ticket_id TEXT PRIMARY KEY,
             basket_id TEXT NOT NULL,
             asset_key TEXT NOT NULL,
@@ -340,27 +352,30 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_created_desc
-            ON daa_trade_tickets(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_created_desc
+            ON daa_trade_tickets(owner_account_id, created_at DESC);
 
-          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_status_created_desc
-            ON daa_trade_tickets(status, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_status_created_desc
+            ON daa_trade_tickets(owner_account_id, status, created_at DESC);
 
-          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc
-            ON daa_trade_tickets(cycle_id, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_owner_cycle_created_desc
+            ON daa_trade_tickets(owner_account_id, cycle_id, created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_broker_account_state (
-            broker_kind TEXT PRIMARY KEY,
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
+            broker_kind TEXT NOT NULL,
             account_id TEXT,
             base_currency TEXT NOT NULL DEFAULT 'USD',
             cash NUMERIC NOT NULL DEFAULT 0,
             investable_cash NUMERIC NOT NULL DEFAULT 0,
             frozen_cash NUMERIC NOT NULL DEFAULT 0,
             total_equity NUMERIC,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (owner_account_id, broker_kind)
           );
 
           CREATE TABLE IF NOT EXISTS daa_broker_positions (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             broker_kind TEXT NOT NULL,
             account_id TEXT,
             asset_key TEXT NOT NULL,
@@ -372,13 +387,14 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             cost_basis NUMERIC,
             tags TEXT[] NOT NULL DEFAULT '{}',
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (broker_kind, asset_key)
+            PRIMARY KEY (owner_account_id, broker_kind, asset_key)
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc
-            ON daa_broker_positions(broker_kind, updated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_owner_kind_updated_desc
+            ON daa_broker_positions(owner_account_id, broker_kind, updated_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
             broker_kind TEXT NOT NULL,
             broker_account_id TEXT,
@@ -391,10 +407,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique
-            ON daa_broker_order_snapshots(broker_kind, broker_order_id);
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_owner_order_unique
+            ON daa_broker_order_snapshots(owner_account_id, broker_kind, broker_order_id);
 
           CREATE TABLE IF NOT EXISTS daa_rebalance_cycles (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             cycle_id TEXT PRIMARY KEY,
             status TEXT NOT NULL DEFAULT 'generated',
             trigger_source TEXT NOT NULL,
@@ -414,13 +431,14 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_created_desc
-            ON daa_rebalance_cycles(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_owner_created_desc
+            ON daa_rebalance_cycles(owner_account_id, created_at DESC);
 
-          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_status_created_desc
-            ON daa_rebalance_cycles(status, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_cycles_owner_status_created_desc
+            ON daa_rebalance_cycles(owner_account_id, status, created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_cycle_reports (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             cycle_id TEXT PRIMARY KEY REFERENCES daa_rebalance_cycles(cycle_id) ON DELETE CASCADE,
             before_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
             after_snapshot_json JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -434,8 +452,9 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             ON daa_cycle_reports(created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_trigger_events (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             event_id TEXT PRIMARY KEY,
-            idempotency_key TEXT NOT NULL UNIQUE,
+            idempotency_key TEXT NOT NULL,
             trigger_source TEXT NOT NULL,
             trigger_reason TEXT NOT NULL DEFAULT '',
             cycle_id TEXT REFERENCES daa_rebalance_cycles(cycle_id) ON DELETE SET NULL,
@@ -444,13 +463,17 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_trigger_events_created_desc
-            ON daa_trigger_events(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_trigger_events_owner_created_desc
+            ON daa_trigger_events(owner_account_id, created_at DESC);
 
           CREATE INDEX IF NOT EXISTS idx_daa_trigger_events_source_created_desc
-            ON daa_trigger_events(trigger_source, created_at DESC);
+            ON daa_trigger_events(owner_account_id, trigger_source, created_at DESC);
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_trigger_events_owner_idempotency_key
+            ON daa_trigger_events(owner_account_id, idempotency_key);
 
           CREATE TABLE IF NOT EXISTS daa_rebalance_decisions (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             id TEXT PRIMARY KEY,
             request_json JSONB NOT NULL,
             response_json JSONB NOT NULL,
@@ -460,13 +483,14 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_decisions_created_desc
-            ON daa_rebalance_decisions(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_decisions_owner_created_desc
+            ON daa_rebalance_decisions(owner_account_id, created_at DESC);
 
-          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_decisions_status_created_desc
-            ON daa_rebalance_decisions(status, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_rebalance_decisions_owner_status_created_desc
+            ON daa_rebalance_decisions(owner_account_id, status, created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_execution_orders (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             order_id TEXT PRIMARY KEY,
             decision_id TEXT NOT NULL REFERENCES daa_rebalance_decisions(id) ON DELETE CASCADE,
             symbol TEXT NOT NULL,
@@ -485,10 +509,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_execution_orders_decision_status
-            ON daa_execution_orders(decision_id, status);
+          CREATE INDEX IF NOT EXISTS idx_daa_execution_orders_owner_decision_status
+            ON daa_execution_orders(owner_account_id, decision_id, status);
 
           CREATE TABLE IF NOT EXISTS daa_execution_order_events (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             id TEXT PRIMARY KEY,
             decision_id TEXT NOT NULL REFERENCES daa_rebalance_decisions(id) ON DELETE CASCADE,
             order_id TEXT NOT NULL REFERENCES daa_execution_orders(order_id) ON DELETE CASCADE,
@@ -498,9 +523,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           );
 
           CREATE INDEX IF NOT EXISTS idx_daa_execution_order_events_order_created_desc
-            ON daa_execution_order_events(order_id, created_at DESC);
+            ON daa_execution_order_events(owner_account_id, order_id, created_at DESC);
 
           CREATE TABLE IF NOT EXISTS daa_run_history (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             id TEXT PRIMARY KEY,
             ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             trigger_source TEXT NOT NULL DEFAULT 'manual',
@@ -509,10 +535,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             summary_json JSONB NOT NULL
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_run_history_ts_desc
-            ON daa_run_history(ts DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_run_history_owner_ts_desc
+            ON daa_run_history(owner_account_id, ts DESC);
 
           CREATE TABLE IF NOT EXISTS daa_op_log (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             id TEXT PRIMARY KEY,
             ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             level TEXT NOT NULL DEFAULT 'info',
@@ -520,8 +547,8 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             context_json JSONB NOT NULL DEFAULT '{}'::jsonb
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_op_log_ts_desc
-            ON daa_op_log(ts DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_op_log_owner_ts_desc
+            ON daa_op_log(owner_account_id, ts DESC);
 
           CREATE TABLE IF NOT EXISTS daa_hf_ingest_state (
             id TEXT PRIMARY KEY,
@@ -547,6 +574,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             ON daa_fx_rates(base_ccy, quote_ccy);
 
           CREATE TABLE IF NOT EXISTS daa_llm_feedback (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             id TEXT PRIMARY KEY,
             context_id TEXT NOT NULL,
             type TEXT NOT NULL CHECK (type IN ('insight', 'decision')),
@@ -555,11 +583,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           );
 
-          CREATE INDEX IF NOT EXISTS idx_daa_llm_feedback_created_desc
-            ON daa_llm_feedback(created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_llm_feedback_owner_created_desc
+            ON daa_llm_feedback(owner_account_id, created_at DESC);
 
-          CREATE INDEX IF NOT EXISTS idx_daa_llm_feedback_context_created_desc
-            ON daa_llm_feedback(context_id, created_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_daa_llm_feedback_owner_context_created_desc
+            ON daa_llm_feedback(owner_account_id, context_id, created_at DESC);
         `);
 
         await query("ALTER TABLE daa_execution_orders ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ");
@@ -590,12 +618,12 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         ).catch(() => undefined);
         await ensureTableColumn(query as any, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
         await query(
-          "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_basket_status_created_desc ON daa_trade_tickets(basket_id, status, created_at DESC)",
+          "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_basket_status_created_desc ON daa_trade_tickets(owner_account_id, basket_id, status, created_at DESC)",
         );
         await query(
-          "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc ON daa_trade_tickets(cycle_id, created_at DESC)",
+          "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_cycle_created_desc ON daa_trade_tickets(owner_account_id, cycle_id, created_at DESC)",
         );
-        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_broker_order_id ON daa_trade_tickets(broker_order_id)");
+        await query("CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_broker_order_id ON daa_trade_tickets(owner_account_id, broker_order_id)");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN basket_id DROP NOT NULL");
         await query("ALTER TABLE daa_trade_tickets ALTER COLUMN asset_key DROP NOT NULL");
         await query("UPDATE daa_trade_tickets SET asset_key = CONCAT(market, '::', symbol) WHERE asset_key IS NULL OR asset_key = ''");
@@ -611,18 +639,21 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
         );
         await query(`
           CREATE TABLE IF NOT EXISTS daa_broker_account_state (
-            broker_kind TEXT PRIMARY KEY,
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
+            broker_kind TEXT NOT NULL,
             account_id TEXT,
             base_currency TEXT NOT NULL DEFAULT 'USD',
             cash NUMERIC NOT NULL DEFAULT 0,
             investable_cash NUMERIC NOT NULL DEFAULT 0,
             frozen_cash NUMERIC NOT NULL DEFAULT 0,
             total_equity NUMERIC,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (owner_account_id, broker_kind)
           )
         `);
         await query(`
           CREATE TABLE IF NOT EXISTS daa_broker_positions (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             broker_kind TEXT NOT NULL,
             account_id TEXT,
             asset_key TEXT NOT NULL,
@@ -634,14 +665,15 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             cost_basis NUMERIC,
             tags TEXT[] NOT NULL DEFAULT '{}',
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            PRIMARY KEY (broker_kind, asset_key)
+            PRIMARY KEY (owner_account_id, broker_kind, asset_key)
           )
         `);
         await query(
-          "CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_kind_updated_desc ON daa_broker_positions(broker_kind, updated_at DESC)",
+          "CREATE INDEX IF NOT EXISTS idx_daa_broker_positions_owner_kind_updated_desc ON daa_broker_positions(owner_account_id, broker_kind, updated_at DESC)",
         );
         await query(`
           CREATE TABLE IF NOT EXISTS daa_broker_order_snapshots (
+            owner_account_id TEXT NOT NULL DEFAULT 'default',
             ticket_id TEXT PRIMARY KEY REFERENCES daa_trade_tickets(ticket_id) ON DELETE CASCADE,
             broker_kind TEXT NOT NULL,
             broker_account_id TEXT,
@@ -655,7 +687,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           )
         `);
         await query(
-          "CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_order_unique ON daa_broker_order_snapshots(broker_kind, broker_order_id)",
+          "CREATE UNIQUE INDEX IF NOT EXISTS idx_daa_broker_order_snapshots_owner_order_unique ON daa_broker_order_snapshots(owner_account_id, broker_kind, broker_order_id)",
         );
         await query("DROP TABLE IF EXISTS daa_watchlist_candidates");
 
@@ -680,10 +712,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           const resetTs = new Date().toISOString();
           await query(
             `INSERT INTO daa_portfolio_ledger_events (
-               event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+               owner_account_id, event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
                amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
              ) VALUES (
-               $1,$2,'ledger_reset','deposit',0,$3,$3,0,1,NULL,NULL,$2,$4,$5::jsonb,NOW()
+               'default',$1,$2,'ledger_reset','deposit',0,$3,$3,0,1,NULL,NULL,$2,$4,$5::jsonb,NOW()
              )`,
             [
               randomUUID(),
@@ -696,10 +728,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           if (account.cash > 0) {
             await query(
               `INSERT INTO daa_portfolio_ledger_events (
-                 event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+                 owner_account_id, event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
                  amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
                ) VALUES (
-                 $1,$2,'opening_balance','deposit',$3,$4,$4,$3,1,NULL,NULL,$2,$5,$6::jsonb,NOW()
+                 'default',$1,$2,'opening_balance','deposit',$3,$4,$4,$3,1,NULL,NULL,$2,$5,$6::jsonb,NOW()
                )`,
               [
                 randomUUID(),
@@ -712,11 +744,11 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             );
           }
           await query(
-            "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
+            "INSERT INTO daa_equity_snapshots_v2 (owner_account_id, ts, total_equity, holdings_value, cash, source) VALUES ('default',$1,$2,$3,$4,$5)",
             [resetTs, account.cash, 0, account.cash, "ledger_reset"],
           );
           await query(
-            "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'warn', $2, $3::jsonb)",
+            "INSERT INTO daa_op_log (owner_account_id, id, ts, level, message, context_json) VALUES ('default', $1, NOW(), 'warn', $2, $3::jsonb)",
             [
               randomUUID(),
               "账本 V2 已启用，旧账本已归档并按约定重置当前工作账本。",

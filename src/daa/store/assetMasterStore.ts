@@ -7,6 +7,7 @@
 import { withDaaPgClient, toFinite, type DaaTxQueryFn } from "./storeShared";
 import { normalizeText } from "@/src/daa/utils/normalize";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { buildPositionKey } from "./positionStore";
 import {
   inferMarketGroup, inferRegionByMarket,
@@ -87,14 +88,15 @@ export async function upsertWatchlistEntryInTx(
     priceAlertBelow?: number | null;
   },
 ): Promise<void> {
+  const ownerAccountId = getDaaAccountScopeId();
   const tags = Array.isArray(input.watchTags)
     ? input.watchTags.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean)
     : [];
   await query(
     `INSERT INTO daa_watchlist_entries (
-      asset_key, watch_enabled, watch_tags, notes, price_alert_above, price_alert_below, created_at, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())
-    ON CONFLICT (asset_key) DO UPDATE SET
+      owner_account_id, asset_key, watch_enabled, watch_tags, notes, price_alert_above, price_alert_below, created_at, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW())
+    ON CONFLICT (owner_account_id, asset_key) DO UPDATE SET
       watch_enabled = EXCLUDED.watch_enabled,
       watch_tags = EXCLUDED.watch_tags,
       notes = EXCLUDED.notes,
@@ -102,6 +104,7 @@ export async function upsertWatchlistEntryInTx(
       price_alert_below = EXCLUDED.price_alert_below,
       updated_at = NOW()`,
     [
+      ownerAccountId,
       input.assetKey,
       input.watchEnabled,
       tags,
@@ -128,13 +131,14 @@ export async function upsertTargetAllocationInTx(
   assetKey: string,
   targetWeightHint: number,
 ): Promise<void> {
+  const ownerAccountId = getDaaAccountScopeId();
   await query(
-    `INSERT INTO daa_target_allocations (asset_key, target_weight_hint, updated_at)
-     VALUES ($1,$2,NOW())
-     ON CONFLICT (asset_key) DO UPDATE SET
+    `INSERT INTO daa_target_allocations (owner_account_id, asset_key, target_weight_hint, updated_at)
+     VALUES ($1,$2,$3,NOW())
+     ON CONFLICT (owner_account_id, asset_key) DO UPDATE SET
        target_weight_hint = EXCLUDED.target_weight_hint,
        updated_at = NOW()`,
-    [assetKey, Math.max(0, toFinite(targetWeightHint))],
+    [ownerAccountId, assetKey, Math.max(0, toFinite(targetWeightHint))],
   );
 }
 

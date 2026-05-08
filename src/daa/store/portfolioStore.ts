@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { buildDaaAssetKey, parseDaaAssetKey } from "@/src/daa/assetKey";
 import { buildFxLookupToBase, summarizeMarkToMarketPortfolio } from "@/src/daa/modules/portfolio/portfolioValuation";
 import { withDaaPgClient, parseJsonb, toIsoString, type DaaTxQueryFn } from "./storeShared";
@@ -33,11 +34,12 @@ export function mapEquitySnapshotRow(row: Record<string, unknown>): DaaStoreEqui
 
 export async function listDaaEquitySnapshots(limit = 200): Promise<DaaStoreEquitySnapshot[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const n = Math.max(1, Math.min(2000, Math.trunc(toFiniteNumber(limit, 200))));
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 ORDER BY ts DESC LIMIT $1",
-      [n],
+      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 WHERE owner_account_id = $1 ORDER BY ts DESC LIMIT $2",
+      [ownerAccountId, n],
     );
     return result.rows.map((row) => mapEquitySnapshotRow(row as Record<string, unknown>));
   });
@@ -45,6 +47,7 @@ export async function listDaaEquitySnapshots(limit = 200): Promise<DaaStoreEquit
 
 export async function appendDaaEquitySnapshot(snapshot: Partial<DaaStoreEquitySnapshot>): Promise<DaaStoreEquitySnapshot> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const ts = toIsoString(snapshot.ts, new Date().toISOString());
     const totalEquity = Math.max(0, toFiniteNumber(snapshot.totalEquity));
@@ -53,13 +56,13 @@ export async function appendDaaEquitySnapshot(snapshot: Partial<DaaStoreEquitySn
     const source = normalizeText(snapshot.source, "manual");
 
     await query(
-      "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (ts) DO UPDATE SET total_equity=EXCLUDED.total_equity, holdings_value=EXCLUDED.holdings_value, cash=EXCLUDED.cash, source=EXCLUDED.source",
-      [ts, totalEquity, holdingsValue, cash, source],
+      "INSERT INTO daa_equity_snapshots_v2 (owner_account_id, ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (owner_account_id, ts) DO UPDATE SET total_equity=EXCLUDED.total_equity, holdings_value=EXCLUDED.holdings_value, cash=EXCLUDED.cash, source=EXCLUDED.source",
+      [ownerAccountId, ts, totalEquity, holdingsValue, cash, source],
     );
 
     const result = await query(
-      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 WHERE ts = $1 LIMIT 1",
-      [ts],
+      "SELECT ts, total_equity, holdings_value, cash, source FROM daa_equity_snapshots_v2 WHERE owner_account_id = $1 AND ts = $2 LIMIT 1",
+      [ownerAccountId, ts],
     );
     return mapEquitySnapshotRow(result.rows[0] as Record<string, unknown>);
   });
@@ -132,16 +135,18 @@ export function mapCandidateAssetRow(row: Record<string, unknown>): DaaStoreCand
 
 export async function listDaaCandidateAssets(): Promise<DaaStoreCandidateAsset[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
       `SELECT am.asset_key, am.symbol, am.market, am.currency,
               we.watch_enabled, COALESCE(ta.target_weight_hint, 0) AS target_weight_hint,
               we.watch_tags, we.notes, am.created_at, am.updated_at
        FROM daa_asset_master am
-       JOIN daa_watchlist_entries we ON we.asset_key = am.asset_key
-       LEFT JOIN daa_target_allocations ta ON ta.asset_key = am.asset_key
+       JOIN daa_watchlist_entries we ON we.owner_account_id = $1 AND we.asset_key = am.asset_key
+       LEFT JOIN daa_target_allocations ta ON ta.owner_account_id = $1 AND ta.asset_key = am.asset_key
        WHERE we.watch_enabled = TRUE
        ORDER BY am.symbol ASC, am.market ASC`,
+      [ownerAccountId],
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -165,16 +170,19 @@ export async function replaceDaaCandidateAssets(
   rows: Array<Partial<DaaStoreCandidateAsset>>,
 ): Promise<DaaStoreCandidateAsset[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const txQuery = query as DaaTxQueryFn;
     await txQuery("BEGIN");
     try {
       // 清除所有观察列表标记
       await txQuery(
-        "UPDATE daa_watchlist_entries SET watch_enabled = FALSE, watch_tags = '{}'::TEXT[], notes = NULL, updated_at = NOW()",
+        "UPDATE daa_watchlist_entries SET watch_enabled = FALSE, watch_tags = '{}'::TEXT[], notes = NULL, updated_at = NOW() WHERE owner_account_id = $1",
+        [ownerAccountId],
       );
       await txQuery(
-        "UPDATE daa_target_allocations SET target_weight_hint = 0, updated_at = NOW()",
+        "UPDATE daa_target_allocations SET target_weight_hint = 0, updated_at = NOW() WHERE owner_account_id = $1",
+        [ownerAccountId],
       );
       for (const raw of rows) {
         const symbol = normalizeText(raw.symbol).toUpperCase();
@@ -210,10 +218,11 @@ export async function replaceDaaCandidateAssets(
               we.watch_enabled, COALESCE(ta.target_weight_hint, 0) AS target_weight_hint,
               we.watch_tags, we.notes, am.created_at, am.updated_at
        FROM daa_asset_master am
-       JOIN daa_watchlist_entries we ON we.asset_key = am.asset_key
-       LEFT JOIN daa_target_allocations ta ON ta.asset_key = am.asset_key
+       JOIN daa_watchlist_entries we ON we.owner_account_id = $1 AND we.asset_key = am.asset_key
+       LEFT JOIN daa_target_allocations ta ON ta.owner_account_id = $1 AND ta.asset_key = am.asset_key
        WHERE we.watch_enabled = TRUE
        ORDER BY am.symbol ASC, am.market ASC`,
+      [ownerAccountId],
     );
     return result.rows.map((row) => {
       const item = row as Record<string, unknown>;
@@ -237,6 +246,7 @@ export async function buildPortfolioSnapshotFromAssetUniverseInTx(
   query: DaaTxQueryFn,
   input: { baseCurrency: string; cash: number },
 ): Promise<{ holdingsValue: number; totalEquity: number }> {
+  const ownerAccountId = getDaaAccountScopeId();
   const [holdingsRes, fxRes] = await Promise.all([
     query(`
       SELECT
@@ -248,8 +258,8 @@ export async function buildPortfolioSnapshotFromAssetUniverseInTx(
         COALESCE(mps.last_price, p.price, 0) AS last_price
       FROM daa_positions_v2 p
       LEFT JOIN daa_market_price_snapshots mps ON mps.asset_key = p.asset_key
-      WHERE p.qty > 0
-    `),
+      WHERE p.owner_account_id = $1 AND p.qty > 0
+    `, [ownerAccountId]),
     query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates"),
   ]);
   const summary = summarizeMarkToMarketPortfolio({
@@ -322,4 +332,3 @@ export async function appendAssetPriceHistoryRows(rows: Array<{ assetKey: string
     return inserted;
   });
 }
-

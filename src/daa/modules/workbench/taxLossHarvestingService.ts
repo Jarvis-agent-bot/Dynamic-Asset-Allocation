@@ -1,5 +1,6 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import type { WorkbenchBootstrap, RebalanceProposal, TlhCandidate, TlhScanResult } from "./workbenchTypes";
 
 type TlhConfig = {
@@ -29,6 +30,7 @@ async function getWashSaleBlockedSymbols(input: {
   if (input.symbols.length === 0) return new Map();
 
   const pool = daaPgPool();
+  const ownerAccountId = getDaaAccountScopeId();
   const cutoff = new Date(Date.now() - input.washSaleDays * 24 * 60 * 60 * 1000).toISOString();
 
   // Check if trade tickets table exists
@@ -36,12 +38,13 @@ async function getWashSaleBlockedSymbols(input: {
     const { rows } = await pool.query(
       `SELECT symbol, MAX(created_at) as last_buy_at
        FROM daa_trade_tickets
-       WHERE symbol = ANY($1)
+       WHERE owner_account_id = $1
+         AND symbol = ANY($2)
          AND side = 'BUY'
          AND status = 'executed'
-         AND created_at >= $2::timestamptz
+         AND created_at >= $3::timestamptz
        GROUP BY symbol`,
-      [input.symbols.map((s) => s.toUpperCase()), cutoff],
+      [ownerAccountId, input.symbols.map((s) => s.toUpperCase()), cutoff],
     );
 
     const result = new Map<string, string>();

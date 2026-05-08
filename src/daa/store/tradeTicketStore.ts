@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { buildDaaAssetKey, parseDaaAssetKey } from "@/src/daa/assetKey";
 import { resolveInvestableCash as resolveRuntimeInvestableCash } from "@/src/daa/account/resolveInvestableCash";
 import {
@@ -18,10 +19,9 @@ import type {
   DaaStoreTradeTicket, DaaStoreTradeTicketSource, DaaStoreTradeTicketStatus,
   DaaStoreTradeTicketSide, DaaStoreCreateTradeTicketInput,
   DaaStoreExecuteTradeTicketsInput, DaaStoreExecuteTradeTicketsResult,
-  DaaStorePosition, DaaStoreEquitySnapshot, DaaStoreCashLedgerSide,
+  DaaStorePosition, DaaStoreCashLedgerSide,
   DaaStoreRebalanceDecision, DaaStoreBrokerKind, DaaStoreBrokerOrderSnapshot,
-  DaaStoreFxRate, DaaStoreCashLedgerEntry, DaaStoreCashLedgerEntryKind,
-  DaaStoreCashLedgerApplyInput, DaaCurrentLedgerMeta,
+  DaaStoreFxRate,
   DaaStoreRebalanceCycle, DaaStoreCreateRebalanceCycleInput,
   DaaStorePatchRebalanceCycleInput, DaaStoreCycleReport,
   DaaStoreTriggerEvent,
@@ -255,14 +255,16 @@ async function upsertBrokerOrderSnapshotInTx(
   },
 ): Promise<DaaStoreBrokerOrderSnapshot> {
   const syncedAt = input.syncedAt ? toIsoString(input.syncedAt, new Date().toISOString()) : new Date().toISOString();
+  const ownerAccountId = getDaaAccountScopeId();
   const result = await query(
     `INSERT INTO daa_broker_order_snapshots (
-       ticket_id, broker_kind, broker_account_id, broker_order_id, status, filled_qty, avg_fill_price, raw_json, synced_at, updated_at
+       owner_account_id, ticket_id, broker_kind, broker_account_id, broker_order_id, status, filled_qty, avg_fill_price, raw_json, synced_at, updated_at
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,NOW()
+       $1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,NOW()
      )
      ON CONFLICT (ticket_id) DO UPDATE
      SET
+       owner_account_id = EXCLUDED.owner_account_id,
        broker_kind = EXCLUDED.broker_kind,
        broker_account_id = EXCLUDED.broker_account_id,
        broker_order_id = EXCLUDED.broker_order_id,
@@ -274,6 +276,7 @@ async function upsertBrokerOrderSnapshotInTx(
        updated_at = NOW()
      RETURNING ticket_id, broker_kind, broker_account_id, broker_order_id, status, filled_qty, avg_fill_price, raw_json, synced_at, updated_at`,
     [
+      ownerAccountId,
       normalizeText(input.ticketId),
       input.brokerKind,
       input.brokerAccountId ?? null,
@@ -298,19 +301,21 @@ async function selectTradeTicketsByIdsInTx(
 ): Promise<DaaStoreTradeTicket[]> {
   const ids = [...new Set(ticketIds.map((item) => normalizeText(item)).filter(Boolean))];
   if (!ids.length) return [];
-  const placeholders = ids.map((_, idx) => `$${idx + 1}`).join(", ");
+  const ownerAccountId = getDaaAccountScopeId();
+  const placeholders = ids.map((_, idx) => `$${idx + 2}`).join(", ");
   const result = await query(
     `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
      FROM daa_trade_tickets
-     WHERE ticket_id IN (${placeholders})
+     WHERE owner_account_id = $1 AND ticket_id IN (${placeholders})
      ${opts.forUpdate ? "FOR UPDATE" : ""}
      ${opts.orderByCreatedDesc ? "ORDER BY created_at DESC" : ""}`,
-    ids,
+    [ownerAccountId, ...ids],
   );
   return result.rows.map((row) => mapTradeTicketRow(row as Record<string, unknown>));
 }
 
 async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: string[]): Promise<void> {
+  const ownerAccountId = getDaaAccountScopeId();
   const touchedTickets = await selectTradeTicketsByIdsInTx(query, ticketIds);
   const touchedDecisionIds = [...new Set(
     touchedTickets
@@ -318,10 +323,10 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
       .filter((decisionId): decisionId is string => Boolean(decisionId)),
   )];
   if (touchedDecisionIds.length > 0) {
-    const decisionPlaceholders = touchedDecisionIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const decisionPlaceholders = touchedDecisionIds.map((_, idx) => `$${idx + 2}`).join(", ");
     const decisionTicketRows = await query(
-      `SELECT decision_ref_id, status FROM daa_trade_tickets WHERE decision_ref_id IN (${decisionPlaceholders})`,
-      touchedDecisionIds,
+      `SELECT decision_ref_id, status FROM daa_trade_tickets WHERE owner_account_id = $1 AND decision_ref_id IN (${decisionPlaceholders})`,
+      [ownerAccountId, ...touchedDecisionIds],
     );
     const statusByDecision = new Map<string, DaaStoreTradeTicketStatus[]>();
     for (const row of decisionTicketRows.rows as Array<Record<string, unknown>>) {
@@ -335,8 +340,8 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
       const statuses = statusByDecision.get(decisionId) ?? [];
       const nextStatus = deriveDecisionStatusFromTradeTickets(statuses);
       await query(
-        "UPDATE daa_rebalance_decisions SET status = $1 WHERE id = $2",
-        [nextStatus, decisionId],
+        "UPDATE daa_rebalance_decisions SET status = $1 WHERE id = $2 AND owner_account_id = $3",
+        [nextStatus, decisionId, ownerAccountId],
       );
     }
   }
@@ -347,10 +352,10 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
       .filter((id): id is string => Boolean(id)),
   )];
   if (touchedBasketIds.length > 0) {
-    const basketPlaceholders = touchedBasketIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const basketPlaceholders = touchedBasketIds.map((_, idx) => `$${idx + 2}`).join(", ");
     const basketTicketRows = await query(
-      `SELECT basket_id, status FROM daa_trade_tickets WHERE basket_id IN (${basketPlaceholders})`,
-      touchedBasketIds,
+      `SELECT basket_id, status FROM daa_trade_tickets WHERE owner_account_id = $1 AND basket_id IN (${basketPlaceholders})`,
+      [ownerAccountId, ...touchedBasketIds],
     );
     const statusByBasket = new Map<string, DaaStoreTradeTicketStatus[]>();
     for (const row of basketTicketRows.rows as Array<Record<string, unknown>>) {
@@ -364,8 +369,8 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
       const statuses = statusByBasket.get(id) ?? [];
       const nextStatus = deriveBasketStatusFromTickets(statuses);
       await query(
-        "UPDATE daa_trade_baskets SET status = $1, updated_at = NOW(), executed_at = CASE WHEN $1 IN ('executed','partial','canceled') THEN COALESCE(executed_at, NOW()) ELSE executed_at END WHERE basket_id = $2",
-        [nextStatus, id],
+        "UPDATE daa_trade_baskets SET status = $1, updated_at = NOW(), executed_at = CASE WHEN $1 IN ('executed','partial','canceled') THEN COALESCE(executed_at, NOW()) ELSE executed_at END WHERE basket_id = $2 AND owner_account_id = $3",
+        [nextStatus, id, ownerAccountId],
       );
     }
   }
@@ -376,19 +381,19 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
       .filter((id): id is string => Boolean(id)),
   )];
   if (touchedCycleIds.length > 0) {
-    const cyclePlaceholders = touchedCycleIds.map((_, idx) => `$${idx + 1}`).join(", ");
+    const cyclePlaceholders = touchedCycleIds.map((_, idx) => `$${idx + 2}`).join(", ");
     const cycleTicketRows = await query(
       `SELECT cycle_id, ticket_id, status, qty, price
        FROM daa_trade_tickets
-       WHERE cycle_id IN (${cyclePlaceholders})`,
-      touchedCycleIds,
+       WHERE owner_account_id = $1 AND cycle_id IN (${cyclePlaceholders})`,
+      [ownerAccountId, ...touchedCycleIds],
     );
     const cycleStateRows = await query(
       `SELECT cycle_id, executed_at, execution_summary_json
        FROM daa_rebalance_cycles
-       WHERE cycle_id IN (${cyclePlaceholders})
+       WHERE owner_account_id = $1 AND cycle_id IN (${cyclePlaceholders})
        FOR UPDATE`,
-      touchedCycleIds,
+      [ownerAccountId, ...touchedCycleIds],
     );
 
     const currentCycleStateById = new Map<string, {
@@ -454,7 +459,7 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
            executed_at = $3,
            executed_orders_json = $4::jsonb,
            execution_summary_json = $5::jsonb
-         WHERE cycle_id = $1`,
+         WHERE cycle_id = $1 AND owner_account_id = $6`,
         [
           cycleId,
           nextStatus,
@@ -467,6 +472,7 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
             totalNotional,
             newMaxDriftPct,
           }),
+          ownerAccountId,
         ],
       );
     }
@@ -956,286 +962,21 @@ async function upsertDaaFxRates(rows: Array<Partial<DaaStoreFxRate>>): Promise<D
   });
 }
 
-function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry {
-  const normalizedSide = normalizeText(row.side, "deposit").toLowerCase();
-  const side: DaaStoreCashLedgerSide = normalizedSide === "withdraw" ? "withdraw" : "deposit";
-  const normalizedEntryKind = normalizeText(row.event_kind).toLowerCase();
-  const entryKind: DaaStoreCashLedgerEntryKind | null = normalizedEntryKind === "trade_execution"
-    ? "trade_execution"
-    : normalizedEntryKind === "dividend"
-      ? "dividend"
-      : normalizedEntryKind === "opening_balance"
-        ? "opening_balance"
-      : ((normalizedEntryKind === "cash_transfer" || normalizedEntryKind === "manual") ? "manual" : null);
-  return {
-    id: normalizeText(row.event_id),
-    ts: toIsoString(row.ts),
-    side,
-    amount: Math.max(0, toFiniteNumber(row.amount)),
-    baseCurrency: normalizeCcyCode(row.base_currency, "USD"),
-    entryKind,
-    accountBaseCurrency: row.account_base_currency == null ? null : normalizeCcyCode(row.account_base_currency, "USD"),
-    amountInAccountBase: row.amount_in_account_base == null ? null : Math.max(0, toFiniteNumber(row.amount_in_account_base)),
-    fxRateToAccount: row.fx_rate_to_account == null ? null : Math.max(0, toFiniteNumber(row.fx_rate_to_account)),
-    ticketId: row.ticket_id == null ? null : normalizeText(row.ticket_id) || null,
-    cycleId: row.cycle_id == null ? null : normalizeText(row.cycle_id) || null,
-    settlementTs: row.settlement_ts == null ? null : toIsoString(row.settlement_ts),
-    note: row.note == null ? null : String(row.note),
-    createdAt: toIsoString(row.created_at),
-  };
-}
-
-async function listDaaCashLedgerEntries(limit = 100): Promise<DaaStoreCashLedgerEntry[]> {
-  await ensureDaaStoreSchemaPg();
-  const n = Math.max(1, Math.min(1000, Math.trunc(toFiniteNumber(limit, 100))));
-  return withDaaPgClient(async ({ query }) => {
-    const result = await query(
-      `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
-              amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
-       FROM daa_portfolio_ledger_events
-       WHERE event_kind <> 'ledger_reset'
-       ORDER BY ts DESC
-       LIMIT $1`,
-      [n],
-    );
-    return result.rows.map((row) => mapCashLedgerRow(row as Record<string, unknown>));
-  });
-}
-
-async function getDaaLedgerStartTs(): Promise<string | null> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => getCurrentLedgerStartTsInTx(query as DaaTxQueryFn));
-}
-
-async function getDaaCurrentLedgerMeta(): Promise<DaaCurrentLedgerMeta> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const ledgerStartTs = await getCurrentLedgerStartTsInTx(query as DaaTxQueryFn);
-    if (!ledgerStartTs) {
-      return {
-        ledgerStartTs: null,
-        openingBalance: 0,
-        archivedCycleCount: 0,
-        archivedTradeCount: 0,
-        archivedReportCount: 0,
-      };
-    }
-
-    const [openingRes, cycleRes, tradeRes, reportRes] = await Promise.all([
-      query(
-        `SELECT amount_in_account_base, amount
-         FROM daa_portfolio_ledger_events
-         WHERE event_kind = 'opening_balance'
-           AND ts >= $1
-         ORDER BY ts ASC
-         LIMIT 1`,
-        [ledgerStartTs],
-      ),
-      query(
-        `SELECT COUNT(*)::int AS count
-         FROM daa_rebalance_cycles
-         WHERE created_at < $1`,
-        [ledgerStartTs],
-      ),
-      query(
-        `SELECT COUNT(*)::int AS count
-         FROM daa_trade_tickets
-         WHERE created_at < $1`,
-        [ledgerStartTs],
-      ),
-      query(
-        `SELECT COUNT(*)::int AS count
-         FROM daa_cycle_reports r
-         JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
-         WHERE c.created_at < $1`,
-        [ledgerStartTs],
-      ),
-    ]);
-
-    const openingRow = openingRes.rows[0] as Record<string, unknown> | undefined;
-    return {
-      ledgerStartTs,
-      openingBalance: Math.max(
-        0,
-        toFiniteNumber(
-          openingRow?.amount_in_account_base ?? openingRow?.amount,
-          0,
-        ),
-      ),
-      archivedCycleCount: Math.max(0, Math.trunc(toFiniteNumber(cycleRes.rows[0]?.count, 0))),
-      archivedTradeCount: Math.max(0, Math.trunc(toFiniteNumber(tradeRes.rows[0]?.count, 0))),
-      archivedReportCount: Math.max(0, Math.trunc(toFiniteNumber(reportRes.rows[0]?.count, 0))),
-    };
-  });
-}
-
-async function appendDaaCashLedgerEntry(input: DaaStoreCashLedgerApplyInput): Promise<{
-  entry: DaaStoreCashLedgerEntry;
-  account: {
-    baseCurrency: string;
-    cash: number;
-    investableCash: number;
-    frozenCash: number;
-    totalEquity: number | null;
-  };
-  equitySnapshot: DaaStoreEquitySnapshot;
-}> {
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const sideRaw = normalizeText(input.side, "deposit").toLowerCase();
-    const side: DaaStoreCashLedgerSide = sideRaw === "withdraw" ? "withdraw" : "deposit";
-    const amount = Math.max(0, toFiniteNumber(input.amount));
-    if (amount <= 0) throw new Error("cash ledger amount must be greater than 0");
-
-    const rawEntryKind = normalizeText(input.entryKind, "manual").toLowerCase();
-    const entryKind: DaaStoreCashLedgerEntryKind = rawEntryKind === "trade_execution" ? "trade_execution" : rawEntryKind === "dividend" ? "dividend" : "manual";
-    const eventKind = entryKind === "trade_execution" ? "trade_execution" : entryKind === "dividend" ? "dividend" : "cash_transfer";
-    const note = normalizeText(input.note, "");
-    const entryId = randomUUID();
-
-    await query("BEGIN");
-    try {
-      const accountState = await getAccountStateForUpdateInTx(query as any);
-      const currentCash = Math.max(0, toFiniteNumber(accountState.cash, 0));
-      const accountBaseCurrency = normalizeCcyCode(accountState.baseCurrency, "USD");
-      const entryCurrency = normalizeCcyCode(input.baseCurrency, accountBaseCurrency);
-      const fxRes = await query("SELECT base_ccy, quote_ccy, rate FROM daa_fx_rates");
-      const fxMap = buildFxLookupMap(fxRes.rows as Array<Record<string, unknown>>);
-
-      let fxRateToAccount = input.fxRateToAccount != null ? Math.max(0, toFiniteNumber(input.fxRateToAccount, 0)) : 0;
-      if (!(fxRateToAccount > 0)) {
-        fxRateToAccount = resolveFxRateToBase(accountBaseCurrency, entryCurrency, fxMap) ?? 0;
-      }
-      if (!(fxRateToAccount > 0) && entryCurrency === "USDC" && accountBaseCurrency === "USD") {
-        fxRateToAccount = 1;
-      }
-      if (!(fxRateToAccount > 0)) {
-        throw new Error(`missing fx rate for cash-ledger: ${entryCurrency}/${accountBaseCurrency}`);
-      }
-
-      const amountInAccountBase = input.amountInAccountBase != null && toFiniteNumber(input.amountInAccountBase, 0) > 0
-        ? Math.max(0, toFiniteNumber(input.amountInAccountBase, 0))
-        : amount * fxRateToAccount;
-      const nextCash = side === "deposit" ? currentCash + amountInAccountBase : currentCash - amountInAccountBase;
-      if (nextCash < -1e-9) {
-        throw new Error(
-          `insufficient cash for withdraw: ${amount.toFixed(2)} ${entryCurrency} (约 ${amountInAccountBase.toFixed(2)} ${accountBaseCurrency}) > ${currentCash.toFixed(2)} ${accountBaseCurrency}`,
-        );
-      }
-
-      const normalizedNextCash = Math.max(0, nextCash);
-      const valuation = await buildPortfolioSnapshotFromAssetUniverseInTx(query as DaaTxQueryFn, {
-        baseCurrency: accountBaseCurrency,
-        cash: normalizedNextCash,
-      });
-      const account = await syncStrategyAccountCashInTx(query as DaaTxQueryFn, normalizedNextCash, {
-        totalEquity: valuation.totalEquity,
-      });
-      const ts = input.settlementTs ? toIsoString(input.settlementTs, new Date().toISOString()) : new Date().toISOString();
-      const settlementTs = input.settlementTs ? toIsoString(input.settlementTs, ts) : null;
-      await query(
-        `INSERT INTO daa_portfolio_ledger_events (
-           event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
-           amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
-         ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,NOW()
-         )`,
-        [
-          entryId,
-          ts,
-          eventKind,
-          side,
-          amount,
-          entryCurrency,
-          account.baseCurrency,
-          amountInAccountBase,
-          fxRateToAccount,
-          input.ticketId ? normalizeText(input.ticketId) || null : null,
-          input.cycleId ? normalizeText(input.cycleId) || null : null,
-          settlementTs,
-          note || null,
-          JSON.stringify({ entryKind }),
-        ],
-      );
-
-      await query(
-        "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
-        [ts, valuation.totalEquity, valuation.holdingsValue, account.cash, "cash_ledger"],
-      );
-
-      const opLogMessage = side === "deposit"
-        ? `资金入金 ${amount.toFixed(2)} ${entryCurrency}（折算 ${amountInAccountBase.toFixed(2)} ${account.baseCurrency}，余额 ${account.cash.toFixed(2)} ${account.baseCurrency}）`
-        : `资金出金 ${amount.toFixed(2)} ${entryCurrency}（折算 ${amountInAccountBase.toFixed(2)} ${account.baseCurrency}，余额 ${account.cash.toFixed(2)} ${account.baseCurrency}）`;
-      await query(
-        "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'info', $2, $3)",
-        [
-          randomUUID(),
-          opLogMessage,
-          JSON.stringify({
-            side,
-            amount,
-            baseCurrency: entryCurrency,
-            entryKind,
-            amountInAccountBase,
-            accountBaseCurrency: account.baseCurrency,
-            fxRateToAccount,
-            ticketId: input.ticketId ? normalizeText(input.ticketId) || null : null,
-            cycleId: input.cycleId ? normalizeText(input.cycleId) || null : null,
-            note: note || null,
-          }),
-        ],
-      );
-
-      await query("COMMIT");
-
-      const entryRes = await query(
-        `SELECT event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
-                amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, created_at
-         FROM daa_portfolio_ledger_events
-         WHERE event_id = $1
-         LIMIT 1`,
-        [entryId],
-      );
-
-      return {
-        entry: mapCashLedgerRow(entryRes.rows[0] as Record<string, unknown>),
-        account: {
-          ...account,
-          totalEquity: valuation.totalEquity,
-        },
-        equitySnapshot: {
-          ts,
-          totalEquity: valuation.totalEquity,
-          holdingsValue: valuation.holdingsValue,
-          cash: account.cash,
-          source: "cash_ledger",
-        },
-      };
-    } catch (error) {
-      try {
-        await query("ROLLBACK");
-      } catch (err) {
-        logSwallowed("tradeTicketStore.rollback", err);
-      }
-      throw error;
-    }
-  });
-}
-
 export async function createDaaTradeBasket(input: {
   source?: DaaStoreTradeBasketSource;
   decisionRefId?: string | null;
   createdBy?: string;
 } = {}): Promise<DaaStoreTradeBasket> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const basketId = randomUUID();
     const source = normalizeTradeBasketSource(input.source);
     const decisionRefId = normalizeText(input.decisionRefId, "") || null;
     const createdBy = normalizeText(input.createdBy, "admin");
     const inserted = await query(
-      "INSERT INTO daa_trade_baskets (basket_id, source, status, decision_ref_id, created_by, created_at, updated_at) VALUES ($1,$2,'draft',$3,$4,NOW(),NOW()) RETURNING basket_id, source, status, decision_ref_id, created_by, created_at, updated_at, executed_at",
-      [basketId, source, decisionRefId, createdBy],
+      "INSERT INTO daa_trade_baskets (owner_account_id, basket_id, source, status, decision_ref_id, created_by, created_at, updated_at) VALUES ($1,$2,$3,'draft',$4,$5,NOW(),NOW()) RETURNING basket_id, source, status, decision_ref_id, created_by, created_at, updated_at, executed_at",
+      [ownerAccountId, basketId, source, decisionRefId, createdBy],
     );
     return mapTradeBasketRow(inserted.rows[0] as Record<string, unknown>);
   });
@@ -1248,10 +989,11 @@ export async function getActiveDaaTradeBasket(opts: {
   createdBy?: string;
 } = {}): Promise<DaaStoreTradeBasket | null> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const source = opts.source ? normalizeTradeBasketSource(opts.source) : null;
-    const params: unknown[] = [];
-    const where: string[] = ["status = 'draft'"];
+    const params: unknown[] = [ownerAccountId];
+    const where: string[] = ["owner_account_id = $1", "status = 'draft'"];
     if (source) {
       params.push(source);
       where.push(`source = $${params.length}`);
@@ -1264,8 +1006,8 @@ export async function getActiveDaaTradeBasket(opts: {
     const decisionRefId = normalizeText(opts.decisionRefId, "") || null;
     const createdBy = normalizeText(opts.createdBy, "admin");
     const inserted = await query(
-      "INSERT INTO daa_trade_baskets (basket_id, source, status, decision_ref_id, created_by, created_at, updated_at) VALUES ($1,$2,'draft',$3,$4,NOW(),NOW()) RETURNING basket_id, source, status, decision_ref_id, created_by, created_at, updated_at, executed_at",
-      [basketId, source ?? "manual", decisionRefId, createdBy],
+      "INSERT INTO daa_trade_baskets (owner_account_id, basket_id, source, status, decision_ref_id, created_by, created_at, updated_at) VALUES ($1,$2,$3,'draft',$4,$5,NOW(),NOW()) RETURNING basket_id, source, status, decision_ref_id, created_by, created_at, updated_at, executed_at",
+      [ownerAccountId, basketId, source ?? "manual", decisionRefId, createdBy],
     );
     return mapTradeBasketRow(inserted.rows[0] as Record<string, unknown>);
   });
@@ -1276,10 +1018,11 @@ export async function listDaaTradeBaskets(opts: {
   limit?: number;
 } = {}): Promise<DaaStoreTradeBasket[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const limit = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(opts.limit, 100))));
-    const params: unknown[] = [];
-    const where: string[] = [];
+    const params: unknown[] = [ownerAccountId];
+    const where: string[] = ["owner_account_id = $1"];
     if (opts.status) {
       params.push(normalizeTradeBasketStatus(opts.status));
       where.push(`status = $${params.length}`);
@@ -1303,10 +1046,11 @@ export async function listDaaTradeTickets(opts: {
   source?: DaaStoreTradeTicketSource;
 } = {}): Promise<DaaStoreTradeTicket[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(opts.limit, 100))));
-    const where: string[] = [];
-    const params: unknown[] = [];
+    const where: string[] = ["owner_account_id = $1"];
+    const params: unknown[] = [ownerAccountId];
 
     if (opts.status) {
       params.push(normalizeTradeTicketStatus(opts.status));
@@ -1339,12 +1083,13 @@ export async function listDaaTradeTickets(opts: {
 
 export async function getDaaTradeTicket(ticketIdRaw: string): Promise<DaaStoreTradeTicket | null> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const ticketId = normalizeText(ticketIdRaw);
   if (!ticketId) return null;
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
-      [ticketId],
+      `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
+      [ownerAccountId, ticketId],
     );
     if (!result.rows.length) return null;
     return mapTradeTicketRow(result.rows[0] as Record<string, unknown>);
@@ -1353,9 +1098,11 @@ export async function getDaaTradeTicket(ticketIdRaw: string): Promise<DaaStoreTr
 
 export async function listDaaBrokerOpenTradeTickets(brokerKind?: DaaStoreBrokerKind | null): Promise<DaaStoreTradeTicket[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    const params: unknown[] = [];
+    const params: unknown[] = [ownerAccountId];
     const where = [
+      "owner_account_id = $1",
       "broker_order_id IS NOT NULL",
       "status IN ('submitted', 'partially_filled')",
     ];
@@ -1411,11 +1158,12 @@ const REBALANCE_CYCLE_SELECT_COLUMNS_ = [
 
 export async function listDaaRebalanceCycles(limit = 100): Promise<DaaStoreRebalanceCycle[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const n = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(limit, 100))));
     const result = await query(
-      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles ORDER BY created_at DESC LIMIT $1`,
-      [n],
+      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE owner_account_id = $1 ORDER BY created_at DESC LIMIT $2`,
+      [ownerAccountId, n],
     );
     return result.rows.map((row) => mapRebalanceCycleRow(row as Record<string, unknown>));
   });
@@ -1423,12 +1171,13 @@ export async function listDaaRebalanceCycles(limit = 100): Promise<DaaStoreRebal
 
 export async function getDaaRebalanceCycle(cycleIdRaw: string): Promise<DaaStoreRebalanceCycle | null> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const cycleId = normalizeText(cycleIdRaw);
   if (!cycleId) return null;
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE cycle_id = $1 LIMIT 1`,
-      [cycleId],
+      `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE owner_account_id = $1 AND cycle_id = $2 LIMIT 1`,
+      [ownerAccountId, cycleId],
     );
     if (!result.rows.length) return null;
     return mapRebalanceCycleRow(result.rows[0] as Record<string, unknown>);
@@ -1437,6 +1186,7 @@ export async function getDaaRebalanceCycle(cycleIdRaw: string): Promise<DaaStore
 
 export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycleInput): Promise<DaaStoreRebalanceCycle> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const cycleId = normalizeText(input.cycleId, "") || randomUUID();
     const status = normalizeRebalanceCycleStatus(input.status);
@@ -1458,13 +1208,14 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
 
     const inserted = await query(
       `INSERT INTO daa_rebalance_cycles (
-         cycle_id, status, trigger_source, trigger_reason, snapshot_at, equity_snapshot,
+         owner_account_id, cycle_id, status, trigger_source, trigger_reason, snapshot_at, equity_snapshot,
          drift_snapshot_json, proposals_json, risk_check_json, notes, market_context_json, created_at
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11::jsonb,NOW()
+         $1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,NOW()
        )
        ON CONFLICT (cycle_id) DO UPDATE
        SET
+         owner_account_id = EXCLUDED.owner_account_id,
          status = EXCLUDED.status,
          trigger_source = EXCLUDED.trigger_source,
          trigger_reason = EXCLUDED.trigger_reason,
@@ -1477,6 +1228,7 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
          market_context_json = EXCLUDED.market_context_json
        RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_}`,
       [
+        ownerAccountId,
         cycleId,
         status,
         triggerSource,
@@ -1496,6 +1248,7 @@ export async function createDaaRebalanceCycle(input: DaaStoreCreateRebalanceCycl
 
 export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleInput): Promise<DaaStoreRebalanceCycle> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const cycleId = normalizeText(input.cycleId);
     if (!cycleId) throw new Error("cycleId is required");
@@ -1503,8 +1256,8 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
     await query("BEGIN");
     try {
       const currentRes = await query(
-        `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE cycle_id = $1 LIMIT 1 FOR UPDATE`,
-        [cycleId],
+        `SELECT ${REBALANCE_CYCLE_SELECT_COLUMNS_} FROM daa_rebalance_cycles WHERE owner_account_id = $1 AND cycle_id = $2 LIMIT 1 FOR UPDATE`,
+        [ownerAccountId, cycleId],
       );
       if (!currentRes.rows.length) throw new Error(`cycle not found: ${cycleId}`);
       const current = mapRebalanceCycleRow(currentRes.rows[0] as Record<string, unknown>);
@@ -1557,7 +1310,7 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
            cancel_reason = $10,
            notes = $11,
            market_context_json = $12::jsonb
-         WHERE cycle_id = $1
+         WHERE owner_account_id = $13 AND cycle_id = $1
          RETURNING ${REBALANCE_CYCLE_SELECT_COLUMNS_}`,
         [
           cycleId,
@@ -1572,6 +1325,7 @@ export async function patchDaaRebalanceCycle(input: DaaStorePatchRebalanceCycleI
           nextCancelReason,
           nextNotes,
           nextMarketContext == null ? JSON.stringify({}) : JSON.stringify(nextMarketContext),
+          ownerAccountId,
         ],
       );
 
@@ -1610,18 +1364,20 @@ export async function upsertDaaCycleReport(input: {
   riskDelta: Record<string, unknown>;
 }): Promise<DaaStoreCycleReport> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const cycleId = normalizeText(input.cycleId);
     if (!cycleId) throw new Error("cycleId is required");
     const inserted = await query(
       `
       INSERT INTO daa_cycle_reports (
-        cycle_id, before_snapshot_json, after_snapshot_json, execution_stats_json, pnl_attribution_json, risk_delta_json, created_at
+        owner_account_id, cycle_id, before_snapshot_json, after_snapshot_json, execution_stats_json, pnl_attribution_json, risk_delta_json, created_at
       ) VALUES (
-        $1, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, NOW()
+        $1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, NOW()
       )
       ON CONFLICT (cycle_id) DO UPDATE
       SET
+        owner_account_id = EXCLUDED.owner_account_id,
         before_snapshot_json = EXCLUDED.before_snapshot_json,
         after_snapshot_json = EXCLUDED.after_snapshot_json,
         execution_stats_json = EXCLUDED.execution_stats_json,
@@ -1631,6 +1387,7 @@ export async function upsertDaaCycleReport(input: {
       RETURNING cycle_id
       `,
       [
+        ownerAccountId,
         cycleId,
         JSON.stringify(input.beforeSnapshot || {}),
         JSON.stringify(input.afterSnapshot || {}),
@@ -1643,9 +1400,9 @@ export async function upsertDaaCycleReport(input: {
       `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
        FROM daa_cycle_reports r
        JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
-       WHERE r.cycle_id = $1
+       WHERE r.owner_account_id = $1 AND c.owner_account_id = $1 AND r.cycle_id = $2
        LIMIT 1`,
-      [normalizeText((inserted.rows[0] as Record<string, unknown> | undefined)?.cycle_id, cycleId)],
+      [ownerAccountId, normalizeText((inserted.rows[0] as Record<string, unknown> | undefined)?.cycle_id, cycleId)],
     );
     if (!hit.rows.length) throw new Error("cycle report upsert failed");
     return mapCycleReportRow(hit.rows[0] as Record<string, unknown>);
@@ -1654,6 +1411,7 @@ export async function upsertDaaCycleReport(input: {
 
 export async function getDaaCycleReport(cycleIdRaw: string): Promise<DaaStoreCycleReport | null> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const cycleId = normalizeText(cycleIdRaw);
   if (!cycleId) return null;
   return withDaaPgClient(async ({ query }) => {
@@ -1661,9 +1419,9 @@ export async function getDaaCycleReport(cycleIdRaw: string): Promise<DaaStoreCyc
       `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
        FROM daa_cycle_reports r
        JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
-       WHERE r.cycle_id = $1
+       WHERE r.owner_account_id = $1 AND c.owner_account_id = $1 AND r.cycle_id = $2
        LIMIT 1`,
-      [cycleId],
+      [ownerAccountId, cycleId],
     );
     if (!result.rows.length) return null;
     return mapCycleReportRow(result.rows[0] as Record<string, unknown>);
@@ -1672,15 +1430,17 @@ export async function getDaaCycleReport(cycleIdRaw: string): Promise<DaaStoreCyc
 
 export async function listDaaCycleReports(limit = 50): Promise<DaaStoreCycleReport[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const n = Math.max(1, Math.min(200, Math.trunc(toFiniteNumber(limit, 50))));
     const result = await query(
       `SELECT ${CYCLE_REPORT_SELECT_COLUMNS_}
        FROM daa_cycle_reports r
        JOIN daa_rebalance_cycles c ON c.cycle_id = r.cycle_id
+       WHERE r.owner_account_id = $1 AND c.owner_account_id = $1
        ORDER BY r.created_at DESC
-       LIMIT $1`,
-      [n],
+       LIMIT $2`,
+      [ownerAccountId, n],
     );
     return result.rows.map((row) => mapCycleReportRow(row as Record<string, unknown>));
   });
@@ -1695,6 +1455,7 @@ export async function appendDaaTriggerEvent(input: {
   detailsJson?: Record<string, unknown>;
 }): Promise<DaaStoreTriggerEvent> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const idempotencyKey = normalizeText(input.idempotencyKey);
     if (!idempotencyKey) throw new Error("idempotencyKey is required");
@@ -1709,11 +1470,11 @@ export async function appendDaaTriggerEvent(input: {
     const result = await query(
       `
       INSERT INTO daa_trigger_events (
-        event_id, idempotency_key, trigger_source, trigger_reason, cycle_id, status, details_json, created_at
+        owner_account_id, event_id, idempotency_key, trigger_source, trigger_reason, cycle_id, status, details_json, created_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7::jsonb, NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW()
       )
-      ON CONFLICT (idempotency_key) DO UPDATE
+      ON CONFLICT (owner_account_id, idempotency_key) DO UPDATE
       SET
         trigger_source = EXCLUDED.trigger_source,
         trigger_reason = EXCLUDED.trigger_reason,
@@ -1722,7 +1483,7 @@ export async function appendDaaTriggerEvent(input: {
         details_json = EXCLUDED.details_json
       RETURNING event_id, idempotency_key, trigger_source, trigger_reason, cycle_id, status, details_json, created_at
       `,
-      [eventId, idempotencyKey, triggerSource, triggerReason, cycleId, status, JSON.stringify(detailsJson)],
+      [ownerAccountId, eventId, idempotencyKey, triggerSource, triggerReason, cycleId, status, JSON.stringify(detailsJson)],
     );
     return mapTriggerEventRow(result.rows[0] as Record<string, unknown>);
   });
@@ -1730,12 +1491,13 @@ export async function appendDaaTriggerEvent(input: {
 
 export async function getDaaTradeBasket(basketId: string): Promise<DaaStoreTradeBasket | null> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const id = normalizeText(basketId);
   if (!id) return null;
   return withDaaPgClient(async ({ query }) => {
     const result = await query(
-      "SELECT basket_id, source, status, decision_ref_id, created_by, created_at, updated_at, executed_at FROM daa_trade_baskets WHERE basket_id = $1 LIMIT 1",
-      [id],
+      "SELECT basket_id, source, status, decision_ref_id, created_by, created_at, updated_at, executed_at FROM daa_trade_baskets WHERE owner_account_id = $1 AND basket_id = $2 LIMIT 1",
+      [ownerAccountId, id],
     );
     if (!result.rows.length) return null;
     return mapTradeBasketRow(result.rows[0] as Record<string, unknown>);
@@ -1756,6 +1518,7 @@ export async function applyDaaBrokerOrderSync(input: {
   };
 }): Promise<DaaStoreTradeTicket | null> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const ticketId = normalizeText(input.ticketId);
     const orderId = normalizeText(input.order.orderId);
@@ -1763,14 +1526,14 @@ export async function applyDaaBrokerOrderSync(input: {
 
     await query("BEGIN");
     try {
-      const whereSql = ticketId ? "ticket_id = $1" : "broker_order_id = $1";
+      const whereSql = ticketId ? "ticket_id = $2" : "broker_order_id = $2";
       const currentRes = await query(
         `SELECT ${TRADE_TICKET_SELECT_COLUMNS_}
          FROM daa_trade_tickets
-         WHERE ${whereSql}
+         WHERE owner_account_id = $1 AND ${whereSql}
          LIMIT 1
          FOR UPDATE`,
-        [ticketId || orderId],
+        [ownerAccountId, ticketId || orderId],
       );
       if (!currentRes.rows.length) {
         await query("ROLLBACK");
@@ -1814,8 +1577,9 @@ export async function applyDaaBrokerOrderSync(input: {
           : Math.max(0, notionalInBaseDelta);
 
         await query(
-          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, notes, execution_order_id, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())",
+          "INSERT INTO daa_trade_journal (owner_account_id, id, symbol, side, qty, price, notional, fee, executed_at, source, notes, execution_order_id, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())",
           [
+            ownerAccountId,
             randomUUID(),
             current.symbol,
             current.side,
@@ -1832,12 +1596,13 @@ export async function applyDaaBrokerOrderSync(input: {
         try {
           await query(
             `INSERT INTO daa_portfolio_ledger_events (
-               event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+               owner_account_id, event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
                amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
              ) VALUES (
-               $1,$2,'trade_execution',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,NOW()
+               $1,$2,$3,'trade_execution',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,NOW()
              )`,
             [
+              ownerAccountId,
               randomUUID(),
               nowIso,
               ledgerSide,
@@ -1897,7 +1662,7 @@ export async function applyDaaBrokerOrderSync(input: {
            executed_at = CASE WHEN $2 = 'executed' THEN COALESCE(executed_at, $9) ELSE executed_at END,
            canceled_at = CASE WHEN $2 = 'canceled' THEN COALESCE(canceled_at, $9) ELSE canceled_at END,
            updated_at = NOW()
-         WHERE ticket_id = $1`,
+         WHERE owner_account_id = $13 AND ticket_id = $1`,
         [
           current.ticketId,
           nextStatus,
@@ -1911,6 +1676,7 @@ export async function applyDaaBrokerOrderSync(input: {
           nextAppliedFillQty,
           brokerRejectReason,
           JSON.stringify(input.order.raw ?? null),
+          ownerAccountId,
         ],
       );
 
@@ -1952,14 +1718,15 @@ export async function updateDaaTradeTicket(input: {
   reasonTags?: string[];
 }): Promise<DaaStoreTradeTicket> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const ticketId = normalizeText(input.ticketId);
     if (!ticketId) throw new Error("ticketId is required");
     await query("BEGIN");
     try {
       const existingRes = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE`,
-        [ticketId],
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1 FOR UPDATE`,
+        [ownerAccountId, ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
       const current = mapTradeTicketRow(existingRes.rows[0] as Record<string, unknown>);
@@ -1983,14 +1750,14 @@ export async function updateDaaTradeTicket(input: {
       }
       const notionalInBase = grossNotional * fxRateToBase;
       await query(
-        "UPDATE daa_trade_tickets SET qty = $1, price = $2, fee = $3, gross_notional = $4, notional_in_base = $5, reason_text = $6, reason_tags = $7, updated_at = NOW() WHERE ticket_id = $8",
-        [qty, price, fee, grossNotional, notionalInBase, reasonText, reasonTags, ticketId],
+        "UPDATE daa_trade_tickets SET qty = $1, price = $2, fee = $3, gross_notional = $4, notional_in_base = $5, reason_text = $6, reason_tags = $7, updated_at = NOW() WHERE owner_account_id = $8 AND ticket_id = $9",
+        [qty, price, fee, grossNotional, notionalInBase, reasonText, reasonTags, ownerAccountId, ticketId],
       );
-      await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
+      await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE owner_account_id = $1 AND basket_id = $2", [ownerAccountId, current.basketId]);
 
       const updatedRes = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
-        [ticketId],
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
+        [ownerAccountId, ticketId],
       );
       await query("COMMIT");
       return mapTradeTicketRow(updatedRes.rows[0] as Record<string, unknown>);
@@ -2007,26 +1774,27 @@ export async function updateDaaTradeTicket(input: {
 
 export async function cancelDaaTradeTicket(ticketIdRaw: string): Promise<DaaStoreTradeTicket> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const ticketId = normalizeText(ticketIdRaw);
     if (!ticketId) throw new Error("ticketId is required");
     await query("BEGIN");
     try {
       const existingRes = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1 FOR UPDATE`,
-        [ticketId],
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1 FOR UPDATE`,
+        [ownerAccountId, ticketId],
       );
       if (!existingRes.rows.length) throw new Error("ticket not found");
       const current = mapTradeTicketRow(existingRes.rows[0] as Record<string, unknown>);
       if (current.status !== "ready") throw new Error(`ticket status not cancelable: ${current.status}`);
       await query(
-        "UPDATE daa_trade_tickets SET status = 'canceled', canceled_at = NOW(), updated_at = NOW() WHERE ticket_id = $1",
-        [ticketId],
+        "UPDATE daa_trade_tickets SET status = 'canceled', canceled_at = NOW(), updated_at = NOW() WHERE owner_account_id = $1 AND ticket_id = $2",
+        [ownerAccountId, ticketId],
       );
-      await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE basket_id = $1", [current.basketId]);
+      await query("UPDATE daa_trade_baskets SET updated_at = NOW() WHERE owner_account_id = $1 AND basket_id = $2", [ownerAccountId, current.basketId]);
       const updatedRes = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
-        [ticketId],
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
+        [ownerAccountId, ticketId],
       );
       await query("COMMIT");
       return mapTradeTicketRow(updatedRes.rows[0] as Record<string, unknown>);
@@ -2049,6 +1817,7 @@ export async function executeDaaTradeBasket(basketId: string): Promise<DaaStoreE
 
 export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput): Promise<DaaStoreTradeTicket> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const symbol = normalizeText(input.symbol).toUpperCase();
     const market = normalizeText(input.market, "US").toUpperCase();
@@ -2106,21 +1875,21 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
       let basketId = basketIdInput;
       if (!basketId) {
         const draftRes = await query(
-          "SELECT basket_id FROM daa_trade_baskets WHERE status = 'draft' AND source = $1 ORDER BY updated_at DESC LIMIT 1",
-          [sourceForBasket],
+          "SELECT basket_id FROM daa_trade_baskets WHERE owner_account_id = $1 AND status = 'draft' AND source = $2 ORDER BY updated_at DESC LIMIT 1",
+          [ownerAccountId, sourceForBasket],
         );
         basketId = normalizeText((draftRes.rows[0] as Record<string, unknown> | undefined)?.basket_id);
       }
       if (!basketId) {
         basketId = randomUUID();
         await query(
-          "INSERT INTO daa_trade_baskets (basket_id, source, status, decision_ref_id, created_by, created_at, updated_at) VALUES ($1,$2,'draft',$3,$4,NOW(),NOW())",
-          [basketId, sourceForBasket, decisionRefId, createdBy],
+          "INSERT INTO daa_trade_baskets (owner_account_id, basket_id, source, status, decision_ref_id, created_by, created_at, updated_at) VALUES ($1,$2,$3,'draft',$4,$5,NOW(),NOW())",
+          [ownerAccountId, basketId, sourceForBasket, decisionRefId, createdBy],
         );
       } else {
         const basketRes = await query(
-          "SELECT basket_id, status, source FROM daa_trade_baskets WHERE basket_id = $1 LIMIT 1 FOR UPDATE",
-          [basketId],
+          "SELECT basket_id, status, source FROM daa_trade_baskets WHERE owner_account_id = $1 AND basket_id = $2 LIMIT 1 FOR UPDATE",
+          [ownerAccountId, basketId],
         );
         const basketRow = basketRes.rows[0] as Record<string, unknown> | undefined;
         if (!basketRow) {
@@ -2133,8 +1902,8 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
       }
 
       const posRes = await query(
-        "SELECT qty FROM daa_positions_v2 WHERE asset_key = $1 LIMIT 1 FOR UPDATE",
-        [assetKey],
+        "SELECT qty FROM daa_positions_v2 WHERE owner_account_id = $1 AND asset_key = $2 LIMIT 1 FOR UPDATE",
+        [ownerAccountId, assetKey],
       );
       const positionQty = Math.max(0, toFiniteNumber((posRes.rows[0] as Record<string, unknown> | undefined)?.qty, 0));
 
@@ -2153,8 +1922,8 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
 
       if (cycleId) {
         const cycleRes = await query(
-          "SELECT cycle_id FROM daa_rebalance_cycles WHERE cycle_id = $1 LIMIT 1 FOR UPDATE",
-          [cycleId],
+          "SELECT cycle_id FROM daa_rebalance_cycles WHERE owner_account_id = $1 AND cycle_id = $2 LIMIT 1 FOR UPDATE",
+          [ownerAccountId, cycleId],
         );
         if (!cycleRes.rows.length) {
           throw new Error(`cycle not found: ${cycleId}`);
@@ -2163,19 +1932,20 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
 
       await query(
         `INSERT INTO daa_trade_tickets (
-           ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency,
+           owner_account_id, ticket_id, basket_id, asset_key, cycle_id, source, status, symbol, market, instrument_currency, base_currency,
            side, qty, price, fee, gross_notional, fx_rate_to_base, notional_in_base, decision_ref_id, reason_tags, reason_text,
            snapshot_before_json, pricing_mode, price_source, price_snapshot_at, broker_kind, broker_account_id, broker_order_id,
            broker_status, filled_qty, avg_fill_price, last_broker_sync_at, last_applied_fill_qty, broker_reject_reason, broker_raw_json,
            created_by, created_at, updated_at
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-           $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-           $21::jsonb,$22,$23,$24,$25,$26,$27,
-           $28,$29,$30,$31,$32,$33,$34::jsonb,
-           $35,NOW(),NOW()
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+           $12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+           $22::jsonb,$23,$24,$25,$26,$27,$28,
+           $29,$30,$31,$32,$33,$34,$35::jsonb,
+           $36,NOW(),NOW()
          )`,
         [
+          ownerAccountId,
           ticketId,
           basketId,
           assetKey,
@@ -2214,16 +1984,16 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
         ],
       );
       await query(
-        "UPDATE daa_trade_baskets SET updated_at = NOW(), source = CASE WHEN source <> $1 THEN 'mixed' ELSE source END WHERE basket_id = $2",
-        [sourceForBasket, basketId],
+        "UPDATE daa_trade_baskets SET updated_at = NOW(), source = CASE WHEN source <> $1 THEN 'mixed' ELSE source END WHERE owner_account_id = $2 AND basket_id = $3",
+        [sourceForBasket, ownerAccountId, basketId],
       );
       if (status !== "ready") {
         await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, [ticketId]);
       }
 
       const inserted = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id = $1 LIMIT 1`,
-        [ticketId],
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id = $2 LIMIT 1`,
+        [ownerAccountId, ticketId],
       );
       await query("COMMIT");
       return mapTradeTicketRow(inserted.rows[0] as Record<string, unknown>);
@@ -2240,13 +2010,14 @@ export async function createDaaTradeTicket(input: DaaStoreCreateTradeTicketInput
 
 export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsInput): Promise<DaaStoreExecuteTradeTicketsResult> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const basketId = normalizeText(input.basketId);
     let ticketIds = [...new Set((Array.isArray(input.ticketIds) ? input.ticketIds : []).map((item) => normalizeText(item)).filter(Boolean))];
     if (!ticketIds.length && basketId) {
       const rows = await query(
-        "SELECT ticket_id FROM daa_trade_tickets WHERE basket_id = $1 AND status = 'ready' ORDER BY created_at ASC",
-        [basketId],
+        "SELECT ticket_id FROM daa_trade_tickets WHERE owner_account_id = $1 AND basket_id = $2 AND status = 'ready' ORDER BY created_at ASC",
+        [ownerAccountId, basketId],
       );
       ticketIds = rows.rows.map((row) => normalizeText((row as Record<string, unknown>).ticket_id)).filter(Boolean);
     }
@@ -2255,10 +2026,10 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
 
     await query("BEGIN");
     try {
-      const placeholders = ticketIds.map((_, idx) => `$${idx + 1}`).join(", ");
+      const placeholders = ticketIds.map((_, idx) => `$${idx + 2}`).join(", ");
       const ticketRows = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) FOR UPDATE`,
-        ticketIds,
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id IN (${placeholders}) FOR UPDATE`,
+        [ownerAccountId, ...ticketIds],
       );
       const ticketMap = new Map<string, DaaStoreTradeTicket>();
       for (const row of ticketRows.rows as Array<Record<string, unknown>>) {
@@ -2266,7 +2037,10 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         ticketMap.set(ticket.ticketId, ticket);
       }
 
-      const positionsRes = await query("SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 FOR UPDATE");
+      const positionsRes = await query(
+        "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE owner_account_id = $1 FOR UPDATE",
+        [ownerAccountId],
+      );
       const positionsMap = new Map<string, DaaStorePosition>();
       for (const row of positionsRes.rows as Array<Record<string, unknown>>) {
         const pos = mapPositionRow(row);
@@ -2327,8 +2101,8 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         if (!fxRate || fxRate <= 0) {
           const rejectMessage = `缺少汇率：${ticket.instrumentCurrency}/${baseCurrency}`;
           await query(
-            "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'FX_RATE_MISSING', reject_message = $1, updated_at = NOW() WHERE ticket_id = $2",
-            [rejectMessage, ticket.ticketId],
+            "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'FX_RATE_MISSING', reject_message = $1, updated_at = NOW() WHERE owner_account_id = $2 AND ticket_id = $3",
+            [rejectMessage, ownerAccountId, ticket.ticketId],
           );
           results.push({
             ticketId: ticket.ticketId,
@@ -2348,8 +2122,8 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           if (accountInvestableCash + 1e-9 < cashOut) {
             const rejectMessage = `可投资现金不足：需要 ${cashOut.toFixed(2)} ${baseCurrency}，当前 ${accountInvestableCash.toFixed(2)} ${baseCurrency}`;
             await query(
-              "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'INSUFFICIENT_INVESTABLE_CASH', reject_message = $1, updated_at = NOW() WHERE ticket_id = $2",
-              [rejectMessage, ticket.ticketId],
+              "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'INSUFFICIENT_INVESTABLE_CASH', reject_message = $1, updated_at = NOW() WHERE owner_account_id = $2 AND ticket_id = $3",
+              [rejectMessage, ownerAccountId, ticket.ticketId],
             );
             results.push({
               ticketId: ticket.ticketId,
@@ -2384,8 +2158,8 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           if (ticket.qty > prevQty + 1e-9) {
             const rejectMessage = `持仓不足：卖出 ${ticket.qty.toFixed(6)}，当前持仓 ${prevQty.toFixed(6)}`;
             await query(
-              "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'INSUFFICIENT_POSITION', reject_message = $1, updated_at = NOW() WHERE ticket_id = $2",
-              [rejectMessage, ticket.ticketId],
+              "UPDATE daa_trade_tickets SET status = 'rejected', reject_code = 'INSUFFICIENT_POSITION', reject_message = $1, updated_at = NOW() WHERE owner_account_id = $2 AND ticket_id = $3",
+              [rejectMessage, ownerAccountId, ticket.ticketId],
             );
             results.push({
               ticketId: ticket.ticketId,
@@ -2418,8 +2192,9 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         }
 
         await query(
-          "INSERT INTO daa_trade_journal (id, symbol, side, qty, price, notional, fee, executed_at, source, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())",
+          "INSERT INTO daa_trade_journal (owner_account_id, id, symbol, side, qty, price, notional, fee, executed_at, source, notes, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())",
           [
+            ownerAccountId,
             randomUUID(),
             ticket.symbol,
             ticket.side,
@@ -2438,8 +2213,8 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
           positionQty: positionsMap.get(positionKey)?.qty ?? 0,
         };
         await query(
-          "UPDATE daa_trade_tickets SET status = 'executed', reject_code = NULL, reject_message = NULL, fx_rate_to_base = $1, gross_notional = $2, notional_in_base = $3, snapshot_after_json = $4::jsonb, executed_at = $5, updated_at = NOW() WHERE ticket_id = $6",
-          [fxRate, grossNotional, notionalInBase, JSON.stringify(snapshotAfter), nowIso, ticket.ticketId],
+          "UPDATE daa_trade_tickets SET status = 'executed', reject_code = NULL, reject_message = NULL, fx_rate_to_base = $1, gross_notional = $2, notional_in_base = $3, snapshot_after_json = $4::jsonb, executed_at = $5, updated_at = NOW() WHERE owner_account_id = $6 AND ticket_id = $7",
+          [fxRate, grossNotional, notionalInBase, JSON.stringify(snapshotAfter), nowIso, ownerAccountId, ticket.ticketId],
         );
 
         const ledgerSide: DaaStoreCashLedgerSide = ticket.side === "BUY" ? "withdraw" : "deposit";
@@ -2449,12 +2224,13 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
         try {
           await query(
             `INSERT INTO daa_portfolio_ledger_events (
-               event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
+               owner_account_id, event_id, ts, event_kind, side, amount, base_currency, account_base_currency,
                amount_in_account_base, fx_rate_to_account, ticket_id, cycle_id, settlement_ts, note, event_payload_json, created_at
              ) VALUES (
-               $1,$2,'trade_execution',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,NOW()
+               $1,$2,$3,'trade_execution',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,NOW()
              )`,
             [
+              ownerAccountId,
               randomUUID(),
               nowIso,
               ledgerSide,
@@ -2522,13 +2298,14 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
       };
       const snapshotTs = new Date().toISOString();
       await query(
-        "INSERT INTO daa_equity_snapshots_v2 (ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5)",
-        [snapshotTs, totalEquity, holdingsValue, account.cash, "trade_ticket"],
+        "INSERT INTO daa_equity_snapshots_v2 (owner_account_id, ts, total_equity, holdings_value, cash, source) VALUES ($1,$2,$3,$4,$5,$6)",
+        [ownerAccountId, snapshotTs, totalEquity, holdingsValue, account.cash, "trade_ticket"],
       );
 
       await query(
-        "INSERT INTO daa_op_log (id, ts, level, message, context_json) VALUES ($1, NOW(), 'info', $2, $3)",
+        "INSERT INTO daa_op_log (owner_account_id, id, ts, level, message, context_json) VALUES ($1, $2, NOW(), 'info', $3, $4)",
         [
+          ownerAccountId,
           randomUUID(),
           `Trade ticket 执行完成：成功 ${results.filter((r) => r.status === "executed").length}，失败 ${results.filter((r) => r.status === "rejected").length}`,
           JSON.stringify({
@@ -2542,11 +2319,12 @@ export async function executeDaaTradeTickets(input: DaaStoreExecuteTradeTicketsI
       await refreshTradeTicketAggregatesInTx(query as DaaTxQueryFn, ticketIds);
 
       const latestTicketRows = await query(
-        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
-        ticketIds,
+        `SELECT ${TRADE_TICKET_SELECT_COLUMNS_} FROM daa_trade_tickets WHERE owner_account_id = $1 AND ticket_id IN (${placeholders}) ORDER BY created_at DESC`,
+        [ownerAccountId, ...ticketIds],
       );
       const latestPositionsRows = await query(
-        "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE qty > 0 ORDER BY symbol ASC, market ASC",
+        "SELECT asset_key, symbol, market, currency, qty, price, cost_basis, cost_basis_in_base, tags, updated_at FROM daa_positions_v2 WHERE owner_account_id = $1 AND qty > 0 ORDER BY symbol ASC, market ASC",
+        [ownerAccountId],
       );
 
       await query("COMMIT");

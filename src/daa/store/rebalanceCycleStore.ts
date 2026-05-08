@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import type {
   DaaMarketContext, DaaMarketIndicatorKey, DaaMarketIndicatorSnapshot, DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
@@ -469,6 +470,7 @@ export async function createDaaRebalanceDecision(input: {
   triggerSource?: DaaStoreRebalanceDecision["triggerSource"];
 }): Promise<{ decision: DaaStoreRebalanceDecision; orders: DaaStoreExecutionOrder[] }> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const decisionId = randomUUID();
     const triggerSource = normalizeText(input.triggerSource, "manual") as DaaStoreRebalanceDecision["triggerSource"];
@@ -476,8 +478,9 @@ export async function createDaaRebalanceDecision(input: {
     await query("BEGIN");
     try {
       await query(
-        "INSERT INTO daa_rebalance_decisions (id, request_json, response_json, should_rebalance, trigger_source, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,NOW())",
+        "INSERT INTO daa_rebalance_decisions (owner_account_id, id, request_json, response_json, should_rebalance, trigger_source, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())",
         [
+          ownerAccountId,
           decisionId,
           JSON.stringify(input.requestJson || {}),
           JSON.stringify(input.responseJson || {}),
@@ -503,8 +506,8 @@ export async function createDaaRebalanceDecision(input: {
     }
 
     const dRes = await query(
-      "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions WHERE id = $1 LIMIT 1",
-      [decisionId],
+      "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions WHERE owner_account_id = $1 AND id = $2 LIMIT 1",
+      [ownerAccountId, decisionId],
     );
 
     return {
@@ -519,18 +522,19 @@ export async function listDaaRebalanceDecisions(opts?: {
   status?: DaaStoreRebalanceDecision["status"];
 }): Promise<Array<DaaStoreRebalanceDecision & { orders: DaaStoreExecutionOrder[] }>> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   const limit = Math.max(1, Math.min(500, Math.trunc(toFiniteNumber(opts?.limit, 50))));
   const status = normalizeText(opts?.status);
 
   return withDaaPgClient(async ({ query }) => {
     const dRes = status
       ? await query(
-        "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions WHERE status = $1 ORDER BY created_at DESC LIMIT $2",
-        [status, limit],
+        "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions WHERE owner_account_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT $3",
+        [ownerAccountId, status, limit],
       )
       : await query(
-        "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions ORDER BY created_at DESC LIMIT $1",
-        [limit],
+        "SELECT id, request_json, response_json, should_rebalance, trigger_source, status, created_at FROM daa_rebalance_decisions WHERE owner_account_id = $1 ORDER BY created_at DESC LIMIT $2",
+        [ownerAccountId, limit],
       );
 
     const decisions = dRes.rows.map((row) => mapDecisionRow(row as Record<string, unknown>));

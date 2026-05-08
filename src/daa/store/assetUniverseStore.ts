@@ -5,6 +5,7 @@
 import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
+import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { buildDaaAssetKey, parseDaaAssetKey } from "@/src/daa/assetKey";
 import {
   inferMarketGroup, inferRegionByMarket,
@@ -94,9 +95,9 @@ export const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
 
 export const ASSET_UNIVERSE_FROM_SQL_ = [
   "FROM daa_asset_master am",
-  "LEFT JOIN daa_positions_v2 p ON p.asset_key = am.asset_key",
-  "LEFT JOIN daa_watchlist_entries we ON we.asset_key = am.asset_key",
-  "LEFT JOIN daa_target_allocations ta ON ta.asset_key = am.asset_key",
+  "LEFT JOIN daa_positions_v2 p ON p.owner_account_id = $1 AND p.asset_key = am.asset_key",
+  "LEFT JOIN daa_watchlist_entries we ON we.owner_account_id = $1 AND we.asset_key = am.asset_key",
+  "LEFT JOIN daa_target_allocations ta ON ta.owner_account_id = $1 AND ta.asset_key = am.asset_key",
   "LEFT JOIN daa_market_price_snapshots mps ON mps.asset_key = am.asset_key",
 ].join(" ");
 
@@ -105,9 +106,10 @@ export async function selectAssetUniverseRowByKeyInTx(
   query: DaaTxQueryFn,
   assetKey: string,
 ): Promise<DaaStoreAssetUniverseRow | null> {
+  const ownerAccountId = getDaaAccountScopeId();
   const result = await query(
-    `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $1 LIMIT 1`,
-    [assetKey],
+    `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $2 LIMIT 1`,
+    [ownerAccountId, assetKey],
   );
   if (!result.rows.length) return null;
   return mapAssetUniverseRow(result.rows[0] as Record<string, unknown>);
@@ -115,8 +117,14 @@ export async function selectAssetUniverseRowByKeyInTx(
 
 export async function listDaaAssetUniverse(): Promise<DaaStoreAssetUniverseRow[]> {
   await ensureDaaStoreSchemaPg();
+  const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
-    const result = await query(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} ORDER BY am.symbol ASC, am.market ASC`);
+    const result = await query(
+      `SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_}
+       WHERE COALESCE(p.qty, 0) > 0 OR COALESCE(we.watch_enabled, FALSE) = TRUE OR COALESCE(ta.target_weight_hint, 0) > 0
+       ORDER BY am.symbol ASC, am.market ASC`,
+      [ownerAccountId],
+    );
     return result.rows.map((row) => mapAssetUniverseRow(row as Record<string, unknown>));
   });
 }
@@ -289,6 +297,7 @@ export async function patchDaaAssetUniverseRow(input: {
 }): Promise<DaaStoreAssetUniverseRow> {
   await ensureDaaStoreSchemaPg();
   return withDaaPgClient(async ({ query }) => {
+    const ownerAccountId = getDaaAccountScopeId();
     const parsed = parseDaaAssetKey(input.assetKey);
     if (!parsed) throw new Error("assetKey is required");
     const assetKey = buildPositionKey(parsed.symbol, parsed.market);
@@ -296,7 +305,7 @@ export async function patchDaaAssetUniverseRow(input: {
     const txQuery = query as DaaTxQueryFn;
     await txQuery("BEGIN");
     try {
-      const currentRes = await txQuery(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $1 LIMIT 1`, [assetKey]);
+      const currentRes = await txQuery(`SELECT ${ASSET_UNIVERSE_SELECT_COLUMNS_} ${ASSET_UNIVERSE_FROM_SQL_} WHERE am.asset_key = $2 LIMIT 1`, [ownerAccountId, assetKey]);
       if (!currentRes.rows.length) throw new Error(`asset not found: ${assetKey}`);
       const current = mapAssetUniverseRow(currentRes.rows[0] as Record<string, unknown>);
 
