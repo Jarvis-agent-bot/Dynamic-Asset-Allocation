@@ -3,7 +3,7 @@
  */
 
 import type { CognitiveState, CognitiveUpdate } from "@/src/daa/agent/cognitiveState";
-import type { DailyBriefing, ThesisFailureImpact, ThesisConflict, AgentConfigOverlay, CognitionGap, MindChangeCondition, Surprise } from "@/src/daa/agent/cognitiveTypes";
+import type { DailyBriefing, ThesisFailureImpact, ThesisConflict, AgentStrategyOverlay, CognitionGap, MindChangeCondition, Surprise } from "@/src/daa/agent/cognitiveTypes";
 import { buildSurfacePrompt, buildStrategyAdvisorPrompt, formatBriefingForTelegram } from "@/src/daa/agent/cognitivePrompts";
 import { callDeepSeekJson } from "@/src/daa/agent/helpers/llm";
 import { validateShape, shouldCircuitBreak } from "@/src/daa/agent/helpers/validation";
@@ -263,7 +263,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
           maxPositionPct,
         });
 
-        const overlayResult = await callDeepSeekJson<Omit<AgentConfigOverlay, "generatedAt" | "agentRunId">>(
+        const overlayResult = await callDeepSeekJson<Omit<AgentStrategyOverlay, "generatedAt" | "agentRunId">>(
           advisorPrompt, "cognitiveGraph.surface.advisor", { tier: "fast" },
         );
         tokensUsed += overlayResult.tokensUsed;
@@ -293,7 +293,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
             }
             : null;
 
-          briefing.configOverlay = {
+          briefing.strategyOverlay = {
             generatedAt: new Date().toISOString(),
             agentRunId: getCurrentRunId() ?? `surface-${new Date().toISOString()}`,
             regimeOverride: raw.regimeOverride && typeof raw.regimeOverride === "object"
@@ -314,7 +314,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
     briefing.autopilotCoverage = buildAutopilotCoverageSummary({
       portfolio,
       watchlist: state.watchlist ?? null,
-      overlay: briefing.configOverlay ?? null,
+      overlay: briefing.strategyOverlay ?? null,
     });
 
     // 尝试推送 Telegram（非阻塞）

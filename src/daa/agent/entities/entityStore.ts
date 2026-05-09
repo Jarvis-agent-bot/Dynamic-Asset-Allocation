@@ -11,7 +11,7 @@ import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import type { EntityKind, ExtractedEntity } from "@/src/daa/agent/entities/entityExtractor";
 import type { AgentMemory, ResearchThread } from "@/src/daa/agent/cognitiveTypes";
 
-export interface AgentEntity {
+interface AgentEntity {
   id: string;
   kind: EntityKind;
   value: string;
@@ -37,7 +37,7 @@ function mapEntityRow(r: Record<string, unknown>): AgentEntity {
  * Upsert 实体；存在则累加 mention_count 并刷新 last_seen。
  * 返回 entity id。
  */
-export async function upsertEntity(
+async function upsertEntity(
   entity: ExtractedEntity,
 ): Promise<string> {
   return withDaaPgClient(async ({ query }) => {
@@ -55,7 +55,7 @@ export async function upsertEntity(
   });
 }
 
-export async function upsertEntitiesBulk(entities: ExtractedEntity[]): Promise<string[]> {
+async function upsertEntitiesBulk(entities: ExtractedEntity[]): Promise<string[]> {
   if (entities.length === 0) return [];
   const ids: string[] = [];
   for (const e of entities) {
@@ -68,7 +68,7 @@ export async function upsertEntitiesBulk(entities: ExtractedEntity[]): Promise<s
   return ids;
 }
 
-export async function linkMemoryToEntities(memoryId: string, entityIds: string[]): Promise<void> {
+async function linkMemoryToEntities(memoryId: string, entityIds: string[]): Promise<void> {
   if (entityIds.length === 0) return;
   await withDaaPgClient(async ({ query }) => {
     for (const eid of entityIds) {
@@ -82,7 +82,7 @@ export async function linkMemoryToEntities(memoryId: string, entityIds: string[]
   });
 }
 
-export async function linkThesisToEntities(thesisId: string, entityIds: string[]): Promise<void> {
+async function linkThesisToEntities(thesisId: string, entityIds: string[]): Promise<void> {
   if (entityIds.length === 0) return;
   await withDaaPgClient(async ({ query }) => {
     for (const eid of entityIds) {

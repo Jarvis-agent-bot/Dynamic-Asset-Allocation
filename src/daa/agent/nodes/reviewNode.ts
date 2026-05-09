@@ -11,6 +11,7 @@ import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSe
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { generateEmbedding } from "@/src/daa/agent/embedding";
 import * as memoryStore from "@/src/daa/agent/store/memoryStore";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate> {
@@ -33,7 +34,7 @@ export async function reviewNode(state: CognitiveState): Promise<CognitiveUpdate
         let priceChangeText = "";
         if (thread.assetKeys[0]) {
           try {
-            const sym = thread.assetKeys[0].split(":")[1] ?? thread.assetKeys[0];
+            const sym = parseDaaAssetKey(thread.assetKeys[0])?.symbol ?? "";
             const createdDate = new Date(thread.createdAt);
             const daysSinceCreation = Math.floor((Date.now() - createdDate.getTime()) / 86400000);
             if (daysSinceCreation > 0 && sym) {

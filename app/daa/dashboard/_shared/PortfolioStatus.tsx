@@ -11,7 +11,7 @@ import {
 import { PerformanceChart } from "@/app/daa/dashboard/_shared/PerformanceChart";
 import { cn } from "@/lib/utils";
 
-export type PortfolioStatusProps = {
+type PortfolioStatusProps = {
   baseCurrency: string;
   totalEquity: number;
   holdingsValue: number;

@@ -27,7 +27,7 @@ vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({
 }));
 
 vi.mock("@/src/daa/store/daaStorePg", () => ({
-  appendPriceHistoryRows: vi.fn(async () => 0),
+  appendAssetPriceHistoryRows: vi.fn(async () => 0),
   getDaaSystemConfig: vi.fn(async () => ({
     config: {
       dataSources: {
@@ -62,9 +62,18 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
   updateDaaAssetUniverseLastPrice: vi.fn(async () => null),
 }));
 
+vi.mock("@/src/daa/modules/dividend/dividendExtractor", () => ({
+  extractDividendsFromRawPayloads: vi.fn(async () => ({ extracted: 0 })),
+}));
+
+vi.mock("@/src/daa/store/jobExecutionLogRepo", () => ({
+  appendJobExecutionLog: vi.fn(async () => null),
+  findRecentJobExecutionByIdempotencyKey: vi.fn(async () => null),
+}));
+
 import { POST as priceRefreshPost } from "@/app/api/daa/cron/price-refresh/route";
 import { POST as cacheCleanupPost } from "@/app/api/daa/cron/cache-cleanup/route";
-import { cleanupMarketCacheRawPayload, refreshMarketPrices, runUnifiedDataCleanup } from "@/src/daa/modules/marketCache/marketCacheService";
+import { refreshMarketPrices, runUnifiedDataCleanup } from "@/src/daa/modules/marketCache/marketCacheService";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
 function buildMarketCacheConfig(input?: {

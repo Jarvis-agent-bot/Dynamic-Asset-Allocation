@@ -20,10 +20,10 @@ beforeEach(() => {
 
 const mockPortfolio: PortfolioSnapshot = {
   holdings: [
-    { assetKey: "US:AAPL", symbol: "AAPL", holdingQty: 100, lastPrice: 180, weightPct: 0.30, unrealizedPnlPct: 0.15 },
-    { assetKey: "US:NVDA", symbol: "NVDA", holdingQty: 50, lastPrice: 800, weightPct: 0.40, unrealizedPnlPct: 0.25 },
-    { assetKey: "US:GLD", symbol: "GLD", holdingQty: 200, lastPrice: 200, weightPct: 0.20, unrealizedPnlPct: -0.02 },
-    { assetKey: "US:CASH", symbol: "CASH", holdingQty: 1, lastPrice: 10000, weightPct: 0.10, unrealizedPnlPct: 0 },
+    { assetKey: "US::AAPL", symbol: "AAPL", holdingQty: 100, lastPrice: 180, weightPct: 0.30, unrealizedPnlPct: 0.15 },
+    { assetKey: "US::NVDA", symbol: "NVDA", holdingQty: 50, lastPrice: 800, weightPct: 0.40, unrealizedPnlPct: 0.25 },
+    { assetKey: "US::GLD", symbol: "GLD", holdingQty: 200, lastPrice: 200, weightPct: 0.20, unrealizedPnlPct: -0.02 },
+    { assetKey: "US::CASH", symbol: "CASH", holdingQty: 1, lastPrice: 10000, weightPct: 0.10, unrealizedPnlPct: 0 },
   ],
   totalEquity: 100000,
   cashPct: 0.10,

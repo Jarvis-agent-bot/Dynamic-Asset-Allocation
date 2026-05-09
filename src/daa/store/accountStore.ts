@@ -2,7 +2,7 @@
  * Account & system-config store functions.
  */
 
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
@@ -14,7 +14,6 @@ import {
   type DaaSystemConfig,
 } from "@/src/daa/config/systemConfig";
 import { resolveInvestableCash as resolveRuntimeInvestableCash } from "@/src/daa/account/resolveInvestableCash";
-import { runDaaStoreRuntimeMigrations } from "@/src/daa/store/runtimeMigrations";
 import {
   withDaaPgClient,
   parseJsonb,
@@ -230,7 +229,7 @@ export async function getAccountStateForUpdateInTx(
   return ensureAccountStateRowInTx(query);
 }
 
-export async function writeAccountStateInTx(
+async function writeAccountStateInTx(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
   nextRaw: {
     baseCurrency?: unknown;
@@ -285,7 +284,7 @@ export async function writeAccountStateInTx(
   return ensureAccountStateRowInTx(query);
 }
 
-export async function getSystemConfigRowForUpdateInTx(
+async function getSystemConfigRowForUpdateInTx(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
 ): Promise<DaaStoreSystemConfigRow> {
   await ensureSystemConfigRowInTx(query);
@@ -298,7 +297,7 @@ export async function getSystemConfigRowForUpdateInTx(
   return ensureSystemConfigRowInTx(query);
 }
 
-export async function writeSystemConfigCasInTx(
+async function writeSystemConfigCasInTx(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
   nextConfigRaw: unknown,
   expectedVersion: number,
@@ -315,7 +314,7 @@ export async function writeSystemConfigCasInTx(
   throw new Error(`system_config_version_conflict:${latest.version}`);
 }
 
-export async function saveSystemConfigInTx(
+async function saveSystemConfigInTx(
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>,
   nextConfigRaw: unknown,
   baseVersion?: number,

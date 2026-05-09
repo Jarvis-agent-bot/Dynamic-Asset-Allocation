@@ -15,7 +15,7 @@ import type {
 
 function makeRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView {
   return {
-    assetKey: "US:AAPL",
+    assetKey: "US::AAPL",
     symbol: "AAPL",
     market: "US",
     currency: "USD",
@@ -32,7 +32,7 @@ function makeRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView {
 function makePreview(overrides?: Partial<WorkbenchMarketOrderPreviewResult>): WorkbenchMarketOrderPreviewResult {
   return {
     side: "BUY",
-    assetKey: "US:AAPL",
+    assetKey: "US::AAPL",
     symbol: "AAPL",
     market: "US",
     currency: "USD",
@@ -103,16 +103,16 @@ describe("assetActionCommands", () => {
 
   it("normalizes watchlist target weights by existing positive weights", () => {
     const patches = normalizeWatchlistTargetWeights([
-      makeRow({ assetKey: "US:AAPL", targetWeightHint: 0.2 }),
-      makeRow({ assetKey: "US:MSFT", targetWeightHint: 0.3 }),
-      makeRow({ assetKey: "US:GOOG", watchEnabled: false, targetWeightHint: 0.5 }),
+      makeRow({ assetKey: "US::AAPL", targetWeightHint: 0.2 }),
+      makeRow({ assetKey: "US::MSFT", targetWeightHint: 0.3 }),
+      makeRow({ assetKey: "US::GOOG", watchEnabled: false, targetWeightHint: 0.5 }),
     ]);
 
     expect(patches).toEqual({
       ok: true,
       patches: [
-        { assetKey: "US:AAPL", patch: { watchEnabled: true, targetWeightHint: 0.4 } },
-        { assetKey: "US:MSFT", patch: { watchEnabled: true, targetWeightHint: 0.6 } },
+        { assetKey: "US::AAPL", patch: { watchEnabled: true, targetWeightHint: 0.4 } },
+        { assetKey: "US::MSFT", patch: { watchEnabled: true, targetWeightHint: 0.6 } },
       ],
     });
   });
@@ -121,7 +121,7 @@ describe("assetActionCommands", () => {
     expect(buildManualExecutionInput(makePreview())).toMatchObject({
       source: "manual",
       origin: "manual",
-      assetKey: "US:AAPL",
+      assetKey: "US::AAPL",
       symbol: "AAPL",
       reasonText: "来自市价预览",
     });
@@ -136,7 +136,7 @@ describe("assetActionCommands", () => {
     });
 
     expect(result).toEqual({ ok: true, message: "AAPL 目标权重已更新为 12.50%" });
-    expect(patchWorkbenchAsset).toHaveBeenCalledWith("US:AAPL", {
+    expect(patchWorkbenchAsset).toHaveBeenCalledWith("US::AAPL", {
       targetWeightHint: 0.125,
       watchEnabled: true,
     });

@@ -13,13 +13,13 @@ export type ApiErrorCode =
   | "RATE_LIMITED"
   | "UNKNOWN";
 
-export type ApiSuccess<T> = {
+type ApiSuccess<T> = {
   ok: true;
   data: T;
   meta?: Record<string, unknown>;
 };
 
-export type ApiError = {
+type ApiError = {
   ok: false;
   error: {
     code: ApiErrorCode;

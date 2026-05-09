@@ -85,8 +85,6 @@ export function SettingsDataInitSection() {
     }
   }, [range, interval]);
 
-  const progressPct = progress ? Math.round((progress.completed / Math.max(progress.total, 1)) * 100) : 0;
-
   return (
     <section id="settings-data-init" className="scroll-mt-28">
       <DaaSurfacePanel

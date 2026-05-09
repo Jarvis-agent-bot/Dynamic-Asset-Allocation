@@ -14,6 +14,7 @@ import {
   createDaaRebalanceCycle,
   getDaaSystemConfig,
   listDaaRebalanceCycles,
+  patchDaaRebalanceCycle,
   patchDaaAssetUniverseRow,
   replaceDaaAccountState,
   saveDaaSystemConfig,
@@ -118,6 +119,52 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
 
     expect(first[0]?.createdAt).toBeTruthy();
     expect(first[0]?.createdAt).toBe(second[0]?.createdAt);
+  });
+
+  it("旧快照周期刚进入 executing 时不会被当成卡住周期恢复并重复执行", async () => {
+    const cycle = await createDaaRebalanceCycle({
+      status: "generated",
+      triggerSource: "manual",
+      triggerReason: "旧快照周期",
+      snapshotAt: "2026-01-01T00:00:00.000Z",
+      equitySnapshot: 1000,
+      driftSnapshot: [],
+      proposals: [
+        {
+          assetKey: "US::SPY",
+          symbol: "SPY",
+          currency: "USD",
+          fxRateToBase: 1,
+          side: "BUY",
+          suggestedQty: 0.2,
+          suggestedNotional: 100,
+          price: 500,
+          reason: "测试建议",
+          selected: true,
+          hfContribution: null,
+        },
+      ],
+      riskCheck: { overallStatus: "pass", items: [] },
+    });
+    const executing = await patchDaaRebalanceCycle({
+      cycleId: cycle.cycleId,
+      status: "executing",
+    });
+
+    expect(executing.executionStartedAt).toBeTruthy();
+
+    const response = await executeRoute(new Request("http://localhost/api/daa/workbench/rebalance/execute", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cycleId: cycle.cycleId, executeMode: "selected" }),
+    }));
+    const json = await response.json();
+    const [after] = await listDaaRebalanceCycles(1);
+
+    expect(response.status).toBe(409);
+    expect(json.error.details.code).toBe("CYCLE_NOT_EXECUTABLE");
+    expect(json.error.details.cycleStatus).toBe("executing");
+    expect(after?.status).toBe("executing");
   });
 
 

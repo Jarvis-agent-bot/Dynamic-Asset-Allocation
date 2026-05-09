@@ -9,13 +9,13 @@ import {
   type FxRateBook,
 } from "@/src/daa/modules/money/money";
 
-export type DaaFxRateLike = {
+type DaaFxRateLike = {
   baseCcy?: unknown;
   quoteCcy?: unknown;
   rate?: unknown;
 };
 
-export type DaaPositionLike = {
+type DaaPositionLike = {
   symbol?: unknown;
   market?: unknown;
   currency?: unknown;
@@ -23,7 +23,7 @@ export type DaaPositionLike = {
   price?: unknown;
 };
 
-export type DaaMarkToMarketPositionLike = {
+type DaaMarkToMarketPositionLike = {
   symbol?: unknown;
   market?: unknown;
   currency?: unknown;
@@ -32,7 +32,7 @@ export type DaaMarkToMarketPositionLike = {
   holdingPrice?: unknown;
 };
 
-export type DaaPositionValuationRow = {
+type DaaPositionValuationRow = {
   assetKey: string;
   symbol: string;
   market: string;
@@ -43,14 +43,14 @@ export type DaaPositionValuationRow = {
   fxMissing: boolean;
 };
 
-export type DaaMarkToMarketValuationRow = DaaPositionValuationRow & {
+type DaaMarkToMarketValuationRow = DaaPositionValuationRow & {
   markPrice: number;
   markPriceSource: "last_price" | "holding_price" | "missing";
 };
 
-export type PortfolioEquitySource = "derived_mark_to_market" | "account_state_override";
+type PortfolioEquitySource = "derived_mark_to_market" | "account_state_override";
 
-export type PortfolioValuationSummary = {
+type PortfolioValuationSummary = {
   rows: DaaMarkToMarketValuationRow[];
   baseCurrency: string;
   holdingsValue: number;
@@ -73,7 +73,7 @@ export function resolveFxRateToBase(
   return resolveFxRateToBaseCurrency(baseCurrency, localCurrency, fxLookup);
 }
 
-export function buildPositionValuationRows(
+function buildPositionValuationRows(
   positions: DaaPositionLike[],
   baseCurrency: string,
   fxLookup: FxRateBook,
@@ -102,7 +102,7 @@ export function buildPositionValuationRows(
   });
 }
 
-export function resolveMarkToMarketPrice(input: {
+function resolveMarkToMarketPrice(input: {
   lastPrice?: unknown;
   holdingPrice?: unknown;
 }): number {
@@ -113,7 +113,7 @@ export function resolveMarkToMarketPrice(input: {
   return 0;
 }
 
-export function buildMarkToMarketValuationRows(
+function buildMarkToMarketValuationRows(
   positions: DaaMarkToMarketPositionLike[],
   baseCurrency: string,
   fxLookup: FxRateBook,

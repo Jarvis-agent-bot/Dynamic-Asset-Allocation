@@ -19,7 +19,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import type { AssetUniverseView, RebalanceProposal, WorkbenchBootstrap } from "./workbenchTypes";
 
-export type WatchlistEntryEvaluation = {
+type WatchlistEntryEvaluation = {
   assetKey: string;
   symbol: string;
   eligible: boolean;
@@ -29,7 +29,7 @@ export type WatchlistEntryEvaluation = {
   rejectReason: string | null;
 };
 
-export type GenerateWatchlistEntryProposalsResult = {
+type GenerateWatchlistEntryProposalsResult = {
   proposals: RebalanceProposal[];
   evaluations: WatchlistEntryEvaluation[];
 };

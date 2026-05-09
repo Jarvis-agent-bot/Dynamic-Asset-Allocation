@@ -9,7 +9,7 @@ import {
   findAutoExecuteTurnoverBreach,
   shouldSendAgentBriefingTelegram,
 } from "@/src/daa/automation/automationGuards";
-import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
+import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { buildAssetUniverseView, buildSystemConfigRow, buildWorkbenchBootstrap } from "@/src/daa/__tests__/testDataFactories";
 
 describe("automationGuards", () => {
@@ -123,7 +123,7 @@ describe("automationGuards", () => {
   });
 
   it("会把 Agent 目标权重计划转换为可执行的目标权重覆盖", () => {
-    const overlay: AgentConfigOverlay = {
+    const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
       regimeOverride: null,
@@ -165,7 +165,7 @@ describe("automationGuards", () => {
   });
 
   it("Agent 目标权重计划会按单仓上限截断", () => {
-    const overlay: AgentConfigOverlay = {
+    const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
       regimeOverride: null,
@@ -193,20 +193,20 @@ describe("automationGuards", () => {
     expect(plan?.targetWeightOverrides["US::NVDA"]).toBe(0.1);
   });
 
-  it("Agent 目标权重计划兼容单冒号 assetKey", () => {
-    const overlay: AgentConfigOverlay = {
+  it("Agent 目标权重计划拒绝旧版单冒号 assetKey", () => {
+    const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
       regimeOverride: null,
       targetAllocationPlan: {
-        reasoning: "兼容 LLM 常见 assetKey 写法。",
+        reasoning: "只接受 canonical assetKey。",
         intents: [
           {
             assetKey: "US:NVDA",
             symbol: "NVDA",
             proposedTargetWeightPct: 3,
             confidence: 90,
-            reasoning: "格式容错",
+            reasoning: "旧版格式应被跳过",
           },
         ],
       },
@@ -219,11 +219,11 @@ describe("automationGuards", () => {
       minConfidence: 70,
     });
 
-    expect(plan?.targetWeightOverrides).toEqual({ "US::NVDA": 0.03 });
+    expect(plan).toBeNull();
   });
 
   it("Agent 加仓必须有高/中 conviction 论点支持，但降仓可直接进入风控", () => {
-    const overlay: AgentConfigOverlay = {
+    const overlay: AgentStrategyOverlay = {
       generatedAt: "2026-03-01T00:00:00.000Z",
       agentRunId: "run-1",
       regimeOverride: null,
@@ -249,7 +249,7 @@ describe("automationGuards", () => {
             symbol: "MSFT",
             proposedTargetWeightPct: 4,
             confidence: 90,
-            reasoning: "单冒号论点 key 也应能支持加仓",
+            reasoning: "没有 canonical 论点支持的新增仓位应跳过",
           },
         ],
       },
@@ -268,8 +268,8 @@ describe("automationGuards", () => {
       minConfidence: 70,
     });
 
-    expect(plan?.targetWeightOverrides).toEqual({ "US::NVDA": 0.03, "US::MSFT": 0.04 });
-    expect(plan?.skippedCount).toBe(1);
+    expect(plan?.targetWeightOverrides).toEqual({ "US::NVDA": 0.03 });
+    expect(plan?.skippedCount).toBe(2);
   });
 
   it("目标权重覆盖会重算 workbench 资产目标与偏移", () => {

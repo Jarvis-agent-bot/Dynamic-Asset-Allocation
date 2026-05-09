@@ -34,7 +34,7 @@ function makeBootstrap(overrides?: Partial<WorkbenchBootstrap>): WorkbenchBootst
 
 function makeAssetRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView {
   return {
-    assetKey: "SH:600519",
+    assetKey: "SH::600519",
     symbol: "600519.SH",
     market: "SH",
     currency: "CNY",
@@ -89,8 +89,8 @@ describe("useRebalanceFlow", () => {
       useRebalanceFlow(makeInput({
         assetRows: [
           makeAssetRow({ holdingQty: 100, watchEnabled: true }),
-          makeAssetRow({ assetKey: "SH:000001", holdingQty: 0, watchEnabled: true }),
-          makeAssetRow({ assetKey: "US:AAPL", holdingQty: 50, watchEnabled: false }),
+          makeAssetRow({ assetKey: "SH::000001", holdingQty: 0, watchEnabled: true }),
+          makeAssetRow({ assetKey: "US::AAPL", holdingQty: 50, watchEnabled: false }),
         ],
       })),
     );
@@ -108,7 +108,7 @@ describe("useRebalanceFlow", () => {
 
   it("canExecuteSelected is false when risk check blocks", () => {
     const cycle = makeCycle({
-      proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
+      proposals: [{ assetKey: "SH::600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
       useRebalanceFlow(makeInput({
@@ -122,7 +122,7 @@ describe("useRebalanceFlow", () => {
 
   it("canExecuteSelected is true when risk passes and proposals selected", () => {
     const cycle = makeCycle({
-      proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
+      proposals: [{ assetKey: "SH::600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
       useRebalanceFlow(makeInput({
@@ -137,7 +137,7 @@ describe("useRebalanceFlow", () => {
 
   it("riskReadyForExecution requires risk check to exist", () => {
     const cycle = makeCycle({
-      proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
+      proposals: [{ assetKey: "SH::600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
       useRebalanceFlow(makeInput({
@@ -179,7 +179,7 @@ describe("useRebalanceFlow", () => {
 
   it("rebalanceChecklist passes when all conditions met", () => {
     const cycle = makeCycle({
-      proposals: [{ assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
+      proposals: [{ assetKey: "SH::600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never],
     });
     const { result } = renderHook(() =>
       useRebalanceFlow(makeInput({
@@ -211,9 +211,9 @@ describe("useRebalanceFlow", () => {
   it("selectedProposalNotional sums selected proposals", () => {
     const cycle = makeCycle({
       proposals: [
-        { assetKey: "SH:600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never,
-        { assetKey: "SH:000001", side: "BUY", selected: true, suggestedQty: 5, suggestedNotional: 500, price: 100, symbol: "000001.SH", currency: "CNY", reason: "test" } as never,
-        { assetKey: "US:AAPL", side: "SELL", selected: false, suggestedQty: 3, suggestedNotional: 300, price: 100, symbol: "AAPL", currency: "USD", reason: "test" } as never,
+        { assetKey: "SH::600519", side: "BUY", selected: true, suggestedQty: 10, suggestedNotional: 1000, price: 100, symbol: "600519.SH", currency: "CNY", reason: "test" } as never,
+        { assetKey: "SH::000001", side: "BUY", selected: true, suggestedQty: 5, suggestedNotional: 500, price: 100, symbol: "000001.SH", currency: "CNY", reason: "test" } as never,
+        { assetKey: "US::AAPL", side: "SELL", selected: false, suggestedQty: 3, suggestedNotional: 300, price: 100, symbol: "AAPL", currency: "USD", reason: "test" } as never,
       ],
     });
     const { result } = renderHook(() =>

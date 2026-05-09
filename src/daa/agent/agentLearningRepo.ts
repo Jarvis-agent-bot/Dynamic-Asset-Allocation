@@ -4,7 +4,7 @@ import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
-export type DaaAgentLearningEvent = {
+type DaaAgentLearningEvent = {
   eventId: string;
   eventType: string;
   title: string;
@@ -113,7 +113,7 @@ export async function appendAgentLearningEvent(input: {
   return mapLearningEventRow(result.rows[0] as Record<string, unknown>);
 }
 
-export async function listRecentAgentLearningEvents(limit = 8): Promise<DaaAgentLearningEvent[]> {
+async function listRecentAgentLearningEvents(limit = 8): Promise<DaaAgentLearningEvent[]> {
   await ensureAgentLearningTable();
   const pool = daaPgPool();
   const result = await pool.query(

@@ -12,7 +12,7 @@ import type {
 
 function makeAssetRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView {
   return {
-    assetKey: "US:AAPL",
+    assetKey: "US::AAPL",
     symbol: "AAPL",
     market: "US",
     currency: "USD",
@@ -38,7 +38,7 @@ function makeCycle(overrides?: Partial<RebalanceCycle>): RebalanceCycle {
     triggerSource: "manual",
     proposals: [
       {
-        assetKey: "US:AAPL",
+        assetKey: "US::AAPL",
         symbol: "AAPL",
         currency: "USD",
         side: "BUY",
@@ -93,13 +93,13 @@ describe("deriveRebalanceInteractionState", () => {
   it("keeps proposal selection and checklist derivations in the same state object", () => {
     const state = deriveRebalanceInteractionState({
       assetRows: [
-        makeAssetRow({ assetKey: "US:AAPL", watchEnabled: true, holdingQty: 10, targetWeightHint: 0.1 }),
-        makeAssetRow({ assetKey: "US:MSFT", watchEnabled: true, holdingQty: 0, targetWeightHint: 0 }),
+        makeAssetRow({ assetKey: "US::AAPL", watchEnabled: true, holdingQty: 10, targetWeightHint: 0.1 }),
+        makeAssetRow({ assetKey: "US::MSFT", watchEnabled: true, holdingQty: 0, targetWeightHint: 0 }),
       ],
       currentCycle: makeCycle({
         proposals: [
-          { assetKey: "US:AAPL", symbol: "AAPL", currency: "USD", side: "BUY", selected: true, suggestedQty: 1, suggestedNotional: 100, price: 100, reason: "测试" } as never,
-          { assetKey: "US:MSFT", symbol: "MSFT", currency: "USD", side: "SELL", selected: false, suggestedQty: 1, suggestedNotional: 50, price: 50, reason: "测试" } as never,
+          { assetKey: "US::AAPL", symbol: "AAPL", currency: "USD", side: "BUY", selected: true, suggestedQty: 1, suggestedNotional: 100, price: 100, reason: "测试" } as never,
+          { assetKey: "US::MSFT", symbol: "MSFT", currency: "USD", side: "SELL", selected: false, suggestedQty: 1, suggestedNotional: 50, price: 50, reason: "测试" } as never,
         ],
       }),
       riskCheck: makeRiskCheck({ overallStatus: "warn" }),

@@ -9,6 +9,7 @@ import {
   runWorkbenchRiskCheck,
   summarizeWorkbenchRebalanceExecution,
 } from "@/src/daa/modules/workbench/workbenchApi";
+import type { RebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import type { ExecuteRebalanceSummary, PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 
 function isExecutableCycleStatus(status: RebalanceCycle["status"]): boolean {
@@ -25,13 +26,13 @@ export function useExecutionFlow(input: {
   loadBootstrap: (silent?: boolean, preferredCycleId?: string | null) => Promise<void>;
   mergeCycleState: (nextCycle: RebalanceCycle) => void;
 }) {
-  const [pendingExecuteMode, setPendingExecuteMode] = useState<"selected" | "all" | null>(null);
+  const [pendingExecuteMode, setPendingExecuteMode] = useState<RebalanceExecuteMode | null>(null);
   const [executeSummary, setExecuteSummary] = useState<ExecuteRebalanceSummary | null>(null);
   const [executeSummaryLoading, setExecuteSummaryLoading] = useState(false);
   const [executeSummaryError, setExecuteSummaryError] = useState("");
   const [executionReceipt, setExecutionReceipt] = useState<ExecutionReceipt | null>(null);
 
-  const executeCycleNow = useCallback(async (mode: "selected" | "all") => {
+  const executeCycleNow = useCallback(async (mode: RebalanceExecuteMode) => {
     if (!input.currentCycle || input.busy) return;
     input.setBusy(true);
     try {
@@ -165,7 +166,7 @@ export function useExecutionFlow(input: {
     await executeCycleNow(mode);
   }, [executeCycleNow, pendingExecuteMode]);
 
-  const handleOpenExecuteDialog = useCallback((mode: "selected" | "all") => {
+  const handleOpenExecuteDialog = useCallback((mode: RebalanceExecuteMode) => {
     if (!input.currentCycle || input.busy) return;
     if (!isExecutableCycleStatus(input.currentCycle.status)) {
       toast.error("该周期不可执行，请生成新周期继续调仓。");

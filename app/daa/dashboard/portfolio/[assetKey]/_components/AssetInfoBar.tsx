@@ -20,7 +20,6 @@ export function AssetInfoBar(props: {
   const priceChangePercent = priceChange?.changePct ?? null;
 
   // 成本与盈亏 — 优先使用 DB 侧预计算的基准货币成本
-  const costInBase = row.costBasisInBase ?? 0;
   const valBase = row.valuationBase ?? 0;
   const costInstrument = row.costBasis ?? 0;
   const costPerShare = row.holdingQty > 0 && costInstrument > 0 ? costInstrument / row.holdingQty : null;

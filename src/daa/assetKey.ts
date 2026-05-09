@@ -1,8 +1,8 @@
-export function normalizeDaaSymbol(value: unknown): string {
+function normalizeDaaSymbol(value: unknown): string {
   return String(value || "").trim().toUpperCase();
 }
 
-export function normalizeDaaMarket(value: unknown, fallback = "US"): string {
+function normalizeDaaMarket(value: unknown, fallback = "US"): string {
   const market = String(value || "").trim().toUpperCase();
   if (!market) return fallback;
   if (market === "A") return "CN";

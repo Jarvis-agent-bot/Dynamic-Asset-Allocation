@@ -1,5 +1,4 @@
 import { normalizeDaaCurrencyCode, parseDaaAssetKey } from "@/src/daa/assetKey";
-import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
 import { recordTradeOutcomeAsEvidence } from "@/src/daa/agent/tradeOutcomeFeedback";
 import { getActiveTheses } from "@/src/daa/agent/store/thesisStore";
 import { enhanceProposalsWithAgent } from "@/src/daa/agent/agentRebalanceAdapter";
@@ -22,6 +21,7 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { resolveExecutionRoute, syncBrokerOrders } from "./executionVenue";
+import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 
 import { scanTaxLossHarvestingCandidates } from "./taxLossHarvestingService";
 import { generateWatchlistEntryProposals } from "./watchlistEntryService";
@@ -50,7 +50,6 @@ import {
   assertCycleExecutable,
   assertCycleMutable,
   buildCalendarPeriodKey,
-  buildMarketFacts,
   buildCycleDraftFromBootstrap,
   buildPreTradeRiskCheckFromBootstrap,
   enrichRiskCheckWithCorrelation,
@@ -59,7 +58,6 @@ import {
   isCalendarMonthDue,
   isPastUtcTime,
   mapStoreCycleToView,
-  computeHhiPct,
   normalizeText,
   normalizeTimeZoneOrUtc,
   toCycleReportSnapshot,
@@ -260,7 +258,6 @@ export async function generateWorkbenchRebalanceCycle(
   ]);
   const hasAgentTargetOverrides = Object.keys(input.targetWeightOverrides || {}).length > 0;
   const bootstrap = applyTargetWeightOverridesToBootstrap(rawBootstrap, input.targetWeightOverrides);
-  const recentLearningsText = await buildAgentLearningDigest(6);
 
   const latestCycle = recentCycles[0] || null;
   const strategy = systemRow.config.rebalanceStrategy;
@@ -529,7 +526,7 @@ export async function generateWorkbenchRebalanceCycle(
       healthyInsight = {
         maxDriftPct: draft.maxAbsDriftPct,
         topOpportunities: theses.slice(0, 5).map(t => ({
-          symbol: t.assetKeys[0]?.split(":")[1] ?? t.title,
+          symbol: parseDaaAssetKey(t.assetKeys[0])?.symbol ?? t.title,
           action: t.conviction === "high" ? "open_or_add" as const : "watch" as const,
           finalScorePct: t.conviction === "high" ? 80 : t.conviction === "medium" ? 60 : 30,
           confidencePct: t.conviction === "high" ? 85 : 55,
@@ -905,20 +902,21 @@ async function executeWorkbenchProposalByRoute(input: {
 
 export async function executeWorkbenchRebalanceCycle(input: {
   cycleId: string;
-  executeMode: "selected" | "all";
+  executeMode: RebalanceExecuteMode;
 }): Promise<ExecuteRebalanceCycleResult> {
   const cycle = await getDaaRebalanceCycle(input.cycleId);
   if (!cycle) throw new Error(`cycle not found: ${input.cycleId}`);
 
   // ── Stuck-cycle recovery: reset cycles stuck in "executing" for > 5 min ──
   if (cycle.status === "executing" && !cycle.executedAt) {
-    const updatedMs = Date.parse(cycle.snapshotAt);
+    const executionStartedMs = Date.parse(cycle.executionStartedAt || "");
     const stuckThresholdMs = 5 * 60 * 1000;
-    if (Number.isFinite(updatedMs) && Date.now() - updatedMs > stuckThresholdMs) {
+    if (Number.isFinite(executionStartedMs) && Date.now() - executionStartedMs > stuckThresholdMs) {
       console.warn(`[DAA] Recovering stuck cycle ${input.cycleId}: resetting executing → reviewing`);
       await patchDaaRebalanceCycle({
         cycleId: input.cycleId,
         status: "reviewing",
+        executionStartedAt: null,
         notes: `${cycle.notes || ""}\n[系统恢复] 执行中断超时，已自动重置为审阅状态`.trim(),
       });
       // Re-fetch after recovery

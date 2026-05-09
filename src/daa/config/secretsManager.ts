@@ -41,7 +41,7 @@ export const SECRET_KEY_DEFS_ = [
 
 export type DaaSecretKey = (typeof SECRET_KEY_DEFS_)[number]["key"];
 
-export type DaaSecretStatus = {
+type DaaSecretStatus = {
   key: DaaSecretKey;
   label: string;
   group: string;

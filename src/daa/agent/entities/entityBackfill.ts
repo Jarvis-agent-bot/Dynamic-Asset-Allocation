@@ -16,7 +16,7 @@ import {
   upsertAndLinkForThesis,
 } from "@/src/daa/agent/entities/entityStore";
 
-export interface EntityBackfillResult {
+interface EntityBackfillResult {
   memoriesScanned: number;
   memoriesLinked: number;
   memoryEntitiesCreated: number;

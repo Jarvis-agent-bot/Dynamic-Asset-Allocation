@@ -5,9 +5,9 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
 
-export type DaaValuationMetricStatus = "bullish" | "bearish" | "neutral" | "unavailable";
+type DaaValuationMetricStatus = "bullish" | "bearish" | "neutral" | "unavailable";
 
-export type DaaValuationMetric = {
+type DaaValuationMetric = {
   key: string;
   label: string;
   value: number | string;
@@ -16,7 +16,7 @@ export type DaaValuationMetric = {
   description?: string;
 };
 
-export type DaaValuationRelativeValue = {
+type DaaValuationRelativeValue = {
   key: string;
   label: string;
   value: number | null;

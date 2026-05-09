@@ -8,6 +8,7 @@ import type {
   PreTradeRiskCheck,
   RebalanceProposal,
 } from "./workbenchTypes";
+import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import {
@@ -117,7 +118,7 @@ export async function validateExecutionRisk(input: {
 
 export async function buildWorkbenchExecuteSummary(input: {
   cycleId: string;
-  executeMode: "selected" | "all";
+  executeMode: RebalanceExecuteMode;
 }): Promise<ExecuteRebalanceSummary> {
   const cycle = await getDaaRebalanceCycle(input.cycleId);
   if (!cycle) throw new Error(`cycle not found: ${input.cycleId}`);

@@ -108,7 +108,7 @@ export async function getActiveTheses(): Promise<ResearchThread[]> {
 
 /**
  * 归档超过 staleDays 天未更新的 uncertain thesis。
- * prioritizeNode 会为驱动调查创建 conviction=uncertain 的临时 thesis，如果长时间没被 investigate 节点转正，
+ * prioritizeNode 会为驱动调查创建 conviction=uncertain 的待确认 thesis，如果长时间没被 investigate 节点转正，
  * 它们会在冲突检测、认知缺口等下游产生噪声。此函数在每次 observe 时清扫一次。
  * 返回归档的 thesis id 列表，便于日志观察。
  */

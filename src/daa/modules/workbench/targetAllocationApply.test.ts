@@ -2,30 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { buildAssetUniverseView } from "@/src/daa/__tests__/testDataFactories";
 
-import {
-  buildTargetWeightApplyPlan,
-  parseLooseTargetAssetKey,
-} from "./targetAllocationApply";
+import { buildTargetWeightApplyPlan } from "./targetAllocationApply";
 
 describe("targetAllocationApply", () => {
-  it("兼容 ::、: 与裸 symbol 三种目标键格式", () => {
-    expect(parseLooseTargetAssetKey("US::SPY")).toEqual({
-      assetKey: "US::SPY",
-      market: "US",
-      symbol: "SPY",
-    });
-    expect(parseLooseTargetAssetKey("HK:0388.HK")).toEqual({
-      assetKey: "HK::0388.HK",
-      market: "HK",
-      symbol: "0388.HK",
-    });
-    expect(parseLooseTargetAssetKey("QQQ")).toEqual({
-      assetKey: "US::QQQ",
-      market: "US",
-      symbol: "QQQ",
-    });
-  });
-
   it("会统一权重单位、补开 watch，并清零未出现在新计划中的旧目标", () => {
     const plan = buildTargetWeightApplyPlan({
       currentRows: [
@@ -49,9 +28,9 @@ describe("targetAllocationApply", () => {
         }),
       ],
       weightsPct: {
-        "US:SPY": 60,
-        QQQ: 0.4,
-        TLT: 0,
+        "US::SPY": 60,
+        "US::QQQ": 0.4,
+        "US::TLT": 0,
       },
     });
 
@@ -85,5 +64,17 @@ describe("targetAllocationApply", () => {
         targetWeightHint: 0.4,
       },
     ]);
+  });
+
+  it("拒绝旧版单冒号或裸 symbol 目标键", () => {
+    expect(() => buildTargetWeightApplyPlan({
+      currentRows: [],
+      weightsPct: { "US:SPY": 60 },
+    })).toThrow(/MARKET::SYMBOL/);
+
+    expect(() => buildTargetWeightApplyPlan({
+      currentRows: [],
+      weightsPct: { QQQ: 40 },
+    })).toThrow(/MARKET::SYMBOL/);
   });
 });

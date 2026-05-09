@@ -6,7 +6,6 @@ import { randomUUID } from "node:crypto";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import type { AgentRun, AgentRunStatus, AgentTrigger, DailyBriefing, ReasoningTrace, Surprise, ToolCallRecord } from "@/src/daa/agent/cognitiveTypes";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 function parseJsonbArray<T>(v: unknown, fallback: T[] = []): T[] {
   if (Array.isArray(v)) return v as T[];
@@ -102,14 +101,6 @@ export async function getLatestRun(): Promise<AgentRun | null> {
   const ownerAccountId = getDaaAccountScopeId();
   return withDaaPgClient(async ({ query }) => {
     const res = await query(`SELECT * FROM daa_agent_runs WHERE owner_account_id = $1 ORDER BY created_at DESC LIMIT 1`, [ownerAccountId]);
-    return res.rows[0] ? mapRunRow(res.rows[0]) : null;
-  });
-}
-
-export async function getRunById(id: string): Promise<AgentRun | null> {
-  const ownerAccountId = getDaaAccountScopeId();
-  return withDaaPgClient(async ({ query }) => {
-    const res = await query(`SELECT * FROM daa_agent_runs WHERE owner_account_id = $1 AND id = $2`, [ownerAccountId, id]);
     return res.rows[0] ? mapRunRow(res.rows[0]) : null;
   });
 }

@@ -113,28 +113,6 @@ export async function createStrategy(input: {
   }
 }
 
-/** 增加使用次数和更新成功率 */
-export async function updateStrategyUsage(
-  id: string,
-  wasSuccessful: boolean,
-): Promise<void> {
-  try {
-    const { withDaaPgClient } = await import("@/src/daa/pg/daaPg");
-    await withDaaPgClient(async (client) => {
-      await client.query(
-        `UPDATE daa_agent_strategies
-         SET usage_count = usage_count + 1,
-             success_rate = (success_rate * usage_count + $2) / (usage_count + 1),
-             updated_at = NOW()
-         WHERE id = $1`,
-        [id, wasSuccessful ? 1 : 0],
-      );
-    });
-  } catch (e) {
-    logSwallowed("strategyStore.updateUsage", e);
-  }
-}
-
 // ── 内部 ──
 
 function mapRow(row: StrategyRow): InvestigationStrategy {

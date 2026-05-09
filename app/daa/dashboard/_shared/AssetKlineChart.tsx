@@ -182,6 +182,7 @@ export function AssetKlineChart({
     setError("");
     try {
       const qs = new URLSearchParams({ symbol });
+      if (market) qs.set("market", market);
       if (startDate) qs.set("start", startDate);
       const res = await fetch(`/api/daa/market/yfinance/price-series?${qs}`, {
         cache: "no-store",
@@ -203,7 +204,7 @@ export function AssetKlineChart({
     } finally {
       setLoading(false);
     }
-  }, [symbol, startDate]);
+  }, [symbol, market, startDate]);
 
   useEffect(() => {
     void fetchData();

@@ -1,6 +1,6 @@
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
-export type AssetPriceChange = {
+type AssetPriceChange = {
   change: number;
   changePct: number;
   direction: "up" | "down" | "flat";

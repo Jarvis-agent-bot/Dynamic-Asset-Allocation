@@ -16,7 +16,6 @@ export function parseIntegerSearchParam(value: string | null, fallback: number):
 
 export async function buildViewerReadRouteResponse<T>(req: Request, input: {
   load: (searchParams: URLSearchParams) => Promise<T>;
-  fallback: () => T;
 }): Promise<Response> {
   const authResult = await requireDaaAdminViewerAuth(req);
   const denied = mapDeniedResponse(authResult);

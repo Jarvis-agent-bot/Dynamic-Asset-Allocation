@@ -1,4 +1,5 @@
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
+import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
 import { parseAssistantIntent } from "./assistantIntentRules";
@@ -82,7 +83,7 @@ function buildPlannerPrompt(input: AssistantPlanningInput): string {
     "qty": 10,
     "notional": null
   },
-  "executeMode": "all"
+  "executeMode": "selected 或 all；默认 selected，只有用户明确要求全部执行时才用 all"
 }`,
     "",
     `当前待确认动作：${input.pendingActionDescription || "无"}`,
@@ -149,8 +150,13 @@ function parsePlannedIntent(rawUserText: string, rawPlannerText: string): DaaAss
       return { kind: "agent_bootstrap", rawText: rawUserText };
     case "rebalance_generate":
       return { kind: "rebalance_generate", rawText: rawUserText };
-    case "rebalance_execute":
-      return { kind: "rebalance_execute", rawText: rawUserText, executeMode: "all" };
+    case "rebalance_execute": {
+      return {
+        kind: "rebalance_execute",
+        rawText: rawUserText,
+        executeMode: normalizeRebalanceExecuteMode(parsed.executeMode),
+      };
+    }
     case "confirm_action":
       return { kind: "confirm_action", rawText: rawUserText };
     case "cancel_action":

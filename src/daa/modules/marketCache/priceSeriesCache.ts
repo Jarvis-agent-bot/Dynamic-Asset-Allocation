@@ -19,14 +19,14 @@ import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 
 export type CachedPricePoint = { date: string; close: number };
 
-export type PriceSeriesCacheResult = {
+type PriceSeriesCacheResult = {
   symbol: string;
   data: CachedPricePoint[];
   source: "db" | "yahoo" | "mixed";
   error?: string;
 };
 
-export type PriceSeriesCacheOptions = {
+type PriceSeriesCacheOptions = {
   /** 认为 DB 数据"充足"的最小天数（默认 100） */
   minDbDays?: number;
   /** 认为 DB 数据"新鲜"的最大天数（默认 2） */

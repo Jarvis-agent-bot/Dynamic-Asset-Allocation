@@ -22,7 +22,7 @@ const mockThread: ResearchThread = {
   conviction: "high",
   invalidationConditions: "NVDA PE > 80x",
   reviewAt: null,
-  assetKeys: ["US:NVDA"],
+  assetKeys: ["US::NVDA"],
   tags: ["个股", "AI"],
   priorityScore: 0.8,
   createdAt: "2026-03-01T00:00:00Z",
@@ -31,8 +31,8 @@ const mockThread: ResearchThread = {
 
 const mockPortfolio = {
   holdings: [
-    { assetKey: "US:NVDA", symbol: "NVDA", holdingQty: 100, lastPrice: 120, weightPct: 0.15, unrealizedPnlPct: 0.12 },
-    { assetKey: "US:AAPL", symbol: "AAPL", holdingQty: 50, lastPrice: 180, weightPct: 0.10, unrealizedPnlPct: -0.05 },
+    { assetKey: "US::NVDA", symbol: "NVDA", holdingQty: 100, lastPrice: 120, weightPct: 0.15, unrealizedPnlPct: 0.12 },
+    { assetKey: "US::AAPL", symbol: "AAPL", holdingQty: 50, lastPrice: 180, weightPct: 0.10, unrealizedPnlPct: -0.05 },
   ],
   totalEquity: 100000,
   cashPct: 0.05,
@@ -76,7 +76,7 @@ describe("buildPrioritizePrompt", () => {
       news: { items: [] },
       theses: [mockThread],
     });
-    expect(prompt).toContain("US:NVDA");
+    expect(prompt).toContain("US::NVDA");
     expect(prompt).toContain("15.0%");
   });
 
@@ -207,12 +207,12 @@ describe("buildSurfacePrompt", () => {
 describe("buildStrategyAdvisorPrompt", () => {
   it("把自动跟踪项的 Agent 语义传给策略顾问，而不是只给天数", () => {
     const prompt = buildStrategyAdvisorPrompt({
-      holdings: [{ assetKey: "US:NVDA", symbol: "NVDA", weightPct: 0.107, price: 980 }],
+      holdings: [{ assetKey: "US::NVDA", symbol: "NVDA", weightPct: 0.107, price: 980 }],
       watchlist: [],
       theses: [{ ...mockThread, conviction: "uncertain" }],
       surprises: [],
       cognitionGaps: [{
-        assetKey: "US:NVDA",
+        assetKey: "US::NVDA",
         portfolioWeight: 0.107,
         daysSinceLastInvestigation: 2,
         uncertaintyReason: "论点仍处观察态，尚未形成高置信度方向",
@@ -225,7 +225,7 @@ describe("buildStrategyAdvisorPrompt", () => {
 
     expect(prompt).toContain("论点仍处观察态");
     expect(prompt).toContain("关注维度");
-    expect(prompt).not.toContain("US:NVDA 权重10.7% 2天未更新");
+    expect(prompt).not.toContain("US::NVDA 权重10.7% 2天未更新");
   });
 
   it("把观察列表候选交给策略顾问，使大脑可以生成 BUY 目标权重", () => {
@@ -265,7 +265,7 @@ describe("formatBriefingForTelegram", () => {
   it("格式化含所有板块的 briefing", () => {
     const briefing: DailyBriefing = {
       surprises: [{ title: "测试意外", description: "描述", relatedThesisId: null, severityScore: 8, suggestedAction: "行动" }],
-      cognitionGaps: [{ assetKey: "US:NVDA", portfolioWeight: 0.15, daysSinceLastInvestigation: 20, uncertaintyReason: "原因", suggestedInvestigation: "建议" }],
+      cognitionGaps: [{ assetKey: "US::NVDA", portfolioWeight: 0.15, daysSinceLastInvestigation: 20, uncertaintyReason: "原因", suggestedInvestigation: "建议" }],
       mindChangeConditions: [{ thesisTitle: "测试论点", currentConviction: "high", conditions: ["条件1"], monitoringIndicators: ["VIX"] }],
       thesesUpdated: 2,
       memoriesCreated: 1,
@@ -275,7 +275,7 @@ describe("formatBriefingForTelegram", () => {
     const html = formatBriefingForTelegram(briefing, { totalTokens: 5000, durationMs: 3000, thesesCount: 10, memoriesCount: 20 });
     expect(html).toContain("Agent 日报");
     expect(html).toContain("测试意外");
-    expect(html).toContain("US:NVDA");
+    expect(html).toContain("英伟达 NVDA");
     expect(html).toContain("测试论点");
   });
 
@@ -343,7 +343,7 @@ describe("formatBriefingForTelegram", () => {
       memoriesCreated: 0,
       totalTokens: 0,
       estimatedCost: 0,
-      configOverlay: {
+      strategyOverlay: {
         generatedAt: "2026-04-27T00:00:00.000Z",
         agentRunId: "run-1",
         regimeOverride: null,
@@ -392,7 +392,7 @@ describe("formatBriefingForTelegram", () => {
       memoriesCreated: 0,
       totalTokens: 0,
       estimatedCost: 0,
-      configOverlay: {
+      strategyOverlay: {
         generatedAt: "2026-04-27T00:00:00.000Z",
         agentRunId: "run-1",
         regimeOverride: null,
@@ -424,7 +424,7 @@ describe("formatBriefingForTelegram", () => {
       memoriesCreated: 0,
       totalTokens: 0,
       estimatedCost: 0,
-      configOverlay: {
+      strategyOverlay: {
         generatedAt: "2026-04-27T00:00:00.000Z",
         agentRunId: "run-1",
         regimeOverride: null,

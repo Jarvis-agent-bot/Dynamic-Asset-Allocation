@@ -8,17 +8,17 @@ import { isDaaPgEnabled, withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { findRecentJobExecutionByIdempotencyKey } from "@/src/daa/store/jobExecutionLogRepo";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-export type AccountScopedCronSuccess<T> = DaaActiveAccountScope & {
+type AccountScopedCronSuccess<T> = DaaActiveAccountScope & {
   ok: true;
   result: T;
 };
 
-export type AccountScopedCronFailure = DaaActiveAccountScope & {
+type AccountScopedCronFailure = DaaActiveAccountScope & {
   ok: false;
   error: string;
 };
 
-export type AccountScopedCronRun<T> = AccountScopedCronSuccess<T> | AccountScopedCronFailure;
+type AccountScopedCronRun<T> = AccountScopedCronSuccess<T> | AccountScopedCronFailure;
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error || "unknown_error");

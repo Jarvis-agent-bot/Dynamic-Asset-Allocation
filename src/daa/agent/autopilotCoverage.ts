@@ -1,4 +1,4 @@
-import type { AgentConfigOverlay, AutopilotCoverageSummary } from "@/src/daa/agent/cognitiveTypes";
+import type { AgentStrategyOverlay, AutopilotCoverageSummary } from "@/src/daa/agent/cognitiveTypes";
 import type { PortfolioSnapshot, WatchlistSnapshot } from "@/src/daa/agent/cognitiveState";
 
 function isCooldownReady(lastEntryTriggeredAt: string | null, entryCooldownDays: number): boolean {
@@ -19,7 +19,7 @@ function getEffectiveWatchlistTargetWeightPct(candidate: WatchlistSnapshot["cand
 export function buildAutopilotCoverageSummary(input: {
   portfolio: PortfolioSnapshot;
   watchlist: WatchlistSnapshot | null;
-  overlay: AgentConfigOverlay | null | undefined;
+  overlay: AgentStrategyOverlay | null | undefined;
 }): AutopilotCoverageSummary {
   const candidates = input.watchlist?.candidates ?? [];
   const knownAssetKeys = new Set([

@@ -1,19 +1,9 @@
-/**
- * newsSignal.ts — 新闻信号核心模块（v2.1 修复版）
- *
- * 修复 P0-1: sentimentScore 不再硬编码 0（标记为 reserved）
- * 修复 P0-2: 缓存不再反推 sentimentScore（直接用 scorePct）
- * 修复 P1-3: getCachedSignal 合并为单次 DB 查询
- * 修复 P1-4: upsert + LLM 字段改为原子单次写入
- * 修复 P2-4: buildNewsSignals 接受 market 参数
- */
+/** 新闻信号核心模块 */
 
 import { createHash } from "node:crypto";
 import { clamp } from "@/src/core/math";
 import {
-  getDaaNewsSignalSnapshotBySymbol,
   upsertDaaNewsItemSnapshots,
-  upsertDaaNewsSignalSnapshots,
 } from "@/src/daa/store/daaStorePg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { fetchNewsForSymbol } from "./newsProviderRouter";
@@ -24,7 +14,7 @@ import type { RawNewsItem } from "./newsProviders";
 
 // ─── Types ───────────────────────────────────────────────────
 
-export type DaaNewsSignalItem = {
+type DaaNewsSignalItem = {
   symbol: string;
   title: string;
   link: string | null;
@@ -63,10 +53,10 @@ export async function buildNewsSignalForSymbol(
   const normalizedSymbol = symbol.trim().toUpperCase();
   if (!normalizedSymbol) return null;
 
-  // Step 1: 检查缓存（单次 DB 查询，修复 P1-3）
+  // Step 1: 检查缓存
   const cached = await getCachedSignal(normalizedSymbol);
 
-  // Step 2: 拉取新闻（传 market 参数，修复 P2-4）
+  // Step 2: 拉取新闻
   let rawItems: RawNewsItem[] = [];
   try {
     rawItems = await fetchNewsForSymbol(normalizedSymbol, market, 7);
@@ -74,7 +64,7 @@ export async function buildNewsSignalForSymbol(
     logSwallowed("newsSignal.fetch", e);
   }
 
-  // Step 3: 存储新闻 item（sentimentScore=0 标记为 reserved，P0-1 修复）
+  // Step 3: 存储新闻 item
   // 使用 rawItem.provider 保留真实来源（alpaca / yahoo_rss 等），方便排查数据
   // 分布；未知来源时回退到 "multi"。
   const newsItems = rawItems.map((item, idx) => ({
@@ -116,7 +106,7 @@ export async function buildNewsSignalForSymbol(
     llmAnalysis = await analyzeNewsWithLlm({ symbol: normalizedSymbol, items: rawItems });
   }
 
-  // Step 6: 构建信号（P0-2 修复：不再反推 sentimentScore）
+  // Step 6: 构建信号
   const signal = buildSignalFromAnalysis({
     symbol: normalizedSymbol,
     items: newsItems,
@@ -124,7 +114,7 @@ export async function buildNewsSignalForSymbol(
     cached,
   });
 
-  // Step 7: 原子写入所有字段（P1-4 修复：不再 upsert 后 UPDATE）
+  // Step 7: 原子写入所有字段
   try {
     const { daaPgPool } = await import("@/src/daa/pg/daaPg");
     const pool = daaPgPool();
@@ -166,7 +156,7 @@ export async function buildNewsSignalForSymbol(
 
 /**
  * 批量构建新闻信号。
- * @param opts.symbolsWithMarket — 带市场信息的 symbol 列表（优先使用，修复 P2-4）
+ * @param opts.symbolsWithMarket — 带市场信息的 symbol 列表（优先使用）
  */
 export async function buildNewsSignals(opts: {
   symbols?: string[];
@@ -217,7 +207,7 @@ export async function buildNewsSignals(opts: {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-/** 单次 DB 查询获取缓存（修复 P1-3：合并两次查询为一次） */
+/** 单次 DB 查询获取缓存 */
 async function getCachedSignal(symbol: string): Promise<{
   scorePct: number;
   confidencePct: number;
@@ -258,10 +248,6 @@ async function getCachedSignal(symbol: string): Promise<{
   }
 }
 
-/**
- * 修复 P0-2：不再从 scorePct 反推 sentimentScore。
- * 缓存时直接用已存储的 llm 字段，不做数学反推。
- */
 function buildSignalFromAnalysis(input: {
   symbol: string;
   items: DaaNewsSignalItem[];
@@ -284,7 +270,7 @@ function buildSignalFromAnalysis(input: {
     majorEvent = llmAnalysis.majorEvent;
     actionHint = llmAnalysis.actionHint;
   } else if (cached) {
-    // P0-2 修复：直接用缓存的 scorePct 和 llm 字段，不反推
+    // 缓存命中时直接用已存储的 LLM 字段，不从 scorePct 反推。
     scorePct = cached.scorePct;
     summary = cached.llmSummary;
     drivers = cached.llmDrivers;

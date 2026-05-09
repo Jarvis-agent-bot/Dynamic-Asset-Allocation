@@ -12,7 +12,7 @@ import {
   findAutoExecuteTurnoverBreach,
 } from "./automationGuards";
 
-export type AutoRebalanceExecutionResult = {
+type AutoRebalanceExecutionResult = {
   attempted: boolean;
   executed: boolean;
   ordersCount: number;

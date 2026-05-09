@@ -23,7 +23,7 @@ import { estimateTokens } from "@/src/daa/agent/helpers/validation";
  * - fast: 数据整理、摘要、格式化（不需要深度推理）
  * - strong: 投资分析、决策、反思（需要复杂推理）
  */
-export type LlmTaskTier = "fast" | "strong";
+type LlmTaskTier = "fast" | "strong";
 
 /** fast tier 的默认配置（DeepSeek Chat，最便宜） */
 const FAST_TIER_DEFAULTS = {
@@ -39,7 +39,7 @@ const FAST_TIER_DEFAULTS = {
  * - strong: 直接使用系统配置的主 LLM
  * - fast: 优先使用 DeepSeek Chat（便宜），fallback 到主 LLM
  */
-export async function resolveLlmConfigForTier(tier: LlmTaskTier): Promise<LlmRuntimeConfig | null> {
+async function resolveLlmConfigForTier(tier: LlmTaskTier): Promise<LlmRuntimeConfig | null> {
   const primaryConfig = await resolveLlmConfig(tier === "strong" ? "research" : "analysis");
   if (!primaryConfig) return null;
 

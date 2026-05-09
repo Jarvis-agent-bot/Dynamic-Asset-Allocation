@@ -1,4 +1,3 @@
-import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
 import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketContextTypes";
@@ -274,7 +273,7 @@ async function buildHfSignalMap(): Promise<Map<string, HfSignalSummary>> {
     return map;
 }
 
-export function computeHhiPct(weightsPct: number[]): number {
+function computeHhiPct(weightsPct: number[]): number {
     if (!weightsPct.length)
         return 0;
     return weightsPct.reduce((sum, weight) => sum + ((weight / 100) ** 2), 0) * 100;
@@ -698,6 +697,7 @@ function mapStoreCycleToView(cycle: DaaStoreRebalanceCycle | null): RebalanceCyc
         driftSnapshot: cycle.driftSnapshot,
         proposals: cycle.proposals,
         riskCheck: cycle.riskCheck,
+        executionStartedAt: cycle.executionStartedAt,
         executedAt: cycle.executedAt,
         executedOrders: cycle.executedOrders,
         executionSummary: cycle.executionSummary,

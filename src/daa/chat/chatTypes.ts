@@ -1,3 +1,5 @@
+import type { RebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
+
 export type DaaChatChannel = "telegram" | "web";
 export type DaaChatRole = "user" | "assistant" | "system";
 
@@ -80,7 +82,7 @@ export type DaaChatPendingAction =
   | {
       kind: "rebalance_execute";
       cycleId: string;
-      executeMode: "all";
+      executeMode: RebalanceExecuteMode;
       createdAt: string;
       expiresAt: string;
     };

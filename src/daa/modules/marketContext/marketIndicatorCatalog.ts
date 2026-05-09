@@ -186,14 +186,6 @@ export const MARKET_SCOPE_KEY_ORDER_: DaaMarketIndicatorScope[] = [
   "macro_global",
 ];
 
-export const MARKET_INDICATOR_KEYS_BY_SCOPE_: Record<DaaMarketIndicatorScope, DaaMarketIndicatorKey[]> = {
-  us_equity: ["vix", "qqq_spy_ratio", "market_breadth"],
-  hk_cn_equity: ["fxi_volatility", "kweb_fxi_ratio"],
-  crypto: ["btc_eth_ratio", "btc_volatility"],
-  macro_defensive: ["gold_silver_ratio", "yield_curve_spread", "credit_spread"],
-  macro_global: ["usd_strength", "inflation_expectation"],
-};
-
 export function getMarketIndicatorRefreshSymbols(config: DaaMarketIndicatorsConfig): string[] {
   const out = new Set<string>();
   for (const key of MARKET_INDICATOR_KEYS_) {
@@ -249,19 +241,4 @@ export function resolveMarketScopeForAsset(input: {
   }
 
   return "us_equity";
-}
-
-export function getRelevantMarketIndicatorKeysForAsset(input: {
-  symbol: string;
-  market?: string;
-  assetClass?: string;
-  marketGroup?: string;
-  instrumentType?: string;
-  region?: string;
-  exchange?: string;
-  holdingTags?: string[];
-  watchTags?: string[];
-}): DaaMarketIndicatorKey[] {
-  const scope = resolveMarketScopeForAsset(input);
-  return MARKET_INDICATOR_KEYS_BY_SCOPE_[scope];
 }

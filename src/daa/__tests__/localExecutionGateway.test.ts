@@ -40,7 +40,6 @@ vi.mock("@/src/daa/notify/feishu", () => ({
 import {
   executeRebalanceViaGateway,
   executeTradeViaGateway,
-  getLocalExecutionGatewayStatus,
   previewTradeViaGateway,
 } from "@/src/daa/modules/workbench/executionGateway";
 
@@ -57,17 +56,6 @@ describe("local-execution-gateway", () => {
           feishu: { enabled: true, onTradeExecuted: true },
         },
       },
-    });
-  });
-
-  it("返回本地执行网关状态", async () => {
-    const status = await getLocalExecutionGatewayStatus();
-
-    expect(status).toMatchObject({
-      mode: "local",
-      ready: true,
-      supportsRemoteBridge: false,
-      venues: ["sim", "crypto_paper"],
     });
   });
 

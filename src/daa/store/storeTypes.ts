@@ -34,34 +34,6 @@ export type DaaStoreEquitySnapshot = {
   source: string;
 };
 
-export type DaaStoreRebalanceDecision = {
-  id: string;
-  shouldRebalance: boolean;
-  triggerSource: "manual" | "cron_drift" | "cron_scheduled";
-  status: "pending" | "partial" | "executed" | "canceled" | "skipped";
-  requestJson: Record<string, unknown>;
-  responseJson: Record<string, unknown>;
-  createdAt: string;
-};
-
-export type DaaStoreExecutionOrder = {
-  orderId: string;
-  decisionId: string;
-  symbol: string;
-  side: "BUY" | "SELL";
-  suggestedNotional: number;
-  status: "pending" | "submitted" | "partial" | "executed" | "canceled" | "skipped";
-  executedQty: number;
-  executedPrice: number;
-  fee: number;
-  bookedQty: number;
-  bookedNotional: number;
-  bookedFee: number;
-  notes: string | null;
-  updatedAt: string;
-  bookedAt?: string | null;
-};
-
 export type DaaStoreRunHistoryEntry = {
   id: string;
   ts: string;
@@ -191,17 +163,6 @@ export type DaaStoreNewsItemSnapshot = {
   rawRefId: string | null;
 };
 
-export type DaaStoreNewsSignalSnapshot = {
-  provider: string;
-  symbol: string;
-  scorePct: number;
-  confidencePct: number;
-  evidenceCount: number;
-  reasonsJson: string[];
-  generatedAt: string;
-  updatedAt: string;
-};
-
 export type DaaStoreMarketIndicatorSnapshot = {
   id: string;
   key: DaaMarketIndicatorKey;
@@ -318,34 +279,6 @@ export type DaaStoreTradeTicketSource = "manual" | "decision";
 export type DaaStoreTradeTicketStatus = "ready" | "submitted" | "partially_filled" | "executed" | "canceled" | "rejected";
 
 export type DaaStoreTradeTicketSide = "BUY" | "SELL";
-
-export type DaaStoreTradeBasketStatus = "draft" | "executing" | "executed" | "partial" | "canceled";
-
-export type DaaStoreTradeBasketSource = "manual" | "decision" | "mixed" | "migration";
-
-export type DaaStoreBrokerOrderSnapshot = {
-  ticketId: string;
-  brokerKind: DaaStoreBrokerKind;
-  brokerAccountId: string | null;
-  brokerOrderId: string;
-  status: string;
-  filledQty: number | null;
-  avgFillPrice: number | null;
-  raw: Record<string, unknown> | null;
-  syncedAt: string;
-  updatedAt: string;
-};
-
-export type DaaStoreTradeBasket = {
-  basketId: string;
-  source: DaaStoreTradeBasketSource;
-  status: DaaStoreTradeBasketStatus;
-  decisionRefId: string | null;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  executedAt: string | null;
-};
 
 export type DaaStoreTradeTicket = {
   ticketId: string;
@@ -505,6 +438,7 @@ export type DaaStoreRebalanceCycle = {
     decisionContext?: ProposalDecisionContext | null;
   }>;
   riskCheck: DaaStorePreTradeRiskCheck;
+  executionStartedAt: string | null;
   executedAt: string | null;
   executedOrders: string[];
   executionSummary: {
@@ -609,6 +543,7 @@ export type DaaStorePatchRebalanceCycleInput = {
   triggerReason?: string;
   riskCheck?: DaaStorePreTradeRiskCheck;
   proposals?: DaaStoreRebalanceCycle["proposals"];
+  executionStartedAt?: string | null;
   executedAt?: string | null;
   executedOrders?: string[];
   executionSummary?: DaaStoreRebalanceCycle["executionSummary"];

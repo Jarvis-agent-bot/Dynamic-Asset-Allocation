@@ -13,9 +13,9 @@ export type DaaAuthMePayload = {
   };
 };
 
-export type DaaAuthMeResponse = ApiResponse<DaaAuthMePayload>;
+type DaaAuthMeResponse = ApiResponse<DaaAuthMePayload>;
 
-export type DaaAuthSessionResult =
+type DaaAuthSessionResult =
   | { kind: "signedIn"; me: DaaAuthMePayload }
   | { kind: "signedOut" }
   | { kind: "error"; message: string };

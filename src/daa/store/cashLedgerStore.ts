@@ -3,9 +3,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { withDaaPgClient, toIsoString, type DaaTxQueryFn } from "./storeShared";
 import type {
@@ -46,7 +45,7 @@ function mapCashLedgerRow(row: Record<string, unknown>): DaaStoreCashLedgerEntry
   };
 }
 
-export async function getCurrentLedgerStartTsInTx(query: DaaTxQueryFn): Promise<string | null> {
+async function getCurrentLedgerStartTsInTx(query: DaaTxQueryFn): Promise<string | null> {
   const ownerAccountId = getDaaAccountScopeId();
   const result = await query(
     `SELECT ts

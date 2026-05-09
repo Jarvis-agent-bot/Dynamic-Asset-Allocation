@@ -46,19 +46,6 @@ const MOCK_ASSET_ROW_VIEW = buildAssetUniverseView({
   valuationBase: null,
 });
 
-const MOCK_ASSET_ROW = buildAssetUniverseView({
-  assetKey: "US::AAPL",
-  symbol: "AAPL",
-  market: "US",
-  currency: "USD",
-  lastPrice: 188.2,
-  priceUpdatedAt: "2026-03-01T00:00:00.000Z",
-  priceStatus: "fresh",
-  priceSource: "yfinance:AAPL",
-  priceAgeSec: 60,
-  valuationBase: null,
-});
-
 describe("workbench-asset-routes-v1", () => {
   beforeEach(() => {
     vi.clearAllMocks();

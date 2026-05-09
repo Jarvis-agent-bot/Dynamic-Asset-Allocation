@@ -1,15 +1,15 @@
-export type DaaMomentumRegime = "strong" | "neutral" | "weak";
-export type DaaAnalystStance = "offensive" | "neutral" | "defensive";
+type DaaMomentumRegime = "strong" | "neutral" | "weak";
+type DaaAnalystStance = "offensive" | "neutral" | "defensive";
 
-export type DaaHumanSourceChannel =
+type DaaHumanSourceChannel =
   | "official_regulatory"
   | "official_fund_house"
   | "exchange_disclosure"
   | "third_party";
 
-export type DaaHumanActorKind = "institution" | "fund_manager" | "fund";
+type DaaHumanActorKind = "institution" | "fund_manager" | "fund";
 
-export type DaaHumanActorQuality = {
+type DaaHumanActorQuality = {
   accuracyPct: number;
   riskControlPct: number;
   disciplinePct: number;

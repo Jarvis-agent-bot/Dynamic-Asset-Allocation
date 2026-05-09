@@ -3,7 +3,7 @@ import { normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { fetchPriceSeriesWithCache } from "@/src/daa/modules/marketCache/priceSeriesCache";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-export type DaaTechnicalSpecificMetric = {
+type DaaTechnicalSpecificMetric = {
   key: string;
   label: string;
   value: number | string;

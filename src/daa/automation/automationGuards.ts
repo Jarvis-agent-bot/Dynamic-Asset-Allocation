@@ -1,16 +1,16 @@
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
-import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
+import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import type { RebalanceTriggerSource, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
-export type AutoExecuteBreachProposal = {
+type AutoExecuteBreachProposal = {
   assetKey?: string | null;
   symbol?: string | null;
   suggestedNotional?: number | null;
   selected?: boolean | null;
 };
 
-export type RecentExecutedTradeForReversal = {
+type RecentExecutedTradeForReversal = {
   ticketId?: string | null;
   cycleId?: string | null;
   assetKey?: string | null;
@@ -21,7 +21,7 @@ export type RecentExecutedTradeForReversal = {
   createdAt?: string | null;
 };
 
-export type AutoReversalBlockedProposal<T> = T & {
+type AutoReversalBlockedProposal<T> = T & {
   blockedReason: string;
   cooldownUntil: string;
   lastTrade: RecentExecutedTradeForReversal;
@@ -172,7 +172,7 @@ export function shouldSendAgentBriefingTelegram(config: DaaSystemConfig): boolea
     && config.notification.telegram.dailyReport === true;
 }
 
-export type AgentTargetWeightOverrides = {
+type AgentTargetWeightOverrides = {
   targetWeightOverrides: Record<string, number>;
   acceptedCount: number;
   skippedCount: number;
@@ -181,7 +181,7 @@ export type AgentTargetWeightOverrides = {
 };
 
 export function buildAgentTargetWeightOverrides(input: {
-  overlay: AgentConfigOverlay | null;
+  overlay: AgentStrategyOverlay | null;
   knownAssetKeys: string[];
   currentTargetWeights?: Record<string, number>;
   supportedIncreaseAssetKeys?: string[];
@@ -197,17 +197,13 @@ export function buildAgentTargetWeightOverrides(input: {
     const canonical = String(key || "").trim();
     if (!canonical) continue;
     known.set(canonical.toUpperCase(), canonical);
-    known.set(canonical.toUpperCase().replace("::", ":"), canonical);
   }
   const maxPositionPct = Math.max(0, Number(input.maxPositionPct) || 0);
   const minConfidence = Math.max(0, Number(input.minConfidence ?? 70) || 0);
   const supportedIncreaseKeys = input.supportedIncreaseAssetKeys
     ? new Set(input.supportedIncreaseAssetKeys.flatMap((rawKey) => {
       const key = String(rawKey || "").trim().toUpperCase();
-      if (!key) return [];
-      const aliases = [key, key.replace("::", ":")];
-      if (!key.includes("::") && key.includes(":")) aliases.push(key.replace(":", "::"));
-      return aliases;
+      return key ? [key] : [];
     }))
     : null;
   const targetWeightOverrides: Record<string, number> = {};
@@ -232,7 +228,7 @@ export function buildAgentTargetWeightOverrides(input: {
     const targetPct = Math.min(proposedPct / 100, maxPositionPct > 0 ? maxPositionPct : proposedPct / 100);
     const currentTargetWeight = Math.max(0, Number(input.currentTargetWeights?.[canonicalAssetKey] ?? 0) || 0);
     const canonicalKey = canonicalAssetKey.toUpperCase();
-    if (supportedIncreaseKeys && targetPct > currentTargetWeight + 1e-9 && !supportedIncreaseKeys.has(canonicalKey) && !supportedIncreaseKeys.has(canonicalKey.replace("::", ":"))) {
+    if (supportedIncreaseKeys && targetPct > currentTargetWeight + 1e-9 && !supportedIncreaseKeys.has(canonicalKey)) {
       skippedCount += 1;
       continue;
     }

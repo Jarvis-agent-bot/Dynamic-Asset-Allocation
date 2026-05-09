@@ -3,7 +3,7 @@
  * 每秒从 DB 缓存读取价格变化并推送 diff 到客户端。
  * 不调用外部 API — 零额外市场数据压力。
  *
- * GET /api/daa/stream/prices?assets=US:AAPL,US:MSFT,...
+ * GET /api/daa/stream/prices?assets=US::AAPL,US::MSFT,...
  */
 
 import { fail } from "@/src/daa/api/routeHelpers";

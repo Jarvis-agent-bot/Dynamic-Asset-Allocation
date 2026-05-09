@@ -45,7 +45,7 @@ function makeBootstrap(): WorkbenchBootstrap {
 
 function makeRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView {
   return {
-    assetKey: "SH:600519",
+    assetKey: "SH::600519",
     symbol: "600519.SH",
     market: "SH",
     currency: "CNY",

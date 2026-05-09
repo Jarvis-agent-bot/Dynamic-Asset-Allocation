@@ -90,6 +90,21 @@ describe("auth accounts routes v1", () => {
     expect(mocks.resetDaaAuthAccountPassword).toHaveBeenCalledWith({ accountId: "acct-1", password: "pw-2" });
   });
 
+  it("账号更新遇到 auth 数据库未配置时返回 503", async () => {
+    mocks.updateDaaAuthAccount.mockRejectedValue(new Error("DAA Postgres not configured (missing DAA_DB_URL or DATABASE_URL)"));
+
+    const response = await PATCH(new Request("http://localhost/api/daa/auth/accounts/acct-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "active" }),
+    }), { params: { accountId: "acct-1" } });
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json.error.code).toBe("DB_ERROR");
+    expect(json.error.message).toBe("auth_backend_unavailable");
+  });
+
   it("prevents deleting the current account", async () => {
     mocks.getDaaAuthContextFromRequest.mockResolvedValue({
       token: "session-token-1",

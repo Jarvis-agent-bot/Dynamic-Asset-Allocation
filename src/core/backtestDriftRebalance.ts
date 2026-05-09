@@ -52,18 +52,18 @@ export type DriftRebalanceBacktestRequest = {
   };
 };
 
-export type PortfolioWeightsSnapshot = {
+type PortfolioWeightsSnapshot = {
   equityAbs: number;
   cashAbs: number;
   cashPct01: number;
   weightsBySymbolPct01: Record<string, number>;
 };
 
-export type DriftRebalanceBacktestPortfolioPoint = PortfolioWeightsSnapshot & {
+type DriftRebalanceBacktestPortfolioPoint = PortfolioWeightsSnapshot & {
   date: string;
 };
 
-export type DriftRebalanceBacktestEvent = {
+type DriftRebalanceBacktestEvent = {
   date: string;
   kind: "init" | "rebalance";
   signalDate?: string;
@@ -77,7 +77,7 @@ export type DriftRebalanceBacktestEvent = {
   after?: PortfolioWeightsSnapshot;
 };
 
-export type DriftRebalanceBacktestTimelinePoint = {
+type DriftRebalanceBacktestTimelinePoint = {
   date: string;
   trigger: RebalanceTriggerDecision;
   topAbsDriftsPct01: Array<{ symbol: string; absDriftPct01: number; deltaNotional: number }>;

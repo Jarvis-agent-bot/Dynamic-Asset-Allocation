@@ -247,7 +247,7 @@ export default function AgentBriefingView() {
         </div>
       )}
 
-      {/* 运行结果（临时显示） */}
+      {/* 运行结果 */}
       {runResult && (
         <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-indigo-300">

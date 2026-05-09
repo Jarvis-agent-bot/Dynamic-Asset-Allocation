@@ -65,6 +65,5 @@ export async function GET(req: Request) {
       });
       return applyTradeFilters(model, searchParams);
     },
-    fallback: () => { throw new Error("trades read fallback not available — database required"); },
   }));
 }

@@ -4,20 +4,12 @@ import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { fetchFredMacroSnapshot } from "@/src/market/fredClient";
 import type { FredMacroInput } from "@/src/daa/modules/marketContext/macroCycleClassifier";
 import {
-  getMarketIndicatorRefreshSymbols,
-  getRelevantMarketIndicatorKeysForAsset,
   MARKET_INDICATOR_KEY_BY_CONFIG_KEY_,
   MARKET_INDICATOR_KEYS_,
   MARKET_INDICATOR_META_CATALOG_,
-  MARKET_SCOPE_LABEL_ZH_,
-  resolveMarketScopeForAsset,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
-import {
-  buildMarketContextFromIndicators,
-  resolveRelevantMarketScopeContext,
-} from "@/src/daa/modules/marketContext/marketContextOverlay";
+import { buildMarketContextFromIndicators } from "@/src/daa/modules/marketContext/marketContextOverlay";
 import type {
-  DaaMarketContextAttribution,
   DaaMarketContext,
   DaaMarketIndicatorKey,
   DaaMarketIndicatorScope,
@@ -35,7 +27,7 @@ import { upsertMacroCycleSnapshot } from "@/src/daa/store/marketCacheStore";
 import { addDaysIsoUtc, normalizeYfinanceSymbol } from "@/src/market/yfinance";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-export type RefreshMarketIndicatorsResult = {
+type RefreshMarketIndicatorsResult = {
   marketContext: DaaMarketContext | null;
   indicators: DaaMarketIndicatorSnapshot[];
   refreshedCount: number;
@@ -59,11 +51,6 @@ type ComputedIndicatorRow = {
 function round(value: number, digits = 2): number {
   if (!Number.isFinite(value)) return 0;
   return Number(value.toFixed(digits));
-}
-
-function epochSecondsUtcStart(iso: string): number {
-  const ms = Date.parse(`${iso}T00:00:00.000Z`);
-  return Number.isFinite(ms) ? Math.floor(ms / 1000) : Number.NaN;
 }
 
 function percentileOfLatest(values: number[]): number | null {
@@ -538,11 +525,6 @@ export function marketRegimeLabelZh(regime: DaaMarketRegime | null | undefined):
   return "未知";
 }
 
-export function marketScopeLabelZh(scope: DaaMarketIndicatorScope | null | undefined): string {
-  if (!scope) return "组合";
-  return MARKET_SCOPE_LABEL_ZH_[scope] || "组合";
-}
-
 export async function refreshMarketIndicators(): Promise<RefreshMarketIndicatorsResult> {
   const system = await getDaaSystemConfig();
   const config = system.config.dataSources.marketIndicators;
@@ -642,4 +624,3 @@ export async function listMarketIndicatorHistorySeries(input: {
   }
   return grouped;
 }
-

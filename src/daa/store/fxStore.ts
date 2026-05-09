@@ -2,7 +2,7 @@
  * FX-rate store functions.
  */
 
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   buildFxRateBook,
@@ -19,11 +19,11 @@ export function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeMoneyCurrency(value, fallback);
 }
 
-export function normalizeFxPair(baseCcy: string, quoteCcy: string): string {
+function normalizeFxPair(baseCcy: string, quoteCcy: string): string {
   return normalizeMoneyPair(baseCcy, quoteCcy);
 }
 
-export type DaaFxLookupMap = FxRateBook;
+type DaaFxLookupMap = FxRateBook;
 
 export function buildFxLookupMap(rows: Array<Record<string, unknown>>): DaaFxLookupMap {
   return buildFxRateBook(rows);
@@ -37,7 +37,7 @@ export function resolveFxRateToBase(
   return resolveFxRateToBaseCurrency(baseCurrency, instrumentCurrency, fxMap);
 }
 
-export function mapFxRateRow(row: Record<string, unknown>): DaaStoreFxRate {
+function mapFxRateRow(row: Record<string, unknown>): DaaStoreFxRate {
   return {
     id: normalizeText(row.id),
     baseCcy: normalizeCcyCode(row.base_ccy),

@@ -10,7 +10,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 const FRED_BASE_URL = "https://api.stlouisfed.org/fred";
 
 // 核心序列 ID
-export const FRED_SERIES = {
+const FRED_SERIES = {
   GDP_GROWTH: "A191RL1Q225SBEA",    // Real GDP Growth Rate (quarterly, % change)
   CPI: "CPIAUCSL",                   // Consumer Price Index (monthly)
   CPI_YOY: "CPALTT01USM657N",       // CPI Year-over-Year % change (monthly)
@@ -19,15 +19,13 @@ export const FRED_SERIES = {
   PMI_MANUFACTURING: "MANEMP",      // Manufacturing Employment (monthly, proxy for PMI)
 } as const;
 
-export type FredSeriesId = (typeof FRED_SERIES)[keyof typeof FRED_SERIES];
-
-export type FredObservation = {
+type FredObservation = {
   date: string;       // "2024-01-01"
   value: number | null;
   seriesId: string;
 };
 
-export type FredSeriesResult = {
+type FredSeriesResult = {
   seriesId: string;
   title: string;
   frequency: string;
@@ -36,7 +34,7 @@ export type FredSeriesResult = {
   latestDate: string | null;
 };
 
-export type FredMacroSnapshot = {
+type FredMacroSnapshot = {
   gdpGrowth: number | null;
   cpiYoY: number | null;
   unemployment: number | null;
@@ -46,7 +44,7 @@ export type FredMacroSnapshot = {
 /**
  * 从 FRED API 获取单个序列的观测数据
  */
-export async function fetchFredSeries(
+async function fetchFredSeries(
   apiKey: string,
   seriesId: string,
   opts?: { limit?: number },

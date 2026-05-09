@@ -1,4 +1,5 @@
 import type { DaaBrainMode } from "@/src/daa/config/systemConfig";
+import type { RebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 
 export type DaaAssistantIntent =
   | { kind: "help"; rawText: string }
@@ -11,7 +12,7 @@ export type DaaAssistantIntent =
   | { kind: "agent_run"; rawText: string }
   | { kind: "agent_bootstrap"; rawText: string }
   | { kind: "rebalance_generate"; rawText: string }
-  | { kind: "rebalance_execute"; rawText: string; executeMode: "all" }
+  | { kind: "rebalance_execute"; rawText: string; executeMode: RebalanceExecuteMode }
   | { kind: "confirm_action"; rawText: string }
   | { kind: "cancel_action"; rawText: string }
   | { kind: "trade"; rawText: string; side: "BUY" | "SELL"; symbol: string; qty: number | null; notional: number | null }

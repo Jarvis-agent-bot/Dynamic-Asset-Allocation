@@ -4,6 +4,7 @@ import { resolveLlmConfig, type LlmRuntimeConfig, type LlmTaskType } from "@/src
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { buildAgentLearningDigest } from "@/src/daa/agent/agentLearningRepo";
 import { buildWorkbenchReadModel } from "@/src/daa/modules/read/workbenchReadService";
+import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { normalizeText } from "@/src/daa/utils/normalize";
 
 import { getChatSessionMemory, listChatMessages, saveChatSessionMemory } from "./chatRepo";
@@ -91,7 +92,7 @@ export function parsePendingAction(value: unknown): DaaChatPendingAction | null 
     return {
       kind,
       cycleId,
-      executeMode: "all",
+      executeMode: normalizeRebalanceExecuteMode(record.executeMode),
       createdAt,
       expiresAt,
     };

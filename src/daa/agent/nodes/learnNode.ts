@@ -18,7 +18,7 @@ export async function learnNode(state: CognitiveState): Promise<CognitiveUpdate>
     // 从当前 cycle 的工具调用记录中提炼策略
     const toolsCalled = state.toolsCalled ?? [];
     const result = await extractStrategyFromRun({
-      runId: `cycle_${Date.now()}`, // 临时 ID，后续由 agentRunStore 补全
+      runId: `cycle_${Date.now()}`,
       toolsCalled: toolsCalled.map(tc => ({
         tool: tc.tool,
         input: tc.input,

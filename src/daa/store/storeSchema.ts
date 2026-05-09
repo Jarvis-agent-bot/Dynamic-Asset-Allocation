@@ -1,11 +1,11 @@
 /**
- * Schema initialization and pool management.
+ * Schema initialization.
  */
 
 import { randomUUID } from "node:crypto";
-import { daaPgPool, withDaaPgClient } from "@/src/daa/pg/daaPg";
+import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import { runDaaStoreRuntimeMigrations } from "@/src/daa/store/runtimeMigrations";
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
+import { normalizeText } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import {
   archiveTable,
@@ -461,6 +461,7 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
             drift_snapshot_json JSONB NOT NULL DEFAULT '[]'::jsonb,
             proposals_json JSONB NOT NULL DEFAULT '[]'::jsonb,
             risk_check_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+            execution_started_at TIMESTAMPTZ,
             executed_at TIMESTAMPTZ,
             executed_orders_json JSONB NOT NULL DEFAULT '[]'::jsonb,
             execution_summary_json JSONB,
@@ -657,6 +658,10 @@ export async function ensureDaaStoreSchemaPg(): Promise<void> {
           "ALTER TABLE daa_trade_tickets ADD CONSTRAINT daa_trade_tickets_status_check CHECK (status IN ('ready', 'submitted', 'partially_filled', 'executed', 'canceled', 'rejected'))",
         ).catch(() => undefined);
         await ensureTableColumn(query as any, "daa_rebalance_cycles", "market_context_json", "JSONB NOT NULL DEFAULT '{}'::jsonb");
+        await ensureTableColumn(query as any, "daa_rebalance_cycles", "execution_started_at", "TIMESTAMPTZ");
+        await query(
+          "UPDATE daa_rebalance_cycles SET execution_started_at = NOW() WHERE status = 'executing' AND executed_at IS NULL AND execution_started_at IS NULL",
+        );
         await query(
           "CREATE INDEX IF NOT EXISTS idx_daa_trade_tickets_basket_status_created_desc ON daa_trade_tickets(owner_account_id, basket_id, status, created_at DESC)",
         );
@@ -1014,9 +1019,4 @@ export async function ensureDaaMarketCacheSchemaPg(): Promise<void> {
     st.marketCacheSchemaInit = null;
     throw error;
   }
-}
-
-export async function closeDaaStorePool(): Promise<void> {
-  const pool = daaPgPool();
-  await pool.end();
 }

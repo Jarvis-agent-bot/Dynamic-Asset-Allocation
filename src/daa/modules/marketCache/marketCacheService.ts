@@ -13,7 +13,7 @@ import { toYfinanceSymbolByMarket } from "@/src/market/yfinanceSymbol";
 import { normalizeText, normalizeUpper, toFinite } from "@/src/daa/utils/normalize";
 import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
 
-export type MarketCachePriceStatus = "fresh" | "stale" | "missing";
+type MarketCachePriceStatus = "fresh" | "stale" | "missing";
 
 export type MarketPriceAssetInput = {
   symbol: string;
@@ -584,7 +584,6 @@ export async function refreshMarketPrices(input: {
   missing: number;
   results: Record<string, MarketPriceResolved>;
 }> {
-  const startedAt = new Date().toISOString();
   const results = await getMarketPricesWithCache({
     assets: input.assets,
     provider: input.provider,

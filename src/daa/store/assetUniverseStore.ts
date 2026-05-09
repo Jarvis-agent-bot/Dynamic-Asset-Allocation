@@ -2,11 +2,10 @@
  * Asset-universe store functions.
  */
 
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
-import { buildDaaAssetKey, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import {
   inferMarketGroup, inferRegionByMarket,
   normalizeAssetClass, normalizeInstrumentType, normalizeRegion,
@@ -24,7 +23,7 @@ function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeCurrencyAlias(value, fallback);
 }
 
-export function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUniverseRow {
+function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAssetUniverseRow {
   const symbol = normalizeText(row.symbol).toUpperCase();
   const market = normalizeText(row.market, "US").toUpperCase();
   const assetClass = normalizeAssetClass(row.asset_class, "EQUITY");
@@ -62,7 +61,7 @@ export function mapAssetUniverseRow(row: Record<string, unknown>): DaaStoreAsset
   };
 }
 
-export const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
+const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
   "am.asset_key",
   "am.symbol",
   "am.market",
@@ -93,7 +92,7 @@ export const ASSET_UNIVERSE_SELECT_COLUMNS_ = [
   "am.updated_at",
 ].join(", ");
 
-export const ASSET_UNIVERSE_FROM_SQL_ = [
+const ASSET_UNIVERSE_FROM_SQL_ = [
   "FROM daa_asset_master am",
   "LEFT JOIN daa_positions_v2 p ON p.owner_account_id = $1 AND p.asset_key = am.asset_key",
   "LEFT JOIN daa_watchlist_entries we ON we.owner_account_id = $1 AND we.asset_key = am.asset_key",
@@ -102,7 +101,7 @@ export const ASSET_UNIVERSE_FROM_SQL_ = [
 ].join(" ");
 
 
-export async function selectAssetUniverseRowByKeyInTx(
+async function selectAssetUniverseRowByKeyInTx(
   query: DaaTxQueryFn,
   assetKey: string,
 ): Promise<DaaStoreAssetUniverseRow | null> {

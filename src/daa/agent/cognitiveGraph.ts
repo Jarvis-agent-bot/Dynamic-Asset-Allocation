@@ -73,7 +73,7 @@ function buildCognitiveGraph() {
 
 let _compiledGraph: ReturnType<typeof buildCognitiveGraph> | null = null;
 
-export function getCognitiveGraph() {
+function getCognitiveGraph() {
   if (!_compiledGraph) {
     _compiledGraph = buildCognitiveGraph();
   }

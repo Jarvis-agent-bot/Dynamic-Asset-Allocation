@@ -18,6 +18,7 @@ vi.mock("@/src/daa/store/daaStorePg", () => ({
   getDaaLedgerStartTs: vi.fn(async () => null),
   getDaaSystemConfig: vi.fn(),
   getDaaMarketCacheHealthStats: vi.fn(async () => ({ freshCount: 1, staleCount: 0, missingCount: 0, errorCount: 0, unsupportedCount: 0, totalSnapshots: 1, recentJobSuccessRatePct: 100, recentJobFailureRatePct: 0, provider: "yfinance" })),
+  listLatestDaaMarketIndicatorSnapshots: vi.fn(async () => []),
   listDaaAssetUniverse: vi.fn(),
   listDaaCycleReports: vi.fn(),
   listDaaEquitySnapshots: vi.fn(async () => []),
@@ -42,6 +43,10 @@ vi.mock("@/src/daa/modules/portfolio/portfolioValuation", () => ({
 
 vi.mock("@/src/daa/modules/marketCache/marketCacheService", () => ({
   getMarketPricesWithCache: vi.fn(),
+}));
+
+vi.mock("@/src/daa/modules/marketContext/marketIndicatorService", () => ({
+  getCurrentMarketContext: vi.fn(async () => null),
 }));
 
 vi.mock("@/src/daa/modules/workbench/assetUniverseService", () => ({

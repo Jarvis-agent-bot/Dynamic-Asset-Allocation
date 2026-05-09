@@ -1,8 +1,9 @@
+import type { RebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export type ExecutionReceipt = {
   cycleId: string;
-  mode: "selected" | "all";
+  mode: RebalanceExecuteMode;
   status: "success" | "submitted" | "partial" | "failed" | "blocked";
   executed: number;
   submitted?: number;

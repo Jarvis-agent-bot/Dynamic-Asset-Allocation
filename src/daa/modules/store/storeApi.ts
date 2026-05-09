@@ -14,7 +14,7 @@ import type {
   DaaNotificationDeliveryLog,
 } from "@/src/daa/store/notificationDeliveryLogRepo";
 
-export type StoreCashLedgerEntry = {
+type StoreCashLedgerEntry = {
   id: string;
   ts: string;
   side: "deposit" | "withdraw";
@@ -31,14 +31,14 @@ export type StoreCashLedgerEntry = {
   createdAt?: string;
 };
 
-export type StoreCashLedgerApplyInput = {
+type StoreCashLedgerApplyInput = {
   side: "deposit" | "withdraw";
   amount: number;
   baseCurrency?: string;
   note?: string;
 };
 
-export type StoreCashLedgerApplyResult = {
+type StoreCashLedgerApplyResult = {
   entry: StoreCashLedgerEntry;
   account: {
     baseCurrency: string;
@@ -59,15 +59,15 @@ export type StoreCashLedgerApplyResult = {
 export type StoreNotificationDeliveryEntry = DaaNotificationDeliveryLog;
 export type StoreNotificationStatusSummary = NotificationStatusSummary;
 
-export type StoreSystemConfigEnvelope = {
+type StoreSystemConfigEnvelope = {
   version: number;
   updatedAt: string;
   config: DaaSystemConfig;
 };
 
-export type StoreSystemConfigPatch = DaaSystemConfigPatch;
+type StoreSystemConfigPatch = DaaSystemConfigPatch;
 
-export type StoreMarketIndicatorRefreshResult = {
+type StoreMarketIndicatorRefreshResult = {
   marketContext: DaaMarketContext | null;
   indicators: DaaMarketIndicatorSnapshot[];
   refreshedCount: number;
@@ -236,7 +236,7 @@ export type TelegramWebhookInfo = {
   botUsername: string | null;
 };
 
-export type TelegramWebhookRegisterResult = {
+type TelegramWebhookRegisterResult = {
   success: boolean;
   botUsername: string;
   webhookUrl: string;

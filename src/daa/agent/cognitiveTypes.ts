@@ -173,9 +173,9 @@ export interface DailyBriefing {
   thesisFailureImpacts?: ThesisFailureImpact[];
   thesisConflicts?: ThesisConflict[];
   autopilotCoverage?: AutopilotCoverageSummary;
-  /** Agent 策略顾问的参数建议（由 LLM 生成，规则引擎消费） */
-  configOverlay?: AgentConfigOverlay;
-  /** Phase 4: 子 agent 并行调查的摘要（可选，向后兼容） */
+  /** Agent 策略顾问生成的目标权重计划（由 LLM 生成，执行层消费） */
+  strategyOverlay?: AgentStrategyOverlay;
+  /** 子 agent 并行调查的摘要 */
   subAgentSummaries?: Array<{
     threadId: string;
     threadTitle: string;
@@ -192,7 +192,7 @@ export interface DailyBriefing {
 // ── Agent 策略 Overlay ──
 
 /** Agent LLM 输出的目标权重计划，执行层负责转成订单并做硬风控 */
-export interface AgentConfigOverlay {
+export interface AgentStrategyOverlay {
   generatedAt: string;
   agentRunId: string;
 

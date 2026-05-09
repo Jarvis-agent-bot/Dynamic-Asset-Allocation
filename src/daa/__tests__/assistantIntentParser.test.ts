@@ -32,6 +32,17 @@ describe("assistant-intent-parser", () => {
     });
   });
 
+  it("执行调仓默认只执行已选建议，明确全部时才执行全部", () => {
+    expect(parseAssistantIntent("执行调仓")).toMatchObject({
+      kind: "rebalance_execute",
+      executeMode: "selected",
+    });
+    expect(parseAssistantIntent("全部执行调仓")).toMatchObject({
+      kind: "rebalance_execute",
+      executeMode: "all",
+    });
+  });
+
   it("识别大脑状态查询", () => {
     const intent = parseAssistantIntent("你现在这个全权大脑能做什么");
     expect(intent).toMatchObject({

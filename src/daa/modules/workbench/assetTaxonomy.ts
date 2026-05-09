@@ -1,6 +1,6 @@
-export type AssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
-export type Region = "US" | "HK" | "CN" | "EU" | "JP" | "GLOBAL" | "OTHER";
-export type InstrumentType = "STOCK" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
+type AssetClass = "EQUITY" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
+type Region = "US" | "HK" | "CN" | "EU" | "JP" | "GLOBAL" | "OTHER";
+type InstrumentType = "STOCK" | "ETF" | "BOND" | "COMMODITY" | "CASH" | "CRYPTO" | "FUND" | "INDEX" | "CURRENCY" | "OTHER";
 
 export function normalizeAssetClass(value: unknown, fallback: AssetClass = "OTHER"): AssetClass {
   const v = String(value || "").trim().toUpperCase();

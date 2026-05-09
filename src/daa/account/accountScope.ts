@@ -18,7 +18,7 @@ export type DaaActiveAccountScope = {
 
 const scopeStorage = new AsyncLocalStorage<DaaAccountScopeStore>();
 
-export function normalizeDaaAccountScopeId(raw: unknown): string {
+function normalizeDaaAccountScopeId(raw: unknown): string {
   const text = typeof raw === "string" ? raw.trim() : "";
   return text || DEFAULT_DAA_ACCOUNT_SCOPE_ID;
 }
@@ -27,7 +27,7 @@ export function getDaaAccountScopeId(): string {
   return normalizeDaaAccountScopeId(scopeStorage.getStore()?.accountId);
 }
 
-export function enterDaaAccountScope(accountId: unknown): string {
+function enterDaaAccountScope(accountId: unknown): string {
   const normalized = normalizeDaaAccountScopeId(accountId);
   scopeStorage.enterWith({ accountId: normalized });
   return normalized;
@@ -53,7 +53,7 @@ async function authAccountsTableExists(): Promise<boolean> {
   }
 }
 
-export async function resolvePrimaryDaaAccountScopeId(): Promise<string> {
+async function resolvePrimaryDaaAccountScopeId(): Promise<string> {
   if (!(await authAccountsTableExists())) return DEFAULT_DAA_ACCOUNT_SCOPE_ID;
   try {
     return await withDaaPgClient(async ({ query }) => {
@@ -114,7 +114,7 @@ export async function listActiveDaaAccountScopes(): Promise<DaaActiveAccountScop
   }
 }
 
-export async function resolveDaaAccountScopeIdForAuthAccount(accountIdRaw: unknown): Promise<string> {
+async function resolveDaaAccountScopeIdForAuthAccount(accountIdRaw: unknown): Promise<string> {
   const accountId = normalizeDaaAccountScopeId(accountIdRaw);
   const primaryAccountId = await resolvePrimaryDaaAccountScopeId();
   if (primaryAccountId === accountId) return DEFAULT_DAA_ACCOUNT_SCOPE_ID;

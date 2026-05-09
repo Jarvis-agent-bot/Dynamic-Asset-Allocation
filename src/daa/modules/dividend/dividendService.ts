@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type DaaDividendRecord = {
+type DaaDividendRecord = {
   id: string;
   symbol: string;
   market: string;
@@ -16,7 +16,7 @@ export type DaaDividendRecord = {
   createdAt: string;
 };
 
-export type DaaDividendIncome = {
+type DaaDividendIncome = {
   id: string;
   symbol: string;
   market: string;
@@ -32,7 +32,7 @@ export type DaaDividendIncome = {
   createdAt: string;
 };
 
-export type DividendSummary = {
+type DividendSummary = {
   totalDividendsBase: number;
   pendingDividendsBase: number;
   creditedDividendsBase: number;
@@ -45,7 +45,7 @@ export type DividendSummary = {
 
 let schemaInitPromise: Promise<void> | null = null;
 
-export async function ensureDividendSchema(): Promise<void> {
+async function ensureDividendSchema(): Promise<void> {
   if (schemaInitPromise) return schemaInitPromise;
   schemaInitPromise = withDaaPgClient(async ({ query }) => {
     await query(`
@@ -322,4 +322,3 @@ export async function getDividendSummary(): Promise<DividendSummary> {
     })),
   };
 }
-

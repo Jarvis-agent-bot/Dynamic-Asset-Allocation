@@ -29,7 +29,7 @@ export type DanjuanFundFetchRaw = {
   payloadText: string;
 };
 
-export type DanjuanFundAssetPercentFetchResult = {
+type DanjuanFundAssetPercentFetchResult = {
   rows: DanjuanHoldingRow[];
   raw: DanjuanFundFetchRaw | null;
 };

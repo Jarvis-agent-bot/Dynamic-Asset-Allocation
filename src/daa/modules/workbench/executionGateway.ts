@@ -16,12 +16,13 @@ import {
   type ExecuteManualTradeInput,
   type PreviewManualTradeInput,
 } from "./manualTradeService";
+import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 import { executeWorkbenchRebalanceCycle } from "./workbenchRebalanceCycleService";
 import type { ExecuteRebalanceCycleResult } from "./workbenchTypes";
 
-export type LocalExecutionGatewayNotifyMode = "fanout" | "silent";
+type LocalExecutionGatewayNotifyMode = "fanout" | "silent";
 
-export type LocalExecutionGatewayStatus = {
+type LocalExecutionGatewayStatus = {
   mode: "local";
   ready: true;
   label: string;
@@ -110,7 +111,7 @@ async function fanoutTradeExecutionNotification(execution: DaaBrokerBackedExecut
 
 async function fanoutRebalanceExecutionNotification(
   result: ExecuteRebalanceCycleResult,
-  executeMode: "selected" | "all",
+  executeMode: RebalanceExecuteMode,
 ): Promise<void> {
   try {
     const systemRow = await getDaaSystemConfig();
@@ -158,10 +159,6 @@ async function fanoutRebalanceExecutionNotification(
   }
 }
 
-export async function getLocalExecutionGatewayStatus(): Promise<LocalExecutionGatewayStatus> {
-  return LOCAL_EXECUTION_GATEWAY_STATUS;
-}
-
 export async function previewTradeViaGateway(input: PreviewManualTradeInput) {
   return previewManualTrade(input);
 }
@@ -179,7 +176,7 @@ export async function executeTradeViaGateway(input: {
 
 export async function executeRebalanceViaGateway(input: {
   cycleId: string;
-  executeMode: "selected" | "all";
+  executeMode: RebalanceExecuteMode;
   notifyMode?: LocalExecutionGatewayNotifyMode;
 }) {
   const result = await executeWorkbenchRebalanceCycle({

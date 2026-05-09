@@ -57,12 +57,10 @@ function resolveSection(pathname: string): string {
 export default function DashboardShell({ children }: Props) {
   const pathname = usePathname() || "/daa/dashboard/portfolio";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("daa:sidebar:collapsed");
     if (stored === "0") setSidebarCollapsed(false);
-    setHydrated(true);
   }, []);
 
   const currentSection = useMemo(() => SECTION_META[resolveSection(pathname)] ?? DEFAULT_SECTION_META, [pathname]);

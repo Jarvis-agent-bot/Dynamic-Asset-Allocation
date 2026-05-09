@@ -15,7 +15,7 @@ vi.mock("@/src/daa/llm/llmClient", () => ({
 }));
 
 vi.mock("@/src/daa/pg/daaPg", () => ({
-  withDaaPgClient: vi.fn().mockImplementation(async (fn: unknown) => {
+  withDaaPgClient: vi.fn().mockImplementation(async () => {
     // 不真正连接 DB
     return [];
   }),
@@ -33,7 +33,7 @@ const mockThread: ResearchThread = {
   conviction: "medium",
   invalidationConditions: "PE > 40",
   reviewAt: null,
-  assetKeys: ["US:AAPL"],
+  assetKeys: ["US::AAPL"],
   tags: ["tech", "ai"],
   priorityScore: 80,
   createdAt: "2026-04-01T00:00:00Z",

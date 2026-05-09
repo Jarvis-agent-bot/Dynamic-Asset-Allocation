@@ -3,9 +3,9 @@ import { isApiResponse } from "@/src/daa/api/contracts";
 import type { PriceBar } from "../core/domain";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
+type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
-export type MarketDataClient = {
+type MarketDataClient = {
   yahoo: {
     rss(params: { symbol: string }): Promise<unknown>;
   };
@@ -15,7 +15,7 @@ export type MarketDataClient = {
   };
 };
 
-export type YfinancePriceSeriesApiResponse = {
+type YfinancePriceSeriesApiResponse = {
   source?: string;
   interval?: string;
   priceMode?: "adjclose" | "close";

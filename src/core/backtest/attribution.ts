@@ -1,7 +1,7 @@
 import type { DriftRebalanceBacktestResult } from "../backtestDriftRebalance";
 import { toFinite } from "../utils/number";
 
-export type BacktestBenchmarkCoverage = "full" | "partial" | "missing";
+type BacktestBenchmarkCoverage = "full" | "partial" | "missing";
 
 export type BacktestAttribution = {
   totalReturn: number;

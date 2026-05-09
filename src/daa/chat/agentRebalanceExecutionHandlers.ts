@@ -1,6 +1,7 @@
 import { appendAgentLearningEvent } from "@/src/daa/agent/agentLearningRepo";
 import { evaluateManualRebalanceAuthority } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
+import type { RebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 import { appendChatToolCall } from "./chatRepo";
@@ -11,12 +12,16 @@ import type { DaaChatPendingAction } from "./chatTypes";
 function formatRebalanceConfirmationText(input: {
   cycleId: string;
   status: string;
+  executeMode: RebalanceExecuteMode;
   selectedCount: number;
   proposalCount: number;
 }): string {
+  const executionText = input.executeMode === "all"
+    ? `将执行全部 ${input.proposalCount} 条建议`
+    : `已纳入执行 ${input.selectedCount}`;
   return [
     `调仓周期 ${input.cycleId.slice(0, 8)} 已进入待确认。`,
-    `当前状态 ${input.status}，候选 ${input.proposalCount}，已纳入执行 ${input.selectedCount}。`,
+    `当前状态 ${input.status}，候选 ${input.proposalCount}，${executionText}。`,
     "回复“确认”继续执行，回复“取消”放弃本次动作。",
   ].join("\n");
 }
@@ -191,7 +196,7 @@ export function createAssistantRebalanceHandlers(input: DaaAgentToolContext): Ma
       const pendingAction: DaaChatPendingAction = {
         kind: "rebalance_execute",
         cycleId: latestCycle.cycleId,
-        executeMode: "all",
+        executeMode: input.intent.kind === "rebalance_execute" ? input.intent.executeMode : "selected",
         createdAt: toIsoFromNow(),
         expiresAt: toIsoFromNow(PENDING_ACTION_TTL_MS),
       };
@@ -199,6 +204,7 @@ export function createAssistantRebalanceHandlers(input: DaaAgentToolContext): Ma
         text: formatRebalanceConfirmationText({
           cycleId: latestCycle.cycleId,
           status: latestCycle.status,
+          executeMode: pendingAction.executeMode,
           selectedCount: latestCycle.proposals.filter((item) => item.selected).length,
           proposalCount: latestCycle.proposals.length,
         }),
@@ -211,7 +217,7 @@ export function createAssistantRebalanceHandlers(input: DaaAgentToolContext): Ma
       pendingAction: {
         kind: "rebalance_execute",
         cycleId: latestCycle.cycleId,
-        executeMode: "all",
+        executeMode: input.intent.kind === "rebalance_execute" ? input.intent.executeMode : "selected",
         createdAt: toIsoFromNow(),
         expiresAt: toIsoFromNow(PENDING_ACTION_TTL_MS),
       },

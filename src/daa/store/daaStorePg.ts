@@ -1,6 +1,6 @@
 /**
- * Barrel re-export — all store functions are available from this module.
- * Individual stores can also be imported directly for tree-shaking.
+ * Store compatibility barrel for the route/service layer.
+ * New store internals should stay in their owning modules unless callers need them.
  */
 export * from "./storeTypes";
 export * from "./accountStore";
@@ -11,8 +11,8 @@ export * from "./portfolioStore";
 export * from "./fxStore";
 export * from "./cashLedgerStore";
 export * from "./tradeTicketStore";
-export * from "./rebalanceCycleStore";
 export * from "./notificationStore";
 export * from "./marketCacheStore";
 export * from "./jobStore";
 export * from "./storeSchema";
+export * from "./marketIndicatorNormalizers";

@@ -160,7 +160,7 @@ export async function resolveLlmConfig(taskType: LlmTaskType = "analysis"): Prom
 // HTTP Call
 // ─────────────────────────────────────────────────────────────────────────────
 
-export class LlmRequestError extends Error {
+class LlmRequestError extends Error {
   status: number;
   reasonCode: string;
 

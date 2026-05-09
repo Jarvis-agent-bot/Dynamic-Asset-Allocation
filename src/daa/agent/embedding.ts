@@ -261,14 +261,6 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   }
 }
 
-/**
- * 批量生成 embedding（减少 API 调用次数）。
- * 注意：当前逐条调用，未来可优化为批量 API。
- */
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  return Promise.all(texts.map(t => generateEmbedding(t)));
-}
-
 /** 返回当前使用的 embedding provider 信息（用于诊断） */
 export async function getEmbeddingProviderInfo(): Promise<{
   provider: string;

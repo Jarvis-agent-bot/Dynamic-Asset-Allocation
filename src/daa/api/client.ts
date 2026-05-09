@@ -56,7 +56,7 @@ function normalizeDisplayErrorMessage(message: string): string {
   return message;
 }
 
-export async function requestApi<T>(
+async function requestApi<T>(
   input: RequestInfo | URL,
   init?: RequestInit,
   opts: RequestApiOptions = {},

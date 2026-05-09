@@ -39,7 +39,6 @@ import {
   buildPreTradeRiskCheck,
   buildRiskCycleDraft,
   buildWorkbenchMarketDataHealth,
-  calcHoldingCostPerUnit,
   mapStoreCycleReportToView,
   mapStoreCycleToView,
   priceAgeSec,
@@ -333,9 +332,6 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     };
   });
 
-  const holdingsValue = assetUniverse
-    .filter((row) => row.holdingQty > 0)
-    .reduce((sum, row) => sum + Math.max(0, toFinite(row.valuationBase, 0)), 0);
   const portfolioValuation = summarizeMarkToMarketPortfolio({
     positions: rowsWithPriceContext.map((row) => ({
       symbol: row.symbol,

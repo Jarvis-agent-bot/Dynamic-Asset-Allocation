@@ -6,11 +6,9 @@ import {
   MARKET_INDICATOR_KEYS_,
   MARKET_SCOPE_KEY_ORDER_,
   MARKET_SCOPE_LABEL_ZH_,
-  resolveMarketScopeForAsset,
 } from "@/src/daa/modules/marketContext/marketIndicatorCatalog";
 import type {
   DaaMarketContext,
-  DaaMarketIndicatorKey,
   DaaMarketIndicatorScope,
   DaaMarketIndicatorSnapshot,
   DaaMarketRegime,
@@ -37,7 +35,7 @@ function compareScopeRisk(a: DaaMarketScopeContext, b: DaaMarketScopeContext): n
   return scopePriority(b.scope) - scopePriority(a.scope);
 }
 
-export function rankMarketIndicatorReasons(input: {
+function rankMarketIndicatorReasons(input: {
   indicators: DaaMarketIndicatorSnapshot[];
   config: DaaMarketIndicatorsConfig;
 }): string[] {
@@ -180,7 +178,7 @@ export function buildMarketContextFromIndicators(input: {
   return result;
 }
 
-export function compareMarketRegimePriority(regime: DaaMarketRegime | null | undefined): number {
+function compareMarketRegimePriority(regime: DaaMarketRegime | null | undefined): number {
   if (regime === "risk_off") return 3;
   if (regime === "transitional") return 2;
   if (regime === "risk_on") return 1;
@@ -198,31 +196,4 @@ export function mergeMarketRegimeConservatively(
   return compareMarketRegimePriority(ruleRegime) >= compareMarketRegimePriority(llmRegime)
     ? ruleRegime
     : llmRegime;
-}
-
-export function getMarketScopeContext(
-  marketContext: DaaMarketContext | null | undefined,
-  scope: DaaMarketIndicatorScope | null | undefined,
-): DaaMarketScopeContext | null {
-  if (!marketContext || !scope) return null;
-  const scopes = Array.isArray((marketContext as { scopes?: DaaMarketScopeContext[] }).scopes)
-    ? (marketContext as { scopes?: DaaMarketScopeContext[] }).scopes || []
-    : [];
-  return scopes.find((item) => item.scope === scope) || null;
-}
-
-export function resolveRelevantMarketScopeContext(input: {
-  marketContext: DaaMarketContext | null | undefined;
-  symbol: string;
-  market?: string;
-  assetClass?: string;
-  marketGroup?: string;
-  instrumentType?: string;
-  region?: string;
-  exchange?: string;
-  holdingTags?: string[];
-  watchTags?: string[];
-}): DaaMarketScopeContext | null {
-  const scope = resolveMarketScopeForAsset(input);
-  return getMarketScopeContext(input.marketContext, scope) || null;
 }

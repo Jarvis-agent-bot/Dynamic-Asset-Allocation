@@ -1,6 +1,6 @@
 import type { DaaMarketIndicatorSnapshot, MacroCyclePhase } from "./marketContextTypes";
 
-export type MacroCycleResult = {
+type MacroCycleResult = {
   phase: MacroCyclePhase;
   growthProxy: number;
   inflationProxy: number;
@@ -111,4 +111,3 @@ export function classifyMacroCycleWithFred(
     favoredAssets: meta.favoredAssets,
   };
 }
-

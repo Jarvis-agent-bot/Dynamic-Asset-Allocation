@@ -82,7 +82,7 @@ export async function getWatchlistAutoEntry(assetKey: string): Promise<Watchlist
   });
 }
 
-export type WatchlistAutoEntryUpdate = {
+type WatchlistAutoEntryUpdate = {
   autoEntryEnabled?: boolean;
   entryTargetWeightPct?: number | null;
   entryRules?: WatchlistEntryRulesOverride | null;

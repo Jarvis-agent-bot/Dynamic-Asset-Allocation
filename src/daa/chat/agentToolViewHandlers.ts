@@ -181,7 +181,7 @@ export function createAssistantQueryHandlers(input: DaaAgentToolContext): Map<Da
         parts.push("\n🔄 改观条件:");
         for (const m of b.mindChangeConditions.slice(0, 3)) parts.push(`  "${m.thesisTitle}" (${m.currentConviction}): ${m.conditions.slice(0, 2).join("; ")}`);
       }
-      const overlay = b.configOverlay ?? null;
+      const overlay = b.strategyOverlay ?? null;
       const intents = overlay?.targetAllocationPlan?.intents ?? [];
       if (overlay?.regimeOverride || intents.length > 0 || b.cognitionGaps.length > 0) {
         parts.push("\n🤖 策略建议:");

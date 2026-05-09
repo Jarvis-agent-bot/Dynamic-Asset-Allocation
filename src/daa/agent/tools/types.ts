@@ -8,11 +8,6 @@
  * - meta: 自省反思（历史决策、准确率、论点轨迹）
  */
 
-// ── 信号类型常量 ──
-
-export const SIGNAL_TYPES = ["technical", "valuation", "news", "human"] as const;
-export type SignalType = typeof SIGNAL_TYPES[number];
-
 // ── 工具分类 ──
 
 export type ToolCategory = "observe" | "analyze" | "act" | "meta";

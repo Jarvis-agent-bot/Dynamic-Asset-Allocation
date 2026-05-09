@@ -32,7 +32,7 @@ const MODE_ACTIONS: Record<DaaBrainMode, ReadonlySet<DaaBrainAction>> = {
   autopilot: new Set(["view_context", "generate_rebalance", "simulate_rebalance", "simulate_trade", "run_agent_cycle", "bootstrap_theses"]),
 };
 
-export type DaaResolvedBrainConfig = NonNullable<DaaSystemConfig["brain"]>;
+type DaaResolvedBrainConfig = NonNullable<DaaSystemConfig["brain"]>;
 
 export function resolveBrainConfig(config?: DaaSystemConfig["brain"]): DaaResolvedBrainConfig {
   return {
@@ -55,7 +55,7 @@ export function getBrainModeLabel(mode: DaaBrainMode): string {
   return MODE_LABELS[mode] || "操作员";
 }
 
-export function getBrainActionLabel(action: DaaBrainAction): string {
+function getBrainActionLabel(action: DaaBrainAction): string {
   return ACTION_LABELS[action] || action;
 }
 

@@ -11,7 +11,7 @@ import type { ExecutionReceipt } from "@/app/daa/dashboard/_hooks/dashboard/dash
 import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import type { AssetDetailDraft } from "@/app/daa/dashboard/_shared/AssetDetailDialog";
 
-export type PendingConfirm =
+type PendingConfirm =
   | { type: "cancelCycle" }
   | { type: "removeWatchlist"; row: AssetUniverseView }
   | null;

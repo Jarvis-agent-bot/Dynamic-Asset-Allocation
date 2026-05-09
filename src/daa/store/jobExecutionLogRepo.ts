@@ -6,7 +6,7 @@ import { toIsoString, toNullableNumber, parseJsonb } from "@/src/daa/store/store
 import { normalizeText } from "@/src/daa/utils/normalize";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 
-export type DaaJobExecutionLog = {
+type DaaJobExecutionLog = {
   jobId: string;
   ownerAccountId: string;
   jobType: string;

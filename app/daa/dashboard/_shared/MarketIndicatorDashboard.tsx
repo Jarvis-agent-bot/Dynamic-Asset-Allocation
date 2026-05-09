@@ -13,7 +13,7 @@ import type { DaaMarketContext } from "@/src/daa/modules/marketContext/marketCon
 import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
 
 import { InvestmentClockWidget } from "./InvestmentClockWidget";
-import { macroCyclePhaseLabel, marketRegimeLabel, marketRegimeTone } from "./rebalance";
+import { macroCyclePhaseLabel, marketRegimeLabel, marketRegimeTone } from "./rebalance/rebalanceLabels";
 
 /* ---------- types ---------- */
 

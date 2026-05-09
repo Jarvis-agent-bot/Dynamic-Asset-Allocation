@@ -38,9 +38,9 @@ export function useRebalanceFlow(input: {
 
   const {
     stage, summary, currentRiskCheck, selectedProposalCount, isCurrentCycleTerminal,
-    riskReadyForExecution, canEditCurrentCycle, canExecuteAll, canExecuteSelected,
-    selectedProposalNotional, buyProposalCount, sellProposalCount, basketAssetCount,
-    hasCycleProposal, rebalanceChecklist, rebalanceChecklistAllPassed,
+    canEditCurrentCycle, canExecuteAll, canExecuteSelected,
+    selectedProposalNotional, buyProposalCount, sellProposalCount,
+    rebalanceChecklist, rebalanceChecklistAllPassed,
     firstUnmetChecklist, cycleProgressText, firstBlockedActionReason,
   } = derived;
 

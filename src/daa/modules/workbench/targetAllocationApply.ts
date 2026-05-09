@@ -1,4 +1,5 @@
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
 
 import { patchWorkbenchAsset, upsertWorkbenchAsset } from "./workbenchApi";
 import type { AssetUniverseView } from "./workbenchTypes";
@@ -18,7 +19,7 @@ type TargetWeightUpsert = {
   targetWeightHint: number;
 };
 
-export type TargetWeightApplyPlan = {
+type TargetWeightApplyPlan = {
   patches: TargetWeightPatch[];
   upserts: TargetWeightUpsert[];
 };
@@ -28,42 +29,17 @@ function clampTargetWeightHint(value: number): number {
   return Math.min(1, value > 1 ? value / 100 : value);
 }
 
-export function parseLooseTargetAssetKey(rawKey: string): {
+function parseTargetAssetKey(rawKey: string): {
   assetKey: string;
   market: string;
   symbol: string;
 } | null {
-  const text = String(rawKey || "").trim().toUpperCase();
-  if (!text) return null;
-
-  const doubleColon = text.indexOf("::");
-  if (doubleColon > 0 && doubleColon < text.length - 2) {
-    const market = text.slice(0, doubleColon).trim();
-    const symbol = text.slice(doubleColon + 2).trim();
-    if (!market || !symbol) return null;
-    return {
-      assetKey: `${market}::${symbol}`,
-      market,
-      symbol,
-    };
-  }
-
-  const singleColon = text.indexOf(":");
-  if (singleColon > 0 && singleColon < text.length - 1) {
-    const market = text.slice(0, singleColon).trim();
-    const symbol = text.slice(singleColon + 1).trim();
-    if (!market || !symbol) return null;
-    return {
-      assetKey: `${market}::${symbol}`,
-      market,
-      symbol,
-    };
-  }
-
+  const parsed = parseDaaAssetKey(rawKey);
+  if (!parsed) return null;
   return {
-    assetKey: `US::${text}`,
-    market: "US",
-    symbol: text,
+    assetKey: `${parsed.market}::${parsed.symbol}`,
+    market: parsed.market,
+    symbol: parsed.symbol,
   };
 }
 
@@ -74,9 +50,9 @@ export function buildTargetWeightApplyPlan(input: {
   const desired = new Map<string, { market: string; symbol: string; targetWeightHint: number }>();
 
   for (const [rawKey, rawWeight] of Object.entries(input.weightsPct || {})) {
-    const parsed = parseLooseTargetAssetKey(rawKey);
+    const parsed = parseTargetAssetKey(rawKey);
     if (!parsed) {
-      throw new Error(`无效的目标权重标的键：${rawKey}`);
+      throw new Error(`无效的目标权重标的键：${rawKey}，请使用 MARKET::SYMBOL 格式`);
     }
     const targetWeightHint = clampTargetWeightHint(Number(rawWeight));
     if (!(targetWeightHint > 0)) continue;

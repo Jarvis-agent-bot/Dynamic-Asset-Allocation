@@ -86,6 +86,49 @@ describe("assistant-planner", () => {
     });
   });
 
+  it("LLM 规划执行调仓时默认只执行已选建议", async () => {
+    vi.mocked(resolveLlmConfig).mockResolvedValue({
+      enabled: true,
+      provider: "openai",
+      model: "gpt-5.4",
+      endpoint: "https://llm-api.onekeytest.com/v1/responses",
+      apiKey: "test-key",
+      timeoutMs: 5000,
+    });
+    vi.mocked(callLlm).mockResolvedValue({
+      text: JSON.stringify({
+        intent: "rebalance_execute",
+        reason: "用户要求执行调仓",
+        answer: "",
+        trade: {
+          side: "BUY",
+          symbol: "",
+          qty: null,
+          notional: null,
+        },
+        executeMode: "",
+      }),
+      raw: {},
+    });
+
+    const result = await planAssistantIntent({
+      userText: "执行调仓",
+      allowExecution: true,
+      contextDigest: "",
+      systemDigest: "",
+      sessionSummary: "",
+      recentConversation: "",
+      pendingActionDescription: "无",
+      learningDigest: "",
+    });
+
+    expect(result.source).toBe("llm");
+    expect(result.intent).toMatchObject({
+      kind: "rebalance_execute",
+      executeMode: "selected",
+    });
+  });
+
   it("LLM 可以规划 thesis_status 和 agent_briefing 这类 Agent 查询", async () => {
     vi.mocked(resolveLlmConfig).mockResolvedValue({
       enabled: true,

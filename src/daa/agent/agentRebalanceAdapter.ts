@@ -62,7 +62,7 @@ function scaleProposalForConviction(proposal: RebalanceProposal, multiplier: num
   return { adjustedQty, adjustedNotional };
 }
 
-export interface AgentRebalanceResult {
+interface AgentRebalanceResult {
   proposals: RebalanceProposal[];
   llmSummary: string | null;
   marketRegime: DaaMarketRegime | null;
@@ -75,8 +75,6 @@ export interface AgentRebalanceResult {
  *
  * @param draftProposals Step A 的纯数学漂移提案
  * @param marketRegime 当前市场 regime
- * @param totalEquity 组合总权益
- * @param maxPositionPct 最大单仓位占比
  */
 export async function enhanceProposalsWithAgent(input: {
   draftProposals: RebalanceProposal[];
@@ -84,7 +82,7 @@ export async function enhanceProposalsWithAgent(input: {
   totalEquity: number;
   maxPositionPct: number;
 }): Promise<AgentRebalanceResult> {
-  const { draftProposals, marketRegime, totalEquity, maxPositionPct } = input;
+  const { draftProposals, marketRegime } = input;
 
   try {
     const theses = await getActiveTheses();

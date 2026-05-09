@@ -11,10 +11,6 @@ afterEach(() => {
   cleanup();
 });
 
-vi.mock("../AssetUniverseTable", () => ({
-  default: ({ view }: { view: string }) => <div data-testid={`asset-table-${view}`}>{view}</div>,
-}));
-
 vi.mock("@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar", () => ({
   WatchlistSearchBar: () => <div data-testid="watchlist-search">watchlist-search</div>,
 }));
@@ -22,12 +18,6 @@ vi.mock("@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar", () => ({
 vi.mock("@/app/daa/dashboard/portfolio/_components/WatchlistItemList", () => ({
   WatchlistItemList: () => <div data-testid="watchlist-items">watchlist-items</div>,
 }));
-
-vi.mock("../CashSection", () => ({
-  CashSection: () => <div data-testid="cash-section">cash</div>,
-}));
-
-// RebalanceSection mock removed — rebalance tab moved to ActionWorkflow
 
 function createNotificationSummaryFixture(): NotificationStatusSummary {
   return {
@@ -284,6 +274,4 @@ describe("ActiveTabPanel", () => {
     // 搜索栏在列表之前
     expect(Boolean(search.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
-
-  // 调仓已从 Tab 移到独立的 ActionWorkflow 模块，调仓导航测试不再适用
 });

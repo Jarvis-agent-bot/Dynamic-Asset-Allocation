@@ -1,8 +1,7 @@
 import type { DaaBrokerKind } from "./executionVenue";
+import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 import type { TradeTicketSide, TradeTicketSource, TradeTicketStatus, TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
-import { normalizeText, toFinite, toPositive } from "@/src/daa/utils/normalize";
 import type {
-  DaaMarketContextAttribution,
   DaaMarketContext,
   DaaMarketIndicatorScope,
   DaaMarketRegime,
@@ -185,6 +184,7 @@ export type RebalanceCycle = {
   }>;
   proposals: RebalanceProposal[];
   riskCheck: PreTradeRiskCheck;
+  executionStartedAt?: string | null;
   executedAt: string | null;
   executedOrders: string[];
   executionSummary: {
@@ -216,7 +216,7 @@ export type RebalanceCycle = {
   createdAt: string;
 };
 
-export type RebalanceStrategyConfig = {
+type RebalanceStrategyConfig = {
   calendar: {
     enabled: boolean;
     frequency: "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
@@ -301,7 +301,7 @@ export type GenerateRebalanceCycleInput = {
   triggerReason?: string;
   manual?: boolean;
   /**
-   * 临时目标权重覆盖（0-1），用于 Agent 全权调仓。
+   * Agent 目标权重覆盖（0-1），用于全权调仓。
    * 只影响本次周期生成，不直接写入系统配置。
    */
   targetWeightOverrides?: Record<string, number>;
@@ -352,12 +352,12 @@ export type GenerateRebalanceCycleResult = {
 
 export type ExecuteRebalanceCycleInput = {
   cycleId: string;
-  executeMode: "selected" | "all";
+  executeMode: RebalanceExecuteMode;
 };
 
 export type ExecuteRebalanceSummary = {
   cycleId: string;
-  executeMode: "selected" | "all";
+  executeMode: RebalanceExecuteMode;
   orderCount: number;
   buyNotional: number;
   sellNotional: number;
@@ -388,7 +388,7 @@ export type UpdateRebalanceCycleInput = {
   selectedAssetSideKeys?: string[];
 };
 
-export type WorkbenchMarketDataHealth = {
+type WorkbenchMarketDataHealth = {
   status: "ok" | "degraded" | "down";
   freshCount: number;
   staleCount: number;
@@ -472,51 +472,6 @@ export type WorkbenchExecutionExecuteInput = {
   reasonTags?: string[];
   reasonText?: string;
 };
-
-// ---------------------------------------------------------------------------
-// Runtime parser — validates unknown request body into typed input
-// ---------------------------------------------------------------------------
-
-type ParsedExecuteTradeInput = {
-  source: "manual" | "decision";
-  side: TradeTicketSide;
-  assetKey: string;
-  cycleId: string | undefined;
-  symbol: string;
-  market: string;
-  currency: string;
-  qty: number;
-  price: number;
-  fee: number;
-  pricingMode: "manual" | "market";
-  priceSource: string | undefined;
-  priceSnapshotAt: string | undefined;
-  decisionRefId: string | null;
-  reasonTags: string[];
-  reasonText: string | undefined;
-  createdBy: string;
-};
-
-function normalizeTradeSource(v: unknown): "manual" | "decision" {
-  const s = normalizeText(v).toLowerCase();
-  if (s === "decision" || s === "recommendation") return "decision";
-  return "manual";
-}
-
-function normalizePricingMode(v: unknown): "manual" | "market" {
-  return normalizeText(v).toLowerCase() === "market" ? "market" : "manual";
-}
-
-function normalizeSide(v: unknown): TradeTicketSide | null {
-  const s = normalizeText(v).toUpperCase();
-  if (s === "BUY" || s === "SELL") return s;
-  return null;
-}
-
-function pickStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
-  return [];
-}
 
 export type WorkbenchExecutionExecuteResult = {
   item: TradeTicket;

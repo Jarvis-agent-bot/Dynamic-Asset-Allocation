@@ -1,4 +1,4 @@
-export type ISODate = string;
+type ISODate = string;
 
 export type PriceBar = {
   date: ISODate;
@@ -15,5 +15,3 @@ export type BacktestMetrics = {
   sharpe: number;
   winRate: number;
 };
-
-export type Action = "BUY" | "SELL" | "HOLD";

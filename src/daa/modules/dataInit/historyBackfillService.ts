@@ -11,13 +11,13 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 export type BackfillRange = "1y" | "2y" | "5y";
 export type BackfillInterval = "1d" | "1h";
 
-export type BackfillRequest = {
+type BackfillRequest = {
   assetKeys?: string[];
   range: BackfillRange;
   interval: BackfillInterval;
 };
 
-export type BackfillResult = {
+type BackfillResult = {
   total: number;
   completed: number;
   failed: Array<{ assetKey: string; error: string }>;

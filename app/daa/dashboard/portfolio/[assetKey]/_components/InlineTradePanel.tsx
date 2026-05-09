@@ -39,8 +39,6 @@ export function InlineTradePanel(props: {
     submitting: props.submitting,
   });
 
-  const sideTone = side === "BUY" ? "green" : "amber";
-
   return (
     <div className="space-y-3 rounded-[16px] border border-[var(--border)] bg-[rgba(13,19,32,0.92)] p-4">
       {/* BUY / SELL tab */}

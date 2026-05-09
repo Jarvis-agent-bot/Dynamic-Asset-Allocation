@@ -11,12 +11,12 @@
 import { batchReadAssetPriceSnapshots, type AssetPriceSnapshot } from "@/src/daa/store/assetUniverseStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-export type PriceUpdateEvent = {
+type PriceUpdateEvent = {
   type: "price_update";
   data: Record<string, { price: number; ts: string; delta: number; currency: string }>;
 };
 
-export type HeartbeatEvent = {
+type HeartbeatEvent = {
   type: "heartbeat";
   ts: string;
 };
@@ -28,7 +28,7 @@ let activeStreamCount = 0;
 /**
  * 比较两次价格快照，返回有变化的资产 diff。
  */
-export function diffPriceSnapshots(
+function diffPriceSnapshots(
   prev: Map<string, AssetPriceSnapshot>,
   curr: AssetPriceSnapshot[],
 ): PriceUpdateEvent | null {

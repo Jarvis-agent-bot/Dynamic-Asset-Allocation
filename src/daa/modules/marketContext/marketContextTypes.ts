@@ -71,12 +71,3 @@ export type DaaMarketContext = {
     favoredAssets: string[];
   } | null;
 };
-
-export type DaaMarketContextAttribution = {
-  scope: DaaMarketIndicatorScope | "portfolio";
-  scopeLabel: string;
-  relevantKeys: DaaMarketIndicatorKey[];
-  explanation: string[];
-  buyScale: number | null;
-  highRiskBuyScale: number | null;
-};

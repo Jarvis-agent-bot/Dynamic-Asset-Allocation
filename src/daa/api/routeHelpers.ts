@@ -55,11 +55,10 @@ function isDbErrorMessage(message: string): boolean {
   return /database|postgres|connect|timeout|query|sql|pool/i.test(message);
 }
 
-export function errorToResponse(error: unknown): Response {
+function errorToResponse(error: unknown): Response {
   console.error("[DAA API]", error);
   const message = error instanceof Error ? error.message : String(error);
   const status = Number((error as { status?: unknown } | null)?.status);
-  const details = (error as { details?: unknown } | null)?.details;
   if (Number.isFinite(status) && status >= 400 && status < 500) {
     // 不泄露内部错误详情 — 仅返回安全的错误码
     const safeMessage = status === 404 ? "not_found" : status === 409 ? "conflict" : "request_error";
@@ -90,17 +89,5 @@ export async function readJsonBody<T = unknown>(req: Request): Promise<T | null>
   } catch (err) {
     logSwallowed("routeHelpers.readJsonBody", err);
     return null;
-  }
-}
-
-/**
- * 严格版 readJsonBody：解析失败时抛出错误（由 withApiHandler 捕获后返回 400）。
- * 适用于要求请求体必须为有效 JSON 的路由。
- */
-export async function readJsonBodyStrict<T = unknown>(req: Request): Promise<T> {
-  try {
-    return (await req.json()) as T;
-  } catch {
-    throw Object.assign(new Error("请求体不是有效的 JSON"), { status: 400 });
   }
 }

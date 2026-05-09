@@ -8,30 +8,15 @@
 import { registerTool } from "@/src/daa/agent/tools/registry";
 import type { ToolExecutionContext, ToolResultV2 } from "@/src/daa/agent/tools/types";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import { buildDaaAssetKey, parseDaaAssetKey } from "@/src/daa/assetKey";
+import { parseDaaAssetKey } from "@/src/daa/assetKey";
 
 /**
- * 归一化 LLM 传入的 assetKeys — 接受以下三种形式，统一输出 `MARKET::SYMBOL`（双冒号）：
- *   - "US::AAPL"   (已经是规范格式) → 原样返回
- *   - "US:AAPL"    (单冒号)         → 转为 "US::AAPL"
- *   - "AAPL"       (裸 symbol)      → 默认 "US::AAPL"
- * 无法归一化的条目直接丢弃。
+ * 校验 LLM 传入的 assetKeys，只接受 canonical `MARKET::SYMBOL`。
  */
 function normalizeAssetKeysFromLlm(raw: string): string[] {
   return raw.split(",").map(s => s.trim()).filter(Boolean).map(item => {
-    const upper = item.toUpperCase();
-    const normalized = parseDaaAssetKey(upper);
-    if (normalized) return buildDaaAssetKey(normalized.symbol, normalized.market);
-    // 尝试单冒号形式
-    const singleColonIdx = upper.indexOf(":");
-    if (singleColonIdx > 0 && !upper.includes("::")) {
-      const market = upper.slice(0, singleColonIdx);
-      const symbol = upper.slice(singleColonIdx + 1);
-      if (market && symbol) return buildDaaAssetKey(symbol, market);
-    }
-    // 裸 symbol → 默认 US 市场
-    if (upper && !upper.includes(":")) return buildDaaAssetKey(upper, "US");
-    return "";
+    const parsed = parseDaaAssetKey(item);
+    return parsed ? `${parsed.market}::${parsed.symbol}` : "";
   }).filter(Boolean);
 }
 
@@ -65,7 +50,7 @@ registerTool(
 
     const assetKeys = normalizeAssetKeysFromLlm(assetKeysStr);
     if (assetKeys.length === 0) {
-      return { toolName: "create_thesis", category: "act", success: false, data: null, outputFields: {}, error: `assetKeys 无法归一化: "${assetKeysStr}"`, latencyMs: Date.now() - t0 };
+      return { toolName: "create_thesis", category: "act", success: false, data: null, outputFields: {}, error: `assetKeys 格式必须为 MARKET::SYMBOL: "${assetKeysStr}"`, latencyMs: Date.now() - t0 };
     }
     const tags = String(params.tags || "").split(",").map(s => s.trim()).filter(Boolean);
 

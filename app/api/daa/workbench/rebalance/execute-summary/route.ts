@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { WorkbenchDomainError } from "@/src/daa/modules/workbench/workbenchErrors";
 import { buildWorkbenchExecuteSummary } from "@/src/daa/modules/workbench/workbenchExecutionService";
 
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     if (!cycleId) {
       return fail("VALIDATION_FAILED", "cycleId is required", { status: 400 });
     }
-    const executeMode = String(body?.executeMode || "").trim().toLowerCase() === "selected" ? "selected" : "all";
+    const executeMode = normalizeRebalanceExecuteMode(body?.executeMode);
     let summary;
     try {
       summary = await buildWorkbenchExecuteSummary({ cycleId, executeMode });

@@ -2,7 +2,7 @@ import { resolveSecret } from "@/src/daa/config/secretsManager";
 import { appendNotificationDeliveryLog } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-export type TelegramSendResult = {
+type TelegramSendResult = {
   ok: boolean;
   statusCode: number | null;
   errorCode: string | null;

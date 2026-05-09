@@ -102,7 +102,8 @@ export function parseAssistantIntent(raw: string, options?: {
   if (/最近.*(调仓|周期|再平衡)|latest cycle|最近一次/.test(text)) return { kind: "latest_cycle", rawText: text };
   if (/生成.*(调仓|再平衡)|\/rebalance\s+generate/i.test(text)) return { kind: "rebalance_generate", rawText: text };
   if (/执行.*(调仓|再平衡)|\/rebalance\s+(exec|execute)/i.test(text)) {
-    return downgradeExecutionIntent({ kind: "rebalance_execute", rawText: text, executeMode: "all" }, allowExecution);
+    const executeMode = /全部|所有|all/i.test(text) ? "all" : "selected";
+    return downgradeExecutionIntent({ kind: "rebalance_execute", rawText: text, executeMode }, allowExecution);
   }
   if (BUY_WORDS.test(text) || SELL_WORDS.test(text)) {
     return downgradeExecutionIntent(parseTrade(text) || { kind: "unknown", rawText: text }, allowExecution);

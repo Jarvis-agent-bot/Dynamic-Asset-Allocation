@@ -1,19 +1,19 @@
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 
-export type MoneyAmount = {
+type MoneyAmount = {
   amount: number;
   currency: string;
 };
 
-export type BaseMoney = MoneyAmount & {
+type BaseMoney = MoneyAmount & {
   kind: "base";
 };
 
-export type LocalMoney = MoneyAmount & {
+type LocalMoney = MoneyAmount & {
   kind: "local";
 };
 
-export type FxRateLike = {
+type FxRateLike = {
   baseCcy?: unknown;
   quoteCcy?: unknown;
   base_ccy?: unknown;
@@ -23,7 +23,7 @@ export type FxRateLike = {
 
 export type FxRateBook = Map<string, number>;
 
-export type FxConversionResult = {
+type FxConversionResult = {
   local: LocalMoney;
   base: BaseMoney | null;
   fxRateToBase: number | null;
@@ -38,12 +38,12 @@ export function normalizeMoneyPair(baseCurrency: unknown, quoteCurrency: unknown
   return `${normalizeMoneyCurrency(baseCurrency)}/${normalizeMoneyCurrency(quoteCurrency)}`;
 }
 
-export function toPositiveMoneyAmount(value: unknown): number {
+function toPositiveMoneyAmount(value: unknown): number {
   const amount = Number(value);
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
 }
 
-export function createLocalMoney(amount: unknown, currency: unknown, fallbackCurrency = "USD"): LocalMoney {
+function createLocalMoney(amount: unknown, currency: unknown, fallbackCurrency = "USD"): LocalMoney {
   return {
     kind: "local",
     amount: toPositiveMoneyAmount(amount),
@@ -51,7 +51,7 @@ export function createLocalMoney(amount: unknown, currency: unknown, fallbackCur
   };
 }
 
-export function createBaseMoney(amount: unknown, baseCurrency: unknown): BaseMoney {
+function createBaseMoney(amount: unknown, baseCurrency: unknown): BaseMoney {
   return {
     kind: "base",
     amount: toPositiveMoneyAmount(amount),
@@ -107,23 +107,5 @@ export function convertLocalMoneyToBase(input: {
     base,
     fxRateToBase,
     fxMissing: local.amount > 0 && base == null,
-  };
-}
-
-export function requireBaseConversion(input: {
-  amount: unknown;
-  localCurrency: unknown;
-  baseCurrency: unknown;
-  fxBook: FxRateBook;
-  context: string;
-}): FxConversionResult & { base: BaseMoney; fxRateToBase: number } {
-  const converted = convertLocalMoneyToBase(input);
-  if (converted.base == null || converted.fxRateToBase == null) {
-    throw new Error(`missing fx rate for ${input.context}: ${converted.local.currency}/${normalizeMoneyCurrency(input.baseCurrency, "USD")}`);
-  }
-  return {
-    ...converted,
-    base: converted.base,
-    fxRateToBase: converted.fxRateToBase,
   };
 }

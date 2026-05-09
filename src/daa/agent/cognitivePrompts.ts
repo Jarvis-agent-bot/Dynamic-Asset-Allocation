@@ -6,7 +6,7 @@
  */
 
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";
-import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition, CognitionGap } from "@/src/daa/agent/cognitiveTypes";
+import type { ResearchThread, AgentMemory, Surprise, DailyBriefing, ToolCallRecord, ReasoningTrace, MindChangeCondition } from "@/src/daa/agent/cognitiveTypes";
 import type { MarketSnapshot, PortfolioSnapshot, WatchlistSnapshot, NewsSnapshot } from "@/src/daa/agent/cognitiveState";
 import { formatAssetLabel, formatAssetLabelByKey } from "@/src/daa/assetRegistry";
 
@@ -104,7 +104,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
     {
       "title": "新研究线索标题",
       "initialThesis": "初始判断",
-      "assetKeys": ["US:AAPL"],
+      "assetKeys": ["US::AAPL"],
       "tags": ["个股"]
     }
   ]
@@ -119,7 +119,7 @@ ${thesisSummary || "暂无活跃论点（首次运行）"}
     {"threadId": null, "reason": "VIX 突破25但无对应宏观避险论点", "dataNeeded": ["technical"]}
   ],
   "newThreads": [
-    {"title": "市场波动率飙升的避险策略", "initialThesis": "VIX 突破25暗示市场恐慌情绪升温，需评估是否增加避险仓位", "assetKeys": ["US:GLD", "US:TLT"], "tags": ["宏观", "避险"]}
+    {"title": "市场波动率飙升的避险策略", "initialThesis": "VIX 突破25暗示市场恐慌情绪升温，需评估是否增加避险仓位", "assetKeys": ["US::GLD", "US::TLT"], "tags": ["宏观", "避险"]}
   ]
 }
 \`\`\`
@@ -712,7 +712,7 @@ export function formatBriefingForTelegram(briefing: DailyBriefing, meta: {
   }
 
   // ── Agent 目标权重计划（如有） ──
-  const ov = briefing.configOverlay ?? null;
+  const ov = briefing.strategyOverlay ?? null;
   const strategyLines: string[] = [];
   if (ov?.regimeOverride) {
     strategyLines.push(`Regime: ${ov.regimeOverride.ruleBasedRegime}→${ov.regimeOverride.suggestedRegime} (${ov.regimeOverride.confidence}%)`);

@@ -15,7 +15,7 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 /** 亏损阈值（PnL% 低于此值 + 高 conviction 时触发 urgent review） */
 const URGENT_REVIEW_LOSS_THRESHOLD = -0.10; // -10%
 
-export interface TradeOutcomeInput {
+interface TradeOutcomeInput {
   thesisId: string;
   assetKey: string;
   side: "BUY" | "SELL";
@@ -25,7 +25,7 @@ export interface TradeOutcomeInput {
   realizedPnlPct: number | null;
 }
 
-export interface TradeOutcomeResult {
+interface TradeOutcomeResult {
   evidenceAdded: boolean;
   urgentReviewScheduled: boolean;
   evidenceType: "supporting" | "contradicting" | "neutral";

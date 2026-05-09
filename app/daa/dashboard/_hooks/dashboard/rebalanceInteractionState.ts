@@ -14,7 +14,7 @@ export type RebalanceInteractionStage =
   | "cancelled"
   | "busy";
 
-export type RebalanceChecklistItem = {
+type RebalanceChecklistItem = {
   id: "watchlist" | "basket" | "cycle" | "proposal" | "risk";
   label: string;
   ok: boolean;

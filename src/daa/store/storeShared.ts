@@ -67,12 +67,6 @@ export function toNullableNumber(value: unknown): number | null {
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
-export function toIsoStringOrNull(v: unknown): string | null {
-  if (v == null) return null;
-  const result = toIsoString(v, "");
-  return result || null;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Schema inspection helpers                                         */
 /* ------------------------------------------------------------------ */
@@ -89,7 +83,7 @@ export async function hasTable(query: SchemaQueryFn, tableName: string): Promise
   return result.rows.length > 0;
 }
 
-export async function hasTableColumn(query: SchemaQueryFn, tableName: string, columnName: string): Promise<boolean> {
+async function hasTableColumn(query: SchemaQueryFn, tableName: string, columnName: string): Promise<boolean> {
   const result = await query(
     `SELECT 1
      FROM information_schema.columns

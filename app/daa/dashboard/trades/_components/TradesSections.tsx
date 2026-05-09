@@ -123,7 +123,7 @@ export function TradesCompactOverview({ model }: { model: TradesModel }) {
           </div>
           <label className="space-y-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">状态</span>
-            <select value={model.filters.status ?? ""} onChange={(e) => updateFilter({ status: e.target.value || undefined })} className={cn(dasSurfaceDenseFieldClassName, "w-[100px]")}>
+            <select value={model.filters.status ?? ""} onChange={(e) => updateFilter({ status: e.target.value || undefined })} className={cn(daaSurfaceDenseFieldClassName, "w-[100px]")}>
               <option value="">全部</option>
               <option value="ready">待执行</option>
               <option value="submitted">已提交</option>
@@ -401,6 +401,3 @@ function TD({ children, align = "left", mono }: { children: React.ReactNode; ali
     </td>
   );
 }
-
-// Fix: import name typo guard
-const dasSurfaceDenseFieldClassName = daaSurfaceDenseFieldClassName;

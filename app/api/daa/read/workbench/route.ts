@@ -12,6 +12,5 @@ export async function GET(req: Request) {
         autoRiskCycle: parseBooleanSearchParam(searchParams.get("autoRiskCycle"), false),
       });
     },
-    fallback: () => { throw new Error("workbench read fallback not available — database required"); },
   }));
 }

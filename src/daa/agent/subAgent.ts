@@ -36,7 +36,7 @@ export interface SubAgentConfig {
   portfolio: PortfolioSnapshot | null;
 }
 
-export interface SubAgentResult {
+interface SubAgentResult {
   threadId: string;
   threadTitle: string;
   investigateOutput: InvestigateOutput | null;

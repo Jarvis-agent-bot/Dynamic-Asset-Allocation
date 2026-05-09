@@ -16,7 +16,7 @@
  *   注意：该建议是 BUY-only 的轻量操作，独立于完整再平衡流程。
  */
 
-export type CashClassification = {
+type CashClassification = {
   // ── Tier 1 ──────────────────────────────────────────────────────
   /** 运营储备金额（基准货币）*/
   operationalReserve: number;

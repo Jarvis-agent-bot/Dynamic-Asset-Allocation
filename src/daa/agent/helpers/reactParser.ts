@@ -22,9 +22,5 @@ export function parseReactResponse(data: unknown): ReactAction | null {
   if (obj.action === "result" && obj.result && typeof obj.result === "object") {
     return { action: "result", result: obj.result as InvestigateOutput };
   }
-  // 兼容：如果 LLM 直接返回 InvestigateOutput（无 action 包装）
-  if ("thesisChanged" in obj && "evidenceSummary" in obj) {
-    return { action: "result", result: obj as unknown as InvestigateOutput };
-  }
   return null;
 }

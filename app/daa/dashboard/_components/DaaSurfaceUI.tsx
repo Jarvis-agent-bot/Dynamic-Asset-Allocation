@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import type { ButtonHTMLAttributes, ComponentPropsWithoutRef, MouseEventHandler, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -54,17 +54,11 @@ export const daaSurfaceFieldClassName =
 export const daaSurfaceDenseFieldClassName =
   "h-9 rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[rgba(8,12,20,0.82)] px-3 text-xs text-[var(--text)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--faint)] focus:border-[var(--primary)] focus:ring-2 focus:ring-[rgba(56,189,248,0.14)]";
 
-export const daaSurfaceTableShellClassName =
-  "overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(10,15,25,0.96),rgba(6,10,18,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
-
 export const daaSurfaceSubtlePanelClassName =
   "rounded-[var(--radius-lg)] border border-[var(--border)] bg-[rgba(8,12,20,0.72)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
 
 export const daaSurfaceMonoPanelClassName =
   "rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(8,12,20,0.58)] px-4 py-3 font-[var(--font-mono)] text-xs leading-6 text-[var(--muted)]";
-
-export const daaSurfaceSearchShellClassName =
-  "flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]";
 
 export const daaSurfaceTableHeadClassName =
   "border-b border-[var(--border)] bg-[rgba(255,255,255,0.02)] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--faint)]";
@@ -424,37 +418,5 @@ export function DaaSurfaceDialogShell({
       <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6", bodyClassName)}>{children}</div>
       {footer ? <div className="shrink-0 border-t border-[var(--border)] px-5 py-3.5 sm:px-6">{footer}</div> : null}
     </DialogContent>
-  );
-}
-
-export function DaaSurfaceSectionAnchor({
-  label,
-  active,
-  href,
-  onClick,
-}: {
-  label: ReactNode;
-  active?: boolean;
-  href: string;
-  onClick?: MouseEventHandler<HTMLAnchorElement>;
-}) {
-  return (
-    <a
-      href={href}
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "group flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-colors",
-        active
-          ? "border-[var(--primary)]/40 bg-[rgba(56,189,248,0.1)] text-[var(--primary)]"
-          : "border-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[var(--hover)] hover:text-[var(--text)]",
-      )}
-    >
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ background: active ? "var(--primary)" : "var(--faint)" }}
-      />
-      <span>{label}</span>
-    </a>
   );
 }

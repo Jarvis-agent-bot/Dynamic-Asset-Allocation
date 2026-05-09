@@ -37,7 +37,7 @@ export function computeMetrics(equity: number[], dailyReturns: number[]): Backte
  * - tiny reward: winRate
  */
 
-export type ScoreWeights = {
+type ScoreWeights = {
   wReturn?: number;
   wSharpe?: number;
   wDrawdown?: number;

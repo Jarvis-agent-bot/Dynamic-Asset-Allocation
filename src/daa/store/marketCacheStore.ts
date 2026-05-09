@@ -3,37 +3,19 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
-import type { DaaMarketIndicatorKey, DaaMarketRegime } from "@/src/daa/modules/marketContext/marketContextTypes";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
+import type { DaaMarketIndicatorKey } from "@/src/daa/modules/marketContext/marketContextTypes";
 import {
   withDaaPgClient, parseJsonb, toIsoString, withPgTransaction, clampNumber, normalizeUpper, normalizeStringArray,
 } from "./storeShared";
 import type {
   DaaStoreMarketPriceSnapshot, DaaStoreMarketPriceStatus, DaaStoreMarketPriceHistory,
   DaaStoreFxRateHistory, DaaStoreFxRateHistoryStatus,
-  DaaStoreNewsItemSnapshot, DaaStoreNewsSignalSnapshot,
+  DaaStoreNewsItemSnapshot,
   DaaStoreMarketIndicatorSnapshot, DaaStoreHfHoldingSnapshot, DaaStoreHfSignalSnapshot,
-  DaaStoreExternalPayloadRaw,
 } from "./storeTypes";
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
-import { normalizeMarketIndicatorKey, normalizeMarketRegimeStore } from "./rebalanceCycleStore";
-
-const RAW_PAYLOAD_SELECT_COLUMNS_ = [
-  "id",
-  "provider",
-  "resource",
-  "subject_key",
-  "request_url",
-  "request_json",
-  "response_status",
-  "response_headers_json",
-  "payload_json",
-  "payload_text",
-  "fetched_at",
-  "expire_at",
-  "created_at",
-].join(", ");
+import { normalizeMarketIndicatorKey, normalizeMarketRegimeStore } from "./marketIndicatorNormalizers";
 
 const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_ = [
   "id",
@@ -56,17 +38,6 @@ const MARKET_INDICATOR_SNAPSHOT_SELECT_COLUMNS_ = [
   "generated_at",
   "expire_at",
   "created_at",
-].join(", ");
-
-const NEWS_SIGNAL_SNAPSHOT_SELECT_COLUMNS_ = [
-  "provider",
-  "symbol",
-  "score_pct",
-  "confidence_pct",
-  "evidence_count",
-  "reasons_json",
-  "generated_at",
-  "updated_at",
 ].join(", ");
 
 const NEWS_ITEM_SNAPSHOT_SELECT_COLUMNS_ = [
@@ -172,19 +143,6 @@ function mapNewsItemSnapshotRow(row: Record<string, unknown>): DaaStoreNewsItemS
   };
 }
 
-function mapNewsSignalSnapshotRow(row: Record<string, unknown>): DaaStoreNewsSignalSnapshot {
-  return {
-    provider: normalizeText(row.provider, "yahoo_rss"),
-    symbol: normalizeUpper(row.symbol),
-    scorePct: clampNumber(toFiniteNumber(row.score_pct, 50), 0, 100),
-    confidencePct: clampNumber(toFiniteNumber(row.confidence_pct, 0), 0, 100),
-    evidenceCount: Math.max(0, Math.trunc(toFiniteNumber(row.evidence_count, 0))),
-    reasonsJson: parseJsonb<string[]>(row.reasons_json, []).map((item) => String(item || "").trim()).filter(Boolean),
-    generatedAt: toIsoString(row.generated_at, new Date().toISOString()),
-    updatedAt: toIsoString(row.updated_at, new Date().toISOString()),
-  };
-}
-
 function mapMarketIndicatorSnapshotRow(row: Record<string, unknown>): DaaStoreMarketIndicatorSnapshot {
   return {
     id: normalizeText(row.id),
@@ -208,77 +166,6 @@ function mapMarketIndicatorSnapshotRow(row: Record<string, unknown>): DaaStoreMa
     expireAt: row.expire_at == null ? null : toIsoString(row.expire_at, new Date().toISOString()),
     createdAt: toIsoString(row.created_at, new Date().toISOString()),
   };
-}
-
-function mapExternalPayloadRawRow(row: Record<string, unknown>): DaaStoreExternalPayloadRaw {
-  return {
-    id: normalizeText(row.id),
-    provider: normalizeText(row.provider),
-    resource: normalizeText(row.resource),
-    subjectKey: normalizeText(row.subject_key),
-    requestUrl: normalizeText(row.request_url),
-    requestJson: parseJsonb<Record<string, unknown>>(row.request_json, {}),
-    responseStatus: Math.max(0, Math.trunc(toFiniteNumber(row.response_status, 0))),
-    responseHeadersJson: parseJsonb<Record<string, unknown>>(row.response_headers_json, {}),
-    payloadJson: row.payload_json == null ? null : parseJsonb<Record<string, unknown>>(row.payload_json, {}),
-    payloadText: row.payload_text == null ? null : String(row.payload_text),
-    fetchedAt: toIsoString(row.fetched_at, new Date().toISOString()),
-    expireAt: toIsoString(row.expire_at, new Date().toISOString()),
-    createdAt: toIsoString(row.created_at, new Date().toISOString()),
-  };
-}
-
-async function appendDaaExternalPayloadRaw(input: {
-  provider: string;
-  resource: string;
-  subjectKey?: string;
-  requestUrl?: string;
-  requestJson?: Record<string, unknown>;
-  responseStatus?: number;
-  responseHeadersJson?: Record<string, unknown>;
-  payloadJson?: Record<string, unknown> | null;
-  payloadText?: string | null;
-  fetchedAt?: string;
-  expireAt?: string;
-}): Promise<DaaStoreExternalPayloadRaw> {
-  await ensureDaaMarketCacheSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const id = randomUUID();
-    const provider = normalizeText(input.provider, "unknown");
-    const resource = normalizeText(input.resource, "unknown");
-    const subjectKey = normalizeText(input.subjectKey, "");
-    const requestUrl = normalizeText(input.requestUrl, "");
-    const requestJson = input.requestJson && typeof input.requestJson === "object" ? input.requestJson : {};
-    const responseStatus = Math.max(0, Math.trunc(toFiniteNumber(input.responseStatus, 0)));
-    const responseHeadersJson = input.responseHeadersJson && typeof input.responseHeadersJson === "object" ? input.responseHeadersJson : {};
-    const payloadJson = input.payloadJson && typeof input.payloadJson === "object" ? input.payloadJson : null;
-    const payloadText = input.payloadText == null ? null : String(input.payloadText);
-    const fetchedAt = toIsoString(input.fetchedAt, new Date().toISOString());
-    const expireAt = toIsoString(input.expireAt, new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString());
-
-    await query(
-      `INSERT INTO daa_external_payload_raw_v1
-        (id, provider, resource, subject_key, request_url, request_json, response_status, response_headers_json, payload_json, payload_text, fetched_at, expire_at, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9::jsonb,$10,$11,$12,NOW())`,
-      [id, provider, resource, subjectKey, requestUrl, JSON.stringify(requestJson), responseStatus, JSON.stringify(responseHeadersJson), payloadJson == null ? null : JSON.stringify(payloadJson), payloadText, fetchedAt, expireAt],
-    );
-    const res = await query(
-      `SELECT ${RAW_PAYLOAD_SELECT_COLUMNS_} FROM daa_external_payload_raw_v1 WHERE id = $1 LIMIT 1`,
-      [id],
-    );
-    return mapExternalPayloadRawRow(res.rows[0] as Record<string, unknown>);
-  });
-}
-
-async function deleteExpiredDaaExternalPayloadRaw(nowIso = new Date().toISOString()): Promise<number> {
-  await ensureDaaMarketCacheSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const result = await query(
-      "DELETE FROM daa_external_payload_raw_v1 WHERE expire_at <= $1",
-      [toIsoString(nowIso, new Date().toISOString())],
-    );
-    return Math.max(0, Math.trunc(toFiniteNumber(result.rowCount, 0)));
-  });
 }
 
 export async function upsertDaaMarketPriceSnapshots(rows: Array<Partial<DaaStoreMarketPriceSnapshot>>): Promise<DaaStoreMarketPriceSnapshot[]> {
@@ -329,29 +216,6 @@ export async function upsertDaaMarketPriceSnapshots(rows: Array<Partial<DaaStore
       }
     });
     return out;
-  });
-}
-
-export async function getDaaMarketPriceSnapshot(input: {
-  provider?: string;
-  market: string;
-  symbol: string;
-}): Promise<DaaStoreMarketPriceSnapshot | null> {
-  await ensureDaaMarketCacheSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const provider = normalizeText(input.provider, "yfinance");
-    const market = normalizeUpper(input.market, "US");
-    const symbol = normalizeUpper(input.symbol);
-    if (!symbol) return null;
-    const result = await query(
-      `SELECT ${MARKET_PRICE_SNAPSHOT_SELECT_COLUMNS_}
-       FROM daa_market_price_snapshot
-       WHERE provider = $1 AND market = $2 AND symbol = $3
-       LIMIT 1`,
-      [provider, market, symbol],
-    );
-    if (!result.rows.length) return null;
-    return mapMarketPriceSnapshotRow(result.rows[0] as Record<string, unknown>);
   });
 }
 
@@ -586,64 +450,6 @@ export async function listDaaNewsItemsBySymbol(input: {
   });
 }
 
-export async function upsertDaaNewsSignalSnapshots(rows: Array<Partial<DaaStoreNewsSignalSnapshot>>): Promise<number> {
-  if (!rows.length) return 0;
-  await ensureDaaMarketCacheSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    let touched = 0;
-    await withPgTransaction(query, async () => {
-      for (const row of rows) {
-        const provider = normalizeText(row.provider, "yahoo_rss");
-        const symbol = normalizeUpper(row.symbol);
-        if (!symbol) continue;
-        const scorePct = clampNumber(toFiniteNumber(row.scorePct, 50), 0, 100);
-        const confidencePct = clampNumber(toFiniteNumber(row.confidencePct, 0), 0, 100);
-        const evidenceCount = Math.max(0, Math.trunc(toFiniteNumber(row.evidenceCount, 0)));
-        const reasonsJson = Array.isArray(row.reasonsJson) ? row.reasonsJson.map((item) => String(item || "").trim()).filter(Boolean) : [];
-        const generatedAt = toIsoString(row.generatedAt, new Date().toISOString());
-        const result = await query(
-          `INSERT INTO daa_news_signal_snapshot_v1
-            (provider, symbol, score_pct, confidence_pct, evidence_count, reasons_json, generated_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,NOW())
-           ON CONFLICT (provider, symbol)
-           DO UPDATE SET
-             score_pct = EXCLUDED.score_pct,
-             confidence_pct = EXCLUDED.confidence_pct,
-             evidence_count = EXCLUDED.evidence_count,
-             reasons_json = EXCLUDED.reasons_json,
-             generated_at = EXCLUDED.generated_at,
-             updated_at = NOW()
-           RETURNING provider`,
-          [provider, symbol, scorePct, confidencePct, evidenceCount, JSON.stringify(reasonsJson), generatedAt],
-        );
-        if (result.rows.length > 0) touched += 1;
-      }
-    });
-    return touched;
-  });
-}
-
-export async function getDaaNewsSignalSnapshotBySymbol(input: {
-  provider?: string;
-  symbol: string;
-}): Promise<DaaStoreNewsSignalSnapshot | null> {
-  await ensureDaaMarketCacheSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const provider = normalizeText(input.provider, "yahoo_rss");
-    const symbol = normalizeUpper(input.symbol);
-    if (!symbol) return null;
-    const result = await query(
-      `SELECT ${NEWS_SIGNAL_SNAPSHOT_SELECT_COLUMNS_}
-       FROM daa_news_signal_snapshot_v1
-       WHERE provider = $1 AND symbol = $2
-       LIMIT 1`,
-      [provider, symbol],
-    );
-    if (!result.rows.length) return null;
-    return mapNewsSignalSnapshotRow(result.rows[0] as Record<string, unknown>);
-  });
-}
-
 export async function upsertDaaMarketIndicatorSnapshots(rows: Array<Partial<DaaStoreMarketIndicatorSnapshot> & Record<string, unknown>>): Promise<number> {
   if (!rows.length) return 0;
   await ensureDaaMarketCacheSchemaPg();
@@ -857,21 +663,6 @@ export async function upsertDaaHfSignalSnapshots(rows: Array<Partial<DaaStoreHfS
 // Macro Cycle Snapshots
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type MacroCycleSnapshotRow = {
-  id: string;
-  phase: string;
-  growthProxy: number;
-  inflationProxy: number;
-  confidence: number;
-  label: string;
-  favoredAssets: string[];
-  dataSource: string;
-  fredGdpPct: number | null;
-  fredCpiPct: number | null;
-  fredUnemploymentPct: number | null;
-  createdAt: string;
-};
-
 export async function upsertMacroCycleSnapshot(input: {
   phase: string;
   growthProxy: number;
@@ -907,31 +698,3 @@ export async function upsertMacroCycleSnapshot(input: {
     );
   });
 }
-
-export async function listMacroCycleHistory(limit = 30): Promise<MacroCycleSnapshotRow[]> {
-  return withDaaPgClient(async (client) => {
-    const result = await client.query(
-      `SELECT id, phase, growth_proxy, inflation_proxy, confidence, label,
-              favored_assets, data_source, fred_gdp_pct, fred_cpi_pct, fred_unemployment_pct, created_at
-       FROM daa_macro_cycle_snapshots
-       ORDER BY created_at DESC
-       LIMIT $1`,
-      [Math.max(1, Math.min(200, Math.trunc(limit)))],
-    );
-    return result.rows.map((row: Record<string, unknown>) => ({
-      id: normalizeText(row.id),
-      phase: normalizeText(row.phase),
-      growthProxy: toFinite(row.growth_proxy, 0),
-      inflationProxy: toFinite(row.inflation_proxy, 0),
-      confidence: toFinite(row.confidence, 0),
-      label: normalizeText(row.label),
-      favoredAssets: normalizeStringArray(row.favored_assets),
-      dataSource: normalizeText(row.data_source, "proxy"),
-      fredGdpPct: row.fred_gdp_pct == null ? null : toFinite(row.fred_gdp_pct, 0),
-      fredCpiPct: row.fred_cpi_pct == null ? null : toFinite(row.fred_cpi_pct, 0),
-      fredUnemploymentPct: row.fred_unemployment_pct == null ? null : toFinite(row.fred_unemployment_pct, 0),
-      createdAt: toIsoString(row.created_at, new Date().toISOString()),
-    }));
-  });
-}
-

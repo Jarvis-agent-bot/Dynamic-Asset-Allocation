@@ -35,7 +35,3 @@ export function normalizeCurrencyPairToken(raw: unknown): string {
 
   return token;
 }
-
-export function normalizeCurrencyPair(base: unknown, quote: unknown): string {
-  return `${normalizeCurrencyAlias(base)}/${normalizeCurrencyAlias(quote)}`;
-}

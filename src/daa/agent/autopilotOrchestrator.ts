@@ -1,7 +1,7 @@
 import { bootstrapTheses, ensureAssetThesisCoverage, type BootstrapAsset } from "@/src/daa/agent/bootstrap";
 import { runCognitiveAgentCycle } from "@/src/daa/agent/cognitiveGraph";
-import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
-import { getAgentConfigOverlayForRun } from "@/src/daa/agent/store/overlayStore";
+import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
+import { getAgentStrategyOverlayForRun } from "@/src/daa/agent/store/overlayStore";
 import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
 import { evaluateBrainActionAuthority } from "@/src/daa/automation/automationAuthority";
@@ -18,14 +18,14 @@ import {
 import type { DaaStoreSystemConfigRow } from "@/src/daa/store/storeTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-export type AutopilotEventSource =
+type AutopilotEventSource =
   | "cron_cognitive_agent"
   | "cron_news_refresh"
   | "alpaca_ws_realtime"
   | "manual"
   | "system";
 
-export type AutopilotLoopResult = {
+type AutopilotLoopResult = {
   skipped: boolean;
   reason: string | null;
   source: AutopilotEventSource;
@@ -179,7 +179,7 @@ async function executeAutopilotRebalance(input: {
 
 async function maybeRunAgentDrivenRebalance(input: {
   row: DaaStoreSystemConfigRow;
-  overlay: AgentConfigOverlay | null;
+  overlay: AgentStrategyOverlay | null;
   reason: string;
   affectedSymbols?: string[];
 }): Promise<AutopilotLoopResult["rebalance"]> {
@@ -321,7 +321,7 @@ export async function runAutopilotLoop(input: RunAutopilotLoopInput): Promise<Au
     ? buildSkippedRebalance(rebalanceBlockedReason)
     : await maybeRunAgentDrivenRebalance({
       row,
-      overlay: await getAgentConfigOverlayForRun(run.runId),
+      overlay: await getAgentStrategyOverlayForRun(run.runId),
       reason: input.reason,
       affectedSymbols: input.affectedSymbols,
     }).catch((error) => {

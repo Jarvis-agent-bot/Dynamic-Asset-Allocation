@@ -1,14 +1,5 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
-const CURRENCY_SYMBOLS_: Record<string, string> = {
-  USD: "$",
-  EUR: "€",
-  CNY: "¥",
-  HKD: "HK$",
-  JPY: "¥",
-  GBP: "£",
-};
-
 const DATE_TIME_FORMATTER_ = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",
   month: "2-digit",

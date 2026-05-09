@@ -1,13 +1,13 @@
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { MARKET_DATA_USER_AGENT } from "@/src/market/constants";
-export type YahooRssItem = {
+type YahooRssItem = {
   title: string;
   link?: string;
   pubDate?: string;
   summary?: string;
 };
 
-export type YahooRssFetchResult = {
+type YahooRssFetchResult = {
   symbol: string;
   requestUrl: string;
   status: number;
@@ -20,7 +20,7 @@ function stripTags(s: string): string {
   return s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-export function parseYahooRssXml(xml: string, limit = 50): YahooRssItem[] {
+function parseYahooRssXml(xml: string, limit = 50): YahooRssItem[] {
   const itemRe = /<item>([\s\S]*?)<\/item>/g;
   const titleRe = /<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/;
   const linkRe = /<link>([\s\S]*?)<\/link>/;

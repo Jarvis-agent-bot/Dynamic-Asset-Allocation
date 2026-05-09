@@ -1,6 +1,6 @@
 import type { NextResponse } from "next/server";
 
-export const DAA_AUTH_SESSION_COOKIE = "daa_auth_session";
+const DAA_AUTH_SESSION_COOKIE = "daa_auth_session";
 export const DAA_AUTH_SESSION_TTL_DAYS = 30;
 
 function isProduction(): boolean {

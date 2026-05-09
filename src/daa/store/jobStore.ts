@@ -3,8 +3,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { withDaaPgClient, parseJsonb, toIsoString } from "./storeShared";
 import type { DaaStoreExternalPayloadRaw } from "./storeTypes";
 import { ensureDaaMarketCacheSchemaPg } from "./storeSchema";
@@ -155,4 +154,3 @@ export async function getDaaMarketCacheHealthStats(provider = "yfinance"): Promi
     };
   });
 }
-

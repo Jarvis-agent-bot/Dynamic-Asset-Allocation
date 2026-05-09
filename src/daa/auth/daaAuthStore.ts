@@ -27,7 +27,7 @@ export type DaaAuthSession = {
   ip: string | null;
 };
 
-export type DaaAuthAuditEventListRow = {
+type DaaAuthAuditEventListRow = {
   eventId: string;
   createdAt: string;
   kind: string;

@@ -4,16 +4,14 @@
  * 资产、观察、目标权重、价格快照分别落到独立表，避免宽表职责混杂。
  */
 
-import { withDaaPgClient, toFinite, type DaaTxQueryFn } from "./storeShared";
+import { toFinite, type DaaTxQueryFn } from "./storeShared";
 import { normalizeText } from "@/src/daa/utils/normalize";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
-import { buildPositionKey } from "./positionStore";
 import {
   inferMarketGroup, inferRegionByMarket,
   normalizeAssetClass, normalizeInstrumentType, normalizeRegion,
 } from "@/src/daa/modules/workbench/assetTaxonomy";
-import { ensureDaaStoreSchemaPg } from "./storeSchema";
 
 // ── Asset Master ──
 
@@ -58,20 +56,6 @@ export async function upsertAssetMasterInTx(
       normalizeInstrumentType(input.instrumentType, "STOCK"),
       normalizeText(input.marketGroup, inferMarketGroup({ market, assetClass })),
     ],
-  );
-}
-
-/** 确保 asset_master 中存在某个 asset_key（幂等，只插入不更新已有字段） */
-export async function ensureAssetMasterExistsInTx(
-  query: DaaTxQueryFn,
-  input: { assetKey: string; symbol: string; market: string; currency: string },
-): Promise<void> {
-  const market = normalizeText(input.market, "US").toUpperCase();
-  await query(
-    `INSERT INTO daa_asset_master (asset_key, symbol, market, currency, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,NOW(),NOW())
-     ON CONFLICT (asset_key) DO NOTHING`,
-    [input.assetKey, normalizeText(input.symbol).toUpperCase(), market, normalizeCurrencyAlias(input.currency, "USD")],
   );
 }
 
@@ -159,43 +143,4 @@ export async function updateMarketPriceSnapshotInTx(
        updated_at = NOW()`,
     [assetKey, Math.max(0, toFinite(lastPrice)), priceUpdatedAt],
   );
-}
-
-export async function batchUpdateMarketPriceSnapshots(
-  items: Array<{ assetKey: string; lastPrice: number; priceUpdatedAt: string }>,
-): Promise<string[]> {
-  if (items.length === 0) return [];
-  await ensureDaaStoreSchemaPg();
-  return withDaaPgClient(async ({ query }) => {
-    const validItems = items
-      .map((item) => ({
-        assetKey: normalizeText(item.assetKey).toUpperCase(),
-        lastPrice: Math.max(0, toFinite(item.lastPrice)),
-        priceUpdatedAt: item.priceUpdatedAt || new Date().toISOString(),
-      }))
-      .filter((item) => item.assetKey && item.lastPrice > 0);
-
-    if (validItems.length === 0) return [];
-
-    const params: (string | number)[] = [];
-    const valuesClauses: string[] = [];
-    for (let i = 0; i < validItems.length; i++) {
-      const offset = i * 3;
-      params.push(validItems[i].assetKey, validItems[i].lastPrice, validItems[i].priceUpdatedAt);
-      valuesClauses.push(`($${offset + 1}, $${offset + 2}::numeric, $${offset + 3}::timestamptz)`);
-    }
-
-    const result = await query(
-      `INSERT INTO daa_market_price_snapshots AS mps (asset_key, last_price, price_updated_at)
-       VALUES ${valuesClauses.join(", ")}
-       ON CONFLICT (asset_key) DO UPDATE SET
-         last_price = EXCLUDED.last_price,
-         price_updated_at = EXCLUDED.price_updated_at,
-         updated_at = NOW()
-       RETURNING mps.asset_key`,
-      params,
-    );
-
-    return result.rows.map((row: Record<string, unknown>) => String(row.asset_key || ""));
-  });
 }

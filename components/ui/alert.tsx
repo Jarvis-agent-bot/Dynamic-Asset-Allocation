@@ -18,7 +18,7 @@ const alertVariants = cva(
   }
 );
 
-export interface AlertProps
+interface AlertProps
   extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof alertVariants> {}
 

@@ -1,6 +1,7 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { fail, mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
+import { normalizeRebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
 import { WorkbenchDomainError } from "@/src/daa/modules/workbench/workbenchErrors";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     if (!cycleId) {
       return fail("VALIDATION_FAILED", "cycleId is required", { status: 400 });
     }
-    const executeMode = String(payload.executeMode || "").trim().toLowerCase() === "selected" ? "selected" : "all";
+    const executeMode = normalizeRebalanceExecuteMode(payload.executeMode);
     let data;
     try {
       data = await executeRebalanceViaGateway({ cycleId, executeMode });
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
             limit: parsed.limit ?? null,
           };
         } catch (err) {
-  logSwallowed("rebalanceExecuteRoute.parseReason", err);
+          logSwallowed("rebalanceExecuteRoute.parseReason", err);
           reason = raw || reason;
         }
         return fail("VALIDATION_FAILED", reason, { status: 409, details });

@@ -1,21 +1,21 @@
 /**
- * Overlay Store — 读取 Agent 目标权重计划
+ * 策略 Overlay 存储 — 读取 Agent 目标权重计划
  *
- * Agent 每个 cycle 在 surfaceNode 末尾通过 LLM 生成目标权重计划（configOverlay），
+ * Agent 每个 cycle 在 surfaceNode 末尾通过 LLM 生成目标权重计划（strategyOverlay），
  * 存储在 daa_agent_runs.briefing JSONB 中。
  */
 
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
-import type { AgentConfigOverlay } from "@/src/daa/agent/cognitiveTypes";
+import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 
-function normalizeOverlayFromBriefing(briefingRaw: unknown): AgentConfigOverlay | null {
+function normalizeStrategyOverlayFromBriefing(briefingRaw: unknown): AgentStrategyOverlay | null {
   const briefing = typeof briefingRaw === "string"
     ? JSON.parse(briefingRaw)
     : briefingRaw;
 
-  const overlay = briefing?.configOverlay;
+  const overlay = briefing?.strategyOverlay;
   if (!overlay || typeof overlay !== "object") return null;
 
   if (overlay.targetAllocationPlan && typeof overlay.targetAllocationPlan === "object") {
@@ -24,13 +24,13 @@ function normalizeOverlayFromBriefing(briefingRaw: unknown): AgentConfigOverlay 
     overlay.targetAllocationPlan = null;
   }
 
-  return overlay as AgentConfigOverlay;
+  return overlay as AgentStrategyOverlay;
 }
 
 /**
  * 读取指定 Agent run 产出的目标权重计划，供 Autopilot 避免误用历史输出。
  */
-export async function getAgentConfigOverlayForRun(runId: string): Promise<AgentConfigOverlay | null> {
+export async function getAgentStrategyOverlayForRun(runId: string): Promise<AgentStrategyOverlay | null> {
   try {
     const id = String(runId || "").trim();
     if (!id) return null;
@@ -47,9 +47,9 @@ export async function getAgentConfigOverlayForRun(runId: string): Promise<AgentC
       );
       return result.rows[0] ?? null;
     });
-    return row ? normalizeOverlayFromBriefing(row.briefing) : null;
+    return row ? normalizeStrategyOverlayFromBriefing(row.briefing) : null;
   } catch (e) {
-    logSwallowed("overlayStore.getForRun", e);
+    logSwallowed("strategyOverlayStore.getForRun", e);
     return null;
   }
 }

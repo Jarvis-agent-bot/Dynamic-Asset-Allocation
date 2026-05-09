@@ -14,10 +14,7 @@ export type {
   ToolEntryV2,
   ToolExecutionContext,
   ToolParamDef,
-  SignalType,
 } from "@/src/daa/agent/tools/types";
-
-export { SIGNAL_TYPES } from "@/src/daa/agent/tools/types";
 
 // ── 注册表 API ──
 export {

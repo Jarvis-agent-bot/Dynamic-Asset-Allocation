@@ -2,8 +2,7 @@
  * Portfolio store functions.
  */
 
-import { randomUUID } from "node:crypto";
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeCurrencyAlias } from "@/src/daa/config/currency";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
@@ -22,7 +21,7 @@ function normalizeCcyCode(value: unknown, fallback = "USD"): string {
   return normalizeCurrencyAlias(value, fallback);
 }
 
-export function mapEquitySnapshotRow(row: Record<string, unknown>): DaaStoreEquitySnapshot {
+function mapEquitySnapshotRow(row: Record<string, unknown>): DaaStoreEquitySnapshot {
   return {
     ts: toIsoString(row.ts),
     totalEquity: toFiniteNumber(row.total_equity),
@@ -68,7 +67,7 @@ export async function appendDaaEquitySnapshot(snapshot: Partial<DaaStoreEquitySn
   });
 }
 
-export function mapHumanIngestStateRow(row: Record<string, unknown>): DaaStoreHumanIngestState {
+function mapHumanIngestStateRow(row: Record<string, unknown>): DaaStoreHumanIngestState {
   return {
     id: "default",
     lastIngestAt: row.last_ingest_at == null ? null : toIsoString(row.last_ingest_at, new Date().toISOString()),
@@ -118,7 +117,7 @@ export async function saveDaaHumanIngestState(input: {
   });
 }
 
-export function mapCandidateAssetRow(row: Record<string, unknown>): DaaStoreCandidateAsset {
+function mapCandidateAssetRow(row: Record<string, unknown>): DaaStoreCandidateAsset {
   return {
     id: normalizeText(row.id),
     symbol: normalizeText(row.symbol).toUpperCase(),

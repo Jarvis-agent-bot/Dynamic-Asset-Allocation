@@ -3,8 +3,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { normalizeText, toFinite, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
-import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import { normalizeText, toFinite as toFiniteNumber } from "@/src/daa/utils/normalize";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
 import { withDaaPgClient, parseJsonb, toIsoString } from "./storeShared";
 import type { DaaStoreRunHistoryEntry, DaaStoreOpLogEntry } from "./storeTypes";

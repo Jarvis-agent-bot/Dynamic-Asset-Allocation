@@ -16,7 +16,6 @@ import {
   appendAssetPriceHistoryRows,
   getDaaSystemConfig,
   listDaaAssetUniverse,
-  updateDaaAssetUniverseLastPrice,
 } from "@/src/daa/store/daaStorePg";
 import { batchUpdateDaaAssetUniverseLastPrices } from "@/src/daa/store/assetUniverseStore";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";

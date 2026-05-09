@@ -9,7 +9,6 @@ import {
   executeDaaTradeTickets,
   getDaaAccountState,
   getDaaTradeTicket,
-  listDaaBrokerOpenTradeTickets,
   listDaaPositions,
   listDaaTradeTickets,
   type DaaStoreTradeTicket,
@@ -21,9 +20,9 @@ import { normalizeText, normalizeUpper } from "@/src/daa/utils/normalize";
 import type { TradeTicketSide, TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 
 export type DaaBrokerKind = "sim" | "crypto_paper";
-export type DaaBrokerOrderType = "MKT" | "LMT";
+type DaaBrokerOrderType = "MKT" | "LMT";
 
-export type DaaBrokerAccountSummary = {
+type DaaBrokerAccountSummary = {
   broker: DaaBrokerKind;
   accountId: string;
   accountAlias: string | null;
@@ -37,7 +36,7 @@ export type DaaBrokerAccountSummary = {
   updatedAt: string;
 };
 
-export type DaaBrokerPosition = {
+type DaaBrokerPosition = {
   broker: DaaBrokerKind;
   accountId: string;
   assetKey: string;
@@ -53,7 +52,7 @@ export type DaaBrokerPosition = {
   updatedAt: string;
 };
 
-export type DaaBrokerOrder = {
+type DaaBrokerOrder = {
   broker: DaaBrokerKind;
   accountId: string;
   orderId: string;
@@ -73,7 +72,7 @@ export type DaaBrokerOrder = {
   raw: Record<string, unknown> | null;
 };
 
-export type DaaBrokerPreviewOrderInput = {
+type DaaBrokerPreviewOrderInput = {
   accountId?: string | null;
   assetKey: string;
   symbol: string;
@@ -86,7 +85,7 @@ export type DaaBrokerPreviewOrderInput = {
   limitPrice?: number | null;
 };
 
-export type DaaBrokerPreviewOrderResult = {
+type DaaBrokerPreviewOrderResult = {
   broker: DaaBrokerKind;
   accountId: string;
   canPlace: boolean;
@@ -95,21 +94,21 @@ export type DaaBrokerPreviewOrderResult = {
   warnings: string[];
 };
 
-export type DaaBrokerPlaceOrderInput = DaaBrokerPreviewOrderInput & {
+type DaaBrokerPlaceOrderInput = DaaBrokerPreviewOrderInput & {
   reasonText?: string | null;
   timeInForce?: "DAY" | "GTC";
   tags?: string[];
   createdBy?: string;
 };
 
-export type DaaBrokerPlaceOrderResult = {
+type DaaBrokerPlaceOrderResult = {
   accepted: boolean;
   order: DaaBrokerOrder;
   messages: string[];
   warnings: string[];
 };
 
-export type DaaBrokerExecutionMeta = {
+type DaaBrokerExecutionMeta = {
   kind: DaaBrokerKind;
   accountId: string;
   accepted: boolean;
@@ -143,7 +142,7 @@ export type DaaBrokerBackedExecutionResult = {
   broker: DaaBrokerExecutionMeta | null;
 };
 
-export interface BrokerAdapter {
+interface BrokerAdapter {
   readonly kind: DaaBrokerKind;
   readonly remote?: boolean;
   getAccountSummary(accountId?: string | null): Promise<DaaBrokerAccountSummary>;
@@ -182,7 +181,7 @@ function mapSimTicketToOrder(ticket: DaaStoreTradeTicket): DaaBrokerOrder {
   };
 }
 
-export class SimBroker implements BrokerAdapter {
+class SimBroker implements BrokerAdapter {
   readonly kind = "sim" as const;
   readonly remote = false as const;
 
@@ -304,7 +303,7 @@ function mapCryptoTicketToOrder(ticket: DaaStoreTradeTicket): DaaBrokerOrder {
   };
 }
 
-export class CryptoPaperBroker implements BrokerAdapter {
+class CryptoPaperBroker implements BrokerAdapter {
   readonly kind = "crypto_paper" as const;
   readonly remote = false as const;
 
@@ -366,7 +365,7 @@ export class CryptoPaperBroker implements BrokerAdapter {
 
 /* ---------- execution routing ---------- */
 
-export type ExecutionRouteInput = {
+type ExecutionRouteInput = {
   assetKey?: string | null;
   symbol: string;
   market: string;
@@ -376,14 +375,14 @@ export type ExecutionRouteInput = {
   marketGroup?: string | null;
 };
 
-export type ExecutionRouteDecision = {
+type ExecutionRouteDecision = {
   kind: DaaBrokerKind;
   adapter: BrokerAdapter;
   routeReason: string;
   remote: boolean;
 };
 
-export function isCryptoAsset(input: ExecutionRouteInput): boolean {
+function isCryptoAsset(input: ExecutionRouteInput): boolean {
   const market = normalizeUpper(input.market);
   const assetClass = normalizeUpper(input.assetClass);
   const instrumentType = normalizeUpper(input.instrumentType);
@@ -412,7 +411,7 @@ export async function resolveExecutionRoute(input: ExecutionRouteInput): Promise
   };
 }
 
-export async function resolveExecutionRouteForTicket(ticket: DaaStoreTradeTicket): Promise<ExecutionRouteDecision> {
+async function resolveExecutionRouteForTicket(ticket: DaaStoreTradeTicket): Promise<ExecutionRouteDecision> {
   const kind = ticket.brokerKind;
   if (kind === "crypto_paper") {
     return {
@@ -430,23 +429,11 @@ export async function resolveExecutionRouteForTicket(ticket: DaaStoreTradeTicket
   };
 }
 
-export async function listRouteScopedOpenTickets(input: {
-  routeKind: DaaBrokerKind;
-  ticketId?: string | null;
-}): Promise<DaaStoreTradeTicket[]> {
-  if (input.ticketId) {
-    const ticket = await getDaaTradeTicket(input.ticketId);
-    if (!ticket) return [];
-    return [ticket];
-  }
-  return listDaaBrokerOpenTradeTickets(input.routeKind);
-}
-
 /* ---------- broker order sync ---------- */
 
-export type BrokerOrderSyncScope = "open" | "recent" | "ticket";
+type BrokerOrderSyncScope = "open" | "recent" | "ticket";
 
-export type BrokerOrderSyncResult = {
+type BrokerOrderSyncResult = {
   kind: "sim" | "crypto_paper";
   scope: BrokerOrderSyncScope;
   orderCount: number;
@@ -498,9 +485,4 @@ export function mapBrokerOrderStatusToTradeTicketStatus(statusRaw: string | null
   if (status === "cancelled" || status === "apicancelled") return "canceled";
   if (status === "inactive" || status === "rejected") return "rejected";
   return "submitted";
-}
-
-export function isBrokerOrderOpenStatus(statusRaw: string | null | undefined): boolean {
-  const status = mapBrokerOrderStatusToTradeTicketStatus(statusRaw);
-  return status === "submitted" || status === "partially_filled";
 }

@@ -8,7 +8,7 @@ import {
 } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 
-export type NotificationChannelStatusSummary = {
+type NotificationChannelStatusSummary = {
   channel: DaaNotificationChannel;
   enabled: boolean;
   configured: boolean;
@@ -20,7 +20,7 @@ export type NotificationChannelStatusSummary = {
   lastErrorMessage: string | null;
 };
 
-export type TelegramAssistantStatusSummary = {
+type TelegramAssistantStatusSummary = {
   ready: boolean;
   secretStates: Array<{ key: string; configured: boolean }>;
   lastSessionAt: string | null;

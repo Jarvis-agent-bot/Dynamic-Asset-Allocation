@@ -57,7 +57,6 @@ export async function POST(req: Request) {
     const cash = bootstrap.account.cash;
 
     // 当前配置
-    const holdMap = new Map(holdings.map((h) => [h.assetKey, h]));
     const beforeItems: AllocationItem[] = [];
     let totalHoldingsValue = 0;
 

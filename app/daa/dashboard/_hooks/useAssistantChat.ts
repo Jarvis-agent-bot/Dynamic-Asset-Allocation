@@ -89,5 +89,3 @@ export function useAssistantChat() {
     selectThread,
   };
 }
-
-export type AssistantChatModel = ReturnType<typeof useAssistantChat>;

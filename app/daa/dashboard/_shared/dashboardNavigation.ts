@@ -1,5 +1,3 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
-
 import { normalizeDashboardTab, type DashboardTab } from "@/app/daa/dashboard/_hooks/useDashboardModel";
 
 export function resolveTabFromLocation(input: {
@@ -19,13 +17,4 @@ export function resolveTabFromLocation(input: {
     return normalizeDashboardTab(input.searchTab);
   }
   return input.fallbackTab;
-}
-
-export function shouldHandleAnchorClick(
-  event: Pick<ReactMouseEvent<HTMLAnchorElement>, "defaultPrevented" | "button" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">,
-): boolean {
-  if (event.defaultPrevented) return false;
-  if (event.button !== 0) return false;
-  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
-  return true;
 }

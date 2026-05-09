@@ -14,7 +14,6 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 
 import { WatchlistSearchBar } from "@/app/daa/dashboard/portfolio/_components/WatchlistSearchBar";
-import AssetUniverseTable from "./AssetUniverseTable";
 import { RiskOverview } from "./RiskOverview";
 
 export function ActiveTabPanel(props: {

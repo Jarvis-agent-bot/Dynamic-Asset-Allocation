@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlaskConical, Play, History, AlertTriangle } from "lucide-react";
+import { Play, History, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   LineChart,
@@ -568,7 +568,7 @@ export default function StrategyLabPageClient() {
                       try {
                         const weights: Record<string, number> = {};
                         for (const item of result.attribution.perAsset) {
-                          const key = item.symbol.includes(":") ? item.symbol : `US:${item.symbol}`;
+                          const key = item.symbol.includes("::") ? item.symbol : `US::${item.symbol}`;
                           weights[key] = Number((item.avgWeight * 100).toFixed(2));
                         }
                         await applyWorkbenchTargetWeights(weights);

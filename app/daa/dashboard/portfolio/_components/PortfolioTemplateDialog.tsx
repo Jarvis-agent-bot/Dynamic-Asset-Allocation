@@ -23,37 +23,37 @@ const TEMPLATES: Template[] = [
     id: "classic_60_40",
     name: "经典 60/40",
     desc: "60% 美股 + 40% 债券，最经典的资产配置方案",
-    weights: { "US:SPY": 60, "US:BND": 40 },
+    weights: { "US::SPY": 60, "US::BND": 40 },
   },
   {
     id: "all_weather",
     name: "全天候",
     desc: "桥水 All Weather 思路，覆盖多经济周期",
-    weights: { "US:SPY": 30, "US:TLT": 40, "US:GLD": 15, "US:DBC": 7.5, "US:IEF": 7.5 },
+    weights: { "US::SPY": 30, "US::TLT": 40, "US::GLD": 15, "US::DBC": 7.5, "US::IEF": 7.5 },
   },
   {
     id: "three_fund",
     name: "三基金",
     desc: "美股 + 国际股票 + 债券的简约组合",
-    weights: { "US:VTI": 50, "US:EFA": 30, "US:BND": 20 },
+    weights: { "US::VTI": 50, "US::EFA": 30, "US::BND": 20 },
   },
   {
     id: "golden_butterfly",
     name: "金蝴蝶",
     desc: "5 等分：大盘 + 小盘 + 长债 + 短债 + 黄金",
-    weights: { "US:SPY": 20, "US:IWM": 20, "US:TLT": 20, "US:SGOV": 20, "US:GLD": 20 },
+    weights: { "US::SPY": 20, "US::IWM": 20, "US::TLT": 20, "US::SGOV": 20, "US::GLD": 20 },
   },
   {
     id: "risk_parity_lite",
     name: "风险平价 (简化版)",
     desc: "按波动率倒数近似配置",
-    weights: { "US:SPY": 25, "US:TLT": 35, "US:GLD": 20, "US:DBC": 10, "US:IEF": 10 },
+    weights: { "US::SPY": 25, "US::TLT": 35, "US::GLD": 20, "US::DBC": 10, "US::IEF": 10 },
   },
   {
     id: "growth_tilt",
     name: "成长偏重",
     desc: "偏重科技和成长型资产",
-    weights: { "US:QQQ": 40, "US:SPY": 25, "US:EFA": 15, "US:BND": 10, "US:GLD": 10 },
+    weights: { "US::QQQ": 40, "US::SPY": 25, "US::EFA": 15, "US::BND": 10, "US::GLD": 10 },
   },
 ];
 

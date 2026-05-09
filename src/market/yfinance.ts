@@ -1,6 +1,6 @@
 import type { PriceBar } from "../core/domain";
 
-export type NormalizeYfinanceHistoricalQuotesResult = { series: PriceBar[]; issues: string[] };
+type NormalizeYfinanceHistoricalQuotesResult = { series: PriceBar[]; issues: string[] };
 
 export function normalizeYfinanceSymbol(raw: string): string {
   const s = String(raw || "").trim();
@@ -38,7 +38,7 @@ function asIsoDate(x: unknown): string {
   return "";
 }
 
-export type YahooFinanceHistoricalQuoteLike = {
+type YahooFinanceHistoricalQuoteLike = {
   date?: unknown;
   close?: unknown;
   adjClose?: unknown;
