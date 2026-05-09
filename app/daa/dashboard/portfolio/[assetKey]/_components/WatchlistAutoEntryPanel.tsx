@@ -31,7 +31,6 @@ function isCooldownReady(lastEntryTriggeredAt: string | null, cooldownDays: numb
 export function WatchlistAutoEntryPanel(props: {
   assetKey: string;
   assetSnapshot: {
-    targetWeightHint: number;
     fxMissing: boolean;
     lastPrice: number;
     holdingPrice: number;
@@ -136,12 +135,13 @@ export function WatchlistAutoEntryPanel(props: {
   const lastTriggeredLabel = row.lastEntryTriggeredAt
     ? new Date(row.lastEntryTriggeredAt).toLocaleString("zh-CN", { hour12: false })
     : "尚未触发";
-  const fallbackTargetWeightPct = Math.max(0, assetSnapshot.targetWeightHint || 0) * 100;
   const explicitTargetWeightPct = row.entryTargetWeightPct;
-  const effectiveTargetWeightPct = explicitTargetWeightPct ?? (fallbackTargetWeightPct > 0 ? fallbackTargetWeightPct : null);
+  const effectiveTargetWeightPct = explicitTargetWeightPct != null && explicitTargetWeightPct > 0
+    ? explicitTargetWeightPct
+    : null;
   const effectiveTargetSource = explicitTargetWeightPct != null && explicitTargetWeightPct > 0
     ? "单资产规则"
-    : (fallbackTargetWeightPct > 0 ? "观察列表目标权重" : "未设置");
+    : "未设置";
   const livePrice = assetSnapshot.lastPrice > 0 ? assetSnapshot.lastPrice : assetSnapshot.holdingPrice;
   const firstBlocker = !row.autoEntryEnabled
     ? "未启用本标的自动建仓"

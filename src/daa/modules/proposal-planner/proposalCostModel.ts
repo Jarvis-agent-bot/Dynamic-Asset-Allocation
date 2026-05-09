@@ -1,4 +1,4 @@
-import type { RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export function estimateProposalPlanCost(input: {
   proposals: RebalanceProposal[];
@@ -20,4 +20,3 @@ export function estimateProposalPlanCost(input: {
     estimatedCostBase: estimatedFeeBase + estimatedSlippageBase,
   };
 }
-

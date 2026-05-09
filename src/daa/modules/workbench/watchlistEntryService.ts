@@ -17,7 +17,8 @@ import type { DaaValuationSignal } from "@/src/daa/signals/valuationSignal";
 import { listActiveWatchlistAutoEntries, type WatchlistAutoEntryRow, type WatchlistEntryRulesOverride } from "@/src/daa/store/watchlistAutoEntryStore";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
-import type { AssetUniverseView, RebalanceProposal, WorkbenchBootstrap } from "./workbenchTypes";
+import type { AssetUniverseView, WorkbenchBootstrap } from "./workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 type WatchlistEntryEvaluation = {
   assetKey: string;
@@ -75,8 +76,7 @@ function resolveEffectiveTargetWeightPct(input: {
 }): number | null {
   const explicit = input.config?.entryTargetWeightPct ?? input.asset.entryTargetWeightPct;
   if (explicit != null && explicit > 0) return explicit;
-  const fallbackTargetWeightPct = Math.max(0, Number(input.asset.targetWeightHint) || 0) * 100;
-  return fallbackTargetWeightPct > 0 ? fallbackTargetWeightPct : null;
+  return null;
 }
 
 export async function generateWatchlistEntryProposals(input: {

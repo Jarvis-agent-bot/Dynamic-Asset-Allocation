@@ -1,7 +1,7 @@
 import { appendDaaTriggerEvent } from "@/src/daa/store/daaStorePg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { normalizeText } from "@/src/daa/utils/normalize";
-import type { RebalanceTriggerSource } from "./workbenchTypes";
+import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 function buildTriggerEventIdempotencyKey(input: {
   triggerSource: RebalanceTriggerSource;

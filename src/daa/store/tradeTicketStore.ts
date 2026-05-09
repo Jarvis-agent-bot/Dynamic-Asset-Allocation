@@ -10,7 +10,11 @@ import { parseDaaAssetKey } from "@/src/daa/assetKey";
 import {
   withDaaPgClient, parseJsonb, toIsoString, isPgUniqueViolation, isRecord, toBoolean, clampNumber, normalizeStringArray, type DaaTxQueryFn,
 } from "./storeShared";
-import type { ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
+import {
+  normalizeRebalanceCycleStatus,
+  normalizeRebalanceTriggerSource,
+  type ProposalDecisionContext,
+} from "@/src/daa/modules/rebalance/rebalanceTypes";
 import type {
   DaaStoreTradeTicket, DaaStoreTradeTicketSource, DaaStoreTradeTicketStatus,
   DaaStoreTradeTicketSide, DaaStoreCreateTradeTicketInput,
@@ -439,26 +443,6 @@ async function refreshTradeTicketAggregatesInTx(query: DaaTxQueryFn, ticketIds: 
       );
     }
   }
-}
-
-function normalizeRebalanceCycleStatus(value: unknown): DaaStoreRebalanceCycleStatus {
-  const text = normalizeText(value, "generated").toLowerCase();
-  if (text === "reviewing") return "reviewing";
-  if (text === "executing") return "executing";
-  if (text === "completed") return "completed";
-  if (text === "cancelled" || text === "canceled") return "cancelled";
-  return "generated";
-}
-
-function normalizeRebalanceTriggerSource(value: unknown): DaaStoreRebalanceTriggerSource {
-  const text = normalizeText(value, "manual").toLowerCase();
-  if (text === "scheduled_review") return "scheduled_review";
-  if (text === "drift") return "drift";
-  if (text === "risk") return "risk";
-  if (text === "cash_idle") return "cash_idle";
-  if (text === "agent_trigger") return "agent_trigger";
-  if (text === "watchlist_entry") return "watchlist_entry";
-  return "manual";
 }
 
 function normalizePolicyEvaluationSource(value: unknown): NonNullable<DaaStoreRebalanceCycle["policySnapshot"]>["decision"]["source"] {

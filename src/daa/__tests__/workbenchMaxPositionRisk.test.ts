@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { buildPreTradeRiskCheck } from "@/src/daa/modules/workbench/workbenchModeling";
-import type { AssetUniverseView, RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 function makeAsset(overrides: Partial<AssetUniverseView> = {}): AssetUniverseView {
   return {

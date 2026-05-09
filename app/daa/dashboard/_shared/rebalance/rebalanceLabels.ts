@@ -1,5 +1,6 @@
 import type { DaaSurfaceTone } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
-import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export function cycleStatusLabel(status: RebalanceCycle["status"]): string {
   if (status === "generated") return "已生成";

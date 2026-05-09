@@ -153,7 +153,6 @@ export default function AssetTradingPageClient(props: { assetKey: string }) {
               <WatchlistAutoEntryPanel
                 assetKey={row.assetKey}
                 assetSnapshot={{
-                  targetWeightHint: row.targetWeightHint,
                   fxMissing: row.fxMissing,
                   lastPrice: row.lastPrice,
                   holdingPrice: row.holdingPrice,

@@ -7,7 +7,7 @@ import { evaluateNoTradeBand } from "@/src/daa/modules/policy-engine/noTradeBand
 import type { InvestmentIntent } from "@/src/daa/modules/intents/intentTypes";
 import type { PortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateTypes";
 import type { DriftSignal } from "@/src/daa/modules/signals/signalTypes";
-import type { RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 function portfolioState(overrides: Partial<PortfolioState> = {}): PortfolioState {
   return {

@@ -487,7 +487,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
         trigger: {
           driftThresholdPct: 0,
           minOrderNotional: 0,
-          rebalanceCooldownSeconds: 0,
+          minRebalanceIntervalSeconds: 0,
         },
       });
 
@@ -625,7 +625,7 @@ export function backtestDriftRebalance(req: DriftRebalanceBacktestRequest): Drif
       trigger: {
         driftThresholdPct: trigger.driftThresholdPct,
         minOrderNotional: trigger.minOrderNotional,
-        rebalanceCooldownSeconds: trigger.rebalanceCooldownSeconds,
+        minRebalanceIntervalSeconds: trigger.minRebalanceIntervalSeconds,
         lastRebalanceAt,
         now,
       },

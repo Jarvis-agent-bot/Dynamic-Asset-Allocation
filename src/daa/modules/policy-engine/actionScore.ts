@@ -1,7 +1,7 @@
 import type { InvestmentIntent } from "@/src/daa/modules/intents/intentTypes";
 import type { PortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateTypes";
 import type { PortfolioSignal } from "@/src/daa/modules/signals/signalTypes";
-import type { RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 import type { DaaPolicyConfig, PolicyCostBenefit } from "./policyTypes";
 
@@ -65,4 +65,3 @@ export function calculateActionScore(input: {
   );
   return { score, costBenefit };
 }
-

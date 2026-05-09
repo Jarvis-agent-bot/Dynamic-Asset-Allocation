@@ -10,7 +10,8 @@ import {
   summarizeWorkbenchRebalanceExecution,
 } from "@/src/daa/modules/workbench/workbenchApi";
 import type { RebalanceExecuteMode } from "@/src/daa/modules/workbench/rebalanceExecuteMode";
-import type { ExecuteRebalanceSummary, PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { ExecuteRebalanceSummary, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 function isExecutableCycleStatus(status: RebalanceCycle["status"]): boolean {
   return status === "generated" || status === "reviewing";

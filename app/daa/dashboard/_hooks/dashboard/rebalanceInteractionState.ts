@@ -1,8 +1,5 @@
-import type {
-  AssetUniverseView,
-  PreTradeRiskCheck,
-  RebalanceCycle,
-} from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export type RebalanceInteractionStage =
   | "empty"

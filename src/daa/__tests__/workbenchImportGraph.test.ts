@@ -36,4 +36,24 @@ describe("workbench-import-graph-v1", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("store、policy engine、portfolio state 与 proposal planner 不再依赖 workbench 视图类型", () => {
+    const root = process.cwd();
+    const candidates = [
+      ...walkFiles(path.join(root, "src/daa/store")),
+      ...walkFiles(path.join(root, "src/daa/modules/policy-engine")),
+      ...walkFiles(path.join(root, "src/daa/modules/portfolio-state")),
+      ...walkFiles(path.join(root, "src/daa/modules/proposal-planner")),
+      path.join(root, "src/daa/modules/intents/intentBuilder.ts"),
+      path.join(root, "src/daa/agent/agentRebalanceAdapter.ts"),
+    ];
+
+    const offenders = candidates
+      .filter((file) => fs.existsSync(file))
+      .map((file) => ({ file, content: fs.readFileSync(file, "utf8") }))
+      .filter(({ content }) => content.includes("modules/workbench/workbenchTypes") || content.includes("./workbenchTypes"))
+      .map(({ file }) => normalize(path.relative(root, file)));
+
+    expect(offenders).toEqual([]);
+  });
 });

@@ -21,7 +21,7 @@ import {
 } from "@/src/daa/store/daaStorePg";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
 import { buildInvestmentIntents } from "@/src/daa/modules/intents/intentBuilder";
-import { buildPortfolioStateFromBootstrap } from "@/src/daa/modules/portfolio-state/portfolioStateService";
+import { buildPortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateService";
 import { buildProposalPlan } from "@/src/daa/modules/proposal-planner/proposalPlanner";
 import { evaluatePortfolioPolicy } from "@/src/daa/modules/policy-engine/policyEngine";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
@@ -39,8 +39,6 @@ import type {
   GenerateRebalanceCycleResult,
   PortfolioHealthyInsight,
   RebalanceCycle,
-  RebalanceProposal,
-  RebalanceTriggerSource,
   UpdateRebalanceCycleInput,
 } from "./workbenchTypes";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
@@ -63,6 +61,7 @@ import {
 } from "./reviewSchedule";
 import { assertCycleExecutable, assertCycleMutable } from "./cycleGuards";
 import { calcHoldingCostPerUnit } from "./executionCost";
+import type { RebalanceProposal, RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import {
   buildCycleDraftFromBootstrap,
   buildPreTradeRiskCheckFromBootstrap,
@@ -267,7 +266,7 @@ export async function generateWorkbenchRebalanceCycle(
 
   const latestCycle = recentCycles[0] || null;
   const policy = resolvePolicyConfig(systemRow.config);
-  const portfolioState = buildPortfolioStateFromBootstrap(bootstrap);
+  const portfolioState = buildPortfolioState(bootstrap);
   const signals = collectPortfolioSignals({
     portfolioState,
     systemConfig: systemRow.config,

@@ -5,9 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { ApiClientError, getApiErrorMessage } from "@/src/daa/api/client";
 import { getWorkbenchReadModel } from "@/src/daa/modules/read/readApi";
 import type { WorkbenchReadModel } from "@/src/daa/modules/read/readModels";
-import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { useDashboardAutoRefresh } from "./useDashboardAutoRefresh";
 import { usePriceStream, type PriceUpdate } from "./usePriceStream";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export type DashboardTab = "positions" | "watchlist" | "analysis" | "rebalance" | "cash";
 

@@ -1,7 +1,8 @@
 import { formatAssetLabel } from "@/src/daa/assetRegistry";
 import type { AgentStrategyOverlay } from "@/src/daa/agent/cognitiveTypes";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
-import type { RebalanceTriggerSource, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
+import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 type AutoExecuteBreachProposal = {
   assetKey?: string | null;

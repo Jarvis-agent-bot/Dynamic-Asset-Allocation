@@ -4,16 +4,13 @@ import {
   getDaaSystemConfig,
 } from "@/src/daa/store/daaStorePg";
 import { normalizeText, toFinite } from "@/src/daa/utils/normalize";
-import type {
-  ExecuteRebalanceSummary,
-  PreTradeRiskCheck,
-  RebalanceProposal,
-} from "./workbenchTypes";
+import type { ExecuteRebalanceSummary } from "./workbenchTypes";
 import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 
 import { buildWorkbenchBootstrap } from "./workbenchReadService";
 import { assertCycleExecutable } from "./cycleGuards";
 import { summarizeProposalExecutionCosts } from "./executionCost";
+import type { PreTradeRiskCheck, RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import {
   buildCycleDraftFromBootstrap,
   buildManualPreTradeRiskCheck,

@@ -3,7 +3,8 @@ import { renderHook, act, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 
 import { useExecutionFlow } from "../dashboard/useExecutionFlow";
-import type { PreTradeRiskCheck, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 vi.mock("@/src/daa/modules/workbench/workbenchApi", () => ({
   executeWorkbenchRebalanceCycle: vi.fn(),

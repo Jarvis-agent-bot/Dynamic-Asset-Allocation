@@ -4,11 +4,8 @@ import { SectionErrorBoundary } from "@/app/daa/dashboard/_components/SectionErr
 import { PortfolioRiskPanel } from "@/app/daa/dashboard/_shared/PortfolioRiskPanel";
 import { RebalanceRiskAlerts } from "@/app/daa/dashboard/_shared/rebalance/RebalanceRiskAlerts";
 import type { DaaStoreEquitySnapshot } from "@/src/daa/store/storeTypes";
-import type {
-  PreTradeRiskCheck,
-  RebalanceCycle,
-  WorkbenchBootstrap,
-} from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export function RiskOverview(props: {
   bootstrap: WorkbenchBootstrap | null;

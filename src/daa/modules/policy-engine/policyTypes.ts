@@ -1,4 +1,4 @@
-import type { RebalanceTriggerSource } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export type PolicyReviewFrequency = "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
 

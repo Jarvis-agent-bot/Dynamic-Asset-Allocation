@@ -1,5 +1,6 @@
 import { requireDaaAdminEditorAuth } from "@/src/daa/adminAuth";
 import { mapDeniedResponse, ok, readJsonBody, withApiHandler } from "@/src/daa/api/routeHelpers";
+import { normalizeRebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 
 export const runtime = "nodejs";
@@ -10,15 +11,6 @@ type Body = {
   manual?: unknown;
   targetWeightOverrides?: unknown;
 };
-
-function toTriggerSource(value: unknown): "scheduled_review" | "drift" | "manual" | "risk" | undefined {
-  const text = String(value || "").trim().toLowerCase();
-  if (text === "scheduled_review") return "scheduled_review";
-  if (text === "drift") return "drift";
-  if (text === "manual") return "manual";
-  if (text === "risk") return "risk";
-  return undefined;
-}
 
 function toTargetWeightOverrides(value: unknown): Record<string, number> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
@@ -40,7 +32,7 @@ export async function POST(req: Request) {
     const body = await readJsonBody<Body>(req);
     const payload = (body || {}) as Body;
     const data = await generateWorkbenchRebalanceCycle({
-      triggerSource: toTriggerSource(payload.triggerSource),
+      triggerSource: normalizeRebalanceTriggerSource(payload.triggerSource),
       triggerReason: String(payload.triggerReason || "").trim(),
       manual: payload.manual === true || payload.manual === "1" || payload.manual === "true",
       targetWeightOverrides: toTargetWeightOverrides(payload.targetWeightOverrides),

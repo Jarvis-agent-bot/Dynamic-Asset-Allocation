@@ -12,12 +12,14 @@ import {
 import { computeCorrelationMatrix } from "./correlationService";
 import { calcHoldingCostPerUnit } from "./executionCost";
 import type {
-  HfSignalSummary,
-  PreTradeRiskRule,
-  PreTradeRiskCheckItem,
   PreTradeRiskCheck,
-  RebalanceCycle,
+  PreTradeRiskCheckItem,
+  PreTradeRiskRule,
   RebalanceProposal,
+} from "@/src/daa/modules/rebalance/rebalanceTypes";
+import type {
+  HfSignalSummary,
+  RebalanceCycle,
   WorkbenchBootstrap,
   WorkbenchRebalanceCycleReport,
 } from "./workbenchTypes";

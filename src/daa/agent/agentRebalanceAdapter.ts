@@ -10,7 +10,7 @@
  */
 
 import type { ResearchThread } from "@/src/daa/agent/cognitiveTypes";
-import type { RebalanceProposal, ProposalDecisionContext } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { ProposalDecisionContext, RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import { getActiveTheses, getThesisAccuracyAvg } from "@/src/daa/agent/store/thesisStore";
 import { callLlm, resolveLlmConfig } from "@/src/daa/llm/llmClient";
 import { sanitizeForPrompt } from "@/src/daa/llm/llmSanitize";

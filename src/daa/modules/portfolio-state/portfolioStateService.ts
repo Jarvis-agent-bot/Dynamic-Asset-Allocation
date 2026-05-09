@@ -1,14 +1,41 @@
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
-import type { WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
-import type { PortfolioDataHealth, PortfolioState } from "./portfolioStateTypes";
+import type { PortfolioDataHealth, PortfolioPriceStatus, PortfolioState } from "./portfolioStateTypes";
+
+type PortfolioStateSourceAsset = {
+  assetKey: string;
+  symbol: string;
+  market: string;
+  currency: string;
+  holdingQty: number;
+  holdingPrice: number;
+  lastPrice: number;
+  priceStatus?: PortfolioPriceStatus;
+  valuationBase: number | null;
+  costBasisInBase: number | null;
+  unrealizedPnlPct: number | null;
+  actualWeightPct: number;
+  targetWeightPct: number;
+  targetWeightHint: number;
+  gapPct: number | null;
+  fxMissing: boolean;
+};
+
+type PortfolioStateSource = {
+  baseCurrency: string;
+  account: {
+    cash?: number | null;
+    totalEquity?: number | null;
+  };
+  assetUniverse: PortfolioStateSourceAsset[];
+};
 
 function toFiniteNumber(value: unknown, fallback = 0): number {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 }
 
-function buildDataHealth(bootstrap: WorkbenchBootstrap): PortfolioDataHealth {
+function buildDataHealth(bootstrap: PortfolioStateSource): PortfolioDataHealth {
   const staleAssetKeys: string[] = [];
   const missingAssetKeys: string[] = [];
   const fxMissingAssetKeys: string[] = [];
@@ -33,7 +60,7 @@ function buildDataHealth(bootstrap: WorkbenchBootstrap): PortfolioDataHealth {
   return { status, staleAssetKeys, missingAssetKeys, fxMissingAssetKeys, message };
 }
 
-export function buildPortfolioStateFromBootstrap(bootstrap: WorkbenchBootstrap): PortfolioState {
+export function buildPortfolioState(bootstrap: PortfolioStateSource): PortfolioState {
   const positions = bootstrap.assetUniverse.map((row) => {
     const symbol = String(row.symbol || "UNKNOWN").trim().toUpperCase() || "UNKNOWN";
     const market = String(row.market || "US").trim().toUpperCase() || "US";

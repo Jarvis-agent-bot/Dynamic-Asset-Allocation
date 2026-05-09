@@ -173,7 +173,7 @@ describe("generateWatchlistEntryProposals", () => {
     expect(result.evaluations[0]?.rejectReason).toMatch(/冷静期/);
   });
 
-  it("信号达标且 entryTargetWeightPct 为空时，会回退到 targetWeightHint 生成 BUY 提案", async () => {
+  it("entryTargetWeightPct 为空时不再回退 targetWeightHint 自动买入", async () => {
     vi.mocked(listActiveWatchlistAutoEntries).mockResolvedValue([
       { assetKey: "US::SPY", autoEntryEnabled: true, entryTargetWeightPct: null, entryRules: null, entryCooldownDays: 14, lastEntryTriggeredAt: null },
     ]);
@@ -184,13 +184,8 @@ describe("generateWatchlistEntryProposals", () => {
       bootstrap: mockBootstrap([mockAsset({ autoEntryEnabled: true, targetWeightHint: 0.05 })], 10000, 50000),
       systemConfig: mockSystemConfig(true),
     });
-    expect(result.proposals).toHaveLength(1);
-    expect(result.proposals[0]?.side).toBe("BUY");
-    expect(result.proposals[0]?.proposalType).toBe("watchlist_entry");
-    expect(result.proposals[0]?.targetWeightPct).toBe(5);
-    expect(result.proposals[0]?.reason).toMatch(/观察列表自动建仓/);
-    // 目标 5% × 50000 = 2500，现金上限 30% × 10000 = 3000 → min = 2500
-    expect(result.proposals[0]?.suggestedNotional).toBeCloseTo(2500, 0);
+    expect(result.proposals).toHaveLength(0);
+    expect(result.evaluations[0]?.rejectReason).toMatch(/未设置有效目标权重/);
   });
 
   it("阈值未过 → 不生成提案", async () => {

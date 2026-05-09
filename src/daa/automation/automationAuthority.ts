@@ -4,7 +4,7 @@ import {
 } from "@/src/daa/brain/brainPolicy";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
-import type { RebalanceTriggerSource } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export type AutomationAuthorityDecision = {
   allowed: boolean;
@@ -22,7 +22,6 @@ export type AutomationAuthorityTrigger =
   | "cron_daily_analysis"
   | "cron_drift_check"
   | "cron_cognitive_agent"
-  | "agent_trigger"
   | "manual_api"
   | "alpaca_ws_realtime"
   | "cron_news_refresh"

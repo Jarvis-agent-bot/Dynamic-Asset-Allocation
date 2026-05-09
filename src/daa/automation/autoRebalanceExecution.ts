@@ -1,13 +1,14 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { evaluateAutoRebalanceAuthority, type AutomationAuthorityDecision, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
-import type { PreTradeRiskCheck, RebalanceCycle, RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
 import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
+import type { PreTradeRiskCheck, RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 import {
   findAutoExecuteSingleOrderBreach,

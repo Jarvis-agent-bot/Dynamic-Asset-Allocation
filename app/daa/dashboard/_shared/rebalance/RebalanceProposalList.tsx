@@ -14,13 +14,10 @@ import {
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { formatCurrency } from "@/app/daa/dashboard/_components/daaFormatters";
 import { cn } from "@/lib/utils";
-import type {
-  PreTradeRiskCheck,
-  RebalanceCycle,
-  WorkbenchBootstrap,
-} from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { cycleStatusTone, llmAdjustmentLabel, marketRegimeLabel, riskOverallTone, riskStatusLabel, signalActionLabel } from "./rebalanceLabels";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export function RebalanceProposalList(props: {
   bootstrap: WorkbenchBootstrap;

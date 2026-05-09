@@ -3,11 +3,15 @@ import type { RebalanceExecuteMode } from "./rebalanceExecuteMode";
 import type { TradeTicketSide, TradeTicketSource, TradeTicketStatus, TradeTicket } from "@/src/daa/modules/trade/tradeTypes";
 import type {
   DaaMarketContext,
-  DaaMarketIndicatorScope,
   DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
-import type { DaaStoreRebalanceCycleStatus } from "@/src/daa/store/storeTypes";
 import type { DaaPolicyConfig, PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
+import type {
+  PreTradeRiskCheck,
+  RebalanceCycleStatus,
+  RebalanceProposal,
+  RebalanceTriggerSource,
+} from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export type WorkbenchPriceStatus = "fresh" | "stale" | "missing" | "unsupported";
 
@@ -74,99 +78,6 @@ export type AssetUniverseView = {
   targetWeightPct: number;
   gapPct: number | null;
   hfSignal: HfSignalSummary | null;
-};
-
-export type RebalanceTriggerSource = "scheduled_review" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger" | "watchlist_entry";
-
-type RebalanceCycleStatus = DaaStoreRebalanceCycleStatus;
-
-/**
- * 每个 proposal 上的决策上下文（由 agentRebalanceAdapter 注入）。
- * 记录完整的决策链路，供 UI 展示和审计追踪。
- */
-export type ProposalDecisionContext = {
-  /** 原始 drift 触发原因 */
-  driftReason: string;
-  /** 信号融合的行动建议 */
-  signalAction: "open_or_add" | "watch" | "reduce_or_avoid" | null;
-  /** 信号综合评分（0-100）*/
-  signalScore: number | null;
-  /** 信号置信度（0-100）*/
-  signalConfidence: number | null;
-  /** 是否存在信号与漂移方向冲突 */
-  signalConflict: boolean;
-  /** LLM 建议的调整指令 */
-  llmAdjustment: "execute" | "reduce_size" | "skip" | "increase_priority" | null;
-  /** LLM 置信度（0-100）*/
-  llmConfidence: number | null;
-  /** LLM 调整原因 */
-  llmRationale: string | null;
-  /** 规则层市场环境 */
-  ruleBasedMarketRegime?: DaaMarketRegime | null;
-  /** AI 市场环境 */
-  llmMarketRegime?: DaaMarketRegime | null;
-  /** 最终生效市场环境 */
-  effectiveMarketRegime?: DaaMarketRegime | null;
-  /** 对应的市场维度 */
-  marketScope?: DaaMarketIndicatorScope | null;
-  /** 市场维度中文标签 */
-  marketScopeLabel?: string | null;
-  /** 市场指标标记 */
-  marketIndicatorFlags?: string[];
-  /** 所有冲突/降权标记 */
-  conflictFlags: string[];
-  /** 最终建议量倍数（0-1）*/
-  finalQtyMultiplier: number;
-};
-
-/** 提案来源类型：区分漂移纠偏、观察列表建仓、税务收割等 */
-export type ProposalType = "drift" | "watchlist_entry" | "tax_loss_harvest";
-
-export type RebalanceProposal = {
-  assetKey: string;
-  symbol: string;
-  currency: string;
-  fxRateToBase: number | null;
-  side: "BUY" | "SELL";
-  suggestedQty: number;
-  suggestedNotional: number;
-  price: number;
-  reason: string;
-  selected: boolean;
-  hfContribution: string | null;
-  /** 此提案希望成交后保留的目标权重百分比，例如 5 表示 5%。 */
-  targetWeightPct?: number | null;
-  /** 提案来源类型（默认 "drift"，观察列表信号建仓为 "watchlist_entry"） */
-  proposalType?: ProposalType;
-  /**
-   * 三层决策上下文（drift × signal × LLM）。
-   * 由 agentRebalanceAdapter 注入，用于审计每条建议的生成路径。
-   */
-  decisionContext?: ProposalDecisionContext | null;
-  /** 影响此提案的 thesis ID 列表（由 agentRebalanceAdapter 注入） */
-  thesisIds?: string[];
-};
-
-export type PreTradeRiskRule =
-  | "max_position"
-  | "max_order_pct"
-  | "concentration"
-  | "correlation"
-  | "stop_loss_breach"
-  | "total_weight"
-  | "cash_sufficiency";
-
-export type PreTradeRiskCheckItem = {
-  rule: PreTradeRiskRule;
-  status: "pass" | "warn" | "block";
-  current: number;
-  limit: number;
-  message: string;
-};
-
-export type PreTradeRiskCheck = {
-  overallStatus: "pass" | "warn" | "block";
-  items: PreTradeRiskCheckItem[];
 };
 
 export type RebalanceCycle = {

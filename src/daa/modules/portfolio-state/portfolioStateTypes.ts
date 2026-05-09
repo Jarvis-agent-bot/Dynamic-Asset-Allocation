@@ -1,4 +1,4 @@
-import type { WorkbenchPriceStatus } from "@/src/daa/modules/workbench/workbenchTypes";
+export type PortfolioPriceStatus = "fresh" | "stale" | "missing" | "unsupported";
 
 export type PortfolioDataHealth = {
   status: "ok" | "stale" | "missing" | "degraded";
@@ -14,7 +14,7 @@ export type PortfolioPositionState = {
   currency: string;
   holdingQty: number;
   price: number;
-  priceStatus: WorkbenchPriceStatus;
+  priceStatus: PortfolioPriceStatus;
   valuationBase: number | null;
   costBasisInBase: number | null;
   unrealizedPnlPct: number | null;
@@ -41,4 +41,3 @@ export type PortfolioState = {
   exposures: PortfolioExposureState;
   dataHealth: PortfolioDataHealth;
 };
-

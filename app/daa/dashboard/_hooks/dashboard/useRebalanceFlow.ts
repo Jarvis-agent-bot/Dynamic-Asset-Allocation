@@ -5,12 +5,8 @@ import { toast } from "sonner";
 
 import { deriveRebalanceInteractionState } from "@/app/daa/dashboard/_hooks/dashboard/rebalanceInteractionState";
 import { generateWorkbenchRebalanceCycle, patchWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchApi";
-import type {
-  AssetUniverseView,
-  PreTradeRiskCheck,
-  RebalanceCycle,
-  WorkbenchBootstrap,
-} from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView, RebalanceCycle, WorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 function isTerminalCycleStatus(status: RebalanceCycle["status"]): boolean {
   return status === "completed" || status === "cancelled";

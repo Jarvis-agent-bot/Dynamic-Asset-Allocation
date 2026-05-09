@@ -114,7 +114,7 @@ describe("rebalanceCore", () => {
     expect(res.warnings.join("\n")).toMatch(/blocks all trades/i);
   });
 
-  it("respects rebalanceCooldownSeconds when lastRebalanceAt is recent", () => {
+  it("respects minRebalanceIntervalSeconds when lastRebalanceAt is recent", () => {
     const res = rebalanceCore({
       account: { cash: 0 },
       holdings: { AAA: 100 },
@@ -124,7 +124,7 @@ describe("rebalanceCore", () => {
       trigger: {
         driftThresholdPct: 0,
         minOrderNotional: 0,
-        rebalanceCooldownSeconds: 3600,
+        minRebalanceIntervalSeconds: 3600,
         lastRebalanceAt: "2026-02-12T00:00:00.000Z",
         now: "2026-02-12T00:10:00.000Z",
       },
@@ -132,7 +132,7 @@ describe("rebalanceCore", () => {
 
     expect(res.orders.length).toBe(2);
     expect(res.trigger.shouldRebalance).toBe(false);
-    expect(res.trigger.reasons.join("\n")).toMatch(/cooldown:/);
+    expect(res.trigger.reasons.join("\n")).toMatch(/min_interval:/);
   });
 
   it("sweeps excess cash down toward implicit cash buffer when enabled", () => {

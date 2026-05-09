@@ -1,5 +1,6 @@
 import { toFinite } from "@/src/daa/utils/normalize";
-import type { RebalanceProposal, WorkbenchBootstrap } from "./workbenchTypes";
+import type { WorkbenchBootstrap } from "./workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export function calcHoldingCostPerUnit(row: Pick<WorkbenchBootstrap["assetUniverse"][number], "holdingQty" | "costBasis" | "holdingPrice">): number {
   if (row.holdingQty > 0 && row.costBasis != null && row.costBasis > 0) {

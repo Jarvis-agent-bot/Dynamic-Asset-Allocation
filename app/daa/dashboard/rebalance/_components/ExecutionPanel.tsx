@@ -13,7 +13,8 @@ import {
   cycleStatusLabel,
   cycleStatusTone,
 } from "@/app/daa/dashboard/_shared/rebalance/rebalanceLabels";
-import type { RebalanceCycle, PreTradeRiskCheck } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export function ExecutionPanel(props: {
   currentCycle: RebalanceCycle | null;

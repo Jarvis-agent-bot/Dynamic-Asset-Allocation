@@ -8,7 +8,12 @@ import type {
   DaaMarketIndicatorKey,
   DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
-import type { ProposalDecisionContext, ProposalType } from "@/src/daa/modules/workbench/workbenchTypes";
+import type {
+  ProposalDecisionContext,
+  ProposalType,
+  RebalanceCycleStatus,
+  RebalanceTriggerSource,
+} from "@/src/daa/modules/rebalance/rebalanceTypes";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 
@@ -404,9 +409,9 @@ export type DaaStorePreTradeRiskCheck = {
   items: DaaStorePreTradeRiskCheckItem[];
 };
 
-export type DaaStoreRebalanceCycleStatus = "generated" | "reviewing" | "executing" | "completed" | "cancelled";
+export type DaaStoreRebalanceCycleStatus = RebalanceCycleStatus;
 
-export type DaaStoreRebalanceTriggerSource = "scheduled_review" | "drift" | "manual" | "risk" | "cash_idle" | "agent_trigger" | "watchlist_entry";
+export type DaaStoreRebalanceTriggerSource = RebalanceTriggerSource;
 
 export type DaaStoreRebalanceCycle = {
   cycleId: string;

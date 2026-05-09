@@ -1,7 +1,8 @@
 import { daaPgPool } from "@/src/daa/pg/daaPg";
 import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 import { getDaaAccountScopeId } from "@/src/daa/account/accountScope";
-import type { WorkbenchBootstrap, RebalanceProposal, TlhCandidate, TlhScanResult } from "./workbenchTypes";
+import type { WorkbenchBootstrap, TlhCandidate, TlhScanResult } from "./workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 type TlhConfig = {
   enabled: boolean;

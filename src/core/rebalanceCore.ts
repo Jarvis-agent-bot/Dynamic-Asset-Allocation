@@ -26,9 +26,9 @@ export type RebalanceTriggerConfig = {
   driftThresholdPct?: number;
   // Minimum per-order notional. If larger than constraints.minNotional, it overrides it.
   minOrderNotional?: number;
-  // Cooldown window after a prior rebalance; during cooldown, shouldRebalance=false.
-  rebalanceCooldownSeconds?: number;
-  // ISO timestamp for last rebalance; used only when rebalanceCooldownSeconds > 0.
+  // Minimum elapsed time after a prior rebalance; before this interval, shouldRebalance=false.
+  minRebalanceIntervalSeconds?: number;
+  // ISO timestamp for last rebalance; used only when minRebalanceIntervalSeconds > 0.
   lastRebalanceAt?: string;
   // Optional ISO timestamp to make the decision deterministic in tests/UI.
   now?: string;
@@ -47,7 +47,7 @@ export type RebalanceTriggerDecision = {
     equity: number;
     driftThresholdPct: number;
     minOrderNotional: number;
-    rebalanceCooldownSeconds: number;
+    minRebalanceIntervalSeconds: number;
     maxAbsDriftPct: number;
     maxAbsDriftSymbol: string | null;
     orderCount: number;
@@ -70,6 +70,12 @@ type RebalanceCoreTargetWeight = {
   id: string;
   label?: string;
   targetPct: number;
+};
+
+type RawRebalanceCoreTargetWeight = Partial<RebalanceCoreTargetWeight> & {
+  symbol?: unknown;
+  target_pct?: unknown;
+  weight?: unknown;
 };
 
 export type SuggestedOrder = {
@@ -144,8 +150,8 @@ function normalizeHoldings(
   if (Array.isArray(holdings)) {
     const out: Record<string, number> = {};
     for (const h of holdings) {
-      const symbol = String((h as any)?.symbol ?? "").trim();
-      const qty = toFinite((h as any)?.qty, 0);
+      const symbol = String(h?.symbol ?? "").trim();
+      const qty = toFinite(h?.qty, 0);
       if (!symbol) continue;
 
       if (blacklist.has(normalizeSymbolKey(symbol))) {
@@ -203,8 +209,8 @@ function normalizePrices(
   if (Array.isArray(prices)) {
     const out: Record<string, number> = {};
     for (const p of prices) {
-      const symbol = String((p as any)?.symbol ?? "").trim();
-      const price = toFinite((p as any)?.price, Number.NaN);
+      const symbol = String(p?.symbol ?? "").trim();
+      const price = toFinite(p?.price, Number.NaN);
       if (!symbol) continue;
 
       if (blacklist.has(normalizeSymbolKey(symbol))) {
@@ -213,7 +219,7 @@ function normalizePrices(
       }
 
       if (!Number.isFinite(price) || price <= 0) {
-        warnings.push(`warning: price for ${symbol} must be > 0; got ${String((p as any)?.price)}`);
+        warnings.push(`warning: price for ${symbol} must be > 0; got ${String(p?.price)}`);
         continue;
       }
       out[symbol] = price;
@@ -269,7 +275,8 @@ function normalizeTargetWeights(
 
   if (Array.isArray(targetWeights)) {
     for (const w of targetWeights) {
-      const id = String((w as any)?.id ?? (w as any)?.symbol ?? "").trim();
+      const row = w as RawRebalanceCoreTargetWeight;
+      const id = String(row.id ?? row.symbol ?? "").trim();
       if (!id) continue;
 
       if (blacklist.has(normalizeSymbolKey(id))) {
@@ -277,8 +284,8 @@ function normalizeTargetWeights(
         continue;
       }
 
-      const label = String((w as any)?.label ?? id).trim() || id;
-      const targetPctRaw = (w as any)?.targetPct ?? (w as any)?.target_pct ?? (w as any)?.weight;
+      const label = String(row.label ?? id).trim() || id;
+      const targetPctRaw = row.targetPct ?? row.target_pct ?? row.weight;
       const targetPctNum = toFinite(targetPctRaw, 0);
 
       if (!Number.isFinite(targetPctNum)) {
@@ -360,7 +367,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
 
   // Funds hub rebalance E2E: allow excluding symbols from holdings/prices/targets.
   const assetBlacklistSet = new Set<string>();
-  const rawAssetBlacklist = (req?.constraints as any)?.assetBlacklist;
+  const rawAssetBlacklist = req?.constraints?.assetBlacklist;
   if (Array.isArray(rawAssetBlacklist)) {
     for (const s of rawAssetBlacklist) {
       const key = normalizeSymbolKey(s);
@@ -384,7 +391,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   const triggerConfig: RebalanceTriggerConfig = req?.trigger && typeof req.trigger === "object" && !Array.isArray(req.trigger) ? req.trigger : {};
   const driftThresholdPct = clamp01(toFinite(triggerConfig.driftThresholdPct, 0));
   const minOrderNotional = Math.max(0, toFinite(triggerConfig.minOrderNotional, 0));
-  const rebalanceCooldownSeconds = Math.max(0, toFinite(triggerConfig.rebalanceCooldownSeconds, 0));
+  const minRebalanceIntervalSeconds = Math.max(0, toFinite(triggerConfig.minRebalanceIntervalSeconds, 0));
   const lastRebalanceAt = typeof triggerConfig.lastRebalanceAt === "string" ? triggerConfig.lastRebalanceAt : "";
   const now = typeof triggerConfig.now === "string" ? triggerConfig.now : "";
 
@@ -443,7 +450,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
           equity: 0,
           driftThresholdPct,
           minOrderNotional: effectiveMinNotional,
-          rebalanceCooldownSeconds,
+          minRebalanceIntervalSeconds,
           maxAbsDriftPct: 0,
           maxAbsDriftSymbol: null,
           orderCount: 0,
@@ -691,12 +698,12 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
       // Track post-order valuations in notional space (no price conversion needed).
       const postValues: Record<string, number> = { ...currentValues };
       for (const o of orders) {
-        const sym = String((o as any)?.symbol ?? "").trim();
+        const sym = String(o.symbol ?? "").trim();
         if (!sym) continue;
-        const n = toFinite((o as any)?.notional, 0);
+        const n = toFinite(o.notional, 0);
         if (!Number.isFinite(n) || n <= 0) continue;
-        if ((o as any)?.side === "SELL") postValues[sym] = Math.max(0, (postValues[sym] ?? 0) - n);
-        if ((o as any)?.side === "BUY") postValues[sym] = (postValues[sym] ?? 0) + n;
+        if (o.side === "SELL") postValues[sym] = Math.max(0, (postValues[sym] ?? 0) - n);
+        if (o.side === "BUY") postValues[sym] = (postValues[sym] ?? 0) + n;
       }
 
       // Prefer buying the most underweight symbol; if everything is already at/above target,
@@ -783,7 +790,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
   }
 
   // Trigger config: decide whether we should actually rebalance based on
-  // drift threshold, minimum trade size, and a cooldown window.
+  // drift threshold, minimum trade size, and a minimum rebalance interval.
   let maxAbsDriftPct = 0;
   let maxAbsDriftSymbol: string | null = null;
   for (const [sym, delta] of Object.entries(deltas)) {
@@ -838,24 +845,24 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
     }
   }
 
-  let cooldownOk = true;
-  if (rebalanceCooldownSeconds > 0) {
+  let intervalOk = true;
+  if (minRebalanceIntervalSeconds > 0) {
     const nowMs = parseIsoMs(now || new Date().toISOString());
     const lastMs = parseIsoMs(lastRebalanceAt);
 
     if (Number.isFinite(nowMs) && Number.isFinite(lastMs)) {
       const elapsed = (nowMs - lastMs) / 1000;
-      if (elapsed < rebalanceCooldownSeconds) {
-        cooldownOk = false;
-        const remain = rebalanceCooldownSeconds - Math.max(0, elapsed);
-        reasons.push(`cooldown: last rebalance ${elapsed.toFixed(0)}s ago; wait ${remain.toFixed(0)}s`);
+      if (elapsed < minRebalanceIntervalSeconds) {
+        intervalOk = false;
+        const remain = minRebalanceIntervalSeconds - Math.max(0, elapsed);
+        reasons.push(`min_interval: last rebalance ${elapsed.toFixed(0)}s ago; wait ${remain.toFixed(0)}s`);
       }
     } else {
-      reasons.push(`cooldown: configured (${rebalanceCooldownSeconds}s) but missing/invalid timestamps; ignored`);
+      reasons.push(`min_interval: configured (${minRebalanceIntervalSeconds}s) but missing/invalid timestamps; ignored`);
     }
   }
 
-  const shouldRebalance = driftOk && cooldownOk && eligibleOrders.length > 0;
+  const shouldRebalance = driftOk && intervalOk && eligibleOrders.length > 0;
   if (shouldRebalance) reasons.push("trigger: ok");
 
   const trigger: RebalanceTriggerDecision = {
@@ -865,7 +872,7 @@ export function rebalanceCore(req: RebalanceCoreRequest): RebalanceCoreResponse 
       equity,
       driftThresholdPct,
       minOrderNotional: minN,
-      rebalanceCooldownSeconds,
+      minRebalanceIntervalSeconds,
       maxAbsDriftPct,
       maxAbsDriftSymbol,
       orderCount: orders.length,

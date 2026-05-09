@@ -5,9 +5,9 @@ import {
   DaaSurfaceStatusPill,
 } from "@/app/daa/dashboard/_components/DaaSurfaceUI";
 import { cn } from "@/lib/utils";
-import type { PreTradeRiskCheck } from "@/src/daa/modules/workbench/workbenchTypes";
 
 import { riskItemStatusLabel, riskItemTone, riskOverallTone, riskRuleLabel, riskStatusLabel } from "./rebalanceLabels";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 export function RebalanceRiskAlerts(props: {
   currentRiskCheck: PreTradeRiskCheck;

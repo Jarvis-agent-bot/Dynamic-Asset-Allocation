@@ -4,11 +4,8 @@ import {
   deriveRebalanceInteractionState,
   type RebalanceInteractionStage,
 } from "./rebalanceInteractionState";
-import type {
-  AssetUniverseView,
-  PreTradeRiskCheck,
-  RebalanceCycle,
-} from "@/src/daa/modules/workbench/workbenchTypes";
+import type { AssetUniverseView, RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { PreTradeRiskCheck } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 function makeAssetRow(overrides?: Partial<AssetUniverseView>): AssetUniverseView {
   return {

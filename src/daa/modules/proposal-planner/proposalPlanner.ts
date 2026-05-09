@@ -1,6 +1,6 @@
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import type { PolicyDecision } from "@/src/daa/modules/policy-engine/policyTypes";
-import type { RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceProposal } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 import { estimateProposalPlanCost } from "./proposalCostModel";
 
@@ -34,4 +34,3 @@ export function buildProposalPlan(input: {
     expectedRiskImprovement: input.policyDecision.costBenefit.expectedRiskImprovement,
   };
 }
-

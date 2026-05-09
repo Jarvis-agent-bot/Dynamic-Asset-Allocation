@@ -171,7 +171,7 @@ describe("backtestDriftRebalance", () => {
       initialHoldings: { AAA: 1 },
       initialCash: 0,
       constraints: { maxIn: 1e9, maxOut: 1e9 },
-      trigger: { driftThresholdPct: 0, minOrderNotional: 0, rebalanceCooldownSeconds: 0 },
+      trigger: { driftThresholdPct: 0, minOrderNotional: 0, minRebalanceIntervalSeconds: 0 },
       execution: { timing: "t_plus_1_close" },
     });
 

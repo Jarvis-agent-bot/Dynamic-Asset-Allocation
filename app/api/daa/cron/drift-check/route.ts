@@ -14,7 +14,7 @@ import { sendTelegramByEnv } from "@/src/daa/notify/telegram";
 import { getDaaSystemConfig } from "@/src/daa/store/daaStorePg";
 import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRepo";
 import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
-import { buildPortfolioStateFromBootstrap } from "@/src/daa/modules/portfolio-state/portfolioStateService";
+import { buildPortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateService";
 import { collectPortfolioSignals } from "@/src/daa/modules/signals/signalCollector";
 import type { DriftSignal } from "@/src/daa/modules/signals/signalTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
@@ -77,7 +77,7 @@ async function runDriftCheck() {
 
     // Always run bootstrap to detect drift (independent of autoGenerateEnabled)
     const bootstrap = await buildWorkbenchBootstrap({ syncPrices: false, autoRiskCycle: true });
-    const portfolioState = buildPortfolioStateFromBootstrap(bootstrap);
+    const portfolioState = buildPortfolioState(bootstrap);
     const signals = collectPortfolioSignals({
       portfolioState,
       systemConfig: system.config,

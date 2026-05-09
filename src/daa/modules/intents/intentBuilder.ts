@@ -1,4 +1,4 @@
-import type { RebalanceTriggerSource } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 import type { CashSignal, DriftSignal, PortfolioSignal, RiskSignal } from "@/src/daa/modules/signals/signalTypes";
 
 import type { InvestmentIntent } from "./intentTypes";

@@ -37,8 +37,8 @@ function resolveAsset(raw: string): { market: string; symbol: string } {
   return { market: "US", symbol };
 }
 
-/** 再平衡频率 → 冷却秒数 */
-function rebalanceCooldownSeconds(freq: string): number {
+/** 再平衡频率 → 最小间隔秒数 */
+function minIntervalSecondsForRebalanceFrequency(freq: string): number {
   switch (freq) {
     case "monthly":
       return 20 * 24 * 3600;
@@ -274,7 +274,7 @@ export async function runStrategyLabBacktest(
     trigger: {
       driftThresholdPct: 0.05,
       minOrderNotional: 50,
-      rebalanceCooldownSeconds: rebalanceCooldownSeconds(params.rebalanceFrequency || "monthly"),
+      minRebalanceIntervalSeconds: minIntervalSecondsForRebalanceFrequency(params.rebalanceFrequency || "monthly"),
     },
     execution: {
       timing: "t_plus_1_close",

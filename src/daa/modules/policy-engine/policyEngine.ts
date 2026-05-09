@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { InvestmentIntent } from "@/src/daa/modules/intents/intentTypes";
 import type { PortfolioState } from "@/src/daa/modules/portfolio-state/portfolioStateTypes";
 import type { PortfolioSignal } from "@/src/daa/modules/signals/signalTypes";
-import type { RebalanceCycle, RebalanceProposal, RebalanceTriggerSource } from "@/src/daa/modules/workbench/workbenchTypes";
+import type { RebalanceProposal, RebalanceTriggerSource } from "@/src/daa/modules/rebalance/rebalanceTypes";
 
 import { calculateActionScore } from "./actionScore";
 import { evaluateNoTradeBand } from "./noTradeBand";
@@ -26,7 +26,7 @@ export function evaluatePortfolioPolicy(input: {
   proposals: RebalanceProposal[];
   triggerSource: RebalanceTriggerSource;
   manual: boolean;
-  latestAutoComparableCycle?: Pick<RebalanceCycle, "cycleId" | "createdAt"> | null;
+  latestAutoComparableCycle?: { cycleId: string; createdAt: string } | null;
 }): PolicyDecision {
   const createdAt = new Date().toISOString();
   const driftSignals = input.signals.filter((signal) => signal.type === "drift");
