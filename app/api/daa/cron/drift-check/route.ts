@@ -65,7 +65,6 @@ async function runDriftCheckJob(req: Request, idempotencyKey: string | null): Pr
 
 async function runDriftCheck() {
     const system = await getDaaSystemConfig();
-    const strategy = system.config.rebalanceStrategy;
     const policy = resolvePolicyConfig(system.config);
 
     if (!policy.drift.enabled) {
@@ -104,7 +103,7 @@ async function runDriftCheck() {
     });
     const hasDrift = driftedAssets.length > 0;
 
-    // Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled)
+    // Phase A: auto-generate rebalance cycle (gated by policy execution)
     let generated: {
       created: boolean;
       skippedByCooldown: boolean;
@@ -113,7 +112,7 @@ async function runDriftCheck() {
       cycle: RebalanceCycle | null;
     } | null = null;
 
-    if (strategy.autoGenerateEnabled) {
+    if (policy.enabled && policy.execution.autoGenerateEnabled) {
       const hasWatchlistEntryPath = system.config.watchlistEntry?.enabled === true;
       if (hasDrift || hasWatchlistEntryPath) {
         generated = await generateWorkbenchRebalanceCycle({
@@ -145,7 +144,7 @@ async function runDriftCheck() {
             (a) => `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
           );
 
-          const noNewCycleReason = strategy.autoGenerateEnabled
+          const noNewCycleReason = policy.execution.autoGenerateEnabled
             ? (generated?.message ?? "未创建新的调仓周期")
             : "自动生成已关闭";
           const notificationTitle = hasDrift
@@ -179,7 +178,7 @@ async function runDriftCheck() {
               cycleId: newlyCreatedCycle?.cycleId || null,
               requestJson: {
                 driftedAssetCount: driftedAssets.length,
-                autoGenerateEnabled: strategy.autoGenerateEnabled,
+                autoGenerateEnabled: policy.execution.autoGenerateEnabled,
                 driftThresholdPct: driftThreshold,
                 newCycleCreated: newlyCreatedCycle != null,
                 referenceCycleId: referenceCycle?.cycleId || null,
@@ -196,7 +195,7 @@ async function runDriftCheck() {
               cycleId: newlyCreatedCycle?.cycleId || null,
               requestJson: {
                 driftedAssetCount: driftedAssets.length,
-                autoGenerateEnabled: strategy.autoGenerateEnabled,
+                autoGenerateEnabled: policy.execution.autoGenerateEnabled,
                 driftThresholdPct: driftThreshold,
                 newCycleCreated: newlyCreatedCycle != null,
                 referenceCycleId: referenceCycle?.cycleId || null,
@@ -352,7 +351,7 @@ async function runDriftCheck() {
       driftedAssetCount: driftedAssets.length,
       driftTriggerNotified,
       driftTriggerSkippedReason,
-      autoGenerateEnabled: strategy.autoGenerateEnabled,
+      autoGenerateEnabled: policy.execution.autoGenerateEnabled,
       autoExecute,
       riskTriggeredCount: riskTriggeredAssets.length,
       riskTriggerNotified,

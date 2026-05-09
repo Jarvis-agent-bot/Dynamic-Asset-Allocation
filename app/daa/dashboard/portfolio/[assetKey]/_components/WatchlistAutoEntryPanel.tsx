@@ -160,7 +160,7 @@ export function WatchlistAutoEntryPanel(props: {
         <div className="text-sm font-semibold text-[var(--text)]">自动建仓规则</div>
       </div>
       <p className="text-xs leading-relaxed text-[var(--muted)]">
-        技术 + 估值信号同时达标时，下一次再平衡 cron 会为此标的生成 BUY 提案。需在"设置 → 再平衡策略"开启全局开关。
+        技术 + 估值信号同时达标时，下一次策略 cron 会为此标的生成 BUY 提案。需在"设置 → Policy Engine"开启全局开关。
       </p>
 
       <div className="grid gap-2 rounded-[12px] border border-[var(--border)] bg-[rgba(255,255,255,0.03)] p-3 text-xs text-[var(--muted)]">

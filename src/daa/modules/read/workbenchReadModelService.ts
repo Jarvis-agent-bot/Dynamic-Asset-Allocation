@@ -44,7 +44,7 @@ function buildSignals(input: {
   const maxDriftRow = (input.bootstrap.assetUniverse || [])
     .filter((row) => row.gapPct != null)
     .sort((a, b) => Math.abs(b.gapPct || 0) - Math.abs(a.gapPct || 0))[0];
-  const driftThresholdPct = Number(input.bootstrap.rebalanceStrategy?.drift?.thresholdPct || 0) * 100;
+  const driftThresholdPct = Number(input.bootstrap.policy?.drift?.outerBandPct || 0) * 100;
   if (maxDriftRow && Math.abs(maxDriftRow.gapPct || 0) > driftThresholdPct) {
     push({
       id: `alert:drift:${maxDriftRow.assetKey}`,
@@ -68,10 +68,10 @@ function buildSignals(input: {
     });
   }
 
-  if (input.bootstrap.rebalanceStrategy.calendar.enabled) {
+  if (input.bootstrap.policy.review.enabled) {
     const nextDueAt = nextCalendarDueDate({
-      frequency: input.bootstrap.rebalanceStrategy.calendar.frequency,
-      dayOfMonth: input.bootstrap.rebalanceStrategy.calendar.dayOfMonth,
+      frequency: input.bootstrap.policy.review.frequency,
+      dayOfMonth: input.bootstrap.policy.review.dayOfMonth,
     });
     push({
       id: "alert:next-calendar-cycle",

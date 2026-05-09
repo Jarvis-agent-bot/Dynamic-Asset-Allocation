@@ -6,6 +6,7 @@ import * as thesisStore from "@/src/daa/agent/store/thesisStore";
 import { resolveBrainConfig } from "@/src/daa/brain/brainPolicy";
 import { evaluateBrainActionAuthority } from "@/src/daa/automation/automationAuthority";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
@@ -130,8 +131,12 @@ export function validateAutopilotPrerequisites(config: DaaSystemConfig): {
   reason: string | null;
 } {
   const missing: string[] = [];
-  if (config.rebalanceStrategy.autoGenerateEnabled !== true) {
-    missing.push("/rebalanceStrategy/autoGenerateEnabled");
+  const policy = resolvePolicyConfig(config);
+  if (policy.enabled !== true) {
+    missing.push("/policy/enabled");
+  }
+  if (policy.execution.autoGenerateEnabled !== true) {
+    missing.push("/policy/execution/autoGenerateEnabled");
   }
   return {
     ready: missing.length === 0,

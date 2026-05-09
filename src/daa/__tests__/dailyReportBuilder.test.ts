@@ -38,14 +38,15 @@ function makeBootstrap(overrides?: Partial<WorkbenchBootstrap>): WorkbenchBootst
       },
     ],
     execution: { logs: [] },
-    rebalance: { mode: "manual", autoAnalysisEnabled: false, analysisTimeUtc: "00:20", timezone: "Asia/Shanghai" },
-    rebalanceStrategy: {
-      calendar: { enabled: true, frequency: "monthly", dayOfMonth: 1 },
-      drift: { enabled: true, thresholdPct: 0.05, checkFrequency: "daily" },
-      cooldownHours: 72,
-      analysisTimeUtc: "00:20",
-      timezone: "Asia/Shanghai",
-      autoGenerateEnabled: false,
+    rebalance: { mode: "manual", autoAnalysisEnabled: false, scheduledTimeUtc: "00:20", timezone: "Asia/Shanghai" },
+    policy: {
+      enabled: true,
+      shadowMode: false,
+      drift: { enabled: true, mode: "static_band", outerBandPct: 0.05, innerBandPct: 0.02, minNotionalBase: 200, volatilityLookbackDays: 60 },
+      review: { enabled: true, frequency: "monthly", dayOfMonth: 1, scheduledTimeUtc: "00:20", timezone: "Asia/Shanghai" },
+      throttle: { proposalDedupeWindowHours: 24, autoExecutionCooldownHours: 72, allowRiskReductionOverride: true, allowSevereRiskOverride: true, minScoreToBreakCooldown: 85 },
+      actionScore: { proposalThreshold: 25, autoExecuteThreshold: 70 },
+      execution: { autoGenerateEnabled: false, autoExecuteEnabled: false, maxSingleOrderPctOfNav: 0.1 },
     },
     latestCycle: null,
     marketContext: {

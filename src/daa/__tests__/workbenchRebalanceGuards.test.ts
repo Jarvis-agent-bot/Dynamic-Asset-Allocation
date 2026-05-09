@@ -224,14 +224,16 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             frozenCash: 0,
           },
         },
-        rebalanceStrategy: {
-          ...current.config.rebalanceStrategy,
-          cooldownHours: 72,
+        policy: {
+          ...current.config.policy,
+          throttle: {
+            ...current.config.policy.throttle,
+            autoExecutionCooldownHours: 72,
+          },
           drift: {
-            ...current.config.rebalanceStrategy.drift,
+            ...current.config.policy.drift,
             enabled: true,
-            thresholdPct: 0.05,
-            checkFrequency: "daily",
+            outerBandPct: 0.05,
           },
         },
       },
@@ -351,9 +353,12 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             frozenCash: 0,
           },
         },
-        rebalanceStrategy: {
-          ...current.config.rebalanceStrategy,
-          cooldownHours: 24,
+        policy: {
+          ...current.config.policy,
+          throttle: {
+            ...current.config.policy.throttle,
+            autoExecutionCooldownHours: 24,
+          },
         },
       },
     });
@@ -427,9 +432,12 @@ describe.skipIf(!isTestDbAvailable())("workbench-rebalance-guards-v1", () => {
             frozenCash: 0,
           },
         },
-        rebalanceStrategy: {
-          ...current.config.rebalanceStrategy,
-          cooldownHours: 24,
+        policy: {
+          ...current.config.policy,
+          throttle: {
+            ...current.config.policy.throttle,
+            autoExecutionCooldownHours: 24,
+          },
         },
       },
     });

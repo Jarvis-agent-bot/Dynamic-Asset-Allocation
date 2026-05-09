@@ -40,7 +40,7 @@ export function buildEmptyAutoTriggerSkipMessage(input: {
     return `Agent 主动调仓未生成可执行提案，跳过创建周期${summary}。`;
   }
   if (input.triggerSource === "calendar") {
-    return `定期再平衡未生成可执行提案，跳过创建周期${summary}。`;
+    return `定期组合复盘未生成可执行提案，跳过创建周期${summary}。`;
   }
   if (input.triggerSource === "drift") {
     return `偏移检查未生成可执行提案，跳过创建周期${summary}。`;
@@ -68,7 +68,7 @@ export function findAutoExecuteSingleOrderBreach(input: {
   const notional = Math.max(0, Number(proposal.suggestedNotional) || 0);
   return {
     ...proposal,
-    message: `[autoExecuteMaxSinglePct 守门] ${label} 单笔 $${notional.toFixed(0)} 超过 NAV 的 ${(maxSinglePct * 100).toFixed(1)}% 上限，已阻止自动执行`,
+    message: `[PolicyExecution 单笔上限守门] ${label} 单笔 $${notional.toFixed(0)} 超过 NAV 的 ${(maxSinglePct * 100).toFixed(1)}% 上限，已阻止自动执行`,
   };
 }
 

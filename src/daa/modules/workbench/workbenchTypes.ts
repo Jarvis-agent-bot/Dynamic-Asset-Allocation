@@ -7,7 +7,7 @@ import type {
   DaaMarketRegime,
 } from "@/src/daa/modules/marketContext/marketContextTypes";
 import type { DaaStoreRebalanceCycleStatus } from "@/src/daa/store/storeTypes";
-import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
+import type { DaaPolicyConfig, PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 
 export type WorkbenchPriceStatus = "fresh" | "stale" | "missing" | "unsupported";
 
@@ -222,23 +222,6 @@ export type RebalanceCycle = {
   createdAt: string;
 };
 
-type RebalanceStrategyConfig = {
-  calendar: {
-    enabled: boolean;
-    frequency: "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
-    dayOfMonth: number;
-  };
-  drift: {
-    enabled: boolean;
-    thresholdPct: number;
-    checkFrequency: "daily" | "weekly";
-  };
-  cooldownHours: number;
-  analysisTimeUtc: string;
-  timezone: string;
-  autoGenerateEnabled: boolean;
-};
-
 type WorkbenchTradeOrderView = TradeTicket & {
   cycleId: string | null;
 };
@@ -442,7 +425,7 @@ export type WorkbenchBootstrap = {
     minNotional?: number;
   };
   rebalance: WorkbenchRebalanceConfig;
-  rebalanceStrategy: RebalanceStrategyConfig;
+  policy: DaaPolicyConfig;
   latestCycle: RebalanceCycle | null;
   marketContext: DaaMarketContext | null;
   warnings: string[];
@@ -454,7 +437,7 @@ type WorkbenchRebalanceMode = "manual" | "auto";
 type WorkbenchRebalanceConfig = {
   mode: WorkbenchRebalanceMode;
   autoAnalysisEnabled: boolean;
-  analysisTimeUtc: string;
+  scheduledTimeUtc: string;
   timezone: string;
 };
 

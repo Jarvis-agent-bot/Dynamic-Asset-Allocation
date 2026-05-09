@@ -57,11 +57,11 @@ vi.mock("@/src/daa/modules/workbench/workbenchReadService", () => ({
       }),
     ],
     marketContext: { regime: "risk_on", indicators: [], scopes: [] },
-    rebalanceStrategy: { calendar: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, thresholdPct: 0.05 } },
+    policy: { review: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, outerBandPct: 0.05 } },
     rebalance: {
       mode: "manual",
       autoAnalysisEnabled: false,
-      analysisTimeUtc: "00:20",
+      scheduledTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
     },
   })),
@@ -122,7 +122,7 @@ function buildSystemConfig(input?: {
   cognitiveAgentEnabled?: boolean;
 }) {
   const baseCurrency: CurrencyCode = input?.baseCurrency || "USD";
-  const analysisTimeUtc = `${String(new Date().getUTCHours()).padStart(2, "0")}:00`;
+  const scheduledTimeUtc = `${String(new Date().getUTCHours()).padStart(2, "0")}:00`;
   return buildSystemConfigRow({
     cognitiveAgent: {
       // 默认关闭，以便 daily_report 作为 fallback 能被测试验证
@@ -150,9 +150,13 @@ function buildSystemConfig(input?: {
         baseCurrency,
       },
     },
-    rebalanceStrategy: {
-      analysisTimeUtc,
-      autoGenerateEnabled: input?.autoGenerateEnabled ?? false,
+    policy: {
+      review: {
+        scheduledTimeUtc,
+      },
+      execution: {
+        autoGenerateEnabled: input?.autoGenerateEnabled ?? false,
+      },
     },
     notification: {
       telegram: {
@@ -413,7 +417,7 @@ describe("cron-ops-routes-v1", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.data.skipped).toBe(true);
-    expect(json.data.message).toBe("auto generate disabled");
+    expect(json.data.message).toBe("policy auto generate disabled");
     expect(vi.mocked(refreshMarketIndicators)).not.toHaveBeenCalled();
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
     // Daily report should still be sent
@@ -452,7 +456,7 @@ describe("cron-ops-routes-v1", () => {
     vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
       cycle: {
         cycleId: "cycle-1",
-        triggerReason: "定期再平衡触发",
+        triggerReason: "定期组合复盘",
         riskCheck: { overallStatus: "pass" },
         proposals: [{
           assetKey: "US::AAPL",
@@ -469,7 +473,7 @@ describe("cron-ops-routes-v1", () => {
         }],
       },
       created: true,
-      message: "已生成再平衡周期 cycle-1",
+      message: "已生成组合复盘周期 cycle-1",
       portfolioStatus: "needs_rebalance",
     }));
     vi.mocked(sendTelegramByEnv).mockResolvedValue(true);
@@ -493,11 +497,13 @@ describe("cron-ops-routes-v1", () => {
 
   it("daily-analysis 自动执行会先应用单笔 NAV 硬上限", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
-      rebalanceStrategy: {
-        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
-        autoExecuteMaxSinglePct: 10,
+      policy: {
+        review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: true,
+          maxSingleOrderPctOfNav: 0.1,
+        },
       },
       notification: {
         telegram: {
@@ -523,7 +529,7 @@ describe("cron-ops-routes-v1", () => {
     vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
       cycle: {
         cycleId: "cycle-large-1",
-        triggerReason: "定期再平衡触发",
+        triggerReason: "定期组合复盘",
         riskCheck: { overallStatus: "pass" },
         proposals: [{
           assetKey: "US::NVDA",
@@ -540,7 +546,7 @@ describe("cron-ops-routes-v1", () => {
         }],
       },
       created: true,
-      message: "已生成再平衡周期 cycle-large-1",
+      message: "已生成组合复盘周期 cycle-large-1",
       portfolioStatus: "needs_rebalance",
     }));
 
@@ -554,7 +560,7 @@ describe("cron-ops-routes-v1", () => {
       executed: false,
       ordersCount: 0,
     });
-    expect(json.data.autoExecute.error).toContain("autoExecuteMaxSinglePct");
+    expect(json.data.autoExecute.error).toContain("PolicyExecution 单笔上限");
     expect(vi.mocked(executeRebalanceViaGateway)).not.toHaveBeenCalled();
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledWith(
       expect.stringContaining("自动执行已阻止"),
@@ -568,11 +574,13 @@ describe("cron-ops-routes-v1", () => {
 
   it("daily-analysis 自动执行只执行已选中的提案", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
-      rebalanceStrategy: {
-        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
-        autoExecuteMaxSinglePct: 10,
+      policy: {
+        review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: true,
+          maxSingleOrderPctOfNav: 0.1,
+        },
       },
       strategy: {
         account: { totalEquity: 10000 },
@@ -588,7 +596,7 @@ describe("cron-ops-routes-v1", () => {
     vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
       cycle: {
         cycleId: "cycle-selected-only-1",
-        triggerReason: "定期再平衡触发",
+        triggerReason: "定期组合复盘",
         riskCheck: { overallStatus: "pass" },
         proposals: [
           {
@@ -620,7 +628,7 @@ describe("cron-ops-routes-v1", () => {
         ],
       },
       created: true,
-      message: "已生成再平衡周期 cycle-selected-only-1",
+      message: "已生成组合复盘周期 cycle-selected-only-1",
       portfolioStatus: "needs_rebalance",
     }));
 
@@ -638,11 +646,13 @@ describe("cron-ops-routes-v1", () => {
 
   it("daily-analysis 只有未选中提案时不会进入执行网关", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
-      rebalanceStrategy: {
-        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
-        autoExecuteMaxSinglePct: 10,
+      policy: {
+        review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: true,
+          maxSingleOrderPctOfNav: 0.1,
+        },
       },
       strategy: {
         account: { totalEquity: 10000 },
@@ -655,7 +665,7 @@ describe("cron-ops-routes-v1", () => {
     vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
       cycle: {
         cycleId: "cycle-unselected-only-1",
-        triggerReason: "定期再平衡触发",
+        triggerReason: "定期组合复盘",
         riskCheck: { overallStatus: "pass" },
         proposals: [{
           assetKey: "US::TLH",
@@ -672,7 +682,7 @@ describe("cron-ops-routes-v1", () => {
         }],
       },
       created: true,
-      message: "已生成再平衡周期 cycle-unselected-only-1",
+      message: "已生成组合复盘周期 cycle-unselected-only-1",
       portfolioStatus: "needs_rebalance",
     }));
 
@@ -692,11 +702,13 @@ describe("cron-ops-routes-v1", () => {
 
   it("daily-analysis 自动执行会应用总换手 NAV 硬上限", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
-      rebalanceStrategy: {
-        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
-        autoExecuteMaxSinglePct: 10,
+      policy: {
+        review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: true,
+          maxSingleOrderPctOfNav: 0.1,
+        },
       },
       strategy: {
         account: { totalEquity: 10000 },
@@ -721,7 +733,7 @@ describe("cron-ops-routes-v1", () => {
     vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
       cycle: {
         cycleId: "cycle-turnover-1",
-        triggerReason: "定期再平衡触发",
+        triggerReason: "定期组合复盘",
         riskCheck: { overallStatus: "warn" },
         proposals: [
           {
@@ -753,7 +765,7 @@ describe("cron-ops-routes-v1", () => {
         ],
       },
       created: true,
-      message: "已生成再平衡周期 cycle-turnover-1",
+      message: "已生成组合复盘周期 cycle-turnover-1",
       portfolioStatus: "needs_rebalance",
     }));
 
@@ -781,11 +793,13 @@ describe("cron-ops-routes-v1", () => {
 
   it("daily-analysis 自动执行遇到非纯 SELL 风控 warn 时转人工", async () => {
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
-      rebalanceStrategy: {
-        analysisTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00`,
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
-        autoExecuteMaxSinglePct: 10,
+      policy: {
+        review: { scheduledTimeUtc: `${String(new Date().getUTCHours()).padStart(2, "0")}:00` },
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: true,
+          maxSingleOrderPctOfNav: 0.1,
+        },
       },
       strategy: {
         account: { totalEquity: 10000 },
@@ -810,7 +824,7 @@ describe("cron-ops-routes-v1", () => {
     vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValue(buildGenerateRebalanceCycleResult({
       cycle: {
         cycleId: "cycle-risk-warn-1",
-        triggerReason: "定期再平衡触发",
+        triggerReason: "定期组合复盘",
         riskCheck: {
           overallStatus: "warn",
           items: [
@@ -838,7 +852,7 @@ describe("cron-ops-routes-v1", () => {
         }],
       },
       created: true,
-      message: "已生成再平衡周期 cycle-risk-warn-1",
+      message: "已生成组合复盘周期 cycle-risk-warn-1",
       portfolioStatus: "needs_rebalance",
     }));
 
@@ -864,14 +878,16 @@ describe("cron-ops-routes-v1", () => {
     );
   });
 
-  it("daily-analysis 会优先按 analysisTimeUtc 推导整点窗口，而不是继续依赖旧 hourly 字段", async () => {
+  it("daily-analysis 会优先按 policy.review.scheduledTimeUtc 推导整点窗口", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-19T11:05:00.000Z"));
     vi.mocked(getDaaSystemConfig).mockResolvedValue(buildSystemConfigRow({
       ...buildSystemConfig({ autoGenerateEnabled: false }).config,
-      rebalanceStrategy: {
-        analysisTimeUtc: "10:51",
-        autoGenerateEnabled: false,
+      policy: {
+        review: { scheduledTimeUtc: "10:51" },
+        execution: {
+          autoGenerateEnabled: false,
+        },
       },
       notification: {
         telegram: {
@@ -896,7 +912,7 @@ describe("cron-ops-routes-v1", () => {
 
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
-    expect(json.data.message).toBe("auto generate disabled");
+    expect(json.data.message).toBe("policy auto generate disabled");
     expect(String(json.data.message)).not.toContain("hour guard");
   });
 });

@@ -174,10 +174,10 @@ export function buildWorkbenchBootstrap(
     rebalance: {
       mode: "manual",
       autoAnalysisEnabled: false,
-      analysisTimeUtc: "00:20",
+      scheduledTimeUtc: "00:20",
       timezone: "Asia/Shanghai",
     },
-    rebalanceStrategy: DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy,
+    policy: DEFAULT_SYSTEM_CONFIG_.policy,
     latestCycle: null,
     marketContext: null,
     warnings: [],

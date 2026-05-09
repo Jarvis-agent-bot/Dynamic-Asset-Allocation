@@ -14,9 +14,9 @@ vi.mock('@/src/daa/store/daaStorePg', () => ({
   ensureDaaStoreSchemaPg: vi.fn(async () => undefined),
   getDaaSystemConfig: vi.fn(async () => ({
     config: {
-      rebalanceStrategy: {
-        autoGenerateEnabled: true,
-        drift: { enabled: true, thresholdPct: 0.05 },
+      policy: {
+        execution: { autoGenerateEnabled: true },
+        drift: { enabled: true, outerBandPct: 0.05 },
       },
       notification: {
         telegram: {
@@ -51,7 +51,7 @@ vi.mock('@/src/daa/modules/workbench/workbenchReadService', () => ({
       { symbol: 'BND', holdingQty: 20, lastPrice: 75, holdingPrice: 74, gapPct: 1.0, watchEnabled: true, targetWeightHint: 0.2 },
     ],
     marketContext: { regime: 'risk_on', indicators: [], scopes: [] },
-    rebalanceStrategy: { calendar: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, thresholdPct: 0.05 } },
+    policy: { review: { enabled: true, dayOfMonth: 1 }, drift: { enabled: true, outerBandPct: 0.05 } },
     execution: { logs: [] },
     rebalance: {},
     latestCycle: null,
@@ -131,9 +131,9 @@ function buildDriftConfig(input: {
   watchlistEntryEnabled?: boolean;
 }) {
   return buildSystemConfigRow({
-    rebalanceStrategy: {
-      autoGenerateEnabled: input.autoGenerateEnabled,
-      drift: { enabled: true, thresholdPct: 0.05, checkFrequency: 'daily' },
+    policy: {
+      execution: { autoGenerateEnabled: input.autoGenerateEnabled },
+      drift: { enabled: true, outerBandPct: 0.05 },
     },
     watchlistEntry: {
       enabled: input.watchlistEntryEnabled ?? false,

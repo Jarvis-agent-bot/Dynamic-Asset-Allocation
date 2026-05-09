@@ -51,17 +51,17 @@ describe("brain-policy", () => {
     const config = normalizeSystemConfig({});
     expect({
       brainMode: config.brain?.mode,
-      autoGenerateEnabled: config.rebalanceStrategy.autoGenerateEnabled,
-      autoExecuteEnabled: config.rebalanceStrategy.autoExecuteEnabled,
-      autoExecuteMaxSinglePct: config.rebalanceStrategy.autoExecuteMaxSinglePct,
+      autoGenerateEnabled: config.policy.execution.autoGenerateEnabled,
+      autoExecuteEnabled: config.policy.execution.autoExecuteEnabled,
+      maxSingleOrderPctOfNav: config.policy.execution.maxSingleOrderPctOfNav,
       executionBoundary: buildBrainBoundaryText(config),
     }).toMatchInlineSnapshot(`
       {
         "autoExecuteEnabled": true,
-        "autoExecuteMaxSinglePct": 10,
         "autoGenerateEnabled": true,
         "brainMode": "autopilot",
         "executionBoundary": "自动驾驶模式：允许运行认知循环、初始化论点与本地模拟执行；Agent 只能输出目标权重计划，不能自动修改系统配置。",
+        "maxSingleOrderPctOfNav": 0.1,
       }
     `);
   });

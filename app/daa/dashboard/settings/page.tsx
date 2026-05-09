@@ -123,7 +123,7 @@ export default function SettingsPage() {
     if (!config || !baselineConfig) return { strategy: false, brain: false, data: false, notification: false };
     const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
     return {
-      strategy: changed(config.rebalanceStrategy, baselineConfig.rebalanceStrategy)
+      strategy: changed(config.policy, baselineConfig.policy)
         || changed(config.strategy?.risk, baselineConfig.strategy?.risk)
         || changed(config.strategy?.constraints, baselineConfig.strategy?.constraints)
         || changed(config.strategy?.execution, baselineConfig.strategy?.execution),

@@ -12,26 +12,30 @@ describe("autopilot-orchestrator", () => {
       cognitiveAgent: {
         enabled: true,
       },
-      rebalanceStrategy: {
-        autoGenerateEnabled: false,
-        autoExecuteEnabled: false,
+      policy: {
+        execution: {
+          autoGenerateEnabled: false,
+          autoExecuteEnabled: false,
+        },
       },
     });
 
     expect(validateAutopilotPrerequisites(config)).toEqual({
       ready: false,
       missing: [
-        "/rebalanceStrategy/autoGenerateEnabled",
+        "/policy/execution/autoGenerateEnabled",
       ],
-      reason: "自动驾驶无法生成调仓周期，缺少必要开关：/rebalanceStrategy/autoGenerateEnabled",
+      reason: "自动驾驶无法生成调仓周期，缺少必要开关：/policy/execution/autoGenerateEnabled",
     });
   });
 
   it("只开启自动生成时也可继续生成周期", () => {
     const config = normalizeSystemConfig({
-      rebalanceStrategy: {
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: false,
+      policy: {
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: false,
+        },
       },
     });
 

@@ -40,6 +40,11 @@ describe("automation-authority snapshots", () => {
               "passed": true,
             },
             {
+              "id": "policy-enabled",
+              "message": "策略引擎未开启，不能进入自动执行。",
+              "passed": true,
+            },
+            {
               "id": "auto-generate-enabled",
               "message": "自动生成未开启，不能进入自动执行。",
               "passed": true,
@@ -128,9 +133,11 @@ describe("automation-authority snapshots", () => {
   it("advisor 模式和远端执行网关会阻止自动执行", () => {
     const config = normalizeSystemConfig({
       brain: { mode: "advisor" },
-      rebalanceStrategy: {
-        autoGenerateEnabled: true,
-        autoExecuteEnabled: true,
+      policy: {
+        execution: {
+          autoGenerateEnabled: true,
+          autoExecuteEnabled: true,
+        },
       },
     });
 
@@ -148,6 +155,11 @@ describe("automation-authority snapshots", () => {
             "id": "brain-mode-simulate-rebalance",
             "message": "顾问模式下未开放「执行模拟调仓」。",
             "passed": false,
+          },
+          {
+            "id": "policy-enabled",
+            "message": "策略引擎未开启，不能进入自动执行。",
+            "passed": true,
           },
           {
             "id": "auto-generate-enabled",

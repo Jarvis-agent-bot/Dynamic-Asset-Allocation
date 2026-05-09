@@ -120,8 +120,9 @@ export async function switchAssistantBrainMode(input: {
   if (next.mode === "autopilot") {
     patches.push(
       { path: "/cognitiveAgent/enabled", value: true },
-      { path: "/rebalanceStrategy/autoGenerateEnabled", value: true },
-      { path: "/rebalanceStrategy/autoExecuteEnabled", value: true },
+      { path: "/policy/enabled", value: true },
+      { path: "/policy/execution/autoGenerateEnabled", value: true },
+      { path: "/policy/execution/autoExecuteEnabled", value: true },
     );
   } else if (
     current?.mode === next.mode

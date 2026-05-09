@@ -19,6 +19,7 @@ import { hasTodayNotification } from "@/src/daa/store/notificationDeliveryLogRep
 import { shouldSendAgentBriefingTelegram } from "@/src/daa/automation/automationGuards";
 import { buildAutopilotCoverageSummary } from "@/src/daa/agent/autopilotCoverage";
 import { getCurrentRunId } from "@/src/daa/agent/tools/registry";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 
 /**
  * 代码直出“自动跟踪清单”（原 cognitionGaps）。
@@ -243,7 +244,7 @@ export async function surfaceNode(state: CognitiveState): Promise<CognitiveUpdat
         // 策略参数实时从 systemConfig 读取，避免 agentConfig 副本陈旧
         const { getDaaSystemConfig } = await import("@/src/daa/store/accountStore");
         const sysCfg = await getDaaSystemConfig().catch(() => null);
-        const defaultDriftThresholdPct = sysCfg?.config.rebalanceStrategy?.drift?.thresholdPct ?? 0.05;
+        const defaultDriftThresholdPct = sysCfg ? resolvePolicyConfig(sysCfg.config).drift.outerBandPct : 0.05;
         const maxPositionPct = sysCfg?.config.strategy?.constraints?.maxPositionPct ?? 0.30;
 
         const portfolio = state.portfolio ?? { holdings: [], totalEquity: 0, cashPct: 0 };

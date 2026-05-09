@@ -3,6 +3,7 @@ import {
   type DaaBrainAction,
 } from "@/src/daa/brain/brainPolicy";
 import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 import type { RebalanceTriggerSource } from "@/src/daa/modules/workbench/workbenchTypes";
 
 export type AutomationAuthorityDecision = {
@@ -21,6 +22,7 @@ export type AutomationAuthorityTrigger =
   | "cron_daily_analysis"
   | "cron_drift_check"
   | "cron_cognitive_agent"
+  | "agent_trigger"
   | "manual_api"
   | "alpaca_ws_realtime"
   | "cron_news_refresh"
@@ -74,22 +76,28 @@ export function evaluateAutoRebalanceAuthority(input: {
   executionVenueMode?: "local" | "remote" | "unknown";
 }): AutomationAuthorityDecision {
   const checks: AutomationAuthorityDecision["checks"] = [];
-  const strategy = input.systemConfig.rebalanceStrategy;
+  const policy = resolvePolicyConfig(input.systemConfig);
   const venueMode = input.executionVenueMode ?? "local";
 
   const brainPermission = canBrainRunAction(input.systemConfig, "simulate_rebalance");
   pushCheck(checks, "brain-mode-simulate-rebalance", brainPermission.allowed, brainPermission.reason);
+  pushCheck(
+    checks,
+    "policy-enabled",
+    policy.enabled === true,
+    "策略引擎未开启，不能进入自动执行。",
+  );
 
   pushCheck(
     checks,
     "auto-generate-enabled",
-    strategy.autoGenerateEnabled === true,
+    policy.execution.autoGenerateEnabled === true,
     "自动生成未开启，不能进入自动执行。",
   );
   pushCheck(
     checks,
     "auto-execute-enabled",
-    strategy.autoExecuteEnabled === true,
+    policy.execution.autoExecuteEnabled === true,
     "自动执行未开启。",
   );
   pushCheck(

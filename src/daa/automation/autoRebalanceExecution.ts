@@ -2,6 +2,7 @@ import type { DaaSystemConfig } from "@/src/daa/config/systemConfig";
 import { evaluateAutoRebalanceAuthority, type AutomationAuthorityDecision, type AutomationAuthorityTrigger } from "@/src/daa/automation/automationAuthority";
 import { executeRebalanceViaGateway } from "@/src/daa/modules/workbench/executionGateway";
 import type { PreTradeRiskCheck, RebalanceCycle, RebalanceProposal } from "@/src/daa/modules/workbench/workbenchTypes";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 import type { PolicyDecisionSnapshot } from "@/src/daa/modules/policy-engine/policyTypes";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { sendFeishuByEnv } from "@/src/daa/notify/feishu";
@@ -123,7 +124,7 @@ export async function executeAutoRebalanceCycle(input: {
   const totalEquity = input.totalEquity == null
     ? Math.max(0, (await buildWorkbenchBootstrap({ syncPrices: false })).account.totalEquity ?? 0)
     : Math.max(0, Number(input.totalEquity) || 0);
-  const maxSinglePct = Math.max(0, input.systemConfig.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10) / 100;
+  const maxSinglePct = resolvePolicyConfig(input.systemConfig).execution.maxSingleOrderPctOfNav;
   const breachingProposal = findAutoExecuteSingleOrderBreach({
     totalEquity,
     maxSinglePct,
@@ -138,7 +139,7 @@ export async function executeAutoRebalanceCycle(input: {
       triggerSource: input.triggerSource,
       cycleId: input.cycle.cycleId,
       message: `[自动执行已阻止]\n周期 ${input.cycle.cycleId}\n${message}`,
-      requestJson: { reason: "autoExecuteMaxSinglePct" },
+      requestJson: { reason: "policy.execution.maxSingleOrderPctOfNav" },
     }).catch((err) => logSwallowed(`${input.triggerSource}.autoExecuteGateNotify`, err));
     return {
       ...base,

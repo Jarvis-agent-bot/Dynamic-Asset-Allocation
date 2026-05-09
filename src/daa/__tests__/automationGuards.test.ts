@@ -42,7 +42,7 @@ describe("automationGuards", () => {
     });
 
     expect(breach?.symbol).toBe("NVDA");
-    expect(breach?.message).toContain("autoExecuteMaxSinglePct");
+    expect(breach?.message).toContain("PolicyExecution 单笔上限");
     expect(breach?.message).toContain("超过 NAV 的 10.0% 上限");
   });
 

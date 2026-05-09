@@ -47,24 +47,4 @@ describe("getAgentStrategyOverlayForRun", () => {
     expect(overlay?.agentRunId).toBe("run-1");
     expect(overlay?.targetAllocationPlan?.intents).toEqual([]);
   });
-
-  it("不再读取旧 briefing.configOverlay 字段", async () => {
-    queryMock.mockResolvedValueOnce({
-      rows: [{
-        briefing: {
-          configOverlay: {
-            generatedAt: "2026-04-27T00:00:00.000Z",
-            agentRunId: "run-legacy",
-            regimeOverride: null,
-            targetAllocationPlan: {
-              reasoning: "旧字段策略计划",
-              intents: [],
-            },
-          },
-        },
-      }],
-    });
-
-    await expect(getAgentStrategyOverlayForRun("run-legacy")).resolves.toBeNull();
-  });
 });

@@ -85,14 +85,12 @@ function proposal(): RebalanceProposal {
 }
 
 describe("policy-engine", () => {
-  it("把 legacy 再平衡参数归一化为 policy 语义", () => {
+  it("把 policy 参数归一化为策略引擎语义", () => {
     const config = normalizeSystemConfig({
-      rebalanceStrategy: {
-        calendar: { enabled: true, frequency: "weekly", dayOfMonth: 5 },
-        drift: { enabled: true, thresholdPct: 0.07, checkFrequency: "weekly" },
-        cooldownHours: 12,
-        analysisTimeUtc: "10:00",
-        timezone: "Asia/Shanghai",
+      policy: {
+        drift: { outerBandPct: 0.07 },
+        review: { frequency: "weekly", dayOfMonth: 5, scheduledTimeUtc: "10:00" },
+        throttle: { proposalDedupeWindowHours: 168, autoExecutionCooldownHours: 12 },
       },
     });
     const policy = resolvePolicyConfig(config);

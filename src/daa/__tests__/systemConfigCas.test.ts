@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { resetTestDb, isTestDbAvailable } from "@/src/daa/__tests__/testDbSetup";
-import { DEFAULT_SYSTEM_CONFIG_, normalizeSystemConfig } from "@/src/daa/config/systemConfig";
+import { DEFAULT_SYSTEM_CONFIG_ } from "@/src/daa/config/systemConfig";
 import { withDaaPgClient } from "@/src/daa/pg/daaPg";
 import {
   appendDaaCashLedgerEntry,
@@ -87,20 +87,6 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     });
   });
 
-  it("notification.dailyAnalysisHourUtc 作为旧字段会被丢弃，只保留 analysisTimeUtc 一个调度来源", () => {
-    const normalized = normalizeSystemConfig({
-      rebalanceStrategy: {
-        analysisTimeUtc: "10:51",
-      },
-      notification: {
-        dailyAnalysisHourUtc: 1,
-      },
-    });
-
-    expect(normalized.rebalanceStrategy.analysisTimeUtc).toBe("10:51");
-    expect("dailyAnalysisHourUtc" in (normalized.notification as unknown as Record<string, unknown>)).toBe(false);
-  });
-
   it("相同 baseVersion 并发保存时只允许一个成功", async () => {
     const current = await getDaaSystemConfig();
 
@@ -109,9 +95,12 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
         baseVersion: current.version,
         config: {
           ...current.config,
-          rebalanceStrategy: {
-            ...current.config.rebalanceStrategy,
-            timezone: "Etc/UTC",
+          policy: {
+            ...current.config.policy,
+            review: {
+              ...current.config.policy.review,
+              timezone: "Etc/UTC",
+            },
           },
         },
       }),
@@ -119,9 +108,12 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
         baseVersion: current.version,
         config: {
           ...current.config,
-          rebalanceStrategy: {
-            ...current.config.rebalanceStrategy,
-            timezone: "Asia/Tokyo",
+          policy: {
+            ...current.config.policy,
+            review: {
+              ...current.config.policy.review,
+              timezone: "Asia/Tokyo",
+            },
           },
         },
       }),
@@ -136,7 +128,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
 
     const latest = await getDaaSystemConfig();
     expect(latest.version).toBe(current.version + 1);
-    expect(["Etc/UTC", "Asia/Tokyo"]).toContain(latest.config.rebalanceStrategy.timezone);
+    expect(["Etc/UTC", "Asia/Tokyo"]).toContain(latest.config.policy.review.timezone);
   });
 
   it("会清理重复的 system config 行并保留最新配置", async () => {
@@ -152,16 +144,22 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
 
       const olderConfig = {
         ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
-        rebalanceStrategy: {
-          ...structuredClone(DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy),
-          timezone: "Etc/UTC",
+        policy: {
+          ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy),
+          review: {
+            ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy.review),
+            timezone: "Etc/UTC",
+          },
         },
       };
       const latestConfig = {
         ...structuredClone(DEFAULT_SYSTEM_CONFIG_),
-        rebalanceStrategy: {
-          ...structuredClone(DEFAULT_SYSTEM_CONFIG_.rebalanceStrategy),
-          timezone: "Asia/Tokyo",
+        policy: {
+          ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy),
+          review: {
+            ...structuredClone(DEFAULT_SYSTEM_CONFIG_.policy.review),
+            timezone: "Asia/Tokyo",
+          },
         },
       };
 
@@ -180,7 +178,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
 
     const current = await getDaaSystemConfig();
     expect(current.version).toBe(2);
-    expect(current.config.rebalanceStrategy.timezone).toBe("Asia/Tokyo");
+    expect(current.config.policy.review.timezone).toBe("Asia/Tokyo");
 
     await withDaaPgClient(async ({ query }) => {
       const rows = await query("SELECT id, version FROM daa_system_config_v2 WHERE id = 'default' ORDER BY version DESC");
@@ -201,9 +199,12 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
       baseVersion: current.version,
       config: {
         ...current.config,
-        rebalanceStrategy: {
-          ...current.config.rebalanceStrategy,
-          timezone: "Etc/UTC",
+        policy: {
+          ...current.config.policy,
+          review: {
+            ...current.config.policy.review,
+            timezone: "Etc/UTC",
+          },
         },
         strategy: {
           ...current.config.strategy,
@@ -224,7 +225,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     expect(latest.config.strategy.account.investableCash).toBeCloseTo(760, 6);
     expect(latest.config.strategy.account.frozenCash).toBeCloseTo(40, 6);
     expect(latest.config.strategy.account.totalEquity).toBeCloseTo(1500, 6);
-    expect(latest.config.rebalanceStrategy.timezone).toBe("Etc/UTC");
+    expect(latest.config.policy.review.timezone).toBe("Etc/UTC");
 
     await withDaaPgClient(async ({ query }) => {
       const configRows = await query("SELECT config_json FROM daa_system_config_v2 WHERE id = 'default' LIMIT 1");
@@ -234,7 +235,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
       expect(persisted.strategy.account.investableCash).toBe(0);
       expect(persisted.strategy.account.frozenCash).toBe(0);
       expect(persisted.strategy.account.totalEquity).toBe(null);
-      expect(persisted.rebalanceStrategy.timezone).toBe("Etc/UTC");
+      expect(persisted.policy.review.timezone).toBe("Etc/UTC");
 
       const accountRows = await query(
         "SELECT base_currency, cash, investable_cash, frozen_cash, total_equity FROM daa_account_state_v2 WHERE id = 'default' LIMIT 1",
@@ -286,9 +287,12 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
       baseVersion: current.version,
       config: {
         ...current.config,
-        rebalanceStrategy: {
-          ...current.config.rebalanceStrategy,
-          cooldownHours: 96,
+        policy: {
+          ...current.config.policy,
+          throttle: {
+            ...current.config.policy.throttle,
+            autoExecutionCooldownHours: 96,
+          },
         },
         strategy: {
           ...current.config.strategy,
@@ -313,7 +317,7 @@ describe.skipIf(!isTestDbAvailable())("system-config-cas-v1", () => {
     const latest = await getDaaSystemConfig();
     expect(applied.account.cash).toBeCloseTo(620, 6);
     expect(applied.account.totalEquity).toBeGreaterThanOrEqual(applied.account.cash);
-    expect(latest.config.rebalanceStrategy.cooldownHours).toBe(96);
+    expect(latest.config.policy.throttle.autoExecutionCooldownHours).toBe(96);
     expect(latest.config.strategy.account.cash).toBeCloseTo(620, 6);
   });
 });

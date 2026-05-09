@@ -10,6 +10,7 @@ import {
 } from "@/src/daa/cron/accountCronScope";
 import { requireCronAuth } from "@/src/daa/cron/auth";
 import { refreshMarketIndicators } from "@/src/daa/modules/marketContext/marketIndicatorService";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 import { buildWorkbenchBootstrap } from "@/src/daa/modules/workbench/workbenchReadService";
 import { generateWorkbenchRebalanceCycle } from "@/src/daa/modules/workbench/workbenchRebalanceCycleService";
 import type { RebalanceCycle } from "@/src/daa/modules/workbench/workbenchTypes";
@@ -23,9 +24,9 @@ import { logSwallowed } from "@/src/daa/utils/logSwallowed";
 export const runtime = "nodejs";
 
 function resolveScheduledHourUtc(config: {
-  rebalanceStrategy?: { analysisTimeUtc?: unknown };
+  policy?: { review?: { scheduledTimeUtc?: unknown } };
 }): number {
-  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(config.rebalanceStrategy?.analysisTimeUtc || "").trim());
+  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(config.policy?.review?.scheduledTimeUtc || "").trim());
   if (matched) {
     const hour = Number(matched[1]);
     const minute = Number(matched[2]);
@@ -158,14 +159,14 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
             at: new Date().toISOString(),
           };
         }
-        const strategy = system.config.rebalanceStrategy;
+        const policy = resolvePolicyConfig(system.config);
         const notif = system.config.notification;
 
-        // ── Phase A: auto-generate rebalance cycle (gated by autoGenerateEnabled) ──
+        // ── Phase A: auto-generate rebalance cycle (gated by policy execution) ──
         let autoGenerate: Omit<DailyAnalysisJobResult, "dailyReport" | "at" | "autoExecute">;
         let generatedCycleForAutoExecute: RebalanceCycle | null = null;
 
-        if (strategy.autoGenerateEnabled) {
+        if (policy.enabled && policy.review.enabled && policy.execution.autoGenerateEnabled) {
           let marketRefresh: { ok: boolean; refreshedCount?: number; reason?: string } = { ok: true, refreshedCount: 0 };
           try {
             const refreshed = await refreshMarketIndicators();
@@ -253,7 +254,7 @@ async function runDailyAnalysisJob(req: Request, idempotencyKey: string | null):
             created: false,
             skippedByCooldown: false,
             cooldownUntil: null,
-            message: "auto generate disabled",
+            message: "policy auto generate disabled",
             cycleId: null,
             proposalCount: 0,
             telegram: { sent: false },

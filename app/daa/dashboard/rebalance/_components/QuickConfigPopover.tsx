@@ -30,7 +30,7 @@ export function QuickConfigPopover(props: {
     let cancelled = false;
     void getSystemConfig().then((current) => {
       if (cancelled) return;
-      setDriftThreshold(String((current.config.rebalanceStrategy.drift.thresholdPct ?? 0.05) * 100));
+      setDriftThreshold(String((current.config.policy.drift.outerBandPct ?? 0.05) * 100));
       setMaxPosition(String((current.config.strategy.constraints.maxPositionPct ?? 0.2) * 100));
       setStopLoss(String((current.config.strategy.risk.perAssetStopLossPct ?? 0.1) * 100));
       setTakeProfit(String((current.config.strategy.risk.perAssetTakeProfitPct ?? 0.3) * 100));
@@ -54,7 +54,7 @@ export function QuickConfigPopover(props: {
       await patchSystemConfig({
         baseVersion: current.version,
         patches: [
-          { path: "rebalanceStrategy.drift.thresholdPct", value: Number(driftThreshold) / 100 },
+          { path: "/policy/drift/outerBandPct", value: Number(driftThreshold) / 100 },
           { path: "strategy.constraints.maxPositionPct", value: Number(maxPosition) / 100 },
           { path: "strategy.risk.perAssetStopLossPct", value: Number(stopLoss) / 100 },
           { path: "strategy.risk.perAssetTakeProfitPct", value: Number(takeProfit) / 100 },

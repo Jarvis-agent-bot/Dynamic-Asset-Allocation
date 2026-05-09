@@ -129,15 +129,15 @@ function formatSummaryTime(value: string | null | undefined): string {
   return value ? formatDateTime(value) : "暂无";
 }
 
-function formatDerivedDailySchedule(analysisTimeUtc: string): {
+function formatDerivedDailySchedule(scheduledTimeUtc: string): {
   title: string;
   hint: string;
 } {
-  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(analysisTimeUtc || "").trim());
+  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(scheduledTimeUtc || "").trim());
   if (!matched) {
     return {
       title: "未识别自动分析时间",
-      hint: "请先在再平衡策略里填写合法的 UTC 时间（HH:MM），通知和每日报告会跟随这一时间窗口。",
+      hint: "请先在 Policy Engine 里填写合法的 UTC 时间（HH:MM），通知和每日报告会跟随这一时间窗口。",
     };
   }
   const hour = Number(matched[1]);
@@ -436,7 +436,7 @@ export function SettingsNotificationSection(props: {
   }, [loadStatus]);
 
   const latestJob = summary?.recentJobs?.[0] || null;
-  const dailySchedule = formatDerivedDailySchedule(config.rebalanceStrategy.analysisTimeUtc);
+  const dailySchedule = formatDerivedDailySchedule(config.policy.review.scheduledTimeUtc);
   const telegramSummary = summary?.channels.telegram || null;
   const telegramAssistant = summary?.telegramAssistant || null;
   const feishuSummary = summary?.channels.feishu || null;
@@ -517,7 +517,7 @@ export function SettingsNotificationSection(props: {
               </div>
             </div>
             <div style={{ marginTop: 5, fontSize: 11, color: "var(--faint)" }}>
-              如需调整，请回到"再平衡策略"修改自动分析时间；保存后会在下一次 cron 窗口生效。
+              如需调整，请回到"Policy Engine"修改自动分析时间；保存后会在下一次 cron 窗口生效。
             </div>
           </div>
 

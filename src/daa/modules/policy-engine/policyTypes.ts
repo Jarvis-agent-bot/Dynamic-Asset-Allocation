@@ -32,6 +32,12 @@ export type ActionScorePolicyConfig = {
   autoExecuteThreshold: number;
 };
 
+export type PolicyExecutionConfig = {
+  autoGenerateEnabled: boolean;
+  autoExecuteEnabled: boolean;
+  maxSingleOrderPctOfNav: number;
+};
+
 export type DaaPolicyConfig = {
   enabled: boolean;
   shadowMode: boolean;
@@ -39,6 +45,7 @@ export type DaaPolicyConfig = {
   review: ReviewPolicyConfig;
   throttle: AutoActionThrottlePolicy;
   actionScore: ActionScorePolicyConfig;
+  execution: PolicyExecutionConfig;
 };
 
 export type PolicyEvaluationSource =
@@ -81,4 +88,3 @@ export type PolicyDecisionSnapshot = {
   intentIds: string[];
   signalIds: string[];
 };
-

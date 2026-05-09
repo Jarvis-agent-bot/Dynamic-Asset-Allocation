@@ -200,7 +200,7 @@ export function PortfolioRiskPanel({
   const hhi = useMemo(() => computeHHI(holdings), [holdings]);
   const maxPos = useMemo(() => maxSinglePosition(holdings), [holdings]);
   const drawdown = useMemo(() => computeMaxDrawdown(snapshots), [snapshots]);
-  const driftThresholdPctPoints = (bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100;
+  const driftThresholdPctPoints = (bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100;
   const drift = useMemo(() => driftViolations(latestCycle, holdings, driftThresholdPctPoints), [latestCycle, holdings, driftThresholdPctPoints]);
 
   const holdingsWithTarget = useMemo(

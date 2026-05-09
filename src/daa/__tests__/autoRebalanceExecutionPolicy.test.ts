@@ -76,9 +76,11 @@ describe("auto-rebalance-execution-policy-gate", () => {
         policySnapshot: policySnapshot("propose"),
       },
       systemConfig: normalizeSystemConfig({
-        rebalanceStrategy: {
-          autoGenerateEnabled: true,
-          autoExecuteEnabled: true,
+        policy: {
+          execution: {
+            autoGenerateEnabled: true,
+            autoExecuteEnabled: true,
+          },
         },
       }),
       triggerSource: "cron_drift_check",

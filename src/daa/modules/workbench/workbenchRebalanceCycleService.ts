@@ -359,8 +359,8 @@ export async function generateWorkbenchRebalanceCycle(
     }
   }
 
-  const cooldownHours = Math.max(1, policy.throttle.autoExecutionCooldownHours);
-  const cooldownMs = cooldownHours * 60 * 60 * 1000;
+  const autoExecutionCooldownHours = Math.max(1, policy.throttle.autoExecutionCooldownHours);
+  const cooldownMs = autoExecutionCooldownHours * 60 * 60 * 1000;
   const latestAutoComparableCycle = isAutoCooldownGuardTrigger({ triggerSource, manual })
     ? (recentCycles.find((row) => row.triggerSource !== "manual" && row.triggerSource !== "risk") || null)
     : null;

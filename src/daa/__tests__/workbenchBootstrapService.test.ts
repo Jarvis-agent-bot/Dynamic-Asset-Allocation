@@ -97,13 +97,11 @@ function buildBootstrapConfigRow(input?: {
         maxConcentrationPct: 0.4,
       },
     },
-    rebalanceStrategy: {
-      calendar: { enabled: false, frequency: "monthly", dayOfMonth: 1 },
-      drift: { enabled: true, thresholdPct: 0.05, checkFrequency: "daily" },
-      cooldownHours: 24,
-      analysisTimeUtc: "00:20",
-      timezone: "Asia/Shanghai",
-      autoGenerateEnabled: false,
+    policy: {
+      review: { enabled: false, frequency: "monthly", dayOfMonth: 1, scheduledTimeUtc: "00:20", timezone: "Asia/Shanghai" },
+      drift: { enabled: true, outerBandPct: 0.05 },
+      throttle: { autoExecutionCooldownHours: 24 },
+      execution: { autoGenerateEnabled: false },
     },
   });
 }

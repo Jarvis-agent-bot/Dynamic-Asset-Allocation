@@ -16,322 +16,12 @@ export function SettingsStrategySection(props: {
   setConfig: SettingsConfigSetter;
 }) {
   const { config, setConfig } = props;
-  const calendarFrequency = config.rebalanceStrategy.calendar.frequency;
-  const usesCalendarDueDay = calendarFrequency !== "every_3_days" && calendarFrequency !== "weekly";
   const policy = config.policy;
+  const calendarFrequency = policy.review.frequency;
+  const usesCalendarDueDay = calendarFrequency !== "every_3_days" && calendarFrequency !== "weekly";
 
   return (
     <>
-      <SectionCard title="复盘调度">
-        <div style={settingsGridCols2Style}>
-          <CheckboxRow
-            checked={config.rebalanceStrategy.calendar.enabled}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      rebalanceStrategy: {
-                        ...prev.rebalanceStrategy,
-                        calendar: { ...prev.rebalanceStrategy.calendar, enabled: value },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            启用定期组合复盘
-          </CheckboxRow>
-
-          <div>
-            <FieldLabel>定期频率</FieldLabel>
-            <FormSelect
-              value={config.rebalanceStrategy.calendar.frequency}
-              onChange={(e) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          calendar: {
-                            ...prev.rebalanceStrategy.calendar,
-                            frequency: e.target.value as DaaSystemConfig["rebalanceStrategy"]["calendar"]["frequency"],
-                          },
-                        },
-                      }
-                    : prev,
-                )
-              }
-            >
-              <option value="every_3_days">每三天</option>
-              <option value="weekly">每周</option>
-              <option value="monthly">每月</option>
-              <option value="quarterly">每季度</option>
-              <option value="semi_annual">每半年</option>
-              <option value="annual">每年</option>
-            </FormSelect>
-          </div>
-
-          {usesCalendarDueDay ? (
-            <div>
-              <FieldLabel>复盘日（1-28）</FieldLabel>
-              <NumberInput
-                value={config.rebalanceStrategy.calendar.dayOfMonth}
-                min={1}
-                max={28}
-                onChange={(value) =>
-                  setConfig((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          rebalanceStrategy: {
-                            ...prev.rebalanceStrategy,
-                            calendar: {
-                              ...prev.rebalanceStrategy.calendar,
-                              dayOfMonth: Math.max(1, Math.min(28, Math.trunc(value || 1))),
-                            },
-                          },
-                        }
-                      : prev,
-                  )
-                }
-              />
-            </div>
-          ) : null}
-
-          <CheckboxRow
-            checked={config.rebalanceStrategy.drift.enabled}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      rebalanceStrategy: {
-                        ...prev.rebalanceStrategy,
-                        drift: { ...prev.rebalanceStrategy.drift, enabled: value },
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            启用偏移监控
-          </CheckboxRow>
-
-          <div>
-            <FieldLabel>兼容偏移阈值 (%)</FieldLabel>
-            <NumberInput
-              value={config.rebalanceStrategy.drift.thresholdPct * 100}
-              min={1}
-              max={50}
-              step={0.5}
-              onChange={(value) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          drift: {
-                            ...prev.rebalanceStrategy.drift,
-                            thresholdPct: Math.max(0.01, Math.min(0.5, value / 100)),
-                          },
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
-
-          <div>
-            <FieldLabel>偏移去重窗口</FieldLabel>
-            <FormSelect
-              value={config.rebalanceStrategy.drift.checkFrequency}
-              onChange={(e) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          drift: {
-                            ...prev.rebalanceStrategy.drift,
-                            checkFrequency: e.target.value as "daily" | "weekly",
-                          },
-                        },
-                      }
-                    : prev,
-                )
-              }
-            >
-              <option value="daily">每日最多一次</option>
-              <option value="weekly">每周最多一次</option>
-            </FormSelect>
-          </div>
-
-          <div>
-            <FieldLabel>兼容冷静期（小时）</FieldLabel>
-            <NumberInput
-              value={config.rebalanceStrategy.cooldownHours}
-              min={1}
-              max={720}
-              onChange={(value) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          cooldownHours: Math.max(1, Math.trunc(value || 1)),
-                        },
-                      }
-                    : prev,
-                )
-              }
-            />
-          </div>
-
-          <div>
-            <FieldLabel>自动复盘时间（UTC）</FieldLabel>
-            <FormInput
-              value={config.rebalanceStrategy.analysisTimeUtc}
-              onChange={(e) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          analysisTimeUtc: e.target.value,
-                        },
-                      }
-                    : prev,
-                )
-              }
-              placeholder="00:20"
-            />
-            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
-              当前调度按整点 UTC 轮询；如果填写 10:51，实际会在 11:00 UTC 的窗口执行。若希望执行时间更直观，建议直接填写整点。
-            </div>
-          </div>
-
-          <div>
-            <FieldLabel>时区</FieldLabel>
-            <FormInput
-              value={config.rebalanceStrategy.timezone}
-              onChange={(e) =>
-                setConfig((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        rebalanceStrategy: {
-                          ...prev.rebalanceStrategy,
-                          timezone: e.target.value,
-                        },
-                      }
-                    : prev,
-                )
-              }
-              placeholder="Asia/Shanghai"
-            />
-          </div>
-
-          <CheckboxRow
-            checked={config.rebalanceStrategy.autoGenerateEnabled}
-            onChange={(value) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      rebalanceStrategy: {
-                        ...prev.rebalanceStrategy,
-                        autoGenerateEnabled: value,
-                        ...(value ? {} : { autoExecuteEnabled: false }),
-                      },
-                    }
-                  : prev,
-              )
-            }
-          >
-            自动生成建议
-          </CheckboxRow>
-
-          {config.rebalanceStrategy.autoGenerateEnabled && (
-            <div style={{ gridColumn: "1 / -1", marginTop: -4 }}>
-              <div style={{
-                border: "1px solid var(--border)",
-                borderRadius: 12,
-                padding: "12px 16px",
-                background: "rgba(8,12,20,0.3)",
-              }}>
-                <CheckboxRow
-                  checked={config.rebalanceStrategy.autoExecuteEnabled ?? false}
-                  onChange={(value) =>
-                    setConfig((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            rebalanceStrategy: {
-                              ...prev.rebalanceStrategy,
-                              autoExecuteEnabled: value,
-                            },
-                          }
-                        : prev,
-                    )
-                  }
-                >
-                  自动执行通过风控的建议
-                </CheckboxRow>
-
-                {config.rebalanceStrategy.autoExecuteEnabled && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-                      <div>
-                        <FieldLabel>单次执行上限 (% NAV)</FieldLabel>
-                        <NumberInput
-                          value={config.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10}
-                          min={1}
-                          max={50}
-                          step={1}
-                          onChange={(value) =>
-                            setConfig((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    rebalanceStrategy: {
-                                      ...prev.rebalanceStrategy,
-                                      autoExecuteMaxSinglePct: Math.max(1, Math.min(50, value || 10)),
-                                    },
-                                  }
-                                : prev,
-                            )
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div style={{
-                      marginTop: 10,
-                      padding: "8px 12px",
-                      background: "rgba(234, 179, 8, 0.08)",
-                      border: "1px solid rgba(234, 179, 8, 0.2)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      color: "var(--muted)",
-                    }}>
-                      自动驾驶开启后，系统将在 cron 触发生成提案并通过风控检查后自动执行交易，无需手动确认。执行结果会通过已配置的通知渠道推送。
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-        </div>
-      </SectionCard>
-
       <SectionCard title="Policy Engine">
         <div style={settingsGridCols2Style}>
           <CheckboxRow
@@ -354,6 +44,146 @@ export function SettingsStrategySection(props: {
             }
           >
             影子模式
+          </CheckboxRow>
+
+          <CheckboxRow
+            checked={policy.review.enabled}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      policy: {
+                        ...prev.policy,
+                        review: { ...prev.policy.review, enabled: value },
+                      },
+                    }
+                  : prev,
+              )
+            }
+          >
+            启用定期组合复盘
+          </CheckboxRow>
+
+          <div>
+            <FieldLabel>定期频率</FieldLabel>
+            <FormSelect
+              value={policy.review.frequency}
+              onChange={(e) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          review: {
+                            ...prev.policy.review,
+                            frequency: e.target.value as DaaSystemConfig["policy"]["review"]["frequency"],
+                          },
+                        },
+                      }
+                    : prev,
+                )
+              }
+            >
+              <option value="every_3_days">每三天</option>
+              <option value="weekly">每周</option>
+              <option value="monthly">每月</option>
+              <option value="quarterly">每季度</option>
+              <option value="semi_annual">每半年</option>
+              <option value="annual">每年</option>
+            </FormSelect>
+          </div>
+
+          {usesCalendarDueDay ? (
+            <div>
+              <FieldLabel>复盘日（1-28）</FieldLabel>
+              <NumberInput
+                value={policy.review.dayOfMonth}
+                min={1}
+                max={28}
+                onChange={(value) =>
+                  setConfig((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          policy: {
+                            ...prev.policy,
+                            review: {
+                              ...prev.policy.review,
+                              dayOfMonth: Math.max(1, Math.min(28, Math.trunc(value || 1))),
+                            },
+                          },
+                        }
+                      : prev,
+                  )
+                }
+              />
+            </div>
+          ) : null}
+
+          <div>
+            <FieldLabel>自动分析时间（UTC）</FieldLabel>
+            <FormInput
+              value={policy.review.scheduledTimeUtc}
+              onChange={(e) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          review: { ...prev.policy.review, scheduledTimeUtc: e.target.value },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              placeholder="00:20"
+            />
+            <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.6, color: "var(--faint)" }}>
+              当前调度按整点 UTC 轮询；如果填写 10:51，实际会在 11:00 UTC 的窗口执行。若希望执行时间更直观，建议直接填写整点。
+            </div>
+          </div>
+
+          <div>
+            <FieldLabel>时区</FieldLabel>
+            <FormInput
+              value={policy.review.timezone}
+              onChange={(e) =>
+                setConfig((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        policy: {
+                          ...prev.policy,
+                          review: { ...prev.policy.review, timezone: e.target.value },
+                        },
+                      }
+                    : prev,
+                )
+              }
+              placeholder="Asia/Shanghai"
+            />
+          </div>
+
+          <CheckboxRow
+            checked={policy.drift.enabled}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      policy: {
+                        ...prev.policy,
+                        drift: { ...prev.policy.drift, enabled: value },
+                      },
+                    }
+                  : prev,
+              )
+            }
+          >
+            启用偏移监控
           </CheckboxRow>
 
           <div>
@@ -511,6 +341,103 @@ export function SettingsStrategySection(props: {
               }
             />
           </div>
+
+          <CheckboxRow
+            checked={policy.execution.autoGenerateEnabled}
+            onChange={(value) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      policy: {
+                        ...prev.policy,
+                        execution: {
+                          ...prev.policy.execution,
+                          autoGenerateEnabled: value,
+                          autoExecuteEnabled: value ? prev.policy.execution.autoExecuteEnabled : false,
+                        },
+                      },
+                    }
+                  : prev,
+              )
+            }
+          >
+            自动生成建议
+          </CheckboxRow>
+
+          {policy.execution.autoGenerateEnabled && (
+            <div style={{ gridColumn: "1 / -1", marginTop: -4 }}>
+              <div style={{
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: "12px 16px",
+                background: "rgba(8,12,20,0.3)",
+              }}>
+                <CheckboxRow
+                  checked={policy.execution.autoExecuteEnabled}
+                  onChange={(value) =>
+                    setConfig((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            policy: {
+                              ...prev.policy,
+                              execution: { ...prev.policy.execution, autoExecuteEnabled: value },
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                >
+                  自动执行通过风控的建议
+                </CheckboxRow>
+
+                {policy.execution.autoExecuteEnabled && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                      <div>
+                        <FieldLabel>单次执行上限 (% NAV)</FieldLabel>
+                        <NumberInput
+                          value={policy.execution.maxSingleOrderPctOfNav * 100}
+                          min={1}
+                          max={50}
+                          step={1}
+                          onChange={(value) =>
+                            setConfig((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    policy: {
+                                      ...prev.policy,
+                                      execution: {
+                                        ...prev.policy.execution,
+                                        maxSingleOrderPctOfNav: Math.max(0.01, Math.min(0.5, value / 100)),
+                                      },
+                                    },
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div style={{
+                      marginTop: 10,
+                      padding: "8px 12px",
+                      background: "rgba(234, 179, 8, 0.08)",
+                      border: "1px solid rgba(234, 179, 8, 0.2)",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                      color: "var(--muted)",
+                    }}>
+                      自动驾驶开启后，系统将在 cron 触发生成提案并通过风控检查后自动执行交易，无需手动确认。执行结果会通过已配置的通知渠道推送。
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </SectionCard>
 

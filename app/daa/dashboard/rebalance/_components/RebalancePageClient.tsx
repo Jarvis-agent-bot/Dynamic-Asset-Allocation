@@ -109,11 +109,11 @@ export default function RebalancePageClient() {
   }, [searchParams, wbModel.rebalanceSectionProps]);
 
   const driftCount = useMemo(() => {
-    const threshold = (wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100;
+    const threshold = (wbModel.bootstrap?.policy?.drift?.outerBandPct ?? 0.05) * 100;
     return wbModel.tableProps.rows.filter(
       (r) => r.watchEnabled && r.targetWeightHint > 0 && r.gapPct != null && Math.abs(r.gapPct) > threshold,
     ).length;
-  }, [wbModel.tableProps.rows, wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct]);
+  }, [wbModel.tableProps.rows, wbModel.bootstrap?.policy?.drift?.outerBandPct]);
 
   const rp = wbModel.rebalanceSectionProps;
 
@@ -201,7 +201,7 @@ export default function RebalancePageClient() {
               {wbModel.priceStreamConnected ? "实时价格" : "价格离线"}
             </DaaSurfaceStatusPill>
           </div>
-          <QuickConfigPopover driftThresholdPct={wbModel.bootstrap?.rebalanceStrategy?.drift?.thresholdPct} />
+          <QuickConfigPopover driftThresholdPct={wbModel.bootstrap?.policy?.drift?.outerBandPct} />
         </div>
         {statusCards.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -291,7 +291,7 @@ export default function RebalancePageClient() {
                 </div>
                 <DriftBarChart
                   rows={wbModel.tableProps.rows}
-                  thresholdPct={(wbModel.bootstrap.rebalanceStrategy?.drift?.thresholdPct ?? 0.05) * 100}
+                  thresholdPct={(wbModel.bootstrap.policy?.drift?.outerBandPct ?? 0.05) * 100}
                   maxItems={8}
                 />
               </div>

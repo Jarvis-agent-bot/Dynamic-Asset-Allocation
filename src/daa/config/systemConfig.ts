@@ -79,32 +79,7 @@ export type DaaSystemConfig = {
       enforceOnExecution: boolean;
     };
   };
-  rebalanceStrategy: {
-    calendar: {
-      enabled: boolean;
-      frequency: "every_3_days" | "weekly" | "monthly" | "quarterly" | "semi_annual" | "annual";
-      dayOfMonth: number;
-    };
-    drift: {
-      enabled: boolean;
-      thresholdPct: number;
-      checkFrequency: "daily" | "weekly";
-    };
-    cooldownHours: number;
-    analysisTimeUtc: string;
-    timezone: string;
-    autoGenerateEnabled: boolean;
-    /** 自动驾驶：风控通过后自动执行再平衡（需同时开启 autoGenerateEnabled） */
-    autoExecuteEnabled?: boolean;
-    /** 单次自动执行最大占 NAV 百分比（默认 10%） */
-    autoExecuteMaxSinglePct?: number;
-  };
-  /**
-   * AI Native 策略引擎配置。
-   *
-   * rebalanceStrategy 仍作为兼容层保留；真正的自动建议入口会先归一化到 policy，
-   * 再由 signals -> intents -> policy decision 决定是否行动。
-   */
+  /** AI Native 策略引擎配置：signals -> intents -> policy decision -> proposal plan。 */
   policy: DaaPolicyConfig;
   dataSources: {
     hfFund: {
@@ -251,6 +226,11 @@ const DEFAULT_POLICY_CONFIG_: DaaPolicyConfig = {
     proposalThreshold: 25,
     autoExecuteThreshold: 70,
   },
+  execution: {
+    autoGenerateEnabled: true,
+    autoExecuteEnabled: true,
+    maxSingleOrderPctOfNav: 0.1,
+  },
 };
 
 export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
@@ -279,24 +259,6 @@ export const DEFAULT_SYSTEM_CONFIG_: DaaSystemConfig = {
       correlationCapPct: 0.6,
       enforceOnExecution: true,
     },
-  },
-  rebalanceStrategy: {
-    calendar: {
-      enabled: true,
-      frequency: "monthly",
-      dayOfMonth: 1,
-    },
-    drift: {
-      enabled: true,
-      thresholdPct: 0.05,
-      checkFrequency: "daily",
-    },
-    cooldownHours: 72,
-    analysisTimeUtc: "00:20",
-    timezone: "Asia/Shanghai",
-    autoGenerateEnabled: true,
-    autoExecuteEnabled: true,
-    autoExecuteMaxSinglePct: 10,
   },
   policy: clone(DEFAULT_POLICY_CONFIG_),
   dataSources: {
@@ -540,8 +502,8 @@ function normalizePairs(input: unknown): string[] {
 
 function normalizeCalendarFrequency(
   value: unknown,
-  fallback: DaaSystemConfig["rebalanceStrategy"]["calendar"]["frequency"],
-): DaaSystemConfig["rebalanceStrategy"]["calendar"]["frequency"] {
+  fallback: PolicyReviewFrequency,
+): PolicyReviewFrequency {
   const text = String(value || "").trim().toLowerCase();
   if (text === "every_3_days" || text === "every_3days" || text === "3days") return "every_3_days";
   if (text === "weekly") return "weekly";
@@ -549,16 +511,6 @@ function normalizeCalendarFrequency(
   if (text === "semi_annual" || text === "semi-annual" || text === "semiannual") return "semi_annual";
   if (text === "annual" || text === "yearly") return "annual";
   if (text === "monthly") return "monthly";
-  return fallback;
-}
-
-function normalizeCheckFrequency(
-  value: unknown,
-  fallback: DaaSystemConfig["rebalanceStrategy"]["drift"]["checkFrequency"],
-): DaaSystemConfig["rebalanceStrategy"]["drift"]["checkFrequency"] {
-  const text = String(value || "").trim().toLowerCase();
-  if (text === "weekly") return "weekly";
-  if (text === "daily") return "daily";
   return fallback;
 }
 
@@ -588,15 +540,8 @@ function numberWithFallback(value: unknown, fallback: number): number {
   return Number.isFinite(num) ? num : fallback;
 }
 
-function legacyProposalDedupeHours(
-  checkFrequency: DaaSystemConfig["rebalanceStrategy"]["drift"]["checkFrequency"],
-): number {
-  return checkFrequency === "weekly" ? 168 : 24;
-}
-
 function normalizePolicyConfig(
   input: unknown,
-  legacy: DaaSystemConfig["rebalanceStrategy"],
   constraints: DaaSystemConfig["strategy"]["constraints"],
   fallback: DaaPolicyConfig,
 ): DaaPolicyConfig {
@@ -605,19 +550,18 @@ function normalizePolicyConfig(
   const review = isRecord(source.review) ? source.review : {};
   const throttle = isRecord(source.throttle) ? source.throttle : {};
   const actionScore = isRecord(source.actionScore) ? source.actionScore : {};
+  const execution = isRecord(source.execution) ? source.execution : {};
 
-  const outerFallback = numberWithFallback(legacy.drift.thresholdPct, fallback.drift.outerBandPct);
-  const rawOuterBandPct = numberWithFallback(drift.outerBandPct, outerFallback);
+  const rawOuterBandPct = numberWithFallback(drift.outerBandPct, fallback.drift.outerBandPct);
   const outerBandPct = clamp(rawOuterBandPct, 0.005, 0.5);
   const rawInnerBandPct = numberWithFallback(drift.innerBandPct, fallback.drift.innerBandPct);
   const innerBandPct = clamp(rawInnerBandPct, 0.001, Math.max(0.001, outerBandPct - 0.001));
-  const legacyDedupeHours = legacyProposalDedupeHours(legacy.drift.checkFrequency);
 
   return {
     enabled: toBool(source.enabled, fallback.enabled),
     shadowMode: toBool(source.shadowMode, fallback.shadowMode),
     drift: {
-      enabled: toBool(drift.enabled, legacy.drift.enabled && fallback.drift.enabled),
+      enabled: toBool(drift.enabled, fallback.drift.enabled),
       mode: String(drift.mode || fallback.drift.mode).trim() === "volatility_adjusted"
         ? "volatility_adjusted"
         : "static_band",
@@ -634,20 +578,20 @@ function normalizePolicyConfig(
       ),
     },
     review: {
-      enabled: toBool(review.enabled, legacy.calendar.enabled && fallback.review.enabled),
-      frequency: normalizePolicyReviewFrequency(review.frequency ?? legacy.calendar.frequency, fallback.review.frequency),
-      dayOfMonth: normalizeDayOfMonth(review.dayOfMonth ?? legacy.calendar.dayOfMonth, fallback.review.dayOfMonth),
-      scheduledTimeUtc: normalizeAnalysisTimeUtc(review.scheduledTimeUtc ?? legacy.analysisTimeUtc, fallback.review.scheduledTimeUtc),
-      timezone: String(review.timezone || legacy.timezone || fallback.review.timezone).trim() || fallback.review.timezone,
+      enabled: toBool(review.enabled, fallback.review.enabled),
+      frequency: normalizePolicyReviewFrequency(review.frequency, fallback.review.frequency),
+      dayOfMonth: normalizeDayOfMonth(review.dayOfMonth, fallback.review.dayOfMonth),
+      scheduledTimeUtc: normalizeAnalysisTimeUtc(review.scheduledTimeUtc, fallback.review.scheduledTimeUtc),
+      timezone: String(review.timezone || fallback.review.timezone).trim() || fallback.review.timezone,
     },
     throttle: {
       proposalDedupeWindowHours: clamp(
-        Math.trunc(numberWithFallback(throttle.proposalDedupeWindowHours, legacyDedupeHours)),
+        Math.trunc(numberWithFallback(throttle.proposalDedupeWindowHours, fallback.throttle.proposalDedupeWindowHours)),
         1,
         24 * 30,
       ),
       autoExecutionCooldownHours: clamp(
-        Math.trunc(numberWithFallback(throttle.autoExecutionCooldownHours, legacy.cooldownHours || fallback.throttle.autoExecutionCooldownHours)),
+        Math.trunc(numberWithFallback(throttle.autoExecutionCooldownHours, fallback.throttle.autoExecutionCooldownHours)),
         1,
         24 * 30,
       ),
@@ -669,6 +613,15 @@ function normalizePolicyConfig(
         numberWithFallback(actionScore.autoExecuteThreshold, fallback.actionScore.autoExecuteThreshold),
         0,
         100,
+      ),
+    },
+    execution: {
+      autoGenerateEnabled: toBool(execution.autoGenerateEnabled, fallback.execution.autoGenerateEnabled),
+      autoExecuteEnabled: toBool(execution.autoExecuteEnabled, fallback.execution.autoExecuteEnabled),
+      maxSingleOrderPctOfNav: clamp(
+        numberWithFallback(execution.maxSingleOrderPctOfNav, fallback.execution.maxSingleOrderPctOfNav),
+        0.01,
+        0.5,
       ),
     },
   };
@@ -710,10 +663,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const execution = isRecord(strategy.execution) ? strategy.execution : {};
   const risk = isRecord(strategy.risk) ? strategy.risk : {};
 
-  const rebalanceStrategy = isRecord(source.rebalanceStrategy) ? source.rebalanceStrategy : {};
-  const calendar = isRecord(rebalanceStrategy.calendar) ? rebalanceStrategy.calendar : {};
-  const drift = isRecord(rebalanceStrategy.drift) ? rebalanceStrategy.drift : {};
-
   const dataSources = isRecord(source.dataSources) ? source.dataSources : {};
   const hfFund = isRecord(dataSources.hfFund) ? dataSources.hfFund : {};
   const priceFeed = isRecord(dataSources.priceFeed) ? dataSources.priceFeed : {};
@@ -726,30 +675,6 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
   const notification = isRecord(source.notification) ? source.notification : {};
   const notificationTelegram = isRecord(notification.telegram) ? notification.telegram : {};
   const notificationFeishu = isRecord(notification.feishu) ? notification.feishu : {};
-
-  const normalizedAnalysisTimeUtc = normalizeAnalysisTimeUtc(
-    rebalanceStrategy.analysisTimeUtc,
-    fallback.rebalanceStrategy.analysisTimeUtc,
-  );
-
-  const normalizedRebalanceStrategy: DaaSystemConfig["rebalanceStrategy"] = {
-    calendar: {
-      enabled: toBool(calendar.enabled, fallback.rebalanceStrategy.calendar.enabled),
-      frequency: normalizeCalendarFrequency(calendar.frequency, fallback.rebalanceStrategy.calendar.frequency),
-      dayOfMonth: normalizeDayOfMonth(calendar.dayOfMonth, fallback.rebalanceStrategy.calendar.dayOfMonth),
-    },
-    drift: {
-      enabled: toBool(drift.enabled, fallback.rebalanceStrategy.drift.enabled),
-      thresholdPct: clamp(Number(drift.thresholdPct) || fallback.rebalanceStrategy.drift.thresholdPct, 0.01, 0.5),
-      checkFrequency: normalizeCheckFrequency(drift.checkFrequency, fallback.rebalanceStrategy.drift.checkFrequency),
-    },
-    cooldownHours: Math.max(1, Math.trunc(Number(rebalanceStrategy.cooldownHours) || fallback.rebalanceStrategy.cooldownHours)),
-    analysisTimeUtc: normalizedAnalysisTimeUtc,
-    timezone: String(rebalanceStrategy.timezone || fallback.rebalanceStrategy.timezone).trim() || fallback.rebalanceStrategy.timezone,
-    autoGenerateEnabled: toBool(rebalanceStrategy.autoGenerateEnabled, fallback.rebalanceStrategy.autoGenerateEnabled),
-    autoExecuteEnabled: toBool(rebalanceStrategy.autoExecuteEnabled, fallback.rebalanceStrategy.autoExecuteEnabled ?? false),
-    autoExecuteMaxSinglePct: clamp(Number(rebalanceStrategy.autoExecuteMaxSinglePct) || (fallback.rebalanceStrategy.autoExecuteMaxSinglePct ?? 10), 1, 50),
-  };
 
   const normalized: DaaSystemConfig = {
     strategy: {
@@ -786,8 +711,7 @@ export function normalizeSystemConfig(raw: unknown): DaaSystemConfig {
         enforceOnExecution: toBool(risk.enforceOnExecution, fallback.strategy.risk.enforceOnExecution),
       },
     },
-    rebalanceStrategy: normalizedRebalanceStrategy,
-    policy: normalizePolicyConfig(source.policy, normalizedRebalanceStrategy, {
+    policy: normalizePolicyConfig(source.policy, {
       maxPositionPct: clamp(Number(constraints.maxPositionPct) || fallback.strategy.constraints.maxPositionPct, 0.01, 1),
       minNotional: toPositiveNumber(constraints.minNotional, fallback.strategy.constraints.minNotional),
       maxOrderPctOfNav: clamp(Number(constraints.maxOrderPctOfNav) || fallback.strategy.constraints.maxOrderPctOfNav, 0.01, 1),
@@ -927,7 +851,7 @@ function toPathSegments(pathRaw: string): string[] {
   const text = String(pathRaw || "").trim();
   if (!text) return [];
   const cleaned = text.startsWith("/") ? text.slice(1) : text;
-  return cleaned.split("/").map((item) => item.trim()).filter(Boolean);
+  return cleaned.split(/[/.]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function applyPathValue(target: Record<string, unknown>, pathSegments: string[], value: unknown) {

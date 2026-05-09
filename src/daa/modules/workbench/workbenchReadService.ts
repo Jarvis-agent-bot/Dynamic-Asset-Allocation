@@ -20,6 +20,7 @@ import {
   type DaaStoreAssetUniverseRow,
 } from "@/src/daa/store/daaStorePg";
 import { getMarketPricesWithCache } from "@/src/daa/modules/marketCache/marketCacheService";
+import { resolvePolicyConfig } from "@/src/daa/modules/policy-engine/policyConfig";
 
 import { buildAssetUniverseViewRows } from "./assetUniverseService";
 import {
@@ -390,7 +391,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
     dataQualityWarnings.push("市场环境数据获取失败，当前决策未包含市场环境因子。");
   }
 
-  const rebalanceStrategy = systemRow.config.rebalanceStrategy;
+  const policy = resolvePolicyConfig(systemRow.config);
   if (shouldAutoRiskCycle) {
     const riskDraft = buildRiskCycleDraft({
       bootstrap: {
@@ -409,12 +410,12 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
           minNotional: systemRow.config.strategy.constraints.minNotional ?? 0,
         },
         rebalance: {
-          mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",
-          autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
-          analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
-          timezone: rebalanceStrategy.timezone,
+          mode: policy.execution.autoGenerateEnabled ? "auto" : "manual",
+          autoAnalysisEnabled: policy.execution.autoGenerateEnabled,
+          scheduledTimeUtc: policy.review.scheduledTimeUtc,
+          timezone: policy.review.timezone,
         },
-        rebalanceStrategy,
+        policy,
         latestCycle: null,
         marketContext,
         warnings: [],
@@ -424,7 +425,7 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
       perAssetTakeProfitPct: systemRow.config.strategy.risk.perAssetTakeProfitPct,
     });
     if (riskDraft) {
-      const cooldownMs = Math.max(1, rebalanceStrategy.cooldownHours) * 60 * 60 * 1000;
+      const cooldownMs = Math.max(1, policy.throttle.autoExecutionCooldownHours) * 60 * 60 * 1000;
       const nowMs = Date.now();
       const draftSymbols = new Set(riskDraft.proposals.map((row) => row.symbol.toUpperCase()));
       const inCooldownConflict = rebalanceCycles.some((cycle) => {
@@ -522,19 +523,12 @@ export async function buildWorkbenchBootstrapBundle(opts: WorkbenchBootstrapOpti
         minNotional: strategy.constraints.minNotional ?? 0,
       },
       rebalance: {
-        mode: rebalanceStrategy.autoGenerateEnabled ? "auto" : "manual",
-        autoAnalysisEnabled: rebalanceStrategy.autoGenerateEnabled,
-        analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
-        timezone: rebalanceStrategy.timezone,
+        mode: policy.execution.autoGenerateEnabled ? "auto" : "manual",
+        autoAnalysisEnabled: policy.execution.autoGenerateEnabled,
+        scheduledTimeUtc: policy.review.scheduledTimeUtc,
+        timezone: policy.review.timezone,
       },
-      rebalanceStrategy: {
-        calendar: rebalanceStrategy.calendar,
-        drift: rebalanceStrategy.drift,
-        cooldownHours: rebalanceStrategy.cooldownHours,
-        analysisTimeUtc: rebalanceStrategy.analysisTimeUtc,
-        timezone: rebalanceStrategy.timezone,
-        autoGenerateEnabled: rebalanceStrategy.autoGenerateEnabled,
-      },
+      policy,
       latestCycle,
       marketContext,
       warnings,

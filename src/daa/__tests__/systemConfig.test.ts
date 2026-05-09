@@ -18,26 +18,26 @@ describe("system-config-normalization", () => {
     });
   });
 
-  it("会丢弃 Settings 中已经没有运行时消费路径的数据源旧字段", () => {
+  it("会丢弃 Settings 中已经没有运行时消费路径的数据源冗余字段", () => {
     const normalized = normalizeSystemConfig({
       dataSources: {
-        hfFund: { id: "hf_fund.legacy" },
+        hfFund: { id: "hf_fund.extra" },
         priceFeed: {
-          id: "price_feed.legacy",
+          id: "price_feed.extra",
           provider: "custom_price",
           intervalMinutes: 1,
         },
         newsFeed: {
-          id: "news_feed.legacy",
+          id: "news_feed.extra",
           provider: "custom_news",
           valuationEnabled: false,
         },
         fxFeed: {
-          id: "fx_feed.legacy",
+          id: "fx_feed.extra",
           provider: "manual",
         },
         marketIndicators: {
-          id: "market_indicators.legacy",
+          id: "market_indicators.extra",
         },
       },
     });
