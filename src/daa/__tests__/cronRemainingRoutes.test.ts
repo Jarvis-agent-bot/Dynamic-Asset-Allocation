@@ -245,7 +245,9 @@ describe('cron-remaining-routes-v1', () => {
     expect(vi.mocked(buildWorkbenchBootstrap)).toHaveBeenCalledWith({ syncPrices: false, autoRiskCycle: true });
     expect(vi.mocked(generateWorkbenchRebalanceCycle)).not.toHaveBeenCalled();
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
-    expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('偏移触发');
+    const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
+    expect(message).toContain('DAA 偏移检测通知');
+    expect(message).toContain('未生成新周期：自动生成已关闭');
   });
 
   it('drift-check 成功创建周期时会预热 bootstrap 并发送通知', async () => {
@@ -275,6 +277,63 @@ describe('cron-remaining-routes-v1', () => {
     });
     expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
     expect(String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '')).toContain('cycle-drift-1');
+    expect(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[1]).toMatchObject({
+      cycleId: 'cycle-drift-1',
+      requestJson: {
+        newCycleCreated: true,
+        referenceCycleId: null,
+      },
+    });
+  });
+
+  it('drift-check 未创建新周期时发送检测通知但不把旧周期当成本次建议', async () => {
+    vi.mocked(getDaaSystemConfig).mockResolvedValue(buildDriftConfig({
+      autoGenerateEnabled: true,
+      telegramEnabled: true,
+      feishuEnabled: false,
+    }));
+    vi.mocked(generateWorkbenchRebalanceCycle).mockResolvedValueOnce({
+      created: false,
+      skippedByCooldown: true,
+      cooldownUntil: '2026-03-10T09:00:00.000Z',
+      message: '冷静期生效中，24 小时内不重复自动触发',
+      cycle: {
+        cycleId: 'cycle-old-1',
+        triggerReason: 'Agent 目标权重调仓',
+        proposals: [{ assetKey: 'US::AAPL' }, { assetKey: 'US::BND' }],
+        riskCheck: { overallStatus: 'warn' },
+      },
+    } as any);
+
+    const response = await driftCheckPost(new Request('http://localhost/api/daa/cron/drift-check', { method: 'POST' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.data).toMatchObject({
+      created: false,
+      skippedByCooldown: true,
+      cycleId: null,
+      referenceCycleId: 'cycle-old-1',
+      proposalCount: 0,
+      driftDetected: true,
+      driftTriggerNotified: true,
+    });
+    expect(vi.mocked(sendTelegramByEnv)).toHaveBeenCalledTimes(1);
+    const message = String(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[0] || '');
+    expect(message).toContain('DAA 偏移检测通知');
+    expect(message).toContain('未生成新周期：冷静期生效中，24 小时内不重复自动触发');
+    expect(message).toContain('参考最近周期: cycle-old-1（非本次生成）');
+    expect(message).not.toContain('建议数');
+    expect(message).not.toContain('风控');
+    expect(vi.mocked(sendTelegramByEnv).mock.calls[0]?.[1]).toMatchObject({
+      cycleId: null,
+      requestJson: {
+        newCycleCreated: false,
+        referenceCycleId: 'cycle-old-1',
+        generationMessage: '冷静期生效中，24 小时内不重复自动触发',
+      },
+    });
   });
 
   it('drift-check 当天已成功推送漂移通知时不重复发送旧周期提醒', async () => {
@@ -304,7 +363,8 @@ describe('cron-remaining-routes-v1', () => {
     expect(json.ok).toBe(true);
     expect(json.data).toMatchObject({
       created: false,
-      cycleId: 'cycle-drift-1',
+      cycleId: null,
+      referenceCycleId: 'cycle-drift-1',
       driftDetected: true,
       driftTriggerNotified: false,
       driftTriggerSkippedReason: 'drift_triggered already delivered today',

@@ -97,6 +97,8 @@ async function runDriftCheck() {
     }
 
     const cycle = generated?.cycle ?? null;
+    const newlyCreatedCycle = generated?.created === true ? cycle : null;
+    const referenceCycle = generated?.created === false ? cycle : null;
     const notif = system.config.notification;
 
     // Phase B: drift notification (independent of autoGenerateEnabled).
@@ -104,7 +106,7 @@ async function runDriftCheck() {
     let driftTriggerNotified = false;
     let driftTriggerSkippedReason: string | null = null;
     try {
-      const shouldNotifyTrigger = hasDrift || (cycle && generated?.created);
+      const shouldNotifyTrigger = hasDrift || newlyCreatedCycle != null;
       if (shouldNotifyTrigger) {
         const isRepeatedDriftReminder = hasDrift && generated?.created !== true;
         if (isRepeatedDriftReminder && await hasTodayNotification("drift_triggered")) {
@@ -115,15 +117,24 @@ async function runDriftCheck() {
             (a) => `${formatAssetLabel({ symbol: a.symbol, assetKey: a.assetKey })}: gap ${a.gapPct != null ? a.gapPct.toFixed(1) : "?"}%`,
           );
 
+          const noNewCycleReason = strategy.autoGenerateEnabled
+            ? (generated?.message ?? "未创建新的调仓周期")
+            : "自动生成已关闭";
+          const notificationTitle = hasDrift
+            ? (newlyCreatedCycle ? "DAA 偏移触发通知" : "DAA 偏移检测通知")
+            : "DAA 自动调仓触发通知";
           const msgParts = [
-            hasDrift ? "DAA 偏移触发通知" : "DAA 自动调仓触发通知",
-            cycle ? `Cycle: ${cycle.cycleId}` : "未生成周期（自动生成已关闭）",
+            notificationTitle,
+            newlyCreatedCycle ? `Cycle: ${newlyCreatedCycle.cycleId}` : `未生成新周期：${noNewCycleReason}`,
             `偏移标的: ${driftedAssets.length} 个`,
             ...driftLines,
           ];
-          if (cycle) {
-            msgParts.push(`建议数: ${cycle.proposals.length}`);
-            msgParts.push(`风控: ${cycle.riskCheck.overallStatus}`);
+          if (referenceCycle) {
+            msgParts.push(`参考最近周期: ${referenceCycle.cycleId}（非本次生成）`);
+          }
+          if (newlyCreatedCycle) {
+            msgParts.push(`建议数: ${newlyCreatedCycle.proposals.length}`);
+            msgParts.push(`风控: ${newlyCreatedCycle.riskCheck.overallStatus}`);
           }
           const driftMsg = msgParts.join("\n");
 
@@ -132,10 +143,14 @@ async function runDriftCheck() {
             sends.push(sendTelegramByEnv(driftMsg, {
               eventType: "drift_triggered",
               triggerSource: "cron_drift_check",
-              cycleId: cycle?.cycleId || null,
+              cycleId: newlyCreatedCycle?.cycleId || null,
               requestJson: {
                 driftedAssetCount: driftedAssets.length,
                 autoGenerateEnabled: strategy.autoGenerateEnabled,
+                driftThresholdPct: driftThreshold,
+                newCycleCreated: newlyCreatedCycle != null,
+                referenceCycleId: referenceCycle?.cycleId || null,
+                generationMessage: generated?.message ?? null,
               },
             }));
           }
@@ -143,10 +158,14 @@ async function runDriftCheck() {
             sends.push(sendFeishuByEnv(driftMsg, {
               eventType: "drift_triggered",
               triggerSource: "cron_drift_check",
-              cycleId: cycle?.cycleId || null,
+              cycleId: newlyCreatedCycle?.cycleId || null,
               requestJson: {
                 driftedAssetCount: driftedAssets.length,
                 autoGenerateEnabled: strategy.autoGenerateEnabled,
+                driftThresholdPct: driftThreshold,
+                newCycleCreated: newlyCreatedCycle != null,
+                referenceCycleId: referenceCycle?.cycleId || null,
+                generationMessage: generated?.message ?? null,
               },
             }));
           }
@@ -289,8 +308,9 @@ async function runDriftCheck() {
       skippedByCooldown: generated?.skippedByCooldown ?? false,
       cooldownUntil: generated?.cooldownUntil ?? null,
       message: generated?.message ?? (hasDrift ? "drift detected but auto generate disabled" : "no drift detected"),
-      cycleId: cycle?.cycleId || null,
-      proposalCount: cycle?.proposals.length || 0,
+      cycleId: newlyCreatedCycle?.cycleId || null,
+      referenceCycleId: referenceCycle?.cycleId || null,
+      proposalCount: newlyCreatedCycle?.proposals.length || 0,
       driftDetected: hasDrift,
       driftedAssetCount: driftedAssets.length,
       driftTriggerNotified,
